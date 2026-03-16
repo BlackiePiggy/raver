@@ -1,0 +1,205 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  username      String   @unique
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  displayName   String?  @map("display_name")
+  avatarUrl     String?  @map("avatar_url")
+  bio           String?
+  location      String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  lastLoginAt   DateTime? @map("last_login_at")
+  isVerified    Boolean  @default(false) @map("is_verified")
+  isActive      Boolean  @default(true) @map("is_active")
+  role          String   @default("user")
+
+  checkins      Checkin[]
+  follows       Follow[] @relation("UserFollows")
+  followers     Follow[] @relation("UserFollowers")
+
+  @@map("users")
+}
+
+model Event {
+  id              String   @id @default(uuid())
+  name            String
+  slug            String   @unique
+  description     String?
+  coverImageUrl   String?  @map("cover_image_url")
+  venueName       String?  @map("venue_name")
+  venueAddress    String?  @map("venue_address")
+  city            String?
+  country         String?
+  latitude        Decimal? @db.Decimal(10, 8)
+  longitude       Decimal? @db.Decimal(11, 8)
+  startDate       DateTime @map("start_date")
+  endDate         DateTime @map("end_date")
+  ticketUrl       String?  @map("ticket_url")
+  officialWebsite String?  @map("official_website")
+  status          String   @default("upcoming")
+  isVerified      Boolean  @default(false) @map("is_verified")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  checkins        Checkin[]
+
+  @@map("events")
+}
+
+model DJ {
+  id             String   @id @default(uuid())
+  name           String
+  slug           String   @unique
+  bio            String?
+  avatarUrl      String?  @map("avatar_url")
+  bannerUrl      String?  @map("banner_url")
+  country        String?
+  spotifyId      String?  @map("spotify_id")
+  appleMusicId   String?  @map("apple_music_id")
+  soundcloudUrl  String?  @map("soundcloud_url")
+  instagramUrl   String?  @map("instagram_url")
+  twitterUrl     String?  @map("twitter_url")
+  isVerified     Boolean  @default(false) @map("is_verified")
+  followerCount  Int      @default(0) @map("follower_count")
+
+  // External data source IDs
+  raId           String?  @map("ra_id") // Resident Advisor ID
+  discogsId      String?  @map("discogs_id") // Discogs ID
+  beatportId     String?  @map("beatport_id") // Beatport ID
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  lastSyncedAt   DateTime? @map("last_synced_at")
+
+  checkins       Checkin[]
+  follows        Follow[]
+  sets           DJSet[]
+
+  @@map("djs")
+}
+
+model Genre {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  parentId    String?  @map("parent_id")
+  color       String?
+  iconUrl     String?  @map("icon_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("genres")
+}
+
+model Checkin {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  eventId     String?  @map("event_id")
+  djId        String?  @map("dj_id")
+  type        String   // "event" or "dj"
+  note        String?
+  photoUrl    String?  @map("photo_url")
+  rating      Int?     // 1-5
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event       Event?   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  dj          DJ?      @relation(fields: [djId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([eventId])
+  @@index([djId])
+  @@map("checkins")
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String   @map("follower_id")
+  followingId String?  @map("following_id")
+  djId        String?  @map("dj_id")
+  type        String   // "user" or "dj"
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  follower    User     @relation("UserFollows", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User?    @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+  dj          DJ?      @relation(fields: [djId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@unique([followerId, djId])
+  @@index([followerId])
+  @@index([followingId])
+  @@index([djId])
+  @@map("follows")
+}
+
+model DJSet {
+  id            String   @id @default(uuid())
+  djId          String   @map("dj_id")
+  title         String
+  slug          String   @unique
+  description   String?
+  thumbnailUrl  String?  @map("thumbnail_url")
+  videoUrl      String   @map("video_url")
+  platform      String   // "youtube" or "bilibili"
+  videoId       String   @map("video_id") // Platform-specific video ID
+  duration      Int?     // Duration in seconds
+  recordedAt    DateTime? @map("recorded_at")
+  venue         String?
+  eventName     String?  @map("event_name")
+  viewCount     Int      @default(0) @map("view_count")
+  likeCount     Int      @default(0) @map("like_count")
+  isVerified    Boolean  @default(false) @map("is_verified")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  dj            DJ       @relation(fields: [djId], references: [id], onDelete: Cascade)
+  tracks        Track[]
+
+  @@index([djId])
+  @@map("dj_sets")
+}
+
+model Track {
+  id              String   @id @default(uuid())
+  setId           String   @map("set_id")
+  position        Int      // Track order in the set
+  startTime       Int      @map("start_time") // Start time in seconds
+  endTime         Int?     @map("end_time") // End time in seconds
+  title           String
+  artist          String
+  status          String   @default("released") // "released", "id", "remix", "edit"
+  label           String?
+  releaseYear     Int?     @map("release_year")
+
+  // Streaming links
+  spotifyUrl      String?  @map("spotify_url")
+  spotifyId       String?  @map("spotify_id")
+  appleMusicUrl   String?  @map("apple_music_url")
+  youtubeMusicUrl String?  @map("youtube_music_url")
+  soundcloudUrl   String?  @map("soundcloud_url")
+  beatportUrl     String?  @map("beatport_url")
+  neteaseUrl      String?  @map("netease_url")
+  neteaseId       String?  @map("netease_id")
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  set             DJSet    @relation(fields: [setId], references: [id], onDelete: Cascade)
+
+  @@index([setId])
+  @@index([status])
+  @@map("tracks")
+}

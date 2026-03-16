@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(cd web:*)",
+      "Bash(cd:*)",
+      "Bash(pnpm install:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(pnpm prisma:*)",
+      "Bash(timeout:*)",
+      "Bash(cat:*)",
+      "Bash(sleep:*)",
+      "Bash(curl:*)"
     ]
   }
 }
