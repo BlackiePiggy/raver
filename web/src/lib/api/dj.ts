@@ -15,12 +15,25 @@ export interface DJ {
   twitterUrl: string | null;
   isVerified: boolean;
   followerCount: number;
+  lastSyncedAt?: string | null;
+  spotify?: {
+    id: string;
+    name: string;
+    uri: string;
+    url: string | null;
+    popularity: number;
+    followers: number;
+    genres: string[];
+    imageUrl: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface DJsResponse {
   djs: DJ[];
+  live?: boolean;
+  refresh?: boolean;
   pagination: {
     page: number;
     limit: number;
@@ -35,6 +48,8 @@ export interface DJFilters {
   search?: string;
   country?: string;
   sortBy?: 'followerCount' | 'name' | 'createdAt';
+  live?: boolean;
+  refresh?: boolean;
 }
 
 class DJAPI {

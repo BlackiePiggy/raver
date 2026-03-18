@@ -1,25 +1,35 @@
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { DJ } from '@/lib/api/dj';
 
 interface DJCardProps {
   dj: DJ;
 }
 
+const getHighResAvatar = (url: string) =>
+  url
+    .replace('ab6761610000f178', 'ab6761610000e5eb')
+    .replace('ab67616100005174', 'ab6761610000e5eb')
+    .replace('ab67616d00004851', 'ab67616d0000b273')
+    .replace('ab67616d00001e02', 'ab67616d0000b273');
+
 export const DJCard: React.FC<DJCardProps> = ({ dj }) => {
   return (
     <Link href={`/djs/${dj.id}`}>
       <div className="bg-bg-secondary rounded-xl overflow-hidden border border-border-secondary hover:border-primary-purple transition-all duration-300 hover:shadow-glow cursor-pointer">
         {dj.avatarUrl ? (
-          <div className="h-48 bg-bg-tertiary relative">
-            <img
-              src={dj.avatarUrl}
+          <div className="aspect-square bg-bg-tertiary relative">
+            <Image
+              src={getHighResAvatar(dj.avatarUrl)}
               alt={dj.name}
-              className="w-full h-full object-cover"
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             />
           </div>
         ) : (
-          <div className="h-48 bg-gradient-to-br from-primary-purple to-primary-blue flex items-center justify-center">
+          <div className="aspect-square bg-gradient-to-br from-primary-purple to-primary-blue flex items-center justify-center">
             <span className="text-6xl">🎧</span>
           </div>
         )}

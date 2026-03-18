@@ -1,13 +1,18 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { eventAPI, Event } from '@/lib/api/event';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import Navigation from '@/components/Navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 
 export default function EventsPage() {
+  const { user } = useAuth();
+  const router = useRouter();
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -16,7 +21,7 @@ export default function EventsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await eventAPI.getEvents({ page, search: search || undefined });
@@ -28,11 +33,11 @@ export default function EventsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [page, search]);
 
   useEffect(() => {
     loadEvents();
-  }, [page]);
+  }, [loadEvents]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +73,17 @@ export default function EventsPage() {
             <p className="text-xl text-text-secondary max-w-2xl mx-auto">
               全球顶级电子音乐节和活动，不容错过的电音盛宴
             </p>
+            {user && (
+              <div className="mt-6">
+                <button
+                  type="button"
+                  onClick={() => router.push('/events/publish')}
+                  className="px-5 py-2.5 bg-primary-blue hover:bg-primary-purple text-white rounded-full text-sm transition-colors"
+                >
+                  发布活动
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Search Bar */}
@@ -139,10 +155,12 @@ export default function EventsPage() {
                             {/* Image */}
                             <div className="relative aspect-[4/3] md:aspect-auto overflow-hidden">
                               {event.coverImageUrl ? (
-                                <img
+                                <Image
                                   src={event.coverImageUrl}
                                   alt={event.name}
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                                  fill
+                                  className="object-cover group-hover:scale-110 transition-transform duration-700"
+                                  sizes="(max-width: 768px) 100vw, 300px"
                                 />
                               ) : (
                                 <div className="w-full h-full bg-gradient-to-br from-primary-purple/20 to-primary-blue/20 flex items-center justify-center">
@@ -193,6 +211,13 @@ export default function EventsPage() {
                               )}
 
                               <div className="space-y-3">
+                                {event.eventType && (
+                                  <div className="flex items-center gap-3 text-text-secondary">
+                                    <span className="text-sm px-2 py-1 rounded-full bg-primary-purple/20 text-primary-purple border border-primary-purple/40">
+                                      {event.eventType}
+                                    </span>
+                                  </div>
+                                )}
                                 {event.venueName && (
                                   <div className="flex items-center gap-3 text-text-secondary">
                                     <svg className="w-5 h-5 text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -218,6 +243,16 @@ export default function EventsPage() {
                                   </svg>
                                   <span>{date.fullDate}</span>
                                 </div>
+                                {(event.ticketPriceMin !== null || event.ticketPriceMax !== null) && (
+                                  <div className="flex items-center gap-3 text-text-secondary">
+                                    <span>🎫</span>
+                                    <span>
+                                      {event.ticketCurrency || 'USD'}{' '}
+                                      {event.ticketPriceMin ?? '-'}
+                                      {event.ticketPriceMax !== null ? ` - ${event.ticketPriceMax}` : ''}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
 
                               <div className="mt-6 flex items-center gap-4">

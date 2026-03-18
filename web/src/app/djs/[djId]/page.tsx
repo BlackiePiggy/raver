@@ -2,12 +2,21 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { djAPI, DJ } from '@/lib/api/dj';
 import { followAPI } from '@/lib/api/follow';
 import { checkinAPI } from '@/lib/api/checkin';
 import { useAuth } from '@/contexts/AuthContext';
+import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+
+const getHighResAvatar = (url: string) =>
+  url
+    .replace('ab6761610000f178', 'ab6761610000e5eb')
+    .replace('ab67616100005174', 'ab6761610000e5eb')
+    .replace('ab67616d00004851', 'ab67616d0000b273')
+    .replace('ab67616d00001e02', 'ab67616d0000b273');
 
 export default function DJDetailPage() {
   const params = useParams();
@@ -104,29 +113,38 @@ export default function DJDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
-        <div className="text-text-secondary">加载中...</div>
+      <div className="min-h-screen bg-bg-primary">
+        <Navigation />
+        <div className="pt-[44px] min-h-[80vh] flex items-center justify-center">
+          <div className="text-text-secondary">加载中...</div>
+        </div>
       </div>
     );
   }
 
   if (error || !dj) {
     return (
-      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
-        <Card className="max-w-md">
-          <div className="text-center">
-            <div className="text-6xl mb-4">😕</div>
-            <p className="text-text-secondary mb-4">{error || 'DJ 不存在'}</p>
-            <Button onClick={() => router.push('/djs')}>返回 DJ 列表</Button>
-          </div>
-        </Card>
+      <div className="min-h-screen bg-bg-primary">
+        <Navigation />
+        <div className="pt-[44px] min-h-[80vh] flex items-center justify-center">
+          <Card className="max-w-md">
+            <div className="text-center">
+              <div className="text-6xl mb-4">😕</div>
+              <p className="text-text-secondary mb-4">{error || 'DJ 不存在'}</p>
+              <Button onClick={() => router.push('/djs')}>返回 DJ 列表</Button>
+            </div>
+          </Card>
+        </div>
       </div>
     );
   }
 
+  const heroImageUrl = dj.bannerUrl || (dj.avatarUrl ? getHighResAvatar(dj.avatarUrl) : null);
+
   return (
     <div className="min-h-screen bg-bg-primary">
-      <div className="max-w-5xl mx-auto px-4 py-8">
+      <Navigation />
+      <div className="max-w-6xl mx-auto px-4 py-8 pt-[60px]">
         <Button
           variant="secondary"
           size="sm"
@@ -136,62 +154,48 @@ export default function DJDetailPage() {
           ← 返回
         </Button>
 
-        {dj.bannerUrl ? (
-          <div className="h-64 rounded-xl overflow-hidden mb-8">
-            <img
-              src={dj.bannerUrl}
-              alt={dj.name}
-              className="w-full h-full object-cover"
-            />
+        <section className="relative rounded-2xl overflow-hidden border border-bg-tertiary mb-10">
+          <div className="relative w-full aspect-[4/3]">
+            {heroImageUrl ? (
+              <Image
+                src={heroImageUrl}
+                alt={dj.name}
+                fill
+                className="object-cover"
+                sizes="(max-width: 1200px) 100vw, 1200px"
+                priority
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-primary-purple to-primary-blue flex items-center justify-center">
+                <span className="text-9xl">🎧</span>
+              </div>
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-bg-primary via-bg-primary/65 to-transparent" />
           </div>
-        ) : (
-          <div className="h-64 rounded-xl bg-gradient-to-br from-primary-purple to-primary-blue flex items-center justify-center mb-8">
-            <span className="text-9xl">🎧</span>
+
+          <div className="absolute left-6 bottom-8 md:left-10 md:bottom-10">
+            <div className="flex items-center gap-3 mb-3">
+              {dj.isVerified && <span className="text-accent-green text-xl">✓ Verified Artist</span>}
+              {dj.country && (
+                <span className="px-2 py-1 text-xs rounded-full bg-bg-glass border border-border-secondary text-text-secondary">
+                  {dj.country}
+                </span>
+              )}
+            </div>
+            <h1
+              className="text-5xl md:text-7xl leading-[0.95] text-text-primary font-black tracking-tight"
+              style={{ fontFamily: "'Circular Std','SpotifyMixUI','Helvetica Neue',Arial,sans-serif" }}
+            >
+              {dj.name}
+            </h1>
+            <p className="mt-3 text-sm md:text-base text-text-secondary">
+              {dj.followerCount.toLocaleString()} 关注
+            </p>
           </div>
-        )}
+        </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
-            <div className="flex items-start gap-6 mb-8">
-              {dj.avatarUrl ? (
-                <img
-                  src={dj.avatarUrl}
-                  alt={dj.name}
-                  className="w-32 h-32 rounded-full object-cover border-4 border-primary-purple"
-                />
-              ) : (
-                <div className="w-32 h-32 rounded-full bg-gradient-to-br from-primary-purple to-primary-blue flex items-center justify-center text-5xl">
-                  🎧
-                </div>
-              )}
-
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <h1 className="text-4xl font-bold text-text-primary">
-                    {dj.name}
-                  </h1>
-                  {dj.isVerified && (
-                    <span className="text-accent-green text-2xl">✓</span>
-                  )}
-                </div>
-
-                {dj.country && (
-                  <div className="flex items-center text-text-secondary mb-4">
-                    <span className="mr-2">🌍</span>
-                    <span>{dj.country}</span>
-                  </div>
-                )}
-
-                <div className="flex items-center text-text-secondary">
-                  <span className="mr-2">👥</span>
-                  <span className="text-2xl font-bold text-primary-purple">
-                    {dj.followerCount.toLocaleString()}
-                  </span>
-                  <span className="ml-2">粉丝</span>
-                </div>
-              </div>
-            </div>
-
             {dj.bio && (
               <Card className="mb-8">
                 <h2 className="text-2xl font-bold text-text-primary mb-4">简介</h2>

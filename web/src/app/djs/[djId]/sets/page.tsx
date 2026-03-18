@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { DJSetAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import Navigation from '@/components/Navigation';
@@ -87,11 +88,15 @@ export default function DJSetsPage() {
                 className="bg-bg-secondary rounded-xl overflow-hidden hover:scale-105 hover:shadow-2xl transition-all duration-300 border border-bg-tertiary"
               >
                 {set.thumbnailUrl ? (
-                  <img
-                    src={set.thumbnailUrl}
-                    alt={set.title}
-                    className="w-full h-48 object-cover"
-                  />
+                  <div className="relative w-full h-48">
+                    <Image
+                      src={set.thumbnailUrl}
+                      alt={set.title}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    />
+                  </div>
                 ) : (
                   <div className="w-full h-48 bg-gradient-to-br from-primary-purple to-primary-blue flex items-center justify-center">
                     <span className="text-6xl">🎧</span>
@@ -115,6 +120,10 @@ export default function DJSetsPage() {
                     </div>
                   )}
                   <div className="flex items-center gap-4 text-sm text-text-secondary pt-3 border-t border-bg-tertiary">
+                    <span className="flex items-center gap-1">
+                      <span>🕒</span>
+                      <span>{new Date(set.createdAt).toLocaleDateString('zh-CN')}</span>
+                    </span>
                     <span className="flex items-center gap-1">
                       <span>🎵</span>
                       <span>{set.tracks.length} 首歌</span>

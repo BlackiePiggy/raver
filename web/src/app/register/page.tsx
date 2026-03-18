@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
+import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
@@ -46,11 +47,13 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg-primary flex items-center justify-center px-4 py-8">
+    <div className="min-h-screen bg-bg-primary">
+      <Navigation />
+      <div className="pt-[44px] min-h-[calc(100vh-44px)] flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-primary-purple to-primary-blue bg-clip-text text-transparent mb-2">
-            Raver
+            RaveHub
           </h1>
           <p className="text-text-secondary">Join the electronic music community</p>
         </div>
@@ -129,6 +132,7 @@ export default function RegisterPage() {
             </p>
           </div>
         </Card>
+      </div>
       </div>
     </div>
   );

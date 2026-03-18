@@ -1,14 +1,16 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { useEffect, useState } from 'react';
 import { eventAPI } from '@/lib/api/event';
 import { djAPI } from '@/lib/api/dj';
+import Navigation from '@/components/Navigation';
 
 export default function Home() {
-  const { user, logout, isLoading } = useAuth();
+  const { user } = useAuth();
   const [stats, setStats] = useState({
     eventsCount: 0,
     djsCount: 0,
@@ -51,56 +53,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-bg-primary">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-apple bg-bg-glass border-b border-border-secondary">
-        <div className="max-w-[980px] mx-auto px-6 h-[44px] flex items-center justify-between">
-          <Link href="/" className="text-xl font-semibold text-text-primary hover:text-text-secondary transition-colors">
-            Raver
-          </Link>
-
-          {!isLoading && (
-            <div className="flex items-center gap-6">
-              {user ? (
-                <>
-                  <Link href="/events" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
-                    活动
-                  </Link>
-                  <Link href="/djs" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
-                    DJ
-                  </Link>
-                  <Link href="/sets" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
-                    DJ Sets
-                  </Link>
-                  <Link href="/checkins" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
-                    打卡
-                  </Link>
-                  <button
-                    onClick={logout}
-                    className="text-sm text-text-secondary hover:text-text-primary transition-colors"
-                  >
-                    登出
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link href="/events" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
-                    活动
-                  </Link>
-                  <Link href="/djs" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
-                    DJ
-                  </Link>
-                  <Link href="/sets" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
-                    DJ Sets
-                  </Link>
-                  <Link href="/login" className="text-sm text-primary-blue hover:text-primary-purple transition-colors">
-                    登录
-                  </Link>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      </nav>
+      <Navigation />
 
       {/* Hero Section */}
       <section className="pt-[88px] pb-[60px] px-6">
@@ -180,11 +133,13 @@ export default function Home() {
                   >
                     <div className="relative overflow-hidden rounded-2xl bg-bg-elevated border border-border-secondary hover:border-border-primary transition-all duration-500 hover:scale-[1.02]">
                       {event.coverImageUrl ? (
-                        <div className="aspect-[4/3] overflow-hidden">
-                          <img
+                        <div className="aspect-[4/3] overflow-hidden relative">
+                          <Image
                             src={event.coverImageUrl}
                             alt={event.name}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                            fill
+                            className="object-cover group-hover:scale-110 transition-transform duration-700"
+                            sizes="(max-width: 768px) 100vw, 33vw"
                           />
                         </div>
                       ) : (
@@ -244,12 +199,14 @@ export default function Home() {
                     className="group text-center animate-fade-in"
                     style={{ animationDelay: `${index * 0.1}s` }}
                   >
-                    <div className="mb-4 relative">
+                    <div className="mb-4 relative w-full aspect-square">
                       {dj.avatarUrl ? (
-                        <img
+                        <Image
                           src={dj.avatarUrl}
                           alt={dj.name}
-                          className="w-full aspect-square rounded-2xl object-cover group-hover:scale-105 transition-transform duration-500"
+                          fill
+                          className="rounded-2xl object-cover group-hover:scale-105 transition-transform duration-500"
+                          sizes="(max-width: 768px) 50vw, 25vw"
                         />
                       ) : (
                         <div className="w-full aspect-square rounded-2xl bg-gradient-to-br from-primary-blue/20 to-accent-cyan/20 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
@@ -341,7 +298,7 @@ export default function Home() {
               准备好开始了吗？
             </h2>
             <p className="text-xl text-text-secondary mb-10">
-              加入Raver社区，发现更多精彩内容
+              加入RaveHub社区，发现更多精彩内容
             </p>
             <div className="flex gap-4 justify-center">
               <Link href="/register">
@@ -366,7 +323,7 @@ export default function Home() {
             Created with ❤️ for the electronic music community
           </p>
           <p className="text-xs text-text-tertiary">
-            © 2026 Raver. All rights reserved.
+            © 2026 RaveHub. All rights reserved.
           </p>
         </div>
       </footer>

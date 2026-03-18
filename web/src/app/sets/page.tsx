@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/Button';
 import { getApiUrl } from '@/lib/config';
 import Navigation from '@/components/Navigation';
@@ -26,36 +27,37 @@ interface DJSet {
 
 export default function DJSetsPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [sets, setSets] = useState<DJSet[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'latest');
-  const [filterDJ, setFilterDJ] = useState(searchParams.get('dj') || '');
+  const [sortBy, setSortBy] = useState('latest');
+  const [filterDJ, setFilterDJ] = useState('');
   const [allDJs, setAllDJs] = useState<any[]>([]);
 
   useEffect(() => {
-    loadData();
-  }, [sortBy, filterDJ]);
+    if (typeof window === 'undefined') {
+      return;
+    }
 
-  const loadData = async () => {
+    const params = new URLSearchParams(window.location.search);
+    setSortBy(params.get('sort') || 'latest');
+    setFilterDJ(params.get('dj') || '');
+  }, []);
+
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
 
-      // 获取所有DJ Sets
       const response = await fetch(getApiUrl('/dj-sets'));
       let data = await response.json();
 
-      // 如果返回的是对象而不是数组，尝试获取数组
       if (!Array.isArray(data)) {
         data = [];
       }
 
-      // 筛选DJ
       if (filterDJ) {
         data = data.filter((set: DJSet) => set.djId === filterDJ);
       }
 
-      // 排序
       switch (sortBy) {
         case 'latest':
           data.sort((a: DJSet, b: DJSet) =>
@@ -72,7 +74,6 @@ export default function DJSetsPage() {
 
       setSets(data);
 
-      // 获取所有DJ列表用于筛选
       const djsResponse = await fetch(getApiUrl('/djs'));
       const djsData = await djsResponse.json();
       setAllDJs(djsData.djs || []);
@@ -81,18 +82,24 @@ export default function DJSetsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterDJ, sortBy]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleSortChange = (newSort: string) => {
     setSortBy(newSort);
-    const params = new URLSearchParams(searchParams.toString());
+
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     params.set('sort', newSort);
     router.push(`/sets?${params.toString()}`);
   };
 
   const handleDJFilter = (djId: string) => {
     setFilterDJ(djId);
-    const params = new URLSearchParams(searchParams.toString());
+
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     if (djId) {
       params.set('dj', djId);
     } else {
@@ -105,7 +112,6 @@ export default function DJSetsPage() {
     <div className="min-h-screen bg-bg-primary">
       <Navigation />
 
-      {/* Header */}
       <div className="pt-[44px] bg-bg-secondary border-b border-bg-tertiary">
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex items-center justify-between mb-6">
@@ -123,9 +129,7 @@ export default function DJSetsPage() {
             </Button>
           </div>
 
-          {/* Filters */}
           <div className="flex flex-wrap gap-4">
-            {/* Sort */}
             <div className="flex items-center gap-2">
               <span className="text-text-secondary text-sm">排序:</span>
               <select
@@ -139,7 +143,6 @@ export default function DJSetsPage() {
               </select>
             </div>
 
-            {/* DJ Filter */}
             <div className="flex items-center gap-2">
               <span className="text-text-secondary text-sm">DJ:</span>
               <select
@@ -156,7 +159,6 @@ export default function DJSetsPage() {
               </select>
             </div>
 
-            {/* Clear Filters */}
             {(filterDJ || sortBy !== 'latest') && (
               <button
                 onClick={() => {
@@ -173,7 +175,6 @@ export default function DJSetsPage() {
         </div>
       </div>
 
-      {/* Sets Grid */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         {loading ? (
           <div className="text-center py-20">
@@ -201,11 +202,15 @@ export default function DJSetsPage() {
                 className="bg-bg-secondary rounded-xl overflow-hidden hover:scale-105 hover:shadow-2xl transition-all duration-300 border border-bg-tertiary"
               >
                 {set.thumbnailUrl ? (
-                  <img
-                    src={set.thumbnailUrl}
-                    alt={set.title}
-                    className="w-full h-48 object-cover"
-                  />
+                  <div className="relative w-full h-48">
+                    <Image
+                      src={set.thumbnailUrl}
+                      alt={set.title}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    />
+                  </div>
                 ) : (
                   <div className="w-full h-48 bg-gradient-to-br from-primary-purple to-primary-blue flex items-center justify-center">
                     <span className="text-6xl">🎧</span>
@@ -216,14 +221,17 @@ export default function DJSetsPage() {
                     {set.title}
                   </h2>
 
-                  {/* DJ Info */}
                   <div className="flex items-center gap-2 mb-3">
                     {set.dj.avatarUrl ? (
-                      <img
-                        src={set.dj.avatarUrl}
-                        alt={set.dj.name}
-                        className="w-6 h-6 rounded-full"
-                      />
+                      <div className="relative w-6 h-6">
+                        <Image
+                          src={set.dj.avatarUrl}
+                          alt={set.dj.name}
+                          fill
+                          className="rounded-full object-cover"
+                          sizes="24px"
+                        />
+                      </div>
                     ) : (
                       <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-purple to-primary-blue flex items-center justify-center text-xs">
                         🎧
@@ -234,19 +242,21 @@ export default function DJSetsPage() {
 
                   {set.venue && (
                     <div className="flex items-center text-text-secondary text-sm mb-2">
-                      <span className="mr-2">📍</span>
                       <span>{set.venue}</span>
                     </div>
                   )}
 
                   {set.eventName && (
                     <div className="flex items-center text-text-secondary text-sm mb-3">
-                      <span className="mr-2">🎪</span>
                       <span>{set.eventName}</span>
                     </div>
                   )}
 
                   <div className="flex items-center gap-4 text-sm text-text-secondary pt-3 border-t border-bg-tertiary">
+                    <span className="flex items-center gap-1">
+                      <span>🕒</span>
+                      <span>{new Date(set.createdAt).toLocaleDateString('zh-CN')}</span>
+                    </span>
                     <span className="flex items-center gap-1">
                       <span>🎵</span>
                       <span>{set.tracks.length} 首歌</span>

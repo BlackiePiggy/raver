@@ -38,34 +38,56 @@ export class MusicSearchService {
    * 搜索Spotify
    */
   async searchSpotify(keyword: string) {
+    const token = await this.getSpotifyToken();
+
+    const response = await axios.get('https://api.spotify.com/v1/search', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      params: {
+        q: keyword,
+        type: 'track',
+        limit: 10,
+      },
+    });
+
+    const tracks = response.data.tracks?.items || [];
+
+    return tracks.map((track: any) => ({
+      id: track.id,
+      name: track.name,
+      artist: track.artists?.map((a: any) => a.name).join(', ') || '',
+      album: track.album?.name || '',
+      url: track.external_urls?.spotify || '',
+      platform: 'spotify',
+      previewUrl: track.preview_url,
+      uri: track.uri,
+    }));
+  }
+
+  async getSpotifyAuthStatus() {
+    const hasCredentials = Boolean(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET);
+    if (!hasCredentials) {
+      return {
+        authenticated: false,
+        hasCredentials: false,
+        message: '未配置 Spotify Client ID/Secret',
+      };
+    }
+
     try {
-      const token = await this.getSpotifyToken();
-
-      const response = await axios.get('https://api.spotify.com/v1/search', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        params: {
-          q: keyword,
-          type: 'track',
-          limit: 10,
-        },
-      });
-
-      const tracks = response.data.tracks?.items || [];
-
-      return tracks.map((track: any) => ({
-        id: track.id,
-        name: track.name,
-        artist: track.artists?.map((a: any) => a.name).join(', ') || '',
-        album: track.album?.name || '',
-        url: track.external_urls?.spotify || '',
-        platform: 'spotify',
-        previewUrl: track.preview_url,
-      }));
+      await this.getSpotifyToken();
+      return {
+        authenticated: true,
+        hasCredentials: true,
+        message: 'Spotify 鉴权可用',
+      };
     } catch (error) {
-      console.error('Spotify search error:', error);
-      return [];
+      return {
+        authenticated: false,
+        hasCredentials: true,
+        message: `Spotify 鉴权失败: ${(error as Error).message}`,
+      };
     }
   }
 

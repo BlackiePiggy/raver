@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
+import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
@@ -11,7 +12,7 @@ import { Card } from '@/components/ui/Card';
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -22,7 +23,7 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await login(email, password);
+      await login(identifier, password);
       router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -32,11 +33,13 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg-primary flex items-center justify-center px-4">
+    <div className="min-h-screen bg-bg-primary">
+      <Navigation />
+      <div className="pt-[44px] min-h-[calc(100vh-44px)] flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-primary-purple to-primary-blue bg-clip-text text-transparent mb-2">
-            Raver
+            RaveHub
           </h1>
           <p className="text-text-secondary">Welcome back to the community</p>
         </div>
@@ -46,11 +49,11 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              type="email"
-              label="Email"
-              placeholder="your@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              label="邮箱 / 用户名 / 昵称"
+              placeholder="your@email.com / username / nickname"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               required
             />
 
@@ -89,6 +92,7 @@ export default function LoginPage() {
             </p>
           </div>
         </Card>
+      </div>
       </div>
     </div>
   );

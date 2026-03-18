@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import DJSetPlayer from '@/components/DJSetPlayer';
+import CommentSection from '@/components/CommentSection';
 import { DJSetAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import Navigation from '@/components/Navigation';
@@ -60,6 +61,11 @@ export default function DJSetPage() {
       <Navigation />
       <div className="pt-[44px]">
         <DJSetPlayer djSet={djSet} />
+
+        {/* Comment Section */}
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <CommentSection setId={djSet.id} setTitle={djSet.title} />
+        </div>
       </div>
     </div>
   );

@@ -1,0 +1,204 @@
+
+// ============================================
+// Community & Squad Models
+// ============================================
+
+model Post {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  content      String   @db.Text
+  images       String[] @default([])
+  type         String   @default("general") // general, event, set, squad
+  visibility   String   @default("public")  // public, friends, squad
+  squadId      String?  @map("squad_id")
+  eventId      String?  @map("event_id")
+  setId        String?  @map("set_id")
+  likeCount    Int      @default(0) @map("like_count")
+  commentCount Int      @default(0) @map("comment_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user         User          @relation("UserPosts", fields: [userId], references: [id], onDelete: Cascade)
+  squad        Squad?        @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  event        Event?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  set          DJSet?        @relation(fields: [setId], references: [id], onDelete: SetNull)
+  likes        PostLike[]
+  comments     PostComment[]
+
+  @@index([userId])
+  @@index([squadId])
+  @@index([createdAt])
+  @@index([type])
+  @@map("posts")
+}
+
+model PostLike {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+  @@map("post_likes")
+}
+
+model PostComment {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId])
+  @@map("post_comments")
+}
+
+model Squad {
+  id          String   @id @default(uuid())
+  name        String
+  description String?  @db.Text
+  avatarUrl   String?  @map("avatar_url")
+  bannerUrl   String?  @map("banner_url")
+  leaderId    String   @map("leader_id")
+  isPublic    Boolean  @default(false) @map("is_public")
+  maxMembers  Int      @default(50) @map("max_members")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  leader      User            @relation("SquadLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  members     SquadMember[]
+  invites     SquadInvite[]
+  activities  SquadActivity[]
+  albums      SquadAlbum[]
+  messages    SquadMessage[]
+  posts       Post[]
+
+  @@index([leaderId])
+  @@index([isPublic])
+  @@map("squads")
+}
+
+model SquadMember {
+  id        String   @id @default(uuid())
+  squadId   String   @map("squad_id")
+  userId    String   @map("user_id")
+  role      String   @default("member") // leader, admin, member
+  joinedAt  DateTime @default(now()) @map("joined_at")
+
+  squad     Squad    @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([squadId, userId])
+  @@index([squadId])
+  @@index([userId])
+  @@map("squad_members")
+}
+
+model SquadInvite {
+  id         String   @id @default(uuid())
+  squadId    String   @map("squad_id")
+  inviterId  String   @map("inviter_id")
+  inviteeId  String   @map("invitee_id")
+  status     String   @default("pending") // pending, accepted, rejected
+  createdAt  DateTime @default(now()) @map("created_at")
+  expiresAt  DateTime @map("expires_at")
+
+  squad      Squad    @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  inviter    User     @relation("SentInvites", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee    User     @relation("ReceivedInvites", fields: [inviteeId], references: [id], onDelete: Cascade)
+
+  @@unique([squadId, inviteeId])
+  @@index([squadId])
+  @@index([inviteeId])
+  @@index([status])
+  @@map("squad_invites")
+}
+
+model SquadActivity {
+  id           String   @id @default(uuid())
+  squadId      String   @map("squad_id")
+  eventId      String?  @map("event_id")
+  title        String
+  description  String?  @db.Text
+  location     String?
+  date         DateTime
+  participants String[] @default([]) // User IDs
+  createdById  String   @map("created_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  squad        Squad    @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  event        Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  createdBy    User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  albums       SquadAlbum[]
+
+  @@index([squadId])
+  @@index([eventId])
+  @@index([date])
+  @@map("squad_activities")
+}
+
+model SquadAlbum {
+  id          String   @id @default(uuid())
+  squadId     String   @map("squad_id")
+  activityId  String?  @map("activity_id")
+  title       String
+  description String?  @db.Text
+  coverUrl    String?  @map("cover_url")
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  squad       Squad           @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  activity    SquadActivity?  @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  createdBy   User            @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  photos      SquadAlbumPhoto[]
+
+  @@index([squadId])
+  @@index([activityId])
+  @@map("squad_albums")
+}
+
+model SquadAlbumPhoto {
+  id           String   @id @default(uuid())
+  albumId      String   @map("album_id")
+  url          String
+  caption      String?
+  uploadedById String   @map("uploaded_by_id")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  album        SquadAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  uploadedBy   User       @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([albumId])
+  @@index([uploadedById])
+  @@map("squad_album_photos")
+}
+
+model SquadMessage {
+  id        String   @id @default(uuid())
+  squadId   String   @map("squad_id")
+  userId    String   @map("user_id")
+  content   String   @db.Text
+  type      String   @default("text") // text, image, system
+  imageUrl  String?  @map("image_url")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  squad     Squad    @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([squadId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("squad_messages")
+}

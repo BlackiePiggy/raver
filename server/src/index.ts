@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import path from 'path';
 import authRoutes from './routes/auth.routes';
 import eventRoutes from './routes/event.routes';
 import djRoutes from './routes/dj.routes';
@@ -11,6 +12,9 @@ import followRoutes from './routes/follow.routes';
 import djSetRoutes from './routes/djset.routes';
 import djAggregatorRoutes from './routes/dj-aggregator.routes';
 import musicRoutes from './routes/music.routes';
+import commentRoutes from './routes/comment.routes';
+import squadRoutes from './routes/squad.routes';
+import notificationRoutes from './routes/notification.routes';
 
 dotenv.config();
 
@@ -18,11 +22,16 @@ const app: Express = express();
 const port = process.env.PORT || 3001;
 
 // Middleware
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Health check
 app.get('/health', (_req: Request, res: Response) => {
@@ -36,12 +45,16 @@ app.use('/api/djs', djRoutes);
 app.use('/api/checkins', checkinRoutes);
 app.use('/api/follows', followRoutes);
 app.use('/api/dj-sets', djSetRoutes);
+app.use('/api/dj-sets', commentRoutes);
+app.use('/api', commentRoutes);
 app.use('/api/dj-aggregator', djAggregatorRoutes);
 app.use('/api/music', musicRoutes);
+app.use('/api/squads', squadRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/api', (_req: Request, res: Response) => {
   res.json({
-    message: 'Raver API Server',
+    message: 'RaveHub API Server',
     version: '1.0.0',
     endpoints: {
       health: '/health',
@@ -53,6 +66,8 @@ app.get('/api', (_req: Request, res: Response) => {
       follows: '/api/follows',
       djSets: '/api/dj-sets',
       djAggregator: '/api/dj-aggregator',
+      squads: '/api/squads',
+      notifications: '/api/notifications',
     },
   });
 });
@@ -69,5 +84,5 @@ app.use((err: Error, _req: Request, res: Response) => {
 });
 
 app.listen(port, () => {
-  console.log(`🎵 Raver API Server running on http://localhost:${port}`);
+  console.log(`🎵 RaveHub API Server running on http://localhost:${port}`);
 });

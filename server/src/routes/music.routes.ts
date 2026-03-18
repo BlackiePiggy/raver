@@ -5,6 +5,23 @@ import musicSearchService from '../services/music-search.service';
 const router: IRouter = Router();
 
 /**
+ * GET /api/music/spotify/auth-status
+ * 获取Spotify鉴权状态
+ */
+router.get('/spotify/auth-status', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const status = await musicSearchService.getSpotifyAuthStatus();
+    res.json({
+      ...status,
+      authUrl: 'https://developer.spotify.com/dashboard',
+    });
+  } catch (error) {
+    console.error('Spotify auth status error:', error);
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+/**
  * GET /api/music/netease/search
  * 搜索网易云音乐
  */

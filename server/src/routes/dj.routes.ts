@@ -3,6 +3,9 @@ import {
   getDJs,
   getDJ,
   createDJ,
+  batchCreateDJs,
+  searchSpotifyArtist,
+  ensureDJs,
   updateDJ,
   deleteDJ,
 } from '../controllers/dj.controller';
@@ -11,6 +14,9 @@ import { authenticate, authorize } from '../middleware/auth';
 const router: Router = Router();
 
 router.get('/', getDJs);
+router.get('/spotify/search', searchSpotifyArtist);
+router.post('/ensure', ensureDJs);
+router.post('/batch', authenticate, authorize('admin', 'user'), batchCreateDJs);
 router.get('/:id', getDJ);
 router.post('/', authenticate, authorize('admin', 'user'), createDJ);
 router.put('/:id', authenticate, authorize('admin'), updateDJ);

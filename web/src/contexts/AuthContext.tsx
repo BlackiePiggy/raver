@@ -6,9 +6,11 @@ import { User, authAPI } from '@/lib/api/auth';
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string, displayName?: string) => Promise<void>;
   logout: () => void;
+  refreshProfile: () => Promise<void>;
+  setAuthUser: (nextUser: User) => void;
   isLoading: boolean;
 }
 
@@ -38,8 +40,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const response = await authAPI.login({ email, password });
+  const login = async (identifier: string, password: string) => {
+    const response = await authAPI.login({ identifier, password });
     setUser(response.user);
     setToken(response.token);
     localStorage.setItem('token', response.token);
@@ -58,8 +60,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('token');
   };
 
+  const refreshProfile = async () => {
+    const currentToken = token || localStorage.getItem('token');
+    if (!currentToken) return;
+    const profile = await authAPI.getProfile(currentToken);
+    setUser(profile);
+    if (!token) {
+      setToken(currentToken);
+    }
+  };
+
+  const setAuthUser = (nextUser: User) => {
+    setUser(nextUser);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, refreshProfile, setAuthUser, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

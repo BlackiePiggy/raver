@@ -6,6 +6,10 @@ export interface User {
   email: string;
   displayName: string | null;
   avatarUrl: string | null;
+  bio?: string | null;
+  location?: string | null;
+  favoriteDjIds?: string[];
+  favoriteGenres?: string[];
   role: string;
 }
 
@@ -22,7 +26,7 @@ export interface RegisterData {
 }
 
 export interface LoginData {
-  email: string;
+  identifier: string;
   password: string;
 }
 
@@ -75,6 +79,66 @@ class AuthAPI {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Failed to fetch profile');
+    }
+
+    return response.json();
+  }
+
+  async updateProfile(
+    token: string,
+    data: {
+      displayName?: string;
+      bio?: string;
+      location?: string;
+      favoriteDjIds?: string[];
+      favoriteGenres?: string[];
+    }
+  ): Promise<User> {
+    const response = await fetch(`${API_URL}/auth/profile`, {
+      method: 'PUT',
+      headers: this.getHeaders(token),
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to update profile');
+    }
+
+    return response.json();
+  }
+
+  async uploadAvatar(token: string, file: File): Promise<User> {
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    const response = await fetch(`${API_URL}/auth/avatar`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to upload avatar');
+    }
+
+    return response.json();
+  }
+
+  async searchUsers(query: string): Promise<Array<{
+    id: string;
+    username: string;
+    displayName?: string;
+    avatarUrl?: string;
+  }>> {
+    const response = await fetch(`${API_URL}/auth/users/search?q=${encodeURIComponent(query)}`);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to search users');
     }
 
     return response.json();

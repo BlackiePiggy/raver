@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Event } from '@/lib/api/event';
 
 interface EventCardProps {
@@ -21,10 +22,12 @@ export const EventCard: React.FC<EventCardProps> = ({ event }) => {
       <div className="bg-bg-secondary rounded-xl overflow-hidden border border-border-secondary hover:border-primary-purple transition-all duration-300 hover:shadow-glow cursor-pointer">
         {event.coverImageUrl ? (
           <div className="h-48 bg-bg-tertiary relative">
-            <img
+            <Image
               src={event.coverImageUrl}
               alt={event.name}
-              className="w-full h-full object-cover"
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             />
           </div>
         ) : (

@@ -1,0 +1,5 @@
+ALTER TABLE "dj_sets"
+ADD COLUMN "co_dj_ids" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+
+ALTER TABLE "dj_sets"
+ADD COLUMN "custom_dj_names" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

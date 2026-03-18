@@ -6,8 +6,14 @@ import { AuthProvider } from '@/contexts/AuthContext'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Raver - 电子音乐爱好者平台',
+  title: 'RaveHub - 电子音乐爱好者平台',
   description: '发现你的下一场电音之旅',
+  icons: {
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/icon.png', type: 'image/png' },
+    ],
+  },
 }
 
 export default function RootLayout({

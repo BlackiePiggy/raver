@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { checkinAPI, Checkin } from '@/lib/api/checkin';
 import { useAuth } from '@/contexts/AuthContext';
+import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 
@@ -15,16 +16,7 @@ export default function MyCheckinsPage() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'event' | 'dj'>('all');
 
-  useEffect(() => {
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-
-    loadCheckins();
-  }, [user, filter]);
-
-  const loadCheckins = async () => {
+  const loadCheckins = useCallback(async () => {
     if (!token) return;
 
     try {
@@ -40,7 +32,16 @@ export default function MyCheckinsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token, filter]);
+
+  useEffect(() => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    loadCheckins();
+  }, [user, router, loadCheckins]);
 
   const handleDelete = async (id: string) => {
     if (!token || !confirm('确定要删除这条打卡记录吗？')) return;
@@ -70,7 +71,8 @@ export default function MyCheckinsPage() {
 
   return (
     <div className="min-h-screen bg-bg-primary">
-      <div className="max-w-5xl mx-auto px-4 py-8">
+      <Navigation />
+      <div className="max-w-5xl mx-auto px-4 py-8 pt-[60px]">
         <div className="mb-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-primary-purple to-primary-blue bg-clip-text text-transparent mb-4">
             我的打卡
