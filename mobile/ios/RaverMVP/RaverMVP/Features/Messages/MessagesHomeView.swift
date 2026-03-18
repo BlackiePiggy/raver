@@ -416,8 +416,10 @@ struct MessagesHomeView: View {
                             conversationRow(conversation)
                         }
                         .simultaneousGesture(TapGesture().onEnded {
-                            chatViewModel.markConversationRead(conversationID: conversation.id)
-                            syncTabBadge()
+                            Task {
+                                await chatViewModel.markConversationRead(conversationID: conversation.id)
+                                syncTabBadge()
+                            }
                         })
                         .listRowBackground(RaverTheme.card)
                     }
@@ -670,9 +672,11 @@ private struct MessageAlertDetailView: View {
             } else {
                 List(items) { item in
                     Button {
-                        viewModel.markRead(item)
-                        onReadChange()
-                        handleTap(item)
+                        Task {
+                            await viewModel.markRead(item)
+                            onReadChange()
+                            handleTap(item)
+                        }
                     } label: {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: category.iconName)

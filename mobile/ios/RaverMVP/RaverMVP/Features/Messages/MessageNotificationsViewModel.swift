@@ -8,7 +8,6 @@ final class MessageNotificationsViewModel: ObservableObject {
     @Published var error: String?
 
     private let service: SocialService
-    private var locallyReadIDs: Set<String> = []
 
     init(service: SocialService) {
         self.service = service
@@ -28,20 +27,27 @@ final class MessageNotificationsViewModel: ObservableObject {
             notifications = inboxResult.items
             unreadCounts = unreadResult
             unreadCounts.total = unreadCounts.follows + unreadCounts.likes + unreadCounts.comments
-            applyLocalReadState()
             error = nil
         } catch {
             self.error = error.localizedDescription
         }
     }
 
-    func markRead(_ item: AppNotification) {
-        guard !locallyReadIDs.contains(item.id) else { return }
-        locallyReadIDs.insert(item.id)
-        if let index = notifications.firstIndex(where: { $0.id == item.id }) {
-            notifications[index].isRead = true
-        }
+    func markRead(_ item: AppNotification) async {
+        guard let index = notifications.firstIndex(where: { $0.id == item.id }) else { return }
+        guard notifications[index].isRead == false else { return }
+
+        notifications[index].isRead = true
         decrementUnread(for: item.type)
+
+        do {
+            try await service.markNotificationRead(notificationID: item.id)
+            error = nil
+        } catch {
+            notifications[index].isRead = false
+            incrementUnread(for: item.type)
+            self.error = error.localizedDescription
+        }
     }
 
     func unreadCount(for type: AppNotificationType) -> Int {
@@ -63,15 +69,6 @@ final class MessageNotificationsViewModel: ObservableObject {
             .sorted(by: { $0.createdAt > $1.createdAt })
     }
 
-    private func applyLocalReadState() {
-        for index in notifications.indices where locallyReadIDs.contains(notifications[index].id) {
-            if notifications[index].isRead == false {
-                decrementUnread(for: notifications[index].type)
-            }
-            notifications[index].isRead = true
-        }
-    }
-
     private func decrementUnread(for type: AppNotificationType) {
         switch type {
         case .follow:
@@ -84,5 +81,19 @@ final class MessageNotificationsViewModel: ObservableObject {
             unreadCounts.squadInvites = max(0, unreadCounts.squadInvites - 1)
         }
         unreadCounts.total = max(0, unreadCounts.total - 1)
+    }
+
+    private func incrementUnread(for type: AppNotificationType) {
+        switch type {
+        case .follow:
+            unreadCounts.follows += 1
+        case .like:
+            unreadCounts.likes += 1
+        case .comment:
+            unreadCounts.comments += 1
+        case .squadInvite:
+            unreadCounts.squadInvites += 1
+        }
+        unreadCounts.total += 1
     }
 }

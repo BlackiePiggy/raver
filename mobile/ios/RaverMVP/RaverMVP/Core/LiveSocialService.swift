@@ -107,6 +107,13 @@ final class LiveSocialService: SocialService {
         try await request(path: "/v1/chat/conversations?type=\(type.rawValue)", method: "GET")
     }
 
+    func markConversationRead(conversationID: String) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/chat/conversations/\(conversationID)/read",
+            method: "POST"
+        )
+    }
+
     func startDirectConversation(identifier: String) async throws -> Conversation {
         try await request(
             path: "/v1/chat/direct/start",
@@ -177,6 +184,14 @@ final class LiveSocialService: SocialService {
 
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount {
         try await request(path: "/v1/notifications/unread-count", method: "GET")
+    }
+
+    func markNotificationRead(notificationID: String) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/notifications/read",
+            method: "POST",
+            body: ["notificationId": notificationID]
+        )
     }
 
     func fetchMyProfile() async throws -> UserProfile {

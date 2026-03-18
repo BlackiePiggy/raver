@@ -21,6 +21,7 @@ protocol SocialService {
     func fetchFriends(userID: String, cursor: String?) async throws -> FollowListPage
 
     func fetchConversations(type: ConversationType) async throws -> [Conversation]
+    func markConversationRead(conversationID: String) async throws
     func startDirectConversation(identifier: String) async throws -> Conversation
     func fetchMessages(conversationID: String) async throws -> [ChatMessage]
     func sendMessage(conversationID: String, content: String) async throws -> ChatMessage
@@ -33,6 +34,7 @@ protocol SocialService {
     func updateSquadInfo(squadID: String, input: UpdateSquadInfoInput) async throws
     func fetchNotifications(limit: Int) async throws -> NotificationInbox
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
+    func markNotificationRead(notificationID: String) async throws
 
     func fetchMyProfile() async throws -> UserProfile
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile

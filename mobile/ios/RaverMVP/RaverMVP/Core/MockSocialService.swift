@@ -290,6 +290,11 @@ actor MockSocialService: SocialService {
             .sorted(by: { $0.updatedAt > $1.updatedAt })
     }
 
+    func markConversationRead(conversationID: String) async throws {
+        guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else { return }
+        conversations[index].unreadCount = 0
+    }
+
     func startDirectConversation(identifier: String) async throws -> Conversation {
         let normalized = identifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if normalized.isEmpty {
@@ -620,6 +625,11 @@ actor MockSocialService: SocialService {
             comments: unreadItems.filter { $0.type == .comment }.count,
             squadInvites: unreadItems.filter { $0.type == .squadInvite }.count
         )
+    }
+
+    func markNotificationRead(notificationID: String) async throws {
+        guard let index = notifications.firstIndex(where: { $0.id == notificationID }) else { return }
+        notifications[index].isRead = true
     }
 
     func fetchMyProfile() async throws -> UserProfile {

@@ -31,12 +31,26 @@ final class MessagesViewModel: ObservableObject {
         }
     }
 
-    func markConversationRead(conversationID: String) {
+    func markConversationRead(conversationID: String) async {
         guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else { return }
-        guard conversations[index].unreadCount > 0 else { return }
+        let previousUnread = conversations[index].unreadCount
+        guard previousUnread > 0 else { return }
+
         conversations[index].unreadCount = 0
         conversations = Self.sortConversations(conversations)
         unreadTotal = conversations.reduce(0) { $0 + max(0, $1.unreadCount) }
+
+        do {
+            try await service.markConversationRead(conversationID: conversationID)
+            error = nil
+        } catch {
+            if let restoreIndex = conversations.firstIndex(where: { $0.id == conversationID }) {
+                conversations[restoreIndex].unreadCount = previousUnread
+            }
+            conversations = Self.sortConversations(conversations)
+            unreadTotal = conversations.reduce(0) { $0 + max(0, $1.unreadCount) }
+            self.error = error.localizedDescription
+        }
     }
 
     private static func sortConversations(_ items: [Conversation]) -> [Conversation] {
