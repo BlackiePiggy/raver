@@ -1,0 +1,547 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		014FB24EF31F0B9F4A90ED34 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED58E3FD346D1B1DA99D81EE /* FollowListView.swift */; };
+		01A49EA26C62191CB0FB2803 /* RemoteCoverImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A00B6CD83B1FA7380ECC424 /* RemoteCoverImage.swift */; };
+		0891E480ACD029C80916089F /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E47BBEE716BD3CC618927D23 /* PostDetailView.swift */; };
+		097FFF23469EEA1D2FA723A6 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CD72467D92997915354A798 /* FeedView.swift */; };
+		0D2A5D26A4F7B07B2325572E /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7E353A02AA123867DBF8214 /* SearchViewModel.swift */; };
+		0DB33245697FDC2AB4233219 /* MockSocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E10177408B284AD6125716B /* MockSocialService.swift */; };
+		1929ADB9FBFB4BE0E1C54F5A /* MessagesHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02D93C1E9013AE51657CE508 /* MessagesHomeView.swift */; };
+		1C90A0077163435CBEB4F876 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 029F1F7A11F8D9328FC2637E /* AppEnvironment.swift */; };
+		1FBBA16E3A548770DFE7B279 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5DE86DE9B4F0EB126C1BD6FC /* Preview Assets.xcassets */; };
+		24B3F3DD60C8BC86D9930C91 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81818C9CF7B8E9DCD756E5F0 /* SearchView.swift */; };
+		2E2ADC697AD46EB8F911381F /* Date+Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65BB3130C75701FCEA9E70AA /* Date+Formatting.swift */; };
+		323F3D3FC83332EA80F230EA /* SocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62830C10B1CF8052DE2C7114 /* SocialService.swift */; };
+		325A5552444074AC42CA44E1 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37DBB975EC23CE42CD9FE0C7 /* ChatView.swift */; };
+		3892F13EB0982506C95ACE3F /* NotificationsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C3638C048950014CEF703C0 /* NotificationsViewModel.swift */; };
+		3F4AB59901BAC2520B33161F /* RaverMVPApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09147CC250EE9B48A01FAA78 /* RaverMVPApp.swift */; };
+		430044327A0BB460A375D3DE /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC843EFC9D73D6230383E286 /* AppConfig.swift */; };
+		47F3C43B0581AAEC6D968AA0 /* MessagesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E31430D89831B6B1F892096F /* MessagesViewModel.swift */; };
+		482D36CFDC412AE4D1D1D9CA /* SquadProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2030BCADD406B01C57394D63 /* SquadProfileViewModel.swift */; };
+		484571D1CEA1F887D558A195 /* PrimaryButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93D5E00041C5689BD07853B7 /* PrimaryButtonStyle.swift */; };
+		4BAE1D9D71584928E0655E8E /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73CE306523273347EB5B9FFB /* EditProfileView.swift */; };
+		4C3C220B125C49820777E2BB /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C313C382D0F686C910F91FAE /* AppState.swift */; };
+		62B16A77B9B42A4668E95E96 /* SquadProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B72680D6A119DEDC285359 /* SquadProfileView.swift */; };
+		707ABC7178B5D8882FA6FB94 /* MessageNotificationsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D22F64C28F795AFB1BDDB071 /* MessageNotificationsViewModel.swift */; };
+		7726ACDE260957D0F261A36F /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18E7E6E5FDF4D8F8F0287B02 /* UserProfileView.swift */; };
+		79A9B616CA5AF6E1927D71EB /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1667E1FD75B9F985BA3968E4 /* ProfileView.swift */; };
+		88343C9F0FC355C1FC2848EC /* DiscoverHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D433A0D9BD7E505C44F531 /* DiscoverHomeView.swift */; };
+		9197161544529AE82E33B872 /* FollowListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16E5645F1BBC6C366601B5F /* FollowListViewModel.swift */; };
+		921DA79B7E9158F25B8C25EE /* PostCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A10D4C2B18B58489A03E3FD /* PostCardView.swift */; };
+		9A1419C5872D0F2A4C9230FA /* LiveSocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76E16068958F9015F96D65E5 /* LiveSocialService.swift */; };
+		9BDD2694CE732F5654A39747 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58DA7470156F9993DC0CFC4A /* LoginView.swift */; };
+		BDA39977AEDCA3882A24B31C /* UserProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C5E934B8EACEEE5F66669D4 /* UserProfileViewModel.swift */; };
+		BFFDECAA0508516FE35108E8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 22DACDC6883B8B285DE1D62B /* Assets.xcassets */; };
+		C5063A39DE8D5CEE2271EE74 /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44D012A0BF065B3C163844A4 /* FeedViewModel.swift */; };
+		CF9E654D840B750EB13AB543 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D5E320CA7039B631B9D218 /* ProfileViewModel.swift */; };
+		D05277EFA4D6EF0211E0EA3E /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39F865C2316916ABFA624E46 /* Models.swift */; };
+		D0CB63C0A1B757B00E758079 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0B45B928FAA36BEC68A7B7E /* GlassCard.swift */; };
+		DF8C98EDD33AD4D433B90E61 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 107F667059BB4EB625E82D05 /* NotificationsView.swift */; };
+		E3FE5377589AF10103D4A7E1 /* ComposePostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6D812798B002B0C31A4CF63 /* ComposePostView.swift */; };
+		FB5A18854CEFE99F1BB2D9AE /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED7D9D9CBAF6906AE336154 /* MainTabView.swift */; };
+		FED85BDCFF1296B7A86E015D /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 581792D7AA4E89244B39D8B2 /* Theme.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		029F1F7A11F8D9328FC2637E /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		02D93C1E9013AE51657CE508 /* MessagesHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesHomeView.swift; sourceTree = "<group>"; };
+		09147CC250EE9B48A01FAA78 /* RaverMVPApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverMVPApp.swift; sourceTree = "<group>"; };
+		107F667059BB4EB625E82D05 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
+		1667E1FD75B9F985BA3968E4 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		18E7E6E5FDF4D8F8F0287B02 /* UserProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileView.swift; sourceTree = "<group>"; };
+		1CD72467D92997915354A798 /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
+		2030BCADD406B01C57394D63 /* SquadProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SquadProfileViewModel.swift; sourceTree = "<group>"; };
+		22DACDC6883B8B285DE1D62B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		2A00B6CD83B1FA7380ECC424 /* RemoteCoverImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteCoverImage.swift; sourceTree = "<group>"; };
+		2C3638C048950014CEF703C0 /* NotificationsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsViewModel.swift; sourceTree = "<group>"; };
+		37DBB975EC23CE42CD9FE0C7 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		39F865C2316916ABFA624E46 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		3E10177408B284AD6125716B /* MockSocialService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockSocialService.swift; sourceTree = "<group>"; };
+		44D012A0BF065B3C163844A4 /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
+		4A10D4C2B18B58489A03E3FD /* PostCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostCardView.swift; sourceTree = "<group>"; };
+		55D5E320CA7039B631B9D218 /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
+		581792D7AA4E89244B39D8B2 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		58DA7470156F9993DC0CFC4A /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		5DE86DE9B4F0EB126C1BD6FC /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		5ED7D9D9CBAF6906AE336154 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		62830C10B1CF8052DE2C7114 /* SocialService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialService.swift; sourceTree = "<group>"; };
+		65BB3130C75701FCEA9E70AA /* Date+Formatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Date+Formatting.swift"; sourceTree = "<group>"; };
+		6C5E934B8EACEEE5F66669D4 /* UserProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileViewModel.swift; sourceTree = "<group>"; };
+		73CE306523273347EB5B9FFB /* EditProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
+		76E16068958F9015F96D65E5 /* LiveSocialService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSocialService.swift; sourceTree = "<group>"; };
+		81818C9CF7B8E9DCD756E5F0 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		93D5E00041C5689BD07853B7 /* PrimaryButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryButtonStyle.swift; sourceTree = "<group>"; };
+		93F03BC5D8661326C73E0C34 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		AF5B0FC75B939A24178606E6 /* RaverMVP.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = RaverMVP.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B8D433A0D9BD7E505C44F531 /* DiscoverHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverHomeView.swift; sourceTree = "<group>"; };
+		BC843EFC9D73D6230383E286 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		C0B72680D6A119DEDC285359 /* SquadProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SquadProfileView.swift; sourceTree = "<group>"; };
+		C313C382D0F686C910F91FAE /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		D0B45B928FAA36BEC68A7B7E /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
+		D22F64C28F795AFB1BDDB071 /* MessageNotificationsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageNotificationsViewModel.swift; sourceTree = "<group>"; };
+		D7E353A02AA123867DBF8214 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
+		E16E5645F1BBC6C366601B5F /* FollowListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowListViewModel.swift; sourceTree = "<group>"; };
+		E31430D89831B6B1F892096F /* MessagesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesViewModel.swift; sourceTree = "<group>"; };
+		E47BBEE716BD3CC618927D23 /* PostDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailView.swift; sourceTree = "<group>"; };
+		ED58E3FD346D1B1DA99D81EE /* FollowListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowListView.swift; sourceTree = "<group>"; };
+		F6D812798B002B0C31A4CF63 /* ComposePostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposePostView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		1CE0F5F922752E993342B22C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AF5B0FC75B939A24178606E6 /* RaverMVP.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		30A73257F74CD2F5361FA93A /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				5ED7D9D9CBAF6906AE336154 /* MainTabView.swift */,
+				3C04FB109339B360DF7E2DB5 /* Auth */,
+				8B68B020F600D24D2F962A38 /* Discover */,
+				5EE0C0C02379C49261662C42 /* Feed */,
+				45DD7D2B84C7AC1ABB727716 /* Messages */,
+				D99575792CAEA571D72CF7EC /* Notifications */,
+				7212D6EC799B1B4EC4D1A0CA /* Profile */,
+				91EA070EC5F5A5442538B2F7 /* Search */,
+				31C75DE61C6FF292592463C3 /* Squads */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		31C75DE61C6FF292592463C3 /* Squads */ = {
+			isa = PBXGroup;
+			children = (
+				C0B72680D6A119DEDC285359 /* SquadProfileView.swift */,
+				2030BCADD406B01C57394D63 /* SquadProfileViewModel.swift */,
+			);
+			path = Squads;
+			sourceTree = "<group>";
+		};
+		363A09259AB8E1EF37F49338 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				5DE86DE9B4F0EB126C1BD6FC /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		3C04FB109339B360DF7E2DB5 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				58DA7470156F9993DC0CFC4A /* LoginView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		45DD7D2B84C7AC1ABB727716 /* Messages */ = {
+			isa = PBXGroup;
+			children = (
+				37DBB975EC23CE42CD9FE0C7 /* ChatView.swift */,
+				D22F64C28F795AFB1BDDB071 /* MessageNotificationsViewModel.swift */,
+				02D93C1E9013AE51657CE508 /* MessagesHomeView.swift */,
+				E31430D89831B6B1F892096F /* MessagesViewModel.swift */,
+			);
+			path = Messages;
+			sourceTree = "<group>";
+		};
+		5EE0C0C02379C49261662C42 /* Feed */ = {
+			isa = PBXGroup;
+			children = (
+				F6D812798B002B0C31A4CF63 /* ComposePostView.swift */,
+				1CD72467D92997915354A798 /* FeedView.swift */,
+				44D012A0BF065B3C163844A4 /* FeedViewModel.swift */,
+				E47BBEE716BD3CC618927D23 /* PostDetailView.swift */,
+			);
+			path = Feed;
+			sourceTree = "<group>";
+		};
+		7212D6EC799B1B4EC4D1A0CA /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				73CE306523273347EB5B9FFB /* EditProfileView.swift */,
+				ED58E3FD346D1B1DA99D81EE /* FollowListView.swift */,
+				E16E5645F1BBC6C366601B5F /* FollowListViewModel.swift */,
+				1667E1FD75B9F985BA3968E4 /* ProfileView.swift */,
+				55D5E320CA7039B631B9D218 /* ProfileViewModel.swift */,
+				18E7E6E5FDF4D8F8F0287B02 /* UserProfileView.swift */,
+				6C5E934B8EACEEE5F66669D4 /* UserProfileViewModel.swift */,
+			);
+			path = Profile;
+			sourceTree = "<group>";
+		};
+		8B68B020F600D24D2F962A38 /* Discover */ = {
+			isa = PBXGroup;
+			children = (
+				B8D433A0D9BD7E505C44F531 /* DiscoverHomeView.swift */,
+			);
+			path = Discover;
+			sourceTree = "<group>";
+		};
+		91EA070EC5F5A5442538B2F7 /* Search */ = {
+			isa = PBXGroup;
+			children = (
+				81818C9CF7B8E9DCD756E5F0 /* SearchView.swift */,
+				D7E353A02AA123867DBF8214 /* SearchViewModel.swift */,
+			);
+			path = Search;
+			sourceTree = "<group>";
+		};
+		A4B11345E9C0768E62BC4DB1 = {
+			isa = PBXGroup;
+			children = (
+				CAB2EA925828AE23AE9BD5C9 /* RaverMVP */,
+				1CE0F5F922752E993342B22C /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		CAB2EA925828AE23AE9BD5C9 /* RaverMVP */ = {
+			isa = PBXGroup;
+			children = (
+				22DACDC6883B8B285DE1D62B /* Assets.xcassets */,
+				93F03BC5D8661326C73E0C34 /* Info.plist */,
+				09147CC250EE9B48A01FAA78 /* RaverMVPApp.swift */,
+				D9D7E1B82939CDF2FFA560D7 /* Core */,
+				30A73257F74CD2F5361FA93A /* Features */,
+				363A09259AB8E1EF37F49338 /* Preview Content */,
+				FA80CD43F58C7BD6F40AAAB4 /* Shared */,
+			);
+			path = RaverMVP;
+			sourceTree = "<group>";
+		};
+		D99575792CAEA571D72CF7EC /* Notifications */ = {
+			isa = PBXGroup;
+			children = (
+				107F667059BB4EB625E82D05 /* NotificationsView.swift */,
+				2C3638C048950014CEF703C0 /* NotificationsViewModel.swift */,
+			);
+			path = Notifications;
+			sourceTree = "<group>";
+		};
+		D9D7E1B82939CDF2FFA560D7 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				BC843EFC9D73D6230383E286 /* AppConfig.swift */,
+				029F1F7A11F8D9328FC2637E /* AppEnvironment.swift */,
+				C313C382D0F686C910F91FAE /* AppState.swift */,
+				65BB3130C75701FCEA9E70AA /* Date+Formatting.swift */,
+				76E16068958F9015F96D65E5 /* LiveSocialService.swift */,
+				3E10177408B284AD6125716B /* MockSocialService.swift */,
+				39F865C2316916ABFA624E46 /* Models.swift */,
+				62830C10B1CF8052DE2C7114 /* SocialService.swift */,
+				581792D7AA4E89244B39D8B2 /* Theme.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		FA80CD43F58C7BD6F40AAAB4 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				D0B45B928FAA36BEC68A7B7E /* GlassCard.swift */,
+				4A10D4C2B18B58489A03E3FD /* PostCardView.swift */,
+				93D5E00041C5689BD07853B7 /* PrimaryButtonStyle.swift */,
+				2A00B6CD83B1FA7380ECC424 /* RemoteCoverImage.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		56189630DAD342F274176A46 /* RaverMVP */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3B51D85AD2FC63586C14F871 /* Build configuration list for PBXNativeTarget "RaverMVP" */;
+			buildPhases = (
+				96EDEF8ECA7836CAC953BCFE /* Sources */,
+				89F123B614E34F2A62323530 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RaverMVP;
+			packageProductDependencies = (
+			);
+			productName = RaverMVP;
+			productReference = AF5B0FC75B939A24178606E6 /* RaverMVP.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		FA7E0A167FF858244BA32208 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 17A373D8FA67927761071514 /* Build configuration list for PBXProject "RaverMVP" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = A4B11345E9C0768E62BC4DB1;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 1CE0F5F922752E993342B22C /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				56189630DAD342F274176A46 /* RaverMVP */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		89F123B614E34F2A62323530 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BFFDECAA0508516FE35108E8 /* Assets.xcassets in Resources */,
+				1FBBA16E3A548770DFE7B279 /* Preview Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		96EDEF8ECA7836CAC953BCFE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				430044327A0BB460A375D3DE /* AppConfig.swift in Sources */,
+				1C90A0077163435CBEB4F876 /* AppEnvironment.swift in Sources */,
+				4C3C220B125C49820777E2BB /* AppState.swift in Sources */,
+				325A5552444074AC42CA44E1 /* ChatView.swift in Sources */,
+				E3FE5377589AF10103D4A7E1 /* ComposePostView.swift in Sources */,
+				2E2ADC697AD46EB8F911381F /* Date+Formatting.swift in Sources */,
+				88343C9F0FC355C1FC2848EC /* DiscoverHomeView.swift in Sources */,
+				4BAE1D9D71584928E0655E8E /* EditProfileView.swift in Sources */,
+				097FFF23469EEA1D2FA723A6 /* FeedView.swift in Sources */,
+				C5063A39DE8D5CEE2271EE74 /* FeedViewModel.swift in Sources */,
+				014FB24EF31F0B9F4A90ED34 /* FollowListView.swift in Sources */,
+				9197161544529AE82E33B872 /* FollowListViewModel.swift in Sources */,
+				D0CB63C0A1B757B00E758079 /* GlassCard.swift in Sources */,
+				9A1419C5872D0F2A4C9230FA /* LiveSocialService.swift in Sources */,
+				9BDD2694CE732F5654A39747 /* LoginView.swift in Sources */,
+				FB5A18854CEFE99F1BB2D9AE /* MainTabView.swift in Sources */,
+				707ABC7178B5D8882FA6FB94 /* MessageNotificationsViewModel.swift in Sources */,
+				1929ADB9FBFB4BE0E1C54F5A /* MessagesHomeView.swift in Sources */,
+				47F3C43B0581AAEC6D968AA0 /* MessagesViewModel.swift in Sources */,
+				0DB33245697FDC2AB4233219 /* MockSocialService.swift in Sources */,
+				D05277EFA4D6EF0211E0EA3E /* Models.swift in Sources */,
+				DF8C98EDD33AD4D433B90E61 /* NotificationsView.swift in Sources */,
+				3892F13EB0982506C95ACE3F /* NotificationsViewModel.swift in Sources */,
+				921DA79B7E9158F25B8C25EE /* PostCardView.swift in Sources */,
+				0891E480ACD029C80916089F /* PostDetailView.swift in Sources */,
+				484571D1CEA1F887D558A195 /* PrimaryButtonStyle.swift in Sources */,
+				79A9B616CA5AF6E1927D71EB /* ProfileView.swift in Sources */,
+				CF9E654D840B750EB13AB543 /* ProfileViewModel.swift in Sources */,
+				3F4AB59901BAC2520B33161F /* RaverMVPApp.swift in Sources */,
+				01A49EA26C62191CB0FB2803 /* RemoteCoverImage.swift in Sources */,
+				24B3F3DD60C8BC86D9930C91 /* SearchView.swift in Sources */,
+				0D2A5D26A4F7B07B2325572E /* SearchViewModel.swift in Sources */,
+				323F3D3FC83332EA80F230EA /* SocialService.swift in Sources */,
+				62B16A77B9B42A4668E95E96 /* SquadProfileView.swift in Sources */,
+				482D36CFDC412AE4D1D1D9CA /* SquadProfileViewModel.swift in Sources */,
+				FED85BDCFF1296B7A86E015D /* Theme.swift in Sources */,
+				7726ACDE260957D0F261A36F /* UserProfileView.swift in Sources */,
+				BDA39977AEDCA3882A24B31C /* UserProfileViewModel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		21A1B2BEF50EAFB1E41AB6FC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		896A4A476916FD78493C9D68 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = RaverMVP/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.raver.mvp;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		8ABE55427D6CCBD5D824F84F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		D8FAEACEF7BCB1B9041AF8C5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = RaverMVP/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.raver.mvp;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		17A373D8FA67927761071514 /* Build configuration list for PBXProject "RaverMVP" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8ABE55427D6CCBD5D824F84F /* Debug */,
+				21A1B2BEF50EAFB1E41AB6FC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3B51D85AD2FC63586C14F871 /* Build configuration list for PBXNativeTarget "RaverMVP" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				896A4A476916FD78493C9D68 /* Debug */,
+				D8FAEACEF7BCB1B9041AF8C5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = FA7E0A167FF858244BA32208 /* Project object */;
+}
