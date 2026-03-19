@@ -112,6 +112,7 @@ struct CreateEventInput: Codable {
     var startDate: Date
     var endDate: Date
     var coverImageUrl: String?
+    var lineupImageUrl: String?
     var status: String?
 }
 
@@ -124,6 +125,7 @@ struct UpdateEventInput: Codable {
     var startDate: Date?
     var endDate: Date?
     var coverImageUrl: String?
+    var lineupImageUrl: String?
     var status: String?
 }
 

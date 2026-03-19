@@ -26,12 +26,7 @@ struct NotificationsView: View {
                             handleTap(item)
                         } label: {
                             HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: item.type.iconName)
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(iconColor(for: item.type))
-                                    .frame(width: 30, height: 30)
-                                    .background(RaverTheme.cardBorder)
-                                    .clipShape(Circle())
+                                notificationLeadingAvatar(for: item)
 
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(item.text)
@@ -109,6 +104,31 @@ struct NotificationsView: View {
             )
         default:
             break
+        }
+    }
+
+    @ViewBuilder
+    private func notificationLeadingAvatar(for item: AppNotification) -> some View {
+        if let actor = item.actor {
+            Image(
+                AppConfig.resolvedUserAvatarAssetName(
+                    userID: actor.id,
+                    username: actor.username,
+                    avatarURL: actor.avatarURL
+                )
+            )
+            .resizable()
+            .scaledToFill()
+            .frame(width: 30, height: 30)
+            .background(RaverTheme.cardBorder)
+            .clipShape(Circle())
+        } else {
+            Image(systemName: item.type.iconName)
+                .font(.subheadline.bold())
+                .foregroundStyle(iconColor(for: item.type))
+                .frame(width: 30, height: 30)
+                .background(RaverTheme.cardBorder)
+                .clipShape(Circle())
         }
     }
 

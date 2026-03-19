@@ -5,7 +5,7 @@ actor MockSocialService: SocialService {
         id: "u_me",
         username: "blackie",
         displayName: "Blackie",
-        avatarURL: nil,
+        avatarURL: MockSocialService.seededAvatarURL(for: "u_me"),
         isFollowing: false
     )
 
@@ -55,6 +55,14 @@ actor MockSocialService: SocialService {
                 posts[index].author.displayName = currentUser.displayName
             }
         }
+        if currentUser.avatarURL?.isEmpty ?? true {
+            currentUser.avatarURL = Self.seededAvatarURL(for: currentUser.id)
+        }
+        usersByID[currentUser.id]?.avatarURL = currentUser.avatarURL
+        profilesByID[currentUser.id]?.avatarURL = currentUser.avatarURL
+        for index in posts.indices where posts[index].author.id == currentUser.id {
+            posts[index].author.avatarURL = currentUser.avatarURL
+        }
         return Session(token: "mock_token", user: currentUser)
     }
 
@@ -64,6 +72,7 @@ actor MockSocialService: SocialService {
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         currentUser.username = username
         currentUser.displayName = name.isEmpty ? username.capitalized : name
+        currentUser.avatarURL = Self.seededAvatarURL(for: currentUser.id)
 
         usersByID[currentUser.id] = currentUser
         profilesByID[currentUser.id] = UserProfile(
@@ -71,7 +80,7 @@ actor MockSocialService: SocialService {
             username: currentUser.username,
             displayName: currentUser.displayName,
             bio: "",
-            avatarURL: nil,
+            avatarURL: currentUser.avatarURL,
             tags: [],
             isFollowersListPublic: true,
             isFollowingListPublic: true,
@@ -314,7 +323,7 @@ actor MockSocialService: SocialService {
             id: "dm_\(UUID().uuidString)",
             type: .direct,
             title: title,
-            avatarURL: nil,
+            avatarURL: targetUser?.avatarURL,
             lastMessage: "开始聊天吧",
             lastMessageSenderID: nil,
             unreadCount: 0,
@@ -768,6 +777,11 @@ actor MockSocialService: SocialService {
         return following.intersection(followers)
     }
 
+    private static func seededAvatarURL(for seed: String) -> String {
+        let encoded = seed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? seed
+        return "https://api.dicebear.com/9.x/adventurer-neutral/png?seed=\(encoded)&backgroundType=gradientLinear"
+    }
+
     private static func makeSeed() -> (
         currentUser: UserSummary,
         usersByID: [String: UserSummary],
@@ -784,9 +798,28 @@ actor MockSocialService: SocialService {
         repostActionAtByPostID: [String: Date]
     ) {
         let now = Date()
-        let currentUser = UserSummary(id: "u_me", username: "blackie", displayName: "Blackie", avatarURL: nil, isFollowing: false)
-        let alice = UserSummary(id: "u_1", username: "alice", displayName: "Alice", avatarURL: nil, isFollowing: true)
-        let bob = UserSummary(id: "u_2", username: "bob", displayName: "Bob", avatarURL: nil, isFollowing: false)
+        let currentUser = UserSummary(
+            id: "u_me",
+            username: "blackie",
+            displayName: "Blackie",
+            avatarURL: seededAvatarURL(for: "u_me"),
+            isFollowing: false
+        )
+        let alice = UserSummary(
+            id: "u_1",
+            username: "warehouse_anya",
+            displayName: "Anya",
+            avatarURL: seededAvatarURL(for: "u_1"),
+            isFollowing: true
+        )
+        let bob = UserSummary(
+            id: "u_2",
+            username: "techno_hao",
+            displayName: "Hao",
+            avatarURL: seededAvatarURL(for: "u_2"),
+            isFollowing: false
+        )
+        let squadAvatarURL = seededAvatarURL(for: "grp_1")
 
         let posts: [Post] = [
             Post(
@@ -794,7 +827,7 @@ actor MockSocialService: SocialService {
                 author: alice,
                 content: "昨晚在上海的 set 太炸了，谁也在现场？",
                 images: ["https://images.unsplash.com/photo-1492684223066-81342ee5ff30"],
-                squad: PostSquad(id: "grp_1", name: "Raver Shanghai Squad", avatarURL: nil),
+                squad: PostSquad(id: "grp_1", name: "Raver Shanghai Squad", avatarURL: squadAvatarURL),
                 createdAt: now.addingTimeInterval(-1800),
                 likeCount: 23,
                 repostCount: 4,
@@ -833,8 +866,8 @@ actor MockSocialService: SocialService {
             Conversation(
                 id: "dm_1",
                 type: .direct,
-                title: "Alice",
-                avatarURL: nil,
+                title: alice.displayName,
+                avatarURL: alice.avatarURL,
                 lastMessage: "我们周五去活动吗？",
                 lastMessageSenderID: alice.id,
                 unreadCount: 2,
@@ -845,7 +878,7 @@ actor MockSocialService: SocialService {
                 id: "grp_1",
                 type: .group,
                 title: "Raver Shanghai Squad",
-                avatarURL: nil,
+                avatarURL: squadAvatarURL,
                 lastMessage: "今晚 10 点集合",
                 lastMessageSenderID: alice.id,
                 unreadCount: 5,
@@ -882,7 +915,7 @@ actor MockSocialService: SocialService {
                 id: "grp_1",
                 name: "Raver Shanghai Squad",
                 description: "上海本地电音社群，约活动、分享 set、现场打卡。",
-                avatarURL: nil,
+                avatarURL: squadAvatarURL,
                 bannerURL: nil,
                 notice: "本周五 21:30 门口集合，进场后在小队里报到。",
                 qrCodeURL: nil,
@@ -914,7 +947,7 @@ actor MockSocialService: SocialService {
                         avatarURL: alice.avatarURL,
                         isFollowing: true,
                         role: "admin",
-                        nickname: "A队务",
+                        nickname: "Anya",
                         isCaptain: false,
                         isAdmin: true
                     ),
@@ -974,7 +1007,7 @@ actor MockSocialService: SocialService {
                 createdAt: now.addingTimeInterval(-260),
                 isRead: false,
                 actor: alice,
-                text: "Alice 关注了你",
+                text: "\(alice.displayName) 关注了你",
                 target: AppNotificationTarget(type: "user", id: alice.id, title: alice.displayName)
             ),
             AppNotification(
@@ -983,7 +1016,7 @@ actor MockSocialService: SocialService {
                 createdAt: now.addingTimeInterval(-820),
                 isRead: false,
                 actor: bob,
-                text: "Bob 评论了你：这条动态很有共鸣",
+                text: "\(bob.displayName) 评论了你：这条动态很有共鸣",
                 target: AppNotificationTarget(type: "post", id: "p_1", title: "昨晚在上海的 set 太炸了")
             ),
             AppNotification(
@@ -992,7 +1025,7 @@ actor MockSocialService: SocialService {
                 createdAt: now.addingTimeInterval(-1400),
                 isRead: false,
                 actor: alice,
-                text: "Alice 邀请你加入小队「Raver Shanghai Squad」",
+                text: "\(alice.displayName) 邀请你加入小队「Raver Shanghai Squad」",
                 target: AppNotificationTarget(type: "squad", id: "grp_1", title: "Raver Shanghai Squad")
             )
         ]
@@ -1015,7 +1048,7 @@ actor MockSocialService: SocialService {
                 username: currentUser.username,
                 displayName: currentUser.displayName,
                 bio: "MVP 阶段个人简介，后续由 BFF 聚合 Mastodon 资料和业务字段。",
-                avatarURL: nil,
+                avatarURL: currentUser.avatarURL,
                 tags: ["Techno", "House"],
                 isFollowersListPublic: true,
                 isFollowingListPublic: true,
@@ -1031,8 +1064,8 @@ actor MockSocialService: SocialService {
                 id: alice.id,
                 username: alice.username,
                 displayName: alice.displayName,
-                bio: "这是 Alice 的公开主页（Mock 数据）。",
-                avatarURL: nil,
+                bio: "这是 Anya 的公开主页（Mock 数据）。",
+                avatarURL: alice.avatarURL,
                 tags: ["EDM", "Melodic"],
                 isFollowersListPublic: true,
                 isFollowingListPublic: true,
@@ -1048,8 +1081,8 @@ actor MockSocialService: SocialService {
                 id: bob.id,
                 username: bob.username,
                 displayName: bob.displayName,
-                bio: "这是 Bob 的公开主页（Mock 数据）。",
-                avatarURL: nil,
+                bio: "这是 Hao 的公开主页（Mock 数据）。",
+                avatarURL: bob.avatarURL,
                 tags: ["Trance"],
                 isFollowersListPublic: true,
                 isFollowingListPublic: true,

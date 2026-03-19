@@ -128,7 +128,7 @@ private struct CreateSquadView: View {
                     if isSubmitting {
                         ProgressView().tint(.white)
                     } else {
-                        Text("创建小队")
+                        Text("创建")
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
@@ -210,29 +210,17 @@ private struct CreateSquadView: View {
     }
 
     private func avatar(for user: UserSummary) -> some View {
-        let resolved = AppConfig.resolvedURLString(user.avatarURL)
-        return Group {
-            if let resolved, !resolved.isEmpty {
-                AsyncImage(url: URL(string: resolved)) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        fallbackAvatar(name: user.displayName)
-                    }
-                }
-            } else {
-                fallbackAvatar(name: user.displayName)
-            }
-        }
+        let asset = AppConfig.resolvedUserAvatarAssetName(
+            userID: user.id,
+            username: user.username,
+            avatarURL: user.avatarURL
+        )
+        return Image(asset)
+            .resizable()
+            .scaledToFill()
+            .background(RaverTheme.card)
         .frame(width: 34, height: 34)
         .clipShape(Circle())
-    }
-
-    private func fallbackAvatar(name: String) -> some View {
-        Circle()
-            .fill(RaverTheme.accent.opacity(0.2))
-            .overlay(Text(String(name.prefix(1))).font(.caption.bold()))
     }
 
     @MainActor
@@ -316,10 +304,12 @@ private struct CreateSquadView: View {
         var imageByUserID: [String: UIImage] = [:]
         for user in users {
             guard imageByUserID[user.id] == nil else { continue }
-            guard let resolved = AppConfig.resolvedURLString(user.avatarURL),
-                  let url = URL(string: resolved) else { continue }
-            if let (data, _) = try? await URLSession.shared.data(from: url),
-               let image = UIImage(data: data) {
+            let asset = AppConfig.resolvedUserAvatarAssetName(
+                userID: user.id,
+                username: user.username,
+                avatarURL: user.avatarURL
+            )
+            if let image = UIImage(named: asset) {
                 imageByUserID[user.id] = image
             }
         }
@@ -391,17 +381,16 @@ struct MessagesHomeView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                HStack(spacing: 16) {
-                    alertsRow
-
-                    Button {
-                        showCreateSquad = true
-                    } label: {
-                        Image(systemName: "plus.circle")
-                            .font(.title2)
-                            .foregroundStyle(RaverTheme.primaryText)
+                ZStack {
+                    HStack {
+                        Spacer()
+                        createSquadButton
                     }
-                    .buttonStyle(.plain)
+
+                    HStack(spacing: 16) {
+                        alertsRow
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -420,17 +409,18 @@ struct MessagesHomeView: View {
                     Spacer()
                 } else {
                     List(chatViewModel.conversations) { conversation in
-                        NavigationLink {
-                            ChatView(conversation: conversation, service: appState.service)
-                        } label: {
-                            conversationRow(conversation)
-                        }
-                        .simultaneousGesture(TapGesture().onEnded {
+                        Button {
+                            pushedConversation = conversation
                             Task {
                                 await chatViewModel.markConversationRead(conversationID: conversation.id)
                                 syncTabBadge()
                             }
-                        })
+                        } label: {
+                            conversationRow(conversation)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                         .listRowBackground(RaverTheme.card)
                     }
                     .scrollContentBackground(.hidden)
@@ -491,6 +481,25 @@ struct MessagesHomeView: View {
         }
     }
 
+    private var createSquadButton: some View {
+        Button {
+            showCreateSquad = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.subheadline.weight(.bold))
+                Text("创建")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(RaverTheme.primaryText)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(RaverTheme.card)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
     private var alertsRow: some View {
         ForEach(MessageAlertCategory.allCases) { category in
             Button {
@@ -525,28 +534,29 @@ struct MessagesHomeView: View {
 
     @ViewBuilder
     private func conversationRow(_ conversation: Conversation) -> some View {
+        let avatarAsset: String = {
+            if conversation.type == .group {
+                return AppConfig.resolvedGroupAvatarAssetName(
+                    groupID: conversation.id,
+                    groupName: conversation.title,
+                    avatarURL: conversation.avatarURL
+                )
+            }
+            return AppConfig.resolvedUserAvatarAssetName(
+                userID: conversation.peer?.id,
+                username: conversation.peer?.username,
+                avatarURL: conversation.peer?.avatarURL ?? conversation.avatarURL
+            )
+        }()
+
         HStack(spacing: 12) {
             // 头像
-            if let avatarURL = conversation.avatarURL, let url = URL(string: avatarURL) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        Circle().fill(RaverTheme.card)
-                    }
-                }
+            Image(avatarAsset)
+                .resizable()
+                .scaledToFill()
                 .frame(width: 48, height: 48)
+                .background(RaverTheme.card)
                 .clipShape(Circle())
-            } else {
-                Circle()
-                    .fill(RaverTheme.accent.opacity(0.2))
-                    .frame(width: 48, height: 48)
-                    .overlay(
-                        Text(String(conversation.title.prefix(1)))
-                            .font(.headline.bold())
-                    )
-            }
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
@@ -595,6 +605,8 @@ struct MessagesHomeView: View {
             }
         }
         .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     @MainActor
@@ -638,12 +650,7 @@ private struct MessageAlertDetailView: View {
                         }
                     } label: {
                         HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: category.iconName)
-                                .font(.subheadline.bold())
-                                .foregroundStyle(.white)
-                                .frame(width: 30, height: 30)
-                                .background(item.isRead ? RaverTheme.cardBorder : Color.red)
-                                .clipShape(Circle())
+                            alertLeadingAvatar(for: item)
 
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(item.text)
@@ -673,6 +680,31 @@ private struct MessageAlertDetailView: View {
         }
         .navigationDestination(item: $selectedSquad) { squad in
             SquadProfileView(squadID: squad.id)
+        }
+    }
+
+    @ViewBuilder
+    private func alertLeadingAvatar(for item: AppNotification) -> some View {
+        if let actor = item.actor {
+            Image(
+                AppConfig.resolvedUserAvatarAssetName(
+                    userID: actor.id,
+                    username: actor.username,
+                    avatarURL: actor.avatarURL
+                )
+            )
+            .resizable()
+            .scaledToFill()
+            .frame(width: 30, height: 30)
+            .background(RaverTheme.cardBorder)
+            .clipShape(Circle())
+        } else {
+            Image(systemName: category.iconName)
+                .font(.subheadline.bold())
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(item.isRead ? RaverTheme.cardBorder : Color.red)
+                .clipShape(Circle())
         }
     }
 

@@ -296,39 +296,87 @@ struct ProfileHeaderCard<Actions: View>: View {
 
     @ViewBuilder
     private var avatarView: some View {
-        if let avatarURL = AppConfig.resolvedURLString(profile.avatarURL), !avatarURL.isEmpty {
-            AsyncImage(url: URL(string: avatarURL)) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                default:
-                    Circle().fill(RaverTheme.card)
-                }
-            }
+        let asset = AppConfig.resolvedUserAvatarAssetName(
+            userID: profile.id,
+            username: profile.username,
+            avatarURL: profile.avatarURL
+        )
+        Image(asset)
+            .resizable()
+            .scaledToFill()
             .frame(width: 84, height: 84)
+            .background(RaverTheme.card)
             .clipShape(Circle())
-        } else {
-            Circle()
-                .fill(RaverTheme.accent.opacity(0.24))
-                .frame(width: 84, height: 84)
-                .overlay(Text(String(profile.displayName.prefix(1))).font(.title).bold())
-        }
     }
 
     @ViewBuilder
     private func tagsFlow(_ tags: [String]) -> some View {
-        HStack(spacing: 8) {
-            ForEach(tags.prefix(6), id: \.self) { tag in
-                Text("#\(tag)")
-                    .font(.caption)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(RaverTheme.card)
-                    .clipShape(Capsule())
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(tags.prefix(12).enumerated()), id: \.offset) { _, tag in
+                    Text(formattedTagText(tag))
+                        .font(.caption)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(RaverTheme.card)
+                        .clipShape(Capsule())
+                }
+
+                if tags.count > 12 {
+                    Text("+\(tags.count - 12)")
+                        .font(.caption.bold())
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(RaverTheme.card)
+                        .clipShape(Capsule())
+                }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func formattedTagText(_ tag: String) -> String {
+        let words = normalizedTagWords(from: tag)
+        guard !words.isEmpty else { return "#\(tag)" }
+
+        if words.count == 1 {
+            return "#\(words[0])"
+        }
+
+        if words.count == 2 {
+            return "#\(words[0])\n\(words[1])"
+        }
+
+        if words.count == 3 {
+            let lengths = words.enumerated().map { ($0.offset, $0.element.count) }
+            guard let longest = lengths.max(by: { $0.1 < $1.1 })?.0 else {
+                return "#\(words[0])\n\(words[1]) \(words[2])"
+            }
+
+            let others = words.enumerated()
+                .filter { $0.offset != longest }
+                .map(\.element)
+                .joined(separator: " ")
+
+            if longest == 2 {
+                return "#\(others)\n\(words[2])"
+            }
+            return "#\(words[longest])\n\(others)"
+        }
+
+        return "#\(words.joined(separator: " "))"
+    }
+
+    private func normalizedTagWords(from tag: String) -> [String] {
+        tag
+            .replacingOccurrences(of: "-", with: " ")
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+            .filter { !$0.isEmpty }
     }
 
     private func stat(_ title: String, value: Int, onTap: (() -> Void)? = nil) -> some View {

@@ -99,25 +99,18 @@ struct PostCardView: View {
     private var authorMeta: some View {
         HStack(alignment: .center, spacing: 10) {
             // 头像
-            if let avatarURL = AppConfig.resolvedURLString(post.author.avatarURL), !avatarURL.isEmpty {
-                AsyncImage(url: URL(string: avatarURL)) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        Circle()
-                            .fill(RaverTheme.accent.opacity(0.2))
-                            .overlay(Text(String(post.author.displayName.prefix(1))).font(.caption).bold())
-                    }
-                }
-                .frame(width: 34, height: 34)
-                .clipShape(Circle())
-            } else {
-                Circle()
-                    .fill(RaverTheme.accent.opacity(0.2))
-                    .frame(width: 34, height: 34)
-                    .overlay(Text(String(post.author.displayName.prefix(1))).font(.caption).bold())
-            }
+            Image(
+                AppConfig.resolvedUserAvatarAssetName(
+                    userID: post.author.id,
+                    username: post.author.username,
+                    avatarURL: post.author.avatarURL
+                )
+            )
+            .resizable()
+            .scaledToFill()
+            .frame(width: 34, height: 34)
+            .background(RaverTheme.card)
+            .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(post.author.displayName)

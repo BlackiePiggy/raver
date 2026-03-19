@@ -76,31 +76,18 @@ struct PostDetailView: View {
                                         selectedUserForProfile = comment.author
                                     } label: {
                                         HStack(alignment: .top, spacing: 10) {
-                                            if let avatar = AppConfig.resolvedURLString(comment.author.avatarURL), !avatar.isEmpty {
-                                                AsyncImage(url: URL(string: avatar)) { phase in
-                                                    switch phase {
-                                                    case .empty:
-                                                        Circle().fill(RaverTheme.card)
-                                                    case .success(let image):
-                                                        image.resizable().scaledToFill()
-                                                    case .failure:
-                                                        Circle().fill(RaverTheme.card)
-                                                    @unknown default:
-                                                        Circle().fill(RaverTheme.card)
-                                                    }
-                                                }
-                                                .frame(width: 30, height: 30)
-                                                .clipShape(Circle())
-                                            } else {
-                                                Circle()
-                                                    .fill(RaverTheme.card)
-                                                    .frame(width: 30, height: 30)
-                                                    .overlay(
-                                                        Image(systemName: "person.fill")
-                                                            .font(.system(size: 12))
-                                                            .foregroundStyle(RaverTheme.secondaryText)
-                                                    )
-                                            }
+                                            Image(
+                                                AppConfig.resolvedUserAvatarAssetName(
+                                                    userID: comment.author.id,
+                                                    username: comment.author.username,
+                                                    avatarURL: comment.author.avatarURL
+                                                )
+                                            )
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 30, height: 30)
+                                            .background(RaverTheme.card)
+                                            .clipShape(Circle())
 
                                             VStack(alignment: .leading, spacing: 4) {
                                                 Text(comment.author.displayName)

@@ -1,12 +1,22 @@
 import Foundation
 
 actor MockWebFeatureService: WebFeatureService {
-    private let currentUser = WebUserLite(id: "u_me", username: "blackie", displayName: "Blackie", avatarUrl: nil)
+    private static func seededAvatarURL(for seed: String) -> String {
+        let encoded = seed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? seed
+        return "https://api.dicebear.com/9.x/adventurer-neutral/png?seed=\(encoded)&backgroundType=gradientLinear"
+    }
+
+    private let currentUser = WebUserLite(
+        id: "u_me",
+        username: "blackie",
+        displayName: "Blackie",
+        avatarUrl: MockWebFeatureService.seededAvatarURL(for: "u_me")
+    )
     private let currentContributor = WebContributorProfile(
         id: "u_me",
         username: "blackie",
         displayName: "Blackie",
-        avatarUrl: nil,
+        avatarUrl: MockWebFeatureService.seededAvatarURL(for: "u_me"),
         bio: "Mock account",
         location: "Shanghai",
         favoriteGenres: ["house", "techno"],
@@ -27,7 +37,7 @@ actor MockWebFeatureService: WebFeatureService {
             name: "Amelie Lens",
             slug: "amelie-lens",
             bio: "Hard techno headliner.",
-            avatarUrl: nil,
+            avatarUrl: Self.seededAvatarURL(for: "dj_amelie"),
             bannerUrl: nil,
             country: "BE",
             spotifyId: nil,
@@ -46,7 +56,7 @@ actor MockWebFeatureService: WebFeatureService {
             name: "Charlotte de Witte",
             slug: "charlotte-de-witte",
             bio: "Dark peak-time techno.",
-            avatarUrl: nil,
+            avatarUrl: Self.seededAvatarURL(for: "dj_charlotte"),
             bannerUrl: nil,
             country: "BE",
             spotifyId: nil,
@@ -190,9 +200,9 @@ actor MockWebFeatureService: WebFeatureService {
             updatedAt: now.addingTimeInterval(-86400),
             contributor: WebContributorProfile(
                 id: "u_ana",
-                username: "ana",
+                username: "acid_ana",
                 displayName: "Ana",
-                avatarUrl: nil,
+                avatarUrl: Self.seededAvatarURL(for: "u_ana"),
                 bio: nil,
                 location: "Berlin",
                 favoriteGenres: ["techno"],
@@ -264,7 +274,12 @@ actor MockWebFeatureService: WebFeatureService {
                     parentId: nil,
                     createdAt: now.addingTimeInterval(-6000),
                     updatedAt: now.addingTimeInterval(-6000),
-                    user: WebUserLite(id: "u_ana", username: "ana", displayName: "Ana", avatarUrl: nil),
+                    user: WebUserLite(
+                        id: "u_ana",
+                        username: "acid_ana",
+                        displayName: "Ana",
+                        avatarUrl: Self.seededAvatarURL(for: "u_ana")
+                    ),
                     replies: []
                 )
             ]
@@ -307,7 +322,7 @@ actor MockWebFeatureService: WebFeatureService {
             slug: slugify(input.name),
             description: input.description,
             coverImageUrl: input.coverImageUrl,
-            lineupImageUrl: nil,
+            lineupImageUrl: input.lineupImageUrl,
             eventType: "club",
             organizerName: currentUser.displayName,
             venueName: input.venueName,
@@ -351,6 +366,7 @@ actor MockWebFeatureService: WebFeatureService {
         if let startDate = input.startDate { events[idx].startDate = startDate }
         if let endDate = input.endDate { events[idx].endDate = endDate }
         if let coverImageUrl = input.coverImageUrl { events[idx].coverImageUrl = coverImageUrl }
+        if let lineupImageUrl = input.lineupImageUrl { events[idx].lineupImageUrl = lineupImageUrl }
         if let status = input.status { events[idx].status = status }
         events[idx].updatedAt = Date()
         return events[idx]

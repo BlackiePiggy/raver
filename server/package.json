@@ -10,7 +10,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "ts-node prisma/seed.ts"
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:backfill:user-profiles": "ts-node prisma/backfill-user-profiles.ts",
+    "prisma:seed:live-feed-posts": "ts-node prisma/seed-live-feed-posts.ts"
   },
   "keywords": [
     "raver",

@@ -1,7 +1,5 @@
 import SwiftUI
 import PhotosUI
-import WebKit
-import SafariServices
 import AVKit
 import AVFoundation
 import UIKit
@@ -28,6 +26,70 @@ private enum EventCalendarViewFilter: String, CaseIterable, Hashable, Identifiab
         case .planned: return "paperplane.fill"
         }
     }
+}
+
+private struct HorizontalAxisLockedScrollView<Content: View>: UIViewRepresentable {
+    let showsIndicators: Bool
+    let content: Content
+
+    init(showsIndicators: Bool = false, @ViewBuilder content: () -> Content) {
+        self.showsIndicators = showsIndicators
+        self.content = content()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(content: content)
+    }
+
+    func makeUIView(context: Context) -> UIScrollView {
+        let scrollView = UIScrollView()
+        scrollView.backgroundColor = .clear
+        scrollView.showsHorizontalScrollIndicator = showsIndicators
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.alwaysBounceHorizontal = true
+        scrollView.alwaysBounceVertical = false
+        scrollView.isDirectionalLockEnabled = true
+        scrollView.clipsToBounds = true
+
+        let hostedView = context.coordinator.hostingController.view
+        hostedView?.backgroundColor = .clear
+        hostedView?.translatesAutoresizingMaskIntoConstraints = false
+
+        if let hostedView {
+            scrollView.addSubview(hostedView)
+            NSLayoutConstraint.activate([
+                hostedView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+                hostedView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+                hostedView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+                hostedView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+                hostedView.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor)
+            ])
+        }
+
+        return scrollView
+    }
+
+    func updateUIView(_ uiView: UIScrollView, context: Context) {
+        uiView.showsHorizontalScrollIndicator = showsIndicators
+        context.coordinator.hostingController.rootView = content
+    }
+
+    final class Coordinator {
+        let hostingController: UIHostingController<Content>
+
+        init(content: Content) {
+            hostingController = UIHostingController(rootView: content)
+            hostingController.view.backgroundColor = .clear
+        }
+    }
+}
+
+private func topSafeAreaInset() -> CGFloat {
+    UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .flatMap { $0.windows }
+        .first(where: { $0.isKeyWindow })?
+        .safeAreaInsets.top ?? 0
 }
 
 struct EventsModuleView: View {
@@ -84,17 +146,10 @@ struct EventsModuleView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .top) {
-                VStack(spacing: 8) {
-                    Picker("活动范围", selection: $selectedScope) {
-                        ForEach(EventScope.allCases) { scope in
-                            Text(scope.title).tag(scope)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, 16)
-
-                    ScrollView(.horizontal, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    HorizontalAxisLockedScrollView(showsIndicators: false) {
                         HStack(spacing: 8) {
+                            myEventsScopeChip
                             eventTypeChip(title: "全部活动", value: "")
                             ForEach(eventTypeTabs, id: \.self) { type in
                                 eventTypeChip(title: type, value: type)
@@ -102,6 +157,7 @@ struct EventsModuleView: View {
                         }
                         .padding(.horizontal, 16)
                     }
+                    .frame(height: 34)
                 }
                 .padding(.top, 8)
                 .padding(.bottom, 4)
@@ -162,8 +218,10 @@ struct EventsModuleView: View {
                 )
                 .presentationDetents([.fraction(0.8), .large])
             }
-            .navigationDestination(item: $selectedEventForDetail) { event in
-                EventDetailView(eventID: event.id)
+            .fullScreenCover(item: $selectedEventForDetail) { event in
+                NavigationStack {
+                    EventDetailView(eventID: event.id)
+                }
             }
             .task {
                 await reload()
@@ -396,8 +454,8 @@ struct EventsModuleView: View {
                 LazyVStack(spacing: 14) {
                     ForEach(events) { event in
                         ZStack(alignment: .topTrailing) {
-                            NavigationLink {
-                                EventDetailView(eventID: event.id)
+                            Button {
+                                selectedEventForDetail = event
                             } label: {
                                 EventRow(event: event)
                             }
@@ -435,8 +493,8 @@ struct EventsModuleView: View {
                         sectionHeader("我标记的活动")
                         ForEach(filteredMarkedEvents) { event in
                             ZStack(alignment: .topTrailing) {
-                                NavigationLink {
-                                    EventDetailView(eventID: event.id)
+                                Button {
+                                    selectedEventForDetail = event
                                 } label: {
                                     EventRow(event: event)
                                 }
@@ -453,8 +511,8 @@ struct EventsModuleView: View {
                         sectionHeader("我计划前往")
                         ForEach(filteredPlannedEvents) { event in
                             ZStack(alignment: .topTrailing) {
-                                NavigationLink {
-                                    EventDetailView(eventID: event.id)
+                                Button {
+                                    selectedEventForDetail = event
                                 } label: {
                                     EventRow(event: event)
                                 }
@@ -471,8 +529,8 @@ struct EventsModuleView: View {
                         sectionHeader("我发布的活动")
                         ForEach(filteredPublishedEvents) { event in
                             ZStack(alignment: .topTrailing) {
-                                NavigationLink {
-                                    EventDetailView(eventID: event.id)
+                                Button {
+                                    selectedEventForDetail = event
                                 } label: {
                                     EventRow(event: event)
                                 }
@@ -512,6 +570,23 @@ struct EventsModuleView: View {
                 .padding(.vertical, 7)
                 .background(
                     Capsule()
+                        .fill(isSelected ? RaverTheme.accent : RaverTheme.card)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var myEventsScopeChip: some View {
+        let isSelected = selectedScope == .mine
+        return Button {
+            selectedScope = isSelected ? .all : .mine
+        } label: {
+            Image(systemName: "person.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(isSelected ? Color.white : RaverTheme.secondaryText)
+                .frame(width: 30, height: 30)
+                .background(
+                    Circle()
                         .fill(isSelected ? RaverTheme.accent : RaverTheme.card)
                 )
         }
@@ -1098,10 +1173,18 @@ private struct EventSearchSheet: View {
 }
 
 struct EventDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
     private let service = AppEnvironment.makeWebService()
 
     let eventID: String
+
+    private struct EventLineupDJEntry: Identifiable, Hashable {
+        let id: String
+        let name: String
+        let avatarUrl: String?
+        let djID: String?
+    }
 
     @State private var event: WebEvent?
     @State private var isLoading = false
@@ -1216,6 +1299,8 @@ struct EventDetailView: View {
                                             EmptyView()
                                         }
                                     }
+
+                                    lineupDJsStrip(for: event)
                                 }
                             }
 
@@ -1261,31 +1346,18 @@ struct EventDetailView: View {
                                     UserProfileView(userID: organizer.id)
                                 } label: {
                                     HStack(spacing: 10) {
-                                        if let avatar = AppConfig.resolvedURLString(organizer.avatarUrl), !avatar.isEmpty {
-                                            AsyncImage(url: URL(string: avatar)) { phase in
-                                                switch phase {
-                                                case .empty:
-                                                    Circle().fill(RaverTheme.card)
-                                                case .success(let image):
-                                                    image.resizable().scaledToFill()
-                                                case .failure:
-                                                    Circle().fill(RaverTheme.card)
-                                                @unknown default:
-                                                    Circle().fill(RaverTheme.card)
-                                                }
-                                            }
-                                            .frame(width: 32, height: 32)
-                                            .clipShape(Circle())
-                                        } else {
-                                            Circle()
-                                                .fill(RaverTheme.card)
-                                                .frame(width: 32, height: 32)
-                                                .overlay(
-                                                    Text(String((organizer.displayName ?? organizer.username).prefix(1)).uppercased())
-                                                        .font(.caption)
-                                                        .foregroundStyle(RaverTheme.secondaryText)
-                                                )
-                                        }
+                                        Image(
+                                            AppConfig.resolvedUserAvatarAssetName(
+                                                userID: organizer.id,
+                                                username: organizer.username,
+                                                avatarURL: organizer.avatarUrl
+                                            )
+                                        )
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 32, height: 32)
+                                        .background(RaverTheme.card)
+                                        .clipShape(Circle())
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text("发布方")
                                                 .font(.caption)
@@ -1331,9 +1403,15 @@ struct EventDetailView: View {
                 ContentUnavailableView("活动不存在", systemImage: "calendar.badge.exclamationmark")
             }
         }
+        .ignoresSafeArea(edges: .top)
         .background(RaverTheme.background)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .overlay(alignment: .topLeading) {
+            floatingDismissButton
+        }
         .task {
             await load()
         }
@@ -1352,66 +1430,178 @@ struct EventDetailView: View {
     }
 
     private func heroSection(_ event: WebEvent) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            if let cover = AppConfig.resolvedURLString(event.coverImageUrl), let url = URL(string: cover) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        RaverTheme.card
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        RaverTheme.card
-                    @unknown default:
-                        RaverTheme.card
+        ZStack {
+            GeometryReader { geo in
+                ZStack {
+                    RaverTheme.card
+                    if let cover = AppConfig.resolvedURLString(event.coverImageUrl), let url = URL(string: cover) {
+                        AsyncImage(url: url, transaction: Transaction(animation: .none)) { phase in
+                            switch phase {
+                            case .empty:
+                                RaverTheme.card
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                            case .failure:
+                                RaverTheme.card
+                            @unknown default:
+                                RaverTheme.card
+                            }
+                        }
+                    } else {
+                        LinearGradient(
+                            colors: [RaverTheme.accent.opacity(0.35), RaverTheme.card],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     }
                 }
-            } else {
-                LinearGradient(
-                    colors: [RaverTheme.accent.opacity(0.35), RaverTheme.card],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                .frame(width: geo.size.width, height: geo.size.height)
+                .clipped()
             }
 
             LinearGradient(
-                colors: [.clear, Color.black.opacity(0.55), RaverTheme.background.opacity(0.96)],
+                colors: [.clear, Color.black.opacity(0.42), RaverTheme.background.opacity(0.82)],
                 startPoint: .top,
                 endPoint: .bottom
             )
 
-            VStack(alignment: .leading, spacing: 8) {
-                if let eventType = event.eventType, !eventType.isEmpty {
-                    Text(eventType)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(RaverTheme.accent)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(
-                            Capsule()
-                                .fill(RaverTheme.accent.opacity(0.16))
-                        )
+            VStack {
+                Spacer()
+                VStack(alignment: .leading, spacing: 0) {
+                    Spacer()
+                    Text(event.name)
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-                Text(event.name)
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-
-                if !event.summaryLocation.isEmpty {
-                    Label(event.summaryLocation, systemImage: "mappin.and.ellipse")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.9))
-                }
+                .frame(height: 85)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 40)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 320)
+        .frame(height: 360)
         .clipped()
+        .zIndex(1)
+    }
+
+    private var floatingDismissButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Color.white)
+                .frame(width: 38, height: 38)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, 12)
+        .padding(.top, topSafeAreaInset() + 10)
+        .zIndex(10)
+    }
+
+    @ViewBuilder
+    private func lineupDJsStrip(for event: WebEvent) -> some View {
+        let djs = lineupDJEntries(for: event)
+        if !djs.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("参演 DJ")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(djs) { dj in
+                            lineupDJAvatarItem(dj)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func lineupDJAvatarItem(_ dj: EventLineupDJEntry) -> some View {
+        let content = VStack(spacing: 6) {
+            if let avatar = AppConfig.resolvedURLString(dj.avatarUrl), let url = URL(string: avatar) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Circle().fill(RaverTheme.card)
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure:
+                        Circle().fill(RaverTheme.card)
+                    @unknown default:
+                        Circle().fill(RaverTheme.card)
+                    }
+                }
+                .frame(width: 44, height: 44)
+                .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(RaverTheme.card)
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Text(String(dj.name.prefix(1)).uppercased())
+                            .font(.caption.bold())
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    )
+            }
+
+            Text(dj.name)
+                .font(.caption2)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .lineLimit(1)
+                .frame(width: 70)
+        }
+
+        if let djID = dj.djID, !djID.isEmpty {
+            NavigationLink {
+                DJDetailView(djID: djID)
+            } label: {
+                content
+            }
+            .buttonStyle(.plain)
+        } else {
+            content
+        }
+    }
+
+    private func lineupDJEntries(for event: WebEvent) -> [EventLineupDJEntry] {
+        var seen = Set<String>()
+        var result: [EventLineupDJEntry] = []
+
+        for slot in event.lineupSlots.sorted(by: { $0.startTime < $1.startTime }) {
+            if let dj = slot.dj {
+                let key = "dj-\(dj.id)"
+                guard !seen.contains(key) else { continue }
+                seen.insert(key)
+                result.append(EventLineupDJEntry(id: key, name: dj.name, avatarUrl: dj.avatarUrl, djID: dj.id))
+                continue
+            }
+
+            let trimmedName = slot.djName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else { continue }
+            let fallbackID = slot.djId?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedFallbackID = (fallbackID?.isEmpty == false) ? fallbackID : nil
+            let key = "name-\((resolvedFallbackID ?? trimmedName.lowercased()))"
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            result.append(EventLineupDJEntry(id: key, name: trimmedName, avatarUrl: nil, djID: resolvedFallbackID))
+        }
+
+        return result
     }
 
     private func infoLine(icon: String, text: String) -> some View {
@@ -1558,7 +1748,9 @@ struct EventEditorView: View {
     @State private var startDate = Date()
     @State private var endDate = Date().addingTimeInterval(7200)
     @State private var coverImageUrl = ""
-    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var lineupImageUrl = ""
+    @State private var selectedCoverPhoto: PhotosPickerItem?
+    @State private var selectedLineupPhoto: PhotosPickerItem?
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -1578,10 +1770,15 @@ struct EventEditorView: View {
                     DatePicker("结束时间", selection: $endDate)
                 }
 
-                Section("封面") {
+                Section("图片") {
                     TextField("封面 URL", text: $coverImageUrl)
-                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                        Label("从相册上传", systemImage: "photo")
+                    PhotosPicker(selection: $selectedCoverPhoto, matching: .images) {
+                        Label("上传封面图", systemImage: "photo")
+                    }
+
+                    TextField("活动阵容图 URL", text: $lineupImageUrl)
+                    PhotosPicker(selection: $selectedLineupPhoto, matching: .images) {
+                        Label("上传活动阵容图", systemImage: "photo.on.rectangle")
                     }
                 }
             }
@@ -1623,6 +1820,7 @@ struct EventEditorView: View {
         startDate = event.startDate
         endDate = event.endDate
         coverImageUrl = event.coverImageUrl ?? ""
+        lineupImageUrl = event.lineupImageUrl ?? ""
     }
 
     private func save() async {
@@ -1641,16 +1839,27 @@ struct EventEditorView: View {
         defer { isSaving = false }
 
         var finalCover = coverImageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        var finalLineup = lineupImageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
 
         do {
-            if let selectedPhoto,
-               let data = try await selectedPhoto.loadTransferable(type: Data.self) {
+            if let selectedCoverPhoto,
+               let data = try await selectedCoverPhoto.loadTransferable(type: Data.self) {
                 let upload = try await service.uploadEventImage(
                     imageData: data,
-                    fileName: "event-\(UUID().uuidString).jpg",
+                    fileName: "event-cover-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg"
                 )
                 finalCover = upload.url
+            }
+
+            if let selectedLineupPhoto,
+               let data = try await selectedLineupPhoto.loadTransferable(type: Data.self) {
+                let upload = try await service.uploadEventImage(
+                    imageData: data,
+                    fileName: "event-lineup-\(UUID().uuidString).jpg",
+                    mimeType: "image/jpeg"
+                )
+                finalLineup = upload.url
             }
 
             switch mode {
@@ -1665,6 +1874,7 @@ struct EventEditorView: View {
                         startDate: startDate,
                         endDate: endDate,
                         coverImageUrl: finalCover.nilIfEmpty,
+                        lineupImageUrl: finalLineup.nilIfEmpty,
                         status: "upcoming"
                     )
                 )
@@ -1680,6 +1890,7 @@ struct EventEditorView: View {
                         startDate: startDate,
                         endDate: endDate,
                         coverImageUrl: finalCover.nilIfEmpty,
+                        lineupImageUrl: finalLineup.nilIfEmpty,
                         status: event.status
                     )
                 )
@@ -1816,8 +2027,10 @@ struct DJsModuleView: View {
             .refreshable {
                 await load()
             }
-            .navigationDestination(item: $selectedDJForDetail) { dj in
-                DJDetailView(djID: dj.id)
+            .fullScreenCover(item: $selectedDJForDetail) { dj in
+                NavigationStack {
+                    DJDetailView(djID: dj.id)
+                }
             }
             .navigationDestination(item: $selectedBoardForDetail) { board in
                 RankingBoardDetailView(board: board)
@@ -2454,11 +2667,15 @@ private struct DJDetailView: View {
                 ContentUnavailableView("DJ 不存在", systemImage: "person.crop.circle.badge.exclamationmark")
             }
         }
+        .ignoresSafeArea(edges: .top)
         .background(RaverTheme.background)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .overlay(alignment: .topLeading) {
+            floatingDismissButton
+        }
         .task {
             await load()
         }
@@ -2521,7 +2738,7 @@ private struct DJDetailView: View {
                                 image
                                     .resizable()
                                     .scaledToFill()
-                                    .frame(width: geo.size.width, height: geo.size.height)
+                                    .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
                             case .failure:
                                 RaverTheme.card
                             @unknown default:
@@ -2547,25 +2764,6 @@ private struct DJDetailView: View {
             )
 
             VStack {
-                HStack {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(Color.white)
-                            .frame(width: 34, height: 34)
-                            .background(Color.black.opacity(0.4), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    Spacer()
-                }
-                .padding(.leading, 12)
-                .padding(.top, 10)
-                Spacer()
-            }
-
-            VStack {
                 Spacer()
                 VStack(alignment: .leading, spacing: 0) {
                     Spacer()
@@ -2584,6 +2782,26 @@ private struct DJDetailView: View {
         .frame(height: 360)
         .clipped()
         .zIndex(1)
+    }
+
+    private var floatingDismissButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Color.white)
+                .frame(width: 38, height: 38)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, 12)
+        .padding(.top, topSafeAreaInset() + 10)
+        .zIndex(10)
     }
 
     private func heroImageURL(for dj: WebDJ) -> String? {
@@ -2734,6 +2952,7 @@ struct SetsModuleView: View {
     @State private var isLoading = false
     @State private var showCreate = false
     @State private var errorMessage: String?
+    @State private var selectedSetForPlayback: WebDJSet?
 
     var body: some View {
         NavigationStack {
@@ -2746,8 +2965,8 @@ struct SetsModuleView: View {
                     ScrollView {
                         LazyVGrid(columns: columns, spacing: 14) {
                             ForEach(displayedSets) { set in
-                                NavigationLink {
-                                    DJSetDetailView(setID: set.id)
+                                Button {
+                                    selectedSetForPlayback = set
                                 } label: {
                                     DJSetGridCard(set: set)
                                 }
@@ -2827,6 +3046,12 @@ struct SetsModuleView: View {
                 DJSetEditorView(mode: .create) {
                     Task { await reload() }
                 }
+            }
+            .fullScreenCover(item: $selectedSetForPlayback) { set in
+                NavigationStack {
+                    DJSetDetailView(setID: set.id)
+                }
+                .toolbar(.hidden, for: .tabBar)
             }
             .task {
                 await reload()
@@ -2992,12 +3217,8 @@ struct DJSetDetailView: View {
     @State private var playbackDuration: Double = 0
     @State private var pendingSeekTime: Double?
     @State private var activeTrackID: String?
-    @State private var youtubePlayerError: String?
     @State private var nativePlayerError: String?
-    @State private var showInAppVideoBrowser = false
-    @State private var youtubePlayerReady = false
-    @State private var autoOpenedFallbackForCurrentSet = false
-    @State private var youtubeEmbedTimeoutTask: Task<Void, Never>?
+    @StateObject private var nativePlayerSession = NativeVideoSession()
     @State private var isTracklistExpanded = false
     @State private var tracklists: [WebTracklistSummary] = []
     @State private var selectedTracklistID: String?
@@ -3007,131 +3228,34 @@ struct DJSetDetailView: View {
     @State private var showTracklistUpload = false
     @State private var selectedArtistDJ: WebDJ?
     @State private var selectedContributor: WebContributorProfile?
+    @State private var selectedCommentUser: WebUserLite?
+    @State private var wheelDragTranslation: CGFloat = 0
+    @State private var wheelLastHapticShift = 0
+    @State private var playerSeekDeltaSeconds: Double = 0
+    @State private var showPlayerSeekIndicator = false
+    @State private var hideSeekIndicatorTask: Task<Void, Never>?
+    @State private var showPlayerVolumeIndicator = false
+    @State private var hideVolumeIndicatorTask: Task<Void, Never>?
+    @State private var playerVolumeLevel: Float = 1.0
+    @State private var playerVolumeBaseLevel: Float?
+    @State private var playerVolumeHapticStep = -1
+    @State private var playerGestureAxis: PlayerGestureAxis = .undecided
+    @State private var controlsVisible = true
+    @State private var controlsAutoHideTask: Task<Void, Never>?
+    @State private var isPlaybackPaused = true
+    @State private var isTracklistHidden = false
+    @State private var isScrubbingProgress = false
 
     var body: some View {
         Group {
             if isLoading, set == nil {
                 ProgressView("加载 Set 详情...")
             } else if let set {
-                VStack(spacing: 0) {
-                    playerSection(for: set)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 248)
-                        .ignoresSafeArea(edges: .top)
-
-                    currentTrackPinnedCard(for: set)
-                        .padding(.horizontal, 10)
-                        .padding(.top, 8)
-                        .padding(.bottom, isTracklistExpanded ? 8 : 10)
-
-                    if isTracklistExpanded {
-                        expandedTracklistSection(for: set)
-                            .padding(.horizontal, 10)
-                            .padding(.bottom, 10)
-                    }
-
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text(set.title)
-                                .font(.title3.bold())
-                                .foregroundStyle(RaverTheme.primaryText)
-
-                            if let dj = set.dj {
-                                Button {
-                                    selectedArtistDJ = dj
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        if let avatar = AppConfig.resolvedURLString(dj.avatarUrl), !avatar.isEmpty {
-                                            AsyncImage(url: URL(string: avatar)) { phase in
-                                                switch phase {
-                                                case .empty:
-                                                    Circle().fill(RaverTheme.card)
-                                                case .success(let image):
-                                                    image.resizable().scaledToFill()
-                                                case .failure:
-                                                    Circle().fill(RaverTheme.card)
-                                                @unknown default:
-                                                    Circle().fill(RaverTheme.card)
-                                                }
-                                            }
-                                            .frame(width: 22, height: 22)
-                                            .clipShape(Circle())
-                                        } else {
-                                            Circle()
-                                                .fill(RaverTheme.card)
-                                                .frame(width: 22, height: 22)
-                                        }
-                                        Text(dj.name)
-                                            .foregroundStyle(RaverTheme.secondaryText)
-                                            .font(.subheadline)
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption2)
-                                            .foregroundStyle(RaverTheme.secondaryText)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                            } else {
-                                HStack(spacing: 8) {
-                                    Circle()
-                                        .fill(RaverTheme.card)
-                                        .frame(width: 22, height: 22)
-                                    Text(set.djId)
-                                        .foregroundStyle(RaverTheme.secondaryText)
-                                        .font(.subheadline)
-                                }
-                            }
-
-                            ProgressView(value: progressValue(for: set))
-                                .progressViewStyle(.linear)
-                            Text("当前时间 \(formatTrackTime(Int(playbackTime))) / \(formatTrackTime(Int(max(1, resolvedDuration(for: set)))))")
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-
-                            if let playerError = youtubePlayerError ?? nativePlayerError {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(playerError)
-                                        .font(.caption)
-                                        .foregroundStyle(.red)
-                                    if resolvedYouTubeID(for: set) != nil {
-                                        Button("在应用内浏览器打开视频") {
-                                            showInAppVideoBrowser = true
-                                        }
-                                        .buttonStyle(.bordered)
-                                    }
-                                }
-                            }
-
-                            Text("\(sortedTracks(for: set).count) tracks · \(set.viewCount) views")
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-
-                            if isMine(set) {
-                                HStack {
-                                    Button("编辑 Set") {
-                                        showEdit = true
-                                    }
-                                    .buttonStyle(.bordered)
-
-                                    Button("编辑 Tracklist") {
-                                        showTrackEditor = true
-                                    }
-                                    .buttonStyle(.bordered)
-
-                                    Button(role: .destructive) {
-                                        Task { await deleteSet() }
-                                    } label: {
-                                        Text("删除 Set")
-                                    }
-                                    .buttonStyle(.bordered)
-                                }
-                            }
-
-                            contributorSection(for: set)
-                            commentsSection
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.top, 4)
-                        .padding(.bottom, 18)
+                GeometryReader { proxy in
+                    if proxy.size.width > proxy.size.height {
+                        landscapePlayerContent(for: set, in: proxy.size)
+                    } else {
+                        portraitDetailContent(for: set)
                     }
                 }
                 .sheet(isPresented: $showEdit) {
@@ -3170,13 +3294,16 @@ struct DJSetDetailView: View {
                 .onChange(of: playbackTime) { _, newTime in
                     syncActiveTrack(for: set, at: newTime)
                 }
-                .sheet(isPresented: $showInAppVideoBrowser) {
-                    InAppSafariView(url: URL(string: AppConfig.resolvedURLString(set.videoUrl) ?? "https://example.com") ?? URL(string: "https://example.com")!)
-                        .ignoresSafeArea()
-                }
                 .onDisappear {
-                    youtubeEmbedTimeoutTask?.cancel()
-                    youtubeEmbedTimeoutTask = nil
+                    hideSeekIndicatorTask?.cancel()
+                    hideSeekIndicatorTask = nil
+                    hideVolumeIndicatorTask?.cancel()
+                    hideVolumeIndicatorTask = nil
+                    controlsAutoHideTask?.cancel()
+                    controlsAutoHideTask = nil
+                    nativePlayerSession.pause()
+                    nativePlayerSession.reset()
+                    forcePortraitOrientation()
                 }
             } else {
                 ContentUnavailableView("Set 不存在", systemImage: "waveform.badge.exclamationmark")
@@ -3187,11 +3314,15 @@ struct DJSetDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .navigationDestination(item: $selectedArtistDJ) { dj in
             DJDetailView(djID: dj.id)
         }
         .navigationDestination(item: $selectedContributor) { contributor in
             UserProfileView(userID: contributor.id)
+        }
+        .navigationDestination(item: $selectedCommentUser) { user in
+            UserProfileView(userID: user.id)
         }
         .task {
             await load()
@@ -3204,6 +3335,963 @@ struct DJSetDetailView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+    }
+
+    @ViewBuilder
+    private func portraitDetailContent(for set: WebDJSet) -> some View {
+        VStack(spacing: 0) {
+            playerViewport(for: set, isFullscreen: false, reservedTrailingWidth: 0)
+                .frame(maxWidth: .infinity)
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .clipped()
+
+            currentTrackPinnedCard(for: set)
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
+                .padding(.bottom, isTracklistExpanded ? 8 : 10)
+
+            if isTracklistExpanded {
+                expandedTracklistSection(for: set)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(set.title)
+                        .font(.title3.bold())
+                        .foregroundStyle(RaverTheme.primaryText)
+
+                    if let dj = set.dj {
+                        Button {
+                            selectedArtistDJ = dj
+                        } label: {
+                            HStack(spacing: 8) {
+                                if let avatar = AppConfig.resolvedURLString(dj.avatarUrl), !avatar.isEmpty {
+                                    AsyncImage(url: URL(string: avatar)) { phase in
+                                        switch phase {
+                                        case .empty:
+                                            Circle().fill(RaverTheme.card)
+                                        case .success(let image):
+                                            image.resizable().scaledToFill()
+                                        case .failure:
+                                            Circle().fill(RaverTheme.card)
+                                        @unknown default:
+                                            Circle().fill(RaverTheme.card)
+                                        }
+                                    }
+                                    .frame(width: 22, height: 22)
+                                    .clipShape(Circle())
+                                } else {
+                                    Circle()
+                                        .fill(RaverTheme.card)
+                                        .frame(width: 22, height: 22)
+                                }
+                                Text(dj.name)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .font(.subheadline)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(RaverTheme.card)
+                                .frame(width: 22, height: 22)
+                            Text(set.djId)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .font(.subheadline)
+                        }
+                    }
+
+                    ProgressView(value: progressValue(for: set))
+                        .progressViewStyle(.linear)
+                    Text("当前时间 \(formatTrackTime(Int(playbackTime))) / \(formatTrackTime(Int(max(1, resolvedDuration(for: set)))))")
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+
+                    if let playerError = nativePlayerError {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(playerError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+
+                    Text("\(sortedTracks(for: set).count) tracks · \(set.viewCount) views")
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+
+                    if isMine(set) {
+                        HStack {
+                            Button("编辑 Set") {
+                                showEdit = true
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button("编辑 Tracklist") {
+                                showTrackEditor = true
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button(role: .destructive) {
+                                Task { await deleteSet() }
+                            } label: {
+                                Text("删除 Set")
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+
+                    contributorSection(for: set)
+                    commentsSection
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+                .padding(.bottom, 18)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func playerViewport(for set: WebDJSet, isFullscreen: Bool, reservedTrailingWidth: CGFloat) -> some View {
+        GeometryReader { proxy in
+            let interactiveWidth = max(40, proxy.size.width - reservedTrailingWidth)
+            ZStack {
+                playerSection(for: set)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                playerGestureLayer(for: set, reservedTrailingWidth: reservedTrailingWidth)
+
+                if showPlayerSeekIndicator {
+                    Text(playerSeekIndicatorText(for: set))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.58))
+                        .clipShape(Capsule())
+                        .position(
+                            x: (interactiveWidth / 2) + 6,
+                            y: proxy.size.height * 0.22
+                        )
+                }
+
+                if showPlayerVolumeIndicator {
+                    playerVolumeIndicatorOverlay
+                        .position(
+                            x: interactiveWidth / 2,
+                            y: proxy.size.height / 2
+                        )
+                }
+
+                playerControlsOverlay(
+                    for: set,
+                    isFullscreen: isFullscreen,
+                    interactiveWidth: interactiveWidth
+                )
+                .opacity(controlsVisible ? 1 : 0)
+                .allowsHitTesting(controlsVisible)
+            }
+            .animation(.easeInOut(duration: 0.2), value: controlsVisible)
+            .onAppear {
+                playerVolumeLevel = min(max(nativePlayerSession.player.volume, 0), 1)
+                showControlsTemporarily()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func playerGestureLayer(for set: WebDJSet, reservedTrailingWidth: CGFloat) -> some View {
+        GeometryReader { proxy in
+            let interactiveWidth = max(40, proxy.size.width - reservedTrailingWidth)
+            Color.clear
+                .frame(width: interactiveWidth, height: proxy.size.height, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    togglePlayback()
+                    showControlsTemporarily()
+                }
+                .onTapGesture {
+                    handleSingleTapControls()
+                }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { value in
+                            handlePlayerDragChanged(value, viewportHeight: proxy.size.height)
+                        }
+                        .onEnded { value in
+                            handlePlayerDragEnded(value, in: set, viewportHeight: proxy.size.height)
+                        }
+                )
+        }
+    }
+
+    @ViewBuilder
+    private func playerControlsOverlay(for set: WebDJSet, isFullscreen: Bool, interactiveWidth: CGFloat) -> some View {
+        let controlHitSize: CGFloat = 46
+        ZStack {
+            VStack {
+                HStack {
+                    Button {
+                        if isFullscreen {
+                            forcePortraitOrientation()
+                        } else {
+                            forcePortraitOrientation()
+                            dismiss()
+                        }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(Color.white)
+                            .frame(width: 36, height: 36)
+                            .background(Color.black.opacity(0.36))
+                            .clipShape(Circle())
+                    }
+                    .frame(width: controlHitSize, height: controlHitSize)
+                    .contentShape(Circle())
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+                .padding(.top, 12)
+                .padding(.leading, 12)
+                Spacer()
+            }
+
+            VStack {
+                Spacer()
+                VStack(spacing: 1) {
+                    HStack(alignment: .center, spacing: 8) {
+                        Button {
+                            togglePlayback()
+                        } label: {
+                            Image(systemName: isPlaybackPaused ? "play.fill" : "pause.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(Color.white)
+                                .frame(width: 40, height: 40)
+                                .shadow(color: Color.black.opacity(0.65), radius: 6, x: 0, y: 1)
+                        }
+                        .frame(width: controlHitSize, height: controlHitSize)
+                        .contentShape(Circle())
+                        .buttonStyle(.plain)
+
+                        playerProgressScrubber(for: set)
+                            .frame(height: 14)
+
+                        Button {
+                            if isFullscreen {
+                                forcePortraitOrientation()
+                            } else {
+                                forceLandscapeOrientation()
+                            }
+                            showControlsTemporarily()
+                        } label: {
+                            Image(systemName: isFullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Color.white)
+                                .frame(width: 34, height: 34)
+                                .shadow(color: Color.black.opacity(0.55), radius: 4, x: 0, y: 1)
+                        }
+                        .frame(width: controlHitSize, height: controlHitSize)
+                        .contentShape(Circle())
+                        .buttonStyle(.plain)
+                    }
+                    .offset(y: 16)
+
+                    HStack {
+                        Text(formatTrackTime(Int(playbackTime)))
+                        Spacer()
+                        Text(formatTrackTime(Int(max(1, resolvedDuration(for: set)))))
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.82))
+                    .padding(.leading, controlHitSize + 8)
+                    .padding(.trailing, controlHitSize + 8)
+                }
+                .padding(.horizontal, 2)
+                .padding(.vertical, 6)
+                .frame(width: interactiveWidth, alignment: .leading)
+                .padding(.leading, 2)
+                .padding(.bottom, 4)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func playerProgressScrubber(for set: WebDJSet) -> some View {
+        GeometryReader { geo in
+            let total = max(1, resolvedDuration(for: set))
+            let normalized = min(max(playbackTime / total, 0), 1)
+            let thumbSize: CGFloat = isScrubbingProgress ? 12 : 10
+            let trackHeight: CGFloat = isScrubbingProgress ? 5 : 4
+            let effectiveWidth = max(1, geo.size.width - thumbSize)
+            let thumbX = (effectiveWidth * normalized)
+            let activeColor = isScrubbingProgress ? Color(red: 0.42, green: 0.24, blue: 0.78) : RaverTheme.accent
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.28))
+                    .frame(height: 3)
+
+                Capsule()
+                    .fill(activeColor)
+                    .frame(width: max(trackHeight, thumbX + (thumbSize / 2)), height: trackHeight)
+
+                Circle()
+                    .fill(activeColor)
+                    .frame(width: thumbSize, height: thumbSize)
+                    .shadow(color: Color.black.opacity(0.35), radius: isScrubbingProgress ? 3 : 1, x: 0, y: 0)
+                    .offset(x: thumbX)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        isScrubbingProgress = true
+                        let ratio = min(max(value.location.x / max(1, geo.size.width), 0), 1)
+                        seekToTime(total * ratio, in: set)
+                        showControlsTemporarily()
+                    }
+                    .onEnded { value in
+                        let ratio = min(max(value.location.x / max(1, geo.size.width), 0), 1)
+                        seekToTime(total * ratio, in: set)
+                        isScrubbingProgress = false
+                        scheduleControlsAutoHide()
+                    }
+            )
+        }
+    }
+
+    private enum PlayerGestureAxis {
+        case undecided
+        case horizontal
+        case vertical
+    }
+
+    private var playerVolumeLevelClamped: Float {
+        min(max(playerVolumeLevel, 0), 1)
+    }
+
+    private var playerVolumeIconName: String {
+        let level = playerVolumeLevelClamped
+        if level <= 0.001 { return "speaker.slash.fill" }
+        if level < 0.5 { return "speaker.wave.1.fill" }
+        return "speaker.wave.2.fill"
+    }
+
+    @ViewBuilder
+    private var playerVolumeIndicatorOverlay: some View {
+        let ratio = CGFloat(playerVolumeLevelClamped)
+
+        HStack(spacing: 10) {
+            Image(systemName: playerVolumeIconName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.94))
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.24))
+                    .frame(width: 132, height: 6)
+
+                if ratio > 0.001 {
+                    Capsule()
+                        .fill(RaverTheme.accent)
+                        .frame(width: max(8, 132 * ratio), height: 6)
+                }
+            }
+            .animation(.easeOut(duration: 0.15), value: ratio)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.black.opacity(0.48))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.55), radius: 16, x: 0, y: 6)
+    }
+
+    private func handlePlayerDragChanged(_ value: DragGesture.Value, viewportHeight: CGFloat) {
+        if playerGestureAxis == .undecided {
+            let horizontal = abs(value.translation.width)
+            let vertical = abs(value.translation.height)
+            guard max(horizontal, vertical) >= 8 else { return }
+            playerGestureAxis = horizontal >= vertical ? .horizontal : .vertical
+        }
+
+        switch playerGestureAxis {
+        case .horizontal:
+            handlePlayerSeekDragChanged(value)
+        case .vertical:
+            handlePlayerVolumeDragChanged(value, viewportHeight: viewportHeight)
+        case .undecided:
+            break
+        }
+    }
+
+    private func handlePlayerDragEnded(_ value: DragGesture.Value, in set: WebDJSet, viewportHeight: CGFloat) {
+        switch playerGestureAxis {
+        case .horizontal:
+            handlePlayerSeekDragEnded(value, in: set)
+        case .vertical:
+            handlePlayerVolumeDragEnded(value, viewportHeight: viewportHeight)
+        case .undecided:
+            break
+        }
+
+        playerGestureAxis = .undecided
+        playerVolumeBaseLevel = nil
+    }
+
+    private func handlePlayerSeekDragChanged(_ value: DragGesture.Value) {
+        let horizontal = value.translation.width
+        let vertical = value.translation.height
+        guard abs(horizontal) > abs(vertical) else { return }
+
+        playerSeekDeltaSeconds = Double(horizontal / 8)
+        showControlsTemporarily()
+        if !showPlayerSeekIndicator {
+            showPlayerSeekIndicator = true
+        }
+        hideSeekIndicatorTask?.cancel()
+    }
+
+    private func handlePlayerSeekDragEnded(_ value: DragGesture.Value, in set: WebDJSet) {
+        let horizontal = value.predictedEndTranslation.width
+        let vertical = value.predictedEndTranslation.height
+        guard abs(horizontal) > abs(vertical) else {
+            playerSeekDeltaSeconds = 0
+            scheduleSeekIndicatorHide()
+            return
+        }
+
+        let deltaSeconds = Double(horizontal / 8)
+        applySeekDelta(deltaSeconds, in: set)
+        playerSeekDeltaSeconds = 0
+        scheduleSeekIndicatorHide()
+    }
+
+    private func handlePlayerVolumeDragChanged(_ value: DragGesture.Value, viewportHeight: CGFloat) {
+        if playerVolumeBaseLevel == nil {
+            playerVolumeBaseLevel = min(max(nativePlayerSession.player.volume, 0), 1)
+        }
+
+        let base = playerVolumeBaseLevel ?? 1
+        let sensitivity = max(180, viewportHeight * 0.75)
+        let delta = Float(-value.translation.height / sensitivity)
+        let targetVolume = min(max(base + delta, 0), 1)
+
+        nativePlayerSession.player.volume = targetVolume
+        playerVolumeLevel = targetVolume
+        showPlayerVolumeIndicator = true
+        showControlsTemporarily()
+
+        let currentStep = Int((targetVolume * 10).rounded())
+        if currentStep != playerVolumeHapticStep {
+            playerVolumeHapticStep = currentStep
+            emitSelectionHaptic()
+        }
+
+        hideVolumeIndicatorTask?.cancel()
+    }
+
+    private func handlePlayerVolumeDragEnded(_ value: DragGesture.Value, viewportHeight: CGFloat) {
+        if playerVolumeBaseLevel == nil {
+            handlePlayerVolumeDragChanged(value, viewportHeight: viewportHeight)
+        }
+        scheduleVolumeIndicatorHide()
+    }
+
+    private func applySeekDelta(_ deltaSeconds: Double, in set: WebDJSet) {
+        guard deltaSeconds != 0 else { return }
+        let total = resolvedDuration(for: set)
+        let upperBound = total > 0 ? total : Double.greatestFiniteMagnitude
+        let target = min(max(playbackTime + deltaSeconds, 0), upperBound)
+        seekToTime(target, in: set)
+        emitSelectionHaptic()
+    }
+
+    private func seekToTime(_ target: Double, in set: WebDJSet) {
+        playbackTime = target
+        syncActiveTrack(for: set, at: target)
+        if resolvedPlayableVideoURL(for: set) != nil {
+            pendingSeekTime = target
+        }
+    }
+
+    private func showControlsTemporarily() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            controlsVisible = true
+        }
+        scheduleControlsAutoHide()
+    }
+
+    private func handleSingleTapControls() {
+        if controlsVisible {
+            controlsAutoHideTask?.cancel()
+            controlsAutoHideTask = nil
+            withAnimation(.easeInOut(duration: 0.2)) {
+                controlsVisible = false
+            }
+        } else {
+            showControlsTemporarily()
+        }
+    }
+
+    private func scheduleControlsAutoHide() {
+        controlsAutoHideTask?.cancel()
+        controlsAutoHideTask = nil
+
+        controlsAutoHideTask = Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    controlsVisible = false
+                }
+            }
+        }
+    }
+
+    private func emitSelectionHaptic() {
+        let feedback = UISelectionFeedbackGenerator()
+        feedback.selectionChanged()
+    }
+
+    private func scheduleSeekIndicatorHide() {
+        hideSeekIndicatorTask?.cancel()
+        hideSeekIndicatorTask = Task {
+            try? await Task.sleep(nanoseconds: 650_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                showPlayerSeekIndicator = false
+            }
+        }
+    }
+
+    private func scheduleVolumeIndicatorHide() {
+        hideVolumeIndicatorTask?.cancel()
+        hideVolumeIndicatorTask = Task {
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                showPlayerVolumeIndicator = false
+            }
+        }
+    }
+
+    private func playerSeekIndicatorText(for set: WebDJSet) -> String {
+        let total = resolvedDuration(for: set)
+        let upperBound = total > 0 ? total : Double.greatestFiniteMagnitude
+        let preview = min(max(playbackTime + playerSeekDeltaSeconds, 0), upperBound)
+        let prefix = playerSeekDeltaSeconds >= 0 ? "+" : "-"
+        return "\(prefix)\(Int(abs(playerSeekDeltaSeconds)))s  \(formatTrackTime(Int(preview)))"
+    }
+
+    private func togglePlayback() {
+        isPlaybackPaused.toggle()
+        showControlsTemporarily()
+        emitSelectionHaptic()
+    }
+
+    private func forceLandscapeOrientation() {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        if #available(iOS 16.0, *) {
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+            scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+        }
+        UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
+    }
+
+    private func forcePortraitOrientation() {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        if #available(iOS 16.0, *) {
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+        }
+        UIDevice.current.setValue(UIInterfaceOrientation.portrait.rawValue, forKey: "orientation")
+    }
+
+    @ViewBuilder
+    private func landscapePlayerContent(for set: WebDJSet, in size: CGSize) -> some View {
+        let wheelWidth = min(max(size.width * 0.34, 160), 320)
+        let reservedWidth = isTracklistHidden ? 34.0 : wheelWidth
+        ZStack(alignment: .topLeading) {
+            playerViewport(for: set, isFullscreen: true, reservedTrailingWidth: reservedWidth)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+                .ignoresSafeArea()
+
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                if isTracklistHidden {
+                    collapsedTracklistOverlay(for: set, width: wheelWidth)
+                } else {
+                    trackWheelOverlay(for: set, width: wheelWidth)
+                }
+            }
+            .ignoresSafeArea()
+
+            if let playerError = nativePlayerError {
+                VStack {
+                    Spacer()
+                    Text(playerError)
+                        .font(.caption)
+                        .foregroundStyle(Color.white)
+                        .lineLimit(2)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.55))
+                        .padding(.bottom, 14)
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func trackWheelOverlay(for set: WebDJSet, width: CGFloat) -> some View {
+        let tracks = sortedTracks(for: set)
+        let activeIndex = resolvedActiveTrackIndex(in: tracks)
+        let rawShift = tracks.count > 1 ? (-wheelDragTranslation / wheelStepHeight) : 0
+        let minShift = CGFloat(-activeIndex)
+        let maxShift = CGFloat(max(0, tracks.count - 1 - activeIndex))
+        let clampedShift = min(max(rawShift, minShift), maxShift)
+
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.0),
+                    Color.black.opacity(0.18),
+                    Color.black.opacity(0.36),
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+
+            if tracks.isEmpty {
+                Text("暂无 Tracklist")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.72))
+            } else {
+                ZStack {
+                    ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
+                        let distance = CGFloat(index - activeIndex) - clampedShift
+                        if abs(distance) <= 3.5 {
+                            let prominence = max(0, 1 - min(abs(distance), 1))
+                            let opacity = max(0.16, 1 - (abs(distance) * 0.24))
+                            let scale = max(0.82, 1 - (abs(distance) * 0.09))
+
+                            wheelTrackEntry(
+                                track: track,
+                                in: set,
+                                prominence: prominence,
+                                opacity: opacity
+                            )
+                                .frame(height: wheelStepHeight)
+                                .scaleEffect(scale)
+                                .rotation3DEffect(
+                                    .degrees(Double(distance) * -12),
+                                    axis: (x: 1, y: 0, z: 0),
+                                    perspective: 0.65
+                                )
+                                .offset(y: distance * wheelStepHeight)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                .padding(.horizontal, 12)
+                .clipped()
+            }
+        }
+        .frame(width: width)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 4)
+                .onChanged { value in
+                    handleWheelDragChanged(value, tracks: tracks, activeIndex: activeIndex)
+                }
+                .onEnded { value in
+                    handleWheelDragEnded(value, tracks: tracks, activeIndex: activeIndex, in: set)
+                }
+        )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 12)
+                .onEnded { value in
+                    guard value.translation.width > 56 else { return }
+                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        isTracklistHidden = true
+                    }
+                }
+        )
+        .overlay(alignment: .topTrailing) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    isTracklistHidden = true
+                }
+            } label: {
+                Image(systemName: "chevron.compact.right")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 30, height: 30)
+                    .background(Color.black.opacity(0.34))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 8)
+            .padding(.trailing, 8)
+        }
+        .onAppear {
+            wheelDragTranslation = 0
+            wheelLastHapticShift = 0
+        }
+    }
+
+    @ViewBuilder
+    private func collapsedTracklistOverlay(for set: WebDJSet, width: CGFloat) -> some View {
+        let tracks = sortedTracks(for: set)
+        let activeIndex = resolvedActiveTrackIndex(in: tracks)
+        let activeTrack = tracks.indices.contains(activeIndex) ? tracks[activeIndex] : nil
+        let title = activeTrack.map(wheelTrackTitle(for:)) ?? "Unknown Track"
+        let djName = activeTrack.map { wheelDJInfo(for: $0, in: set).name } ?? (set.dj?.name ?? set.djId)
+
+        ZStack(alignment: .trailing) {
+            VStack {
+                Spacer()
+                HStack(spacing: 6) {
+                    AnimatedEqualizerIcon(color: .white)
+                    VStack(alignment: .leading, spacing: 1) {
+                        MarqueeText(
+                            text: title,
+                            fontSize: 10,
+                            fontWeight: .semibold,
+                            color: Color.white.opacity(0.92)
+                        )
+                        .frame(width: 138, alignment: .leading)
+
+                        Text(djName)
+                            .font(.system(size: 9, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.7))
+                            .lineLimit(1)
+                            .frame(width: 138, alignment: .leading)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Color.black.opacity(0.24))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .padding(.trailing, 14)
+                .padding(.bottom, 12)
+            }
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    isTracklistHidden = false
+                }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 24, height: 56)
+                    .background(Color.black.opacity(0.35))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 5)
+        }
+        .frame(width: width)
+    }
+
+    private var wheelStepHeight: CGFloat {
+        62
+    }
+
+    @ViewBuilder
+    private func wheelTrackEntry(
+        track: WebDJSetTrack,
+        in set: WebDJSet,
+        prominence: CGFloat,
+        opacity: CGFloat
+    ) -> some View {
+        let titleSize: CGFloat = 12 + (prominence * 3.5)
+        let subtitleSize: CGFloat = max(10, titleSize - 2.8)
+        let info = wheelDJInfo(for: track, in: set)
+        let isActive = activeTrackID == track.id
+
+        VStack(alignment: .trailing, spacing: 3) {
+            HStack(spacing: 5) {
+                Text(wheelTrackTitle(for: track))
+                    .font(.system(size: titleSize, weight: prominence > 0.75 ? .semibold : .medium))
+                    .foregroundStyle(Color.white.opacity(opacity))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .multilineTextAlignment(.trailing)
+                if isActive {
+                    AnimatedEqualizerIcon(color: RaverTheme.accent)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+
+            HStack(spacing: 6) {
+                wheelTrackSourceLinks(for: track)
+
+                Group {
+                    if let avatarURL = info.avatarURL {
+                        AsyncImage(url: avatarURL) { phase in
+                            switch phase {
+                            case .empty:
+                                Circle().fill(Color.white.opacity(0.18))
+                            case .success(let image):
+                                image.resizable().scaledToFill()
+                            case .failure:
+                                Circle().fill(Color.white.opacity(0.18))
+                            @unknown default:
+                                Circle().fill(Color.white.opacity(0.18))
+                            }
+                        }
+                    } else {
+                        Circle().fill(Color.white.opacity(0.18))
+                    }
+                }
+                .frame(width: 14, height: 14)
+                .clipShape(Circle())
+
+                Text(info.name)
+                    .font(.system(size: subtitleSize, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(max(0.16, opacity * 0.85)))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .multilineTextAlignment(.trailing)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    @ViewBuilder
+    private func wheelTrackSourceLinks(for track: WebDJSetTrack) -> some View {
+        HStack(spacing: 6) {
+            if let spotify = resolvedExternalURL(track.spotifyUrl) {
+                Button {
+                    openURL(spotify)
+                } label: {
+                    Image("SpotifyIcon")
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 12, height: 12)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if let netease = resolvedExternalURL(track.neteaseUrl) {
+                Button {
+                    openURL(netease)
+                } label: {
+                    Image("NeteaseIcon")
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 12, height: 12)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func wheelTrackTitle(for track: WebDJSetTrack) -> String {
+        let title = track.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty { return title }
+        let artist = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        return artist.isEmpty ? "Unknown Track" : artist
+    }
+
+    private func wheelDJInfo(for track: WebDJSetTrack, in set: WebDJSet) -> (name: String, avatarURL: URL?) {
+        let matchedDJ = artistDJ(for: track.artist, in: set)
+        let fallbackDJ = set.dj
+        let nameFromTrack = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = matchedDJ?.name
+            ?? fallbackDJ?.name
+            ?? (nameFromTrack.isEmpty ? set.djId : nameFromTrack)
+        let avatarRaw = matchedDJ?.avatarUrl ?? fallbackDJ?.avatarUrl
+        let avatarResolved = AppConfig.resolvedURLString(avatarRaw ?? "")
+        let avatarURL = avatarResolved.flatMap { resolved in
+            resolved.isEmpty ? nil : URL(string: resolved)
+        }
+        return (name, avatarURL)
+    }
+
+    private func resolvedActiveTrackIndex(in tracks: [WebDJSetTrack]) -> Int {
+        guard !tracks.isEmpty else { return 0 }
+        if let activeTrackID,
+           let index = tracks.firstIndex(where: { $0.id == activeTrackID }) {
+            return index
+        }
+        return 0
+    }
+
+    private func clampedWheelShift(rawShift: Int, activeIndex: Int, trackCount: Int) -> Int {
+        guard trackCount > 0 else { return 0 }
+        let minShift = -activeIndex
+        let maxShift = (trackCount - 1) - activeIndex
+        return min(max(rawShift, minShift), maxShift)
+    }
+
+    private func handleWheelDragChanged(
+        _ value: DragGesture.Value,
+        tracks: [WebDJSetTrack],
+        activeIndex: Int
+    ) {
+        guard tracks.count > 1 else { return }
+        wheelDragTranslation = value.translation.height
+        let rawShift = Int((-wheelDragTranslation / wheelStepHeight).rounded())
+        let shift = clampedWheelShift(rawShift: rawShift, activeIndex: activeIndex, trackCount: tracks.count)
+
+        if shift != wheelLastHapticShift {
+            wheelLastHapticShift = shift
+            if shift != 0 {
+                let feedback = UISelectionFeedbackGenerator()
+                feedback.selectionChanged()
+            }
+        }
+    }
+
+    private func handleWheelDragEnded(
+        _ value: DragGesture.Value,
+        tracks: [WebDJSetTrack],
+        activeIndex: Int,
+        in set: WebDJSet
+    ) {
+        guard tracks.count > 1 else {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                wheelDragTranslation = 0
+            }
+            wheelLastHapticShift = 0
+            return
+        }
+
+        let rawShift = Int((-value.predictedEndTranslation.height / wheelStepHeight).rounded())
+        let shift = clampedWheelShift(rawShift: rawShift, activeIndex: activeIndex, trackCount: tracks.count)
+
+        if shift != 0 {
+            let targetIndex = activeIndex + shift
+            if tracks.indices.contains(targetIndex) {
+                seekToTrack(tracks[targetIndex], in: set)
+            }
+        }
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            wheelDragTranslation = 0
+        }
+        wheelLastHapticShift = 0
     }
 
     private func isMine(_ set: WebDJSet) -> Bool {
@@ -3228,14 +4316,14 @@ struct DJSetDetailView: View {
             playbackTime = 0
             pendingSeekTime = nil
             playbackDuration = Double(max(0, loadedSet.duration ?? 0))
-            youtubePlayerError = nil
+            controlsVisible = true
+            isPlaybackPaused = true
+            isTracklistHidden = false
+            controlsAutoHideTask?.cancel()
+            controlsAutoHideTask = nil
             nativePlayerError = nil
-            youtubePlayerReady = false
-            autoOpenedFallbackForCurrentSet = false
-            youtubeEmbedTimeoutTask?.cancel()
-            youtubeEmbedTimeoutTask = nil
             syncActiveTrack(for: loadedSet, at: 0)
-            armYouTubeEmbedTimeoutIfNeeded(for: loadedSet)
+            nativePlayerSession.reset()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -3289,59 +4377,22 @@ struct DJSetDetailView: View {
         }
     }
 
-    private func armYouTubeEmbedTimeoutIfNeeded(for set: WebDJSet) {
-        guard resolvedYouTubeID(for: set) != nil else { return }
-        let expectedSetID = set.id
-        youtubeEmbedTimeoutTask = Task { [expectedSetID] in
-            try? await Task.sleep(nanoseconds: 8_000_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard self.set?.id == expectedSetID else { return }
-                guard !youtubePlayerReady else { return }
-                guard youtubePlayerError == nil else { return }
-                handleYouTubeEmbedError(
-                    "YouTube 嵌入加载超时。该视频可能不允许内嵌播放，已为你切换到应用内浏览器。",
-                    autoOpenBrowser: true
-                )
-            }
-        }
-    }
-
-    private func handleYouTubeEmbedError(_ message: String, autoOpenBrowser: Bool) {
-        youtubePlayerError = message
-        youtubeEmbedTimeoutTask?.cancel()
-        youtubeEmbedTimeoutTask = nil
-        if autoOpenBrowser && !autoOpenedFallbackForCurrentSet {
-            autoOpenedFallbackForCurrentSet = true
-            showInAppVideoBrowser = true
-        }
-    }
-
     @ViewBuilder
     private func playerSection(for set: WebDJSet) -> some View {
-        if let videoID = resolvedYouTubeID(for: set) {
-            EmbeddedYouTubePlayer(
-                videoID: videoID,
-                currentTime: $playbackTime,
-                duration: $playbackDuration,
-                pendingSeekTime: $pendingSeekTime,
-                onReady: {
-                    youtubePlayerReady = true
-                    youtubeEmbedTimeoutTask?.cancel()
-                    youtubeEmbedTimeoutTask = nil
-                },
-                onError: { message in
-                    handleYouTubeEmbedError(message, autoOpenBrowser: true)
-                }
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let playableURL = resolvedPlayableVideoURL(for: set) {
+        if let playableURL = resolvedPlayableVideoURL(for: set) {
             EmbeddedNativeVideoPlayer(
+                session: nativePlayerSession,
                 videoURL: playableURL,
                 currentTime: $playbackTime,
                 duration: $playbackDuration,
                 pendingSeekTime: $pendingSeekTime,
+                isPaused: isPlaybackPaused,
                 onReady: {},
+                onPlaybackStateChanged: { paused in
+                    if isPlaybackPaused != paused {
+                        isPlaybackPaused = paused
+                    }
+                },
                 onError: { message in
                     nativePlayerError = message
                 }
@@ -3351,7 +4402,7 @@ struct DJSetDetailView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("无法直接播放该视频地址", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.yellow)
-                Text("请使用可直连的媒体地址（mp4/mov/webm/m3u8）或先上传到资源库。")
+                Text("当前仅支持原生直连媒体地址（mp4/mov/webm/m3u8）。")
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -3636,31 +4687,23 @@ struct DJSetDetailView: View {
             } else {
                 ForEach(comments) { comment in
                     HStack(alignment: .top, spacing: 10) {
-                        if let avatar = AppConfig.resolvedURLString(comment.user.avatarUrl), !avatar.isEmpty {
-                            AsyncImage(url: URL(string: avatar)) { phase in
-                                switch phase {
-                                case .empty:
-                                    Circle().fill(RaverTheme.card)
-                                case .success(let image):
-                                    image.resizable().scaledToFill()
-                                case .failure:
-                                    Circle().fill(RaverTheme.card)
-                                @unknown default:
-                                    Circle().fill(RaverTheme.card)
-                                }
-                            }
-                            .frame(width: 28, height: 28)
-                            .clipShape(Circle())
-                        } else {
-                            Circle()
-                                .fill(RaverTheme.card)
-                                .frame(width: 28, height: 28)
-                                .overlay(
-                                    Image(systemName: "person.fill")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(RaverTheme.secondaryText)
+                        Button {
+                            selectedCommentUser = comment.user
+                        } label: {
+                            Image(
+                                AppConfig.resolvedUserAvatarAssetName(
+                                    userID: comment.user.id,
+                                    username: comment.user.username,
+                                    avatarURL: comment.user.avatarUrl
                                 )
+                            )
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 28, height: 28)
+                            .background(RaverTheme.card)
+                            .clipShape(Circle())
                         }
+                        .buttonStyle(.plain)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(comment.user.shownName)
@@ -3807,7 +4850,7 @@ struct DJSetDetailView: View {
         let target = Double(track.startTime)
         playbackTime = target
         syncActiveTrack(for: set, at: target)
-        if resolvedYouTubeID(for: set) != nil || resolvedPlayableVideoURL(for: set) != nil {
+        if resolvedPlayableVideoURL(for: set) != nil {
             pendingSeekTime = target
         }
     }
@@ -3834,32 +4877,6 @@ struct DJSetDetailView: View {
         return RaverTheme.secondaryText
     }
 
-    private func resolvedYouTubeID(for set: WebDJSet) -> String? {
-        guard set.platform.lowercased() == "youtube" else { return nil }
-        if isValidYouTubeID(set.videoId) {
-            return set.videoId
-        }
-
-        let patterns = [
-            "(?:youtube\\.com/watch\\?v=|youtu\\.be/)([a-zA-Z0-9_-]{11})",
-            "youtube\\.com/embed/([a-zA-Z0-9_-]{11})",
-            "youtube\\.com/shorts/([a-zA-Z0-9_-]{11})"
-        ]
-
-        for pattern in patterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-            let range = NSRange(set.videoUrl.startIndex..<set.videoUrl.endIndex, in: set.videoUrl)
-            if let match = regex.firstMatch(in: set.videoUrl, options: [], range: range),
-               let idRange = Range(match.range(at: 1), in: set.videoUrl) {
-                let id = String(set.videoUrl[idRange])
-                if isValidYouTubeID(id) {
-                    return id
-                }
-            }
-        }
-        return nil
-    }
-
     private func resolvedPlayableVideoURL(for set: WebDJSet) -> URL? {
         guard let resolved = AppConfig.resolvedURLString(set.videoUrl), !resolved.isEmpty else { return nil }
         if let direct = URL(string: resolved) {
@@ -3872,37 +4889,24 @@ struct DJSetDetailView: View {
         return nil
     }
 
-    private func isValidYouTubeID(_ id: String) -> Bool {
-        guard id.count == 11 else { return false }
-        return id.range(of: "^[A-Za-z0-9_-]{11}$", options: .regularExpression) != nil
-    }
-
     @ViewBuilder
     private func contributorRow(title: String, contributor: WebContributorProfile) -> some View {
         Button {
             selectedContributor = contributor
         } label: {
             HStack(spacing: 8) {
-                if let avatar = AppConfig.resolvedURLString(contributor.avatarUrl), !avatar.isEmpty {
-                    AsyncImage(url: URL(string: avatar)) { phase in
-                        switch phase {
-                        case .empty:
-                            Circle().fill(RaverTheme.card)
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        case .failure:
-                            Circle().fill(RaverTheme.card)
-                        @unknown default:
-                            Circle().fill(RaverTheme.card)
-                        }
-                    }
-                    .frame(width: 26, height: 26)
-                    .clipShape(Circle())
-                } else {
-                    Circle()
-                        .fill(RaverTheme.card)
-                        .frame(width: 26, height: 26)
-                }
+                Image(
+                    AppConfig.resolvedUserAvatarAssetName(
+                        userID: contributor.id,
+                        username: contributor.username,
+                        avatarURL: contributor.avatarUrl
+                    )
+                )
+                .resizable()
+                .scaledToFill()
+                .frame(width: 26, height: 26)
+                .background(RaverTheme.card)
+                .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -3951,179 +4955,99 @@ private struct AnimatedEqualizerIcon: View {
     }
 }
 
-private struct EmbeddedYouTubePlayer: UIViewRepresentable {
-    let videoID: String
-    @Binding var currentTime: Double
-    @Binding var duration: Double
-    @Binding var pendingSeekTime: Double?
-    let onReady: () -> Void
-    let onError: (String) -> Void
+private struct MarqueeText: View {
+    let text: String
+    let fontSize: CGFloat
+    let fontWeight: Font.Weight
+    let color: Color
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
-    }
+    private let gap: CGFloat = 16
+    private let speed: CGFloat = 22
+    @State private var textWidth: CGFloat = 0
 
-    func makeUIView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.allowsInlineMediaPlayback = true
-        if #available(iOS 10.0, *) {
-            config.mediaTypesRequiringUserActionForPlayback = []
-        }
-        let userContentController = WKUserContentController()
-        userContentController.add(context.coordinator, name: "ytBridge")
-        config.userContentController = userContentController
+    var body: some View {
+        GeometryReader { proxy in
+            let containerWidth = proxy.size.width
+            let shouldScroll = textWidth > containerWidth + 2
 
-        let webView = WKWebView(frame: .zero, configuration: config)
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.backgroundColor = .clear
-        webView.loadHTMLString(
-            Self.playerHTML(videoID: videoID, origin: "https://www.youtube.com"),
-            baseURL: URL(string: "https://www.youtube.com")
-        )
-        context.coordinator.webView = webView
-        return webView
-    }
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: !shouldScroll)) { context in
+                let travel = max(1, textWidth + gap)
+                let elapsed = CGFloat(context.date.timeIntervalSinceReferenceDate)
+                let x = shouldScroll
+                    ? -((elapsed * speed).truncatingRemainder(dividingBy: travel))
+                    : 0
 
-    func updateUIView(_ uiView: WKWebView, context: Context) {
-        context.coordinator.parent = self
-        context.coordinator.seekIfNeeded(on: uiView)
-    }
-
-    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
-        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "ytBridge")
-    }
-
-    final class Coordinator: NSObject, WKScriptMessageHandler {
-        var parent: EmbeddedYouTubePlayer
-        weak var webView: WKWebView?
-
-        init(parent: EmbeddedYouTubePlayer) {
-            self.parent = parent
-        }
-
-        func seekIfNeeded(on webView: WKWebView) {
-            guard let seconds = parent.pendingSeekTime else { return }
-            let script = "window.codexSeekTo(\(seconds));"
-            webView.evaluateJavaScript(script, completionHandler: nil)
-            DispatchQueue.main.async {
-                self.parent.pendingSeekTime = nil
-            }
-        }
-
-        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard message.name == "ytBridge",
-                  let payload = message.body as? [String: Any],
-                  let type = payload["type"] as? String else { return }
-
-            let asDouble: (Any?) -> Double? = { value in
-                if let number = value as? NSNumber { return number.doubleValue }
-                if let double = value as? Double { return double }
-                if let int = value as? Int { return Double(int) }
-                return nil
-            }
-
-            switch type {
-            case "progress":
-                let current = asDouble(payload["current"]) ?? 0
-                let duration = asDouble(payload["duration"]) ?? 0
-                DispatchQueue.main.async {
-                    self.parent.currentTime = max(0, current)
-                    if duration > 0 {
-                        self.parent.duration = duration
+                HStack(spacing: gap) {
+                    textLabel
+                    if shouldScroll {
+                        textLabel
                     }
                 }
-            case "ready":
-                let duration = asDouble(payload["duration"]) ?? 0
-                DispatchQueue.main.async {
-                    self.parent.onReady()
-                    if duration > 0 {
-                        self.parent.duration = duration
-                    }
-                }
-            case "error":
-                let code = (payload["code"] as? NSNumber)?.intValue ?? -1
-                DispatchQueue.main.async {
-                    self.parent.onError("YouTube 播放失败（错误码 \(code)）。这通常是视频源限制，可改为应用内浏览器播放。")
-                }
-            default:
-                break
+                .offset(x: x)
             }
         }
+        .frame(height: fontSize + 2)
+        .clipped()
     }
 
-    private static func playerHTML(videoID: String, origin: String) -> String {
-        """
-        <!doctype html>
-        <html>
-          <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-            <style>
-              html, body { margin: 0; padding: 0; background: #000; height: 100%; overflow: hidden; }
-              #player { width: 100%; height: 100%; }
-            </style>
-          </head>
-          <body>
-            <div id="player"></div>
-            <script src="https://www.youtube.com/iframe_api"></script>
-            <script>
-              var player = null;
-              function send(type, data) {
-                try {
-                  window.webkit.messageHandlers.ytBridge.postMessage(Object.assign({type: type}, data || {}));
-                } catch (e) {}
-              }
-              function onYouTubeIframeAPIReady() {
-                player = new YT.Player('player', {
-                  videoId: '\(videoID)',
-                  playerVars: {
-                    playsinline: 1,
-                    rel: 0,
-                    modestbranding: 1,
-                    enablejsapi: 1,
-                    iv_load_policy: 3,
-                    origin: '\(origin)',
-                    widget_referrer: '\(origin)'
-                  },
-                  events: {
-                    onReady: function () {
-                      send('ready', { duration: player && player.getDuration ? player.getDuration() : 0 });
-                    },
-                    onError: function (event) {
-                      send('error', { code: event && event.data ? event.data : -1 });
-                    }
-                  }
-                });
-              }
-              function codexPoll() {
-                if (!player || !player.getCurrentTime) { return; }
-                send('progress', {
-                  current: player.getCurrentTime() || 0,
-                  duration: player.getDuration ? (player.getDuration() || 0) : 0
-                });
-              }
-              setInterval(codexPoll, 350);
-              window.codexSeekTo = function(seconds) {
-                if (!player || !player.seekTo) { return; }
-                player.seekTo(seconds, true);
-                if (player.playVideo) {
-                  player.playVideo();
+    private var textLabel: some View {
+        Text(text)
+            .font(.system(size: fontSize, weight: fontWeight))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: MarqueeWidthPreferenceKey.self,
+                        value: proxy.size.width
+                    )
                 }
-              };
-            </script>
-          </body>
-        </html>
-        """
+            )
+            .onPreferenceChange(MarqueeWidthPreferenceKey.self) { value in
+                textWidth = value
+            }
+    }
+}
+
+private struct MarqueeWidthPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private final class NativeVideoSession: ObservableObject {
+    let player: AVPlayer = AVPlayer()
+    private(set) var currentURL: URL?
+
+    func loadIfNeeded(url: URL) {
+        guard currentURL?.absoluteString != url.absoluteString else { return }
+        currentURL = url
+        player.replaceCurrentItem(with: AVPlayerItem(url: url))
+    }
+
+    func pause() {
+        player.pause()
+    }
+
+    func reset() {
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        currentURL = nil
     }
 }
 
 private struct EmbeddedNativeVideoPlayer: UIViewControllerRepresentable {
+    let session: NativeVideoSession
     let videoURL: URL
     @Binding var currentTime: Double
     @Binding var duration: Double
     @Binding var pendingSeekTime: Double?
+    let isPaused: Bool
     let onReady: () -> Void
+    let onPlaybackStateChanged: (Bool) -> Void
     let onError: (String) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -4132,15 +5056,24 @@ private struct EmbeddedNativeVideoPlayer: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = AVPlayerViewController()
-        controller.showsPlaybackControls = true
-        context.coordinator.loadVideo(into: controller, url: videoURL)
+        controller.showsPlaybackControls = false
+        controller.player = session.player
+        session.loadIfNeeded(url: videoURL)
+        context.coordinator.attachPlayer(session.player)
+        context.coordinator.bindCurrentItemObserver()
         return controller
     }
 
     func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
         context.coordinator.parent = self
-        context.coordinator.ensureVideoURL(videoURL, in: uiViewController)
+        if uiViewController.player !== session.player {
+            uiViewController.player = session.player
+        }
+        session.loadIfNeeded(url: videoURL)
+        context.coordinator.attachPlayer(session.player)
+        context.coordinator.bindCurrentItemObserver()
         context.coordinator.seekIfNeeded()
+        context.coordinator.ensurePlaybackState()
     }
 
     static func dismantleUIViewController(_ uiViewController: AVPlayerViewController, coordinator: Coordinator) {
@@ -4150,24 +5083,48 @@ private struct EmbeddedNativeVideoPlayer: UIViewControllerRepresentable {
 
     final class Coordinator: NSObject {
         var parent: EmbeddedNativeVideoPlayer
-        private var player: AVPlayer?
-        private var currentURL: URL?
+        private weak var player: AVPlayer?
         private var timeObserverToken: Any?
         private var statusObserver: NSKeyValueObservation?
+        private weak var observedItem: AVPlayerItem?
+        private var lastAppliedPausedState: Bool?
 
         init(parent: EmbeddedNativeVideoPlayer) {
             self.parent = parent
+            self.lastAppliedPausedState = nil
         }
 
-        func loadVideo(into controller: AVPlayerViewController, url: URL) {
-            cleanup()
-
-            let item = AVPlayerItem(url: url)
-            let player = AVPlayer(playerItem: item)
-            controller.player = player
+        func attachPlayer(_ player: AVPlayer) {
+            guard self.player !== player else { return }
+            if let existingPlayer = self.player, let token = timeObserverToken {
+                existingPlayer.removeTimeObserver(token)
+                timeObserverToken = nil
+            }
             self.player = player
-            self.currentURL = url
+            timeObserverToken = player.addPeriodicTimeObserver(
+                forInterval: CMTime(seconds: 0.35, preferredTimescale: 600),
+                queue: .main
+            ) { [weak self] time in
+                guard let self else { return }
+                self.parent.currentTime = max(0, time.seconds)
+                self.parent.onPlaybackStateChanged(player.timeControlStatus != .playing)
+                if let item = player.currentItem {
+                    let total = item.duration.seconds
+                    if total.isFinite && total > 0 {
+                        self.parent.duration = total
+                    }
+                }
+            }
+        }
 
+        func bindCurrentItemObserver() {
+            guard let item = player?.currentItem else {
+                observedItem = nil
+                statusObserver = nil
+                return
+            }
+            guard observedItem !== item else { return }
+            observedItem = item
             statusObserver = item.observe(\.status, options: [.initial, .new]) { [weak self] observedItem, _ in
                 guard let self else { return }
                 DispatchQueue.main.async {
@@ -4178,6 +5135,7 @@ private struct EmbeddedNativeVideoPlayer: UIViewControllerRepresentable {
                         if value.isFinite && value > 0 {
                             self.parent.duration = value
                         }
+                        self.ensurePlaybackState()
                     case .failed:
                         let message = observedItem.error?.localizedDescription ?? "视频加载失败，请检查链接或上传文件"
                         self.parent.onError(message)
@@ -4186,34 +5144,25 @@ private struct EmbeddedNativeVideoPlayer: UIViewControllerRepresentable {
                     }
                 }
             }
-
-            timeObserverToken = player.addPeriodicTimeObserver(
-                forInterval: CMTime(seconds: 0.35, preferredTimescale: 600),
-                queue: .main
-            ) { [weak self] time in
-                guard let self else { return }
-                self.parent.currentTime = max(0, time.seconds)
-                if let item = player.currentItem {
-                    let total = item.duration.seconds
-                    if total.isFinite && total > 0 {
-                        self.parent.duration = total
-                    }
-                }
-            }
-        }
-
-        func ensureVideoURL(_ url: URL, in controller: AVPlayerViewController) {
-            guard currentURL?.absoluteString != url.absoluteString else { return }
-            loadVideo(into: controller, url: url)
         }
 
         func seekIfNeeded() {
             guard let seconds = parent.pendingSeekTime else { return }
             let target = CMTime(seconds: max(0, seconds), preferredTimescale: 600)
             player?.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
-            player?.play()
             DispatchQueue.main.async {
                 self.parent.pendingSeekTime = nil
+            }
+        }
+
+        func ensurePlaybackState() {
+            guard lastAppliedPausedState != parent.isPaused else { return }
+            lastAppliedPausedState = parent.isPaused
+            guard let player else { return }
+            if parent.isPaused {
+                player.pause()
+            } else {
+                player.play()
             }
         }
 
@@ -4223,22 +5172,10 @@ private struct EmbeddedNativeVideoPlayer: UIViewControllerRepresentable {
                 player.removeTimeObserver(token)
             }
             timeObserverToken = nil
-            player = nil
-            currentURL = nil
+            observedItem = nil
+            self.player = nil
         }
     }
-}
-
-private struct InAppSafariView: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        let controller = SFSafariViewController(url: url)
-        controller.dismissButtonStyle = .close
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 
 private struct TracklistSelectorSheet: View {
@@ -5176,8 +6113,10 @@ private struct RankingBoardDetailView: View {
         } message: {
             Text(errorMessage ?? "")
         }
-        .navigationDestination(item: $selectedDJForDetail) { dj in
-            DJDetailView(djID: dj.id)
+        .fullScreenCover(item: $selectedDJForDetail) { dj in
+            NavigationStack {
+                DJDetailView(djID: dj.id)
+            }
         }
     }
 

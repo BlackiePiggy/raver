@@ -37,10 +37,12 @@ final class LiveSocialService: SocialService {
     }
 
     func fetchFeed(cursor: String?) async throws -> FeedPage {
-        var path = "/v1/feed"
+        var queryItems = ["limit=12"]
         if let cursor {
-            path += "?cursor=\(cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor)"
+            let encoded = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor
+            queryItems.append("cursor=\(encoded)")
         }
+        let path = "/v1/feed?\(queryItems.joined(separator: "&"))"
         return try await request(path: path, method: "GET")
     }
 

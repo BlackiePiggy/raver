@@ -18,12 +18,16 @@ struct EditProfileView: View {
     @State private var isSaving = false
     @State private var error: String?
 
-    private let currentAvatarURL: String?
+    private let currentAvatarAsset: String
 
     init(profile: UserProfile, onSaved: @escaping (UserProfile) -> Void) {
         self.service = AppEnvironment.makeService()
         self.onSaved = onSaved
-        self.currentAvatarURL = AppConfig.resolvedURLString(profile.avatarURL)
+        self.currentAvatarAsset = AppConfig.resolvedUserAvatarAssetName(
+            userID: profile.id,
+            username: profile.username,
+            avatarURL: profile.avatarURL
+        )
         _displayName = State(initialValue: profile.displayName)
         _bio = State(initialValue: profile.bio)
         _tagsText = State(initialValue: profile.tags.joined(separator: ", "))
@@ -126,24 +130,13 @@ struct EditProfileView: View {
                 .scaledToFill()
                 .frame(width: 88, height: 88)
                 .clipShape(Circle())
-        } else if let currentAvatarURL, !currentAvatarURL.isEmpty {
-            AsyncImage(url: URL(string: currentAvatarURL)) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                default:
-                    Circle().fill(RaverTheme.card)
-                }
-            }
-            .frame(width: 88, height: 88)
-            .clipShape(Circle())
         } else {
-            Circle()
-                .fill(RaverTheme.card)
+            Image(currentAvatarAsset)
+                .resizable()
+                .scaledToFill()
+                .background(RaverTheme.card)
                 .frame(width: 88, height: 88)
-                .overlay(Image(systemName: "person.fill").foregroundStyle(RaverTheme.secondaryText))
+                .clipShape(Circle())
         }
     }
 

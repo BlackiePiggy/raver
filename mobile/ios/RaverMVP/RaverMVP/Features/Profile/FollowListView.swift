@@ -51,26 +51,18 @@ struct FollowListView: View {
                     } label: {
                         HStack(spacing: 12) {
                             // 头像
-                            if let avatar = AppConfig.resolvedURLString(user.avatarURL), !avatar.isEmpty {
-                                AsyncImage(url: URL(string: avatar)) { phase in
-                                    switch phase {
-                                    case .success(let image):
-                                        image.resizable().scaledToFill()
-                                    default:
-                                        Circle().fill(RaverTheme.card)
-                                    }
-                                }
-                                .frame(width: 48, height: 48)
-                                .clipShape(Circle())
-                            } else {
-                                Circle()
-                                    .fill(RaverTheme.accent.opacity(0.2))
-                                    .frame(width: 48, height: 48)
-                                    .overlay(
-                                        Text(String(user.displayName.prefix(1)))
-                                            .font(.headline.bold())
-                                    )
-                            }
+                            Image(
+                                AppConfig.resolvedUserAvatarAssetName(
+                                    userID: user.id,
+                                    username: user.username,
+                                    avatarURL: user.avatarURL
+                                )
+                            )
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 48, height: 48)
+                            .background(RaverTheme.card)
+                            .clipShape(Circle())
 
                             // 昵称和用户名
                             VStack(alignment: .leading, spacing: 4) {

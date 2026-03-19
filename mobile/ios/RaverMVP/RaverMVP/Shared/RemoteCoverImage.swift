@@ -4,7 +4,8 @@ struct RemoteCoverImage: View {
     let urlString: String
 
     var body: some View {
-        AsyncImage(url: URL(string: urlString)) { phase in
+        let resolved = AppConfig.resolvedURLString(urlString) ?? urlString
+        AsyncImage(url: URL(string: resolved)) { phase in
             switch phase {
             case .success(let image):
                 image

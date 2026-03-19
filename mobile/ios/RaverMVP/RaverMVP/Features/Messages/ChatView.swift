@@ -9,7 +9,7 @@ struct ChatView: View {
     @State private var input = ""
     @State private var isLoading = false
     @State private var error: String?
-    @State private var selectedPeerProfile: UserSummary?
+    @State private var selectedUserProfile: UserSummary?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,7 +26,7 @@ struct ChatView: View {
             if conversation.type == .direct, let peer = conversation.peer {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        selectedPeerProfile = peer
+                        selectedUserProfile = peer
                     } label: {
                         Image(systemName: "person.crop.circle")
                     }
@@ -50,7 +50,7 @@ struct ChatView: View {
         .onDisappear {
             Task { await appState.refreshUnreadMessages() }
         }
-        .navigationDestination(item: $selectedPeerProfile) { user in
+        .navigationDestination(item: $selectedUserProfile) { user in
             UserProfileView(userID: user.id)
         }
         .overlay {
@@ -131,7 +131,7 @@ struct ChatView: View {
 
             if !message.isMine {
                 Button {
-                    selectedPeerProfile = message.sender
+                    selectedUserProfile = message.sender
                 } label: {
                     avatarView(for: message.sender)
                 }
@@ -144,18 +144,16 @@ struct ChatView: View {
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
-                Text(message.content)
-                    .padding(10)
-                    .background(message.isMine ? RaverTheme.accent : RaverTheme.card)
-                    .foregroundStyle(message.isMine ? Color.white : RaverTheme.primaryText)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                Text(message.createdAt.chatTimeText)
-                    .font(.caption2)
-                    .foregroundStyle(RaverTheme.secondaryText)
+                messageBodyWithTime(message)
             }
 
             if message.isMine {
-                avatarView(for: message.sender)
+                Button {
+                    selectedUserProfile = message.sender
+                } label: {
+                    avatarView(for: message.sender)
+                }
+                .buttonStyle(.plain)
             }
 
             if !message.isMine { Spacer(minLength: 44) }
@@ -169,7 +167,7 @@ struct ChatView: View {
 
             if !message.isMine {
                 Button {
-                    selectedPeerProfile = message.sender
+                    selectedUserProfile = message.sender
                 } label: {
                     avatarView(for: message.sender)
                 }
@@ -181,54 +179,60 @@ struct ChatView: View {
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
 
-                Text(message.content)
-                    .padding(10)
-                    .background(message.isMine ? RaverTheme.accent : RaverTheme.card)
-                    .foregroundStyle(message.isMine ? Color.white : RaverTheme.primaryText)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                Text(message.createdAt.chatTimeText)
-                    .font(.caption2)
-                    .foregroundStyle(RaverTheme.secondaryText)
+                messageBodyWithTime(message)
             }
 
             if message.isMine {
-                avatarView(for: message.sender)
+                Button {
+                    selectedUserProfile = message.sender
+                } label: {
+                    avatarView(for: message.sender)
+                }
+                .buttonStyle(.plain)
             }
 
             if !message.isMine { Spacer(minLength: 44) }
         }
     }
 
-    private func avatarView(for user: UserSummary) -> some View {
-        let resolved = AppConfig.resolvedURLString(user.avatarURL)
-        return Group {
-            if let resolved, !resolved.isEmpty {
-                AsyncImage(url: URL(string: resolved)) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        fallbackAvatar(user.displayName)
-                    }
-                }
-            } else {
-                fallbackAvatar(user.displayName)
+    @ViewBuilder
+    private func messageBodyWithTime(_ message: ChatMessage) -> some View {
+        HStack(alignment: .bottom, spacing: 6) {
+            if message.isMine {
+                timeLabel(for: message)
+            }
+
+            Text(message.content)
+                .padding(10)
+                .background(message.isMine ? RaverTheme.accent : RaverTheme.card)
+                .foregroundStyle(message.isMine ? Color.white : RaverTheme.primaryText)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            if !message.isMine {
+                timeLabel(for: message)
             }
         }
-        .frame(width: 34, height: 34)
-        .clipShape(Circle())
     }
 
-    private func fallbackAvatar(_ name: String) -> some View {
-        Circle()
-            .fill(RaverTheme.accent.opacity(0.24))
-            .overlay(
-                Text(String(name.prefix(1)))
-                    .font(.caption.bold())
-            )
+    private func timeLabel(for message: ChatMessage) -> some View {
+        Text(message.createdAt.chatTimeText)
+            .font(.caption2)
+            .foregroundStyle(RaverTheme.secondaryText)
+            .padding(.bottom, 2)
+    }
+
+    private func avatarView(for user: UserSummary) -> some View {
+        let asset = AppConfig.resolvedUserAvatarAssetName(
+            userID: user.id,
+            username: user.username,
+            avatarURL: user.avatarURL
+        )
+        return Image(asset)
+            .resizable()
+            .scaledToFill()
+            .background(RaverTheme.card)
+        .frame(width: 34, height: 34)
+        .clipShape(Circle())
     }
 
     @MainActor

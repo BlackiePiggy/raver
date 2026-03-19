@@ -138,6 +138,7 @@ struct MyPublishesView: View {
 
     @State private var editingEvent: WebEvent?
     @State private var editingSet: WebDJSet?
+    @State private var selectedEventIDForDetail: String?
 
     var body: some View {
         List {
@@ -190,8 +191,8 @@ struct MyPublishesView: View {
                 }
 
                 ForEach(publishes.events) { event in
-                    NavigationLink {
-                        EventDetailView(eventID: event.id)
+                    Button {
+                        selectedEventIDForDetail = event.id
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(event.name)
@@ -240,6 +241,18 @@ struct MyPublishesView: View {
         .sheet(item: $editingSet) { set in
             DJSetEditorView(mode: .edit(set)) {
                 Task { await load() }
+            }
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { selectedEventIDForDetail != nil },
+                set: { if !$0 { selectedEventIDForDetail = nil } }
+            )
+        ) {
+            if let eventID = selectedEventIDForDetail {
+                NavigationStack {
+                    EventDetailView(eventID: eventID)
+                }
             }
         }
         .alert("提示", isPresented: Binding(

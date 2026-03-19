@@ -108,7 +108,7 @@ struct SquadProfileView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center, spacing: 12) {
-                    squadAvatar(urlString: profile.avatarURL)
+                    squadAvatar(squadID: profile.id, urlString: profile.avatarURL)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(profile.name)
@@ -159,7 +159,12 @@ struct SquadProfileView: View {
                                 selectedMember = member
                             } label: {
                                 VStack(spacing: 6) {
-                                    avatar(urlString: member.avatarURL, fallback: member.shownName, size: 46)
+                                    avatar(
+                                        userID: member.id,
+                                        username: member.username,
+                                        urlString: member.avatarURL,
+                                        size: 46
+                                    )
 
                                     Text(member.shownName)
                                         .font(.caption2)
@@ -334,38 +339,31 @@ struct SquadProfileView: View {
         }
     }
 
-    private func squadAvatar(urlString: String?) -> some View {
-        avatar(urlString: urlString, fallback: viewModel.profile?.name ?? "队", size: 56)
+    private func squadAvatar(squadID: String, urlString: String?) -> some View {
+        Image(
+            AppConfig.resolvedGroupAvatarAssetName(
+                groupID: squadID,
+                groupName: viewModel.profile?.name,
+                avatarURL: urlString
+            )
+        )
+        .resizable()
+        .scaledToFill()
+        .frame(width: 56, height: 56)
+        .background(RaverTheme.card)
+        .clipShape(Circle())
     }
 
-    private func avatar(urlString: String?, fallback: String, size: CGFloat) -> some View {
-        let resolved = AppConfig.resolvedURLString(urlString)
-        return Group {
-            if let resolved, !resolved.isEmpty {
-                AsyncImage(url: URL(string: resolved)) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        Circle()
-                            .fill(RaverTheme.accent.opacity(0.25))
-                            .overlay(
-                                Text(String(fallback.prefix(1)))
-                                    .font(.caption.bold())
-                            )
-                    }
-                }
-            } else {
-                Circle()
-                    .fill(RaverTheme.accent.opacity(0.25))
-                    .overlay(
-                        Text(String(fallback.prefix(1)))
-                            .font(.caption.bold())
-                    )
-            }
-        }
+    private func avatar(userID: String, username: String, urlString: String?, size: CGFloat) -> some View {
+        let asset = AppConfig.resolvedUserAvatarAssetName(
+            userID: userID,
+            username: username,
+            avatarURL: urlString
+        )
+        return Image(asset)
+            .resizable()
+            .scaledToFill()
+            .background(RaverTheme.card)
         .frame(width: size, height: size)
         .clipShape(Circle())
     }
