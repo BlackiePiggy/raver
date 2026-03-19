@@ -3,7 +3,10 @@ import Foundation
 final class LiveSocialService: SocialService {
     private let baseURL: URL
     private let session: URLSession
-    private var token: String?
+    private var token: String? {
+        get { SessionTokenStore.shared.token }
+        set { SessionTokenStore.shared.token = newValue }
+    }
 
     init(baseURL: URL, session: URLSession = .shared) {
         self.baseURL = baseURL
@@ -244,7 +247,10 @@ final class LiveSocialService: SocialService {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = 15
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
         if let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -270,7 +276,11 @@ final class LiveSocialService: SocialService {
 
         do {
             return try JSONDecoder.raver.decode(T.self, from: data)
+        } catch let decodingError as DecodingError {
+            print("Social BFF decode error:", decodingError)
+            throw ServiceError.message("接口返回格式不匹配，请检查 BFF 契约")
         } catch {
+            print("Social BFF decode error:", error)
             throw ServiceError.message("接口返回格式不匹配，请检查 BFF 契约")
         }
     }
@@ -290,7 +300,10 @@ final class LiveSocialService: SocialService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 30
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
         if let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -321,7 +334,11 @@ final class LiveSocialService: SocialService {
 
         do {
             return try JSONDecoder.raver.decode(T.self, from: responseData)
+        } catch let decodingError as DecodingError {
+            print("Social BFF decode error:", decodingError)
+            throw ServiceError.message("接口返回格式不匹配，请检查 BFF 契约")
         } catch {
+            print("Social BFF decode error:", error)
             throw ServiceError.message("接口返回格式不匹配，请检查 BFF 契约")
         }
     }

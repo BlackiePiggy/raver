@@ -20,7 +20,6 @@ struct FollowListView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: FollowListViewModel
     @State private var selectedUser: UserSummary?
-    @State private var pushedConversation: Conversation?
 
     init(userID: String, kind: FollowListKind) {
         _viewModel = StateObject(wrappedValue: FollowListViewModel(
@@ -47,44 +46,69 @@ struct FollowListView: View {
                 .listRowBackground(RaverTheme.background)
             } else {
                 ForEach(viewModel.users) { user in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
+                    Button {
+                        selectedUser = user
+                    } label: {
+                        HStack(spacing: 12) {
+                            // 头像
+                            if let avatar = AppConfig.resolvedURLString(user.avatarURL), !avatar.isEmpty {
+                                AsyncImage(url: URL(string: avatar)) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image.resizable().scaledToFill()
+                                    default:
+                                        Circle().fill(RaverTheme.card)
+                                    }
+                                }
+                                .frame(width: 48, height: 48)
+                                .clipShape(Circle())
+                            } else {
+                                Circle()
+                                    .fill(RaverTheme.accent.opacity(0.2))
+                                    .frame(width: 48, height: 48)
+                                    .overlay(
+                                        Text(String(user.displayName.prefix(1)))
+                                            .font(.headline.bold())
+                                    )
+                            }
+
+                            // 昵称和用户名
+                            VStack(alignment: .leading, spacing: 4) {
                                 Text(user.displayName)
-                                    .font(.headline)
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                    .lineLimit(1)
                                 Text("@\(user.username)")
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
+                                    .lineLimit(1)
                             }
-                            Spacer()
-                            if user.isFollowing {
-                                Text("已关注")
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectedUser = user
-                        }
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                        Button {
-                            Task {
-                                do {
-                                    let conversation = try await appState.service.startDirectConversation(identifier: user.username)
-                                    pushedConversation = conversation
-                                } catch {
-                                    viewModel.error = error.localizedDescription
+                            Spacer()
+
+                            // 关注按钮
+                            if user.id != appState.session?.user.id {
+                                Button {
+                                    Task {
+                                        await viewModel.toggleFollow(user: user)
+                                    }
+                                } label: {
+                                    Text(user.isFollowing ? "已关注" : "关注")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(user.isFollowing ? RaverTheme.secondaryText : Color.white)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 6)
+                                        .background(user.isFollowing ? RaverTheme.card : RaverTheme.accent)
+                                        .clipShape(Capsule())
                                 }
+                                .buttonStyle(.plain)
                             }
-                        } label: {
-                            Label("发私信", systemImage: "paperplane")
-                                .font(.subheadline)
                         }
-                        .buttonStyle(.bordered)
+                        .padding(.vertical, 8)
                     }
-                    .padding(.vertical, 6)
-                    .listRowBackground(RaverTheme.card)
+                    .buttonStyle(.plain)
+                    .listRowBackground(RaverTheme.background)
                     .onAppear {
                         Task { await viewModel.loadMoreIfNeeded(currentUser: user) }
                     }
@@ -112,9 +136,6 @@ struct FollowListView: View {
         }
         .navigationDestination(item: $selectedUser) { user in
             UserProfileView(userID: user.id)
-        }
-        .navigationDestination(item: $pushedConversation) { conversation in
-            ChatView(conversation: conversation, service: appState.service)
         }
         .alert("提示", isPresented: Binding(
             get: { viewModel.error != nil },

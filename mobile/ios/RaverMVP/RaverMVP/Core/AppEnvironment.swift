@@ -10,7 +10,20 @@ enum AppEnvironment {
         }
     }()
 
+    static let sharedWebService: WebFeatureService = {
+        switch AppConfig.runtimeMode {
+        case .mock:
+            return MockWebFeatureService()
+        case .live:
+            return LiveWebFeatureService(baseURL: AppConfig.bffBaseURL)
+        }
+    }()
+
     static func makeService() -> SocialService {
         sharedService
+    }
+
+    static func makeWebService() -> WebFeatureService {
+        sharedWebService
     }
 }

@@ -15,6 +15,8 @@ import musicRoutes from './routes/music.routes';
 import commentRoutes from './routes/comment.routes';
 import squadRoutes from './routes/squad.routes';
 import notificationRoutes from './routes/notification.routes';
+import bffRoutes from './routes/bff.routes';
+import bffWebRoutes from './routes/bff.web.routes';
 
 dotenv.config();
 
@@ -51,6 +53,8 @@ app.use('/api/dj-aggregator', djAggregatorRoutes);
 app.use('/api/music', musicRoutes);
 app.use('/api/squads', squadRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/v1', bffRoutes);
+app.use('/v1', bffWebRoutes);
 
 app.get('/api', (_req: Request, res: Response) => {
   res.json({
@@ -68,6 +72,7 @@ app.get('/api', (_req: Request, res: Response) => {
       djAggregator: '/api/dj-aggregator',
       squads: '/api/squads',
       notifications: '/api/notifications',
+      bffV1: '/v1',
     },
   });
 });

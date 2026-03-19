@@ -378,10 +378,7 @@ struct MessagesHomeView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var chatViewModel: MessagesViewModel
     @StateObject private var alertViewModel: MessageNotificationsViewModel
-    @State private var showDirectComposer = false
     @State private var showCreateSquad = false
-    @State private var directIdentifier = ""
-    @State private var isStartingDirect = false
     @State private var pushedConversation: Conversation?
     @State private var selectedCategory: MessageAlertCategory?
 
@@ -394,7 +391,20 @@ struct MessagesHomeView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                alertsRow
+                HStack(spacing: 16) {
+                    alertsRow
+
+                    Button {
+                        showCreateSquad = true
+                    } label: {
+                        Image(systemName: "plus.circle")
+                            .font(.title2)
+                            .foregroundStyle(RaverTheme.primaryText)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
 
                 if chatViewModel.isLoading && chatViewModel.conversations.isEmpty {
                     Spacer()
@@ -427,24 +437,8 @@ struct MessagesHomeView: View {
                 }
             }
             .background(RaverTheme.background)
-            .navigationTitle("消息")
-            .toolbar {
-                Menu {
-                    Button {
-                        showDirectComposer = true
-                    } label: {
-                        Label("新私信", systemImage: "square.and.pencil")
-                    }
-
-                    Button {
-                        showCreateSquad = true
-                    } label: {
-                        Label("创建小队", systemImage: "person.3.fill")
-                    }
-                } label: {
-                    Image(systemName: "plus.circle")
-                }
-            }
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .task {
                 await refreshAll()
             }
@@ -484,41 +478,6 @@ struct MessagesHomeView: View {
             } message: {
                 Text(chatViewModel.error ?? alertViewModel.error ?? "")
             }
-            .sheet(isPresented: $showDirectComposer) {
-                NavigationStack {
-                    VStack(spacing: 16) {
-                        TextField("输入用户名（如 alice）", text: $directIdentifier)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .padding(12)
-                            .background(RaverTheme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                        Button {
-                            Task { await startDirectConversation() }
-                        } label: {
-                            if isStartingDirect {
-                                ProgressView().tint(.white)
-                            } else {
-                                Text("开始私信")
-                            }
-                        }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .disabled(directIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isStartingDirect)
-
-                        Spacer()
-                    }
-                    .padding(16)
-                    .background(RaverTheme.background)
-                    .navigationTitle("新私信")
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("取消") { showDirectComposer = false }
-                        }
-                    }
-                }
-                .presentationDetents([.medium])
-            }
             .sheet(isPresented: $showCreateSquad) {
                 NavigationStack {
                     CreateSquadView(service: appState.service) { conversation in
@@ -533,109 +492,109 @@ struct MessagesHomeView: View {
     }
 
     private var alertsRow: some View {
-        HStack(spacing: 16) {
-            ForEach(MessageAlertCategory.allCases) { category in
-                Button {
-                    selectedCategory = category
-                } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Circle()
-                            .fill(RaverTheme.card)
-                            .frame(width: 48, height: 48)
-                            .overlay(
-                                Image(systemName: category.iconName)
-                                    .foregroundStyle(RaverTheme.primaryText)
-                            )
+        ForEach(MessageAlertCategory.allCases) { category in
+            Button {
+                selectedCategory = category
+            } label: {
+                ZStack(alignment: .topTrailing) {
+                    Circle()
+                        .fill(RaverTheme.card)
+                        .frame(width: 48, height: 48)
+                        .overlay(
+                            Image(systemName: category.iconName)
+                                .foregroundStyle(RaverTheme.primaryText)
+                        )
 
-                        let count = alertViewModel.unreadCount(for: category.type)
-                        if count > 0 {
-                            Text("\(count)")
-                                .font(.caption2.bold())
-                                .foregroundStyle(Color.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.red)
-                                .clipShape(Capsule())
-                                .offset(x: 8, y: -8)
-                        }
+                    let count = alertViewModel.unreadCount(for: category.type)
+                    if count > 0 {
+                        Text("\(count)")
+                            .font(.caption2.bold())
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.red)
+                            .clipShape(Capsule())
+                            .offset(x: 8, y: -8)
                     }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(category.title)
             }
-
-            Spacer(minLength: 0)
+            .buttonStyle(.plain)
+            .accessibilityLabel(category.title)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
     }
 
     @ViewBuilder
     private func conversationRow(_ conversation: Conversation) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                HStack(spacing: 6) {
-                    Text(conversation.title)
-                        .font(.headline)
-                        .foregroundStyle(RaverTheme.primaryText)
+        HStack(spacing: 12) {
+            // 头像
+            if let avatarURL = conversation.avatarURL, let url = URL(string: avatarURL) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        Circle().fill(RaverTheme.card)
+                    }
+                }
+                .frame(width: 48, height: 48)
+                .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(RaverTheme.accent.opacity(0.2))
+                    .frame(width: 48, height: 48)
+                    .overlay(
+                        Text(String(conversation.title.prefix(1)))
+                            .font(.headline.bold())
+                    )
+            }
 
-                    if conversation.type == .group {
-                        Text("小队")
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    HStack(spacing: 6) {
+                        Text(conversation.title)
+                            .font(.subheadline.bold())
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .lineLimit(1)
+
+                        if conversation.type == .group {
+                            Text("小队")
+                                .font(.caption2.bold())
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(RaverTheme.accent.opacity(0.24))
+                                .clipShape(Capsule())
+                        }
+                    }
+
+                    Spacer()
+
+                    Text(conversation.updatedAt.chatTimeText)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+
+                HStack(spacing: 8) {
+                    Text(conversation.previewText)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Spacer(minLength: 0)
+
+                    if conversation.unreadCount > 0 {
+                        Text("\(conversation.unreadCount)")
                             .font(.caption2.bold())
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(RaverTheme.accent.opacity(0.24))
+                            .background(RaverTheme.accent)
                             .clipShape(Capsule())
+                            .foregroundStyle(Color.white)
                     }
                 }
-
-                Spacer()
-
-                Text(conversation.updatedAt.chatTimeText)
-                    .font(.caption)
-                    .foregroundStyle(RaverTheme.secondaryText)
-            }
-
-            HStack(spacing: 8) {
-                Text(conversation.previewText)
-                    .font(.subheadline)
-                    .foregroundStyle(RaverTheme.secondaryText)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                Spacer(minLength: 0)
-
-                if conversation.unreadCount > 0 {
-                    Text("\(conversation.unreadCount)")
-                        .font(.caption.bold())
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(RaverTheme.accent)
-                        .clipShape(Capsule())
-                        .foregroundStyle(Color.white)
-                }
             }
         }
-        .padding(.vertical, 6)
-    }
-
-    @MainActor
-    private func startDirectConversation() async {
-        let trimmed = directIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return }
-
-        isStartingDirect = true
-        defer { isStartingDirect = false }
-
-        do {
-            let conversation = try await appState.service.startDirectConversation(identifier: trimmed)
-            directIdentifier = ""
-            showDirectComposer = false
-            await refreshAll()
-            pushedConversation = conversation
-        } catch {
-            chatViewModel.error = error.localizedDescription
-        }
+        .padding(.vertical, 8)
     }
 
     @MainActor

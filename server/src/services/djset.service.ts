@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
+import path from 'path';
 
 const prisma = new PrismaClient();
 
@@ -110,6 +111,36 @@ export class DJSetService {
    * Parse video URL to extract platform and video ID
    */
   parseVideoUrl(url: string): { platform: string; videoId: string } | null {
+    const trimmed = url.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const resolvePathname = (value: string): string => {
+      try {
+        if (value.startsWith('http://') || value.startsWith('https://')) {
+          return new URL(value).pathname;
+        }
+      } catch (_error) {
+        // Ignore invalid URL parsing and fallback to raw string.
+      }
+      return value;
+    };
+
+    const pathname = resolvePathname(trimmed);
+    const lowerPath = pathname.toLowerCase();
+    const isVideoFile = /\.(mp4|mov|m4v|webm|m3u8)$/i.test(lowerPath);
+
+    if ((lowerPath.startsWith('/uploads/') || lowerPath.includes('/uploads/')) && isVideoFile) {
+      const videoId = path.basename(pathname).replace(/\.[^.]+$/, '') || `local-${Date.now()}`;
+      return { platform: 'native', videoId };
+    }
+
+    if ((trimmed.startsWith('http://') || trimmed.startsWith('https://')) && isVideoFile) {
+      const videoId = path.basename(pathname).replace(/\.[^.]+$/, '') || `native-${Date.now()}`;
+      return { platform: 'native', videoId };
+    }
+
     // YouTube patterns
     const youtubePatterns = [
       /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
@@ -196,6 +227,27 @@ export class DJSetService {
     const parsed = this.parseVideoUrl(videoUrl);
     if (!parsed) {
       throw new Error('Invalid video URL');
+    }
+
+    if (parsed.platform === 'native') {
+      const pathname = (() => {
+        try {
+          if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
+            return new URL(videoUrl).pathname;
+          }
+        } catch (_error) {
+          // Ignore URL parse errors and fallback to raw value.
+        }
+        return videoUrl;
+      })();
+      const fileName = path.basename(pathname).replace(/\.[^.]+$/, '');
+      return {
+        platform: parsed.platform,
+        videoId: parsed.videoId,
+        title: fileName ? fileName.replace(/[-_]+/g, ' ') : '',
+        description: '',
+        thumbnailUrl: '',
+      };
     }
 
     let title = '';

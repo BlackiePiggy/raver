@@ -15,12 +15,14 @@ struct FeedView: View {
             Group {
                 if viewModel.isLoading && viewModel.posts.isEmpty {
                     ProgressView("加载中...")
+                        .padding(.top, 12)
                 } else if viewModel.posts.isEmpty {
                     ContentUnavailableView(
                         "还没有动态",
                         systemImage: "square.and.pencil",
                         description: Text("成为第一个发帖的人，开始你的社群互动。")
                     )
+                    .padding(.top, 12)
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 12) {
@@ -63,7 +65,8 @@ struct FeedView: View {
                             }
                         }
                         .padding(.horizontal, 16)
-                        .padding(.top, 12)
+                        .padding(.top, 18)
+                        .padding(.bottom, 92)
                     }
                     .refreshable {
                         await viewModel.refresh()
@@ -71,16 +74,25 @@ struct FeedView: View {
                 }
             }
             .background(RaverTheme.background)
-            .navigationTitle("广场")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showCompose = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("发布动态")
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .overlay(alignment: .bottomTrailing) {
+                Button {
+                    showCompose = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 56, height: 56)
+                        .background(
+                            Circle()
+                                .fill(RaverTheme.accent)
+                                .shadow(color: Color.black.opacity(0.28), radius: 10, x: 0, y: 6)
+                        )
                 }
+                .accessibilityLabel("发布动态")
+                .padding(.trailing, 8)
+                .padding(.bottom, 42)
             }
             .navigationDestination(item: $selectedUserForProfile) { user in
                 UserProfileView(userID: user.id)

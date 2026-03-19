@@ -126,9 +126,19 @@ struct ChatView: View {
 
     @ViewBuilder
     private func directMessageRow(_ message: ChatMessage) -> some View {
-        HStack {
-            if message.isMine { Spacer() }
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .top, spacing: 8) {
+            if message.isMine { Spacer(minLength: 44) }
+
+            if !message.isMine {
+                Button {
+                    selectedPeerProfile = message.sender
+                } label: {
+                    avatarView(for: message.sender)
+                }
+                .buttonStyle(.plain)
+            }
+
+            VStack(alignment: message.isMine ? .trailing : .leading, spacing: 4) {
                 if !message.isMine {
                     Text(message.sender.displayName)
                         .font(.caption)
@@ -137,12 +147,18 @@ struct ChatView: View {
                 Text(message.content)
                     .padding(10)
                     .background(message.isMine ? RaverTheme.accent : RaverTheme.card)
+                    .foregroundStyle(message.isMine ? Color.white : RaverTheme.primaryText)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 Text(message.createdAt.chatTimeText)
                     .font(.caption2)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
-            if !message.isMine { Spacer() }
+
+            if message.isMine {
+                avatarView(for: message.sender)
+            }
+
+            if !message.isMine { Spacer(minLength: 44) }
         }
     }
 
@@ -152,7 +168,12 @@ struct ChatView: View {
             if message.isMine { Spacer(minLength: 44) }
 
             if !message.isMine {
-                avatarView(for: message.sender)
+                Button {
+                    selectedPeerProfile = message.sender
+                } label: {
+                    avatarView(for: message.sender)
+                }
+                .buttonStyle(.plain)
             }
 
             VStack(alignment: message.isMine ? .trailing : .leading, spacing: 4) {
@@ -163,6 +184,7 @@ struct ChatView: View {
                 Text(message.content)
                     .padding(10)
                     .background(message.isMine ? RaverTheme.accent : RaverTheme.card)
+                    .foregroundStyle(message.isMine ? Color.white : RaverTheme.primaryText)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 Text(message.createdAt.chatTimeText)

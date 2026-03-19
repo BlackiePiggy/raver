@@ -21,6 +21,8 @@ model User {
   location      String?
   favoriteDjIds String[] @default([]) @map("favorite_dj_ids")
   favoriteGenres String[] @default([]) @map("favorite_genres")
+  isFollowersListPublic Boolean @default(true) @map("is_followers_list_public")
+  isFollowingListPublic Boolean @default(true) @map("is_following_list_public")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
   lastLoginAt   DateTime? @map("last_login_at")
@@ -39,12 +41,18 @@ model User {
   // Community & Squad
   posts             Post[] @relation("UserPosts")
   postLikes         PostLike[]
+  postReposts       PostRepost[]
   postComments      PostComment[]
   ledSquads         Squad[] @relation("SquadLeader")
   squadMemberships  SquadMember[]
   sentInvites       SquadInvite[] @relation("SentInvites")
   receivedInvites   SquadInvite[] @relation("ReceivedInvites")
   squadMessages     SquadMessage[]
+  directConversationsA DirectConversation[] @relation("DirectConversationUserA")
+  directConversationsB DirectConversation[] @relation("DirectConversationUserB")
+  directConversationReads DirectConversationRead[]
+  directMessages    DirectMessage[]
+  notificationReads NotificationRead[]
   createdActivities SquadActivity[]
   createdAlbums     SquadAlbum[]
   uploadedPhotos    SquadAlbumPhoto[]
@@ -372,6 +380,7 @@ model Post {
   eventId      String?  @map("event_id")
   setId        String?  @map("set_id")
   likeCount    Int      @default(0) @map("like_count")
+  repostCount  Int      @default(0) @map("repost_count")
   commentCount Int      @default(0) @map("comment_count")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
@@ -381,6 +390,7 @@ model Post {
   event        Event?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
   set          DJSet?        @relation(fields: [setId], references: [id], onDelete: SetNull)
   likes        PostLike[]
+  reposts      PostRepost[]
   comments     PostComment[]
 
   @@index([userId])
@@ -405,6 +415,22 @@ model PostLike {
   @@map("post_likes")
 }
 
+model PostRepost {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("post_reposts")
+}
+
 model PostComment {
   id        String   @id @default(uuid())
   postId    String   @map("post_id")
@@ -427,6 +453,8 @@ model Squad {
   description String?  @db.Text
   avatarUrl   String?  @map("avatar_url")
   bannerUrl   String?  @map("banner_url")
+  notice      String?  @db.Text
+  qrCodeUrl   String?  @map("qr_code_url")
   leaderId    String   @map("leader_id")
   isPublic    Boolean  @default(false) @map("is_public")
   maxMembers  Int      @default(50) @map("max_members")
@@ -451,7 +479,10 @@ model SquadMember {
   squadId   String   @map("squad_id")
   userId    String   @map("user_id")
   role      String   @default("member") // leader, admin, member
+  nickname  String?
+  notificationsEnabled Boolean @default(true) @map("notifications_enabled")
   joinedAt  DateTime @default(now()) @map("joined_at")
+  lastReadAt DateTime? @map("last_read_at")
 
   squad     Squad    @relation(fields: [squadId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -559,4 +590,69 @@ model SquadMessage {
   @@index([userId])
   @@index([createdAt])
   @@map("squad_messages")
+}
+
+model DirectConversation {
+  id        String   @id @default(uuid())
+  userAId   String   @map("user_a_id")
+  userBId   String   @map("user_b_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  userA     User     @relation("DirectConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB     User     @relation("DirectConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  messages  DirectMessage[]
+  readStates DirectConversationRead[]
+
+  @@unique([userAId, userBId])
+  @@index([userAId])
+  @@index([userBId])
+  @@index([updatedAt])
+  @@map("direct_conversations")
+}
+
+model DirectConversationRead {
+  id             String             @id @default(uuid())
+  conversationId String             @map("conversation_id")
+  userId         String             @map("user_id")
+  lastReadAt     DateTime           @default(now()) @map("last_read_at")
+
+  conversation   DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([conversationId])
+  @@index([userId])
+  @@map("direct_conversation_reads")
+}
+
+model DirectMessage {
+  id             String             @id @default(uuid())
+  conversationId String             @map("conversation_id")
+  senderId       String             @map("sender_id")
+  content        String             @db.Text
+  type           String             @default("text")
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  conversation   DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User               @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@map("direct_messages")
+}
+
+model NotificationRead {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  type           String
+  sourceId       String   @map("source_id")
+  readAt         DateTime @default(now()) @map("read_at")
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type, sourceId])
+  @@index([userId, type])
+  @@map("notification_reads")
 }

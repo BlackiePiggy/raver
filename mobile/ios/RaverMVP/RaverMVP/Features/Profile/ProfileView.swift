@@ -4,8 +4,24 @@ struct ProfileView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: ProfileViewModel
     @State private var showEditProfile = false
+    @State private var showPublishEvent = false
+    @State private var showUploadSet = false
+    @State private var showSettings = false
+    @State private var selectedProfileDestination: ProfileDestination?
     @State private var selectedFollowListKind: FollowListKind?
     @State private var selectedUserForProfile: UserSummary?
+
+    private enum ProfileDestination: Hashable, Identifiable {
+        case myCheckins
+        case myPublishes
+
+        var id: String {
+            switch self {
+            case .myCheckins: return "checkins"
+            case .myPublishes: return "publishes"
+            }
+        }
+    }
 
     init() {
         _viewModel = StateObject(wrappedValue: ProfileViewModel(service: AppEnvironment.makeService()))
@@ -30,12 +46,9 @@ struct ProfileView: View {
                                 onFriendsTap: {
                                     selectedFollowListKind = .friends
                                 }
-                            ) {
-                                Button("退出登录") {
-                                    appState.logout()
-                                }
-                                .buttonStyle(PrimaryButtonStyle())
-                            }
+                            )
+
+                            profileQuickActions
 
                             Picker("内容", selection: $viewModel.selectedSection) {
                                 ForEach(ProfileViewModel.Section.allCases) { section in
@@ -57,12 +70,15 @@ struct ProfileView: View {
                 }
             }
             .background(RaverTheme.background)
-            .navigationTitle("我的")
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     if viewModel.profile != nil {
-                        Button("编辑") {
-                            showEditProfile = true
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
                         }
                     }
                 }
@@ -76,12 +92,31 @@ struct ProfileView: View {
             .navigationDestination(item: $selectedUserForProfile) { user in
                 UserProfileView(userID: user.id)
             }
+            .navigationDestination(item: $selectedProfileDestination) { destination in
+                switch destination {
+                case .myCheckins:
+                    MyCheckinsView()
+                case .myPublishes:
+                    MyPublishesView()
+                }
+            }
             .navigationDestination(isPresented: $showEditProfile) {
                 if let profile = viewModel.profile {
                     EditProfileView(profile: profile) { updated in
                         viewModel.applyUpdatedProfile(updated)
                     }
                 }
+            }
+            .sheet(isPresented: $showPublishEvent) {
+                EventEditorView(mode: .create) {
+                    Task { await viewModel.load() }
+                }
+            }
+            .sheet(isPresented: $showUploadSet) {
+                DJSetEditorView(mode: .create) {}
+            }
+            .navigationDestination(isPresented: $showSettings) {
+                SettingsView()
             }
             .alert("提示", isPresented: Binding(
                 get: { viewModel.error != nil },
@@ -92,6 +127,56 @@ struct ProfileView: View {
                 Text(viewModel.error ?? "")
             }
         }
+    }
+
+    private var profileQuickActions: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("快捷入口")
+                    .font(.headline)
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                Button {
+                    selectedProfileDestination = .myCheckins
+                } label: {
+                    quickActionRow(title: "我的打卡", icon: "checkmark.seal")
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    selectedProfileDestination = .myPublishes
+                } label: {
+                    quickActionRow(title: "我的发布", icon: "square.stack.3d.up")
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    showPublishEvent = true
+                } label: {
+                    quickActionRow(title: "发布活动", icon: "calendar.badge.plus")
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    showUploadSet = true
+                } label: {
+                    quickActionRow(title: "上传 Set", icon: "square.and.arrow.up")
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func quickActionRow(title: String, icon: String) -> some View {
+        HStack {
+            Label(title, systemImage: icon)
+                .foregroundStyle(RaverTheme.primaryText)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(RaverTheme.secondaryText)
+        }
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder
@@ -131,31 +216,25 @@ struct ProfileView: View {
                             .padding(.horizontal, 4)
                     }
 
-                    NavigationLink {
-                        PostDetailView(post: post, service: appState.service)
-                    } label: {
-                        PostCardView(
-                            post: post,
-                            currentUserId: appState.session?.user.id,
-                            showsFollowButton: false,
-                            onLikeTap: {
-                                Task { await viewModel.toggleLike(post: post) }
-                            },
-                            onRepostTap: {
-                                Task { await viewModel.toggleRepost(post: post) }
-                            },
-                            onFollowTap: nil,
-                            onMessageTap: nil,
-                            onAuthorTap: {
-                                if post.author.id != appState.session?.user.id {
-                                    selectedUserForProfile = post.author
-                                }
-                            },
-                            onSquadTap: nil
-                        )
-                        .foregroundStyle(RaverTheme.primaryText)
-                    }
-                    .buttonStyle(.plain)
+                    PostCardView(
+                        post: post,
+                        currentUserId: appState.session?.user.id,
+                        showsFollowButton: false,
+                        onLikeTap: {
+                            Task { await viewModel.toggleLike(post: post) }
+                        },
+                        onRepostTap: {
+                            Task { await viewModel.toggleRepost(post: post) }
+                        },
+                        onFollowTap: nil,
+                        onMessageTap: nil,
+                        onAuthorTap: {
+                            if post.author.id != appState.session?.user.id {
+                                selectedUserForProfile = post.author
+                            }
+                        },
+                        onSquadTap: nil
+                    )
                 }
             }
         }
@@ -184,36 +263,35 @@ struct ProfileHeaderCard<Actions: View>: View {
     }
 
     var body: some View {
-        GlassCard {
-            VStack(spacing: 12) {
-                avatarView
+        VStack(spacing: 12) {
+            avatarView
 
-                Text(profile.displayName)
-                    .font(.title3.bold())
-                Text("@\(profile.username)")
+            Text(profile.displayName)
+                .font(.title3.bold())
+            Text("@\(profile.username)")
+                .foregroundStyle(RaverTheme.secondaryText)
+
+            if !profile.bio.isEmpty {
+                Text(profile.bio)
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
                     .foregroundStyle(RaverTheme.secondaryText)
-
-                if !profile.bio.isEmpty {
-                    Text(profile.bio)
-                        .font(.subheadline)
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                }
-
-                if !profile.tags.isEmpty {
-                    tagsFlow(profile.tags)
-                }
-
-                HStack(spacing: 24) {
-                    stat("动态", value: profile.postsCount)
-                    stat("粉丝", value: profile.followersCount, onTap: onFollowersTap)
-                    stat("关注", value: profile.followingCount, onTap: onFollowingTap)
-                    stat("好友", value: profile.friendsCount, onTap: onFriendsTap)
-                }
-
-                actions()
             }
+
+            if !profile.tags.isEmpty {
+                tagsFlow(profile.tags)
+            }
+
+            HStack(spacing: 24) {
+                stat("动态", value: profile.postsCount)
+                stat("粉丝", value: profile.followersCount, onTap: onFollowersTap)
+                stat("关注", value: profile.followingCount, onTap: onFollowingTap)
+                stat("好友", value: profile.friendsCount, onTap: onFriendsTap)
+            }
+
+            actions()
         }
+        .padding(16)
     }
 
     @ViewBuilder

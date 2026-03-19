@@ -31,9 +31,10 @@ struct PostCardView: View {
                     if showsFollowButton, post.author.id != currentUserId, let onFollowTap {
                         Button(post.author.isFollowing ? "已关注" : "关注", action: onFollowTap)
                             .font(.caption.bold())
+                            .foregroundStyle(post.author.isFollowing ? RaverTheme.secondaryText : Color.white)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(post.author.isFollowing ? RaverTheme.cardBorder : RaverTheme.accent)
+                            .background(post.author.isFollowing ? RaverTheme.card : RaverTheme.accent)
                             .clipShape(Capsule())
                     }
                 }
@@ -97,10 +98,26 @@ struct PostCardView: View {
 
     private var authorMeta: some View {
         HStack(alignment: .center, spacing: 10) {
-            Circle()
-                .fill(RaverTheme.accent.opacity(0.2))
+            // 头像
+            if let avatarURL = AppConfig.resolvedURLString(post.author.avatarURL), !avatarURL.isEmpty {
+                AsyncImage(url: URL(string: avatarURL)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        Circle()
+                            .fill(RaverTheme.accent.opacity(0.2))
+                            .overlay(Text(String(post.author.displayName.prefix(1))).font(.caption).bold())
+                    }
+                }
                 .frame(width: 34, height: 34)
-                .overlay(Text(String(post.author.displayName.prefix(1))).font(.caption).bold())
+                .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(RaverTheme.accent.opacity(0.2))
+                    .frame(width: 34, height: 34)
+                    .overlay(Text(String(post.author.displayName.prefix(1))).font(.caption).bold())
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(post.author.displayName)

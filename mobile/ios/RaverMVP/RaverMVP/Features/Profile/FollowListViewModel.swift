@@ -70,4 +70,15 @@ final class FollowListViewModel: ObservableObject {
             return try await service.fetchFriends(userID: userID, cursor: cursor)
         }
     }
+
+    func toggleFollow(user: UserSummary) async {
+        do {
+            let updated = try await service.toggleFollow(userID: user.id, shouldFollow: !user.isFollowing)
+            if let index = users.firstIndex(where: { $0.id == user.id }) {
+                users[index] = updated
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
 }
