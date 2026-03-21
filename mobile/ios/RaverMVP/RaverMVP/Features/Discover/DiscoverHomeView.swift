@@ -2,8 +2,8 @@ import SwiftUI
 
 struct DiscoverHomeView: View {
     fileprivate enum Section: String, CaseIterable, Identifiable {
-        case feed
         case events
+        case news
         case djs
         case sets
         case learn
@@ -12,8 +12,8 @@ struct DiscoverHomeView: View {
 
         var title: String {
             switch self {
-            case .feed: return "动态"
             case .events: return "活动"
+            case .news: return "资讯"
             case .djs: return "DJ"
             case .sets: return "Sets"
             case .learn: return "Wiki"
@@ -22,8 +22,8 @@ struct DiscoverHomeView: View {
 
         var themeColor: Color {
             switch self {
-            case .feed: return Color(red: 0.95, green: 0.30, blue: 0.38)
             case .events: return Color(red: 0.97, green: 0.54, blue: 0.21)
+            case .news: return Color(red: 0.98, green: 0.62, blue: 0.22)
             case .djs: return Color(red: 0.44, green: 0.78, blue: 0.33)
             case .sets: return Color(red: 0.30, green: 0.67, blue: 0.97)
             case .learn: return Color(red: 0.76, green: 0.47, blue: 0.95)
@@ -31,7 +31,7 @@ struct DiscoverHomeView: View {
         }
     }
 
-    @State private var section: Section = .feed
+    @State private var section: Section = .events
     @State private var pageProgress: CGFloat = 0
     @State private var tabFrames: [Section: CGRect] = [:]
     @State private var pagerWidth: CGFloat = 1
@@ -140,10 +140,10 @@ struct DiscoverHomeView: View {
     @ViewBuilder
     private func pageView(for section: Section) -> some View {
         switch section {
-        case .feed:
-            FeedView()
         case .events:
             EventsModuleView()
+        case .news:
+            NewsModuleView()
         case .djs:
             DJsModuleView()
         case .sets:

@@ -4,6 +4,15 @@ import { AuthRequest } from '../middleware/auth';
 
 const prisma = new PrismaClient();
 
+type RawLineupSlotInput = {
+  djId?: string;
+  djName?: string;
+  stageName?: string;
+  sortOrder?: number;
+  startTime?: string;
+  endTime?: string;
+};
+
 type LineupSlotInput = {
   djId?: string;
   djName?: string;
@@ -35,14 +44,80 @@ const toNumberOrNull = (value: unknown): number | null => {
   return Number.isFinite(num) ? num : null;
 };
 
-const normalizeLineupSlots = (slots: unknown): LineupSlotInput[] => {
+const parseOptionalDate = (value: unknown): Date | null => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const resolveEventStatus = (startDate: Date, endDate: Date, fallbackStatus?: string | null): 'upcoming' | 'ongoing' | 'ended' => {
+  const now = Date.now();
+  const start = startDate.getTime();
+  const end = endDate.getTime();
+
+  if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+    if (now < start) return 'upcoming';
+    if (now > end) return 'ended';
+    return 'ongoing';
+  }
+
+  if (fallbackStatus === 'ongoing' || fallbackStatus === 'ended') {
+    return fallbackStatus;
+  }
+  return 'upcoming';
+};
+
+const withDerivedStatus = <T extends { startDate: Date; endDate: Date; status?: string | null }>(event: T) => ({
+  ...event,
+  status: resolveEventStatus(new Date(event.startDate), new Date(event.endDate), event.status ?? null),
+});
+
+const normalizeLineupSlots = (slots: unknown, eventStartDate: Date): LineupSlotInput[] => {
   if (!Array.isArray(slots)) {
     return [];
   }
+
+  const safeEventStart = Number.isNaN(eventStartDate.getTime()) ? new Date() : eventStartDate;
   return slots
     .filter((slot) => slot && typeof slot === 'object')
-    .map((slot) => slot as LineupSlotInput)
-    .filter((slot) => slot.startTime && slot.endTime);
+    .map((slot) => slot as RawLineupSlotInput)
+    .map((slot, index) => {
+      const parsedStart = parseOptionalDate(slot.startTime);
+      const parsedEnd = parseOptionalDate(slot.endTime);
+      const fallbackBase = new Date(safeEventStart.getTime() + index * 60_000);
+
+      let startTime = fallbackBase;
+      let endTime = fallbackBase;
+      if (parsedStart && parsedEnd) {
+        startTime = parsedStart;
+        endTime = parsedEnd >= parsedStart ? parsedEnd : new Date(parsedStart.getTime() + 3_600_000);
+      } else if (parsedStart) {
+        startTime = parsedStart;
+        endTime = new Date(parsedStart.getTime() + 3_600_000);
+      } else if (parsedEnd) {
+        endTime = parsedEnd;
+        startTime = new Date(parsedEnd.getTime() - 3_600_000);
+      }
+
+      return {
+        djId: slot.djId,
+        djName: slot.djName,
+        stageName: slot.stageName,
+        sortOrder: slot.sortOrder,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+      };
+    })
+    .filter((slot) => String(slot.djName || '').trim() || String(slot.djId || '').trim());
 };
 
 const normalizeTicketTiers = (tiers: unknown): TicketTierInput[] => {
@@ -71,7 +146,20 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
-    const where: any = { status };
+    const where: any = {};
+    const now = new Date();
+    if (status === 'upcoming') {
+      where.startDate = { gt: now };
+    } else if (status === 'ongoing') {
+      where.startDate = { lte: now };
+      where.endDate = { gte: now };
+    } else if (status === 'ended') {
+      where.endDate = { lt: now };
+    } else if (status === 'all' || status === '') {
+      // no status filter
+    } else if (status) {
+      where.status = status;
+    }
 
     if (search) {
       where.OR = [
@@ -123,7 +211,7 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
     ]);
 
     res.json({
-      events,
+      events: events.map((event) => withDerivedStatus(event)),
       pagination: {
         page: pageNum,
         limit: limitNum,
@@ -171,7 +259,7 @@ export const getMyEvents = async (req: AuthRequest, res: Response): Promise<void
       },
     });
 
-    res.json({ events });
+    res.json({ events: events.map((event) => withDerivedStatus(event)) });
   } catch (error) {
     console.error('Get my events error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -212,7 +300,7 @@ export const getEvent = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    res.json(event);
+    res.json(withDerivedStatus(event));
   } catch (error) {
     console.error('Get event error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -268,7 +356,6 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const normalizedSlots = normalizeLineupSlots(lineupSlots);
     const normalizedTicketTiers = normalizeTicketTiers(ticketTiers);
     const parsedStartDate = new Date(startDate);
     const parsedEndDate = new Date(endDate);
@@ -276,6 +363,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       res.status(400).json({ error: 'Invalid event date range' });
       return;
     }
+    const normalizedSlots = normalizeLineupSlots(lineupSlots, parsedStartDate);
 
     const event = await prisma.event.create({
       data: {
@@ -295,6 +383,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
         longitude: toNumberOrNull(longitude),
         startDate: parsedStartDate,
         endDate: parsedEndDate,
+        status: resolveEventStatus(parsedStartDate, parsedEndDate, null),
         ticketUrl,
         ticketPriceMin: toNumberOrNull(ticketPriceMin),
         ticketPriceMax: toNumberOrNull(ticketPriceMax),
@@ -347,7 +436,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       },
     });
 
-    res.status(201).json(event);
+    res.status(201).json(withDerivedStatus(event));
   } catch (error) {
     console.error('Create event error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -387,13 +476,12 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       ticketNotes,
       ticketTiers,
       officialWebsite,
-      status,
       lineupSlots,
     } = req.body;
 
     const existing = await prisma.event.findUnique({
       where: { id: id as string },
-      select: { id: true, organizerId: true },
+      select: { id: true, organizerId: true, startDate: true, endDate: true, status: true },
     });
     if (!existing) {
       res.status(404).json({ error: 'Event not found' });
@@ -404,7 +492,19 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const normalizedSlots = normalizeLineupSlots(lineupSlots);
+    const nextStartDate = startDate ? new Date(startDate) : null;
+    if (nextStartDate && Number.isNaN(nextStartDate.getTime())) {
+      res.status(400).json({ error: 'Invalid startDate' });
+      return;
+    }
+    const nextEndDate = endDate ? new Date(endDate) : null;
+    if (nextEndDate && Number.isNaN(nextEndDate.getTime())) {
+      res.status(400).json({ error: 'Invalid endDate' });
+      return;
+    }
+    const effectiveStartDate = nextStartDate ?? existing.startDate;
+    const effectiveEndDate = nextEndDate ?? existing.endDate;
+    const normalizedSlots = normalizeLineupSlots(lineupSlots, nextStartDate ?? existing.startDate);
     const normalizedTicketTiers = normalizeTicketTiers(ticketTiers);
 
     const event = await prisma.event.update({
@@ -423,8 +523,8 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         country: country ?? undefined,
         latitude: latitude !== undefined ? toNumberOrNull(latitude) : undefined,
         longitude: longitude !== undefined ? toNumberOrNull(longitude) : undefined,
-        startDate: startDate ? new Date(startDate) : undefined,
-        endDate: endDate ? new Date(endDate) : undefined,
+        startDate: startDate ? nextStartDate ?? undefined : undefined,
+        endDate: endDate ? nextEndDate ?? undefined : undefined,
         ticketUrl: ticketUrl ?? undefined,
         ticketPriceMin: ticketPriceMin !== undefined ? toNumberOrNull(ticketPriceMin) : undefined,
         ticketPriceMax: ticketPriceMax !== undefined ? toNumberOrNull(ticketPriceMax) : undefined,
@@ -442,7 +542,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
             }
           : undefined,
         officialWebsite: officialWebsite ?? undefined,
-        status: status ?? undefined,
+        status: resolveEventStatus(effectiveStartDate, effectiveEndDate, existing.status),
         lineupSlots: Array.isArray(lineupSlots)
           ? {
               deleteMany: {},
@@ -480,7 +580,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       },
     });
 
-    res.json(event);
+    res.json(withDerivedStatus(event));
   } catch (error) {
     console.error('Update event error:', error);
     res.status(500).json({ error: 'Internal server error' });

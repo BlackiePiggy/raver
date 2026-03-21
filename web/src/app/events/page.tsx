@@ -10,6 +10,8 @@ import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 
+type EventVisualStatus = 'upcoming' | 'ongoing' | 'ended';
+
 export default function EventsPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -56,6 +58,40 @@ export default function EventsPage() {
         month: 'long',
         day: 'numeric',
       }),
+    };
+  };
+
+  const resolveEventStatus = (event: Event): EventVisualStatus => {
+    const now = Date.now();
+    const start = new Date(event.startDate).getTime();
+    const end = new Date(event.endDate).getTime();
+    if (!Number.isNaN(start) && !Number.isNaN(end) && end >= start) {
+      if (now < start) return 'upcoming';
+      if (now > end) return 'ended';
+      return 'ongoing';
+    }
+    if (event.status === 'ongoing' || event.status === 'ended') {
+      return event.status;
+    }
+    return 'upcoming';
+  };
+
+  const statusMeta = (status: EventVisualStatus) => {
+    if (status === 'ongoing') {
+      return {
+        label: '进行中',
+        className: 'bg-accent-green/12 text-accent-green border-accent-green/30',
+      };
+    }
+    if (status === 'ended') {
+      return {
+        label: '已结束',
+        className: 'bg-black/45 text-text-secondary border-white/20',
+      };
+    }
+    return {
+      label: '即将开始',
+      className: 'bg-amber-400/10 text-amber-200 border-amber-300/30',
     };
   };
 
@@ -144,6 +180,8 @@ export default function EventsPage() {
               <div className="grid grid-cols-1 gap-8 mb-12">
                 {events.map((event, index) => {
                   const date = formatDate(event.startDate);
+                  const currentStatus = resolveEventStatus(event);
+                  const currentStatusMeta = statusMeta(currentStatus);
                   return (
                     <Link key={event.id} href={`/events/${event.id}`}>
                       <div
@@ -170,7 +208,7 @@ export default function EventsPage() {
 
                               {/* Date Badge */}
                               <div className="absolute top-6 left-6 bg-bg-glass backdrop-blur-apple rounded-2xl p-4 text-center border border-border-secondary">
-                                <div className="text-xs text-text-tertiary font-medium mb-1">
+                                <div className="text-xs text-text-primary font-medium mb-1">
                                   {date.month}
                                 </div>
                                 <div className="text-3xl font-bold text-text-primary">
@@ -179,9 +217,16 @@ export default function EventsPage() {
                               </div>
 
                               {/* Status Badge */}
-                              <div className="absolute bottom-6 left-6">
-                                <span className="px-4 py-2 bg-accent-green/20 backdrop-blur-apple text-accent-green rounded-full text-xs font-semibold border border-accent-green/30">
-                                  即将开始
+                              <div className="absolute top-6 right-6">
+                                <span className={`inline-flex items-center gap-1.5 px-4 py-2 backdrop-blur-apple rounded-full text-xs font-semibold border ${currentStatusMeta.className}`}>
+                                  {currentStatus === 'ongoing' && (
+                                    <span className="inline-flex items-end gap-[2px] h-[11px]">
+                                      <span className="w-[3px] rounded-full bg-white animate-pulse" style={{ height: '7px', animationDuration: '0.7s', animationDelay: '0ms' }} />
+                                      <span className="w-[3px] rounded-full bg-white animate-pulse" style={{ height: '11px', animationDuration: '0.8s', animationDelay: '0.12s' }} />
+                                      <span className="w-[3px] rounded-full bg-white animate-pulse" style={{ height: '8px', animationDuration: '0.75s', animationDelay: '0.24s' }} />
+                                    </span>
+                                  )}
+                                  {currentStatusMeta.label}
                                 </span>
                               </div>
                             </div>

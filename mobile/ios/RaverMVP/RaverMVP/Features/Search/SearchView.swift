@@ -5,6 +5,7 @@ struct SearchView: View {
     @StateObject private var viewModel: SearchViewModel
     @State private var selectedUserForProfile: UserSummary?
     @State private var selectedSquadForProfile: PostSquad?
+    @State private var selectedPostForDetail: Post?
 
     init() {
         _viewModel = StateObject(wrappedValue: SearchViewModel(service: AppEnvironment.makeService()))
@@ -58,8 +59,16 @@ struct SearchView: View {
             .navigationDestination(item: $selectedUserForProfile) { user in
                 UserProfileView(userID: user.id)
             }
-            .navigationDestination(item: $selectedSquadForProfile) { squad in
-                SquadProfileView(squadID: squad.id)
+            .fullScreenCover(item: $selectedSquadForProfile) { squad in
+                NavigationStack {
+                    SquadProfileView(squadID: squad.id)
+                }
+            }
+            .fullScreenCover(item: $selectedPostForDetail) { post in
+                NavigationStack {
+                    PostDetailView(post: post, service: appState.service)
+                        .environmentObject(appState)
+                }
             }
             .alert("搜索失败", isPresented: Binding(
                 get: { viewModel.error != nil },
@@ -118,29 +127,28 @@ struct SearchView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(viewModel.posts) { post in
-                            NavigationLink {
-                                PostDetailView(post: post, service: appState.service)
-                            } label: {
-                                PostCardView(
-                                    post: post,
-                                    currentUserId: appState.session?.user.id,
-                                    showsFollowButton: false,
-                                    onLikeTap: {
-                                        Task { await viewModel.toggleLike(post: post) }
-                                    },
-                                    onRepostTap: {
-                                        Task { await viewModel.toggleRepost(post: post) }
-                                    },
-                                    onFollowTap: nil,
-                                    onMessageTap: nil,
-                                    onAuthorTap: {
-                                        selectedUserForProfile = post.author
-                                    },
-                                    onSquadTap: nil
-                                )
-                                .foregroundStyle(RaverTheme.primaryText)
+                            PostCardView(
+                                post: post,
+                                currentUserId: appState.session?.user.id,
+                                showsFollowButton: false,
+                                onLikeTap: {
+                                    Task { await viewModel.toggleLike(post: post) }
+                                },
+                                onRepostTap: {
+                                    Task { await viewModel.toggleRepost(post: post) }
+                                },
+                                onFollowTap: nil,
+                                onMessageTap: nil,
+                                onAuthorTap: {
+                                    selectedUserForProfile = post.author
+                                },
+                                onSquadTap: nil
+                            )
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selectedPostForDetail = post
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                     .padding(16)

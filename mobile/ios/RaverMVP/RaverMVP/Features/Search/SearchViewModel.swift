@@ -73,7 +73,7 @@ final class SearchViewModel: ObservableObject {
                 posts = []
                 squads = []
             case .posts:
-                posts = try await service.searchFeed(query: trimmed).posts
+                posts = try await service.searchFeed(query: trimmed).posts.filter { !$0.isRaverNews }
                 users = []
                 squads = []
             case .squads:

@@ -34,7 +34,29 @@ private enum MessageAlertCategory: String, CaseIterable, Identifiable {
     }
 }
 
-private struct CreateSquadView: View {
+struct CreateSquadView: View {
+    private enum SquadPrivacy: String, CaseIterable, Identifiable {
+        case `public`
+        case `private`
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .public: return "公开小队"
+            case .private: return "私密小队"
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .public: return "所有人可发现并申请加入"
+            case .private: return "仅邀请成员可加入"
+            }
+        }
+
+        var isPublic: Bool { self == .public }
+    }
+
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
 
@@ -43,13 +65,18 @@ private struct CreateSquadView: View {
 
     @State private var squadName = ""
     @State private var squadDescription = ""
+    @State private var squadPrivacy: SquadPrivacy?
+    @State private var squadFlagURL = ""
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedFlagPhotoItem: PhotosPickerItem?
     @State private var customAvatarData: Data?
     @State private var friends: [UserSummary] = []
     @State private var selectedFriendIDs: [String] = []
     @State private var isLoadingFriends = false
     @State private var isSubmitting = false
+    @State private var isUploadingFlag = false
     @State private var error: String?
+    private let webService = AppEnvironment.makeWebService()
 
     var body: some View {
         ScrollView {
@@ -75,6 +102,100 @@ private struct CreateSquadView: View {
                         .padding(8)
                         .background(RaverTheme.card)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("小队性质（必选）")
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+
+                    HStack(spacing: 10) {
+                        ForEach(SquadPrivacy.allCases) { item in
+                            Button {
+                                squadPrivacy = item
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(item.title)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(item.subtitle)
+                                        .font(.caption2)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                        .lineLimit(2)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(squadPrivacy == item ? RaverTheme.accent.opacity(0.16) : RaverTheme.card)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(
+                                            squadPrivacy == item ? RaverTheme.accent : RaverTheme.cardBorder,
+                                            lineWidth: squadPrivacy == item ? 1.2 : 1
+                                        )
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("小队旗帜图（可选，用于小队卡片背景）")
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+
+                    TextField("输入旗帜图 URL 或选择本地图片上传", text: $squadFlagURL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(12)
+                        .background(RaverTheme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                    HStack(spacing: 10) {
+                        PhotosPicker(selection: $selectedFlagPhotoItem, matching: .images) {
+                            if isUploadingFlag {
+                                Label("上传中...", systemImage: "arrow.trianglehead.2.clockwise")
+                            } else {
+                                Label("选择旗帜图", systemImage: "flag.pattern.checkered")
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isUploadingFlag)
+
+                        if !squadFlagURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Button("清空") {
+                                squadFlagURL = ""
+                                selectedFlagPhotoItem = nil
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.red)
+                        }
+                    }
+
+                    if let flagURL = AppConfig.resolvedURLString(squadFlagURL),
+                       let url = URL(string: flagURL),
+                       (flagURL.hasPrefix("http://") || flagURL.hasPrefix("https://")) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            default:
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(RaverTheme.card)
+                                    .overlay(
+                                        Image(systemName: "flag.pattern.checkered")
+                                            .foregroundStyle(RaverTheme.secondaryText)
+                                    )
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 88)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
                 }
 
                 GlassCard {
@@ -132,7 +253,7 @@ private struct CreateSquadView: View {
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(isSubmitting)
+                .disabled(isSubmitting || squadPrivacy == nil)
             }
             .padding(16)
         }
@@ -153,6 +274,13 @@ private struct CreateSquadView: View {
                 if let data = try? await newItem.loadTransferable(type: Data.self) {
                     customAvatarData = data
                 }
+            }
+        }
+        .onChange(of: selectedFlagPhotoItem) { _, newItem in
+            guard let newItem else { return }
+            Task {
+                guard let data = try? await newItem.loadTransferable(type: Data.self) else { return }
+                await uploadFlagImage(data: data)
             }
         }
         .alert("操作失败", isPresented: Binding(
@@ -209,7 +337,33 @@ private struct CreateSquadView: View {
         }
     }
 
+    @ViewBuilder
     private func avatar(for user: UserSummary) -> some View {
+        if let resolved = AppConfig.resolvedURLString(user.avatarURL),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.card)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    avatarFallback(for: user)
+                @unknown default:
+                    avatarFallback(for: user)
+                }
+            }
+            .frame(width: 34, height: 34)
+            .clipShape(Circle())
+        } else {
+            avatarFallback(for: user)
+        }
+    }
+
+    private func avatarFallback(for user: UserSummary) -> some View {
         let asset = AppConfig.resolvedUserAvatarAssetName(
             userID: user.id,
             username: user.username,
@@ -219,8 +373,8 @@ private struct CreateSquadView: View {
             .resizable()
             .scaledToFill()
             .background(RaverTheme.card)
-        .frame(width: 34, height: 34)
-        .clipShape(Circle())
+            .frame(width: 34, height: 34)
+            .clipShape(Circle())
     }
 
     @MainActor
@@ -240,16 +394,23 @@ private struct CreateSquadView: View {
 
     @MainActor
     private func createSquad() async {
+        guard let squadPrivacy else {
+            error = "请选择小队性质（公开或私密）"
+            return
+        }
         isSubmitting = true
         defer { isSubmitting = false }
 
         do {
             let normalizedName = squadName.trimmingCharacters(in: .whitespacesAndNewlines)
             let normalizedDescription = squadDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedFlagURL = squadFlagURL.trimmingCharacters(in: .whitespacesAndNewlines)
             let conversation = try await service.createSquad(
                 input: CreateSquadInput(
                     name: normalizedName.isEmpty ? nil : normalizedName,
                     description: normalizedDescription.isEmpty ? nil : normalizedDescription,
+                    isPublic: squadPrivacy.isPublic,
+                    bannerURL: normalizedFlagURL.isEmpty ? nil : normalizedFlagURL,
                     memberIds: selectedFriendIDs
                 )
             )
@@ -272,6 +433,22 @@ private struct CreateSquadView: View {
 
             onCreated(conversation)
             dismiss()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func uploadFlagImage(data: Data) async {
+        isUploadingFlag = true
+        defer { isUploadingFlag = false }
+        do {
+            let uploaded = try await webService.uploadEventImage(
+                imageData: data,
+                fileName: "squad-flag-\(Int(Date().timeIntervalSince1970)).jpg",
+                mimeType: "image/jpeg"
+            )
+            squadFlagURL = uploaded.url
         } catch {
             self.error = error.localizedDescription
         }
@@ -368,7 +545,6 @@ struct MessagesHomeView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var chatViewModel: MessagesViewModel
     @StateObject private var alertViewModel: MessageNotificationsViewModel
-    @State private var showCreateSquad = false
     @State private var pushedConversation: Conversation?
     @State private var selectedCategory: MessageAlertCategory?
 
@@ -381,17 +557,10 @@ struct MessagesHomeView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                ZStack {
-                    HStack {
-                        Spacer()
-                        createSquadButton
-                    }
-
-                    HStack(spacing: 16) {
-                        alertsRow
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
+                HStack(spacing: 16) {
+                    alertsRow
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
 
@@ -468,36 +637,7 @@ struct MessagesHomeView: View {
             } message: {
                 Text(chatViewModel.error ?? alertViewModel.error ?? "")
             }
-            .sheet(isPresented: $showCreateSquad) {
-                NavigationStack {
-                    CreateSquadView(service: appState.service) { conversation in
-                        showCreateSquad = false
-                        Task { await refreshAll() }
-                        pushedConversation = conversation
-                    }
-                    .environmentObject(appState)
-                }
-            }
         }
-    }
-
-    private var createSquadButton: some View {
-        Button {
-            showCreateSquad = true
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.subheadline.weight(.bold))
-                Text("创建")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .foregroundStyle(RaverTheme.primaryText)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(RaverTheme.card)
-            .clipShape(Capsule())
-        }
-        .buttonStyle(.plain)
     }
 
     private var alertsRow: some View {
@@ -534,26 +674,9 @@ struct MessagesHomeView: View {
 
     @ViewBuilder
     private func conversationRow(_ conversation: Conversation) -> some View {
-        let avatarAsset: String = {
-            if conversation.type == .group {
-                return AppConfig.resolvedGroupAvatarAssetName(
-                    groupID: conversation.id,
-                    groupName: conversation.title,
-                    avatarURL: conversation.avatarURL
-                )
-            }
-            return AppConfig.resolvedUserAvatarAssetName(
-                userID: conversation.peer?.id,
-                username: conversation.peer?.username,
-                avatarURL: conversation.peer?.avatarURL ?? conversation.avatarURL
-            )
-        }()
-
         HStack(spacing: 12) {
             // 头像
-            Image(avatarAsset)
-                .resizable()
-                .scaledToFill()
+            conversationAvatar(conversation)
                 .frame(width: 48, height: 48)
                 .background(RaverTheme.card)
                 .clipShape(Circle())
@@ -607,6 +730,74 @@ struct MessagesHomeView: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func conversationAvatar(_ conversation: Conversation) -> some View {
+        if conversation.type == .group,
+           let resolved = AppConfig.resolvedURLString(conversation.avatarURL),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.card)
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    Image(
+                        AppConfig.resolvedGroupAvatarAssetName(
+                            groupID: conversation.id,
+                            groupName: conversation.title,
+                            avatarURL: conversation.avatarURL
+                        )
+                    )
+                    .resizable()
+                    .scaledToFill()
+                @unknown default:
+                    Circle().fill(RaverTheme.card)
+                }
+            }
+        } else if conversation.type == .direct,
+                  let resolved = AppConfig.resolvedURLString(conversation.peer?.avatarURL ?? conversation.avatarURL),
+                  let remoteURL = URL(string: resolved),
+                  resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.card)
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    fallbackConversationAvatar(conversation)
+                @unknown default:
+                    Circle().fill(RaverTheme.card)
+                }
+            }
+        } else {
+            fallbackConversationAvatar(conversation)
+        }
+    }
+
+    private func fallbackConversationAvatar(_ conversation: Conversation) -> some View {
+        let avatarAsset: String = {
+            if conversation.type == .group {
+                return AppConfig.resolvedGroupAvatarAssetName(
+                    groupID: conversation.id,
+                    groupName: conversation.title,
+                    avatarURL: conversation.avatarURL
+                )
+            }
+            return AppConfig.resolvedUserAvatarAssetName(
+                userID: conversation.peer?.id,
+                username: conversation.peer?.username,
+                avatarURL: conversation.peer?.avatarURL ?? conversation.avatarURL
+            )
+        }()
+
+        return Image(avatarAsset)
+            .resizable()
+            .scaledToFill()
     }
 
     @MainActor
@@ -678,26 +869,36 @@ private struct MessageAlertDetailView: View {
         .navigationDestination(item: $selectedUser) { user in
             UserProfileView(userID: user.id)
         }
-        .navigationDestination(item: $selectedSquad) { squad in
-            SquadProfileView(squadID: squad.id)
+        .fullScreenCover(item: $selectedSquad) { squad in
+            NavigationStack {
+                SquadProfileView(squadID: squad.id)
+            }
         }
     }
 
     @ViewBuilder
     private func alertLeadingAvatar(for item: AppNotification) -> some View {
         if let actor = item.actor {
-            Image(
-                AppConfig.resolvedUserAvatarAssetName(
-                    userID: actor.id,
-                    username: actor.username,
-                    avatarURL: actor.avatarURL
-                )
-            )
-            .resizable()
-            .scaledToFill()
-            .frame(width: 30, height: 30)
-            .background(RaverTheme.cardBorder)
-            .clipShape(Circle())
+            if let resolved = AppConfig.resolvedURLString(actor.avatarURL),
+               let remoteURL = URL(string: resolved),
+               resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+                AsyncImage(url: remoteURL) { phase in
+                    switch phase {
+                    case .empty:
+                        Circle().fill(RaverTheme.cardBorder)
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure:
+                        alertLeadingAvatarFallback(actor)
+                    @unknown default:
+                        Circle().fill(RaverTheme.cardBorder)
+                    }
+                }
+                .frame(width: 30, height: 30)
+                .clipShape(Circle())
+            } else {
+                alertLeadingAvatarFallback(actor)
+            }
         } else {
             Image(systemName: category.iconName)
                 .font(.subheadline.bold())
@@ -719,6 +920,21 @@ private struct MessageAlertDetailView: View {
             selectedSquad = PostSquad(id: target.id, name: target.title ?? "小队", avatarURL: nil)
         default:
             break
+            }
         }
     }
-}
+
+    private func alertLeadingAvatarFallback(_ actor: UserSummary) -> some View {
+        Image(
+            AppConfig.resolvedUserAvatarAssetName(
+                userID: actor.id,
+                username: actor.username,
+                avatarURL: actor.avatarURL
+            )
+        )
+        .resizable()
+        .scaledToFill()
+        .frame(width: 30, height: 30)
+        .background(RaverTheme.cardBorder)
+        .clipShape(Circle())
+    }

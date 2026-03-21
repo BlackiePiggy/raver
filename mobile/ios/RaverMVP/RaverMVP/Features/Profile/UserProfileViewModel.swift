@@ -5,18 +5,21 @@ import Combine
 final class UserProfileViewModel: ObservableObject {
     @Published var profile: UserProfile?
     @Published var posts: [Post] = []
+    @Published var recentCheckins: [WebCheckin] = []
     @Published var isLoading = false
     @Published var isLoadingMore = false
     @Published var error: String?
 
     private let userID: String
     private let service: SocialService
+    private let webService: WebFeatureService
     private var nextCursor: String?
     private var hasMore = true
 
-    init(userID: String, service: SocialService) {
+    init(userID: String, service: SocialService, webService: WebFeatureService = AppEnvironment.makeWebService()) {
         self.userID = userID
         self.service = service
+        self.webService = webService
     }
 
     func load() async {
@@ -30,7 +33,12 @@ final class UserProfileViewModel: ObservableObject {
             let (profileValue, page) = try await (profileTask, postsTask)
 
             profile = profileValue
-            posts = page.posts
+            posts = page.posts.filter { !$0.isRaverNews }
+            if let checkinPage = try? await webService.fetchUserCheckins(userID: userID, page: 1, limit: 6, type: nil) {
+                recentCheckins = checkinPage.items
+            } else {
+                recentCheckins = []
+            }
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil
             error = nil
@@ -54,7 +62,7 @@ final class UserProfileViewModel: ObservableObject {
         do {
             let page = try await service.fetchPostsByUser(userID: userID, cursor: cursor)
             let existing = Set(posts.map(\.id))
-            posts.append(contentsOf: page.posts.filter { !existing.contains($0.id) })
+            posts.append(contentsOf: page.posts.filter { !existing.contains($0.id) && !$0.isRaverNews })
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil
             error = nil

@@ -51,18 +51,7 @@ struct FollowListView: View {
                     } label: {
                         HStack(spacing: 12) {
                             // 头像
-                            Image(
-                                AppConfig.resolvedUserAvatarAssetName(
-                                    userID: user.id,
-                                    username: user.username,
-                                    avatarURL: user.avatarURL
-                                )
-                            )
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 48, height: 48)
-                            .background(RaverTheme.card)
-                            .clipShape(Circle())
+                            userAvatar(user)
 
                             // 昵称和用户名
                             VStack(alignment: .leading, spacing: 4) {
@@ -137,5 +126,46 @@ struct FollowListView: View {
         } message: {
             Text(viewModel.error ?? "")
         }
+    }
+
+    @ViewBuilder
+    private func userAvatar(_ user: UserSummary) -> some View {
+        if let resolved = AppConfig.resolvedURLString(user.avatarURL),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.card)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    userAvatarFallback(user)
+                @unknown default:
+                    userAvatarFallback(user)
+                }
+            }
+            .frame(width: 48, height: 48)
+            .clipShape(Circle())
+        } else {
+            userAvatarFallback(user)
+        }
+    }
+
+    private func userAvatarFallback(_ user: UserSummary) -> some View {
+        Image(
+            AppConfig.resolvedUserAvatarAssetName(
+                userID: user.id,
+                username: user.username,
+                avatarURL: user.avatarURL
+            )
+        )
+        .resizable()
+        .scaledToFill()
+        .frame(width: 48, height: 48)
+        .background(RaverTheme.card)
+        .clipShape(Circle())
     }
 }

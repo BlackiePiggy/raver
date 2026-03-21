@@ -23,7 +23,7 @@ final class FeedViewModel: ObservableObject {
 
         do {
             let page = try await service.fetchFeed(cursor: nil)
-            posts = page.posts
+            posts = page.posts.filter { !$0.isRaverNews }
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil
             self.error = nil
@@ -47,7 +47,7 @@ final class FeedViewModel: ObservableObject {
         do {
             let page = try await service.fetchFeed(cursor: cursor)
             let existingIds = Set(posts.map(\.id))
-            posts.append(contentsOf: page.posts.filter { !existingIds.contains($0.id) })
+            posts.append(contentsOf: page.posts.filter { !existingIds.contains($0.id) && !$0.isRaverNews })
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil
             self.error = nil

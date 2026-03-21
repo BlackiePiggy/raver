@@ -1,6 +1,9 @@
 import SwiftUI
+import PhotosUI
+import UIKit
 
 struct SquadProfileView: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: SquadProfileViewModel
     @State private var pushedConversation: Conversation?
@@ -30,7 +33,7 @@ struct SquadProfileView: View {
                         mySettingsCard(profile)
                     }
 
-                    if profile.canEditGroup {
+                    if canManageSquad(profile) {
                         Button {
                             showManageSheet = true
                         } label: {
@@ -62,15 +65,45 @@ struct SquadProfileView: View {
             .padding(16)
         }
         .background(RaverTheme.background)
-        .navigationTitle("小队")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top) {
+            HStack {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(Color.black.opacity(0.36))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Text("小队")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                Spacer()
+
+                Color.clear
+                    .frame(width: 34, height: 34)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 4)
+            .padding(.bottom, 6)
+        }
         .navigationDestination(item: $pushedConversation) { conversation in
             ChatView(conversation: conversation, service: appState.service)
         }
         .navigationDestination(item: $selectedMember) { member in
             UserProfileView(userID: member.id)
         }
-        .sheet(isPresented: $showManageSheet) {
+        .sheet(isPresented: $showManageSheet, onDismiss: {
+            Task { await viewModel.load() }
+        }) {
             if let profile = viewModel.profile {
                 SquadManageSheet(profile: profile, isSaving: viewModel.isSavingGroupInfo) { input in
                     Task {
@@ -113,7 +146,7 @@ struct SquadProfileView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(profile.name)
                             .font(.title3.bold())
-                        Text(profile.isPublic ? "公开小队" : "私密小队")
+                        Text("\(profile.isPublic ? "公开小队" : "私密小队")（\(profile.memberCount)/\(profile.maxMembers)）")
                             .font(.caption)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
@@ -128,19 +161,6 @@ struct SquadProfileView: View {
                     Text(description)
                         .font(.subheadline)
                         .foregroundStyle(RaverTheme.secondaryText)
-                }
-
-                HStack(spacing: 16) {
-                    stat("成员", value: profile.memberCount)
-                    stat("上限", value: profile.maxMembers)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("队长")
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                        Text(profile.leader.displayName)
-                            .font(.subheadline.bold())
-                    }
                 }
             }
         }
@@ -159,22 +179,11 @@ struct SquadProfileView: View {
                                 selectedMember = member
                             } label: {
                                 VStack(spacing: 6) {
-                                    avatar(
-                                        userID: member.id,
-                                        username: member.username,
-                                        urlString: member.avatarURL,
-                                        size: 46
-                                    )
+                                    avatarWithRoleBadge(member: member, size: 46)
 
                                     Text(member.shownName)
                                         .font(.caption2)
                                         .lineLimit(1)
-
-                                    if member.isCaptain {
-                                        badge("队长", color: .orange)
-                                    } else if member.isAdmin {
-                                        badge("管理员", color: .blue)
-                                    }
                                 }
                                 .frame(width: 70)
                             }
@@ -329,17 +338,41 @@ struct SquadProfileView: View {
         }
     }
 
-    private func stat(_ title: String, value: Int) -> some View {
-        VStack(spacing: 4) {
-            Text("\(value)")
-                .font(.headline)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(RaverTheme.secondaryText)
+    private func canManageSquad(_ profile: SquadProfile) -> Bool {
+        if profile.canEditGroup {
+            return true
+        }
+        guard let role = profile.myRole else { return false }
+        return role == "leader" || role == "admin"
+    }
+
+    @ViewBuilder
+    private func squadAvatar(squadID: String, urlString: String?) -> some View {
+        if let resolved = AppConfig.resolvedURLString(urlString),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.card)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    squadAvatarFallback(squadID: squadID, urlString: urlString)
+                @unknown default:
+                    squadAvatarFallback(squadID: squadID, urlString: urlString)
+                }
+            }
+            .frame(width: 56, height: 56)
+            .clipShape(Circle())
+        } else {
+            squadAvatarFallback(squadID: squadID, urlString: urlString)
         }
     }
 
-    private func squadAvatar(squadID: String, urlString: String?) -> some View {
+    private func squadAvatarFallback(squadID: String, urlString: String?) -> some View {
         Image(
             AppConfig.resolvedGroupAvatarAssetName(
                 groupID: squadID,
@@ -354,7 +387,33 @@ struct SquadProfileView: View {
         .clipShape(Circle())
     }
 
+    @ViewBuilder
     private func avatar(userID: String, username: String, urlString: String?, size: CGFloat) -> some View {
+        if let resolved = AppConfig.resolvedURLString(urlString),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.card)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    avatarFallback(userID: userID, username: username, urlString: urlString, size: size)
+                @unknown default:
+                    avatarFallback(userID: userID, username: username, urlString: urlString, size: size)
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+        } else {
+            avatarFallback(userID: userID, username: username, urlString: urlString, size: size)
+        }
+    }
+
+    private func avatarFallback(userID: String, username: String, urlString: String?, size: CGFloat) -> some View {
         let asset = AppConfig.resolvedUserAvatarAssetName(
             userID: userID,
             username: username,
@@ -364,8 +423,8 @@ struct SquadProfileView: View {
             .resizable()
             .scaledToFill()
             .background(RaverTheme.card)
-        .frame(width: size, height: size)
-        .clipShape(Circle())
+            .frame(width: size, height: size)
+            .clipShape(Circle())
     }
 
     private func groupQRCode(urlString: String?) -> some View {
@@ -403,35 +462,92 @@ struct SquadProfileView: View {
         }
     }
 
-    private func badge(_ title: String, color: Color) -> some View {
+    private func avatarWithRoleBadge(member: SquadMemberProfile, size: CGFloat) -> some View {
+        avatar(
+            userID: member.id,
+            username: member.username,
+            urlString: member.avatarURL,
+            size: size
+        )
+        .overlay(alignment: .bottom) {
+            if let role = memberRoleBadge(member) {
+                roleBadge(role.title, color: role.color)
+            }
+        }
+    }
+
+    private func memberRoleBadge(_ member: SquadMemberProfile) -> (title: String, color: Color)? {
+        if member.isCaptain {
+            return ("队长", .orange)
+        }
+        if member.isAdmin {
+            return ("管理员", .blue)
+        }
+        return nil
+    }
+
+    private func roleBadge(_ title: String, color: Color) -> some View {
         Text(title)
             .font(.caption2.bold())
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.2))
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .foregroundStyle(.white)
+            .background(color.opacity(0.9))
             .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.75), lineWidth: 0.7)
+            )
     }
 }
 
 private struct SquadManageSheet: View {
+    private enum PrivacyOption: String, CaseIterable, Identifiable {
+        case `public`
+        case `private`
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .public: return "公开小队"
+            case .private: return "私密小队"
+            }
+        }
+
+        var isPublic: Bool { self == .public }
+    }
+
     @Environment(\.dismiss) private var dismiss
 
     let isSaving: Bool
     let onSave: (UpdateSquadInfoInput) -> Void
 
+    private let squadID: String
     @State private var name: String
     @State private var descriptionText: String
+    @State private var privacyOption: PrivacyOption
     @State private var notice: String
     @State private var avatarURL: String
+    @State private var bannerURL: String
     @State private var qrCodeURL: String
+    @State private var selectedAvatarPhotoItem: PhotosPickerItem?
+    @State private var selectedFlagPhotoItem: PhotosPickerItem?
+    @State private var isUploadingAvatar = false
+    @State private var isUploadingFlag = false
+    @State private var uploadError: String?
+    private let webService = AppEnvironment.makeWebService()
+    private let socialService = AppEnvironment.makeService()
 
     init(profile: SquadProfile, isSaving: Bool, onSave: @escaping (UpdateSquadInfoInput) -> Void) {
+        self.squadID = profile.id
         self.isSaving = isSaving
         self.onSave = onSave
         _name = State(initialValue: profile.name)
         _descriptionText = State(initialValue: profile.description ?? "")
+        _privacyOption = State(initialValue: profile.isPublic ? .public : .private)
         _notice = State(initialValue: profile.notice)
         _avatarURL = State(initialValue: profile.avatarURL ?? "")
+        _bannerURL = State(initialValue: profile.bannerURL ?? "")
         _qrCodeURL = State(initialValue: profile.qrCodeURL ?? "")
     }
 
@@ -442,12 +558,37 @@ private struct SquadManageSheet: View {
                     TextField("小队名称", text: $name)
                     TextField("简介", text: $descriptionText, axis: .vertical)
                         .lineLimit(2...4)
+                    Picker("小队性质", selection: $privacyOption) {
+                        ForEach(PrivacyOption.allCases) { item in
+                            Text(item.title).tag(item)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
 
                 Section("展示") {
                     TextField("头像 URL（可选）", text: $avatarURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                    PhotosPicker(selection: $selectedAvatarPhotoItem, matching: .images) {
+                        if isUploadingAvatar {
+                            Label("头像上传中...", systemImage: "arrow.trianglehead.2.clockwise")
+                        } else {
+                            Label("从相册选择小队头像", systemImage: "person.crop.circle.badge.plus")
+                        }
+                    }
+                    .disabled(isUploadingAvatar || isUploadingFlag)
+                    TextField("旗帜图 URL（可选）", text: $bannerURL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    PhotosPicker(selection: $selectedFlagPhotoItem, matching: .images) {
+                        if isUploadingFlag {
+                            Label("旗帜图上传中...", systemImage: "arrow.trianglehead.2.clockwise")
+                        } else {
+                            Label("从相册选择旗帜图", systemImage: "flag.pattern.checkered")
+                        }
+                    }
+                    .disabled(isUploadingFlag)
                     TextField("小队二维码 URL（可选）", text: $qrCodeURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -470,7 +611,9 @@ private struct SquadManageSheet: View {
                             UpdateSquadInfoInput(
                                 name: name,
                                 description: descriptionText,
+                                isPublic: privacyOption.isPublic,
                                 avatarURL: avatarURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : avatarURL,
+                                bannerURL: bannerURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : bannerURL,
                                 notice: notice,
                                 qrCodeURL: qrCodeURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : qrCodeURL
                             )
@@ -482,9 +625,70 @@ private struct SquadManageSheet: View {
                             Text("保存")
                         }
                     }
-                    .disabled(isSaving || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(isSaving || isUploadingAvatar || isUploadingFlag || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+        }
+        .onChange(of: selectedAvatarPhotoItem) { _, newItem in
+            guard let newItem else { return }
+            Task {
+                guard let data = try? await newItem.loadTransferable(type: Data.self) else { return }
+                await uploadAvatarImage(data: data)
+            }
+        }
+        .onChange(of: selectedFlagPhotoItem) { _, newItem in
+            guard let newItem else { return }
+            Task {
+                guard let data = try? await newItem.loadTransferable(type: Data.self) else { return }
+                await uploadFlagImage(data: data)
+            }
+        }
+        .alert("上传失败", isPresented: Binding(
+            get: { uploadError != nil },
+            set: { if !$0 { uploadError = nil } }
+        )) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(uploadError ?? "")
+        }
+    }
+
+    @MainActor
+    private func uploadAvatarImage(data: Data) async {
+        isUploadingAvatar = true
+        defer { isUploadingAvatar = false }
+        do {
+            let uploadData: Data
+            if let image = UIImage(data: data), let jpeg = image.jpegData(compressionQuality: 0.88) {
+                uploadData = jpeg
+            } else {
+                uploadData = data
+            }
+            let uploaded = try await socialService.uploadSquadAvatar(
+                squadID: squadID,
+                imageData: uploadData,
+                fileName: "squad-avatar-\(Int(Date().timeIntervalSince1970)).jpg",
+                mimeType: "image/jpeg"
+            )
+            avatarURL = uploaded.avatarURL
+        } catch {
+            uploadError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func uploadFlagImage(data: Data) async {
+        isUploadingFlag = true
+        defer { isUploadingFlag = false }
+        do {
+            let uploaded = try await webService.uploadEventImage(
+                imageData: data,
+                fileName: "squad-flag-\(Int(Date().timeIntervalSince1970)).jpg",
+                mimeType: "image/jpeg"
+            )
+            bannerURL = uploaded.url
+        } catch {
+            uploadError = error.localizedDescription
         }
     }
 }

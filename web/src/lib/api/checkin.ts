@@ -9,6 +9,7 @@ export interface Checkin {
   note: string | null;
   photoUrl: string | null;
   rating: number | null;
+  attendedAt: string;
   createdAt: string;
   user?: {
     id: string;
@@ -37,6 +38,7 @@ export interface CreateCheckinData {
   note?: string;
   photoUrl?: string;
   rating?: number;
+  attendedAt?: string;
 }
 
 class CheckinAPI {

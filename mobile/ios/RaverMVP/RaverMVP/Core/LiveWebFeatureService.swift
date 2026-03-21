@@ -9,7 +9,7 @@ final class LiveWebFeatureService: WebFeatureService {
         self.session = session
     }
 
-    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?) async throws -> EventListPage {
+    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage {
         var queryItems = [
             URLQueryItem(name: "page", value: "\(max(1, page))"),
             URLQueryItem(name: "limit", value: "\(max(1, min(100, limit)))")
@@ -19,6 +19,9 @@ final class LiveWebFeatureService: WebFeatureService {
         }
         if let eventType, !eventType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             queryItems.append(URLQueryItem(name: "eventType", value: eventType))
+        }
+        if let status, !status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "status", value: status))
         }
         let response: BFFEnvelope<BFFItems<WebEvent>> = try await request(path: "/v1/events", method: "GET", queryItems: queryItems)
         return EventListPage(items: response.data.items, pagination: response.pagination)
@@ -79,6 +82,11 @@ final class LiveWebFeatureService: WebFeatureService {
 
     func fetchDJSets(djID: String) async throws -> [WebDJSet] {
         let response: BFFEnvelope<BFFItems<WebDJSet>> = try await request(path: "/v1/djs/\(djID)/sets", method: "GET")
+        return response.data.items
+    }
+
+    func fetchDJEvents(djID: String) async throws -> [WebEvent] {
+        let response: BFFEnvelope<BFFItems<WebEvent>> = try await request(path: "/v1/djs/\(djID)/events", method: "GET")
         return response.data.items
     }
 
@@ -227,12 +235,55 @@ final class LiveWebFeatureService: WebFeatureService {
     }
 
     func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
+        try await fetchCheckins(
+            page: page,
+            limit: limit,
+            type: type,
+            userID: nil,
+            djID: nil
+        )
+    }
+
+    func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
+        try await fetchCheckins(
+            page: page,
+            limit: limit,
+            type: type,
+            userID: userID,
+            djID: nil
+        )
+    }
+
+    func fetchMyDJCheckinCount(djID: String) async throws -> Int {
+        let page = try await fetchCheckins(
+            page: 1,
+            limit: 1,
+            type: "dj",
+            userID: nil,
+            djID: djID
+        )
+        return page.pagination?.total ?? page.items.count
+    }
+
+    private func fetchCheckins(
+        page: Int,
+        limit: Int,
+        type: String?,
+        userID: String?,
+        djID: String?
+    ) async throws -> CheckinListPage {
         var queryItems = [
             URLQueryItem(name: "page", value: "\(max(1, page))"),
             URLQueryItem(name: "limit", value: "\(max(1, min(100, limit)))")
         ]
         if let type, !type.isEmpty {
             queryItems.append(URLQueryItem(name: "type", value: type))
+        }
+        if let userID, !userID.isEmpty {
+            queryItems.append(URLQueryItem(name: "userId", value: userID))
+        }
+        if let djID, !djID.isEmpty {
+            queryItems.append(URLQueryItem(name: "djId", value: djID))
         }
         let response: BFFEnvelope<BFFItems<WebCheckin>> = try await request(path: "/v1/checkins", method: "GET", queryItems: queryItems)
         return CheckinListPage(items: response.data.items, pagination: response.pagination)
@@ -245,6 +296,54 @@ final class LiveWebFeatureService: WebFeatureService {
 
     func deleteCheckin(id: String) async throws {
         let _: BFFEnvelope<GenericSuccess> = try await request(path: "/v1/checkins/\(id)", method: "DELETE")
+    }
+
+    func fetchRatingEvents() async throws -> [WebRatingEvent] {
+        let response: BFFEnvelope<BFFItems<WebRatingEvent>> = try await request(path: "/v1/rating-events", method: "GET")
+        return response.data.items
+    }
+
+    func fetchRatingEvent(id: String) async throws -> WebRatingEvent {
+        let response: BFFEnvelope<WebRatingEvent> = try await request(path: "/v1/rating-events/\(id)", method: "GET")
+        return response.data
+    }
+
+    func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent {
+        let response: BFFEnvelope<WebRatingEvent> = try await request(path: "/v1/rating-events", method: "POST", body: input)
+        return response.data
+    }
+
+    func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent {
+        let response: BFFEnvelope<WebRatingEvent> = try await request(path: "/v1/rating-events/\(id)", method: "PATCH", body: input)
+        return response.data
+    }
+
+    func deleteRatingEvent(id: String) async throws {
+        let _: BFFEnvelope<GenericSuccess> = try await request(path: "/v1/rating-events/\(id)", method: "DELETE")
+    }
+
+    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit {
+        let response: BFFEnvelope<WebRatingUnit> = try await request(path: "/v1/rating-events/\(eventID)/units", method: "POST", body: input)
+        return response.data
+    }
+
+    func updateRatingUnit(id: String, input: UpdateRatingUnitInput) async throws -> WebRatingUnit {
+        let response: BFFEnvelope<WebRatingUnit> = try await request(path: "/v1/rating-units/\(id)", method: "PATCH", body: input)
+        return response.data
+    }
+
+    func deleteRatingUnit(id: String) async throws {
+        let _: BFFEnvelope<GenericSuccess> = try await request(path: "/v1/rating-units/\(id)", method: "DELETE")
+    }
+
+    func fetchRatingUnit(id: String) async throws -> WebRatingUnit {
+        let response: BFFEnvelope<WebRatingUnit> = try await request(path: "/v1/rating-units/\(id)", method: "GET")
+        return response.data
+    }
+
+    func addRatingComment(unitID: String, input: CreateRatingCommentInput) async throws -> WebRatingComment {
+        let response: BFFEnvelope<WebRatingComment> = try await request(path: "/v1/rating-units/\(unitID)/comments", method: "POST", body: input)
+        return response.data
     }
 
     func fetchLearnGenres() async throws -> [LearnGenreNode] {

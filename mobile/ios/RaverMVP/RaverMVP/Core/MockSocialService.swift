@@ -121,15 +121,16 @@ actor MockSocialService: SocialService {
 
     func createPost(input: CreatePostInput) async throws -> Post {
         let trimmed = input.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            throw ServiceError.message("内容不能为空")
+        let normalizedImages = input.images.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if trimmed.isEmpty && normalizedImages.isEmpty {
+            throw ServiceError.message("请填写正文或添加媒体")
         }
 
         let new = Post(
             id: UUID().uuidString,
             author: currentUser,
             content: trimmed,
-            images: input.images,
+            images: normalizedImages,
             squad: nil,
             createdAt: Date(),
             likeCount: 0,
@@ -388,6 +389,7 @@ actor MockSocialService: SocialService {
                 name: squad.name,
                 description: squad.description,
                 avatarURL: squad.avatarURL,
+                bannerURL: squad.bannerURL,
                 isPublic: squad.isPublic,
                 memberCount: squad.memberCount,
                 isMember: squad.isMember,
@@ -395,6 +397,25 @@ actor MockSocialService: SocialService {
                 updatedAt: squad.updatedAt
             )
         }
+    }
+
+    func fetchMySquads() async throws -> [SquadSummary] {
+        squads
+            .filter(\.isMember)
+            .map { squad in
+                SquadSummary(
+                    id: squad.id,
+                    name: squad.name,
+                    description: squad.description,
+                    avatarURL: squad.avatarURL,
+                    bannerURL: squad.bannerURL,
+                    isPublic: squad.isPublic,
+                    memberCount: squad.memberCount,
+                    isMember: true,
+                    lastMessage: squad.lastMessage,
+                    updatedAt: squad.updatedAt
+                )
+            }
     }
 
     func fetchSquadProfile(squadID: String) async throws -> SquadProfile {
@@ -470,6 +491,7 @@ actor MockSocialService: SocialService {
         let fallbackName = "\(currentUser.id)+\(Int(Date().timeIntervalSince1970))创建的小队"
         let finalName = normalizedName.isEmpty ? fallbackName : normalizedName
         let normalizedDescription = input.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBannerURL = input.bannerURL?.trimmingCharacters(in: .whitespacesAndNewlines)
         let squadID = "grp_\(UUID().uuidString)"
         let now = Date()
 
@@ -505,10 +527,10 @@ actor MockSocialService: SocialService {
             name: finalName,
             description: normalizedDescription?.isEmpty == false ? normalizedDescription : nil,
             avatarURL: nil,
-            bannerURL: nil,
+            bannerURL: normalizedBannerURL?.isEmpty == false ? normalizedBannerURL : nil,
             notice: "",
             qrCodeURL: nil,
-            isPublic: false,
+            isPublic: input.isPublic,
             maxMembers: 50,
             memberCount: selectedMembers.count + 1,
             isMember: true,
@@ -600,11 +622,17 @@ actor MockSocialService: SocialService {
         squads[squadIndex].name = trimmedName
         let trimmedDescription = input.description.trimmingCharacters(in: .whitespacesAndNewlines)
         squads[squadIndex].description = trimmedDescription.isEmpty ? nil : trimmedDescription
+        if let isPublic = input.isPublic {
+            squads[squadIndex].isPublic = isPublic
+        }
         let trimmedNotice = input.notice.trimmingCharacters(in: .whitespacesAndNewlines)
         squads[squadIndex].notice = trimmedNotice
 
         let trimmedAvatar = input.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         squads[squadIndex].avatarURL = trimmedAvatar.isEmpty ? nil : trimmedAvatar
+
+        let trimmedBanner = input.bannerURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        squads[squadIndex].bannerURL = trimmedBanner.isEmpty ? nil : trimmedBanner
 
         let trimmedQRCode = input.qrCodeURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         squads[squadIndex].qrCodeURL = trimmedQRCode.isEmpty ? nil : trimmedQRCode
@@ -686,6 +714,50 @@ actor MockSocialService: SocialService {
 
         for index in posts.indices where posts[index].author.id == currentUser.id {
             posts[index].author.avatarURL = url
+        }
+
+        for (postID, comments) in commentsByPost {
+            var updatedComments = comments
+            for index in updatedComments.indices where updatedComments[index].author.id == currentUser.id {
+                updatedComments[index].author.avatarURL = url
+            }
+            commentsByPost[postID] = updatedComments
+        }
+
+        for index in conversations.indices {
+            guard conversations[index].type == .direct,
+                  conversations[index].peer?.id == currentUser.id else { continue }
+            conversations[index].peer?.avatarURL = url
+        }
+
+        for (conversationID, messages) in messagesByConversation {
+            var updatedMessages = messages
+            for index in updatedMessages.indices where updatedMessages[index].sender.id == currentUser.id {
+                updatedMessages[index].sender.avatarURL = url
+            }
+            messagesByConversation[conversationID] = updatedMessages
+        }
+
+        for index in squads.indices {
+            if squads[index].leader.id == currentUser.id {
+                squads[index].leader.avatarURL = url
+            }
+
+            for memberIndex in squads[index].members.indices where squads[index].members[memberIndex].id == currentUser.id {
+                squads[index].members[memberIndex].avatarURL = url
+            }
+
+            for messageIndex in squads[index].recentMessages.indices where squads[index].recentMessages[messageIndex].sender.id == currentUser.id {
+                squads[index].recentMessages[messageIndex].sender.avatarURL = url
+            }
+
+            for activityIndex in squads[index].activities.indices where squads[index].activities[activityIndex].createdBy.id == currentUser.id {
+                squads[index].activities[activityIndex].createdBy.avatarURL = url
+            }
+        }
+
+        for index in notifications.indices where notifications[index].actor?.id == currentUser.id {
+            notifications[index].actor?.avatarURL = url
         }
 
         return AvatarUploadResponse(avatarURL: url)

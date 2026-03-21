@@ -10,6 +10,7 @@ struct ChatView: View {
     @State private var isLoading = false
     @State private var error: String?
     @State private var selectedUserProfile: UserSummary?
+    @State private var showSquadProfile = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,8 +36,8 @@ struct ChatView: View {
             }
             if conversation.type == .group {
                 ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        SquadProfileView(squadID: conversation.id, service: appState.service)
+                    Button {
+                        showSquadProfile = true
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -52,6 +53,12 @@ struct ChatView: View {
         }
         .navigationDestination(item: $selectedUserProfile) { user in
             UserProfileView(userID: user.id)
+        }
+        .fullScreenCover(isPresented: $showSquadProfile) {
+            NavigationStack {
+                SquadProfileView(squadID: conversation.id, service: appState.service)
+                    .environmentObject(appState)
+            }
         }
         .overlay {
             if isLoading {
@@ -221,7 +228,33 @@ struct ChatView: View {
             .padding(.bottom, 2)
     }
 
+    @ViewBuilder
     private func avatarView(for user: UserSummary) -> some View {
+        if let resolved = AppConfig.resolvedURLString(user.avatarURL),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.card)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    avatarViewFallback(for: user)
+                @unknown default:
+                    avatarViewFallback(for: user)
+                }
+            }
+            .frame(width: 34, height: 34)
+            .clipShape(Circle())
+        } else {
+            avatarViewFallback(for: user)
+        }
+    }
+
+    private func avatarViewFallback(for user: UserSummary) -> some View {
         let asset = AppConfig.resolvedUserAvatarAssetName(
             userID: user.id,
             username: user.username,
@@ -231,8 +264,8 @@ struct ChatView: View {
             .resizable()
             .scaledToFill()
             .background(RaverTheme.card)
-        .frame(width: 34, height: 34)
-        .clipShape(Circle())
+            .frame(width: 34, height: 34)
+            .clipShape(Circle())
     }
 
     @MainActor

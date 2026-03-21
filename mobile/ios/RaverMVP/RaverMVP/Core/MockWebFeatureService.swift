@@ -29,12 +29,14 @@ actor MockWebFeatureService: WebFeatureService {
     private var tracklistsBySetID: [String: [WebTracklistDetail]]
     private var commentsBySetID: [String: [WebSetComment]]
     private var checkins: [WebCheckin]
+    private var ratingEvents: [WebRatingEvent]
 
     init() {
         let now = Date()
         let djA = WebDJ(
             id: "dj_amelie",
             name: "Amelie Lens",
+            aliases: ["莲姐", "硬核女王"],
             slug: "amelie-lens",
             bio: "Hard techno headliner.",
             avatarUrl: Self.seededAvatarURL(for: "dj_amelie"),
@@ -54,6 +56,7 @@ actor MockWebFeatureService: WebFeatureService {
         let djB = WebDJ(
             id: "dj_charlotte",
             name: "Charlotte de Witte",
+            aliases: ["CDW", "夏洛特"],
             slug: "charlotte-de-witte",
             bio: "Dark peak-time techno.",
             avatarUrl: Self.seededAvatarURL(for: "dj_charlotte"),
@@ -102,7 +105,25 @@ actor MockWebFeatureService: WebFeatureService {
             updatedAt: now.addingTimeInterval(-86400),
             organizer: currentUser,
             ticketTiers: [],
-            lineupSlots: []
+            lineupSlots: [
+                WebEventLineupSlot(
+                    id: "slot_evt_shanghai_001_1",
+                    eventId: "evt_shanghai_001",
+                    djId: "dj_amelie",
+                    djName: "Amelie Lens",
+                    stageName: "Main Stage",
+                    sortOrder: 1,
+                    startTime: now.addingTimeInterval(86400 * 6 + 3600),
+                    endTime: now.addingTimeInterval(86400 * 6 + 7200),
+                    dj: WebEventLineupSlotDJ(
+                        id: "dj_amelie",
+                        name: "Amelie Lens",
+                        avatarUrl: Self.seededAvatarURL(for: "dj_amelie"),
+                        bannerUrl: nil,
+                        country: "BE"
+                    )
+                )
+            ]
         )
 
         events = [mockEvent]
@@ -286,18 +307,79 @@ actor MockWebFeatureService: WebFeatureService {
         ]
 
         checkins = []
+
+        ratingEvents = [
+            WebRatingEvent(
+                id: "rating_event_vac_2026_spring",
+                name: "VAC 电音节 2026 春季",
+                description: "两天多舞台活动，包含主舞台、仓库舞台与 afterparty。",
+                imageUrl: nil,
+                createdAt: now.addingTimeInterval(-86400 * 6),
+                updatedAt: now.addingTimeInterval(-86400 * 2),
+                createdBy: currentUser,
+                units: [
+                    WebRatingUnit(
+                        id: "rating_unit_vac_main_stage_day1",
+                        eventId: "rating_event_vac_2026_spring",
+                        name: "主舞台 Day1",
+                        description: "灯光编排、音响、观演体验",
+                        imageUrl: nil,
+                        createdAt: now.addingTimeInterval(-86400 * 6),
+                        updatedAt: now.addingTimeInterval(-86400 * 2),
+                        rating: 9.0,
+                        ratingCount: 1,
+                        comments: [
+                            WebRatingComment(
+                                id: "rating_comment_1",
+                                unitId: "rating_unit_vac_main_stage_day1",
+                                userId: "u_ana",
+                                score: 9,
+                                content: "开场节奏很好，低频很稳。",
+                                createdAt: now.addingTimeInterval(-7200),
+                                updatedAt: now.addingTimeInterval(-7200),
+                                user: WebUserLite(
+                                    id: "u_ana",
+                                    username: "acid_ana",
+                                    displayName: "Ana",
+                                    avatarUrl: Self.seededAvatarURL(for: "u_ana")
+                                )
+                            )
+                        ],
+                        event: nil,
+                        createdBy: currentUser
+                    ),
+                    WebRatingUnit(
+                        id: "rating_unit_vac_warehouse_day1",
+                        eventId: "rating_event_vac_2026_spring",
+                        name: "仓库舞台 Day1",
+                        description: "Techno 专场",
+                        imageUrl: nil,
+                        createdAt: now.addingTimeInterval(-86400 * 5),
+                        updatedAt: now.addingTimeInterval(-86400 * 3),
+                        rating: 0,
+                        ratingCount: 0,
+                        comments: [],
+                        event: nil,
+                        createdBy: currentUser
+                    )
+                ]
+            )
+        ]
     }
 
-    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?) async throws -> EventListPage {
+    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage {
         let normalized = search?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         let normalizedType = eventType?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let normalizedStatus = status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         let filtered = events.filter { event in
             let matchesSearch =
                 normalized.isEmpty ||
                 event.name.lowercased().contains(normalized) ||
                 (event.description ?? "").lowercased().contains(normalized)
             let matchesType = normalizedType.isEmpty || event.eventType == normalizedType
-            return matchesSearch && matchesType
+            let resolvedStatus = resolveEventStatus(for: event)
+            let matchesStatus = normalizedStatus.isEmpty || normalizedStatus == "all" || resolvedStatus == normalizedStatus
+            return matchesSearch && matchesType && matchesStatus
         }
         let sorted = filtered.sorted(by: { $0.startDate < $1.startDate })
         return paginateEvents(sorted, page: page, limit: limit)
@@ -316,14 +398,23 @@ actor MockWebFeatureService: WebFeatureService {
 
     func createEvent(input: CreateEventInput) async throws -> WebEvent {
         let now = Date()
+        let eventID = "evt_\(UUID().uuidString)"
+        let lineupSlots = buildLineupSlots(
+            from: input.lineupSlots ?? [],
+            eventID: eventID,
+            eventStartDate: input.startDate
+        )
         let event = WebEvent(
-            id: "evt_\(UUID().uuidString)",
+            id: eventID,
             name: input.name,
             slug: slugify(input.name),
             description: input.description,
             coverImageUrl: input.coverImageUrl,
             lineupImageUrl: input.lineupImageUrl,
-            eventType: "club",
+            eventType: {
+                let trimmed = input.eventType?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return trimmed.isEmpty ? nil : trimmed
+            }(),
             organizerName: currentUser.displayName,
             venueName: input.venueName,
             venueAddress: nil,
@@ -345,7 +436,7 @@ actor MockWebFeatureService: WebFeatureService {
             updatedAt: now,
             organizer: currentUser,
             ticketTiers: [],
-            lineupSlots: []
+            lineupSlots: lineupSlots
         )
         events.insert(event, at: 0)
         return event
@@ -367,7 +458,18 @@ actor MockWebFeatureService: WebFeatureService {
         if let endDate = input.endDate { events[idx].endDate = endDate }
         if let coverImageUrl = input.coverImageUrl { events[idx].coverImageUrl = coverImageUrl }
         if let lineupImageUrl = input.lineupImageUrl { events[idx].lineupImageUrl = lineupImageUrl }
+        if let eventType = input.eventType {
+            let trimmed = eventType.trimmingCharacters(in: .whitespacesAndNewlines)
+            events[idx].eventType = trimmed.isEmpty ? nil : trimmed
+        }
         if let status = input.status { events[idx].status = status }
+        if let lineupSlots = input.lineupSlots {
+            events[idx].lineupSlots = buildLineupSlots(
+                from: lineupSlots,
+                eventID: events[idx].id,
+                eventStartDate: events[idx].startDate
+            )
+        }
         events[idx].updatedAt = Date()
         return events[idx]
     }
@@ -390,7 +492,9 @@ actor MockWebFeatureService: WebFeatureService {
     func fetchDJs(page: Int, limit: Int, search: String?, sortBy: String) async throws -> DJListPage {
         let normalized = search?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         var filtered = djs.filter { item in
-            normalized.isEmpty || item.name.lowercased().contains(normalized)
+            normalized.isEmpty
+                || item.name.lowercased().contains(normalized)
+                || (item.aliases?.contains(where: { $0.lowercased().contains(normalized) }) ?? false)
         }
 
         switch sortBy {
@@ -428,6 +532,14 @@ actor MockWebFeatureService: WebFeatureService {
 
     func fetchDJSets(djID: String) async throws -> [WebDJSet] {
         sets.filter { $0.djId == djID }.sorted(by: { $0.createdAt > $1.createdAt })
+    }
+
+    func fetchDJEvents(djID: String) async throws -> [WebEvent] {
+        events
+            .filter { event in
+                event.lineupSlots.contains(where: { $0.djId == djID })
+            }
+            .sorted(by: { $0.startDate > $1.startDate })
     }
 
     func fetchDJFollowStatus(djID: String) async throws -> Bool {
@@ -769,10 +881,15 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
+        try await fetchUserCheckins(userID: currentUser.id, page: page, limit: limit, type: type)
+    }
+
+    func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
         let normalizedType = type?.trimmingCharacters(in: .whitespacesAndNewlines)
         let filtered = checkins.filter { item in
-            normalizedType == nil || normalizedType == "" || item.type == normalizedType
-        }.sorted(by: { $0.createdAt > $1.createdAt })
+            item.userId == userID
+                && (normalizedType == nil || normalizedType == "" || item.type == normalizedType)
+        }.sorted(by: { $0.attendedAt > $1.attendedAt })
 
         let normalizedPage = max(1, page)
         let normalizedLimit = max(1, min(100, limit))
@@ -789,6 +906,14 @@ actor MockWebFeatureService: WebFeatureService {
                 totalPages: max(1, Int(ceil(Double(filtered.count) / Double(normalizedLimit))))
             )
         )
+    }
+
+    func fetchMyDJCheckinCount(djID: String) async throws -> Int {
+        checkins.filter { item in
+            item.userId == currentUser.id
+                && item.type == "dj"
+                && item.djId == djID
+        }.count
     }
 
     func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin {
@@ -815,8 +940,19 @@ actor MockWebFeatureService: WebFeatureService {
             note: input.note,
             photoUrl: nil,
             rating: input.rating,
+            attendedAt: input.attendedAt ?? Date(),
             createdAt: Date(),
-            event: event.map { CheckinEventLite(id: $0.id, name: $0.name, coverImageUrl: $0.coverImageUrl, city: $0.city, country: $0.country) },
+            event: event.map {
+                CheckinEventLite(
+                    id: $0.id,
+                    name: $0.name,
+                    coverImageUrl: $0.coverImageUrl,
+                    city: $0.city,
+                    country: $0.country,
+                    startDate: $0.startDate,
+                    endDate: $0.endDate
+                )
+            },
             dj: dj.map { CheckinDJLite(id: $0.id, name: $0.name, avatarUrl: $0.avatarUrl, country: $0.country) }
         )
         checkins.insert(item, at: 0)
@@ -828,6 +964,196 @@ actor MockWebFeatureService: WebFeatureService {
             throw ServiceError.message("打卡不存在")
         }
         checkins.remove(at: idx)
+    }
+
+    func fetchRatingEvents() async throws -> [WebRatingEvent] {
+        ratingEvents
+            .sorted(by: { $0.createdAt > $1.createdAt })
+            .map { event in
+                var normalized = event
+                normalized.units = event.units.map(normalizeRatingUnit)
+                return normalized
+            }
+    }
+
+    func fetchRatingEvent(id: String) async throws -> WebRatingEvent {
+        guard let event = ratingEvents.first(where: { $0.id == id }) else {
+            throw ServiceError.message("打分事件不存在")
+        }
+        var normalized = event
+        normalized.units = event.units.map(normalizeRatingUnit)
+        return normalized
+    }
+
+    func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent {
+        let name = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            throw ServiceError.message("事件名称不能为空")
+        }
+
+        let now = Date()
+        let created = WebRatingEvent(
+            id: "rating_event_\(UUID().uuidString)",
+            name: name,
+            description: input.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+            imageUrl: input.imageUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+            createdAt: now,
+            updatedAt: now,
+            createdBy: currentUser,
+            units: []
+        )
+        ratingEvents.insert(created, at: 0)
+        return created
+    }
+
+    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit {
+        guard let eventIndex = ratingEvents.firstIndex(where: { $0.id == eventID }) else {
+            throw ServiceError.message("打分事件不存在")
+        }
+        let name = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            throw ServiceError.message("打分单位名称不能为空")
+        }
+
+        let now = Date()
+        let created = WebRatingUnit(
+            id: "rating_unit_\(UUID().uuidString)",
+            eventId: eventID,
+            name: name,
+            description: input.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+            imageUrl: input.imageUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+            createdAt: now,
+            updatedAt: now,
+            rating: 0,
+            ratingCount: 0,
+            comments: [],
+            event: nil,
+            createdBy: currentUser
+        )
+        ratingEvents[eventIndex].units.append(created)
+        ratingEvents[eventIndex].updatedAt = now
+        return created
+    }
+
+    func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent {
+        guard let eventIndex = ratingEvents.firstIndex(where: { $0.id == id }) else {
+            throw ServiceError.message("打分事件不存在")
+        }
+        guard ratingEvents[eventIndex].createdBy?.id == currentUser.id else {
+            throw ServiceError.message("Forbidden")
+        }
+
+        if let name = input.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            ratingEvents[eventIndex].name = name
+        }
+        if let description = input.description {
+            let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+            ratingEvents[eventIndex].description = trimmed.isEmpty ? nil : trimmed
+        }
+        if let imageUrl = input.imageUrl {
+            let trimmed = imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            ratingEvents[eventIndex].imageUrl = trimmed.isEmpty ? nil : trimmed
+        }
+        ratingEvents[eventIndex].updatedAt = Date()
+        return ratingEvents[eventIndex]
+    }
+
+    func deleteRatingEvent(id: String) async throws {
+        guard let eventIndex = ratingEvents.firstIndex(where: { $0.id == id }) else {
+            throw ServiceError.message("打分事件不存在")
+        }
+        guard ratingEvents[eventIndex].createdBy?.id == currentUser.id else {
+            throw ServiceError.message("Forbidden")
+        }
+        ratingEvents.remove(at: eventIndex)
+    }
+
+    func updateRatingUnit(id: String, input: UpdateRatingUnitInput) async throws -> WebRatingUnit {
+        for eventIndex in ratingEvents.indices {
+            guard let unitIndex = ratingEvents[eventIndex].units.firstIndex(where: { $0.id == id }) else { continue }
+            guard ratingEvents[eventIndex].units[unitIndex].createdBy?.id == currentUser.id else {
+                throw ServiceError.message("Forbidden")
+            }
+
+            if let name = input.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                ratingEvents[eventIndex].units[unitIndex].name = name
+            }
+            if let description = input.description {
+                let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+                ratingEvents[eventIndex].units[unitIndex].description = trimmed.isEmpty ? nil : trimmed
+            }
+            if let imageUrl = input.imageUrl {
+                let trimmed = imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+                ratingEvents[eventIndex].units[unitIndex].imageUrl = trimmed.isEmpty ? nil : trimmed
+            }
+            let now = Date()
+            ratingEvents[eventIndex].units[unitIndex].updatedAt = now
+            ratingEvents[eventIndex].updatedAt = now
+            return normalizeRatingUnit(ratingEvents[eventIndex].units[unitIndex])
+        }
+        throw ServiceError.message("打分单位不存在")
+    }
+
+    func deleteRatingUnit(id: String) async throws {
+        for eventIndex in ratingEvents.indices {
+            guard let unitIndex = ratingEvents[eventIndex].units.firstIndex(where: { $0.id == id }) else { continue }
+            guard ratingEvents[eventIndex].units[unitIndex].createdBy?.id == currentUser.id else {
+                throw ServiceError.message("Forbidden")
+            }
+            ratingEvents[eventIndex].units.remove(at: unitIndex)
+            ratingEvents[eventIndex].updatedAt = Date()
+            return
+        }
+        throw ServiceError.message("打分单位不存在")
+    }
+
+    func fetchRatingUnit(id: String) async throws -> WebRatingUnit {
+        for event in ratingEvents {
+            if let unit = event.units.first(where: { $0.id == id }) {
+                var normalized = normalizeRatingUnit(unit)
+                normalized.event = WebRatingUnitEventLite(
+                    id: event.id,
+                    name: event.name,
+                    description: event.description,
+                    imageUrl: event.imageUrl
+                )
+                return normalized
+            }
+        }
+        throw ServiceError.message("打分单位不存在")
+    }
+
+    func addRatingComment(unitID: String, input: CreateRatingCommentInput) async throws -> WebRatingComment {
+        let content = input.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let score = min(10, max(1, round(input.score)))
+        guard !content.isEmpty else {
+            throw ServiceError.message("评论不能为空")
+        }
+        guard input.score >= 1 else {
+            throw ServiceError.message("请先评分")
+        }
+
+        for eventIndex in ratingEvents.indices {
+            guard let unitIndex = ratingEvents[eventIndex].units.firstIndex(where: { $0.id == unitID }) else { continue }
+            let now = Date()
+            let created = WebRatingComment(
+                id: "rating_comment_\(UUID().uuidString)",
+                unitId: unitID,
+                userId: currentUser.id,
+                score: score,
+                content: content,
+                createdAt: now,
+                updatedAt: now,
+                user: currentUser
+            )
+            ratingEvents[eventIndex].units[unitIndex].comments.insert(created, at: 0)
+            ratingEvents[eventIndex].units[unitIndex] = normalizeRatingUnit(ratingEvents[eventIndex].units[unitIndex])
+            ratingEvents[eventIndex].units[unitIndex].updatedAt = now
+            ratingEvents[eventIndex].updatedAt = now
+            return created
+        }
+
+        throw ServiceError.message("打分单位不存在")
     }
 
     func fetchLearnGenres() async throws -> [LearnGenreNode] {
@@ -915,7 +1241,39 @@ actor MockWebFeatureService: WebFeatureService {
                 )
             }
 
-        return MyPublishes(djSets: mySets, events: myEvents)
+        let myRatingEvents = ratingEvents
+            .filter { $0.createdBy?.id == currentUser.id }
+            .sorted(by: { $0.createdAt > $1.createdAt })
+            .map {
+                MyPublishRatingEvent(
+                    id: $0.id,
+                    name: $0.name,
+                    imageUrl: $0.imageUrl,
+                    description: $0.description,
+                    unitCount: $0.units.count,
+                    createdAt: $0.createdAt
+                )
+            }
+
+        let myRatingUnits = ratingEvents
+            .flatMap { event in
+                event.units
+                    .filter { $0.createdBy?.id == currentUser.id }
+                    .map { unit in
+                        MyPublishRatingUnit(
+                            id: unit.id,
+                            eventId: event.id,
+                            eventName: event.name,
+                            name: unit.name,
+                            imageUrl: unit.imageUrl,
+                            description: unit.description,
+                            createdAt: unit.createdAt
+                        )
+                    }
+            }
+            .sorted(by: { $0.createdAt > $1.createdAt })
+
+        return MyPublishes(djSets: mySets, events: myEvents, ratingEvents: myRatingEvents, ratingUnits: myRatingUnits)
     }
 
     private func slugify(_ text: String) -> String {
@@ -923,6 +1281,79 @@ actor MockWebFeatureService: WebFeatureService {
             .lowercased()
             .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    }
+
+    private func resolveEventStatus(for event: WebEvent, now: Date = Date()) -> String {
+        if now < event.startDate {
+            return "upcoming"
+        }
+        if now > event.endDate {
+            return "ended"
+        }
+        return "ongoing"
+    }
+
+    private func buildLineupSlots(
+        from inputSlots: [EventLineupSlotInput],
+        eventID: String,
+        eventStartDate: Date
+    ) -> [WebEventLineupSlot] {
+        inputSlots.enumerated().compactMap { index, slot in
+            let trimmedName = slot.djName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let matchedDJ = djs.first(where: { $0.id == slot.djId }) ??
+                djs.first(where: { $0.name.compare(trimmedName, options: .caseInsensitive) == .orderedSame })
+            let finalDJName = trimmedName.isEmpty ? (matchedDJ?.name ?? "Unknown DJ") : trimmedName
+            guard !finalDJName.isEmpty else { return nil }
+
+            let fallbackBase = eventStartDate.addingTimeInterval(Double(index) * 60)
+            let startCandidate = slot.startTime
+            let endCandidate = slot.endTime
+
+            let startTime: Date
+            let endTime: Date
+            if let startCandidate, let endCandidate {
+                startTime = startCandidate
+                endTime = endCandidate >= startCandidate ? endCandidate : startCandidate.addingTimeInterval(3600)
+            } else if let startCandidate {
+                startTime = startCandidate
+                endTime = startCandidate.addingTimeInterval(3600)
+            } else if let endCandidate {
+                startTime = endCandidate.addingTimeInterval(-3600)
+                endTime = endCandidate
+            } else {
+                startTime = fallbackBase
+                endTime = fallbackBase
+            }
+
+            return WebEventLineupSlot(
+                id: "slot_\(UUID().uuidString)",
+                eventId: eventID,
+                djId: {
+                    if let resolvedID = matchedDJ?.id {
+                        return resolvedID
+                    }
+                    let fallbackID = slot.djId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    return fallbackID.isEmpty ? nil : fallbackID
+                }(),
+                djName: finalDJName,
+                stageName: {
+                    let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    return trimmed.isEmpty ? nil : trimmed
+                }(),
+                sortOrder: slot.sortOrder ?? (index + 1),
+                startTime: startTime,
+                endTime: endTime,
+                dj: matchedDJ.map {
+                    WebEventLineupSlotDJ(
+                        id: $0.id,
+                        name: $0.name,
+                        avatarUrl: $0.avatarUrl,
+                        bannerUrl: $0.bannerUrl,
+                        country: $0.country
+                    )
+                }
+            )
+        }
     }
 
     private func paginateEvents(_ source: [WebEvent], page: Int, limit: Int) -> EventListPage {
@@ -941,6 +1372,19 @@ actor MockWebFeatureService: WebFeatureService {
                 totalPages: max(1, Int(ceil(Double(source.count) / Double(normalizedLimit))))
             )
         )
+    }
+
+    private func normalizeRatingUnit(_ unit: WebRatingUnit) -> WebRatingUnit {
+        var normalized = unit
+        let scores = unit.comments.map(\.score)
+        if scores.isEmpty {
+            normalized.rating = 0
+            normalized.ratingCount = 0
+            return normalized
+        }
+        normalized.ratingCount = scores.count
+        normalized.rating = scores.reduce(0, +) / Double(scores.count)
+        return normalized
     }
 
     private func parseVideo(_ url: String) -> (platform: String, videoId: String) {

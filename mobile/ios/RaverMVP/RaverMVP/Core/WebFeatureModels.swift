@@ -67,6 +67,15 @@ struct WebEventLineupSlot: Codable, Identifiable, Hashable {
     var dj: WebEventLineupSlotDJ?
 }
 
+struct EventLineupSlotInput: Codable, Hashable {
+    var djId: String?
+    var djName: String
+    var stageName: String?
+    var sortOrder: Int?
+    var startTime: Date?
+    var endTime: Date?
+}
+
 struct WebEvent: Codable, Identifiable, Hashable {
     let id: String
     var name: String
@@ -106,6 +115,7 @@ struct WebEvent: Codable, Identifiable, Hashable {
 struct CreateEventInput: Codable {
     var name: String
     var description: String?
+    var eventType: String? = nil
     var city: String?
     var country: String?
     var venueName: String?
@@ -113,12 +123,14 @@ struct CreateEventInput: Codable {
     var endDate: Date
     var coverImageUrl: String?
     var lineupImageUrl: String?
+    var lineupSlots: [EventLineupSlotInput]? = nil
     var status: String?
 }
 
 struct UpdateEventInput: Codable {
     var name: String?
     var description: String?
+    var eventType: String? = nil
     var city: String?
     var country: String?
     var venueName: String?
@@ -126,12 +138,14 @@ struct UpdateEventInput: Codable {
     var endDate: Date?
     var coverImageUrl: String?
     var lineupImageUrl: String?
+    var lineupSlots: [EventLineupSlotInput]? = nil
     var status: String?
 }
 
 struct WebDJ: Codable, Identifiable, Hashable {
     let id: String
     var name: String
+    var aliases: [String]?
     var slug: String?
     var bio: String?
     var avatarUrl: String?
@@ -303,6 +317,7 @@ struct WebCheckin: Codable, Identifiable, Hashable {
     var note: String?
     var photoUrl: String?
     var rating: Int?
+    var attendedAt: Date
     var createdAt: Date
     var event: CheckinEventLite?
     var dj: CheckinDJLite?
@@ -314,6 +329,8 @@ struct CheckinEventLite: Codable, Identifiable, Hashable {
     var coverImageUrl: String?
     var city: String?
     var country: String?
+    var startDate: Date?
+    var endDate: Date?
 }
 
 struct CheckinDJLite: Codable, Identifiable, Hashable {
@@ -329,6 +346,80 @@ struct CreateCheckinInput: Codable {
     var djId: String?
     var note: String?
     var rating: Int?
+    var attendedAt: Date? = nil
+}
+
+struct WebRatingComment: Codable, Identifiable, Hashable {
+    let id: String
+    var unitId: String
+    var userId: String
+    var score: Double
+    var content: String
+    var createdAt: Date
+    var updatedAt: Date
+    var user: WebUserLite?
+}
+
+struct WebRatingUnitEventLite: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var description: String?
+    var imageUrl: String?
+}
+
+struct WebRatingUnit: Codable, Identifiable, Hashable {
+    let id: String
+    var eventId: String
+    var name: String
+    var description: String?
+    var imageUrl: String?
+    var createdAt: Date
+    var updatedAt: Date
+    var rating: Double
+    var ratingCount: Int
+    var comments: [WebRatingComment]
+    var event: WebRatingUnitEventLite?
+    var createdBy: WebUserLite?
+}
+
+struct WebRatingEvent: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var description: String?
+    var imageUrl: String?
+    var createdAt: Date
+    var updatedAt: Date
+    var createdBy: WebUserLite?
+    var units: [WebRatingUnit]
+}
+
+struct CreateRatingEventInput: Codable {
+    var name: String
+    var description: String?
+    var imageUrl: String?
+}
+
+struct CreateRatingUnitInput: Codable {
+    var name: String
+    var description: String?
+    var imageUrl: String?
+}
+
+struct UpdateRatingEventInput: Codable {
+    var name: String?
+    var description: String?
+    var imageUrl: String?
+}
+
+struct UpdateRatingUnitInput: Codable {
+    var name: String?
+    var description: String?
+    var imageUrl: String?
+}
+
+struct CreateRatingCommentInput: Codable {
+    var score: Double
+    var content: String
 }
 
 struct LearnGenreNode: Codable, Identifiable, Hashable {
@@ -368,6 +459,8 @@ struct RankingEntry: Codable, Identifiable, Hashable {
 struct MyPublishes: Codable, Hashable {
     var djSets: [MyPublishSet]
     var events: [MyPublishEvent]
+    var ratingEvents: [MyPublishRatingEvent]
+    var ratingUnits: [MyPublishRatingUnit]
 }
 
 struct MyPublishSet: Codable, Identifiable, Hashable {
@@ -388,6 +481,25 @@ struct MyPublishEvent: Codable, Identifiable, Hashable {
     var startDate: Date
     var createdAt: Date
     var lineupSlotCount: Int
+}
+
+struct MyPublishRatingEvent: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var imageUrl: String?
+    var description: String?
+    var unitCount: Int
+    var createdAt: Date
+}
+
+struct MyPublishRatingUnit: Codable, Identifiable, Hashable {
+    let id: String
+    var eventId: String
+    var eventName: String
+    var name: String
+    var imageUrl: String?
+    var description: String?
+    var createdAt: Date
 }
 
 struct UploadMediaResponse: Codable, Hashable {

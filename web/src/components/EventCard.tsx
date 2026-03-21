@@ -8,6 +8,21 @@ interface EventCardProps {
 }
 
 export const EventCard: React.FC<EventCardProps> = ({ event }) => {
+  const resolveEventStatus = () => {
+    const now = Date.now();
+    const start = new Date(event.startDate).getTime();
+    const end = new Date(event.endDate).getTime();
+    if (!Number.isNaN(start) && !Number.isNaN(end) && end >= start) {
+      if (now < start) return 'upcoming' as const;
+      if (now > end) return 'ended' as const;
+      return 'ongoing' as const;
+    }
+    if (event.status === 'ongoing' || event.status === 'ended') return event.status;
+    return 'upcoming' as const;
+  };
+
+  const visualStatus = resolveEventStatus();
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('zh-CN', {
@@ -74,14 +89,21 @@ export const EventCard: React.FC<EventCardProps> = ({ event }) => {
           </div>
 
           <div className="mt-4 flex gap-2">
-            <span className={`px-3 py-1 rounded-full text-xs ${
-              event.status === 'upcoming'
-                ? 'bg-accent-green/20 text-accent-green'
-                : event.status === 'ongoing'
-                ? 'bg-primary-blue/20 text-primary-blue'
-                : 'bg-text-tertiary/20 text-text-tertiary'
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs border ${
+              visualStatus === 'upcoming'
+                ? 'bg-amber-400/10 text-amber-200 border-amber-300/30'
+                : visualStatus === 'ongoing'
+                ? 'bg-accent-green/12 text-accent-green border-accent-green/30'
+                : 'bg-text-tertiary/20 text-text-tertiary border-white/15'
             }`}>
-              {event.status === 'upcoming' ? '即将开始' : event.status === 'ongoing' ? '进行中' : '已结束'}
+              {visualStatus === 'ongoing' && (
+                <span className="inline-flex items-end gap-[2px] h-[10px]">
+                  <span className="w-[2px] rounded-full bg-white animate-pulse" style={{ height: '6px', animationDuration: '0.7s', animationDelay: '0ms' }} />
+                  <span className="w-[2px] rounded-full bg-white animate-pulse" style={{ height: '10px', animationDuration: '0.8s', animationDelay: '0.12s' }} />
+                  <span className="w-[2px] rounded-full bg-white animate-pulse" style={{ height: '7px', animationDuration: '0.75s', animationDelay: '0.24s' }} />
+                </span>
+              )}
+              {visualStatus === 'upcoming' ? '即将开始' : visualStatus === 'ongoing' ? '进行中' : '已结束'}
             </span>
           </div>
         </div>

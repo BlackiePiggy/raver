@@ -81,6 +81,93 @@ const toNumber = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+type NormalizedLineupSlot = {
+  djId: string | null;
+  djName: string;
+  stageName: string | null;
+  sortOrder: number;
+  startTime: Date;
+  endTime: Date;
+};
+
+const parseDateInput = (value: unknown): Date | null => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const fromTimestamp = new Date(value);
+    return Number.isNaN(fromTimestamp.getTime()) ? null : fromTimestamp;
+  }
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const resolveEventStatus = (startDate: Date, endDate: Date, fallbackStatus?: string | null): 'upcoming' | 'ongoing' | 'ended' => {
+  const now = Date.now();
+  const start = startDate.getTime();
+  const end = endDate.getTime();
+
+  if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+    if (now < start) return 'upcoming';
+    if (now > end) return 'ended';
+    return 'ongoing';
+  }
+
+  if (fallbackStatus === 'ongoing' || fallbackStatus === 'ended') {
+    return fallbackStatus;
+  }
+  return 'upcoming';
+};
+
+const normalizeLineupSlots = (slots: unknown, eventStartDate: Date): NormalizedLineupSlot[] => {
+  if (!Array.isArray(slots)) {
+    return [];
+  }
+
+  const safeEventStart = Number.isNaN(eventStartDate.getTime()) ? new Date() : eventStartDate;
+  return slots
+    .filter((slot): slot is Record<string, unknown> => typeof slot === 'object' && slot !== null)
+    .map((slot, index) => {
+      const parsedStart = parseDateInput(slot.startTime);
+      const parsedEnd = parseDateInput(slot.endTime);
+      const fallbackBase = new Date(safeEventStart.getTime() + index * 60_000);
+
+      let startTime = fallbackBase;
+      let endTime = fallbackBase;
+
+      if (parsedStart && parsedEnd) {
+        startTime = parsedStart;
+        endTime = parsedEnd >= parsedStart ? parsedEnd : new Date(parsedStart.getTime() + 3_600_000);
+      } else if (parsedStart) {
+        startTime = parsedStart;
+        endTime = new Date(parsedStart.getTime() + 3_600_000);
+      } else if (parsedEnd) {
+        endTime = parsedEnd;
+        startTime = new Date(parsedEnd.getTime() - 3_600_000);
+      }
+
+      const djName = typeof slot.djName === 'string' ? slot.djName.trim() : '';
+      const djId = typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId.trim() : null;
+      const hasIdentity = djName.length > 0 || !!djId;
+      if (!hasIdentity) {
+        return null;
+      }
+
+      return {
+        djId,
+        djName: djName || 'Unknown DJ',
+        stageName: typeof slot.stageName === 'string' && slot.stageName.trim() ? slot.stageName.trim() : null,
+        sortOrder: typeof slot.sortOrder === 'number' && Number.isFinite(slot.sortOrder) ? slot.sortOrder : index + 1,
+        startTime,
+        endTime,
+      };
+    })
+    .filter((slot): slot is NormalizedLineupSlot => slot !== null);
+};
+
 const normalizeName = (value: string): string => value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
 
 const parseRankingText = (text: string): Array<{ rank: number; name: string }> =>
@@ -151,6 +238,7 @@ const djSetVideoUpload = createVideoUpload(djSetUploadDir, 300 * 1024 * 1024);
 const mapDJ = (row: any, isFollowing = false) => ({
   id: row.id,
   name: row.name,
+  aliases: Array.isArray(row.aliases) ? row.aliases : [],
   slug: row.slug,
   bio: row.bio,
   avatarUrl: row.avatarUrl,
@@ -201,7 +289,7 @@ const mapEvent = (row: any) => ({
   ticketCurrency: row.ticketCurrency,
   ticketNotes: row.ticketNotes,
   officialWebsite: row.officialWebsite,
-  status: row.status,
+  status: resolveEventStatus(new Date(row.startDate), new Date(row.endDate), row.status),
   isVerified: row.isVerified,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
@@ -319,6 +407,63 @@ const mapDJSet = (row: any) => ({
   tracklistContributor: row.tracklistContributor || null,
 });
 
+const mapRatingComment = (row: any) => ({
+  id: row.id,
+  unitId: row.unitId,
+  userId: row.userId,
+  score: row.score,
+  content: row.content,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  user: mapUserLite(row.user),
+});
+
+const resolveRatingSummary = (comments: Array<{ score: number }>): { rating: number; ratingCount: number } => {
+  const scores = comments.map((item) => item.score).filter((value) => typeof value === 'number' && Number.isFinite(value));
+  if (!scores.length) {
+    return { rating: 0, ratingCount: 0 };
+  }
+  const total = scores.reduce((sum, value) => sum + value, 0);
+  return {
+    rating: total / scores.length,
+    ratingCount: scores.length,
+  };
+};
+
+const mapRatingUnit = (row: any, includeComments = false) => {
+  const scoreRows: Array<{ score: number }> = Array.isArray(row.comments)
+    ? row.comments
+        .filter((item: any) => typeof item === 'object' && item !== null && typeof item.score === 'number')
+        .map((item: any) => ({ score: item.score }))
+    : [];
+  const summary = resolveRatingSummary(scoreRows);
+
+  return {
+    id: row.id,
+    eventId: row.eventId,
+    name: row.name,
+    description: row.description,
+    imageUrl: row.imageUrl,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    rating: summary.rating,
+    ratingCount: summary.ratingCount,
+    comments: includeComments && Array.isArray(row.comments) ? row.comments.map(mapRatingComment) : [],
+    createdBy: mapUserLite(row.createdBy),
+  };
+};
+
+const mapRatingEvent = (row: any) => ({
+  id: row.id,
+  name: row.name,
+  description: row.description,
+  imageUrl: row.imageUrl,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  createdBy: mapUserLite(row.createdBy),
+  units: Array.isArray(row.units) ? row.units.map((unit: any) => mapRatingUnit(unit)) : [],
+});
+
 const RANKING_BOARDS: Record<string, { title: string; subtitle: string; years: number[]; coverImageUrl?: string }> = {
   djmag: {
     title: 'DJ MAG TOP 100',
@@ -359,7 +504,20 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
     const eventType = typeof req.query.eventType === 'string' ? req.query.eventType.trim() : '';
     const status = typeof req.query.status === 'string' ? req.query.status.trim() : 'upcoming';
 
-    const where: any = { status };
+    const where: any = {};
+    const now = new Date();
+    if (status === 'upcoming') {
+      where.startDate = { gt: now };
+    } else if (status === 'ongoing') {
+      where.startDate = { lte: now };
+      where.endDate = { gte: now };
+    } else if (status === 'ended') {
+      where.endDate = { lt: now };
+    } else if (status === 'all' || status === '') {
+      // no status filter
+    } else if (status) {
+      where.status = status;
+    }
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -496,6 +654,13 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       return;
     }
 
+    const parsedStartDate = new Date(startDate);
+    const parsedEndDate = new Date(endDate);
+    if (Number.isNaN(parsedStartDate.getTime()) || Number.isNaN(parsedEndDate.getTime())) {
+      res.status(400).json({ error: 'Invalid event date range' });
+      return;
+    }
+
     const desiredSlug = String(body.slug || '').trim() || `${slugify(name)}-${Date.now().toString().slice(-6)}`;
     const slugUsed = await prisma.event.findUnique({ where: { slug: desiredSlug }, select: { id: true } });
     if (slugUsed) {
@@ -504,17 +669,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     }
 
     const rawSlots = Array.isArray(body.lineupSlots) ? body.lineupSlots : [];
-    const lineupSlots = rawSlots
-      .filter((slot): slot is Record<string, unknown> => typeof slot === 'object' && slot !== null)
-      .filter((slot) => slot.startTime && slot.endTime)
-      .map((slot, index) => ({
-        djId: typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId : null,
-        djName: typeof slot.djName === 'string' && slot.djName.trim() ? slot.djName.trim() : 'Unknown DJ',
-        stageName: typeof slot.stageName === 'string' && slot.stageName.trim() ? slot.stageName.trim() : null,
-        sortOrder: typeof slot.sortOrder === 'number' ? slot.sortOrder : index + 1,
-        startTime: new Date(String(slot.startTime)),
-        endTime: new Date(String(slot.endTime)),
-      }));
+    const lineupSlots = normalizeLineupSlots(rawSlots, parsedStartDate);
 
     const rawTicketTiers = Array.isArray(body.ticketTiers) ? body.ticketTiers : [];
     const ticketCurrency = typeof body.ticketCurrency === 'string' ? body.ticketCurrency : null;
@@ -550,8 +705,9 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         country: typeof body.country === 'string' ? body.country : null,
         latitude: toNumber(body.latitude),
         longitude: toNumber(body.longitude),
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
+        startDate: parsedStartDate,
+        endDate: parsedEndDate,
+        status: resolveEventStatus(parsedStartDate, parsedEndDate, typeof body.status === 'string' ? body.status : null),
         ticketUrl: typeof body.ticketUrl === 'string' ? body.ticketUrl : null,
         ticketPriceMin: toNumber(body.ticketPriceMin),
         ticketPriceMax: toNumber(body.ticketPriceMax),
@@ -595,7 +751,7 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const eventId = req.params.id as string;
     const existing = await prisma.event.findUnique({
       where: { id: eventId },
-      select: { id: true, organizerId: true },
+      select: { id: true, organizerId: true, startDate: true, endDate: true, status: true },
     });
 
     if (!existing) {
@@ -612,17 +768,21 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const rawSlots = Array.isArray(body.lineupSlots) ? body.lineupSlots : null;
     const rawTicketTiers = Array.isArray(body.ticketTiers) ? body.ticketTiers : null;
 
-    const lineupSlots = (rawSlots || [])
-      .filter((slot): slot is Record<string, unknown> => typeof slot === 'object' && slot !== null)
-      .filter((slot) => slot.startTime && slot.endTime)
-      .map((slot, index) => ({
-        djId: typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId : null,
-        djName: typeof slot.djName === 'string' && slot.djName.trim() ? slot.djName.trim() : 'Unknown DJ',
-        stageName: typeof slot.stageName === 'string' && slot.stageName.trim() ? slot.stageName.trim() : null,
-        sortOrder: typeof slot.sortOrder === 'number' ? slot.sortOrder : index + 1,
-        startTime: new Date(String(slot.startTime)),
-        endTime: new Date(String(slot.endTime)),
-      }));
+    const parsedStartDate = body.startDate !== undefined ? parseDateInput(body.startDate) : null;
+    const parsedEndDate = body.endDate !== undefined ? parseDateInput(body.endDate) : null;
+    if (body.startDate !== undefined && parsedStartDate === null) {
+      res.status(400).json({ error: 'Invalid startDate' });
+      return;
+    }
+    if (body.endDate !== undefined && parsedEndDate === null) {
+      res.status(400).json({ error: 'Invalid endDate' });
+      return;
+    }
+
+    const lineupBaseDate = parsedStartDate ?? existing.startDate;
+    const effectiveStartDate = parsedStartDate ?? existing.startDate;
+    const effectiveEndDate = parsedEndDate ?? existing.endDate;
+    const lineupSlots = normalizeLineupSlots(rawSlots || [], lineupBaseDate);
 
     const ticketCurrency = typeof body.ticketCurrency === 'string' ? body.ticketCurrency : null;
     const ticketTiers = (rawTicketTiers || [])
@@ -657,15 +817,15 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         country: typeof body.country === 'string' ? body.country : undefined,
         latitude: body.latitude !== undefined ? toNumber(body.latitude) : undefined,
         longitude: body.longitude !== undefined ? toNumber(body.longitude) : undefined,
-        startDate: typeof body.startDate === 'string' ? new Date(body.startDate) : undefined,
-        endDate: typeof body.endDate === 'string' ? new Date(body.endDate) : undefined,
+        startDate: body.startDate !== undefined ? parsedStartDate ?? undefined : undefined,
+        endDate: body.endDate !== undefined ? parsedEndDate ?? undefined : undefined,
         ticketUrl: typeof body.ticketUrl === 'string' ? body.ticketUrl : undefined,
         ticketPriceMin: body.ticketPriceMin !== undefined ? toNumber(body.ticketPriceMin) : undefined,
         ticketPriceMax: body.ticketPriceMax !== undefined ? toNumber(body.ticketPriceMax) : undefined,
         ticketCurrency: body.ticketCurrency !== undefined ? ticketCurrency : undefined,
         ticketNotes: typeof body.ticketNotes === 'string' ? body.ticketNotes : undefined,
         officialWebsite: typeof body.officialWebsite === 'string' ? body.officialWebsite : undefined,
-        status: typeof body.status === 'string' ? body.status : undefined,
+        status: resolveEventStatus(effectiveStartDate, effectiveEndDate, typeof body.status === 'string' ? body.status : existing.status),
         lineupSlots:
           rawSlots !== null
             ? {
@@ -771,8 +931,12 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
 
     const where: any = {};
     if (search) {
+      const normalizedSearchVariants = Array.from(
+        new Set([search, search.toLowerCase(), search.toUpperCase()])
+      );
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
+        { aliases: { hasSome: normalizedSearchVariants } },
         { bio: { contains: search, mode: 'insensitive' } },
       ];
     }
@@ -831,6 +995,43 @@ router.get('/djs/:id/sets', optionalAuth, async (req: Request, res: Response): P
     ok(res, { items: sets.map(mapDJSet) });
   } catch (error) {
     console.error('BFF web dj sets error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const djId = req.params.id as string;
+    const rows = await prisma.event.findMany({
+      where: {
+        lineupSlots: {
+          some: {
+            djId,
+          },
+        },
+      },
+      orderBy: [{ startDate: 'desc' }, { name: 'asc' }],
+      include: {
+        ticketTiers: {
+          orderBy: { sortOrder: 'asc' },
+        },
+        lineupSlots: {
+          orderBy: { startTime: 'asc' },
+          include: {
+            dj: {
+              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true },
+            },
+          },
+        },
+        organizer: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+      },
+    });
+
+    ok(res, { items: rows.map(mapEvent) });
+  } catch (error) {
+    console.error('BFF web dj events error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1484,18 +1685,24 @@ router.get('/checkins', optionalAuth, async (req: Request, res: Response): Promi
     const limit = normalizeLimit(req.query.limit, 20, 100);
     const skip = (page - 1) * limit;
     const type = typeof req.query.type === 'string' ? req.query.type : undefined;
+    const requestedUserId = typeof req.query.userId === 'string' ? req.query.userId.trim() : '';
+    const targetUserId = requestedUserId || userId;
+    const djId = typeof req.query.djId === 'string' ? req.query.djId.trim() : '';
+    const eventId = typeof req.query.eventId === 'string' ? req.query.eventId.trim() : '';
 
-    const where: any = { userId };
+    const where: any = { userId: targetUserId };
     if (type === 'event' || type === 'dj') {
       where.type = type;
     }
+    if (djId) where.djId = djId;
+    if (eventId) where.eventId = eventId;
 
     const [rows, total] = await Promise.all([
       prisma.checkin.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ attendedAt: 'desc' }, { createdAt: 'desc' }],
         include: {
           event: {
             select: {
@@ -1504,6 +1711,8 @@ router.get('/checkins', optionalAuth, async (req: Request, res: Response): Promi
               coverImageUrl: true,
               city: true,
               country: true,
+              startDate: true,
+              endDate: true,
             },
           },
           dj: {
@@ -1531,6 +1740,7 @@ router.get('/checkins', optionalAuth, async (req: Request, res: Response): Promi
           note: row.note,
           photoUrl: row.photoUrl,
           rating: row.rating,
+          attendedAt: row.attendedAt,
           createdAt: row.createdAt,
           event: row.event,
           dj: row.dj,
@@ -1563,6 +1773,10 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
 
     const eventId = typeof body.eventId === 'string' ? body.eventId : null;
     const djId = typeof body.djId === 'string' ? body.djId : null;
+    const attendedAt =
+      typeof body.attendedAt === 'string' && body.attendedAt.trim().length > 0
+        ? new Date(body.attendedAt)
+        : null;
 
     if (type === 'event' && !eventId) {
       res.status(400).json({ error: 'eventId is required for event checkin' });
@@ -1572,16 +1786,22 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
       res.status(400).json({ error: 'djId is required for dj checkin' });
       return;
     }
+    if (attendedAt && Number.isNaN(attendedAt.getTime())) {
+      res.status(400).json({ error: 'attendedAt must be a valid ISO datetime' });
+      return;
+    }
 
     const created = await prisma.checkin.create({
       data: {
         userId,
         type,
-        eventId: type === 'event' ? eventId : null,
+        // Allow DJ checkins to optionally bind to an event for timeline grouping.
+        eventId,
         djId: type === 'dj' ? djId : null,
         note: typeof body.note === 'string' ? body.note : null,
         photoUrl: typeof body.photoUrl === 'string' ? body.photoUrl : null,
         rating: typeof body.rating === 'number' ? body.rating : null,
+        attendedAt: attendedAt ?? new Date(),
       },
       include: {
         event: {
@@ -1591,6 +1811,8 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
             coverImageUrl: true,
             city: true,
             country: true,
+            startDate: true,
+            endDate: true,
           },
         },
         dj: {
@@ -1637,6 +1859,402 @@ router.delete('/checkins/:id', optionalAuth, async (req: Request, res: Response)
     ok(res, { success: true });
   } catch (error) {
     console.error('BFF web delete checkin error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/rating-events', optionalAuth, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const rows = await prisma.ratingEvent.findMany({
+      orderBy: [{ createdAt: 'desc' }],
+      include: {
+        createdBy: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+        units: {
+          orderBy: [{ createdAt: 'asc' }],
+          include: {
+            comments: {
+              select: { score: true },
+            },
+            createdBy: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true },
+            },
+          },
+        },
+      },
+    });
+
+    ok(res, { items: rows.map(mapRatingEvent) });
+  } catch (error) {
+    console.error('BFF web rating events error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/rating-events/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const eventId = req.params.id as string;
+    const row = await prisma.ratingEvent.findUnique({
+      where: { id: eventId },
+      include: {
+        createdBy: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+        units: {
+          orderBy: [{ createdAt: 'asc' }],
+          include: {
+            comments: {
+              select: { score: true },
+            },
+            createdBy: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!row) {
+      res.status(404).json({ error: 'Rating event not found' });
+      return;
+    }
+
+    ok(res, mapRatingEvent(row));
+  } catch (error) {
+    console.error('BFF web rating event detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/rating-events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const body = req.body as Record<string, unknown>;
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    const created = await prisma.ratingEvent.create({
+      data: {
+        createdById: userId,
+        name,
+        description: typeof body.description === 'string' ? body.description.trim() || null : null,
+        imageUrl: typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : null,
+      },
+      include: {
+        createdBy: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+        units: {
+          orderBy: [{ createdAt: 'asc' }],
+          include: {
+            comments: {
+              select: { score: true },
+            },
+            createdBy: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true },
+            },
+          },
+        },
+      },
+    });
+
+    ok(res, mapRatingEvent(created));
+  } catch (error) {
+    console.error('BFF web create rating event error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/rating-events/:id/units', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const eventId = req.params.id as string;
+    const event = await prisma.ratingEvent.findUnique({
+      where: { id: eventId },
+      select: { id: true },
+    });
+    if (!event) {
+      res.status(404).json({ error: 'Rating event not found' });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    const created = await prisma.ratingUnit.create({
+      data: {
+        eventId,
+        createdById: userId,
+        name,
+        description: typeof body.description === 'string' ? body.description.trim() || null : null,
+        imageUrl: typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : null,
+      },
+      include: {
+        comments: {
+          select: { score: true },
+        },
+        createdBy: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+      },
+    });
+
+    ok(res, mapRatingUnit(created));
+  } catch (error) {
+    console.error('BFF web create rating unit error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/rating-events/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const eventId = req.params.id as string;
+    const existing = await prisma.ratingEvent.findUnique({
+      where: { id: eventId },
+      select: { id: true, createdById: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Rating event not found' });
+      return;
+    }
+    if (authReq.user?.role !== 'admin' && existing.createdById !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const updated = await prisma.ratingEvent.update({
+      where: { id: eventId },
+      data: {
+        name: typeof body.name === 'string' ? body.name.trim() : undefined,
+        description: typeof body.description === 'string' ? body.description.trim() || null : undefined,
+        imageUrl: typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : undefined,
+      },
+      include: {
+        createdBy: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+        units: {
+          orderBy: [{ createdAt: 'asc' }],
+          include: {
+            comments: {
+              select: { score: true },
+            },
+            createdBy: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true },
+            },
+          },
+        },
+      },
+    });
+
+    ok(res, mapRatingEvent(updated));
+  } catch (error) {
+    console.error('BFF web update rating event error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/rating-events/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const eventId = req.params.id as string;
+    const existing = await prisma.ratingEvent.findUnique({
+      where: { id: eventId },
+      select: { id: true, createdById: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Rating event not found' });
+      return;
+    }
+    if (authReq.user?.role !== 'admin' && existing.createdById !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    await prisma.ratingEvent.delete({ where: { id: eventId } });
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF web delete rating event error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/rating-units/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const unitId = req.params.id as string;
+    const row = await prisma.ratingUnit.findUnique({
+      where: { id: unitId },
+      include: {
+        event: {
+          select: { id: true, name: true, description: true, imageUrl: true },
+        },
+        comments: {
+          orderBy: [{ createdAt: 'desc' }],
+          include: {
+            user: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true },
+            },
+          },
+        },
+        createdBy: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+      },
+    });
+
+    if (!row) {
+      res.status(404).json({ error: 'Rating unit not found' });
+      return;
+    }
+
+    ok(res, {
+      ...mapRatingUnit(row, true),
+      event: row.event,
+    });
+  } catch (error) {
+    console.error('BFF web rating unit detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/rating-units/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const unitId = req.params.id as string;
+    const existing = await prisma.ratingUnit.findUnique({
+      where: { id: unitId },
+      select: { id: true, createdById: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Rating unit not found' });
+      return;
+    }
+    if (authReq.user?.role !== 'admin' && existing.createdById !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const updated = await prisma.ratingUnit.update({
+      where: { id: unitId },
+      data: {
+        name: typeof body.name === 'string' ? body.name.trim() : undefined,
+        description: typeof body.description === 'string' ? body.description.trim() || null : undefined,
+        imageUrl: typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : undefined,
+      },
+      include: {
+        comments: {
+          select: { score: true },
+        },
+        createdBy: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+      },
+    });
+
+    ok(res, mapRatingUnit(updated));
+  } catch (error) {
+    console.error('BFF web update rating unit error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/rating-units/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const unitId = req.params.id as string;
+    const existing = await prisma.ratingUnit.findUnique({
+      where: { id: unitId },
+      select: { id: true, createdById: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Rating unit not found' });
+      return;
+    }
+    if (authReq.user?.role !== 'admin' && existing.createdById !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    await prisma.ratingUnit.delete({ where: { id: unitId } });
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF web delete rating unit error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/rating-units/:id/comments', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const unitId = req.params.id as string;
+    const body = req.body as Record<string, unknown>;
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+    const score = typeof body.score === 'number' ? Math.round(body.score) : NaN;
+
+    if (!Number.isFinite(score) || score < 1 || score > 10) {
+      res.status(400).json({ error: '请先评分' });
+      return;
+    }
+    if (!content) {
+      res.status(400).json({ error: 'content is required' });
+      return;
+    }
+
+    const unit = await prisma.ratingUnit.findUnique({
+      where: { id: unitId },
+      select: { id: true },
+    });
+    if (!unit) {
+      res.status(404).json({ error: 'Rating unit not found' });
+      return;
+    }
+
+    const comment = await prisma.ratingComment.create({
+      data: {
+        unitId,
+        userId,
+        score,
+        content,
+      },
+      include: {
+        user: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+      },
+    });
+
+    ok(res, mapRatingComment(comment));
+  } catch (error) {
+    console.error('BFF web create rating comment error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1793,7 +2411,7 @@ router.get('/publishes/me', optionalAuth, async (req: Request, res: Response): P
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
 
-    const [djSets, events] = await Promise.all([
+    const [djSets, events, ratingEvents, ratingUnits] = await Promise.all([
       prisma.dJSet.findMany({
         where: { uploadedById: userId },
         include: {
@@ -1822,6 +2440,24 @@ router.get('/publishes/me', optionalAuth, async (req: Request, res: Response): P
         },
         orderBy: { createdAt: 'desc' },
       }),
+      prisma.ratingEvent.findMany({
+        where: { createdById: userId },
+        include: {
+          units: {
+            select: { id: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.ratingUnit.findMany({
+        where: { createdById: userId },
+        include: {
+          event: {
+            select: { id: true, name: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
     ]);
 
     ok(res, {
@@ -1842,6 +2478,23 @@ router.get('/publishes/me', optionalAuth, async (req: Request, res: Response): P
         startDate: event.startDate,
         createdAt: event.createdAt,
         lineupSlotCount: event.lineupSlots.length,
+      })),
+      ratingEvents: ratingEvents.map((event) => ({
+        id: event.id,
+        name: event.name,
+        imageUrl: event.imageUrl,
+        description: event.description,
+        unitCount: event.units.length,
+        createdAt: event.createdAt,
+      })),
+      ratingUnits: ratingUnits.map((unit) => ({
+        id: unit.id,
+        eventId: unit.eventId,
+        eventName: unit.event?.name || '未知事件',
+        name: unit.name,
+        imageUrl: unit.imageUrl,
+        description: unit.description,
+        createdAt: unit.createdAt,
       })),
     });
   } catch (error) {

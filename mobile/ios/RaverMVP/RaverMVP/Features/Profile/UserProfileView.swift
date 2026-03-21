@@ -5,6 +5,8 @@ struct UserProfileView: View {
     @StateObject private var viewModel: UserProfileViewModel
     @State private var pushedConversation: Conversation?
     @State private var selectedFollowListKind: FollowListKind?
+    @State private var showAllCheckins = false
+    @State private var selectedPostForDetail: Post?
 
     init(userID: String) {
         _viewModel = StateObject(wrappedValue: UserProfileViewModel(userID: userID, service: AppEnvironment.makeService()))
@@ -61,6 +63,14 @@ struct UserProfileView: View {
                         }
                     }
 
+                    ProfileRecentCheckinsCard(
+                        title: "Ta 的近期打卡",
+                        checkins: viewModel.recentCheckins,
+                        emptyText: "Ta 还没有公开的打卡记录。"
+                    ) {
+                        showAllCheckins = true
+                    }
+
                     if viewModel.posts.isEmpty {
                         ContentUnavailableView(
                             "Ta 还没有发布动态",
@@ -69,27 +79,26 @@ struct UserProfileView: View {
                         )
                     } else {
                         ForEach(viewModel.posts) { post in
-                            NavigationLink {
-                                PostDetailView(post: post, service: appState.service)
-                            } label: {
-                                PostCardView(
-                                    post: post,
-                                    currentUserId: appState.session?.user.id,
-                                    showsFollowButton: false,
-                                    onLikeTap: {
-                                        Task { await viewModel.toggleLike(post: post) }
-                                    },
-                                    onRepostTap: {
-                                        Task { await viewModel.toggleRepost(post: post) }
-                                    },
-                                    onFollowTap: nil,
-                                    onMessageTap: nil,
-                                    onAuthorTap: nil,
-                                    onSquadTap: nil
-                                )
-                                .foregroundStyle(RaverTheme.primaryText)
+                            PostCardView(
+                                post: post,
+                                currentUserId: appState.session?.user.id,
+                                showsFollowButton: false,
+                                onLikeTap: {
+                                    Task { await viewModel.toggleLike(post: post) }
+                                },
+                                onRepostTap: {
+                                    Task { await viewModel.toggleRepost(post: post) }
+                                },
+                                onFollowTap: nil,
+                                onMessageTap: nil,
+                                onAuthorTap: nil,
+                                onSquadTap: nil
+                            )
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selectedPostForDetail = post
                             }
-                            .buttonStyle(.plain)
                             .onAppear {
                                 Task { await viewModel.loadMoreIfNeeded(currentPost: post) }
                             }
@@ -120,6 +129,20 @@ struct UserProfileView: View {
         .navigationDestination(item: $selectedFollowListKind) { kind in
             FollowListView(userID: viewModel.profile?.id ?? "", kind: kind)
         }
+        .fullScreenCover(isPresented: $showAllCheckins) {
+            NavigationStack {
+                MyCheckinsView(
+                    targetUserID: viewModel.profile?.id,
+                    title: "\(viewModel.profile?.displayName ?? "Ta")的打卡"
+                )
+            }
+        }
+        .fullScreenCover(item: $selectedPostForDetail) { post in
+            NavigationStack {
+                PostDetailView(post: post, service: appState.service)
+                    .environmentObject(appState)
+            }
+        }
         .task {
             await viewModel.load()
         }
@@ -139,5 +162,4 @@ struct UserProfileView: View {
     private func isCurrentUser(_ profile: UserProfile) -> Bool {
         profile.id == appState.session?.user.id
     }
-
 }

@@ -1,7 +1,7 @@
 import Foundation
 
 protocol WebFeatureService {
-    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?) async throws -> EventListPage
+    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage
     func fetchEvent(id: String) async throws -> WebEvent
     func fetchMyEvents() async throws -> [WebEvent]
     func createEvent(input: CreateEventInput) async throws -> WebEvent
@@ -12,6 +12,7 @@ protocol WebFeatureService {
     func fetchDJs(page: Int, limit: Int, search: String?, sortBy: String) async throws -> DJListPage
     func fetchDJ(id: String) async throws -> WebDJ
     func fetchDJSets(djID: String) async throws -> [WebDJSet]
+    func fetchDJEvents(djID: String) async throws -> [WebEvent]
     func fetchDJFollowStatus(djID: String) async throws -> Bool
     func toggleDJFollow(djID: String, shouldFollow: Bool) async throws -> WebDJ
 
@@ -36,8 +37,21 @@ protocol WebFeatureService {
     func deleteSetComment(commentID: String) async throws
 
     func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage
+    func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage
+    func fetchMyDJCheckinCount(djID: String) async throws -> Int
     func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin
     func deleteCheckin(id: String) async throws
+
+    func fetchRatingEvents() async throws -> [WebRatingEvent]
+    func fetchRatingEvent(id: String) async throws -> WebRatingEvent
+    func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent
+    func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent
+    func deleteRatingEvent(id: String) async throws
+    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit
+    func updateRatingUnit(id: String, input: UpdateRatingUnitInput) async throws -> WebRatingUnit
+    func deleteRatingUnit(id: String) async throws
+    func fetchRatingUnit(id: String) async throws -> WebRatingUnit
+    func addRatingComment(unitID: String, input: CreateRatingCommentInput) async throws -> WebRatingComment
 
     func fetchLearnGenres() async throws -> [LearnGenreNode]
     func fetchRankingBoards() async throws -> [RankingBoard]

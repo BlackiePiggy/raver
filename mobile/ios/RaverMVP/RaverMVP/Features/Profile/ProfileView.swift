@@ -7,9 +7,12 @@ struct ProfileView: View {
     @State private var showPublishEvent = false
     @State private var showUploadSet = false
     @State private var showSettings = false
+    @State private var showAvatarFullscreen = false
+    @State private var showMyCheckins = false
     @State private var selectedProfileDestination: ProfileDestination?
     @State private var selectedFollowListKind: FollowListKind?
     @State private var selectedUserForProfile: UserSummary?
+    @State private var selectedPostForDetail: Post?
 
     private enum ProfileDestination: Hashable, Identifiable {
         case myCheckins
@@ -37,6 +40,9 @@ struct ProfileView: View {
                         VStack(spacing: 14) {
                             ProfileHeaderCard(
                                 profile: profile,
+                                onAvatarTap: {
+                                    showAvatarFullscreen = true
+                                },
                                 onFollowersTap: {
                                     selectedFollowListKind = .followers
                                 },
@@ -47,6 +53,14 @@ struct ProfileView: View {
                                     selectedFollowListKind = .friends
                                 }
                             )
+
+                            ProfileRecentCheckinsCard(
+                                title: "我的近期打卡",
+                                checkins: viewModel.recentCheckins,
+                                emptyText: "去发现页完成活动或 DJ 打卡，记录会显示在这里。"
+                            ) {
+                                showMyCheckins = true
+                            }
 
                             profileQuickActions
 
@@ -73,6 +87,15 @@ struct ProfileView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if viewModel.profile != nil {
+                        Button {
+                            showEditProfile = true
+                        } label: {
+                            Label("编辑", systemImage: "square.and.pencil")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     if viewModel.profile != nil {
                         Button {
@@ -92,12 +115,23 @@ struct ProfileView: View {
             .navigationDestination(item: $selectedUserForProfile) { user in
                 UserProfileView(userID: user.id)
             }
+            .fullScreenCover(item: $selectedPostForDetail) { post in
+                NavigationStack {
+                    PostDetailView(post: post, service: appState.service)
+                        .environmentObject(appState)
+                }
+            }
             .navigationDestination(item: $selectedProfileDestination) { destination in
                 switch destination {
                 case .myCheckins:
-                    MyCheckinsView()
+                    EmptyView()
                 case .myPublishes:
                     MyPublishesView()
+                }
+            }
+            .fullScreenCover(isPresented: $showMyCheckins) {
+                NavigationStack {
+                    MyCheckinsView()
                 }
             }
             .navigationDestination(isPresented: $showEditProfile) {
@@ -118,6 +152,13 @@ struct ProfileView: View {
             .navigationDestination(isPresented: $showSettings) {
                 SettingsView()
             }
+            .fullScreenCover(isPresented: $showAvatarFullscreen) {
+                if let profile = viewModel.profile {
+                    AvatarFullscreenView(profile: profile) {
+                        showAvatarFullscreen = false
+                    }
+                }
+            }
             .alert("提示", isPresented: Binding(
                 get: { viewModel.error != nil },
                 set: { if !$0 { viewModel.error = nil } }
@@ -135,13 +176,6 @@ struct ProfileView: View {
                 Text("快捷入口")
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
-
-                Button {
-                    selectedProfileDestination = .myCheckins
-                } label: {
-                    quickActionRow(title: "我的打卡", icon: "checkmark.seal")
-                }
-                .buttonStyle(.plain)
 
                 Button {
                     selectedProfileDestination = .myPublishes
@@ -176,7 +210,9 @@ struct ProfileView: View {
                 .font(.caption)
                 .foregroundStyle(RaverTheme.secondaryText)
         }
-        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -236,6 +272,10 @@ struct ProfileView: View {
                         onSquadTap: nil
                     )
                 }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedPostForDetail = post
+                }
             }
         }
     }
@@ -243,6 +283,7 @@ struct ProfileView: View {
 
 struct ProfileHeaderCard<Actions: View>: View {
     let profile: UserProfile
+    let onAvatarTap: (() -> Void)?
     let onFollowersTap: (() -> Void)?
     let onFollowingTap: (() -> Void)?
     let onFriendsTap: (() -> Void)?
@@ -250,12 +291,14 @@ struct ProfileHeaderCard<Actions: View>: View {
 
     init(
         profile: UserProfile,
+        onAvatarTap: (() -> Void)? = nil,
         onFollowersTap: (() -> Void)? = nil,
         onFollowingTap: (() -> Void)? = nil,
         onFriendsTap: (() -> Void)? = nil,
         @ViewBuilder actions: @escaping () -> Actions = { EmptyView() }
     ) {
         self.profile = profile
+        self.onAvatarTap = onAvatarTap
         self.onFollowersTap = onFollowersTap
         self.onFollowingTap = onFollowingTap
         self.onFriendsTap = onFriendsTap
@@ -296,17 +339,14 @@ struct ProfileHeaderCard<Actions: View>: View {
 
     @ViewBuilder
     private var avatarView: some View {
-        let asset = AppConfig.resolvedUserAvatarAssetName(
-            userID: profile.id,
-            username: profile.username,
-            avatarURL: profile.avatarURL
-        )
-        Image(asset)
-            .resizable()
-            .scaledToFill()
-            .frame(width: 84, height: 84)
-            .background(RaverTheme.card)
-            .clipShape(Circle())
+        if let onAvatarTap {
+            Button(action: onAvatarTap) {
+                ProfileAvatarImage(profile: profile, size: 84)
+            }
+            .buttonStyle(.plain)
+        } else {
+            ProfileAvatarImage(profile: profile, size: 84)
+        }
     }
 
     @ViewBuilder
@@ -400,5 +440,217 @@ struct ProfileHeaderCard<Actions: View>: View {
                 .font(.caption)
                 .foregroundStyle(RaverTheme.secondaryText)
         }
+    }
+}
+
+struct ProfileRecentCheckinsCard: View {
+    let title: String
+    let checkins: [WebCheckin]
+    let emptyText: String
+    let onShowAll: () -> Void
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center, spacing: 8) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Spacer()
+                    Button("查看全部") {
+                        onShowAll()
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.accent)
+                    .buttonStyle(.plain)
+                }
+
+                if checkins.isEmpty {
+                    Text(emptyText)
+                        .font(.subheadline)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .padding(.vertical, 8)
+                } else {
+                    ForEach(Array(checkins.prefix(3))) { item in
+                        checkinPreviewRow(item)
+                    }
+                }
+            }
+        }
+    }
+
+    private func checkinPreviewRow(_ item: WebCheckin) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: item.type == "event" ? "calendar.circle.fill" : "music.mic.circle.fill")
+                .font(.title3)
+                .foregroundStyle(item.type == "event" ? Color(red: 0.88, green: 0.44, blue: 0.20) : Color(red: 0.26, green: 0.55, blue: 0.95))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(checkinTitle(item))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+
+                Text(checkinSubtitle(item))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func checkinTitle(_ item: WebCheckin) -> String {
+        if item.type == "event" {
+            return item.event?.name ?? "活动打卡"
+        }
+        return item.dj?.name ?? "DJ 打卡"
+    }
+
+    private func checkinSubtitle(_ item: WebCheckin) -> String {
+        let location: String = {
+            if let event = item.event {
+                let text = [event.city, event.country]
+                    .compactMap { value in
+                        guard let value, !value.isEmpty else { return nil }
+                        return value
+                    }
+                    .joined(separator: " · ")
+                return text.isEmpty ? "现场记录" : text
+            }
+            if let country = item.dj?.country, !country.isEmpty {
+                return country
+            }
+            return "现场记录"
+        }()
+        return "\(item.attendedAt.formatted(date: .abbreviated, time: .omitted)) · \(location)"
+    }
+}
+
+private struct ProfileAvatarImage: View {
+    let profile: UserProfile
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let resolved = AppConfig.resolvedURLString(profile.avatarURL),
+               let url = URL(string: resolved),
+               resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Circle().fill(RaverTheme.card)
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure:
+                        fallbackAvatar
+                    @unknown default:
+                        fallbackAvatar
+                    }
+                }
+            } else {
+                fallbackAvatar
+            }
+        }
+        .frame(width: size, height: size)
+        .background(RaverTheme.card)
+        .clipShape(Circle())
+    }
+
+    private var fallbackAvatar: some View {
+        let asset = AppConfig.resolvedUserAvatarAssetName(
+            userID: profile.id,
+            username: profile.username,
+            avatarURL: profile.avatarURL
+        )
+        return Image(asset)
+            .resizable()
+            .scaledToFill()
+    }
+}
+
+private struct AvatarFullscreenView: View {
+    let profile: UserProfile
+    let onClose: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                let size = min(proxy.size.width - 48, proxy.size.height * 0.62)
+                VStack {
+                    Spacer()
+                    ProfileAvatarSquareImage(profile: profile, size: size)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                        )
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button {
+                            onClose()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(Color.white.opacity(0.92))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.trailing, 20)
+                        .padding(.top, 14)
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+}
+
+private struct ProfileAvatarSquareImage: View {
+    let profile: UserProfile
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let resolved = AppConfig.resolvedURLString(profile.avatarURL),
+               let url = URL(string: resolved),
+               resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(RaverTheme.card)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        fallbackAvatar
+                    @unknown default:
+                        fallbackAvatar
+                    }
+                }
+            } else {
+                fallbackAvatar
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var fallbackAvatar: some View {
+        let asset = AppConfig.resolvedUserAvatarAssetName(
+            userID: profile.id,
+            username: profile.username,
+            avatarURL: profile.avatarURL
+        )
+        return Image(asset)
+            .resizable()
+            .scaledToFill()
     }
 }

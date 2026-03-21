@@ -72,8 +72,10 @@ struct NotificationsView: View {
             .navigationDestination(item: $selectedUser) { user in
                 UserProfileView(userID: user.id)
             }
-            .navigationDestination(item: $selectedSquad) { squad in
-                SquadProfileView(squadID: squad.id)
+            .fullScreenCover(item: $selectedSquad) { squad in
+                NavigationStack {
+                    SquadProfileView(squadID: squad.id)
+                }
             }
             .alert("通知加载失败", isPresented: Binding(
                 get: { viewModel.error != nil },
@@ -110,18 +112,26 @@ struct NotificationsView: View {
     @ViewBuilder
     private func notificationLeadingAvatar(for item: AppNotification) -> some View {
         if let actor = item.actor {
-            Image(
-                AppConfig.resolvedUserAvatarAssetName(
-                    userID: actor.id,
-                    username: actor.username,
-                    avatarURL: actor.avatarURL
-                )
-            )
-            .resizable()
-            .scaledToFill()
-            .frame(width: 30, height: 30)
-            .background(RaverTheme.cardBorder)
-            .clipShape(Circle())
+            if let resolved = AppConfig.resolvedURLString(actor.avatarURL),
+               let remoteURL = URL(string: resolved),
+               resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+                AsyncImage(url: remoteURL) { phase in
+                    switch phase {
+                    case .empty:
+                        Circle().fill(RaverTheme.cardBorder)
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure:
+                        notificationLeadingAvatarFallback(actor)
+                    @unknown default:
+                        Circle().fill(RaverTheme.cardBorder)
+                    }
+                }
+                .frame(width: 30, height: 30)
+                .clipShape(Circle())
+            } else {
+                notificationLeadingAvatarFallback(actor)
+            }
         } else {
             Image(systemName: item.type.iconName)
                 .font(.subheadline.bold())
@@ -143,5 +153,20 @@ struct NotificationsView: View {
         case .squadInvite:
             return .green
         }
+    }
+
+    private func notificationLeadingAvatarFallback(_ actor: UserSummary) -> some View {
+        Image(
+            AppConfig.resolvedUserAvatarAssetName(
+                userID: actor.id,
+                username: actor.username,
+                avatarURL: actor.avatarURL
+            )
+        )
+        .resizable()
+        .scaledToFill()
+        .frame(width: 30, height: 30)
+        .background(RaverTheme.cardBorder)
+        .clipShape(Circle())
     }
 }

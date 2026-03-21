@@ -146,6 +146,7 @@ struct SquadSummary: Codable, Identifiable, Hashable {
     var name: String
     var description: String?
     var avatarURL: String?
+    var bannerURL: String?
     var isPublic: Bool
     var memberCount: Int
     var isMember: Bool
@@ -218,7 +219,9 @@ struct UpdateSquadMySettingsInput: Codable {
 struct UpdateSquadInfoInput: Codable {
     var name: String
     var description: String
+    var isPublic: Bool?
     var avatarURL: String?
+    var bannerURL: String?
     var notice: String
     var qrCodeURL: String?
 }
@@ -226,6 +229,8 @@ struct UpdateSquadInfoInput: Codable {
 struct CreateSquadInput: Codable {
     var name: String?
     var description: String?
+    var isPublic: Bool
+    var bannerURL: String?
     var memberIds: [String]
 }
 
@@ -281,4 +286,48 @@ struct NotificationUnreadCount: Codable {
     var likes: Int
     var comments: Int
     var squadInvites: Int
+}
+
+extension Post {
+    static let raverNewsMarker = "#RAVER_NEWS"
+
+    var isRaverNews: Bool {
+        content
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .contains(Self.raverNewsMarker)
+    }
+
+    var raverNewsTitle: String {
+        raverNewsValue(for: ["标题", "title"]) ?? "未命名资讯"
+    }
+
+    var raverNewsSource: String {
+        raverNewsValue(for: ["来源", "source"]) ?? "社区投稿"
+    }
+
+    var raverNewsSummary: String {
+        raverNewsValue(for: ["摘要", "summary"]) ?? "暂无摘要"
+    }
+
+    private func raverNewsValue(for keys: [String]) -> String? {
+        let lines = content
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        for line in lines {
+            for key in keys {
+                let prefixes = ["\(key)：", "\(key):", "\(key.uppercased())：", "\(key.uppercased()):"]
+                if let prefix = prefixes.first(where: { line.hasPrefix($0) }) {
+                    let value = String(line.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !value.isEmpty {
+                        return value
+                    }
+                }
+            }
+        }
+
+        return nil
+    }
 }

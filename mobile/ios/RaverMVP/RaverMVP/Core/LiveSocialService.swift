@@ -139,6 +139,10 @@ final class LiveSocialService: SocialService {
         try await request(path: "/v1/squads/recommended", method: "GET")
     }
 
+    func fetchMySquads() async throws -> [SquadSummary] {
+        try await request(path: "/v1/squads/mine", method: "GET")
+    }
+
     func fetchSquadProfile(squadID: String) async throws -> SquadProfile {
         try await request(path: "/v1/squads/\(squadID)/profile", method: "GET")
     }

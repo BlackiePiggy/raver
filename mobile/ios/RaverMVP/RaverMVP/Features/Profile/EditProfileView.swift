@@ -19,6 +19,7 @@ struct EditProfileView: View {
     @State private var error: String?
 
     private let currentAvatarAsset: String
+    private let currentAvatarURL: String?
 
     init(profile: UserProfile, onSaved: @escaping (UserProfile) -> Void) {
         self.service = AppEnvironment.makeService()
@@ -28,6 +29,7 @@ struct EditProfileView: View {
             username: profile.username,
             avatarURL: profile.avatarURL
         )
+        self.currentAvatarURL = profile.avatarURL
         _displayName = State(initialValue: profile.displayName)
         _bio = State(initialValue: profile.bio)
         _tagsText = State(initialValue: profile.tags.joined(separator: ", "))
@@ -130,6 +132,31 @@ struct EditProfileView: View {
                 .scaledToFill()
                 .frame(width: 88, height: 88)
                 .clipShape(Circle())
+        } else if let resolved = AppConfig.resolvedURLString(currentAvatarURL),
+                  let remoteURL = URL(string: resolved),
+                  resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.card)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    Image(currentAvatarAsset)
+                        .resizable()
+                        .scaledToFill()
+                        .background(RaverTheme.card)
+                @unknown default:
+                    Image(currentAvatarAsset)
+                        .resizable()
+                        .scaledToFill()
+                        .background(RaverTheme.card)
+                }
+            }
+            .frame(width: 88, height: 88)
+            .clipShape(Circle())
         } else {
             Image(currentAvatarAsset)
                 .resizable()

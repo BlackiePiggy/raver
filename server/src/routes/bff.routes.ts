@@ -497,6 +497,7 @@ router.get('/', (_req: Request, res: Response) => {
       notificationsUnreadCount: 'GET /v1/notifications/unread-count',
       notificationsRead: 'POST /v1/notifications/read',
       squadsRecommended: 'GET /v1/squads/recommended',
+      squadsMine: 'GET /v1/squads/mine',
       squadProfile: 'GET /v1/squads/:id/profile',
       squadJoin: 'POST /v1/squads/:id/join',
       squadCreate: 'POST /v1/squads',
@@ -1475,7 +1476,12 @@ router.get('/squads/recommended', optionalAuth, async (req: Request, res: Respon
 
     const limit = normalizeLimit(req.query.limit, 20, 50);
     const squads = await prisma.squad.findMany({
-      where: { isPublic: true },
+      where: {
+        OR: [
+          { isPublic: true },
+          { members: { some: { userId } } },
+        ],
+      },
       include: {
         _count: {
           select: {
@@ -1511,6 +1517,7 @@ router.get('/squads/recommended', optionalAuth, async (req: Request, res: Respon
         name: squad.name,
         description: squad.description,
         avatarURL: squad.avatarUrl,
+        bannerURL: squad.bannerUrl,
         isPublic: squad.isPublic,
         memberCount: squad._count.members,
         isMember: memberSet.has(squad.id),
@@ -1520,6 +1527,55 @@ router.get('/squads/recommended', optionalAuth, async (req: Request, res: Respon
     );
   } catch (error) {
     console.error('BFF recommended squads error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/squads/mine', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const squads = await prisma.squad.findMany({
+      where: {
+        members: {
+          some: { userId },
+        },
+      },
+      include: {
+        _count: {
+          select: {
+            members: true,
+          },
+        },
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            content: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    res.json(
+      squads.map((squad) => ({
+        id: squad.id,
+        name: squad.name,
+        description: squad.description,
+        avatarURL: squad.avatarUrl,
+        bannerURL: squad.bannerUrl,
+        isPublic: squad.isPublic,
+        memberCount: squad._count.members,
+        isMember: true,
+        lastMessage: squad.messages[0]?.content ?? null,
+        updatedAt: squad.messages[0]?.createdAt ?? squad.updatedAt,
+      }))
+    );
+  } catch (error) {
+    console.error('BFF my squads error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1750,6 +1806,8 @@ router.post('/squads', optionalAuth, async (req: Request, res: Response): Promis
     const body = req.body as {
       name?: unknown;
       description?: unknown;
+      isPublic?: unknown;
+      bannerURL?: unknown;
       memberIds?: unknown;
     };
 
@@ -1774,6 +1832,8 @@ router.post('/squads', optionalAuth, async (req: Request, res: Response): Promis
 
     const requestedName = typeof body.name === 'string' ? body.name.trim() : '';
     const requestedDescription = typeof body.description === 'string' ? body.description.trim() : '';
+    const requestedIsPublic = typeof body.isPublic === 'boolean' ? body.isPublic : false;
+    const requestedBannerURL = typeof body.bannerURL === 'string' ? body.bannerURL.trim() : '';
     const fallbackName = `${userId}+${Date.now()}创建的小队`;
     const finalName = requestedName || fallbackName;
 
@@ -1782,8 +1842,9 @@ router.post('/squads', optionalAuth, async (req: Request, res: Response): Promis
         data: {
           name: finalName,
           description: requestedDescription || null,
+          bannerUrl: requestedBannerURL || null,
           leaderId: userId,
-          isPublic: false,
+          isPublic: requestedIsPublic,
           maxMembers: 50,
         },
         select: {
@@ -1986,7 +2047,9 @@ router.patch('/squads/:id/manage', optionalAuth, async (req: Request, res: Respo
     const body = req.body as {
       name?: unknown;
       description?: unknown;
+      isPublic?: unknown;
       avatarURL?: unknown;
+      bannerURL?: unknown;
       notice?: unknown;
       qrCodeURL?: unknown;
     };
@@ -1994,7 +2057,9 @@ router.patch('/squads/:id/manage', optionalAuth, async (req: Request, res: Respo
     const data: {
       name?: string;
       description?: string | null;
+      isPublic?: boolean;
       avatarUrl?: string | null;
+      bannerUrl?: string | null;
       notice?: string | null;
       qrCodeUrl?: string | null;
     } = {};
@@ -2013,9 +2078,18 @@ router.patch('/squads/:id/manage', optionalAuth, async (req: Request, res: Respo
       data.description = trimmedDescription || null;
     }
 
+    if (typeof body.isPublic === 'boolean') {
+      data.isPublic = body.isPublic;
+    }
+
     if (typeof body.avatarURL === 'string') {
       const trimmedAvatar = body.avatarURL.trim();
       data.avatarUrl = trimmedAvatar || null;
+    }
+
+    if (typeof body.bannerURL === 'string') {
+      const trimmedBanner = body.bannerURL.trim();
+      data.bannerUrl = trimmedBanner || null;
     }
 
     if (typeof body.notice === 'string') {
@@ -2054,15 +2128,14 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
       squadId?: string;
     };
 
-    const trimmed = String(content || '').trim();
-    if (!trimmed) {
-      res.status(400).json({ error: 'content is required' });
-      return;
-    }
-
     const normalizedImages = Array.isArray(images)
       ? images.filter((url): url is string => typeof url === 'string' && !!url.trim())
       : [];
+    const trimmed = String(content || '').trim();
+    if (!trimmed && normalizedImages.length === 0) {
+      res.status(400).json({ error: 'content or images is required' });
+      return;
+    }
 
     let linkedSquadId: string | null = null;
     if (typeof squadId === 'string' && squadId.trim()) {

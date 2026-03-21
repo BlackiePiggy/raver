@@ -26,6 +26,7 @@ protocol SocialService {
     func fetchMessages(conversationID: String) async throws -> [ChatMessage]
     func sendMessage(conversationID: String, content: String) async throws -> ChatMessage
     func fetchRecommendedSquads() async throws -> [SquadSummary]
+    func fetchMySquads() async throws -> [SquadSummary]
     func fetchSquadProfile(squadID: String) async throws -> SquadProfile
     func joinSquad(squadID: String) async throws
     func createSquad(input: CreateSquadInput) async throws -> Conversation

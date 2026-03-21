@@ -156,7 +156,7 @@ export default function MyCheckinsPage() {
                         </div>
                         <p className="text-sm text-text-tertiary flex items-center gap-2">
                           <span>📅</span>
-                          {formatDate(checkin.createdAt)}
+                          {formatDate(checkin.attendedAt || checkin.createdAt)}
                         </p>
                       </div>
                     </div>

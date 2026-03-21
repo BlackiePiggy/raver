@@ -12,7 +12,7 @@ export const createCheckin = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { eventId, djId, type, note, photoUrl, rating } = req.body;
+    const { eventId, djId, type, note, photoUrl, rating, attendedAt } = req.body;
 
     if (!type || (type !== 'event' && type !== 'dj')) {
       res.status(400).json({ error: 'Invalid type. Must be "event" or "dj"' });
@@ -29,15 +29,24 @@ export const createCheckin = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    const parsedAttendedAt =
+      typeof attendedAt === 'string' && attendedAt.trim().length > 0 ? new Date(attendedAt) : null;
+
+    if (parsedAttendedAt && Number.isNaN(parsedAttendedAt.getTime())) {
+      res.status(400).json({ error: 'attendedAt must be a valid ISO datetime' });
+      return;
+    }
+
     const checkin = await prisma.checkin.create({
       data: {
         userId,
-        eventId: type === 'event' ? eventId : null,
+        eventId: eventId ?? null,
         djId: type === 'dj' ? djId : null,
         type,
         note,
         photoUrl,
         rating,
+        attendedAt: parsedAttendedAt ?? new Date(),
       },
       include: {
         user: {
@@ -98,7 +107,7 @@ export const getCheckins = async (req: AuthRequest, res: Response): Promise<void
         where,
         skip,
         take: limitNum,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ attendedAt: 'desc' }, { createdAt: 'desc' }],
         include: {
           user: {
             select: {
@@ -159,7 +168,7 @@ export const getMyCheckins = async (req: AuthRequest, res: Response): Promise<vo
         where,
         skip,
         take: limitNum,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ attendedAt: 'desc' }, { createdAt: 'desc' }],
         include: {
           event: true,
           dj: true,

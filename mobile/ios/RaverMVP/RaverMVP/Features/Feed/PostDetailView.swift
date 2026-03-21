@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PostDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
     @State private var post: Post
     private let service: SocialService
@@ -76,18 +77,7 @@ struct PostDetailView: View {
                                         selectedUserForProfile = comment.author
                                     } label: {
                                         HStack(alignment: .top, spacing: 10) {
-                                            Image(
-                                                AppConfig.resolvedUserAvatarAssetName(
-                                                    userID: comment.author.id,
-                                                    username: comment.author.username,
-                                                    avatarURL: comment.author.avatarURL
-                                                )
-                                            )
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(width: 30, height: 30)
-                                            .background(RaverTheme.card)
-                                            .clipShape(Circle())
+                                            commentAvatar(comment.author)
 
                                             VStack(alignment: .leading, spacing: 4) {
                                                 Text(comment.author.displayName)
@@ -119,7 +109,7 @@ struct PostDetailView: View {
                 TextField("说点什么...", text: $commentInput)
                     .padding(12)
                     .background(RaverTheme.card)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 1, style: .continuous))
 
                 Button("发送") {
                     Task {
@@ -140,7 +130,36 @@ struct PostDetailView: View {
             .background(RaverTheme.background)
         }
         .background(RaverTheme.background)
-        .navigationTitle("动态详情")
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top) {
+            HStack {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(Color.black.opacity(0.36))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Text("动态详情")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                Spacer()
+
+                Color.clear
+                    .frame(width: 34, height: 34)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 4)
+            .padding(.bottom, 6)
+        }
         .navigationDestination(item: $selectedUserForProfile) { user in
             UserProfileView(userID: user.id)
         }
@@ -167,5 +186,46 @@ struct PostDetailView: View {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    @ViewBuilder
+    private func commentAvatar(_ user: UserSummary) -> some View {
+        if let resolved = AppConfig.resolvedURLString(user.avatarURL),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.card)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    commentAvatarFallback(user)
+                @unknown default:
+                    commentAvatarFallback(user)
+                }
+            }
+            .frame(width: 30, height: 30)
+            .clipShape(Circle())
+        } else {
+            commentAvatarFallback(user)
+        }
+    }
+
+    private func commentAvatarFallback(_ user: UserSummary) -> some View {
+        Image(
+            AppConfig.resolvedUserAvatarAssetName(
+                userID: user.id,
+                username: user.username,
+                avatarURL: user.avatarURL
+            )
+        )
+        .resizable()
+        .scaledToFill()
+        .frame(width: 30, height: 30)
+        .background(RaverTheme.card)
+        .clipShape(Circle())
     }
 }

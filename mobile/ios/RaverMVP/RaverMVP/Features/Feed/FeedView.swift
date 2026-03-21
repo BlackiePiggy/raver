@@ -4,6 +4,7 @@ struct FeedView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: FeedViewModel
     @State private var selectedUserForProfile: UserSummary?
+    @State private var selectedPostForDetail: Post?
     @State private var showCompose = false
 
     init() {
@@ -27,29 +28,28 @@ struct FeedView: View {
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             ForEach(viewModel.posts) { post in
-                                NavigationLink {
-                                    PostDetailView(post: post, service: appState.service)
-                                } label: {
-                                    PostCardView(
-                                        post: post,
-                                        currentUserId: appState.session?.user.id,
-                                        showsFollowButton: false,
-                                        onLikeTap: {
-                                            Task { await viewModel.toggleLike(post: post) }
-                                        },
-                                        onRepostTap: {
-                                            Task { await viewModel.toggleRepost(post: post) }
-                                        },
-                                        onFollowTap: nil,
-                                        onMessageTap: nil,
-                                        onAuthorTap: {
-                                            selectedUserForProfile = post.author
-                                        },
-                                        onSquadTap: nil
-                                    )
-                                    .foregroundStyle(RaverTheme.primaryText)
+                                PostCardView(
+                                    post: post,
+                                    currentUserId: appState.session?.user.id,
+                                    showsFollowButton: false,
+                                    onLikeTap: {
+                                        Task { await viewModel.toggleLike(post: post) }
+                                    },
+                                    onRepostTap: {
+                                        Task { await viewModel.toggleRepost(post: post) }
+                                    },
+                                    onFollowTap: nil,
+                                    onMessageTap: nil,
+                                    onAuthorTap: {
+                                        selectedUserForProfile = post.author
+                                    },
+                                    onSquadTap: nil
+                                )
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    selectedPostForDetail = post
                                 }
-                                .buttonStyle(.plain)
                                 .onAppear {
                                     Task { await viewModel.loadMoreIfNeeded(currentPost: post) }
                                 }
@@ -100,6 +100,12 @@ struct FeedView: View {
             .sheet(isPresented: $showCompose) {
                 ComposePostView()
                     .environmentObject(appState)
+            }
+            .fullScreenCover(item: $selectedPostForDetail) { post in
+                NavigationStack {
+                    PostDetailView(post: post, service: appState.service)
+                        .environmentObject(appState)
+                }
             }
             .task {
                 await viewModel.load()

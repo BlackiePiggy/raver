@@ -23,14 +23,17 @@ final class ProfileViewModel: ObservableObject {
     @Published var recentPosts: [Post] = []
     @Published var likedItems: [ActivityPostItem] = []
     @Published var repostedItems: [ActivityPostItem] = []
+    @Published var recentCheckins: [WebCheckin] = []
     @Published var selectedSection: Section = .recent
     @Published var isLoading = false
     @Published var error: String?
 
     private let service: SocialService
+    private let webService: WebFeatureService
 
-    init(service: SocialService) {
+    init(service: SocialService, webService: WebFeatureService = AppEnvironment.makeWebService()) {
         self.service = service
+        self.webService = webService
     }
 
     func load() async {
@@ -47,9 +50,14 @@ final class ProfileViewModel: ObservableObject {
             async let repostsTask = service.fetchMyRepostHistory(cursor: nil)
 
             let (postsPage, likesPage, repostsPage) = try await (postsTask, likesTask, repostsTask)
-            recentPosts = postsPage.posts
+            recentPosts = postsPage.posts.filter { !$0.isRaverNews }
             likedItems = likesPage.items
             repostedItems = repostsPage.items
+            if let checkinPage = try? await webService.fetchUserCheckins(userID: profileValue.id, page: 1, limit: 6, type: nil) {
+                recentCheckins = checkinPage.items
+            } else {
+                recentCheckins = []
+            }
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -65,11 +73,14 @@ final class ProfileViewModel: ObservableObject {
         do {
             switch selectedSection {
             case .recent:
-                recentPosts = try await service.fetchPostsByUser(userID: profile.id, cursor: nil).posts
+                recentPosts = try await service.fetchPostsByUser(userID: profile.id, cursor: nil).posts.filter { !$0.isRaverNews }
             case .likes:
                 likedItems = try await service.fetchMyLikeHistory(cursor: nil).items
             case .reposts:
                 repostedItems = try await service.fetchMyRepostHistory(cursor: nil).items
+            }
+            if let checkinPage = try? await webService.fetchUserCheckins(userID: profile.id, page: 1, limit: 6, type: nil) {
+                recentCheckins = checkinPage.items
             }
             error = nil
         } catch {
