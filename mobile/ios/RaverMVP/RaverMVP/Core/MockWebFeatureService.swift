@@ -1179,6 +1179,158 @@ actor MockWebFeatureService: WebFeatureService {
         ]
     }
 
+    func fetchLearnLabels(
+        page: Int,
+        limit: Int,
+        sortBy: String,
+        order: String,
+        search: String?,
+        nation: String?,
+        genre: String?
+    ) async throws -> LearnLabelListPage {
+        var labels: [LearnLabel] = [
+            LearnLabel(
+                id: "label-monstercat",
+                name: "Monstercat",
+                slug: "monstercat",
+                profileUrl: "https://labelsbase.net/monstercat",
+                profileSlug: "monstercat",
+                avatarUrl: "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/labels/monstercat/avatar.jpg",
+                backgroundUrl: "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/labels/monstercat/background.jpg",
+                nation: "CA",
+                soundcloudFollowers: 1_070_718,
+                likes: 385,
+                genres: ["Dubstep", "House", "Dance"],
+                genresPreview: "Dubstep, House",
+                latestReleaseListing: "2 years ago",
+                locationPeriod: "Vancouver, Canada. 2011 – present",
+                introduction: "Empowering a creative and passionate community through innovation.",
+                generalContactEmail: "support@monstercat.com",
+                demoSubmissionUrl: "https://www.labelradar.com",
+                demoSubmissionDisplay: "www.labelradar.com",
+                facebookUrl: "https://facebook.com/monstercat",
+                soundcloudUrl: "https://soundcloud.com/monstercat",
+                musicPurchaseUrl: "https://www.beatport.com/label/monstercat/12345",
+                officialWebsiteUrl: "https://www.monstercat.com",
+                founderName: "Amelie Lens",
+                foundedAt: "2011",
+                founderDj: djs.first(where: { $0.id == "dj_amelie" })
+            ),
+            LearnLabel(
+                id: "label-foolsgold",
+                name: "Fool's Gold Records",
+                slug: "fools-gold-records",
+                profileUrl: "https://labelsbase.net/fools-gold-records",
+                profileSlug: "fools-gold-records",
+                avatarUrl: "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/labels/fools-gold-records-2903ddc1/avatar.jpg",
+                backgroundUrl: "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/labels/fools-gold-records-2903ddc1/background.jpg",
+                nation: "US",
+                soundcloudFollowers: 7_931_905,
+                likes: 167,
+                genres: ["Electronica", "Nu Disco", "Hip-Hop"],
+                genresPreview: "Electronica, Indie Dance, Nu Disco, Hip-Hop",
+                latestReleaseListing: nil,
+                locationPeriod: nil,
+                introduction: "Founded by DJs A-Trak and Nick Catchdubs.",
+                generalContactEmail: "info@foolsgoldrecs.com",
+                demoSubmissionUrl: "mailto:demos@foolsgoldrecs.com",
+                demoSubmissionDisplay: "demos@foolsgoldrecs.com",
+                facebookUrl: "https://www.facebook.com/foolsgoldrecords/",
+                soundcloudUrl: "https://soundcloud.com/foolsgoldrecs",
+                musicPurchaseUrl: "https://www.beatport.com/label/fools-gold-records/5550",
+                officialWebsiteUrl: "http://foolsgoldrecs.com",
+                founderName: "A-Trak",
+                foundedAt: "2007",
+                founderDj: nil
+            ),
+            LearnLabel(
+                id: "label-mad-decent",
+                name: "Mad Decent",
+                slug: "mad-decent",
+                profileUrl: "https://labelsbase.net/mad-decent",
+                profileSlug: "mad-decent",
+                avatarUrl: "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/labels/mad-decent-47e320a5/avatar.jpg",
+                backgroundUrl: "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/labels/mad-decent-47e320a5/background.jpg",
+                nation: "US",
+                soundcloudFollowers: 5_129_845,
+                likes: 212,
+                genres: ["Bass", "Trap", "House"],
+                genresPreview: "Bass, Trap, House",
+                latestReleaseListing: "1 year ago",
+                locationPeriod: nil,
+                introduction: "Global dance music label founded by Diplo.",
+                generalContactEmail: nil,
+                demoSubmissionUrl: nil,
+                demoSubmissionDisplay: nil,
+                facebookUrl: "https://www.facebook.com/maddecent",
+                soundcloudUrl: "https://soundcloud.com/maddecent",
+                musicPurchaseUrl: "https://www.beatport.com/label/mad-decent/414",
+                officialWebsiteUrl: "https://www.maddecent.com",
+                founderName: "Diplo",
+                foundedAt: "2005",
+                founderDj: djs.first(where: { $0.name.lowercased() == "diplo" })
+            )
+        ]
+
+        if let search, !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let keyword = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            labels = labels.filter { label in
+                label.name.lowercased().contains(keyword)
+                    || (label.introduction?.lowercased().contains(keyword) ?? false)
+                    || (label.genresPreview?.lowercased().contains(keyword) ?? false)
+            }
+        }
+
+        if let nation, !nation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let keyword = nation.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            labels = labels.filter { ($0.nation ?? "").lowercased() == keyword }
+        }
+
+        if let genre, !genre.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let keyword = genre.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            labels = labels.filter { label in
+                label.genres.contains(where: { $0.lowercased() == keyword })
+            }
+        }
+
+        let isAscending = order.lowercased() == "asc"
+        let comparator: (LearnLabel, LearnLabel) -> Bool = { lhs, rhs in
+            switch sortBy {
+            case "likes":
+                return isAscending ? (lhs.likes ?? 0) < (rhs.likes ?? 0) : (lhs.likes ?? 0) > (rhs.likes ?? 0)
+            case "name":
+                return isAscending ? lhs.name.localizedCompare(rhs.name) == .orderedAscending : lhs.name.localizedCompare(rhs.name) == .orderedDescending
+            case "nation":
+                return isAscending
+                    ? (lhs.nation ?? "").localizedCompare(rhs.nation ?? "") == .orderedAscending
+                    : (lhs.nation ?? "").localizedCompare(rhs.nation ?? "") == .orderedDescending
+            case "latestRelease":
+                return isAscending
+                    ? (lhs.latestReleaseListing ?? "") < (rhs.latestReleaseListing ?? "")
+                    : (lhs.latestReleaseListing ?? "") > (rhs.latestReleaseListing ?? "")
+            default:
+                return isAscending
+                    ? (lhs.soundcloudFollowers ?? 0) < (rhs.soundcloudFollowers ?? 0)
+                    : (lhs.soundcloudFollowers ?? 0) > (rhs.soundcloudFollowers ?? 0)
+            }
+        }
+        labels.sort(by: comparator)
+
+        let safePage = max(1, page)
+        let safeLimit = max(1, min(500, limit))
+        let total = labels.count
+        let start = min(total, (safePage - 1) * safeLimit)
+        let end = min(total, start + safeLimit)
+        let items = Array(labels[start..<end])
+        let pagination = BFFPagination(
+            page: safePage,
+            limit: safeLimit,
+            total: total,
+            totalPages: max(1, Int(ceil(Double(max(total, 1)) / Double(safeLimit))))
+        )
+        return LearnLabelListPage(items: items, pagination: pagination)
+    }
+
     func fetchRankingBoards() async throws -> [RankingBoard] {
         [
             RankingBoard(

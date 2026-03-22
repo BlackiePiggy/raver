@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
@@ -66,6 +66,13 @@ const normalizeLimit = (value: unknown, fallback = 20, max = 50): number => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(1, Math.min(max, Math.floor(parsed)));
+};
+
+const parseSortOrder = (value: unknown, fallback: Prisma.SortOrder): Prisma.SortOrder => {
+  if (value === 'asc' || value === 'desc') {
+    return value;
+  }
+  return fallback;
 };
 
 const slugify = (value: string): string =>
@@ -2302,6 +2309,138 @@ router.get('/learn/genres', (_req: Request, res: Response): void => {
   ];
 
   ok(res, genreTree);
+});
+
+type LearnLabelSortBy = 'soundcloudFollowers' | 'likes' | 'name' | 'nation' | 'latestRelease' | 'createdAt';
+
+const parseLearnLabelSortBy = (value: unknown): LearnLabelSortBy => {
+  if (value === 'likes') return 'likes';
+  if (value === 'name') return 'name';
+  if (value === 'nation') return 'nation';
+  if (value === 'latestRelease') return 'latestRelease';
+  if (value === 'createdAt') return 'createdAt';
+  return 'soundcloudFollowers';
+};
+
+const parseMultiFilterValues = (value: unknown): string[] => {
+  const normalized = Array.isArray(value) ? value : [value];
+  return normalized
+    .flatMap((item) => (typeof item === 'string' ? item.split(',') : []))
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+};
+
+router.get('/learn/labels', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = normalizePage(req.query.page);
+    const limit = normalizeLimit(req.query.limit, 20, 500);
+    const sortBy = parseLearnLabelSortBy(req.query.sortBy);
+
+    const defaultOrder: Prisma.SortOrder = sortBy === 'name' || sortBy === 'nation' ? 'asc' : 'desc';
+    const order = parseSortOrder(req.query.order, defaultOrder);
+
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const nationFilters = Array.from(
+      new Set([
+        ...parseMultiFilterValues(req.query.nation),
+        ...parseMultiFilterValues(req.query.nations),
+      ])
+    );
+    const genreFilters = Array.from(
+      new Set([
+        ...parseMultiFilterValues(req.query.genre),
+        ...parseMultiFilterValues(req.query.genres),
+      ])
+    );
+
+    const andConditions: Prisma.LabelWhereInput[] = [];
+
+    if (search) {
+      andConditions.push({
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { introduction: { contains: search, mode: 'insensitive' } },
+          { genresPreview: { contains: search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (nationFilters.length > 0) {
+      andConditions.push({
+        OR: nationFilters.map((nation) => ({
+          nation: { equals: nation, mode: 'insensitive' },
+        })),
+      });
+    }
+
+    if (genreFilters.length > 0) {
+      for (const genre of genreFilters) {
+        andConditions.push({ genres: { has: genre } });
+      }
+    }
+
+    const where: Prisma.LabelWhereInput =
+      andConditions.length > 0
+        ? { AND: andConditions }
+        : {};
+
+    const orderBy: Prisma.LabelOrderByWithRelationInput =
+      sortBy === 'soundcloudFollowers'
+        ? { soundcloudFollowers: order }
+        : sortBy === 'likes'
+          ? { likes: order }
+          : sortBy === 'nation'
+            ? { nation: order }
+            : sortBy === 'latestRelease'
+              ? { latestReleaseListing: order }
+              : sortBy === 'createdAt'
+                ? { createdAt: order }
+                : { name: order };
+
+    const [labels, total] = await Promise.all([
+      prisma.label.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.label.count({ where }),
+    ]);
+
+    const founderDjIds = Array.from(
+      new Set(
+        labels
+          .map((item) => item.founderDjId)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+    const founderDjs = founderDjIds.length > 0
+      ? await prisma.dJ.findMany({
+          where: { id: { in: founderDjIds } },
+        })
+      : [];
+    const founderDjById = new Map(founderDjs.map((item: { id: string }) => [item.id, item]));
+    const hydratedLabels = labels.map((item) => ({
+      ...item,
+      founderDj: item.founderDjId ? founderDjById.get(item.founderDjId) ?? null : null,
+    }));
+
+    ok(
+      res,
+      {
+        items: hydratedLabels,
+      },
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      }
+    );
+  } catch (error) {
+    console.error('BFF web learn labels error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/learn/rankings', (_req: Request, res: Response): void => {

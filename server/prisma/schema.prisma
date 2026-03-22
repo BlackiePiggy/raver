@@ -148,6 +148,7 @@ model DJ {
   slug           String   @unique
   bio            String?
   avatarUrl      String?  @map("avatar_url")
+  avatarSourceUrl String? @map("avatar_source_url")
   bannerUrl      String?  @map("banner_url")
   country        String?
   spotifyId      String?  @map("spotify_id")
@@ -157,6 +158,40 @@ model DJ {
   twitterUrl     String?  @map("twitter_url")
   isVerified     Boolean  @default(false) @map("is_verified")
   followerCount  Int      @default(0) @map("follower_count")
+
+  // EDM Dance Directory source fields
+  sourceId                 String?   @map("source_id")
+  sourceAddedAt            DateTime? @map("source_added_at")
+  sourceUpdatedAt          DateTime? @map("source_updated_at")
+  sourceArtistType         String?   @map("source_artist_type")
+  sourceDataSource         String?   @map("source_data_source")
+  sourceSameAs             String[]  @default([]) @map("source_same_as")
+  sourceGenres             String[]  @default([]) @map("source_genres")
+  sourceLabels             String[]  @default([]) @map("source_labels")
+  sourceWebsite            String?   @map("source_website")
+  sourceWikipedia          String?   @map("source_wikipedia")
+  sourceTiktok             String?   @map("source_tiktok")
+  sourceBookingAgency      String?   @map("source_booking_agency")
+  sourceBookingAgent       String?   @map("source_booking_agent")
+  sourceBookingUrl         String?   @map("source_booking_url")
+  sourceRealName           String?   @map("source_real_name")
+  sourceBirthDate          String?   @map("source_birth_date")
+  sourceNationality        String?   @map("source_nationality")
+  sourceYearsActive        String?   @map("source_years_active")
+  sourceDiscographyCount   Int?      @map("source_discography_count")
+  sourceUpcomingShows      Int       @default(0) @map("source_upcoming_shows")
+  sourceLineupEventCount   Int       @default(0) @map("source_lineup_event_count")
+  sourceLineupCityCount    Int       @default(0) @map("source_lineup_city_count")
+  sourcePromotionScore     Int       @default(0) @map("source_promotion_score")
+  sourceTotalVotes         Int       @default(0) @map("source_total_votes")
+  sourceTrendingScore      Int       @default(0) @map("source_trending_score")
+  sourceVerificationScore  Int?      @map("source_verification_score")
+  sourceLastEnrichedAt     DateTime? @map("source_last_enriched_at")
+  sourceLastImageAttemptAt DateTime? @map("source_last_image_attempt_at")
+  sourceNextImageAttemptAt DateTime? @map("source_next_image_attempt_at")
+  sourceSetlistFmMbid      String?   @map("source_setlistfm_mbid")
+  sourceSetlistFmUrl       String?   @map("source_setlistfm_url")
+  sourceSetlistFmFetchedAt DateTime? @map("source_setlistfm_fetched_at")
 
   // External data source IDs
   raId           String?  @map("ra_id") // Resident Advisor ID
@@ -171,6 +206,7 @@ model DJ {
   follows        Follow[]
   sets           DJSet[]
   lineupSlots    EventLineupSlot[]
+  foundedLabels  Label[]    @relation("LabelFounderDJ")
 
   @@map("djs")
 }
@@ -186,6 +222,58 @@ model Genre {
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@map("genres")
+}
+
+model Label {
+  id                    String   @id @default(uuid())
+  name                  String
+  slug                  String   @unique
+  profileUrl            String   @unique @map("profile_url")
+  profileSlug           String?  @map("profile_slug")
+  sourcePage            Int?     @map("source_page")
+  sourceListingUrl      String?  @map("source_listing_url")
+  cardId                String?  @map("card_id")
+
+  logoUrl               String?  @map("logo_url")
+  avatarSourceUrl       String?  @map("avatar_source_url")
+  backgroundSourceUrl   String?  @map("background_source_url")
+  avatarUrl             String?  @map("avatar_url")
+  backgroundUrl         String?  @map("background_url")
+
+  soundcloudFollowers   Int?     @map("soundcloud_followers")
+  likes                 Int?
+  nation                String?
+  genresPreview         String?  @map("genres_preview")
+  latestReleaseListing  String?  @map("latest_release_listing")
+  introductionPreview   String?  @map("introduction_preview") @db.Text
+  locationPeriod        String?  @map("location_period")
+  introduction          String?  @db.Text
+  genres                String[] @default([])
+  contacts              Json?
+  linksInWeb            Json?    @map("links_in_web")
+  generalContactEmail   String?  @map("general_contact_email")
+  demoSubmissionUrl     String?  @map("demo_submission_url")
+  demoSubmissionDisplay String?  @map("demo_submission_display")
+
+  facebookUrl           String?  @map("facebook_url")
+  soundcloudUrl         String?  @map("soundcloud_url")
+  musicPurchaseUrl      String?  @map("music_purchase_url")
+  officialWebsiteUrl    String?  @map("official_website_url")
+  founderName           String?  @map("founder_name")
+  foundedAt             String?  @map("founded_at")
+  founderDjId           String?  @map("founder_dj_id")
+
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  founderDj             DJ?      @relation("LabelFounderDJ", fields: [founderDjId], references: [id], onDelete: SetNull)
+
+  @@index([name])
+  @@index([nation])
+  @@index([soundcloudFollowers])
+  @@index([likes])
+  @@index([founderDjId])
+  @@map("labels")
 }
 
 model Checkin {

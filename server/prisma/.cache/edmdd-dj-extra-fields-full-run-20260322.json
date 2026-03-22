@@ -1,0 +1,130 @@
+[
+  {
+    "sourceField": "addedAt",
+    "nonNullCount": 12447
+  },
+  {
+    "sourceField": "artistType",
+    "nonNullCount": 12447
+  },
+  {
+    "sourceField": "genres",
+    "nonNullCount": 12447
+  },
+  {
+    "sourceField": "id",
+    "nonNullCount": 12447
+  },
+  {
+    "sourceField": "lineupCityCount",
+    "nonNullCount": 12447
+  },
+  {
+    "sourceField": "lineupEventCount",
+    "nonNullCount": 12447
+  },
+  {
+    "sourceField": "promotionScore",
+    "nonNullCount": 12447
+  },
+  {
+    "sourceField": "totalVotes",
+    "nonNullCount": 12447
+  },
+  {
+    "sourceField": "trendingScore",
+    "nonNullCount": 12447
+  },
+  {
+    "sourceField": "upcomingShows",
+    "nonNullCount": 12447
+  },
+  {
+    "sourceField": "updatedAt",
+    "nonNullCount": 12447
+  },
+  {
+    "sourceField": "bookingAgency",
+    "nonNullCount": 12382
+  },
+  {
+    "sourceField": "dataSource",
+    "nonNullCount": 12133
+  },
+  {
+    "sourceField": "sameAs",
+    "nonNullCount": 1275
+  },
+  {
+    "sourceField": "lastEnrichedAt",
+    "nonNullCount": 1203
+  },
+  {
+    "sourceField": "lastImageAttemptAt",
+    "nonNullCount": 1018
+  },
+  {
+    "sourceField": "verificationScore",
+    "nonNullCount": 843
+  },
+  {
+    "sourceField": "nextImageAttemptAt",
+    "nonNullCount": 644
+  },
+  {
+    "sourceField": "setlistFmUrl",
+    "nonNullCount": 189
+  },
+  {
+    "sourceField": "setlistFmMbid",
+    "nonNullCount": 188
+  },
+  {
+    "sourceField": "setlistFmFetchedAt",
+    "nonNullCount": 181
+  },
+  {
+    "sourceField": "labels",
+    "nonNullCount": 180
+  },
+  {
+    "sourceField": "realName",
+    "nonNullCount": 180
+  },
+  {
+    "sourceField": "discographyCount",
+    "nonNullCount": 179
+  },
+  {
+    "sourceField": "nationality",
+    "nonNullCount": 179
+  },
+  {
+    "sourceField": "yearsActive",
+    "nonNullCount": 179
+  },
+  {
+    "sourceField": "birthDate",
+    "nonNullCount": 166
+  },
+  {
+    "sourceField": "website",
+    "nonNullCount": 164
+  },
+  {
+    "sourceField": "bookingUrl",
+    "nonNullCount": 100
+  },
+  {
+    "sourceField": "wikipedia",
+    "nonNullCount": 72
+  },
+  {
+    "sourceField": "tiktok",
+    "nonNullCount": 54
+  },
+  {
+    "sourceField": "bookingAgent",
+    "nonNullCount": 53
+  }
+]

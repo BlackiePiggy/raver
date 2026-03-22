@@ -27,6 +27,11 @@ struct CheckinListPage: Codable {
     var pagination: BFFPagination?
 }
 
+struct LearnLabelListPage: Codable {
+    var items: [LearnLabel]
+    var pagination: BFFPagination?
+}
+
 struct WebUserLite: Codable, Identifiable, Hashable {
     let id: String
     var username: String
@@ -454,6 +459,34 @@ struct RankingEntry: Codable, Identifiable, Hashable {
     var id: String {
         "\(rank)-\(name)"
     }
+}
+
+struct LearnLabel: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var slug: String
+    var profileUrl: String
+    var profileSlug: String?
+    var avatarUrl: String?
+    var backgroundUrl: String?
+    var nation: String?
+    var soundcloudFollowers: Int?
+    var likes: Int?
+    var genres: [String]
+    var genresPreview: String?
+    var latestReleaseListing: String?
+    var locationPeriod: String?
+    var introduction: String?
+    var generalContactEmail: String?
+    var demoSubmissionUrl: String?
+    var demoSubmissionDisplay: String?
+    var facebookUrl: String?
+    var soundcloudUrl: String?
+    var musicPurchaseUrl: String?
+    var officialWebsiteUrl: String?
+    var founderName: String?
+    var foundedAt: String?
+    var founderDj: WebDJ?
 }
 
 struct MyPublishes: Codable, Hashable {

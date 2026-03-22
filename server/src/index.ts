@@ -15,6 +15,7 @@ import musicRoutes from './routes/music.routes';
 import commentRoutes from './routes/comment.routes';
 import squadRoutes from './routes/squad.routes';
 import notificationRoutes from './routes/notification.routes';
+import labelRoutes from './routes/label.routes';
 import bffRoutes from './routes/bff.routes';
 import bffWebRoutes from './routes/bff.web.routes';
 
@@ -53,6 +54,7 @@ app.use('/api/dj-aggregator', djAggregatorRoutes);
 app.use('/api/music', musicRoutes);
 app.use('/api/squads', squadRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/labels', labelRoutes);
 app.use('/v1', bffRoutes);
 app.use('/v1', bffWebRoutes);
 
@@ -72,6 +74,7 @@ app.get('/api', (_req: Request, res: Response) => {
       djAggregator: '/api/dj-aggregator',
       squads: '/api/squads',
       notifications: '/api/notifications',
+      labels: '/api/labels',
       bffV1: '/v1',
     },
   });

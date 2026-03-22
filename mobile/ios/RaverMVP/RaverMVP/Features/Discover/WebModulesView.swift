@@ -3,6 +3,7 @@ import PhotosUI
 import AVKit
 import AVFoundation
 import UIKit
+import CoreImage.CIFilterBuiltins
 
 private enum EventCalendarViewFilter: String, CaseIterable, Hashable, Identifiable {
     case all
@@ -5669,7 +5670,9 @@ struct DJSetDetailView: View {
     @State private var selectedContributor: WebContributorProfile?
     @State private var selectedCommentUser: WebUserLite?
     @State private var wheelDragTranslation: CGFloat = 0
+    @State private var wheelManualShift = 0
     @State private var wheelLastHapticShift = 0
+    @State private var wheelAutoRecenterTask: Task<Void, Never>?
     @State private var playerSeekDeltaSeconds: Double = 0
     @State private var showPlayerSeekIndicator = false
     @State private var hideSeekIndicatorTask: Task<Void, Never>?
@@ -5742,6 +5745,8 @@ struct DJSetDetailView: View {
                     hideSeekIndicatorTask = nil
                     hideVolumeIndicatorTask?.cancel()
                     hideVolumeIndicatorTask = nil
+                    wheelAutoRecenterTask?.cancel()
+                    wheelAutoRecenterTask = nil
                     controlsAutoHideTask?.cancel()
                     controlsAutoHideTask = nil
                     nativePlayerSession.pause()
@@ -5849,12 +5854,6 @@ struct DJSetDetailView: View {
                                 .font(.subheadline)
                         }
                     }
-
-                    ProgressView(value: progressValue(for: set))
-                        .progressViewStyle(.linear)
-                    Text("当前时间 \(formatTrackTime(Int(playbackTime))) / \(formatTrackTime(Int(max(1, resolvedDuration(for: set)))))")
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
 
                     if let playerError = nativePlayerError {
                         VStack(alignment: .leading, spacing: 6) {
@@ -6405,10 +6404,7 @@ struct DJSetDetailView: View {
     private func trackWheelOverlay(for set: WebDJSet, width: CGFloat) -> some View {
         let tracks = sortedTracks(for: set)
         let activeIndex = resolvedActiveTrackIndex(in: tracks)
-        let rawShift = tracks.count > 1 ? (-wheelDragTranslation / wheelStepHeight) : 0
-        let minShift = CGFloat(-activeIndex)
-        let maxShift = CGFloat(max(0, tracks.count - 1 - activeIndex))
-        let clampedShift = min(max(rawShift, minShift), maxShift)
+        let clampedShift = CGFloat(currentWheelShift(activeIndex: activeIndex, trackCount: tracks.count))
 
         ZStack {
             LinearGradient(
@@ -6467,6 +6463,9 @@ struct DJSetDetailView: View {
                     handleWheelDragEnded(value, tracks: tracks, activeIndex: activeIndex, in: set)
                 }
         )
+        .onTapGesture {
+            handleWheelTap(tracks: tracks, activeIndex: activeIndex, in: set)
+        }
         .simultaneousGesture(
             DragGesture(minimumDistance: 12)
                 .onEnded { value in
@@ -6496,7 +6495,10 @@ struct DJSetDetailView: View {
         }
         .onAppear {
             wheelDragTranslation = 0
+            wheelManualShift = 0
             wheelLastHapticShift = 0
+            wheelAutoRecenterTask?.cancel()
+            wheelAutoRecenterTask = nil
         }
     }
 
@@ -6694,9 +6696,10 @@ struct DJSetDetailView: View {
         activeIndex: Int
     ) {
         guard tracks.count > 1 else { return }
+        wheelAutoRecenterTask?.cancel()
+        wheelAutoRecenterTask = nil
         wheelDragTranslation = value.translation.height
-        let rawShift = Int((-wheelDragTranslation / wheelStepHeight).rounded())
-        let shift = clampedWheelShift(rawShift: rawShift, activeIndex: activeIndex, trackCount: tracks.count)
+        let shift = currentWheelShift(activeIndex: activeIndex, trackCount: tracks.count)
 
         if shift != wheelLastHapticShift {
             wheelLastHapticShift = shift
@@ -6711,7 +6714,7 @@ struct DJSetDetailView: View {
         _ value: DragGesture.Value,
         tracks: [WebDJSetTrack],
         activeIndex: Int,
-        in set: WebDJSet
+        in _: WebDJSet
     ) {
         guard tracks.count > 1 else {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
@@ -6721,20 +6724,62 @@ struct DJSetDetailView: View {
             return
         }
 
-        let rawShift = Int((-value.predictedEndTranslation.height / wheelStepHeight).rounded())
-        let shift = clampedWheelShift(rawShift: rawShift, activeIndex: activeIndex, trackCount: tracks.count)
-
-        if shift != 0 {
-            let targetIndex = activeIndex + shift
-            if tracks.indices.contains(targetIndex) {
-                seekToTrack(tracks[targetIndex], in: set)
-            }
-        }
+        let predictedRawShift = wheelManualShift + Int((-value.predictedEndTranslation.height / wheelStepHeight).rounded())
+        let shift = clampedWheelShift(rawShift: predictedRawShift, activeIndex: activeIndex, trackCount: tracks.count)
+        wheelManualShift = shift
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
             wheelDragTranslation = 0
         }
         wheelLastHapticShift = 0
+        scheduleWheelAutoRecenter(activeIndex: activeIndex, trackCount: tracks.count)
+    }
+
+    private func handleWheelTap(
+        tracks: [WebDJSetTrack],
+        activeIndex: Int,
+        in set: WebDJSet
+    ) {
+        guard !tracks.isEmpty else { return }
+        let shift = currentWheelShift(activeIndex: activeIndex, trackCount: tracks.count)
+        let targetIndex = activeIndex + shift
+        guard tracks.indices.contains(targetIndex) else { return }
+        let targetTrack = tracks[targetIndex]
+        guard shift != 0 || targetTrack.id != activeTrackID else { return }
+
+        wheelAutoRecenterTask?.cancel()
+        wheelAutoRecenterTask = nil
+        seekToTrack(targetTrack, in: set)
+        wheelManualShift = 0
+        wheelLastHapticShift = 0
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            wheelDragTranslation = 0
+        }
+    }
+
+    private func currentWheelShift(activeIndex: Int, trackCount: Int) -> Int {
+        let rawShift = wheelManualShift + Int((-wheelDragTranslation / wheelStepHeight).rounded())
+        return clampedWheelShift(rawShift: rawShift, activeIndex: activeIndex, trackCount: trackCount)
+    }
+
+    private func scheduleWheelAutoRecenter(activeIndex: Int, trackCount: Int) {
+        wheelAutoRecenterTask?.cancel()
+        wheelAutoRecenterTask = nil
+
+        let shift = currentWheelShift(activeIndex: activeIndex, trackCount: trackCount)
+        guard shift != 0 else { return }
+
+        wheelAutoRecenterTask = Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                    wheelManualShift = 0
+                    wheelDragTranslation = 0
+                }
+                wheelLastHapticShift = 0
+            }
+        }
     }
 
     private func isMine(_ set: WebDJSet) -> Bool {
@@ -6760,8 +6805,13 @@ struct DJSetDetailView: View {
             pendingSeekTime = nil
             playbackDuration = Double(max(0, loadedSet.duration ?? 0))
             controlsVisible = true
-            isPlaybackPaused = true
+            isPlaybackPaused = false
             isTracklistHidden = false
+            wheelManualShift = 0
+            wheelDragTranslation = 0
+            wheelLastHapticShift = 0
+            wheelAutoRecenterTask?.cancel()
+            wheelAutoRecenterTask = nil
             controlsAutoHideTask?.cancel()
             controlsAutoHideTask = nil
             nativePlayerError = nil
@@ -6804,6 +6854,11 @@ struct DJSetDetailView: View {
             selectedTracklistID = nil
             currentTracklistInfo = nil
             currentTracks = set.tracks
+            wheelManualShift = 0
+            wheelDragTranslation = 0
+            wheelLastHapticShift = 0
+            wheelAutoRecenterTask?.cancel()
+            wheelAutoRecenterTask = nil
             syncActiveTrack(for: set, at: playbackTime)
             return
         }
@@ -6814,6 +6869,11 @@ struct DJSetDetailView: View {
             currentTracklistInfo = detail
             selectedTracklistID = targetID
             currentTracks = detail.tracks
+            wheelManualShift = 0
+            wheelDragTranslation = 0
+            wheelLastHapticShift = 0
+            wheelAutoRecenterTask?.cancel()
+            wheelAutoRecenterTask = nil
             syncActiveTrack(for: set, at: playbackTime)
         } catch {
             errorMessage = error.localizedDescription
@@ -7000,10 +7060,6 @@ struct DJSetDetailView: View {
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                                     .lineLimit(1)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption2)
-                                    .foregroundStyle(RaverTheme.secondaryText)
                             }
                         }
                         .buttonStyle(.plain)
@@ -7024,9 +7080,11 @@ struct DJSetDetailView: View {
                         }
                     }
                 }
+                Spacer(minLength: 8)
 
                 if hasSourceLinks(track) {
                     sourceLinksRow(for: track)
+                        .frame(width: 52, alignment: .trailing)
                         .padding(.bottom, 1)
                 }
             }
@@ -8820,45 +8878,88 @@ struct LearnModuleView: View {
     private let service = AppEnvironment.makeWebService()
 
     @State private var genres: [LearnGenreNode] = []
-    @State private var isLoading = false
+    @State private var allLabels: [LearnLabel] = []
+    @State private var labels: [LearnLabel] = []
+    @State private var labelsPagination: BFFPagination?
+    @State private var selectedSection: LearnModuleSection = .genres
+    @State private var selectedSort: LearnLabelSortOption = .soundcloudFollowers
+    @State private var sortOrder: LearnLabelSortOrder = .desc
+    @State private var searchText = ""
+    @State private var committedSearch = ""
+    @State private var selectedGenreFilters: Set<String> = []
+    @State private var selectedNationFilters: Set<String> = []
+    @State private var activeFilterPanel: LearnLabelFilterPanelType?
+    @State private var searchTask: Task<Void, Never>?
+    @State private var isLoadingGenres = false
+    @State private var isLoadingLabels = false
+    @State private var selectedLabelForDetail: LearnLabel?
     @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
-            Group {
-                if isLoading && genres.isEmpty {
-                    ProgressView("学习内容加载中...")
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
-                            if !genres.isEmpty {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text("流派树")
-                                        .font(.title3.weight(.bold))
-                                        .foregroundStyle(RaverTheme.primaryText)
-                                    ForEach(genres) { node in
-                                        GenreNodeView(node: node)
-                                            .padding(12)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .background(RaverTheme.card)
-                                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                    }
-                                }
-                            }
-                        }
+            VStack(spacing: 0) {
+                headerTabs
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
+
+                if selectedSection == .labels {
+                    labelsToolbar
                         .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
+                        .padding(.bottom, 6)
+                }
+
+                Group {
+                    if selectedSection == .genres {
+                        genresContent
+                    } else {
+                        labelsContent
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .background(RaverTheme.background)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .task {
-                await load()
+                await loadInitial()
             }
             .refreshable {
-                await load()
+                await refreshAll()
+            }
+            .onChange(of: selectedSort) { _, next in
+                sortOrder = next.defaultOrder
+                Task { await loadLabels() }
+            }
+            .onChange(of: sortOrder) { _, _ in
+                Task { await loadLabels() }
+            }
+            .onChange(of: committedSearch) { _, _ in
+                Task { await loadLabels() }
+            }
+            .onChange(of: selectedGenreFilters) { _, _ in
+                applyLabelFilters()
+            }
+            .onChange(of: selectedNationFilters) { _, _ in
+                applyLabelFilters()
+            }
+            .onChange(of: searchText) { _, next in
+                searchTask?.cancel()
+                searchTask = Task {
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    if Task.isCancelled { return }
+                    await MainActor.run {
+                        committedSearch = next.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
+            }
+            .onDisappear {
+                searchTask?.cancel()
+            }
+            .fullScreenCover(item: $selectedLabelForDetail) { label in
+                NavigationStack {
+                    LearnLabelDetailView(label: label)
+                }
             }
             .alert("提示", isPresented: Binding(
                 get: { errorMessage != nil },
@@ -8871,15 +8972,345 @@ struct LearnModuleView: View {
         }
     }
 
-    private func load() async {
-        isLoading = true
-        defer { isLoading = false }
+    @ViewBuilder
+    private var headerTabs: some View {
+        HStack(spacing: 8) {
+            ForEach(LearnModuleSection.allCases) { item in
+                Button(item.title) {
+                    withAnimation(.interactiveSpring(response: 0.26, dampingFraction: 0.84)) {
+                        selectedSection = item
+                    }
+                }
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(selectedSection == item ? RaverTheme.accent : RaverTheme.card)
+                .foregroundStyle(selectedSection == item ? Color.white : RaverTheme.primaryText)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            Spacer(minLength: 0)
+        }
+    }
 
+    @ViewBuilder
+    private var labelsToolbar: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    TextField("搜索厂牌名 / 简介", text: $searchText)
+                        .font(.subheadline)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(RaverTheme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                Menu {
+                    ForEach(LearnLabelSortOption.allCases) { option in
+                        Button {
+                            selectedSort = option
+                        } label: {
+                            if option == selectedSort {
+                                Label(option.title, systemImage: "checkmark")
+                            } else {
+                                Text(option.title)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(selectedSort.title)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(RaverTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+
+                Button {
+                    sortOrder = sortOrder == .desc ? .asc : .desc
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: sortOrder == .desc ? "arrow.down" : "arrow.up")
+                        Text(sortOrder == .desc ? "降序" : "升序")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(RaverTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        activeFilterPanel = activeFilterPanel == .genres ? nil : .genres
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: activeFilterPanel == .genres ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        Text(selectedGenreFilters.isEmpty ? "筛选风格" : "风格 \(selectedGenreFilters.count)")
+                            .lineLimit(1)
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(RaverTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        activeFilterPanel = activeFilterPanel == .nations ? nil : .nations
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: activeFilterPanel == .nations ? "flag.fill" : "flag")
+                        Text(selectedNationFilters.isEmpty ? "筛选国家" : "国家 \(selectedNationFilters.count)")
+                            .lineLimit(1)
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(RaverTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                if !selectedGenreFilters.isEmpty || !selectedNationFilters.isEmpty {
+                    Button("清空全部") {
+                        selectedGenreFilters.removeAll()
+                        selectedNationFilters.removeAll()
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            if activeFilterPanel == .genres {
+                LearnLabelMultiSelectPanel(
+                    title: "筛选风格",
+                    options: availableGenreFilters,
+                    selectedValues: selectedGenreFilters,
+                    emptyText: "暂无可筛选风格",
+                    onToggle: toggleGenreFilter,
+                    onClear: {
+                        selectedGenreFilters.removeAll()
+                    },
+                    onClose: {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            activeFilterPanel = nil
+                        }
+                    }
+                )
+            } else if activeFilterPanel == .nations {
+                LearnLabelMultiSelectPanel(
+                    title: "筛选国家",
+                    options: availableNationFilters,
+                    selectedValues: selectedNationFilters,
+                    emptyText: "暂无可筛选国家",
+                    onToggle: toggleNationFilter,
+                    onClear: {
+                        selectedNationFilters.removeAll()
+                    },
+                    onClose: {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            activeFilterPanel = nil
+                        }
+                    }
+                )
+            }
+
+            if let total = labelsPagination?.total {
+                Text("筛选后 \(labels.count) / 共 \(total) 个厂牌")
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var genresContent: some View {
+        if isLoadingGenres && genres.isEmpty {
+            ProgressView("学习内容加载中...")
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if !genres.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("流派树")
+                                .font(.title3.weight(.bold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                            ForEach(genres) { node in
+                                GenreNodeView(node: node)
+                                    .padding(12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(RaverTheme.card)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var labelsContent: some View {
+        if isLoadingLabels && labels.isEmpty {
+            ProgressView("厂牌加载中...")
+        } else if labels.isEmpty {
+            ContentUnavailableView("暂无厂牌", systemImage: "building.2")
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    ForEach(labels) { label in
+                        LearnLabelCard(label: label)
+                            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .onTapGesture {
+                                selectedLabelForDetail = label
+                            }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    if activeFilterPanel != nil {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            activeFilterPanel = nil
+                        }
+                    }
+                }
+            )
+        }
+    }
+
+    private func loadInitial() async {
+        async let genresTask: Void = loadGenres()
+        async let labelsTask: Void = loadLabels()
+        _ = await (genresTask, labelsTask)
+    }
+
+    private func refreshAll() async {
+        async let genresTask: Void = loadGenres()
+        async let labelsTask: Void = loadLabels()
+        _ = await (genresTask, labelsTask)
+    }
+
+    private func loadGenres() async {
+        isLoadingGenres = true
+        defer { isLoadingGenres = false }
         do {
             genres = try await service.fetchLearnGenres()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func loadLabels() async {
+        isLoadingLabels = true
+        defer { isLoadingLabels = false }
+
+        do {
+            let page = try await service.fetchLearnLabels(
+                page: 1,
+                limit: 500,
+                sortBy: selectedSort.apiValue,
+                order: sortOrder.rawValue,
+                search: committedSearch,
+                nation: nil,
+                genre: nil
+            )
+            allLabels = page.items
+            applyLabelFilters()
+            labelsPagination = page.pagination
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private var availableGenreFilters: [String] {
+        let genres = allLabels.flatMap { labelGenres(for: $0) }
+        return Array(Set(genres)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private var availableNationFilters: [String] {
+        let nations = allLabels.compactMap { label -> String? in
+            let trimmed = label.nation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        return Array(Set(nations)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private func applyLabelFilters() {
+        let normalizedGenreFilters = Set(selectedGenreFilters.map(normalizeFilterToken))
+        let normalizedNationFilters = Set(selectedNationFilters.map(normalizeFilterToken))
+
+        labels = allLabels.filter { label in
+            let nationPass: Bool = {
+                guard !normalizedNationFilters.isEmpty else { return true }
+                let nation = normalizeFilterToken(label.nation ?? "")
+                return normalizedNationFilters.contains(nation)
+            }()
+
+            guard nationPass else { return false }
+
+            guard !normalizedGenreFilters.isEmpty else { return true }
+            let genrePool = Set(labelGenres(for: label).map(normalizeFilterToken))
+            return normalizedGenreFilters.allSatisfy { genrePool.contains($0) }
+        }
+    }
+
+    private func labelGenres(for label: LearnLabel) -> [String] {
+        if !label.genres.isEmpty {
+            return label.genres.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        }
+        return (label.genresPreview ?? "")
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func toggleGenreFilter(_ genre: String) {
+        if selectedGenreFilters.contains(genre) {
+            selectedGenreFilters.remove(genre)
+        } else {
+            selectedGenreFilters.insert(genre)
+        }
+    }
+
+    private func toggleNationFilter(_ nation: String) {
+        if selectedNationFilters.contains(nation) {
+            selectedNationFilters.remove(nation)
+        } else {
+            selectedNationFilters.insert(nation)
+        }
+    }
+
+    private func normalizeFilterToken(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
 
@@ -8909,6 +9340,949 @@ private struct GenreNodeView: View {
                     .foregroundStyle(RaverTheme.secondaryText)
             }
         }
+    }
+}
+
+private enum LearnModuleSection: String, CaseIterable, Identifiable {
+    case genres
+    case labels
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .genres: return "流派树"
+        case .labels: return "厂牌"
+        }
+    }
+}
+
+private enum LearnLabelFilterPanelType {
+    case genres
+    case nations
+}
+
+private struct LearnLabelMultiSelectPanel: View {
+    let title: String
+    let options: [String]
+    let selectedValues: Set<String>
+    let emptyText: String
+    let onToggle: (String) -> Void
+    let onClear: () -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer(minLength: 0)
+                if !selectedValues.isEmpty {
+                    Button("清空") {
+                        onClear()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.accent)
+                }
+                Button("完成") {
+                    onClose()
+                }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            if options.isEmpty {
+                Text(emptyText)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(options, id: \.self) { item in
+                            Button {
+                                onToggle(item)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: selectedValues.contains(item) ? "checkmark.square.fill" : "square")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(selectedValues.contains(item) ? RaverTheme.accent : RaverTheme.secondaryText)
+                                    Text(item)
+                                        .font(.subheadline)
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(RaverTheme.background.opacity(0.45))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 220)
+            }
+        }
+        .padding(12)
+        .frame(width: 300, alignment: .leading)
+        .background(RaverTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private enum LearnLabelSortOrder: String {
+    case asc
+    case desc
+}
+
+private enum LearnLabelSortOption: String, CaseIterable, Identifiable {
+    case soundcloudFollowers
+    case likes
+    case name
+    case nation
+    case latestRelease
+    case createdAt
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .soundcloudFollowers: return "热度"
+        case .likes: return "Likes"
+        case .name: return "名称"
+        case .nation: return "国家"
+        case .latestRelease: return "发布时间文本"
+        case .createdAt: return "入库时间"
+        }
+    }
+
+    var defaultOrder: LearnLabelSortOrder {
+        switch self {
+        case .name, .nation, .latestRelease:
+            return .asc
+        case .soundcloudFollowers, .likes, .createdAt:
+            return .desc
+        }
+    }
+
+    var apiValue: String {
+        rawValue
+    }
+}
+
+private struct LearnLabelCard: View {
+    let label: LearnLabel
+    @State private var avatarLuminance: CGFloat?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Color.clear
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .overlay {
+                    bannerView
+                        .allowsHitTesting(false)
+                }
+                .clipped()
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .frame(width: 66)
+                        .overlay {
+                            avatarView
+                                .allowsHitTesting(false)
+                        }
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(LearnLabelAvatarStyling.borderColor(for: avatarLuminance), lineWidth: 1)
+                        )
+                        .offset(y: -22)
+                        .padding(.bottom, -22)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(label.name)
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .lineLimit(2)
+
+                        Text(metaLine)
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                if !displayGenres.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(displayGenres, id: \.self) { genre in
+                                Text(genre)
+                                    .font(.caption2.weight(.medium))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(RaverTheme.background)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+                }
+
+                if let intro = introLine {
+                    Text(intro)
+                        .font(.subheadline)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(3)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
+        }
+        .background(RaverTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .task(id: label.avatarUrl ?? "") {
+            await resolveAvatarLuminance()
+        }
+    }
+
+    @ViewBuilder
+    private var bannerView: some View {
+        if let url = destinationURL(label.backgroundUrl) {
+            fallbackBanner
+                .overlay {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            Color.clear
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            Color.clear
+                        @unknown default:
+                            Color.clear
+                        }
+                    }
+                }
+        } else {
+            fallbackBanner
+        }
+    }
+
+    @ViewBuilder
+    private var avatarView: some View {
+        if let url = destinationURL(label.avatarUrl) {
+            fallbackAvatar
+                .overlay {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            Color.clear
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            Color.clear
+                        @unknown default:
+                            Color.clear
+                        }
+                    }
+                }
+        } else {
+            fallbackAvatar
+        }
+    }
+
+    private var fallbackBanner: some View {
+        LinearGradient(
+            colors: [Color(red: 0.17, green: 0.20, blue: 0.28), Color(red: 0.08, green: 0.09, blue: 0.14)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var fallbackAvatar: some View {
+        ZStack {
+            fallbackBanner
+            Text(String(label.name.prefix(2)).uppercased())
+                .font(.system(size: 22, weight: .black, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.85))
+        }
+    }
+
+    private var displayGenres: [String] {
+        if !label.genres.isEmpty {
+            return Array(label.genres.prefix(5))
+        }
+        let raw = label.genresPreview?.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? []
+        return Array(raw.filter { !$0.isEmpty }.prefix(5))
+    }
+
+    private var introLine: String? {
+        let trimmed = label.introduction?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var metaLine: String {
+        let nation = label.nation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return nation.isEmpty ? "厂牌信息" : nation
+    }
+
+    private func destinationURL(_ raw: String?) -> URL? {
+        guard let resolved = AppConfig.resolvedURLString(raw) else { return nil }
+        return URL(string: resolved)
+    }
+
+    private func resolveAvatarLuminance() async {
+        guard let avatarURL = destinationURL(label.avatarUrl) else {
+            await MainActor.run {
+                avatarLuminance = nil
+            }
+            return
+        }
+        let luminance = await LearnLabelAvatarStyling.luminance(for: avatarURL)
+        await MainActor.run {
+            avatarLuminance = luminance
+        }
+    }
+}
+
+private struct LearnLabelDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let label: LearnLabel
+
+    @State private var previewImage: LearnLabelPreviewImage?
+    @State private var avatarLuminance: CGFloat?
+    @State private var selectedFounderDJ: LearnLabelFounderTarget?
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                Color.clear
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .overlay {
+                        Button {
+                            openPreview(urlString: label.backgroundUrl, title: "\(label.name) 背景图")
+                        } label: {
+                            headerBanner
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .clipped()
+
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top, spacing: 14) {
+                        Button {
+                            openPreview(urlString: label.avatarUrl, title: "\(label.name) 头像")
+                        } label: {
+                            Color.clear
+                                .aspectRatio(1, contentMode: .fit)
+                                .frame(width: 98)
+                                .overlay {
+                                    headerAvatar
+                                }
+                                .clipped()
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .stroke(LearnLabelAvatarStyling.borderColor(for: avatarLuminance), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .offset(y: -50)
+                        .padding(.bottom, -50)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(label.name)
+                                .font(.title3.weight(.black))
+                                .foregroundStyle(RaverTheme.primaryText)
+                            if let intro = label.introduction?.trimmingCharacters(in: .whitespacesAndNewlines), !intro.isEmpty {
+                                LearnLabelExpandableText(text: intro, collapsedLineLimit: 4)
+                            }
+                        }
+                    }
+
+                    if !displayGenres.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Genres")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            WrapFlowLayout(items: displayGenres) { genre in
+                                Text(genre)
+                                    .font(.caption2.weight(.medium))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 6)
+                                    .background(RaverTheme.background)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        if hasFounderDisplay {
+                            founderSection
+                        }
+                        LearnLabelInfoRow(title: "国家", value: label.nation)
+                        LearnLabelInfoRow(title: "地区/时期", value: label.locationPeriod)
+                        LearnLabelInfoRow(title: "联系邮箱", value: label.generalContactEmail)
+                        LearnLabelInfoRow(title: "Demo 提交", value: label.demoSubmissionDisplay ?? label.demoSubmissionUrl)
+                        if hasFoundedAtDisplay {
+                            LearnLabelInfoRow(title: "创始时间", value: foundedAtDisplay)
+                        }
+                    }
+
+                    linksSection
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+            }
+        }
+        .background(RaverTheme.background)
+        .navigationTitle("厂牌详情")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("关闭") {
+                    dismiss()
+                }
+                .foregroundStyle(RaverTheme.primaryText)
+            }
+        }
+        .fullScreenCover(item: $previewImage) { item in
+            LearnLabelImagePreviewView(item: item)
+        }
+        .fullScreenCover(item: $selectedFounderDJ) { dj in
+            NavigationStack {
+                DJDetailView(djID: dj.id)
+            }
+        }
+        .task(id: label.avatarUrl ?? "") {
+            await resolveAvatarLuminance()
+        }
+    }
+
+    @ViewBuilder
+    private var headerBanner: some View {
+        if let url = destinationURL(label.backgroundUrl) {
+            fallbackBanner
+                .overlay {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            Color.clear
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            Color.clear
+                        @unknown default:
+                            Color.clear
+                        }
+                    }
+                }
+                .overlay {
+                    bannerEdgeGradient
+                }
+        } else {
+            fallbackBanner
+                .overlay {
+                    bannerEdgeGradient
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var headerAvatar: some View {
+        if let url = destinationURL(label.avatarUrl) {
+            fallbackAvatar
+                .overlay {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            Color.clear
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            Color.clear
+                        @unknown default:
+                            Color.clear
+                        }
+                    }
+                }
+        } else {
+            fallbackAvatar
+        }
+    }
+
+    private var fallbackBanner: some View {
+        LinearGradient(
+            colors: [Color(red: 0.17, green: 0.20, blue: 0.28), Color(red: 0.08, green: 0.09, blue: 0.14)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var fallbackAvatar: some View {
+        ZStack {
+            fallbackBanner
+            Text(String(label.name.prefix(2)).uppercased())
+                .font(.system(size: 28, weight: .black, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.85))
+        }
+    }
+
+    private var displayGenres: [String] {
+        if !label.genres.isEmpty {
+            return label.genres
+        }
+        return label.genresPreview?
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+    }
+
+    private func destinationURL(_ raw: String?) -> URL? {
+        guard let resolved = AppConfig.resolvedURLString(raw) else { return nil }
+        return URL(string: resolved)
+    }
+
+    @ViewBuilder
+    private var founderSection: some View {
+        HStack(alignment: .center, spacing: 10) {
+            if let founderDj = label.founderDj {
+                Button {
+                    selectedFounderDJ = LearnLabelFounderTarget(id: founderDj.id)
+                } label: {
+                    HStack(spacing: 10) {
+                        LearnLabelFounderAvatar(urlString: founderDj.avatarUrl)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("创始人")
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            Text(founderDisplayName)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .lineLimit(1)
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+                .buttonStyle(.plain)
+            } else {
+                HStack(spacing: 10) {
+                    LearnLabelFounderAvatar(urlString: nil)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("创始人")
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                        Text(founderDisplayName)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var founderDisplayName: String {
+        if let founderDj = label.founderDj {
+            return founderDj.name
+        }
+        return (label.founderName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
+    }
+
+    private var foundedAtDisplay: String {
+        label.foundedAt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private var hasFounderDisplay: Bool {
+        if label.founderDj != nil { return true }
+        return !founderDisplayName.isEmpty
+    }
+
+    private var hasFoundedAtDisplay: Bool {
+        !foundedAtDisplay.isEmpty
+    }
+
+    @ViewBuilder
+    private var linksSection: some View {
+        let hasLinks = destinationURL(label.facebookUrl) != nil
+            || destinationURL(label.soundcloudUrl) != nil
+            || destinationURL(label.musicPurchaseUrl) != nil
+            || destinationURL(label.officialWebsiteUrl) != nil
+            || destinationURL(label.demoSubmissionUrl) != nil
+        if hasLinks {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Links")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                if let url = destinationURL(label.facebookUrl) {
+                    LearnLabelExternalLinkRow(icon: "person.2.fill", title: "Facebook", url: url)
+                }
+                if let url = destinationURL(label.soundcloudUrl) {
+                    LearnLabelExternalLinkRow(icon: "waveform", title: "SoundCloud", url: url)
+                }
+                if let url = destinationURL(label.musicPurchaseUrl) {
+                    LearnLabelExternalLinkRow(icon: "cart.fill", title: "音乐资产购买", url: url)
+                }
+                if let url = destinationURL(label.officialWebsiteUrl) {
+                    LearnLabelExternalLinkRow(icon: "globe", title: "官网", url: url)
+                }
+                if let url = destinationURL(label.demoSubmissionUrl) {
+                    LearnLabelExternalLinkRow(icon: "paperplane.fill", title: "Demo 提交", url: url)
+                }
+            }
+        }
+    }
+
+    private var bannerEdgeGradient: some View {
+        LinearGradient(
+            stops: [
+                .init(color: Color.black.opacity(0.76), location: 0),
+                .init(color: Color.clear, location: 0.28),
+                .init(color: Color.clear, location: 0.66),
+                .init(color: Color.black.opacity(0.82), location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private func resolveAvatarLuminance() async {
+        guard let avatarURL = destinationURL(label.avatarUrl) else {
+            await MainActor.run {
+                avatarLuminance = nil
+            }
+            return
+        }
+        let luminance = await LearnLabelAvatarStyling.luminance(for: avatarURL)
+        await MainActor.run {
+            avatarLuminance = luminance
+        }
+    }
+
+    private func openPreview(urlString: String?, title: String) {
+        guard let url = destinationURL(urlString) else { return }
+        previewImage = LearnLabelPreviewImage(title: title, url: url)
+    }
+}
+
+private struct LearnLabelExpandableText: View {
+    let text: String
+    let collapsedLineLimit: Int
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .lineLimit(isExpanded ? nil : collapsedLineLimit)
+
+            if shouldShowToggle {
+                Button(isExpanded ? "收起" : "展开全文") {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isExpanded.toggle()
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.accent)
+            }
+        }
+    }
+
+    private var shouldShowToggle: Bool {
+        text.count > 80 || text.contains("\n")
+    }
+}
+
+private struct LearnLabelFounderAvatar: View {
+    let urlString: String?
+
+    var body: some View {
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .frame(width: 42)
+            .overlay {
+                if let url = destinationURL(urlString) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            placeholder
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            placeholder
+                        @unknown default:
+                            placeholder
+                        }
+                    }
+                } else {
+                    placeholder
+                }
+            }
+            .clipped()
+            .clipShape(Circle())
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            Color.white.opacity(0.1)
+            Image(systemName: "person.crop.circle.fill")
+                .font(.system(size: 23, weight: .regular))
+                .foregroundStyle(RaverTheme.secondaryText)
+        }
+    }
+
+    private func destinationURL(_ raw: String?) -> URL? {
+        guard let resolved = AppConfig.resolvedURLString(raw) else { return nil }
+        return URL(string: resolved)
+    }
+}
+
+private struct LearnLabelExternalLinkRow: View {
+    let icon: String
+    let title: String
+    let url: URL
+
+    var body: some View {
+        Link(destination: url) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(RaverTheme.accent)
+                    .frame(width: 16)
+
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                Spacer(minLength: 8)
+
+                Text(url.host ?? url.absoluteString)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+
+                Image(systemName: "arrow.up.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 3)
+        }
+    }
+}
+
+private enum LearnLabelAvatarStyling {
+    private static let ciContext = CIContext()
+    private static let luminanceCache = NSCache<NSURL, NSNumber>()
+
+    static func borderColor(for luminance: CGFloat?) -> Color {
+        guard let luminance else {
+            return Color.white.opacity(0.55)
+        }
+        if luminance >= 0.67 {
+            return Color.black.opacity(0.78)
+        }
+        return Color.white.opacity(0.82)
+    }
+
+    static func luminance(for url: URL) async -> CGFloat? {
+        if let cached = luminanceCache.object(forKey: url as NSURL) {
+            return CGFloat(truncating: cached)
+        }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+                return nil
+            }
+            guard let image = UIImage(data: data), let luminance = averageLuminance(for: image) else {
+                return nil
+            }
+            luminanceCache.setObject(NSNumber(value: Double(luminance)), forKey: url as NSURL)
+            return luminance
+        } catch {
+            return nil
+        }
+    }
+
+    private static func averageLuminance(for image: UIImage) -> CGFloat? {
+        guard let cgImage = image.cgImage else { return nil }
+        let inputImage = CIImage(cgImage: cgImage)
+        guard !inputImage.extent.isEmpty else { return nil }
+        let filter = CIFilter.areaAverage()
+        filter.inputImage = inputImage
+        filter.extent = inputImage.extent
+        guard let outputImage = filter.outputImage else { return nil }
+
+        var rgba = [UInt8](repeating: 0, count: 4)
+        ciContext.render(
+            outputImage,
+            toBitmap: &rgba,
+            rowBytes: 4,
+            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+            format: .RGBA8,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+
+        let red = CGFloat(rgba[0]) / 255.0
+        let green = CGFloat(rgba[1]) / 255.0
+        let blue = CGFloat(rgba[2]) / 255.0
+        return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
+    }
+}
+
+private struct LearnLabelInfoRow: View {
+    let title: String
+    let value: String?
+
+    var body: some View {
+        if let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            HStack(alignment: .top, spacing: 10) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .frame(width: 78, alignment: .leading)
+                Text(value)
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+private struct LearnLabelPreviewImage: Identifiable {
+    let id = UUID().uuidString
+    let title: String
+    let url: URL
+}
+
+private struct LearnLabelFounderTarget: Identifiable {
+    let id: String
+}
+
+private struct LearnLabelImagePreviewView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let item: LearnLabelPreviewImage
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+
+            AsyncImage(url: item.url) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView("加载中...")
+                        .tint(.white)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .failure:
+                    Text("图片加载失败")
+                        .foregroundStyle(Color.white.opacity(0.85))
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 44)
+
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.92))
+            }
+            .padding(.top, 12)
+            .padding(.trailing, 12)
+        }
+        .overlay(alignment: .topLeading) {
+            Text(item.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.white.opacity(0.9))
+                .padding(.top, 18)
+                .padding(.leading, 16)
+        }
+    }
+}
+
+private struct WrapFlowLayout<Item: Hashable, Content: View>: View {
+    let items: [Item]
+    let content: (Item) -> Content
+
+    init(items: [Item], @ViewBuilder content: @escaping (Item) -> Content) {
+        self.items = items
+        self.content = content
+    }
+
+    var body: some View {
+        let rows = buildRows()
+        return VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 6) {
+                    ForEach(row, id: \.self) { item in
+                        content(item)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
+    private func buildRows() -> [[Item]] {
+        // Keep a deterministic, lightweight wrap in the absence of runtime width measurement.
+        // This is good enough for short tag strings and keeps implementation simple.
+        var rows: [[Item]] = []
+        var current: [Item] = []
+        for (index, item) in items.enumerated() {
+            current.append(item)
+            if current.count == 4 || index == items.count - 1 {
+                rows.append(current)
+                current = []
+            }
+        }
+        return rows
     }
 }
 

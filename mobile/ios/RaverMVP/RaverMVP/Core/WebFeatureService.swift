@@ -54,6 +54,15 @@ protocol WebFeatureService {
     func addRatingComment(unitID: String, input: CreateRatingCommentInput) async throws -> WebRatingComment
 
     func fetchLearnGenres() async throws -> [LearnGenreNode]
+    func fetchLearnLabels(
+        page: Int,
+        limit: Int,
+        sortBy: String,
+        order: String,
+        search: String?,
+        nation: String?,
+        genre: String?
+    ) async throws -> LearnLabelListPage
     func fetchRankingBoards() async throws -> [RankingBoard]
     func fetchRankingBoardDetail(boardID: String, year: Int?) async throws -> RankingBoardDetail
 

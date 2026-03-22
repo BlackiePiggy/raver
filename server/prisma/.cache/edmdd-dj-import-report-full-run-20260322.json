@@ -1,0 +1,16 @@
+{
+  "startedAt": "2026-03-22T11:03:50.213Z",
+  "finishedAt": "2026-03-22T11:25:39.176Z",
+  "durationSeconds": 1309,
+  "stats": {
+    "totalFromSource": 12468,
+    "totalValidSlug": 12467,
+    "skippedEmptySlug": 1,
+    "skippedCompletedFromProgress": 20,
+    "created": 12333,
+    "updated": 114,
+    "failed": 0,
+    "processed": 12447
+  },
+  "notes": "This report captures the full import run after an initial 20-row smoke test. Aggregate created across both runs: 12353."
+}

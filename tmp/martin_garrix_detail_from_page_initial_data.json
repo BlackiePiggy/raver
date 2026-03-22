@@ -1,0 +1,949 @@
+{
+  "dj": {
+    "id": "26b108b6-45d6-4bff-8e98-38415d76f72d",
+    "name": "Martin Garrix",
+    "slug": "martin-garrix",
+    "image": "/api/img?url=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab6761610000e5ebf5b8ee60f1f4ee3453aba40b&w=800",
+    "genres": [
+      "Progressive House",
+      "EDM"
+    ],
+    "location": "Amsterdam, Netherlands",
+    "bio": "Martin Garrix, born Martijn Garritsen, is a Dutch DJ and producer from Amstelveen. His track Animals became a global phenomenon. Founded STMPD Records. Ranked number one DJ by DJ Mag multiple times. Regular headline performances at Tomorrowland, Ultra, and major festivals. His sound shaped future rave.",
+    "website": "https://martingarrix.com",
+    "wikipedia": "https://en.wikipedia.org/wiki/Martin_Garrix",
+    "instagram": "https://instagram.com/martingarrix",
+    "spotify": "https://open.spotify.com/artist/60d24wfXkVzDSfLS6hyCjZ",
+    "soundcloud": null,
+    "twitter": "https://twitter.com/martingarrix",
+    "tiktok": "https://www.tiktok.com/@martingarrix",
+    "aliases": null,
+    "bookingAgency": "WME",
+    "bookingAgent": "Kyle B.",
+    "bookingContact": null,
+    "bookingUrl": "https://mn2s.com/",
+    "upcomingShows": 8,
+    "addedAt": "2025-11-26T13:15:41.781Z",
+    "updatedAt": "2026-03-22T07:19:19.689Z",
+    "realName": "Martijn Gerard Garritsen",
+    "birthDate": "1996-05-14",
+    "nationality": "Dutch",
+    "yearsActive": "2012-present",
+    "labels": [
+      "STMPD RCRDS",
+      "Epic Amsterdam",
+      "Spinnin Records"
+    ],
+    "discographyCount": 2,
+    "discogsId": null,
+    "musicbrainzId": null,
+    "lastfmId": null,
+    "spotifyArtistId": null,
+    "totalVotes": 0,
+    "trendingScore": 0,
+    "lastVotedAt": null,
+    "lastEnrichedAt": null,
+    "lastImageAttemptAt": null,
+    "nextImageAttemptAt": null,
+    "artistType": "canonical",
+    "promotionScore": 0,
+    "promotedAt": null,
+    "lineupEventCount": 8,
+    "lineupCityCount": 4,
+    "verificationConfidence": null,
+    "verifiedAt": null,
+    "verificationScore": null,
+    "setlistFmMbid": "3e1f2ee4-16be-4406-bf18-6173840cf2b1",
+    "setlistFmUrl": "https://www.setlist.fm/setlists/martin-garrix-23dd8c1f.html",
+    "setlistFmFetchedAt": "2026-03-22T07:19:19.683Z"
+  },
+  "djUpcomingEvents": [
+    {
+      "id": "75537977-a319-4e11-9af0-603d318048a3",
+      "slug": "ultra-music-festival",
+      "title": "Ultra Music Festival",
+      "date": "2026-03-27",
+      "venue": "Bayfront Park",
+      "city": "Detroit",
+      "country": "United States",
+      "updatedAt": "2026-03-12T17:04:19.729Z",
+      "addedAt": "2025-11-26T13:15:41.865Z"
+    },
+    {
+      "id": "c2e5c3d7-3bc1-4c93-ba12-79757fdfb466",
+      "slug": "edc-thailand-2026",
+      "title": "EDC Thailand 2026",
+      "date": "2026-04-24",
+      "venue": "Pattaya Exhibition and Convention Hall (PEACH)",
+      "city": "Pattaya",
+      "country": "Thailand",
+      "updatedAt": "2026-03-12T17:30:32.086Z",
+      "addedAt": "2026-01-26T22:15:33.344Z"
+    },
+    {
+      "id": "5bdc5701-679e-4f42-9c4b-a3b9d3312843",
+      "slug": "martin-garrix-at-northerly-island-june-25-26-27-los-angeles-2026-06-25",
+      "title": "Martin Garrix at Northerly Island June 25, 26, & 27",
+      "date": "2026-06-25",
+      "venue": "The Huntington Bank Pavilion at Northerly Island",
+      "city": "Chicago",
+      "country": "United States",
+      "updatedAt": "2026-03-13T06:29:27.201Z",
+      "addedAt": "2025-12-27T11:05:10.582Z"
+    },
+    {
+      "id": "0c0b2650-7d5d-4bfe-ba08-67bddfec6c83",
+      "slug": "martin-garrix-ibiza-2026-08-20",
+      "title": "Martin Garrix",
+      "date": "2026-08-20",
+      "venue": "Ushuaïa Ibiza",
+      "city": "Ibiza",
+      "country": "Spain",
+      "updatedAt": "2026-03-13T06:39:43.360Z",
+      "addedAt": "2026-02-21T12:31:53.823Z"
+    },
+    {
+      "id": "4c51111f-55c8-48da-a597-defcf1b25a69",
+      "slug": "martin-garrix-ibiza-2026-08-27",
+      "title": "Martin Garrix",
+      "date": "2026-08-27",
+      "venue": "Ushuaïa Ibiza",
+      "city": "Ibiza",
+      "country": "Spain",
+      "updatedAt": "2026-03-13T06:41:36.537Z",
+      "addedAt": "2026-02-28T12:18:45.539Z"
+    },
+    {
+      "id": "edcdb741-9249-41f6-b026-198a6fcee1c6",
+      "slug": "martin-garrix-ibiza-2026-09-03",
+      "title": "Martin Garrix",
+      "date": "2026-09-03",
+      "venue": "Ushuaïa Ibiza",
+      "city": "Ibiza",
+      "country": "Spain",
+      "updatedAt": "2026-03-13T06:43:53.887Z",
+      "addedAt": "2026-03-07T12:18:52.526Z"
+    },
+    {
+      "id": "ce6ea4ed-ad54-48be-b3b7-50db873ad6a1",
+      "slug": "martin-garrix-ibiza-2026-09-10",
+      "title": "Martin Garrix",
+      "date": "2026-09-10",
+      "venue": "Ushuaïa Ibiza",
+      "city": "Ibiza",
+      "country": "Spain",
+      "updatedAt": "2026-03-14T12:29:02.734Z",
+      "addedAt": "2026-03-14T12:29:02.734Z"
+    },
+    {
+      "id": "2f0ceaf3-354d-4f50-9d64-0ed002de5a21",
+      "slug": "martin-garrix-ibiza-2026-09-17",
+      "title": "Martin Garrix",
+      "date": "2026-09-17",
+      "venue": "Ushuaïa Ibiza",
+      "city": "Ibiza",
+      "country": "Spain",
+      "updatedAt": "2026-03-21T12:18:56.677Z",
+      "addedAt": "2026-03-21T12:18:56.677Z"
+    }
+  ],
+  "djPastEvents": [],
+  "djNews": [
+    {
+      "id": "b2c6dd1a-5ba1-4f9b-ad6c-e84dc334d2aa",
+      "slug": "martin-garrix-shares-first-ever-track-with-solo-vocals-catharina-listen",
+      "title": "Martin Garrix shares first-ever track with solo vocals, ‘Catharina’: Listen",
+      "source": "DJ Mag",
+      "publishedAt": "2026-03-16T15:21:04.000Z"
+    },
+    {
+      "id": "574d0f34-fed1-492d-b28e-49711825ecfa",
+      "slug": "new-edm-friday-mar-13-martin-garrix-john-summit-more",
+      "title": "New EDM Friday Mar 13: Martin Garrix, John Summit & More",
+      "source": "EDM House Network",
+      "publishedAt": "2026-03-13T11:38:47.000Z"
+    },
+    {
+      "id": "3b447088-743f-4598-95c2-aba4c4a80053",
+      "slug": "martin-garrix-hints-at-new-music-with-teasers-on-his-socials-watch",
+      "title": "Martin Garrix hints at new music with teasers on his socials: Watch",
+      "source": "We Rave You",
+      "publishedAt": "2026-03-02T10:50:48.000Z"
+    },
+    {
+      "id": "e87803de-9b8e-44bc-9167-89cbea69ca7a",
+      "slug": "martin-garrix-in-search-of-local-djs-to-open-his-2026-americas-tour",
+      "title": "Martin Garrix in search of local DJs to open his 2026 Americas Tour",
+      "source": "We Rave You",
+      "publishedAt": "2026-02-03T13:23:59.000Z"
+    },
+    {
+      "id": "72d1e024-f89b-427a-be4a-1cf3c63b3a1c",
+      "slug": "martin-garrix-seeks-local-djs-to-open-on-his-2026-americas-tour",
+      "title": "Martin Garrix seeks local DJs to open on his 2026 Americas tour",
+      "source": "DJ Mag",
+      "publishedAt": "2026-02-02T12:23:07.000Z"
+    }
+  ],
+  "outboundLinks": [],
+  "ssrRelationships": {
+    "success": true,
+    "entityType": "dj",
+    "entityId": "26b108b6-45d6-4bff-8e98-38415d76f72d",
+    "relationships": {
+      "outgoing": [
+        {
+          "targetType": "event",
+          "targetSlug": "edc-thailand-2026",
+          "targetName": "EDC Thailand 2026",
+          "relationshipType": "performs_at",
+          "confidence": 0.95,
+          "suggestedAnchorText": "EDC Thailand 2026",
+          "suggestedContext": "See Martin Garrix perform at EDC Thailand 2026"
+        },
+        {
+          "targetType": "event",
+          "targetSlug": "martin-garrix-at-northerly-island-june-25-26-27-los-angeles-2026-06-25",
+          "targetName": "Martin Garrix at Northerly Island June 25, 26, & 27",
+          "relationshipType": "performs_at",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix at Northerly Island June 25, 26, & 27",
+          "suggestedContext": "See Martin Garrix perform at Martin Garrix at Northerly Island June 25, 26, & 27"
+        },
+        {
+          "targetType": "event",
+          "targetSlug": "ultra-music-festival",
+          "targetName": "Ultra Music Festival",
+          "relationshipType": "performs_at",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Ultra Music Festival",
+          "suggestedContext": "See Martin Garrix perform at Ultra Music Festival"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "afrojack",
+          "targetName": "Afrojack",
+          "relationshipType": "similar_artist",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Afrojack",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Afrojack"
+        },
+        {
+          "targetType": "city_guide",
+          "targetSlug": "amsterdam",
+          "targetName": "Amsterdam",
+          "relationshipType": "based_in",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Amsterdam EDM scene",
+          "suggestedContext": "Martin Garrix is based in Amsterdam"
+        },
+        {
+          "targetType": "genre_guide",
+          "targetSlug": "edm",
+          "targetName": "EDM",
+          "relationshipType": "plays_genre",
+          "confidence": 0.9,
+          "suggestedAnchorText": "EDM music",
+          "suggestedContext": "Martin Garrix specializes in EDM"
+        },
+        {
+          "targetType": "genre_guide",
+          "targetSlug": "progressive-house",
+          "targetName": "Progressive House",
+          "relationshipType": "plays_genre",
+          "confidence": 0.9,
+          "suggestedAnchorText": "Progressive House music",
+          "suggestedContext": "Martin Garrix specializes in Progressive House"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "laidback-luke",
+          "targetName": "Laidback Luke",
+          "relationshipType": "similar_artist",
+          "confidence": 0.9,
+          "suggestedAnchorText": "Laidback Luke",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Laidback Luke"
+        },
+        {
+          "targetType": "venue",
+          "targetSlug": "the-huntington-bank-pavilion-at-northerly-island-los-angeles",
+          "targetName": "The Huntington Bank Pavilion at Northerly Island",
+          "relationshipType": "performs_at_venue",
+          "confidence": 0.85,
+          "suggestedAnchorText": "The Huntington Bank Pavilion at Northerly Island",
+          "suggestedContext": "Martin Garrix has performed at The Huntington Bank Pavilion at Northerly Island"
+        },
+        {
+          "targetType": "venue",
+          "targetSlug": "bayfront-park-detroit",
+          "targetName": "Bayfront Park",
+          "relationshipType": "performs_at_venue",
+          "confidence": 0.85,
+          "suggestedAnchorText": "Bayfront Park",
+          "suggestedContext": "Martin Garrix has performed at Bayfront Park"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "fedde-le-grand",
+          "targetName": "Fedde le Grand",
+          "relationshipType": "similar_artist",
+          "confidence": 0.85,
+          "suggestedAnchorText": "Fedde le Grand",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Fedde le Grand"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "hardwell",
+          "targetName": "Hardwell",
+          "relationshipType": "similar_artist",
+          "confidence": 0.85,
+          "suggestedAnchorText": "Hardwell",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Hardwell"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "nicky-romero",
+          "targetName": "Nicky Romero",
+          "relationshipType": "similar_artist",
+          "confidence": 0.85,
+          "suggestedAnchorText": "Nicky Romero",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Nicky Romero"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "oliver-heldens",
+          "targetName": "Oliver Heldens",
+          "relationshipType": "similar_artist",
+          "confidence": 0.85,
+          "suggestedAnchorText": "Oliver Heldens",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Oliver Heldens"
+        },
+        {
+          "targetType": "venue",
+          "targetSlug": "pattaya-exhibition-and-convention-hall-peachpattaya",
+          "targetName": "Pattaya Exhibition and Convention Hall (PEACH)",
+          "relationshipType": "performs_at_venue",
+          "confidence": 0.85,
+          "suggestedAnchorText": "Pattaya Exhibition and Convention Hall (PEACH)",
+          "suggestedContext": "Martin Garrix has performed at Pattaya Exhibition and Convention Hall (PEACH)"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "dubvision",
+          "targetName": "DubVision",
+          "relationshipType": "similar_artist",
+          "confidence": 0.8,
+          "suggestedAnchorText": "DubVision",
+          "suggestedContext": "Fans of Martin Garrix also enjoy DubVision"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "dannic",
+          "targetName": "Dannic",
+          "relationshipType": "similar_artist",
+          "confidence": 0.8,
+          "suggestedAnchorText": "Dannic",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Dannic"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "tritonal",
+          "targetName": "Tritonal",
+          "relationshipType": "similar_artist",
+          "confidence": 0.8,
+          "suggestedAnchorText": "Tritonal",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Tritonal"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "alesso",
+          "targetName": "Alesso",
+          "relationshipType": "similar_artist",
+          "confidence": 0.8,
+          "suggestedAnchorText": "Alesso",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Alesso"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "alok",
+          "targetName": "Alok",
+          "relationshipType": "similar_artist",
+          "confidence": 0.75,
+          "suggestedAnchorText": "Alok",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Alok"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "blasterjaxx",
+          "targetName": "Blasterjaxx",
+          "relationshipType": "similar_artist",
+          "confidence": 0.75,
+          "suggestedAnchorText": "Blasterjaxx",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Blasterjaxx"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "bassjackers",
+          "targetName": "Bassjackers",
+          "relationshipType": "similar_artist",
+          "confidence": 0.75,
+          "suggestedAnchorText": "Bassjackers",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Bassjackers"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "claptone",
+          "targetName": "Claptone",
+          "relationshipType": "similar_artist",
+          "confidence": 0.75,
+          "suggestedAnchorText": "Claptone",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Claptone"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "12th-planet",
+          "targetName": "12th Planet",
+          "relationshipType": "similar_artist",
+          "confidence": 0.65,
+          "suggestedAnchorText": "12th Planet",
+          "suggestedContext": "Fans of Martin Garrix also enjoy 12th Planet"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "borgeous",
+          "targetName": "Borgeous",
+          "relationshipType": "similar_artist",
+          "confidence": 0.65,
+          "suggestedAnchorText": "Borgeous",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Borgeous"
+        },
+        {
+          "targetType": "dj",
+          "targetSlug": "don-diablo",
+          "targetName": "Don Diablo",
+          "relationshipType": "similar_artist",
+          "confidence": 0.65,
+          "suggestedAnchorText": "Don Diablo",
+          "suggestedContext": "Fans of Martin Garrix also enjoy Don Diablo"
+        }
+      ],
+      "incoming": [
+        {
+          "sourceType": "news",
+          "sourceSlug": "ultra-worldwide-confirms-the-return-of-ultra-australia-and-ultra-beach-gold-coas",
+          "sourceName": "ULTRA Worldwide Confirms the Return of ULTRA Australia and ULTRA Beach Gold Coast for 2026",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "the-playbook-san-franciscos-super-bowl-lx-dance-music-guide",
+          "sourceName": "The Playbook: San Francisco’s Super Bowl LX Dance Music Guide",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "tomorrowland-unveils-2026-lineup-for-consciencia-theme-debut",
+          "sourceName": "Tomorrowland Unveils 2026 Lineup For ‘CONSCIENCIA’ Theme Debut",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "the-best-sets-from-2016-skrillex-martin-garrix-disclosure-carl-cox-calvin-harris",
+          "sourceName": "The Best Sets from 2016; Skrillex, Martin Garrix, Disclosure, Carl Cox, Calvin Harris and more",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "ultra-europe-2025-releases-official-aftermovie",
+          "sourceName": "Ultra Europe 2025 Releases Official Aftermovie",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "ultra-music-festival-2026-phase-3-lineup-revealed",
+          "sourceName": "Ultra Music Festival 2026 Phase 3 Lineup Revealed",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "dancing-astronauts-artists-to-watch-in-2026",
+          "sourceName": "Dancing Astronaut’s Artists to Watch in 2026",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "matisse-sadko-releases-hard-hitting-new-song-pull-up",
+          "sourceName": "Matisse & Sadko Releases Hard Hitting New Song ‘Pull Up’",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "edc-las-vegas-2026-unveils-massive-30th-anniversary-lineup",
+          "sourceName": "EDC Las Vegas 2026 Unveils Massive 30th Anniversary Lineup",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "les-plages-lectroniques-unveils-phase-1-of-20th-anniversary-lineup",
+          "sourceName": "Les Plages Électroniques unveils phase 1 of 20th anniversary lineup",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "martin-garrix-seeks-local-djs-to-open-on-his-2026-americas-tour",
+          "sourceName": "Martin Garrix seeks local DJs to open on his 2026 Americas tour",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "lavern-releases-addictive-first-single-of-2026-in-my-head",
+          "sourceName": "LAVERN Releases Addictive First Single of 2026 ‘In My Head’",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "edc-las-vegas-2026-unveils-massive-lineup-for-its-30th-anniversary-edition",
+          "sourceName": "EDC Las Vegas 2026 unveils massive lineup for its 30th anniversary edition",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "afrojack-links-with-aml-again-on-new-track-rivers",
+          "sourceName": "AFROJACK Links With Amél Again on New Track ‘Rivers’",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "martin-garrix-future-rave-2025",
+          "sourceName": "Martin Garrix Announces New 'Future Rave 2025' Album",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "martin-garrix-announces-16-run-2026-americas-tour",
+          "sourceName": "Martin Garrix Announces 16-Run 2026 Americas Tour",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "martin-garrix-returns-to-ushuaa-ibiza-for-summer-2026-residency",
+          "sourceName": "Martin Garrix returns to Ushuaïa Ibiza for Summer 2026 residency",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "dancing-astronauts-new-music-friday-alleycvt-adam-sellouk-riordan-anam-disclosur",
+          "sourceName": "Dancing Astronaut’s New Music Friday: ALLEYCVT, Adam Sellouk, Riordan, anamē, Disclosure, and more (November 28 & December 5, 2025)",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "martin-garrix-announces-ushuaa-ibiza-2026-residency",
+          "sourceName": "Martin Garrix announces Ushuaïa Ibiza 2026 residency",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "ultra-2026-brings-the-heat-with-b2b-sets",
+          "sourceName": "Ultra 2026 Brings the Heat with B2B Sets",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "martin-garrix-announces-massive-americas-tour-for-2026",
+          "sourceName": "Martin Garrix announces massive Americas tour for 2026",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "rave-rae-on-risk-crowd-signals-and-the-moments-that-shape-his-sets",
+          "sourceName": "Rave Rae on Risk, Crowd Signals, and the Moments That Shape His Sets",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "pat-lok-talks-pressure-focus-and-trusting-experience-behind-the-decks",
+          "sourceName": "Pat Lok Talks Pressure, Focus, and Trusting Experience Behind the Decks",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "dancing-astronauts-new-music-friday-adam-sellouk-y-do-i-mary-droppinz-lusu-rossy",
+          "sourceName": "Dancing Astronaut’s New Music Friday: Adam Sellouk & Y do I, Mary Droppinz, LUSU, ROSSY, Fred again.., and more (December 12, 2025)",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "edc-las-vegas-2026-lineup-30th-anniversary-revealed",
+          "sourceName": "EDC Las Vegas 2026 Lineup: 30th Anniversary Revealed",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "david-guetta-announces-f-me-im-famous-residency-at-ushuaa-ibiza",
+          "sourceName": "David Guetta announces F*** ME I’M FAMOUS residency at Ushuaïa Ibiza",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "all-confirmed-ibiza-residencies-for-2026-so-far",
+          "sourceName": "All Confirmed Ibiza Residencies for 2026 (So Far)",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "ultra-music-festival-2026-the-10-biggest-surprises-on-this-years-lineup",
+          "sourceName": "Ultra Music Festival 2026: The 10 Biggest Surprises on This Year’s Lineup",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "untold-festival-2026-announces-first-names",
+          "sourceName": "Untold Festival 2026 Announces First Names",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "martin-garrix-in-search-of-local-djs-to-open-his-2026-americas-tour",
+          "sourceName": "Martin Garrix in search of local DJs to open his 2026 Americas Tour",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "tomorrowland-2026-sold-out-across-both-weekends",
+          "sourceName": "Tomorrowland 2026 Sold Out Across Both Weekends",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "martin-garrix-to-spotlight-local-openers-in-every-city-of-americas-tour",
+          "sourceName": "Martin Garrix To Spotlight Local Openers In Every City Of America’s Tour",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "mesto-releases-8216caramelle8217-the-new-single-that8217s-already-in-every-top-d",
+          "sourceName": "Mesto Releases &#8216;Caramelle&#8217; – The New Single That&#8217;s Already in Every Top DJ’s USB",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "martin-garrix-alesso-share-full-b2b-set-from-red-rocks-amphitheatre-watch",
+          "sourceName": "Martin Garrix & Alesso share full B2B set from Red Rocks Amphitheatre: Watch",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "ultra-worldwide-announces-ultra-new-zealand-coming-in-2026",
+          "sourceName": "Ultra Worldwide Announces Ultra New Zealand Coming in 2026",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "martin-garrix-announces-2026-americas-tour",
+          "sourceName": "Martin Garrix announces 2026 Americas tour",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "armin-van-buuren-flips-keshas-delusional-into-a-club-ready-hit",
+          "sourceName": "Armin van Buuren Flips Kesha’s ‘DELUSIONAL’ Into a Club Ready Hit",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "david-guetta-set-for-debut-red-rocks-performance-this-may",
+          "sourceName": "David Guetta set for debut Red Rocks performance this May",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "dj",
+          "sourceSlug": "afrojack",
+          "sourceName": "Afrojack",
+          "relationshipType": "similar_artist",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Fans of Afrojack also enjoy Martin Garrix"
+        },
+        {
+          "sourceType": "news",
+          "sourceSlug": "kiss-gene-simmons-takes-shot-at-edm-calling-it-boop-boop-music",
+          "sourceName": "Kiss’ Gene Simmons Takes Shot At EDM Calling It “Boop Boop” Music",
+          "relationshipType": "mentions",
+          "confidence": 0.95,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Read more about Martin Garrix"
+        },
+        {
+          "sourceType": "dj",
+          "sourceSlug": "fedde-le-grand",
+          "sourceName": "Fedde le Grand",
+          "relationshipType": "similar_artist",
+          "confidence": 0.85,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Fans of Fedde le Grand also enjoy Martin Garrix"
+        },
+        {
+          "sourceType": "dj",
+          "sourceSlug": "hardwell",
+          "sourceName": "Hardwell",
+          "relationshipType": "similar_artist",
+          "confidence": 0.85,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Fans of Hardwell also enjoy Martin Garrix"
+        },
+        {
+          "sourceType": "dj",
+          "sourceSlug": "oliver-heldens",
+          "sourceName": "Oliver Heldens",
+          "relationshipType": "similar_artist",
+          "confidence": 0.85,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Fans of Oliver Heldens also enjoy Martin Garrix"
+        },
+        {
+          "sourceType": "dj",
+          "sourceSlug": "nicky-romero",
+          "sourceName": "Nicky Romero",
+          "relationshipType": "similar_artist",
+          "confidence": 0.85,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Fans of Nicky Romero also enjoy Martin Garrix"
+        },
+        {
+          "sourceType": "dj",
+          "sourceSlug": "blasterjaxx",
+          "sourceName": "Blasterjaxx",
+          "relationshipType": "similar_artist",
+          "confidence": 0.75,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Fans of Blasterjaxx also enjoy Martin Garrix"
+        },
+        {
+          "sourceType": "dj",
+          "sourceSlug": "alok",
+          "sourceName": "Alok",
+          "relationshipType": "similar_artist",
+          "confidence": 0.75,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Fans of Alok also enjoy Martin Garrix"
+        },
+        {
+          "sourceType": "dj",
+          "sourceSlug": "claptone",
+          "sourceName": "Claptone",
+          "relationshipType": "similar_artist",
+          "confidence": 0.75,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Fans of Claptone also enjoy Martin Garrix"
+        },
+        {
+          "sourceType": "dj",
+          "sourceSlug": "luciano",
+          "sourceName": "Luciano",
+          "relationshipType": "similar_artist",
+          "confidence": 0.7,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Fans of Luciano also enjoy Martin Garrix"
+        },
+        {
+          "sourceType": "dj",
+          "sourceSlug": "san-holo",
+          "sourceName": "San Holo",
+          "relationshipType": "similar_artist",
+          "confidence": 0.7,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Fans of San Holo also enjoy Martin Garrix"
+        },
+        {
+          "sourceType": "dj",
+          "sourceSlug": "nora-en-pure",
+          "sourceName": "Nora En Pure",
+          "relationshipType": "similar_artist",
+          "confidence": 0.7,
+          "suggestedAnchorText": "Martin Garrix",
+          "suggestedContext": "Fans of Nora En Pure also enjoy Martin Garrix"
+        }
+      ]
+    }
+  },
+  "venueHistory": [
+    {
+      "venueId": "b1116f46-0ee3-4fbb-955a-2a6c5a6e2b80",
+      "venueName": "Ushuaïa Ibiza",
+      "venueSlug": "ushua-a-ibiza-ibiza",
+      "city": "Ibiza",
+      "country": "Spain",
+      "count": 5
+    },
+    {
+      "venueId": "0805dc84-2c03-481b-851b-c16773bede2a",
+      "venueName": "The Huntington Bank Pavilion at Northerly Island",
+      "venueSlug": "the-huntington-bank-pavilion-at-northerly-island-chicago",
+      "city": "Chicago",
+      "country": "United States",
+      "count": 1
+    },
+    {
+      "venueId": "1f1fbb11-d9b5-42f1-a119-db68787f2a86",
+      "venueName": "Bayfront Park",
+      "venueSlug": "bayfront-park-detroit",
+      "city": "Detroit",
+      "country": "United States",
+      "count": 1
+    },
+    {
+      "venueId": "98b8bf2e-36f4-45fe-919a-eec5363b5c7a",
+      "venueName": "Pattaya Exhibition and Convention Hall (PEACH)",
+      "venueSlug": "pattaya-exhibition-and-convention-hall-peachpattaya",
+      "city": "Pattaya",
+      "country": "Thailand",
+      "count": 1
+    }
+  ],
+  "aiDescriptions": {
+    "short": "Amsterdam, Netherlands-based DJ Martin Garrix delivers Progressive House sounds to global audiences.",
+    "medium": "Martin Garrix stands as a prominent figure in the Progressive House scene, known for blending Progressive House, EDM. Their approach to electronic music combines technical precision with creative expression, earning recognition across the international community.",
+    "long": "Hailing from Amsterdam, Netherlands, Martin Garrix has established themselves as a distinctive voice, incorporating elements of Progressive House, EDM into a cohesive sonic identity. \n\nTheir approach to electronic music combines technical precision with creative expression, earning recognition across the international community. Their catalog reflects an artist committed to the evolution of Progressive House, connecting with audiences through authentic performances.\n\nAs both a DJ and producer, Martin Garrix continues to push the boundaries of Progressive House while maintaining the authentic energy of the genre. Martin Garrix's ongoing contribution to the Amsterdam, Netherlands landscape has positioned them as a respected figure in the global electronic music scene.",
+    "hook": "Experience Progressive House through the lens of Martin Garrix, a distinctive voice from Amsterdam, Netherlands.",
+    "semantic_keywords": [
+      "martin garrix",
+      "progressive house",
+      "edm",
+      "Progressive House dj amsterdam",
+      "Progressive House producer amsterdam",
+      "electronic music amsterdam",
+      "Progressive House scene amsterdam",
+      "Martin Garrix residency",
+      "Martin Garrix live sets",
+      "dj",
+      "producer",
+      "electronic music",
+      "dance music"
+    ]
+  },
+  "adjacentDJs": {
+    "prev": {
+      "slug": "martin-fredes",
+      "name": "Martin Fredes"
+    },
+    "next": {
+      "slug": "martin-huergo",
+      "name": "Martin Huergo"
+    }
+  }
+}

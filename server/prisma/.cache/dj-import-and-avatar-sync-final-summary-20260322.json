@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-03-22T11:59:30+08:00",
+  "djImport": {
+    "sourceTotal": 12468,
+    "validSlug": 12467,
+    "skippedEmptySlug": 1,
+    "updatedAfterSchemaMigration": 12467,
+    "failedAfterRetry": 0,
+    "extraFieldsRemaining": 0
+  },
+  "avatarSync": {
+    "ossPrefix": "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/djs/avatar/",
+    "totalDjRows": 12546,
+    "avatarInOss": 12540,
+    "avatarNull": 2,
+    "avatarSourceUnreachable": [
+      "dj-bassan",
+      "john-talabot",
+      "nils-kaufhold",
+      "prossowski"
+    ]
+  }
+}

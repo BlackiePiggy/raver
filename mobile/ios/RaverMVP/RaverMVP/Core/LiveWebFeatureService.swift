@@ -351,6 +351,39 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data
     }
 
+    func fetchLearnLabels(
+        page: Int,
+        limit: Int,
+        sortBy: String,
+        order: String,
+        search: String?,
+        nation: String?,
+        genre: String?
+    ) async throws -> LearnLabelListPage {
+        var queryItems = [
+            URLQueryItem(name: "page", value: "\(max(1, page))"),
+            URLQueryItem(name: "limit", value: "\(max(1, min(500, limit)))"),
+            URLQueryItem(name: "sortBy", value: sortBy),
+            URLQueryItem(name: "order", value: order)
+        ]
+        if let search, !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "search", value: search))
+        }
+        if let nation, !nation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "nation", value: nation))
+        }
+        if let genre, !genre.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "genre", value: genre))
+        }
+
+        let response: BFFEnvelope<BFFItems<LearnLabel>> = try await request(
+            path: "/v1/learn/labels",
+            method: "GET",
+            queryItems: queryItems
+        )
+        return LearnLabelListPage(items: response.data.items, pagination: response.pagination)
+    }
+
     func fetchRankingBoards() async throws -> [RankingBoard] {
         let response: BFFEnvelope<[RankingBoard]> = try await request(path: "/v1/learn/rankings", method: "GET")
         return response.data

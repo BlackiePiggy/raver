@@ -1,0 +1,22 @@
+{
+  "startedAt": "2026-03-22T12:41:01.775Z",
+  "finishedAt": "2026-03-22T12:41:54.997Z",
+  "durationSeconds": 53,
+  "placeholderUrl": "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/djs/avatar/_placeholder.png",
+  "canonicalPrefix": "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/djs/avatar/",
+  "stats": {
+    "totalPlaceholderRows": 10945,
+    "targets": 20,
+    "updated": 9,
+    "failNoArtist": 9,
+    "failNoImage": 2,
+    "failed": 11,
+    "processed": 20,
+    "bySpotifyIdPath": 0,
+    "bySearchPath": 11
+  },
+  "files": {
+    "progress": "/Users/blackie/Projects/raver/server/prisma/.cache/dj-placeholder-avatar-spotify-progress.json",
+    "report": "/Users/blackie/Projects/raver/server/prisma/.cache/dj-placeholder-avatar-spotify-report.json"
+  }
+}

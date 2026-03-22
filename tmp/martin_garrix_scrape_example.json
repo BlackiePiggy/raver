@@ -1,0 +1,175 @@
+{
+  "seed_entry_example": {
+    "name": "Martin Garrix",
+    "url": "https://edmdancedirectory.com/djs/martin-garrix",
+    "slug": "martin-garrix"
+  },
+  "detail_api_url": "https://edmdancedirectory.com/api/djs/martin-garrix",
+  "detail_api_fields": {
+    "id": "26b108b6-45d6-4bff-8e98-38415d76f72d",
+    "name": "Martin Garrix",
+    "slug": "martin-garrix",
+    "image": "https://i.scdn.co/image/ab6761610000e5ebf5b8ee60f1f4ee3453aba40b",
+    "genres": [
+      "Progressive House",
+      "EDM"
+    ],
+    "location": "Amsterdam, Netherlands",
+    "bio": "Martin Garrix, born Martijn Garritsen, is a Dutch DJ and producer from Amstelveen. His track Animals became a global phenomenon. Founded STMPD Records. Ranked number one DJ by DJ Mag multiple times. Regular headline performances at Tomorrowland, Ultra, and major festivals. His sound shaped future rave.",
+    "website": "https://martingarrix.com",
+    "wikipedia": "https://en.wikipedia.org/wiki/Martin_Garrix",
+    "instagram": "https://instagram.com/martingarrix",
+    "spotify": "https://open.spotify.com/artist/60d24wfXkVzDSfLS6hyCjZ",
+    "soundcloud": null,
+    "twitter": "https://twitter.com/martingarrix",
+    "tiktok": "https://www.tiktok.com/@martingarrix",
+    "bookingAgency": "WME",
+    "bookingAgent": "Kyle B.",
+    "bookingContact": null,
+    "bookingUrl": "https://mn2s.com/",
+    "upcomingShows": 8,
+    "realName": "Martijn Gerard Garritsen",
+    "birthDate": "1996-05-14",
+    "nationality": "Dutch",
+    "yearsActive": "2012-present",
+    "labels": [
+      "STMPD RCRDS",
+      "Epic Amsterdam",
+      "Spinnin Records"
+    ],
+    "dataSource": "verified_manual",
+    "updatedAt": "2026-03-22T07:19:19.689Z",
+    "sameAs": [
+      "https://martingarrix.com",
+      "https://instagram.com/martingarrix",
+      "https://open.spotify.com/artist/60d24wfXkVzDSfLS6hyCjZ",
+      "https://en.wikipedia.org/wiki/Martin_Garrix"
+    ]
+  },
+  "detail_page_extra_blocks": {
+    "djUpcomingEvents_count": 8,
+    "djUpcomingEvents_sample": [
+      {
+        "id": "75537977-a319-4e11-9af0-603d318048a3",
+        "slug": "ultra-music-festival",
+        "title": "Ultra Music Festival",
+        "date": "2026-03-27",
+        "venue": "Bayfront Park",
+        "city": "Detroit",
+        "country": "United States",
+        "updatedAt": "2026-03-12T17:04:19.729Z",
+        "addedAt": "2025-11-26T13:15:41.865Z"
+      },
+      {
+        "id": "c2e5c3d7-3bc1-4c93-ba12-79757fdfb466",
+        "slug": "edc-thailand-2026",
+        "title": "EDC Thailand 2026",
+        "date": "2026-04-24",
+        "venue": "Pattaya Exhibition and Convention Hall (PEACH)",
+        "city": "Pattaya",
+        "country": "Thailand",
+        "updatedAt": "2026-03-12T17:30:32.086Z",
+        "addedAt": "2026-01-26T22:15:33.344Z"
+      },
+      {
+        "id": "5bdc5701-679e-4f42-9c4b-a3b9d3312843",
+        "slug": "martin-garrix-at-northerly-island-june-25-26-27-los-angeles-2026-06-25",
+        "title": "Martin Garrix at Northerly Island June 25, 26, & 27",
+        "date": "2026-06-25",
+        "venue": "The Huntington Bank Pavilion at Northerly Island",
+        "city": "Chicago",
+        "country": "United States",
+        "updatedAt": "2026-03-13T06:29:27.201Z",
+        "addedAt": "2025-12-27T11:05:10.582Z"
+      }
+    ],
+    "djNews_count": 5,
+    "djNews_sample": [
+      {
+        "id": "b2c6dd1a-5ba1-4f9b-ad6c-e84dc334d2aa",
+        "slug": "martin-garrix-shares-first-ever-track-with-solo-vocals-catharina-listen",
+        "title": "Martin Garrix shares first-ever track with solo vocals, ‘Catharina’: Listen",
+        "source": "DJ Mag",
+        "publishedAt": "2026-03-16T15:21:04.000Z"
+      },
+      {
+        "id": "574d0f34-fed1-492d-b28e-49711825ecfa",
+        "slug": "new-edm-friday-mar-13-martin-garrix-john-summit-more",
+        "title": "New EDM Friday Mar 13: Martin Garrix, John Summit & More",
+        "source": "EDM House Network",
+        "publishedAt": "2026-03-13T11:38:47.000Z"
+      },
+      {
+        "id": "3b447088-743f-4598-95c2-aba4c4a80053",
+        "slug": "martin-garrix-hints-at-new-music-with-teasers-on-his-socials-watch",
+        "title": "Martin Garrix hints at new music with teasers on his socials: Watch",
+        "source": "We Rave You",
+        "publishedAt": "2026-03-02T10:50:48.000Z"
+      }
+    ],
+    "venueHistory_count": 4,
+    "venueHistory_sample": [
+      {
+        "venueId": "b1116f46-0ee3-4fbb-955a-2a6c5a6e2b80",
+        "venueName": "Ushuaïa Ibiza",
+        "venueSlug": "ushua-a-ibiza-ibiza",
+        "city": "Ibiza",
+        "country": "Spain",
+        "count": 5
+      },
+      {
+        "venueId": "0805dc84-2c03-481b-851b-c16773bede2a",
+        "venueName": "The Huntington Bank Pavilion at Northerly Island",
+        "venueSlug": "the-huntington-bank-pavilion-at-northerly-island-chicago",
+        "city": "Chicago",
+        "country": "United States",
+        "count": 1
+      },
+      {
+        "venueId": "1f1fbb11-d9b5-42f1-a119-db68787f2a86",
+        "venueName": "Bayfront Park",
+        "venueSlug": "bayfront-park-detroit",
+        "city": "Detroit",
+        "country": "United States",
+        "count": 1
+      }
+    ],
+    "aiDescriptions": {
+      "short": "Amsterdam, Netherlands-based DJ Martin Garrix delivers Progressive House sounds to global audiences.",
+      "medium": "Martin Garrix stands as a prominent figure in the Progressive House scene, known for blending Progressive House, EDM. Their approach to electronic music combines technical precision with creative expression, earning recognition across the international community.",
+      "long": "Hailing from Amsterdam, Netherlands, Martin Garrix has established themselves as a distinctive voice, incorporating elements of Progressive House, EDM into a cohesive sonic identity. \n\nTheir approach to electronic music combines technical precision with creative expression, earning recognition across the international community. Their catalog reflects an artist committed to the evolution of Progressive House, connecting with audiences through authentic performances.\n\nAs both a DJ and producer, Martin Garrix continues to push the boundaries of Progressive House while maintaining the authentic energy of the genre. Martin Garrix's ongoing contribution to the Amsterdam, Netherlands landscape has positioned them as a respected figure in the global electronic music scene.",
+      "hook": "Experience Progressive House through the lens of Martin Garrix, a distinctive voice from Amsterdam, Netherlands.",
+      "semantic_keywords": [
+        "martin garrix",
+        "progressive house",
+        "edm",
+        "Progressive House dj amsterdam",
+        "Progressive House producer amsterdam",
+        "electronic music amsterdam",
+        "Progressive House scene amsterdam",
+        "Martin Garrix residency",
+        "Martin Garrix live sets",
+        "dj",
+        "producer",
+        "electronic music",
+        "dance music"
+      ]
+    },
+    "adjacentDJs": {
+      "prev": {
+        "slug": "martin-fredes",
+        "name": "Martin Fredes"
+      },
+      "next": {
+        "slug": "martin-huergo",
+        "name": "Martin Huergo"
+      }
+    },
+    "ssrRelationships_summary": {
+      "success": true,
+      "entityType": "dj",
+      "entityId": "26b108b6-45d6-4bff-8e98-38415d76f72d",
+      "relationships_count": 76
+    }
+  }
+}

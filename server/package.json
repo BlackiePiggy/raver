@@ -12,7 +12,11 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
     "prisma:backfill:user-profiles": "ts-node prisma/backfill-user-profiles.ts",
-    "prisma:seed:live-feed-posts": "ts-node prisma/seed-live-feed-posts.ts"
+    "prisma:seed:live-feed-posts": "ts-node prisma/seed-live-feed-posts.ts",
+    "labels:import": "ts-node prisma/import-labelsbase.ts",
+    "djs:import:edmdd": "ts-node prisma/import-edmdancedirectory-djs.ts",
+    "djs:avatars:oss": "ts-node prisma/upload-dj-avatars-to-oss.ts",
+    "djs:avatars:spotify-placeholder-fix": "ts-node prisma/backfill-dj-placeholder-avatars-via-spotify.ts"
   },
   "keywords": [
     "raver",
@@ -23,6 +27,7 @@
   "license": "MIT",
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "ali-oss": "^6.23.0",
     "axios": "^1.13.6",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
@@ -34,6 +39,7 @@
     "multer": "^2.1.1"
   },
   "devDependencies": {
+    "@types/ali-oss": "^6.23.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",

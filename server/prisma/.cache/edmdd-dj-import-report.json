@@ -1,0 +1,21 @@
+{
+  "startedAt": "2026-03-22T11:53:50.622Z",
+  "finishedAt": "2026-03-22T11:53:54.207Z",
+  "durationSeconds": 4,
+  "stats": {
+    "totalFromSource": 12468,
+    "totalValidSlug": 12467,
+    "skippedEmptySlug": 1,
+    "skippedCompletedFromProgress": 12463,
+    "created": 0,
+    "updated": 4,
+    "failed": 0,
+    "processed": 4
+  },
+  "files": {
+    "progress": "/Users/blackie/Projects/raver/server/prisma/.cache/edmdd-dj-import-progress.json",
+    "report": "/Users/blackie/Projects/raver/server/prisma/.cache/edmdd-dj-import-report.json",
+    "extraFields": "/Users/blackie/Projects/raver/server/prisma/.cache/edmdd-dj-extra-fields.json",
+    "seedList": "/Users/blackie/Projects/raver/server/prisma/.cache/edmdd-dj-seed-list.json"
+  }
+}
