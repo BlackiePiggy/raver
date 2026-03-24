@@ -6,7 +6,7 @@ struct LoginView: View {
     @EnvironmentObject private var appState: AppState
 
     @State private var mode: AuthMode = .login
-    @State private var username = "blackie"
+    @State private var username = "uploadtester"
     @State private var email = ""
     @State private var displayName = ""
     @State private var password = "123456"

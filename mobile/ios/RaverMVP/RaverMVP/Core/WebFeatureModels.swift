@@ -154,6 +154,7 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var slug: String?
     var bio: String?
     var avatarUrl: String?
+    var avatarSourceUrl: String? = nil
     var bannerUrl: String?
     var country: String?
     var spotifyId: String?
@@ -163,6 +164,12 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var twitterUrl: String?
     var isVerified: Bool?
     var followerCount: Int?
+    var sourceDataSource: String? = nil
+    var contributors: [WebUserLite]? = nil
+    var contributorUsernames: [String]? = nil
+    var uploadedByUsername: String? = nil
+    var isContributor: Bool? = nil
+    var canEdit: Bool? = nil
     var createdAt: Date?
     var updatedAt: Date?
     var isFollowing: Bool?
@@ -328,6 +335,71 @@ struct WebCheckin: Codable, Identifiable, Hashable {
     var dj: CheckinDJLite?
 }
 
+struct EventAttendanceDJSelection: Codable, Hashable, Identifiable {
+    let id: String
+    var name: String
+    var avatarUrl: String?
+    var country: String?
+}
+
+struct EventAttendanceDaySelectionPayload: Codable, Hashable, Identifiable {
+    var id: String { dayID }
+    var dayID: String
+    var dayIndex: Int
+    var djSelections: [EventAttendanceDJSelection]
+}
+
+extension WebCheckin {
+    private static let eventAttendanceNotePrefix = "event_checkin_v1:"
+
+    var normalizedNote: String {
+        note?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+    }
+
+    var isPlannedCheckin: Bool {
+        normalizedNote == "planned"
+    }
+
+    var isMarkedCheckin: Bool {
+        normalizedNote == "marked"
+    }
+
+    var isEventAttendanceCheckin: Bool {
+        type == "event" && !isPlannedCheckin && !isMarkedCheckin
+    }
+
+    var eventAttendanceSelections: [EventAttendanceDaySelectionPayload] {
+        guard let note else { return [] }
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(Self.eventAttendanceNotePrefix) else { return [] }
+        let payloadString = String(trimmed.dropFirst(Self.eventAttendanceNotePrefix.count))
+        guard let data = payloadString.data(using: .utf8) else { return [] }
+        if let payloads = try? JSONDecoder().decode([EventAttendanceDaySelectionPayload].self, from: data) {
+            return payloads
+        }
+        if let payload = try? JSONDecoder().decode(EventAttendanceDaySelectionPayload.self, from: data) {
+            return [payload]
+        }
+        return []
+    }
+
+    var eventAttendanceSelection: EventAttendanceDaySelectionPayload? {
+        eventAttendanceSelections.first
+    }
+
+    static func makeEventAttendanceNote(selections: [EventAttendanceDaySelectionPayload]) -> String? {
+        guard let data = try? JSONEncoder().encode(selections),
+              let json = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return "\(eventAttendanceNotePrefix)\(json)"
+    }
+
+    static func makeEventAttendanceNote(payload: EventAttendanceDaySelectionPayload) -> String? {
+        makeEventAttendanceNote(selections: [payload])
+    }
+}
+
 struct CheckinEventLite: Codable, Identifiable, Hashable {
     let id: String
     var name: String
@@ -347,6 +419,14 @@ struct CheckinDJLite: Codable, Identifiable, Hashable {
 
 struct CreateCheckinInput: Codable {
     var type: String
+    var eventId: String?
+    var djId: String?
+    var note: String?
+    var rating: Int?
+    var attendedAt: Date? = nil
+}
+
+struct UpdateCheckinInput: Codable {
     var eventId: String?
     var djId: String?
     var note: String?
@@ -540,4 +620,81 @@ struct UploadMediaResponse: Codable, Hashable {
     var fileName: String
     var mimeType: String
     var size: Int
+}
+
+struct EventLineupImageImportItem: Codable, Hashable, Identifiable {
+    let id: String
+    var musician: String
+    var time: String?
+    var stage: String?
+    var date: String?
+}
+
+struct EventLineupImageImportResponse: Codable, Hashable {
+    var normalizedText: String
+    var lineupInfo: [EventLineupImageImportItem]
+}
+
+struct SpotifyDJCandidate: Codable, Hashable, Identifiable {
+    var id: String { spotifyId }
+    var spotifyId: String
+    var name: String
+    var uri: String
+    var url: String?
+    var popularity: Int
+    var followers: Int
+    var genres: [String]
+    var imageUrl: String?
+    var existingDJId: String?
+    var existingDJName: String?
+    var existingMatchType: String?
+}
+
+struct ImportSpotifyDJInput: Codable, Hashable {
+    var spotifyId: String
+    var name: String?
+    var aliases: [String]?
+    var bio: String?
+    var country: String?
+    var instagramUrl: String?
+    var soundcloudUrl: String?
+    var twitterUrl: String?
+    var isVerified: Bool?
+}
+
+struct ImportSpotifyDJResponse: Codable, Hashable {
+    var action: String
+    var avatarUploadedToOss: Bool
+    var replacedExistingAvatar: Bool
+    var dj: WebDJ
+}
+
+struct ImportManualDJInput: Codable, Hashable {
+    var name: String
+    var spotifyId: String?
+    var aliases: [String]?
+    var bio: String?
+    var country: String?
+    var instagramUrl: String?
+    var soundcloudUrl: String?
+    var twitterUrl: String?
+    var isVerified: Bool?
+}
+
+struct ImportManualDJResponse: Codable, Hashable {
+    var action: String
+    var dj: WebDJ
+}
+
+struct UpdateDJInput: Codable, Hashable {
+    var name: String?
+    var aliases: [String]?
+    var bio: String?
+    var country: String?
+    var spotifyId: String?
+    var appleMusicId: String?
+    var instagramUrl: String?
+    var soundcloudUrl: String?
+    var twitterUrl: String?
+    var isVerified: Bool?
 }

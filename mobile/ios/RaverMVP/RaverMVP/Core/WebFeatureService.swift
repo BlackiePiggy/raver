@@ -7,10 +7,36 @@ protocol WebFeatureService {
     func createEvent(input: CreateEventInput) async throws -> WebEvent
     func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent
     func deleteEvent(id: String) async throws
-    func uploadEventImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
+    func uploadEventImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        eventID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse
+    func importEventLineupFromImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        startDate: Date?,
+        endDate: Date?
+    ) async throws -> EventLineupImageImportResponse
+    func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
+    func uploadPostVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
 
     func fetchDJs(page: Int, limit: Int, search: String?, sortBy: String) async throws -> DJListPage
     func fetchDJ(id: String) async throws -> WebDJ
+    func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate]
+    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportSpotifyDJResponse
+    func importManualDJ(input: ImportManualDJInput) async throws -> ImportManualDJResponse
+    func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ
+    func uploadDJImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        djID: String,
+        usage: String
+    ) async throws -> UploadMediaResponse
     func fetchDJSets(djID: String) async throws -> [WebDJSet]
     func fetchDJEvents(djID: String) async throws -> [WebEvent]
     func fetchDJFollowStatus(djID: String) async throws -> Bool
@@ -37,9 +63,12 @@ protocol WebFeatureService {
     func deleteSetComment(commentID: String) async throws
 
     func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage
+    func fetchMyCheckins(page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage
     func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage
+    func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage
     func fetchMyDJCheckinCount(djID: String) async throws -> Int
     func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin
+    func updateCheckin(id: String, input: UpdateCheckinInput) async throws -> WebCheckin
     func deleteCheckin(id: String) async throws
 
     func fetchRatingEvents() async throws -> [WebRatingEvent]
@@ -67,4 +96,16 @@ protocol WebFeatureService {
     func fetchRankingBoardDetail(boardID: String, year: Int?) async throws -> RankingBoardDetail
 
     func fetchMyPublishes() async throws -> MyPublishes
+}
+
+extension WebFeatureService {
+    func uploadEventImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
+        try await uploadEventImage(
+            imageData: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
+            eventID: nil,
+            usage: nil
+        )
+    }
 }

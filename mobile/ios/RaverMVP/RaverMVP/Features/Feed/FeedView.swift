@@ -5,6 +5,7 @@ struct FeedView: View {
     @StateObject private var viewModel: FeedViewModel
     @State private var selectedUserForProfile: UserSummary?
     @State private var selectedPostForDetail: Post?
+    @State private var selectedPostForEdit: Post?
     @State private var showCompose = false
 
     init() {
@@ -43,11 +44,17 @@ struct FeedView: View {
                                     onAuthorTap: {
                                         selectedUserForProfile = post.author
                                     },
-                                    onSquadTap: nil
+                                    onSquadTap: nil,
+                                    onEditTap: post.author.id == appState.session?.user.id
+                                        ? { selectedPostForEdit = post }
+                                        : nil
                                 )
                                 .foregroundStyle(RaverTheme.primaryText)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
+                                    if selectedPostForEdit?.id == post.id {
+                                        return
+                                    }
                                     selectedPostForDetail = post
                                 }
                                 .onAppear {
@@ -98,7 +105,27 @@ struct FeedView: View {
                 UserProfileView(userID: user.id)
             }
             .sheet(isPresented: $showCompose) {
-                ComposePostView()
+                ComposePostView(
+                    mode: .create,
+                    onPostCreated: { created in
+                        viewModel.mergeNewPost(created)
+                    }
+                )
+                .environmentObject(appState)
+            }
+            .sheet(item: $selectedPostForEdit) { post in
+                ComposePostView(
+                    mode: .edit(post),
+                    onPostUpdated: { updated in
+                        viewModel.mergeUpdatedPost(updated)
+                    },
+                    onPostDeleted: { deletedPostID in
+                        viewModel.removePost(deletedPostID)
+                        if selectedPostForDetail?.id == deletedPostID {
+                            selectedPostForDetail = nil
+                        }
+                    }
+                )
                     .environmentObject(appState)
             }
             .fullScreenCover(item: $selectedPostForDetail) { post in

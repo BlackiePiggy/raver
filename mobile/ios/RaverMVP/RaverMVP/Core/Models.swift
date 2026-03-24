@@ -115,6 +115,11 @@ struct CreatePostInput: Codable {
     let images: [String]
 }
 
+struct UpdatePostInput: Codable {
+    let content: String
+    let images: [String]
+}
+
 struct UpdateMyProfileInput: Codable {
     var displayName: String
     var bio: String

@@ -484,9 +484,98 @@ actor MockWebFeatureService: WebFeatureService {
         events.remove(at: idx)
     }
 
-    func uploadEventImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
+    func uploadEventImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        eventID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse {
         _ = imageData
+        _ = usage
+        if let eventID, !eventID.isEmpty {
+            return UploadMediaResponse(
+                url: "/uploads/events/\(eventID)/mock-\(fileName)",
+                fileName: fileName,
+                mimeType: mimeType,
+                size: 1
+            )
+        }
         return UploadMediaResponse(url: "/uploads/events/mock-\(fileName)", fileName: fileName, mimeType: mimeType, size: 1)
+    }
+
+    func importEventLineupFromImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        startDate: Date?,
+        endDate: Date?
+    ) async throws -> EventLineupImageImportResponse {
+        _ = imageData
+        _ = fileName
+        _ = mimeType
+        _ = startDate
+        _ = endDate
+        return EventLineupImageImportResponse(
+            normalizedText: """
+            {
+              "lineup_info": [
+                {"musician":"ARTBAT","time":"17:00-18:00","stage":"Main Stage","date":"Day1"},
+                {"musician":"ANYMA B2B MRAK","time":"18:30-19:30","stage":"Main Stage","date":"Day1"},
+                {"musician":"未知","time":"未知","stage":"未知","date":"未知"}
+              ]
+            }
+            """,
+            lineupInfo: [
+                EventLineupImageImportItem(
+                    id: UUID().uuidString,
+                    musician: "ARTBAT",
+                    time: "17:00-18:00",
+                    stage: "Main Stage",
+                    date: "Day1"
+                ),
+                EventLineupImageImportItem(
+                    id: UUID().uuidString,
+                    musician: "ANYMA B2B MRAK",
+                    time: "18:30-19:30",
+                    stage: "Main Stage",
+                    date: "Day1"
+                )
+            ]
+        )
+    }
+
+    func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
+        _ = imageData
+        return UploadMediaResponse(url: "/uploads/feed/mock-\(fileName)", fileName: fileName, mimeType: mimeType, size: 1)
+    }
+
+    func uploadPostVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
+        _ = videoData
+        let normalizedName = fileName.isEmpty ? "video-\(UUID().uuidString).mp4" : fileName
+        return UploadMediaResponse(url: "/uploads/feed/mock-\(normalizedName)", fileName: normalizedName, mimeType: mimeType, size: 1)
+    }
+
+    func uploadDJImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        djID: String,
+        usage: String
+    ) async throws -> UploadMediaResponse {
+        _ = imageData
+        guard let index = djs.firstIndex(where: { $0.id == djID }) else {
+            throw ServiceError.message("DJ 不存在")
+        }
+        let safeUsage = usage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "image" : usage
+        let url = "/uploads/djs/\(djID)/\(safeUsage)-mock-\(fileName)"
+        if safeUsage == "avatar" {
+            djs[index].avatarUrl = url
+        } else if safeUsage == "banner" {
+            djs[index].bannerUrl = url
+        }
+        djs[index].updatedAt = Date()
+        return UploadMediaResponse(url: url, fileName: fileName, mimeType: mimeType, size: 1)
     }
 
     func fetchDJs(page: Int, limit: Int, search: String?, sortBy: String) async throws -> DJListPage {
@@ -528,6 +617,232 @@ actor MockWebFeatureService: WebFeatureService {
             throw ServiceError.message("DJ 不存在")
         }
         return dj
+    }
+
+    func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let normalized = trimmed.lowercased()
+        let matched = djs.filter { $0.name.lowercased().contains(normalized) }
+        let maxCount = max(1, min(20, limit))
+
+        if matched.isEmpty {
+            return [
+                SpotifyDJCandidate(
+                    spotifyId: "spotify_\(UUID().uuidString)",
+                    name: trimmed,
+                    uri: "spotify:artist:\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))",
+                    url: "https://open.spotify.com/search/\(trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? trimmed)",
+                    popularity: 50,
+                    followers: 10000,
+                    genres: [],
+                    imageUrl: nil,
+                    existingDJId: nil,
+                    existingDJName: nil,
+                    existingMatchType: nil
+                )
+            ]
+        }
+
+        return Array(matched.prefix(maxCount)).map { dj in
+            SpotifyDJCandidate(
+                spotifyId: dj.spotifyId ?? "spotify_\(dj.id)",
+                name: dj.name,
+                uri: "spotify:artist:\(dj.spotifyId ?? dj.id)",
+                url: dj.spotifyId.flatMap { "https://open.spotify.com/artist/\($0)" },
+                popularity: 70,
+                followers: dj.followerCount ?? 0,
+                genres: [],
+                imageUrl: dj.avatarUrl,
+                existingDJId: dj.id,
+                existingDJName: dj.name,
+                existingMatchType: "name_case_insensitive"
+            )
+        }
+    }
+
+    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportSpotifyDJResponse {
+        let spotifyId = input.spotifyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !spotifyId.isEmpty else {
+            throw ServiceError.message("spotifyId 不能为空")
+        }
+
+        let finalName = (input.name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            ? input.name!.trimmingCharacters(in: .whitespacesAndNewlines)
+            : "Spotify Artist"
+        let normalizedName = finalName.lowercased()
+
+        let existingBySpotify = djs.firstIndex { ($0.spotifyId ?? "").caseInsensitiveCompare(spotifyId) == .orderedSame }
+        let existingByName = djs.firstIndex { $0.name.lowercased() == normalizedName }
+        let targetIndex = existingBySpotify ?? existingByName
+
+        let aliases = input.aliases?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty } ?? []
+        let bio = normalizedOptional(input.bio)
+
+        if let index = targetIndex {
+            var updated = djs[index]
+            updated.spotifyId = spotifyId
+            updated.name = updated.name.isEmpty ? finalName : updated.name
+            updated.aliases = Array(Set((updated.aliases ?? []) + aliases)).sorted()
+            updated.bio = bio ?? updated.bio
+            updated.country = normalizedOptional(input.country) ?? updated.country
+            updated.instagramUrl = normalizedOptional(input.instagramUrl) ?? updated.instagramUrl
+            updated.soundcloudUrl = normalizedOptional(input.soundcloudUrl) ?? updated.soundcloudUrl
+            updated.twitterUrl = normalizedOptional(input.twitterUrl) ?? updated.twitterUrl
+            updated.isVerified = input.isVerified ?? updated.isVerified ?? true
+            updated.updatedAt = Date()
+            djs[index] = updated
+            return ImportSpotifyDJResponse(
+                action: "updated",
+                avatarUploadedToOss: false,
+                replacedExistingAvatar: false,
+                dj: updated
+            )
+        }
+
+        let created = WebDJ(
+            id: "dj_\(UUID().uuidString)",
+            name: finalName,
+            aliases: aliases,
+            slug: slugify(finalName),
+            bio: bio,
+            avatarUrl: nil,
+            bannerUrl: nil,
+            country: normalizedOptional(input.country),
+            spotifyId: spotifyId,
+            appleMusicId: nil,
+            soundcloudUrl: normalizedOptional(input.soundcloudUrl),
+            instagramUrl: normalizedOptional(input.instagramUrl),
+            twitterUrl: normalizedOptional(input.twitterUrl),
+            isVerified: input.isVerified ?? true,
+            followerCount: 0,
+            createdAt: Date(),
+            updatedAt: Date(),
+            isFollowing: false
+        )
+        djs.insert(created, at: 0)
+        return ImportSpotifyDJResponse(
+            action: "created",
+            avatarUploadedToOss: false,
+            replacedExistingAvatar: false,
+            dj: created
+        )
+    }
+
+    func importManualDJ(input: ImportManualDJInput) async throws -> ImportManualDJResponse {
+        let finalName = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !finalName.isEmpty else {
+            throw ServiceError.message("DJ 名称不能为空")
+        }
+
+        let normalizedName = finalName.lowercased()
+        let spotifyId = normalizedOptional(input.spotifyId)
+        let existingBySpotify = spotifyId.flatMap { value in
+            djs.firstIndex(where: { ($0.spotifyId ?? "").caseInsensitiveCompare(value) == .orderedSame })
+        }
+        let existingByName = djs.firstIndex { $0.name.lowercased() == normalizedName }
+        let targetIndex = existingBySpotify ?? existingByName
+
+        let aliases = input.aliases?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty } ?? []
+        let bio = normalizedOptional(input.bio)
+
+        if let index = targetIndex {
+            var updated = djs[index]
+            updated.name = updated.name.isEmpty ? finalName : updated.name
+            updated.spotifyId = spotifyId ?? updated.spotifyId
+            updated.aliases = Array(Set((updated.aliases ?? []) + aliases)).sorted()
+            updated.bio = bio ?? updated.bio
+            updated.country = normalizedOptional(input.country) ?? updated.country
+            updated.instagramUrl = normalizedOptional(input.instagramUrl) ?? updated.instagramUrl
+            updated.soundcloudUrl = normalizedOptional(input.soundcloudUrl) ?? updated.soundcloudUrl
+            updated.twitterUrl = normalizedOptional(input.twitterUrl) ?? updated.twitterUrl
+            updated.isVerified = input.isVerified ?? updated.isVerified ?? true
+            updated.updatedAt = Date()
+            djs[index] = updated
+            return ImportManualDJResponse(action: "updated", dj: updated)
+        }
+
+        let created = WebDJ(
+            id: "dj_\(UUID().uuidString)",
+            name: finalName,
+            aliases: aliases,
+            slug: slugify(finalName),
+            bio: bio,
+            avatarUrl: nil,
+            bannerUrl: nil,
+            country: normalizedOptional(input.country),
+            spotifyId: spotifyId,
+            appleMusicId: nil,
+            soundcloudUrl: normalizedOptional(input.soundcloudUrl),
+            instagramUrl: normalizedOptional(input.instagramUrl),
+            twitterUrl: normalizedOptional(input.twitterUrl),
+            isVerified: input.isVerified ?? true,
+            followerCount: 0,
+            createdAt: Date(),
+            updatedAt: Date(),
+            isFollowing: false
+        )
+        djs.insert(created, at: 0)
+        return ImportManualDJResponse(action: "created", dj: created)
+    }
+
+    func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ {
+        guard let index = djs.firstIndex(where: { $0.id == id }) else {
+            throw ServiceError.message("DJ 不存在")
+        }
+
+        var updated = djs[index]
+
+        if let name = input.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            if updated.name.lowercased() != name.lowercased() {
+                var aliases = updated.aliases ?? []
+                aliases.append(updated.name)
+                updated.aliases = Array(Set(aliases)).sorted()
+            }
+            updated.name = name
+        }
+
+        if let aliases = input.aliases {
+            updated.aliases = aliases
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+
+        if let bio = input.bio {
+            let trimmed = bio.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.bio = trimmed.isEmpty ? nil : trimmed
+        }
+        if let country = input.country {
+            let trimmed = country.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.country = trimmed.isEmpty ? nil : trimmed
+        }
+        if let spotifyId = input.spotifyId {
+            let trimmed = spotifyId.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.spotifyId = trimmed.isEmpty ? nil : trimmed
+        }
+        if let appleMusicId = input.appleMusicId {
+            let trimmed = appleMusicId.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.appleMusicId = trimmed.isEmpty ? nil : trimmed
+        }
+        if let instagramUrl = input.instagramUrl {
+            let trimmed = instagramUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.instagramUrl = trimmed.isEmpty ? nil : trimmed
+        }
+        if let soundcloudUrl = input.soundcloudUrl {
+            let trimmed = soundcloudUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.soundcloudUrl = trimmed.isEmpty ? nil : trimmed
+        }
+        if let twitterUrl = input.twitterUrl {
+            let trimmed = twitterUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.twitterUrl = trimmed.isEmpty ? nil : trimmed
+        }
+        if let isVerified = input.isVerified {
+            updated.isVerified = isVerified
+        }
+
+        updated.updatedAt = Date()
+        djs[index] = updated
+        return updated
     }
 
     func fetchDJSets(djID: String) async throws -> [WebDJSet] {
@@ -881,14 +1196,24 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
-        try await fetchUserCheckins(userID: currentUser.id, page: page, limit: limit, type: type)
+        try await fetchMyCheckins(page: page, limit: limit, type: type, eventID: nil, djID: nil)
+    }
+
+    func fetchMyCheckins(page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage {
+        try await fetchUserCheckins(userID: currentUser.id, page: page, limit: limit, type: type, eventID: eventID, djID: djID)
     }
 
     func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
+        try await fetchUserCheckins(userID: userID, page: page, limit: limit, type: type, eventID: nil, djID: nil)
+    }
+
+    func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage {
         let normalizedType = type?.trimmingCharacters(in: .whitespacesAndNewlines)
         let filtered = checkins.filter { item in
             item.userId == userID
                 && (normalizedType == nil || normalizedType == "" || item.type == normalizedType)
+                && (eventID == nil || eventID == "" || item.eventId == eventID)
+                && (djID == nil || djID == "" || item.djId == djID)
         }.sorted(by: { $0.attendedAt > $1.attendedAt })
 
         let normalizedPage = max(1, page)
@@ -930,6 +1255,19 @@ actor MockWebFeatureService: WebFeatureService {
         if input.type == "dj" && dj == nil {
             throw ServiceError.message("DJ 不存在")
         }
+        if input.type == "event",
+           let eventID = input.eventId,
+           let normalizedNote = input.note?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+           normalizedNote != "planned",
+           normalizedNote != "marked",
+           checkins.contains(where: {
+               $0.userId == currentUser.id
+                   && $0.type == "event"
+                   && $0.eventId == eventID
+                   && $0.isEventAttendanceCheckin
+           }) {
+            throw ServiceError.message("该活动已打卡，请直接编辑原有记录")
+        }
 
         let item = WebCheckin(
             id: "chk_\(UUID().uuidString)",
@@ -956,6 +1294,46 @@ actor MockWebFeatureService: WebFeatureService {
             dj: dj.map { CheckinDJLite(id: $0.id, name: $0.name, avatarUrl: $0.avatarUrl, country: $0.country) }
         )
         checkins.insert(item, at: 0)
+        return item
+    }
+
+    func updateCheckin(id: String, input: UpdateCheckinInput) async throws -> WebCheckin {
+        guard let idx = checkins.firstIndex(where: { $0.id == id }) else {
+            throw ServiceError.message("打卡不存在")
+        }
+
+        var item = checkins[idx]
+        if let eventID = input.eventId {
+            item.eventId = eventID
+            if let event = events.first(where: { $0.id == eventID }) {
+                item.event = CheckinEventLite(
+                    id: event.id,
+                    name: event.name,
+                    coverImageUrl: event.coverImageUrl,
+                    city: event.city,
+                    country: event.country,
+                    startDate: event.startDate,
+                    endDate: event.endDate
+                )
+            }
+        }
+        if let djID = input.djId {
+            item.djId = djID
+            item.dj = djs.first(where: { $0.id == djID }).map {
+                CheckinDJLite(id: $0.id, name: $0.name, avatarUrl: $0.avatarUrl, country: $0.country)
+            }
+        }
+        if let note = input.note {
+            item.note = note
+        }
+        if let rating = input.rating {
+            item.rating = rating
+        }
+        if let attendedAt = input.attendedAt {
+            item.attendedAt = attendedAt
+        }
+
+        checkins[idx] = item
         return item
     }
 
@@ -1433,6 +1811,12 @@ actor MockWebFeatureService: WebFeatureService {
             .lowercased()
             .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    }
+
+    private func normalizedOptional(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func resolveEventStatus(for event: WebEvent, now: Date = Date()) -> String {

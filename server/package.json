@@ -16,7 +16,8 @@
     "labels:import": "ts-node prisma/import-labelsbase.ts",
     "djs:import:edmdd": "ts-node prisma/import-edmdancedirectory-djs.ts",
     "djs:avatars:oss": "ts-node prisma/upload-dj-avatars-to-oss.ts",
-    "djs:avatars:spotify-placeholder-fix": "ts-node prisma/backfill-dj-placeholder-avatars-via-spotify.ts"
+    "djs:avatars:spotify-placeholder-fix": "ts-node prisma/backfill-dj-placeholder-avatars-via-spotify.ts",
+    "djs:contributors:backfill-uploadtester": "ts-node prisma/backfill-dj-contributors-uploadtester.ts"
   },
   "keywords": [
     "raver",

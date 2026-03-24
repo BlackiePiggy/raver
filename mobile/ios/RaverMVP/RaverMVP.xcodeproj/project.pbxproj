@@ -34,6 +34,11 @@
 		7726ACDE260957D0F261A36F /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18E7E6E5FDF4D8F8F0287B02 /* UserProfileView.swift */; };
 		79A9B616CA5AF6E1927D71EB /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1667E1FD75B9F985BA3968E4 /* ProfileView.swift */; };
 		88343C9F0FC355C1FC2848EC /* DiscoverHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D433A0D9BD7E505C44F531 /* DiscoverHomeView.swift */; };
+		54D5FA55DC5ECEE00A588B24 /* EventDetailHostingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CF12A5E5C6C339BEAC07F4 /* EventDetailHostingController.swift */; };
+		021324FF19866C1FE91CDC82 /* EventDetailPageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613C62C92237CF2DE5A4FA85 /* EventDetailPageViewController.swift */; };
+		CC2689B8A804F6DE74B0E365 /* EventDetailTabBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22EDFA6B837C5ED5F49B7AF0 /* EventDetailTabBarView.swift */; };
+		A72178B4233E07DF79606733 /* EventDetailScrollViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E4F2AC1B8668DEFA7B9B609 /* EventDetailScrollViewController.swift */; };
+		508165D52BEE1D7B3EFC7914 /* EventDetailRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F9A8E6AD43EB97C419616F /* EventDetailRepresentable.swift */; };
 		9197161544529AE82E33B872 /* FollowListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16E5645F1BBC6C366601B5F /* FollowListViewModel.swift */; };
 		921DA79B7E9158F25B8C25EE /* PostCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A10D4C2B18B58489A03E3FD /* PostCardView.swift */; };
 		9A1419C5872D0F2A4C9230FA /* LiveSocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76E16068958F9015F96D65E5 /* LiveSocialService.swift */; };
@@ -97,6 +102,11 @@
 		A3090DD3A60C8BF350695E9F /* WebProfileModulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebProfileModulesView.swift; sourceTree = "<group>"; };
 		AF5B0FC75B939A24178606E6 /* RaverMVP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RaverMVP.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B8D433A0D9BD7E505C44F531 /* DiscoverHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverHomeView.swift; sourceTree = "<group>"; };
+		62CF12A5E5C6C339BEAC07F4 /* EventDetailHostingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailHostingController.swift; sourceTree = "<group>"; };
+		613C62C92237CF2DE5A4FA85 /* EventDetailPageViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailPageViewController.swift; sourceTree = "<group>"; };
+		22EDFA6B837C5ED5F49B7AF0 /* EventDetailTabBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailTabBarView.swift; sourceTree = "<group>"; };
+		7E4F2AC1B8668DEFA7B9B609 /* EventDetailScrollViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailScrollViewController.swift; sourceTree = "<group>"; };
+		79F9A8E6AD43EB97C419616F /* EventDetailRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailRepresentable.swift; sourceTree = "<group>"; };
 		BC843EFC9D73D6230383E286 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		C0B72680D6A119DEDC285359 /* SquadProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SquadProfileView.swift; sourceTree = "<group>"; };
 		C313C382D0F686C910F91FAE /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -205,6 +215,11 @@
 			children = (
 				B8D433A0D9BD7E505C44F531 /* DiscoverHomeView.swift */,
 				012D6A4BCFC498C0889B7749 /* WebModulesView.swift */,
+				62CF12A5E5C6C339BEAC07F4 /* EventDetailHostingController.swift */,
+				613C62C92237CF2DE5A4FA85 /* EventDetailPageViewController.swift */,
+				22EDFA6B837C5ED5F49B7AF0 /* EventDetailTabBarView.swift */,
+				7E4F2AC1B8668DEFA7B9B609 /* EventDetailScrollViewController.swift */,
+				79F9A8E6AD43EB97C419616F /* EventDetailRepresentable.swift */,
 			);
 			path = Discover;
 			sourceTree = "<group>";
@@ -356,6 +371,11 @@
 				E3FE5377589AF10103D4A7E1 /* ComposePostView.swift in Sources */,
 				2E2ADC697AD46EB8F911381F /* Date+Formatting.swift in Sources */,
 				88343C9F0FC355C1FC2848EC /* DiscoverHomeView.swift in Sources */,
+				54D5FA55DC5ECEE00A588B24 /* EventDetailHostingController.swift in Sources */,
+				021324FF19866C1FE91CDC82 /* EventDetailPageViewController.swift in Sources */,
+				CC2689B8A804F6DE74B0E365 /* EventDetailTabBarView.swift in Sources */,
+				A72178B4233E07DF79606733 /* EventDetailScrollViewController.swift in Sources */,
+				508165D52BEE1D7B3EFC7914 /* EventDetailRepresentable.swift in Sources */,
 				4BAE1D9D71584928E0655E8E /* EditProfileView.swift in Sources */,
 				097FFF23469EEA1D2FA723A6 /* FeedView.swift in Sources */,
 				C5063A39DE8D5CEE2271EE74 /* FeedViewModel.swift in Sources */,

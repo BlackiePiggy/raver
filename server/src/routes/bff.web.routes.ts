@@ -1,10 +1,13 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
+import OSS from 'ali-oss';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import djSetService from '../services/djset.service';
 import commentService from '../services/comment.service';
+import spotifyArtistService, { SpotifyUpstreamError } from '../services/spotify-artist.service';
 import { verifyToken, type JWTPayload } from '../utils/auth';
 
 const router: Router = Router();
@@ -192,7 +195,9 @@ const parseRankingText = (text: string): Array<{ rank: number; name: string }> =
 
 const eventUploadDir = path.join(process.cwd(), 'uploads', 'events');
 const djSetUploadDir = path.join(process.cwd(), 'uploads', 'dj-sets');
-for (const dir of [eventUploadDir, djSetUploadDir]) {
+const feedUploadDir = path.join(process.cwd(), 'uploads', 'feed');
+const djUploadDir = path.join(process.cwd(), 'uploads', 'djs');
+for (const dir of [eventUploadDir, djSetUploadDir, feedUploadDir, djUploadDir]) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -239,29 +244,1043 @@ const createVideoUpload = (destinationDir: string, maxSize: number) =>
   });
 
 const eventImageUpload = createImageUpload(eventUploadDir, 10 * 1024 * 1024);
+const lineupImportImageUpload = createImageUpload(eventUploadDir, 10 * 1024 * 1024);
 const djSetThumbUpload = createImageUpload(djSetUploadDir, 10 * 1024 * 1024);
 const djSetVideoUpload = createVideoUpload(djSetUploadDir, 300 * 1024 * 1024);
+const feedImageUpload = createImageUpload(feedUploadDir, 10 * 1024 * 1024);
+const feedVideoUpload = createVideoUpload(feedUploadDir, 300 * 1024 * 1024);
+const djImageUpload = createImageUpload(djUploadDir, 10 * 1024 * 1024);
 
-const mapDJ = (row: any, isFollowing = false) => ({
-  id: row.id,
-  name: row.name,
-  aliases: Array.isArray(row.aliases) ? row.aliases : [],
-  slug: row.slug,
-  bio: row.bio,
-  avatarUrl: row.avatarUrl,
-  bannerUrl: row.bannerUrl,
-  country: row.country,
-  spotifyId: row.spotifyId,
-  appleMusicId: row.appleMusicId,
-  soundcloudUrl: row.soundcloudUrl,
-  instagramUrl: row.instagramUrl,
-  twitterUrl: row.twitterUrl,
-  isVerified: row.isVerified,
-  followerCount: row.followerCount,
-  createdAt: row.createdAt,
-  updatedAt: row.updatedAt,
-  isFollowing,
-});
+const cleanEnv = (value: string | undefined): string | null => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const ossRegion = cleanEnv(process.env.OSS_REGION);
+const ossAccessKeyId = cleanEnv(process.env.OSS_ACCESS_KEY_ID);
+const ossAccessKeySecret = cleanEnv(process.env.OSS_ACCESS_KEY_SECRET);
+const ossBucket = cleanEnv(process.env.OSS_BUCKET);
+const ossEndpoint = cleanEnv(process.env.OSS_ENDPOINT);
+const ossPostsPrefix = (cleanEnv(process.env.OSS_POSTS_PREFIX) || 'posts').replace(/^\/+|\/+$/g, '');
+const ossEventsPrefix = (cleanEnv(process.env.OSS_EVENTS_PREFIX) || 'wen-jasonlee/events').replace(/^\/+|\/+$/g, '');
+const ossDjsPrefix = (cleanEnv(process.env.OSS_DJS_PREFIX) || 'wen-jasonlee/djs').replace(/^\/+|\/+$/g, '');
+const cozeWorkflowRunUrl = cleanEnv(process.env.COZE_WORKFLOW_RUN_URL) || 'https://dxy8zryvs2.coze.site/run';
+const cozeWorkflowToken = cleanEnv(process.env.COZE_WORKFLOW_TOKEN);
+const cozeWorkflowImageField = cleanEnv(process.env.COZE_WORKFLOW_IMAGE_FIELD) || 'festival_image';
+
+const postMediaOssClient =
+  ossRegion && ossAccessKeyId && ossAccessKeySecret && ossBucket
+    ? new OSS({
+        region: ossRegion,
+        accessKeyId: ossAccessKeyId,
+        accessKeySecret: ossAccessKeySecret,
+        bucket: ossBucket,
+        endpoint: ossEndpoint || undefined,
+      })
+    : null;
+
+const looksLikePostMediaName = (name: string, kind: 'image' | 'video'): boolean => {
+  const lower = name.trim().toLowerCase();
+  if (!lower) return false;
+  if (kind === 'image') {
+    return lower.startsWith('post-image-');
+  }
+  return lower.startsWith('post-video-');
+};
+
+const normalizeUploadedOssUrl = (rawUrl: string | undefined, objectKey: string): string => {
+  if (rawUrl && rawUrl.trim().length > 0) {
+    if (rawUrl.startsWith('//')) return `https:${rawUrl}`;
+    if (rawUrl.startsWith('http://')) return `https://${rawUrl.slice('http://'.length)}`;
+    if (rawUrl.startsWith('https://')) return rawUrl;
+  }
+
+  if (!ossBucket || !ossRegion) {
+    throw new Error('OSS bucket/region is not configured');
+  }
+  const endpointHost = ossEndpoint
+    ? ossEndpoint.replace(/^https?:\/\//, '').replace(/^\/+|\/+$/g, '')
+    : `${ossRegion}.aliyuncs.com`;
+  const bucketHost = endpointHost.startsWith(`${ossBucket}.`) ? endpointHost : `${ossBucket}.${endpointHost}`;
+  return `https://${bucketHost}/${objectKey}`;
+};
+
+const sanitizeOssPathSegment = (value: string): string =>
+  value
+    .trim()
+    .replace(/[^a-zA-Z0-9-_]/g, '')
+    .slice(0, 128);
+
+const buildEventMediaObjectKey = (
+  eventId: string,
+  fileName: string,
+  mimeType: string,
+  usage: string | null
+): string => {
+  const rawExt = path.extname(fileName || '').toLowerCase();
+  const mimeExt = mimeType.includes('png')
+    ? '.png'
+    : mimeType.includes('webp')
+      ? '.webp'
+      : mimeType.includes('gif')
+        ? '.gif'
+        : '.jpg';
+  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
+  const safeEventId = sanitizeOssPathSegment(eventId) || 'unknown-event';
+  const safeUsage = sanitizeOssPathSegment(usage || '') || 'image';
+  return `${ossEventsPrefix}/${safeEventId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+};
+
+const parseOssObjectKeyFromUrl = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      const parsed = new URL(trimmed);
+      const key = parsed.pathname.replace(/^\/+/, '');
+      return key || null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  return null;
+};
+
+const isEventOssObjectKey = (objectKey: string, eventId: string): boolean => {
+  const safeEventId = sanitizeOssPathSegment(eventId);
+  if (!safeEventId) return false;
+  return objectKey.startsWith(`${ossEventsPrefix}/${safeEventId}/`);
+};
+
+const isDjAvatarOssObjectKey = (objectKey: string, djId: string): boolean => {
+  const safeDJId = sanitizeOssPathSegment(djId);
+  if (!safeDJId) return false;
+  return objectKey.startsWith(`${ossDjsPrefix}/${safeDJId}/`);
+};
+
+const normalizeDJNameKey = (value: string): string => value.trim().toLowerCase();
+
+const mergeAliases = (baseName: string, values: Array<string | null | undefined>): string[] => {
+  const baseKey = normalizeDJNameKey(baseName);
+  const result: string[] = [];
+  const seen = new Set<string>([baseKey]);
+
+  for (const raw of values) {
+    if (!raw) continue;
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const key = normalizeDJNameKey(trimmed);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+
+  return result;
+};
+
+const splitDataSources = (value: string | null | undefined): string[] => {
+  if (!value) return [];
+  return value
+    .split(/[|,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const mergeDJDataSources = (
+  existing: string | null | undefined,
+  additions: Array<string | null | undefined>
+): string | null => {
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (raw: string | null | undefined) => {
+    if (!raw) return;
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(trimmed);
+  };
+
+  for (const source of splitDataSources(existing)) {
+    push(source);
+  }
+  for (const source of additions) {
+    push(source);
+  }
+
+  return result.length > 0 ? result.join('|') : null;
+};
+
+type DJContributorInfo = {
+  userIds: string[];
+  usernames: string[];
+  users: Array<{
+    id: string;
+    username: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+  }>;
+  uploadedByUsername: string | null;
+};
+
+const emptyDJContributorInfo: DJContributorInfo = {
+  userIds: [],
+  usernames: [],
+  users: [],
+  uploadedByUsername: null,
+};
+
+const contributorInfoFromRow = (row: any): DJContributorInfo =>
+  (row?.__contributorInfo as DJContributorInfo | undefined) ?? emptyDJContributorInfo;
+
+const fetchDJContributorInfoMap = async (djIds: string[]): Promise<Map<string, DJContributorInfo>> => {
+  const validIds = Array.from(new Set(djIds.map((id) => id.trim()).filter(Boolean)));
+  if (validIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = await prisma.$queryRaw<
+    Array<{
+      djId: string;
+      userId: string;
+      username: string;
+      displayName: string | null;
+      avatarUrl: string | null;
+      createdAt: Date;
+    }>
+  >(Prisma.sql`
+    SELECT
+      c."dj_id" AS "djId",
+      c."user_id" AS "userId",
+      u."username" AS "username",
+      u."display_name" AS "displayName",
+      u."avatar_url" AS "avatarUrl",
+      c."created_at" AS "createdAt"
+    FROM "dj_contributors" c
+    INNER JOIN "users" u ON u."id" = c."user_id"
+    WHERE c."dj_id" IN (${Prisma.join(validIds)})
+    ORDER BY c."created_at" ASC
+  `);
+
+  const map = new Map<string, DJContributorInfo>();
+  for (const row of rows) {
+    const current = map.get(row.djId) ?? {
+      userIds: [],
+      usernames: [],
+      users: [],
+      uploadedByUsername: null,
+    };
+    if (!current.userIds.includes(row.userId)) {
+      current.userIds.push(row.userId);
+      current.users.push({
+        id: row.userId,
+        username: row.username,
+        displayName: row.displayName,
+        avatarUrl: row.avatarUrl,
+      });
+    }
+    const username = row.username?.trim() ?? '';
+    if (username && !current.usernames.some((item) => item.toLowerCase() === username.toLowerCase())) {
+      current.usernames.push(username);
+    }
+    if (!current.uploadedByUsername && username) {
+      current.uploadedByUsername = username;
+    }
+    map.set(row.djId, current);
+  }
+
+  return map;
+};
+
+const attachDJContributorInfo = async (row: any): Promise<any> => {
+  if (!row?.id) return row;
+  const map = await fetchDJContributorInfoMap([String(row.id)]);
+  return {
+    ...row,
+    __contributorInfo: map.get(String(row.id)) ?? emptyDJContributorInfo,
+  };
+};
+
+const attachDJContributorInfoList = async (rows: any[]): Promise<any[]> => {
+  if (rows.length === 0) return rows;
+  const map = await fetchDJContributorInfoMap(rows.map((row) => String(row.id)));
+  return rows.map((row) => ({
+    ...row,
+    __contributorInfo: map.get(String(row.id)) ?? emptyDJContributorInfo,
+  }));
+};
+
+const isDJContributorByRow = (row: any, userId: string | null | undefined): boolean => {
+  if (!userId) return false;
+  return contributorInfoFromRow(row).userIds.includes(userId);
+};
+
+const isDJContributor = async (djId: string, userId: string): Promise<boolean> => {
+  const rows = await prisma.$queryRaw<Array<{ matched: number }>>(Prisma.sql`
+    SELECT 1 AS "matched"
+    FROM "dj_contributors"
+    WHERE "dj_id" = ${djId} AND "user_id" = ${userId}
+    LIMIT 1
+  `);
+  return rows.length > 0;
+};
+
+const canUserEditDJ = async (
+  djId: string,
+  userId: string,
+  role: string | null | undefined
+): Promise<boolean> => {
+  if (role === 'admin') return true;
+  return isDJContributor(djId, userId);
+};
+
+const ensureDJContributor = async (djId: string, userId: string): Promise<void> => {
+  await prisma.$executeRaw(Prisma.sql`
+    INSERT INTO "dj_contributors" ("id", "dj_id", "user_id", "created_at", "updated_at")
+    VALUES (${crypto.randomUUID()}, ${djId}, ${userId}, NOW(), NOW())
+    ON CONFLICT ("dj_id", "user_id") DO NOTHING
+  `);
+};
+
+const fetchDJWithContributorsById = async (djId: string) =>
+  attachDJContributorInfo(
+    await prisma.dJ.findUnique({
+    where: { id: djId },
+    })
+  );
+
+const uniqueDJSlugForName = async (name: string): Promise<string> => {
+  const base = slugify(name) || `dj-${Date.now()}`;
+  let candidate = base;
+  let seq = 1;
+  while (true) {
+    const exists = await prisma.dJ.findUnique({ where: { slug: candidate } });
+    if (!exists || normalizeDJNameKey(exists.name) === normalizeDJNameKey(name)) {
+      return candidate;
+    }
+    seq += 1;
+    candidate = `${base}-${seq}`;
+  }
+};
+
+const buildDJAvatarObjectKey = (djId: string, mimeType: string, sourceUrl?: string | null): string => {
+  const sourceExt = sourceUrl ? path.extname(sourceUrl.split('?')[0] || '').toLowerCase() : '';
+  const mimeExt = mimeType.includes('png')
+    ? '.png'
+    : mimeType.includes('webp')
+      ? '.webp'
+      : mimeType.includes('gif')
+        ? '.gif'
+        : '.jpg';
+  const ext = sourceExt && sourceExt.length <= 10 ? sourceExt : mimeExt;
+  const safeDJId = sanitizeOssPathSegment(djId) || 'unknown-dj';
+  return `${ossDjsPrefix}/${safeDJId}/avatar-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+};
+
+const buildDJMediaObjectKey = (
+  djId: string,
+  fileName: string,
+  mimeType: string,
+  usage: 'avatar' | 'banner'
+): string => {
+  const rawExt = path.extname(fileName || '').toLowerCase();
+  const mimeExt = mimeType.includes('png')
+    ? '.png'
+    : mimeType.includes('webp')
+      ? '.webp'
+      : mimeType.includes('gif')
+        ? '.gif'
+        : '.jpg';
+  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
+  const safeDJId = sanitizeOssPathSegment(djId) || 'unknown-dj';
+  const safeUsage = sanitizeOssPathSegment(usage) || 'image';
+  return `${ossDjsPrefix}/${safeDJId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+};
+
+const uploadRemoteDJAvatarToOss = async (
+  djId: string,
+  sourceUrl: string
+): Promise<{ url: string; objectKey: string } | null> => {
+  if (!postMediaOssClient) return null;
+  const trimmed = sourceUrl.trim();
+  if (!trimmed) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const response = await fetch(trimmed, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: {
+        Accept: 'image/*',
+      },
+    });
+    if (!response.ok) return null;
+
+    const mimeType = (response.headers.get('content-type') || 'image/jpeg').toLowerCase();
+    if (!mimeType.startsWith('image/')) return null;
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length === 0) return null;
+
+    const objectKey = buildDJAvatarObjectKey(djId, mimeType, trimmed);
+    const putResult = await postMediaOssClient.put(objectKey, buffer, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+
+    return {
+      url: normalizeUploadedOssUrl(putResult.url, objectKey),
+      objectKey,
+    };
+  } catch (_error) {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const deleteOssObjects = async (keys: string[]): Promise<void> => {
+  if (!postMediaOssClient || keys.length === 0) return;
+
+  const chunkSize = 1000;
+  for (let start = 0; start < keys.length; start += chunkSize) {
+    const chunk = keys.slice(start, start + chunkSize);
+    try {
+      await postMediaOssClient.deleteMulti(chunk, { quiet: true });
+    } catch (error) {
+      console.error('BFF web delete OSS objects error:', error);
+    }
+  }
+};
+
+const deleteSingleEventOssObjectIfOwned = async (url: string | null | undefined, eventId: string): Promise<void> => {
+  if (!postMediaOssClient || !url) return;
+  const objectKey = parseOssObjectKeyFromUrl(url);
+  if (!objectKey || !isEventOssObjectKey(objectKey, eventId)) return;
+  await deleteOssObjects([objectKey]);
+};
+
+const deleteSingleDJAvatarOssObjectIfOwned = async (url: string | null | undefined, djId: string): Promise<void> => {
+  if (!postMediaOssClient || !url) return;
+  const objectKey = parseOssObjectKeyFromUrl(url);
+  if (!objectKey || !isDjAvatarOssObjectKey(objectKey, djId)) return;
+  await deleteOssObjects([objectKey]);
+};
+
+const deleteSingleDJMediaOssObjectIfOwned = async (url: string | null | undefined, djId: string): Promise<void> => {
+  if (!postMediaOssClient || !url) return;
+  const objectKey = parseOssObjectKeyFromUrl(url);
+  if (!objectKey || !isDjAvatarOssObjectKey(objectKey, djId)) return;
+  await deleteOssObjects([objectKey]);
+};
+
+const deleteEventOssFolder = async (eventId: string): Promise<void> => {
+  if (!postMediaOssClient) return;
+  const safeEventId = sanitizeOssPathSegment(eventId);
+  if (!safeEventId) return;
+  const prefix = `${ossEventsPrefix}/${safeEventId}/`;
+
+  let marker: string | undefined;
+  const keys: string[] = [];
+
+  do {
+    let listed:
+      | {
+          objects?: Array<{ name?: string }>;
+          nextMarker?: string;
+          isTruncated?: boolean;
+        }
+      | undefined;
+
+    try {
+      listed = await postMediaOssClient.list(
+        {
+          prefix,
+          marker,
+          'max-keys': 1000,
+        },
+        {}
+      );
+    } catch (error) {
+      console.error('BFF web list OSS folder error:', error);
+      return;
+    }
+
+    const objects = Array.isArray(listed?.objects) ? listed.objects : [];
+    for (const item of objects) {
+      if (item?.name) {
+        keys.push(item.name);
+      }
+    }
+
+    if (listed?.isTruncated && listed.nextMarker) {
+      marker = listed.nextMarker;
+    } else {
+      marker = undefined;
+    }
+  } while (marker);
+
+  await deleteOssObjects(keys);
+};
+
+const uploadPostMediaToOss = async (
+  file: Express.Multer.File,
+  kind: 'image' | 'video'
+): Promise<{ url: string; fileName: string; mimeType: string; size: number }> => {
+  if (!postMediaOssClient) {
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  const originalExt = path.extname(file.originalname || '').toLowerCase();
+  const fallbackExt = kind === 'image' ? '.jpg' : '.mp4';
+  const safeExt = originalExt && originalExt.length <= 10 ? originalExt : fallbackExt;
+  const objectKey = `${ossPostsPrefix}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}${safeExt}`;
+  const mimeType = file.mimetype || (kind === 'image' ? 'image/jpeg' : 'video/mp4');
+
+  let putResult: { url?: string };
+  try {
+    putResult = await postMediaOssClient.put(objectKey, file.path, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+  }
+
+  return {
+    url: normalizeUploadedOssUrl(putResult.url, objectKey),
+    fileName: path.basename(objectKey),
+    mimeType,
+    size: file.size,
+  };
+};
+
+const uploadEventMediaToOss = async (
+  file: Express.Multer.File,
+  eventId: string,
+  usage: string | null
+): Promise<{ url: string; fileName: string; mimeType: string; size: number }> => {
+  if (!postMediaOssClient) {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  const mimeType = file.mimetype || 'image/jpeg';
+  const objectKey = buildEventMediaObjectKey(eventId, file.originalname || file.filename || 'image.jpg', mimeType, usage);
+
+  let putResult: { url?: string };
+  try {
+    putResult = await postMediaOssClient.put(objectKey, file.path, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+  }
+
+  return {
+    url: normalizeUploadedOssUrl(putResult.url, objectKey),
+    fileName: path.basename(objectKey),
+    mimeType,
+    size: file.size,
+  };
+};
+
+const uploadDJMediaToOss = async (
+  file: Express.Multer.File,
+  djId: string,
+  usage: 'avatar' | 'banner'
+): Promise<{ url: string; fileName: string; mimeType: string; size: number }> => {
+  if (!postMediaOssClient) {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  const mimeType = file.mimetype || 'image/jpeg';
+  const objectKey = buildDJMediaObjectKey(djId, file.originalname || file.filename || 'image.jpg', mimeType, usage);
+
+  let putResult: { url?: string };
+  try {
+    putResult = await postMediaOssClient.put(objectKey, file.path, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+  }
+
+  return {
+    url: normalizeUploadedOssUrl(putResult.url, objectKey),
+    fileName: path.basename(objectKey),
+    mimeType,
+    size: file.size,
+  };
+};
+
+const buildLineupImportObjectKey = (fileName: string, mimeType: string): string => {
+  const rawExt = path.extname(fileName || '').toLowerCase();
+  const mimeExt = mimeType.includes('png')
+    ? '.png'
+    : mimeType.includes('webp')
+      ? '.webp'
+      : mimeType.includes('gif')
+        ? '.gif'
+        : '.jpg';
+  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
+  return `${ossEventsPrefix}/lineup-imports/${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+};
+
+const uploadLineupImportImageToOss = async (
+  file: Express.Multer.File
+): Promise<{ url: string; objectKey: string; mimeType: string }> => {
+  if (!postMediaOssClient) {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  const mimeType = file.mimetype || 'image/jpeg';
+  const objectKey = buildLineupImportObjectKey(file.originalname || file.filename || 'lineup.jpg', mimeType);
+
+  let putResult: { url?: string };
+  try {
+    putResult = await postMediaOssClient.put(objectKey, file.path, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=3600',
+      },
+    });
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+  }
+
+  return {
+    url: normalizeUploadedOssUrl(putResult.url, objectKey),
+    objectKey,
+    mimeType,
+  };
+};
+
+type ImportedLineupItem = {
+  id: string;
+  musician: string;
+  time: string | null;
+  stage: string | null;
+  date: string | null;
+};
+
+type SpotifyDJSearchItem = {
+  spotifyId: string;
+  name: string;
+  uri: string;
+  url: string | null;
+  popularity: number;
+  followers: number;
+  genres: string[];
+  imageUrl: string | null;
+  existingDJId: string | null;
+  existingDJName: string | null;
+  existingMatchType: 'spotify_id' | 'name_case_insensitive' | null;
+};
+
+const isUnknownText = (value: string): boolean => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return true;
+  return (
+    normalized === 'unknown' ||
+    normalized === 'unk' ||
+    normalized === 'n/a' ||
+    normalized === 'na' ||
+    normalized === 'none' ||
+    normalized === 'null' ||
+    normalized === '-' ||
+    normalized === '--' ||
+    normalized === '未知'
+  );
+};
+
+const sanitizeOptionalText = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || isUnknownText(trimmed)) return null;
+  return trimmed;
+};
+
+const safeParseJson = (text: string): unknown | null => {
+  try {
+    return JSON.parse(text);
+  } catch (_error) {
+    return null;
+  }
+};
+
+const extractFirstJSONObjectText = (input: string): string | null => {
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth += 1;
+      continue;
+    }
+    if (ch === '}') {
+      if (depth > 0) depth -= 1;
+      if (depth === 0 && start >= 0) {
+        return input.slice(start, i + 1);
+      }
+    }
+  }
+  return null;
+};
+
+const tryParseJsonFromText = (rawText: string): unknown | null => {
+  const direct = safeParseJson(rawText);
+  if (direct !== null) return direct;
+  const extracted = extractFirstJSONObjectText(rawText);
+  if (!extracted) return null;
+  return safeParseJson(extracted);
+};
+
+const extractLineupInfo = (value: unknown): Array<Record<string, unknown>> => {
+  const seen = new WeakSet<object>();
+
+  const walk = (node: unknown): Array<Record<string, unknown>> | null => {
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const nested = walk(item);
+        if (nested && nested.length > 0) return nested;
+      }
+      return null;
+    }
+
+    if (typeof node === 'string') {
+      const parsed = tryParseJsonFromText(node);
+      if (parsed !== null) return walk(parsed);
+      return null;
+    }
+
+    if (!node || typeof node !== 'object') return null;
+    if (seen.has(node)) return null;
+    seen.add(node);
+
+    const record = node as Record<string, unknown>;
+    if (Array.isArray(record.lineup_info)) {
+      return record.lineup_info.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null);
+    }
+
+    for (const value of Object.values(record)) {
+      const nested = walk(value);
+      if (nested && nested.length > 0) return nested;
+    }
+    return null;
+  };
+
+  return walk(value) ?? [];
+};
+
+const extractFormattedOutputText = (value: unknown): string | null => {
+  const seen = new WeakSet<object>();
+
+  const walk = (node: unknown): string | null => {
+    if (typeof node === 'string') {
+      const trimmed = node.trim();
+      return trimmed ? trimmed : null;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const found = walk(item);
+        if (found) return found;
+      }
+      return null;
+    }
+    if (!node || typeof node !== 'object') return null;
+    if (seen.has(node)) return null;
+    seen.add(node);
+
+    const record = node as Record<string, unknown>;
+    const direct = record.formatted_output ?? record.formattedOutput ?? record.output ?? null;
+    if (typeof direct === 'string' && direct.trim()) {
+      return direct.trim();
+    }
+
+    for (const child of Object.values(record)) {
+      const found = walk(child);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  return walk(value);
+};
+
+const normalizeTimeText = (value: string): string =>
+  value
+    .replace(/：/g, ':')
+    .replace(/[—–]/g, '-')
+    .trim();
+
+const isLikelyTimeRange = (value: string): boolean =>
+  /^\s*\d{1,2}:[0-5]\d\s*-\s*\d{1,2}:[0-5]\d\s*$/i.test(normalizeTimeText(value));
+
+const isLikelySingleTime = (value: string): boolean =>
+  /^\s*\d{1,2}:[0-5]\d\s*$/i.test(normalizeTimeText(value));
+
+const isLikelyTimeValue = (value: string): boolean => {
+  const normalized = normalizeTimeText(value).toLowerCase();
+  return isLikelyTimeRange(normalized) || isLikelySingleTime(normalized) || normalized === 'open';
+};
+
+const isLikelyDateValue = (value: string): boolean => {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (/^\s*day\s*\d{1,2}\s*$/i.test(trimmed)) return true;
+  if (/^\s*\d{4}[/-]\d{1,2}[/-]\d{1,2}\s*$/i.test(trimmed)) return true;
+  if (/^\s*\d{1,2}\s*[A-Za-z]{3,}\.?\s*$/i.test(trimmed)) return true; // 31 DEC.
+  if (/^\s*[A-Za-z]{3,}\.?\s*\d{1,2}\s*$/i.test(trimmed)) return true; // Nov.2
+  return false;
+};
+
+const normalizeFormattedSegment = (value: string): string => {
+  let cleaned = value.trim();
+  cleaned = cleaned.replace(/^[\[{(]+/, '').replace(/[\]})]+$/, '').trim();
+  cleaned = cleaned.replace(
+    /^(?:"?(musician|artist|name|date|time|stage)"?)\s*[:：]\s*/i,
+    ''
+  );
+  cleaned = cleaned.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+  return cleaned.trim();
+};
+
+const parseFormattedOutputToItems = (text: string): ImportedLineupItem[] => {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return lines
+    .map((line, index) => {
+      const segments = line
+        .split(/[，,]/)
+        .map((item) => normalizeFormattedSegment(item))
+        .filter(Boolean);
+      if (segments.length === 0) return null;
+
+      const musician = sanitizeOptionalText(segments[0]);
+      if (!musician) return null;
+
+      let time: string | null = null;
+      let stage: string | null = null;
+      let date: string | null = null;
+      const rest = segments.slice(1);
+      const consumed = new Set<number>();
+
+      for (let i = 0; i < rest.length; i += 1) {
+        if (time === null && isLikelyTimeValue(rest[i])) {
+          time = sanitizeOptionalText(rest[i]);
+          consumed.add(i);
+          continue;
+        }
+        if (date === null && isLikelyDateValue(rest[i])) {
+          date = sanitizeOptionalText(rest[i]);
+          consumed.add(i);
+          continue;
+        }
+      }
+
+      for (let i = 0; i < rest.length; i += 1) {
+        if (consumed.has(i)) continue;
+        const candidate = sanitizeOptionalText(rest[i]);
+        if (!candidate) continue;
+        if (time === null && isLikelyTimeValue(candidate)) {
+          time = candidate;
+          continue;
+        }
+        if (date === null && isLikelyDateValue(candidate)) {
+          date = candidate;
+          continue;
+        }
+        if (stage === null) {
+          stage = candidate;
+        }
+      }
+
+      return {
+        id: `ocr-text-${index}-${Math.random().toString(36).slice(2, 8)}`,
+        musician,
+        time,
+        stage,
+        date,
+      } satisfies ImportedLineupItem;
+    })
+    .filter((item): item is ImportedLineupItem => item !== null);
+};
+
+const normalizeImportedLineupItems = (items: Array<Record<string, unknown>>): ImportedLineupItem[] =>
+  items
+    .map((item, index) => {
+      const musician = sanitizeOptionalText(item.musician ?? item.name ?? item.artist ?? item.djName);
+      if (!musician) return null;
+      return {
+        id: `ocr-${index}-${Math.random().toString(36).slice(2, 8)}`,
+        musician,
+        time: sanitizeOptionalText(item.time ?? item.time_range ?? item.timeRange ?? item.slot),
+        stage: sanitizeOptionalText(item.stage ?? item.stage_name ?? item.stageName),
+        date: sanitizeOptionalText(item.date ?? item.day ?? item.performDate),
+      } as ImportedLineupItem;
+    })
+    .filter((item): item is ImportedLineupItem => item !== null);
+
+const resolveCozeFileType = (value: string): 'image' | 'video' | 'audio' | 'document' | 'default' => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return 'default';
+  if (normalized === 'image' || normalized.startsWith('image/')) return 'image';
+  if (normalized === 'video' || normalized.startsWith('video/')) return 'video';
+  if (normalized === 'audio' || normalized.startsWith('audio/')) return 'audio';
+  if (normalized === 'document' || normalized.startsWith('application/')) return 'document';
+  return 'default';
+};
+
+const runCozeLineupWorker = async (
+  imageUrl: string,
+  fileType: string
+): Promise<{ normalizedText: string; lineupInfo: ImportedLineupItem[] }> => {
+  if (!cozeWorkflowToken) {
+    throw new Error('COZE_WORKFLOW_TOKEN is not configured');
+  }
+
+  const payload = {
+    [cozeWorkflowImageField]: {
+      url: imageUrl,
+      file_type: resolveCozeFileType(fileType),
+    },
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  let rawText = '';
+  try {
+    const response = await fetch(cozeWorkflowRunUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cozeWorkflowToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    rawText = await response.text();
+    if (!response.ok) {
+      throw new Error(`Coze workflow request failed (${response.status}): ${rawText.slice(0, 500)}`);
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const parsed = tryParseJsonFromText(rawText);
+  if (parsed === null) {
+    throw new Error('Coze workflow returned non-JSON content');
+  }
+
+  const lineupRaw = extractLineupInfo(parsed);
+  let lineupInfo = normalizeImportedLineupItems(lineupRaw);
+  if (lineupInfo.length === 0) {
+    const formattedOutput = extractFormattedOutputText(parsed);
+    if (formattedOutput) {
+      lineupInfo = parseFormattedOutputToItems(formattedOutput);
+    }
+  }
+
+  return {
+    normalizedText: JSON.stringify(
+      {
+        lineup_info: lineupInfo.map((item) => ({
+          musician: item.musician,
+          time: item.time ?? '未知',
+          stage: item.stage ?? '未知',
+          date: item.date ?? '未知',
+        })),
+      },
+      null,
+      2
+    ),
+    lineupInfo,
+  };
+};
+
+const mapDJ = (
+  row: any,
+  isFollowing = false,
+  viewerId: string | null | undefined = null,
+  viewerRole: string | null | undefined = null
+) => {
+  const contributorInfo = contributorInfoFromRow(row);
+  const contributorUsernames = contributorInfo.usernames;
+  const contributors = contributorInfo.users.map((user) => mapUserLite(user));
+  const uploadedByUsername = contributorInfo.uploadedByUsername;
+  const isContributor = isDJContributorByRow(row, viewerId);
+  const canEdit = viewerRole === 'admin' || isContributor;
+
+  return {
+    id: row.id,
+    name: row.name,
+    aliases: Array.isArray(row.aliases) ? row.aliases : [],
+    slug: row.slug,
+    bio: row.bio,
+    avatarUrl: row.avatarUrl,
+    avatarSourceUrl: row.avatarSourceUrl ?? null,
+    bannerUrl: row.bannerUrl,
+    country: row.country,
+    spotifyId: row.spotifyId,
+    appleMusicId: row.appleMusicId,
+    soundcloudUrl: row.soundcloudUrl,
+    instagramUrl: row.instagramUrl,
+    twitterUrl: row.twitterUrl,
+    isVerified: row.isVerified,
+    followerCount: row.followerCount,
+    sourceDataSource: row.sourceDataSource ?? null,
+    contributors,
+    contributorUsernames,
+    uploadedByUsername,
+    isContributor,
+    canEdit,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    isFollowing,
+  };
+};
 
 const mapUserLite = (row: any) => {
   if (!row) return null;
@@ -677,6 +1696,14 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
 
     const rawSlots = Array.isArray(body.lineupSlots) ? body.lineupSlots : [];
     const lineupSlots = normalizeLineupSlots(rawSlots, parsedStartDate);
+    const coverImageUrlInput =
+      typeof body.coverImageUrl === 'string' && body.coverImageUrl.trim()
+        ? body.coverImageUrl.trim()
+        : null;
+    const lineupImageUrlInput =
+      typeof body.lineupImageUrl === 'string' && body.lineupImageUrl.trim()
+        ? body.lineupImageUrl.trim()
+        : null;
 
     const rawTicketTiers = Array.isArray(body.ticketTiers) ? body.ticketTiers : [];
     const ticketCurrency = typeof body.ticketCurrency === 'string' ? body.ticketCurrency : null;
@@ -702,8 +1729,8 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         name,
         slug: desiredSlug,
         description: typeof body.description === 'string' ? body.description : null,
-        coverImageUrl: typeof body.coverImageUrl === 'string' ? body.coverImageUrl : null,
-        lineupImageUrl: typeof body.lineupImageUrl === 'string' ? body.lineupImageUrl : null,
+        coverImageUrl: coverImageUrlInput,
+        lineupImageUrl: lineupImageUrlInput,
         eventType: typeof body.eventType === 'string' ? body.eventType : null,
         organizerName: typeof body.organizerName === 'string' ? body.organizerName : null,
         venueName: typeof body.venueName === 'string' ? body.venueName : null,
@@ -758,7 +1785,15 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const eventId = req.params.id as string;
     const existing = await prisma.event.findUnique({
       where: { id: eventId },
-      select: { id: true, organizerId: true, startDate: true, endDate: true, status: true },
+      select: {
+        id: true,
+        organizerId: true,
+        startDate: true,
+        endDate: true,
+        status: true,
+        coverImageUrl: true,
+        lineupImageUrl: true,
+      },
     });
 
     if (!existing) {
@@ -774,6 +1809,16 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const body = req.body as Record<string, unknown>;
     const rawSlots = Array.isArray(body.lineupSlots) ? body.lineupSlots : null;
     const rawTicketTiers = Array.isArray(body.ticketTiers) ? body.ticketTiers : null;
+    const hasCoverImageField = Object.prototype.hasOwnProperty.call(body, 'coverImageUrl');
+    const hasLineupImageField = Object.prototype.hasOwnProperty.call(body, 'lineupImageUrl');
+    const nextCoverImageUrl =
+      hasCoverImageField
+        ? (typeof body.coverImageUrl === 'string' && body.coverImageUrl.trim() ? body.coverImageUrl.trim() : null)
+        : undefined;
+    const nextLineupImageUrl =
+      hasLineupImageField
+        ? (typeof body.lineupImageUrl === 'string' && body.lineupImageUrl.trim() ? body.lineupImageUrl.trim() : null)
+        : undefined;
 
     const parsedStartDate = body.startDate !== undefined ? parseDateInput(body.startDate) : null;
     const parsedEndDate = body.endDate !== undefined ? parseDateInput(body.endDate) : null;
@@ -814,8 +1859,8 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         name: typeof body.name === 'string' ? body.name : undefined,
         slug: typeof body.slug === 'string' ? body.slug : undefined,
         description: typeof body.description === 'string' ? body.description : undefined,
-        coverImageUrl: typeof body.coverImageUrl === 'string' ? body.coverImageUrl : undefined,
-        lineupImageUrl: typeof body.lineupImageUrl === 'string' ? body.lineupImageUrl : undefined,
+        coverImageUrl: nextCoverImageUrl,
+        lineupImageUrl: nextLineupImageUrl,
         eventType: typeof body.eventType === 'string' ? body.eventType : undefined,
         organizerName: typeof body.organizerName === 'string' ? body.organizerName : undefined,
         venueName: typeof body.venueName === 'string' ? body.venueName : undefined,
@@ -866,6 +1911,13 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       },
     });
 
+    if (hasCoverImageField && existing.coverImageUrl && existing.coverImageUrl !== updated.coverImageUrl) {
+      await deleteSingleEventOssObjectIfOwned(existing.coverImageUrl, eventId);
+    }
+    if (hasLineupImageField && existing.lineupImageUrl && existing.lineupImageUrl !== updated.lineupImageUrl) {
+      await deleteSingleEventOssObjectIfOwned(existing.lineupImageUrl, eventId);
+    }
+
     ok(res, mapEvent(updated));
   } catch (error) {
     console.error('BFF web update event error:', error);
@@ -896,6 +1948,7 @@ router.delete('/events/:id', optionalAuth, async (req: Request, res: Response): 
     }
 
     await prisma.event.delete({ where: { id: eventId } });
+    await deleteEventOssFolder(eventId);
     ok(res, { success: true });
   } catch (error) {
     console.error('BFF web delete event error:', error);
@@ -905,11 +1958,45 @@ router.delete('/events/:id', optionalAuth, async (req: Request, res: Response): 
 
 router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = requireAuth(req as BFFAuthRequest, res);
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
     if (!userId) return;
     const file = (req as Request & { file?: Express.Multer.File }).file;
     if (!file) {
       res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    const formBody = req.body as Record<string, unknown>;
+    const eventId = typeof formBody.eventId === 'string' ? formBody.eventId.trim() : '';
+    const usage = typeof formBody.usage === 'string' ? formBody.usage.trim() : '';
+
+    if (eventId) {
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { id: true, organizerId: true },
+      });
+
+      if (!event) {
+        await fs.promises.unlink(file.path).catch(() => undefined);
+        res.status(404).json({ error: 'Event not found' });
+        return;
+      }
+
+      if (authReq.user?.role !== 'admin' && event.organizerId !== userId) {
+        await fs.promises.unlink(file.path).catch(() => undefined);
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
+
+      const uploaded = await uploadEventMediaToOss(file, eventId, usage || null);
+      ok(res, uploaded);
+      return;
+    }
+
+    if (looksLikePostMediaName(file.originalname || '', 'image')) {
+      const uploaded = await uploadPostMediaToOss(file, 'image');
+      ok(res, uploaded);
       return;
     }
 
@@ -925,9 +2012,83 @@ router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image
   }
 });
 
+router.post('/events/lineup/import-image', optionalAuth, lineupImportImageUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    if (!postMediaOssClient) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(503).json({ error: 'OSS is not configured for lineup image import' });
+      return;
+    }
+    if (!cozeWorkflowToken) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(503).json({ error: 'COZE_WORKFLOW_TOKEN is not configured' });
+      return;
+    }
+
+    const uploaded = await uploadLineupImportImageToOss(file);
+    try {
+      const imported = await runCozeLineupWorker(uploaded.url, uploaded.mimeType);
+      ok(res, imported);
+    } finally {
+      await deleteOssObjects([uploaded.objectKey]);
+    }
+  } catch (error) {
+    console.error('BFF web lineup import image error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/feed/upload-image', optionalAuth, feedImageUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    const uploaded = await uploadPostMediaToOss(file, 'image');
+    ok(res, uploaded);
+  } catch (error) {
+    console.error('BFF web upload feed image error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/feed/upload-video', optionalAuth, feedVideoUpload.single('video'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    const uploaded = await uploadPostMediaToOss(file, 'video');
+    ok(res, uploaded);
+  } catch (error) {
+    console.error('BFF web upload feed video error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const viewerId = (req as BFFAuthRequest).user?.userId;
+    const authReq = req as BFFAuthRequest;
+    const viewerId = authReq.user?.userId;
+    const viewerRole = authReq.user?.role ?? null;
     const page = normalizePage(req.query.page, 1);
     const limit = normalizeLimit(req.query.limit, 20, 100);
     const skip = (page - 1) * limit;
@@ -936,7 +2097,7 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
     const country = typeof req.query.country === 'string' ? req.query.country.trim() : '';
     const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : 'followerCount';
 
-    const where: any = {};
+    const where: Prisma.DJWhereInput = {};
     if (search) {
       const normalizedSearchVariants = Array.from(
         new Set([search, search.toLowerCase(), search.toUpperCase()])
@@ -949,22 +2110,80 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
     }
     if (country) where.country = country;
 
-    const orderBy: any =
-      sortBy === 'name'
-        ? { name: 'asc' }
-        : sortBy === 'createdAt'
-          ? { createdAt: 'desc' }
-          : { followerCount: 'desc' };
+    let rows: any[] = [];
+    let total = 0;
 
-    const [rows, total] = await Promise.all([
-      prisma.dJ.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy,
-      }),
-      prisma.dJ.count({ where }),
-    ]);
+    if (sortBy === 'random') {
+      const whereSqlParts: Prisma.Sql[] = [];
+
+      if (search) {
+        const searchPattern = `%${search}%`;
+        whereSqlParts.push(Prisma.sql`(
+          "djs"."name" ILIKE ${searchPattern}
+          OR COALESCE("djs"."bio", '') ILIKE ${searchPattern}
+          OR EXISTS (
+            SELECT 1
+            FROM unnest("djs"."aliases") AS "alias"
+            WHERE "alias" ILIKE ${searchPattern}
+          )
+        )`);
+      }
+
+      if (country) {
+        whereSqlParts.push(Prisma.sql`"djs"."country" = ${country}`);
+      }
+
+      const whereSql =
+        whereSqlParts.length > 0
+          ? Prisma.sql`WHERE ${Prisma.join(whereSqlParts, ' AND ')}`
+          : Prisma.empty;
+
+      const [idRows, totalCount] = await Promise.all([
+        prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT "djs"."id"
+          FROM "djs"
+          ${whereSql}
+          ORDER BY RANDOM()
+          LIMIT ${limit}
+          OFFSET ${skip}
+        `),
+        prisma.dJ.count({ where }),
+      ]);
+
+      total = totalCount;
+      const orderedIds = idRows.map((row) => row.id);
+      if (orderedIds.length > 0) {
+        const idOrder = new Map(orderedIds.map((id, index) => [id, index]));
+        rows = await prisma.dJ.findMany({
+          where: {
+            id: { in: orderedIds },
+          },
+        });
+        rows.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
+      }
+    } else {
+      const orderBy: Prisma.DJOrderByWithRelationInput =
+        sortBy === 'name'
+          ? { name: 'asc' }
+          : sortBy === 'createdAt'
+            ? { createdAt: 'desc' }
+            : { followerCount: 'desc' };
+
+      const [sortedRows, totalCount] = await Promise.all([
+        prisma.dJ.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy,
+        }),
+        prisma.dJ.count({ where }),
+      ]);
+
+      rows = sortedRows;
+      total = totalCount;
+    }
+
+    rows = await attachDJContributorInfoList(rows);
 
     const ids = rows.map((row) => row.id);
     const followRows = viewerId
@@ -981,7 +2200,7 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
 
     ok(
       res,
-      { items: rows.map((row) => mapDJ(row, followSet.has(row.id))) },
+      { items: rows.map((row) => mapDJ(row, followSet.has(row.id), viewerId, viewerRole)) },
       {
         page,
         limit,
@@ -991,6 +2210,602 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
     );
   } catch (error) {
     console.error('BFF web djs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/djs/spotify/search', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    if (!spotifyArtistService.isConfigured()) {
+      res.status(503).json({ error: 'Spotify credentials are not configured' });
+      return;
+    }
+
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (!query) {
+      res.status(400).json({ error: 'q is required' });
+      return;
+    }
+
+    const limit = normalizeLimit(req.query.limit, 10, 10);
+    console.info('[spotify-debug] bff.search.start', {
+      userId,
+      query,
+      limit,
+    });
+    const candidates = await spotifyArtistService.searchArtistsByName(query, limit);
+    if (candidates.length === 0) {
+      console.info('[spotify-debug] bff.search.empty', {
+        userId,
+        query,
+      });
+      ok(res, { items: [] as SpotifyDJSearchItem[] });
+      return;
+    }
+
+    const spotifyIds = candidates.map((item) => item.id).filter(Boolean);
+    const nameConditions = candidates.map((item) => ({
+      name: { equals: item.name, mode: 'insensitive' as const },
+    }));
+    const existingRows = await prisma.dJ.findMany({
+      where: {
+        OR: [
+          ...(spotifyIds.length > 0 ? [{ spotifyId: { in: spotifyIds } }] : []),
+          ...nameConditions,
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        spotifyId: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    const bySpotifyId = new Map<string, (typeof existingRows)[number]>();
+    const byName = new Map<string, (typeof existingRows)[number]>();
+    for (const row of existingRows) {
+      if (row.spotifyId && !bySpotifyId.has(row.spotifyId)) {
+        bySpotifyId.set(row.spotifyId, row);
+      }
+      const key = normalizeDJNameKey(row.name);
+      if (!byName.has(key)) {
+        byName.set(key, row);
+      }
+    }
+
+    const items: SpotifyDJSearchItem[] = candidates.map((item) => {
+      const spotifyMatched = bySpotifyId.get(item.id) ?? null;
+      const nameMatched = byName.get(normalizeDJNameKey(item.name)) ?? null;
+      const matched = spotifyMatched ?? nameMatched;
+      const matchType: SpotifyDJSearchItem['existingMatchType'] = spotifyMatched
+        ? 'spotify_id'
+        : nameMatched
+          ? 'name_case_insensitive'
+          : null;
+
+      return {
+        spotifyId: item.id,
+        name: item.name,
+        uri: item.uri,
+        url: item.url,
+        popularity: item.popularity,
+        followers: item.followers,
+        genres: item.genres,
+        imageUrl: item.imageUrl,
+        existingDJId: matched?.id ?? null,
+        existingDJName: matched?.name ?? null,
+        existingMatchType: matchType,
+      };
+    });
+
+    console.info('[spotify-debug] bff.search.success', {
+      userId,
+      query,
+      spotifyCandidateCount: candidates.length,
+      responseItemCount: items.length,
+      matchedExistingCount: items.filter((item) => Boolean(item.existingDJId)).length,
+    });
+    ok(res, { items });
+  } catch (error) {
+    if (error instanceof SpotifyUpstreamError) {
+      console.error('BFF web spotify dj search upstream error:', {
+        code: error.code,
+        status: error.status,
+        message: error.message,
+      });
+      res.status(503).json({
+        error: 'Spotify 服务暂时不可用，请稍后重试',
+        errorCode: error.code,
+      });
+      return;
+    }
+    console.error('BFF web spotify dj search error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    if (!spotifyArtistService.isConfigured()) {
+      res.status(503).json({ error: 'Spotify credentials are not configured' });
+      return;
+    }
+
+    const payload = (req.body ?? {}) as Record<string, unknown>;
+    const spotifyId = typeof payload.spotifyId === 'string' ? payload.spotifyId.trim() : '';
+    if (!spotifyId) {
+      res.status(400).json({ error: 'spotifyId is required' });
+      return;
+    }
+
+    const spotifyArtist = await spotifyArtistService.getArtistById(spotifyId);
+    if (!spotifyArtist) {
+      res.status(404).json({ error: 'Spotify artist not found' });
+      return;
+    }
+
+    const requestedName = typeof payload.name === 'string' ? payload.name.trim() : '';
+    const finalName = requestedName || spotifyArtist.name.trim();
+    if (!finalName) {
+      res.status(400).json({ error: 'DJ name is empty' });
+      return;
+    }
+
+    const requestedAliases = Array.isArray(payload.aliases)
+      ? payload.aliases.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+      : [];
+    const requestedBio = typeof payload.bio === 'string' ? payload.bio.trim() : '';
+    const requestedCountry = typeof payload.country === 'string' ? payload.country.trim() : '';
+    const requestedInstagram = typeof payload.instagramUrl === 'string' ? payload.instagramUrl.trim() : '';
+    const requestedSoundcloud = typeof payload.soundcloudUrl === 'string' ? payload.soundcloudUrl.trim() : '';
+    const requestedTwitter = typeof payload.twitterUrl === 'string' ? payload.twitterUrl.trim() : '';
+    const requestedVerified =
+      typeof payload.isVerified === 'boolean' ? payload.isVerified : true;
+
+    const spotifyName = spotifyArtist.name.trim();
+    const derivedBio = spotifyArtist.genres.length
+      ? `Spotify genres: ${spotifyArtist.genres.slice(0, 4).join(', ')}`
+      : '';
+
+    const existingBySpotifyId = await prisma.dJ.findFirst({
+      where: { spotifyId: spotifyArtist.id },
+    });
+    const existingByName = existingBySpotifyId
+      ? null
+      : await prisma.dJ.findFirst({
+          where: { name: { equals: finalName, mode: 'insensitive' } },
+          orderBy: { createdAt: 'asc' },
+        });
+
+    const target = existingBySpotifyId ?? existingByName;
+    if (target) {
+      const allowed = await canUserEditDJ(target.id, userId, viewerRole);
+      if (!allowed) {
+        res.status(403).json({ error: '仅该 DJ 的贡献者或管理员可修改信息' });
+        return;
+      }
+    }
+    const mergedAliases = mergeAliases(finalName, [
+      ...(target?.aliases ?? []),
+      ...requestedAliases,
+      spotifyName,
+    ]);
+
+    let action: 'created' | 'updated' = 'created';
+    let previousAvatarUrl: string | null = null;
+    let persisted: any;
+
+    if (target) {
+      action = 'updated';
+      previousAvatarUrl = target.avatarUrl ?? null;
+      persisted = await prisma.dJ.update({
+        where: { id: target.id },
+        data: {
+          name: target.name || finalName,
+          aliases: mergedAliases,
+          bio: requestedBio || target.bio || derivedBio || null,
+          country: requestedCountry || target.country || null,
+          spotifyId: spotifyArtist.id,
+          followerCount: spotifyArtist.followers || target.followerCount || 0,
+          instagramUrl: requestedInstagram || target.instagramUrl || null,
+          soundcloudUrl: requestedSoundcloud || target.soundcloudUrl || null,
+          twitterUrl: requestedTwitter || target.twitterUrl || null,
+          isVerified: target.isVerified || requestedVerified,
+          avatarSourceUrl: spotifyArtist.imageUrl || target.avatarSourceUrl || null,
+          sourceDataSource: mergeDJDataSources(target.sourceDataSource, ['spotify']),
+        },
+      });
+    } else {
+      const slug = await uniqueDJSlugForName(finalName);
+      persisted = await prisma.dJ.create({
+        data: {
+          name: finalName,
+          aliases: mergedAliases,
+          slug,
+          bio: requestedBio || derivedBio || null,
+          country: requestedCountry || null,
+          spotifyId: spotifyArtist.id,
+          followerCount: spotifyArtist.followers || 0,
+          instagramUrl: requestedInstagram || null,
+          soundcloudUrl: requestedSoundcloud || null,
+          twitterUrl: requestedTwitter || null,
+          isVerified: requestedVerified,
+          avatarSourceUrl: spotifyArtist.imageUrl || null,
+          avatarUrl: null,
+          sourceDataSource: mergeDJDataSources(null, ['spotify']),
+        },
+      });
+    }
+
+    let avatarUploadedToOss = false;
+    let replacedExistingAvatar = false;
+    if (spotifyArtist.imageUrl) {
+      const uploadedAvatar = await uploadRemoteDJAvatarToOss(persisted.id, spotifyArtist.imageUrl);
+      if (uploadedAvatar) {
+        avatarUploadedToOss = true;
+        replacedExistingAvatar = Boolean(previousAvatarUrl && previousAvatarUrl !== uploadedAvatar.url);
+        const updated = await prisma.dJ.update({
+          where: { id: persisted.id },
+          data: {
+            avatarUrl: uploadedAvatar.url,
+            avatarSourceUrl: spotifyArtist.imageUrl,
+          },
+        });
+        if (previousAvatarUrl && previousAvatarUrl !== uploadedAvatar.url) {
+          await deleteSingleDJAvatarOssObjectIfOwned(previousAvatarUrl, persisted.id);
+        }
+        persisted = updated;
+      } else if (!persisted.avatarUrl) {
+        persisted = await prisma.dJ.update({
+          where: { id: persisted.id },
+          data: {
+            avatarUrl: spotifyArtist.imageUrl,
+            avatarSourceUrl: spotifyArtist.imageUrl,
+          },
+        });
+      }
+    }
+
+    await ensureDJContributor(persisted.id, userId);
+    const hydrated = await fetchDJWithContributorsById(persisted.id);
+    const mapped = mapDJ(hydrated ?? persisted, false, userId, viewerRole);
+
+    ok(res, {
+      action,
+      avatarUploadedToOss,
+      replacedExistingAvatar,
+      dj: mapped,
+    });
+  } catch (error) {
+    if (error instanceof SpotifyUpstreamError) {
+      console.error('BFF web spotify dj import upstream error:', {
+        code: error.code,
+        status: error.status,
+        message: error.message,
+      });
+      res.status(503).json({
+        error: 'Spotify 服务暂时不可用，请稍后重试',
+        errorCode: error.code,
+      });
+      return;
+    }
+    console.error('BFF web spotify dj import error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    const payload = (req.body ?? {}) as Record<string, unknown>;
+    const name = typeof payload.name === 'string' ? payload.name.trim() : '';
+    if (!name) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    const spotifyId = typeof payload.spotifyId === 'string' ? payload.spotifyId.trim() : '';
+    const aliases = Array.isArray(payload.aliases)
+      ? payload.aliases.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+      : [];
+    const bio = typeof payload.bio === 'string' ? payload.bio.trim() : '';
+    const country = typeof payload.country === 'string' ? payload.country.trim() : '';
+    const instagramUrl = typeof payload.instagramUrl === 'string' ? payload.instagramUrl.trim() : '';
+    const soundcloudUrl = typeof payload.soundcloudUrl === 'string' ? payload.soundcloudUrl.trim() : '';
+    const twitterUrl = typeof payload.twitterUrl === 'string' ? payload.twitterUrl.trim() : '';
+    const isVerified = typeof payload.isVerified === 'boolean' ? payload.isVerified : true;
+
+    const existingBySpotifyId = spotifyId
+      ? await prisma.dJ.findFirst({
+          where: { spotifyId },
+        })
+      : null;
+    const existingByName = existingBySpotifyId
+      ? null
+      : await prisma.dJ.findFirst({
+          where: { name: { equals: name, mode: 'insensitive' } },
+          orderBy: { createdAt: 'asc' },
+        });
+    const target = existingBySpotifyId ?? existingByName;
+    if (target) {
+      const allowed = await canUserEditDJ(target.id, userId, viewerRole);
+      if (!allowed) {
+        res.status(403).json({ error: '仅该 DJ 的贡献者或管理员可修改信息' });
+        return;
+      }
+    }
+
+    const mergedAliases = mergeAliases(name, [...(target?.aliases ?? []), ...aliases]);
+
+    let action: 'created' | 'updated' = 'created';
+    let persisted: any;
+    if (target) {
+      action = 'updated';
+      persisted = await prisma.dJ.update({
+        where: { id: target.id },
+        data: {
+          name: target.name || name,
+          aliases: mergedAliases,
+          bio: bio || target.bio || null,
+          country: country || target.country || null,
+          spotifyId: spotifyId || target.spotifyId || null,
+          instagramUrl: instagramUrl || target.instagramUrl || null,
+          soundcloudUrl: soundcloudUrl || target.soundcloudUrl || null,
+          twitterUrl: twitterUrl || target.twitterUrl || null,
+          isVerified: target.isVerified || isVerified,
+          sourceDataSource: mergeDJDataSources(target.sourceDataSource, ['manual']),
+        },
+      });
+    } else {
+      const slug = await uniqueDJSlugForName(name);
+      persisted = await prisma.dJ.create({
+        data: {
+          name,
+          aliases: mergedAliases,
+          slug,
+          bio: bio || null,
+          country: country || null,
+          spotifyId: spotifyId || null,
+          instagramUrl: instagramUrl || null,
+          soundcloudUrl: soundcloudUrl || null,
+          twitterUrl: twitterUrl || null,
+          isVerified,
+          sourceDataSource: mergeDJDataSources(null, ['manual']),
+        },
+      });
+    }
+
+    await ensureDJContributor(persisted.id, userId);
+    const hydrated = await fetchDJWithContributorsById(persisted.id);
+    const mapped = mapDJ(hydrated ?? persisted, false, userId, viewerRole);
+
+    ok(res, {
+      action,
+      dj: mapped,
+    });
+  } catch (error) {
+    console.error('BFF web manual dj import error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/djs/upload-image', optionalAuth, djImageUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    const formBody = req.body as Record<string, unknown>;
+    const djId = typeof formBody.djId === 'string' ? formBody.djId.trim() : '';
+    const usageRaw = typeof formBody.usage === 'string' ? formBody.usage.trim().toLowerCase() : '';
+    const usage: 'avatar' | 'banner' | null =
+      usageRaw === 'avatar' || usageRaw === 'banner' ? usageRaw : null;
+
+    if (!djId) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(400).json({ error: 'djId is required' });
+      return;
+    }
+    if (!usage) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(400).json({ error: 'usage must be avatar or banner' });
+      return;
+    }
+
+    const existing = await prisma.dJ.findUnique({
+      where: { id: djId },
+      select: { id: true, avatarUrl: true, bannerUrl: true },
+    });
+    if (!existing) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(404).json({ error: 'DJ not found' });
+      return;
+    }
+
+    const allowed = await canUserEditDJ(existing.id, userId, viewerRole);
+    if (!allowed) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(403).json({ error: '仅该 DJ 的贡献者或管理员可修改信息' });
+      return;
+    }
+
+    const uploaded = await uploadDJMediaToOss(file, djId, usage);
+    const previousUrl = usage === 'avatar' ? existing.avatarUrl : existing.bannerUrl;
+
+    await prisma.dJ.update({
+      where: { id: djId },
+      data:
+        usage === 'avatar'
+          ? {
+              avatarUrl: uploaded.url,
+              avatarSourceUrl: uploaded.url,
+            }
+          : {
+              bannerUrl: uploaded.url,
+            },
+    });
+
+    if (previousUrl && previousUrl !== uploaded.url) {
+      await deleteSingleDJMediaOssObjectIfOwned(previousUrl, djId);
+    }
+
+    await ensureDJContributor(djId, userId);
+
+    ok(res, uploaded);
+  } catch (error) {
+    console.error('BFF web upload dj image error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    const djId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    if (!djId) {
+      res.status(400).json({ error: 'DJ id is required' });
+      return;
+    }
+
+    const existing = await fetchDJWithContributorsById(djId);
+    if (!existing) {
+      res.status(404).json({ error: 'DJ not found' });
+      return;
+    }
+
+    const allowed = await canUserEditDJ(existing.id, userId, viewerRole);
+    if (!allowed) {
+      res.status(403).json({ error: '仅该 DJ 的贡献者或管理员可修改信息' });
+      return;
+    }
+
+    const payload = (req.body ?? {}) as Record<string, unknown>;
+    const updateData: Prisma.DJUpdateInput = {};
+
+    let nextName = existing.name;
+    let hasNameInput = false;
+    if (Object.prototype.hasOwnProperty.call(payload, 'name')) {
+      if (typeof payload.name !== 'string') {
+        res.status(400).json({ error: 'name must be a string' });
+        return;
+      }
+      const trimmed = payload.name.trim();
+      if (!trimmed) {
+        res.status(400).json({ error: 'name cannot be empty' });
+        return;
+      }
+      hasNameInput = true;
+      nextName = trimmed;
+      updateData.name = trimmed;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'aliases') || hasNameInput) {
+      const inputAliases = Array.isArray(payload.aliases)
+        ? payload.aliases
+            .map((item) => (typeof item === 'string' ? item.trim() : ''))
+            .filter(Boolean)
+        : [];
+      const aliasCandidates = [
+        ...(existing.aliases ?? []),
+        ...inputAliases,
+      ];
+      if (hasNameInput && normalizeDJNameKey(existing.name) !== normalizeDJNameKey(nextName)) {
+        aliasCandidates.push(existing.name);
+      }
+      updateData.aliases = mergeAliases(nextName, aliasCandidates);
+    }
+
+    const assignOptionalString = (
+      payloadKey: string,
+      targetKey:
+        | 'bio'
+        | 'country'
+        | 'spotifyId'
+        | 'appleMusicId'
+        | 'instagramUrl'
+        | 'soundcloudUrl'
+        | 'twitterUrl'
+    ) => {
+      if (!Object.prototype.hasOwnProperty.call(payload, payloadKey)) return;
+      const value = payload[payloadKey];
+      if (value === null) {
+        updateData[targetKey] = null;
+        return;
+      }
+      if (typeof value !== 'string') {
+        throw new Error(`${payloadKey} must be a string or null`);
+      }
+      const trimmed = value.trim();
+      updateData[targetKey] = trimmed || null;
+    };
+
+    try {
+      assignOptionalString('bio', 'bio');
+      assignOptionalString('country', 'country');
+      assignOptionalString('spotifyId', 'spotifyId');
+      assignOptionalString('appleMusicId', 'appleMusicId');
+      assignOptionalString('instagramUrl', 'instagramUrl');
+      assignOptionalString('soundcloudUrl', 'soundcloudUrl');
+      assignOptionalString('twitterUrl', 'twitterUrl');
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message });
+      return;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'isVerified')) {
+      if (typeof payload.isVerified !== 'boolean') {
+        res.status(400).json({ error: 'isVerified must be a boolean' });
+        return;
+      }
+      updateData.isVerified = payload.isVerified;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      ok(res, mapDJ(existing, false, userId, viewerRole));
+      return;
+    }
+
+    await prisma.dJ.update({
+      where: { id: djId },
+      data: updateData,
+    });
+    await ensureDJContributor(djId, userId);
+
+    const updated = await fetchDJWithContributorsById(djId);
+    if (!updated) {
+      res.status(404).json({ error: 'DJ not found after update' });
+      return;
+    }
+
+    ok(res, mapDJ(updated, false, userId, viewerRole));
+  } catch (error) {
+    console.error('BFF web update dj error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1045,9 +2860,15 @@ router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response):
 
 router.get('/djs/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const viewerId = (req as BFFAuthRequest).user?.userId;
+    const authReq = req as BFFAuthRequest;
+    const viewerId = authReq.user?.userId;
+    const viewerRole = authReq.user?.role ?? null;
     const djId = req.params.id as string;
-    const row = await prisma.dJ.findUnique({ where: { id: djId } });
+    const row = await attachDJContributorInfo(
+      await prisma.dJ.findUnique({
+        where: { id: djId },
+      })
+    );
     if (!row) {
       res.status(404).json({ error: 'DJ not found' });
       return;
@@ -1066,7 +2887,7 @@ router.get('/djs/:id', optionalAuth, async (req: Request, res: Response): Promis
       isFollowing = Boolean(follow);
     }
 
-    ok(res, mapDJ(row, isFollowing));
+    ok(res, mapDJ(row, isFollowing, viewerId, viewerRole));
   } catch (error) {
     console.error('BFF web dj detail error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -1097,8 +2918,10 @@ router.get('/djs/:id/follow-status', optionalAuth, async (req: Request, res: Res
 
 router.post('/djs/:id/follow', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = requireAuth(req as BFFAuthRequest, res);
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
     if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
 
     const djId = req.params.id as string;
     const dj = await prisma.dJ.findUnique({ where: { id: djId } });
@@ -1136,8 +2959,12 @@ router.post('/djs/:id/follow', optionalAuth, async (req: Request, res: Response)
       ]);
     }
 
-    const updated = await prisma.dJ.findUnique({ where: { id: djId } });
-    ok(res, mapDJ(updated || dj, true));
+    const updated = await attachDJContributorInfo(
+      await prisma.dJ.findUnique({
+        where: { id: djId },
+      })
+    );
+    ok(res, mapDJ(updated || dj, true, userId, viewerRole));
   } catch (error) {
     console.error('BFF web follow dj error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -1146,8 +2973,10 @@ router.post('/djs/:id/follow', optionalAuth, async (req: Request, res: Response)
 
 router.delete('/djs/:id/follow', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = requireAuth(req as BFFAuthRequest, res);
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
     if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
 
     const djId = req.params.id as string;
     const dj = await prisma.dJ.findUnique({ where: { id: djId } });
@@ -1186,8 +3015,12 @@ router.delete('/djs/:id/follow', optionalAuth, async (req: Request, res: Respons
       ]);
     }
 
-    const updated = await prisma.dJ.findUnique({ where: { id: djId } });
-    ok(res, mapDJ(updated || dj, false));
+    const updated = await attachDJContributorInfo(
+      await prisma.dJ.findUnique({
+        where: { id: djId },
+      })
+    );
+    ok(res, mapDJ(updated || dj, false, userId, viewerRole));
   } catch (error) {
     console.error('BFF web unfollow dj error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -1570,6 +3403,12 @@ router.post('/dj-sets/upload-video', optionalAuth, djSetVideoUpload.single('vide
       return;
     }
 
+    if (looksLikePostMediaName(file.originalname || '', 'video')) {
+      const uploaded = await uploadPostMediaToOss(file, 'video');
+      ok(res, uploaded);
+      return;
+    }
+
     ok(res, {
       url: `/uploads/dj-sets/${file.filename}`,
       fileName: file.filename,
@@ -1798,6 +3637,26 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
       return;
     }
 
+    if (type === 'event' && eventId) {
+      const existingAttendance = await prisma.checkin.findFirst({
+        where: {
+          userId,
+          type: 'event',
+          eventId,
+          NOT: [
+            { note: 'planned' },
+            { note: 'marked' },
+          ],
+        },
+        orderBy: [{ attendedAt: 'desc' }, { createdAt: 'desc' }],
+      });
+
+      if (existingAttendance) {
+        res.status(409).json({ error: '该活动已打卡，请直接编辑原有记录' });
+        return;
+      }
+    }
+
     const created = await prisma.checkin.create({
       data: {
         userId,
@@ -1836,6 +3695,133 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
     ok(res, created);
   } catch (error) {
     console.error('BFF web create checkin error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/checkins/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const checkinId = req.params.id as string;
+    const existing = await prisma.checkin.findUnique({
+      where: { id: checkinId },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            coverImageUrl: true,
+            city: true,
+            country: true,
+            startDate: true,
+            endDate: true,
+          },
+        },
+        dj: {
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+            country: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Checkin not found' });
+      return;
+    }
+
+    if (authReq.user?.role !== 'admin' && existing.userId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const nextEventId = typeof body.eventId === 'string' ? body.eventId : existing.eventId;
+    const nextDjId = typeof body.djId === 'string' ? body.djId : existing.djId;
+    const nextNote = typeof body.note === 'string' ? body.note : existing.note;
+    const nextRating = typeof body.rating === 'number' ? body.rating : existing.rating;
+    const attendedAt =
+      typeof body.attendedAt === 'string' && body.attendedAt.trim().length > 0
+        ? new Date(body.attendedAt)
+        : existing.attendedAt;
+
+    if (Number.isNaN(attendedAt.getTime())) {
+      res.status(400).json({ error: 'attendedAt must be a valid ISO datetime' });
+      return;
+    }
+
+    if (existing.type === 'event' && !nextEventId) {
+      res.status(400).json({ error: 'eventId is required for event checkin' });
+      return;
+    }
+
+    if (existing.type === 'dj' && !nextDjId) {
+      res.status(400).json({ error: 'djId is required for dj checkin' });
+      return;
+    }
+
+    if (existing.type === 'event' && nextEventId) {
+      const conflicting = await prisma.checkin.findFirst({
+        where: {
+          id: { not: checkinId },
+          userId,
+          type: 'event',
+          eventId: nextEventId,
+          NOT: [
+            { note: 'planned' },
+            { note: 'marked' },
+          ],
+        },
+        orderBy: [{ attendedAt: 'desc' }, { createdAt: 'desc' }],
+      });
+
+      if (conflicting) {
+        res.status(409).json({ error: '该活动已存在另一条打卡记录' });
+        return;
+      }
+    }
+
+    const updated = await prisma.checkin.update({
+      where: { id: checkinId },
+      data: {
+        eventId: nextEventId ?? null,
+        djId: existing.type === 'dj' ? nextDjId : null,
+        note: nextNote ?? null,
+        rating: nextRating ?? null,
+        attendedAt,
+      },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            coverImageUrl: true,
+            city: true,
+            country: true,
+            startDate: true,
+            endDate: true,
+          },
+        },
+        dj: {
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+            country: true,
+          },
+        },
+      },
+    });
+
+    ok(res, updated);
+  } catch (error) {
+    console.error('BFF web update checkin error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

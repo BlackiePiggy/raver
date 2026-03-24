@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
+import OSS from 'ali-oss';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -32,6 +33,95 @@ const avatarUpload = multer({
     cb(null, true);
   },
 });
+
+const cleanEnv = (value: string | undefined): string | null => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const ossRegion = cleanEnv(process.env.OSS_REGION);
+const ossAccessKeyId = cleanEnv(process.env.OSS_ACCESS_KEY_ID);
+const ossAccessKeySecret = cleanEnv(process.env.OSS_ACCESS_KEY_SECRET);
+const ossBucket = cleanEnv(process.env.OSS_BUCKET);
+const ossEndpoint = cleanEnv(process.env.OSS_ENDPOINT);
+const ossPostsPrefix = (cleanEnv(process.env.OSS_POSTS_PREFIX) || 'posts').replace(/^\/+|\/+$/g, '');
+
+const postMediaOssClient =
+  ossRegion && ossAccessKeyId && ossAccessKeySecret && ossBucket
+    ? new OSS({
+        region: ossRegion,
+        accessKeyId: ossAccessKeyId,
+        accessKeySecret: ossAccessKeySecret,
+        bucket: ossBucket,
+        endpoint: ossEndpoint || undefined,
+      })
+    : null;
+
+const extractPostMediaOssKey = (raw: string): string | null => {
+  const value = raw.trim();
+  if (!value) return null;
+
+  const normalizedPrefix = `${ossPostsPrefix}/`;
+  if (value.startsWith('/')) {
+    const relative = value.replace(/^\/+/, '');
+    return relative.startsWith(normalizedPrefix) ? relative : null;
+  }
+
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    try {
+      const url = new URL(value);
+      const pathname = decodeURIComponent(url.pathname || '').replace(/^\/+/, '');
+      if (!pathname.startsWith(normalizedPrefix)) {
+        return null;
+      }
+      if (!ossBucket) {
+        return null;
+      }
+      const host = url.hostname.toLowerCase();
+      const expectedBucket = ossBucket.toLowerCase();
+      if (host === expectedBucket || host.startsWith(`${expectedBucket}.`)) {
+        return pathname;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  return value.startsWith(normalizedPrefix) ? value : null;
+};
+
+const deletePostMediaFromOss = async (imageUrls: string[]): Promise<{ deletedKeys: string[]; failedKeys: string[] }> => {
+  if (!postMediaOssClient || imageUrls.length === 0) {
+    return { deletedKeys: [], failedKeys: [] };
+  }
+
+  const uniqueKeys = Array.from(
+    new Set(
+      imageUrls
+        .map((item) => extractPostMediaOssKey(item))
+        .filter((item): item is string => Boolean(item))
+    )
+  );
+
+  if (uniqueKeys.length === 0) {
+    return { deletedKeys: [], failedKeys: [] };
+  }
+
+  const results = await Promise.allSettled(uniqueKeys.map((key) => postMediaOssClient.delete(key)));
+  const deletedKeys: string[] = [];
+  const failedKeys: string[] = [];
+  results.forEach((result, index) => {
+    const key = uniqueKeys[index];
+    if (result.status === 'fulfilled') {
+      deletedKeys.push(key);
+    } else {
+      failedKeys.push(key);
+    }
+  });
+  return { deletedKeys, failedKeys };
+};
 
 interface BFFAuthRequest extends Request {
   user?: JWTPayload;
@@ -487,6 +577,8 @@ router.get('/', (_req: Request, res: Response) => {
       feed: 'GET /v1/feed',
       feedSearch: 'GET /v1/feed/search',
       createPost: 'POST /v1/feed/posts',
+      updatePost: 'PATCH /v1/feed/posts/:id',
+      deletePost: 'DELETE /v1/feed/posts/:id',
       userSearch: 'GET /v1/users/search',
       userProfile: 'GET /v1/users/:id/profile',
       userPosts: 'GET /v1/users/:id/posts',
@@ -2198,6 +2290,163 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
     res.status(201).json(mapped);
   } catch (error) {
     console.error('BFF create post error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const postId = req.params.id as string;
+    const { content, images } = req.body as {
+      content?: string;
+      images?: string[];
+    };
+
+    const hasContent = typeof content === 'string';
+    const hasImages = Array.isArray(images);
+    if (!hasContent && !hasImages) {
+      res.status(400).json({ error: 'content or images is required' });
+      return;
+    }
+
+    const existing = await prisma.post.findUnique({
+      where: { id: postId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+        squad: {
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Post not found' });
+      return;
+    }
+
+    if (authReq.user?.role !== 'admin' && existing.userId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const nextContent = hasContent ? String(content || '').trim() : existing.content;
+    const nextImages = hasImages
+      ? (images as unknown[])
+          .filter((url): url is string => typeof url === 'string')
+          .map((url) => url.trim())
+          .filter(Boolean)
+      : existing.images;
+
+    if (!nextContent && nextImages.length === 0) {
+      res.status(400).json({ error: 'content or images is required' });
+      return;
+    }
+
+    const updateData: { content?: string; images?: string[] } = {};
+    if (hasContent) {
+      updateData.content = nextContent;
+    }
+    if (hasImages) {
+      updateData.images = nextImages;
+    }
+
+    const updated =
+      Object.keys(updateData).length > 0
+        ? await prisma.post.update({
+            where: { id: postId },
+            data: updateData,
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  username: true,
+                  displayName: true,
+                  avatarUrl: true,
+                },
+              },
+              squad: {
+                select: {
+                  id: true,
+                  name: true,
+                  avatarUrl: true,
+                },
+              },
+            },
+          })
+        : existing;
+
+    if (hasImages) {
+      const newImageSet = new Set(nextImages);
+      const removedImages = existing.images.filter((url) => !newImageSet.has(url));
+      if (removedImages.length > 0) {
+        const { failedKeys } = await deletePostMediaFromOss(removedImages);
+        if (failedKeys.length > 0) {
+          console.warn('BFF update post OSS cleanup failed keys:', failedKeys);
+        }
+      }
+    }
+
+    const followingSet = await buildFollowingMap(userId, [updated.user.id]);
+    const likedPostIds = await buildLikedPostMap(userId, [updated.id]);
+    const repostedPostIds = await buildRepostedPostMap(userId, [updated.id]);
+    const mapped = mapPost(updated, followingSet, likedPostIds, repostedPostIds);
+    res.json(mapped);
+  } catch (error) {
+    console.error('BFF update post error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/feed/posts/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const postId = req.params.id as string;
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, userId: true, images: true },
+    });
+
+    if (!post) {
+      res.status(404).json({ error: 'Post not found' });
+      return;
+    }
+
+    if (authReq.user?.role !== 'admin' && post.userId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    await prisma.post.delete({ where: { id: postId } });
+
+    const { deletedKeys, failedKeys } = await deletePostMediaFromOss(post.images);
+
+    res.json({
+      success: true,
+      deletedPostId: postId,
+      deletedMediaCount: deletedKeys.length,
+      cleanupFailedCount: failedKeys.length,
+      cleanupFailedKeys: failedKeys,
+    });
+  } catch (error) {
+    console.error('BFF delete post error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

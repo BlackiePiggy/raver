@@ -42,6 +42,41 @@ const uniqueSlugForName = async (name: string) => {
   }
 };
 
+const splitDataSources = (value: string | null | undefined): string[] => {
+  if (!value) return [];
+  return value
+    .split(/[|,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const mergeDataSources = (
+  existing: string | null | undefined,
+  additions: Array<string | null | undefined>
+): string | null => {
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (raw: string | null | undefined) => {
+    if (!raw) return;
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(trimmed);
+  };
+
+  for (const item of splitDataSources(existing)) {
+    push(item);
+  }
+  for (const item of additions) {
+    push(item);
+  }
+
+  return result.length > 0 ? result.join('|') : null;
+};
+
 const ensureDJByName = async (name: string) => {
   const trimmed = name.trim();
   if (!trimmed) {
@@ -116,6 +151,7 @@ const enrichDJWithSpotify = async (dj: any, forceRefresh = false) => {
       avatarUrl: dj.avatarUrl || spotify.imageUrl,
       bio: inferredBio,
       lastSyncedAt: new Date(),
+      sourceDataSource: mergeDataSources(dj.sourceDataSource, ['spotify']),
     };
 
     const updatedDJ = await prisma.dJ.update({
@@ -160,6 +196,7 @@ const upsertDJFromSpotifyProfile = async (
     avatarUrl: target?.avatarUrl || spotify.imageUrl,
     bio: target?.bio || bio,
     lastSyncedAt: new Date(),
+    sourceDataSource: mergeDataSources(target?.sourceDataSource, ['spotify']),
   };
 
   if (target) {

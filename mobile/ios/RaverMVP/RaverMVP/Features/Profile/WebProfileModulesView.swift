@@ -14,15 +14,87 @@ struct MyCheckinsView: View {
     private struct TimelineNode: Identifiable {
         let id: String
         var anchorDate: Date
-        let day: Date
+        var day: Date
         let event: CheckinEventLite?
         var eventCheckin: WebCheckin?
         var djs: [TimelineDJEntry]
         var manualEventName: String?
+        var structuredSelections: [EventAttendanceDaySelectionPayload]
 
         var isStandaloneDJNode: Bool {
             event == nil
         }
+    }
+
+    private struct TimelineAttendanceSection: Identifiable {
+        let id: String
+        let title: String
+        let djs: [TimelineDJEntry]
+        var structuredDJSelections: [EventAttendanceDJSelection]?
+    }
+
+    private enum TimelineActType {
+        case solo
+        case b2b
+        case b3b
+
+        var performerCount: Int {
+            switch self {
+            case .solo: return 1
+            case .b2b: return 2
+            case .b3b: return 3
+            }
+        }
+    }
+
+    private enum TimelineCheckinAvatarSize {
+        case small
+        case medium
+        case large
+
+        var frameWidth: CGFloat {
+            switch self {
+            case .small:
+                return TimelineAvatarLayout.performerSize
+            case .medium:
+                return TimelineAvatarLayout.contentWidth(for: 2) + TimelineAvatarLayout.mediumHorizontalInset * 2
+            case .large:
+                return TimelineAvatarLayout.contentWidth(for: 3) + TimelineAvatarLayout.largeHorizontalInset * 2
+            }
+        }
+
+        var frameHeight: CGFloat { TimelineAvatarLayout.performerSize }
+        var performerSize: CGFloat { TimelineAvatarLayout.performerSize }
+    }
+
+    private enum TimelineAvatarLayout {
+        static let performerSize: CGFloat = 56
+        static let performerCenterDistance: CGFloat = 68
+        static let connectorSize: CGFloat = 12
+        static let groupSpacing: CGFloat = 12
+        static let sectionSpacing: CGFloat = 8
+        static let gridSpacing: CGFloat = performerCenterDistance - performerSize
+        static let mediumHorizontalInset: CGFloat = 4
+        static let largeHorizontalInset: CGFloat = 7
+
+        static func contentWidth(for performerCount: Int) -> CGFloat {
+            guard performerCount > 0 else { return 0 }
+            return performerSize + CGFloat(max(0, performerCount - 1)) * performerCenterDistance
+        }
+    }
+
+    private struct TimelineActPerformer: Identifiable {
+        let id: String
+        let name: String
+        let djID: String?
+        let avatarUrl: String?
+    }
+
+    private struct TimelineActEntry: Identifiable {
+        let id: String
+        let title: String
+        let type: TimelineActType
+        let performers: [TimelineActPerformer]
     }
 
     private enum DisplayMode: String, CaseIterable {
@@ -48,6 +120,7 @@ struct MyCheckinsView: View {
     @State private var errorMessage: String?
     @State private var selectedEventIDForDetail: String?
     @State private var selectedDJIDForDetail: String?
+    @State private var timelineDJIdentityByName: [String: CheckinDJLite] = [:]
 
     init(targetUserID: String? = nil, title: String = "我的打卡") {
         self.targetUserID = targetUserID
@@ -103,34 +176,50 @@ struct MyCheckinsView: View {
         .background(RaverTheme.background)
         .scrollIndicators(.hidden)
         .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .top) {
-            HStack {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                HStack {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(Color.black.opacity(0.36))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+
+                    Text(navigationTitleText)
                         .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(RaverTheme.primaryText)
+
+                    Spacer()
+
+                    Color.clear
                         .frame(width: 34, height: 34)
-                        .background(Color.black.opacity(0.36))
-                        .clipShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .padding(.horizontal, 14)
+                .padding(.top, 4)
+                .padding(.bottom, 6)
+                .background(RaverTheme.background.opacity(0.98))
 
-                Spacer()
-
-                Text(navigationTitleText)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-
-                Spacer()
-
-                Color.clear
-                    .frame(width: 34, height: 34)
+                LinearGradient(
+                    colors: [
+                        RaverTheme.background.opacity(0.96),
+                        RaverTheme.background.opacity(0.72),
+                        RaverTheme.background.opacity(0.34),
+                        .clear
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 28)
+                .allowsHitTesting(false)
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 4)
-            .padding(.bottom, 6)
         }
         .task {
             await reload()
@@ -325,7 +414,7 @@ struct MyCheckinsView: View {
                         .fill(RaverTheme.background)
                         .frame(width: 28, height: 28)
                 )
-                .padding(.top, 42)
+                .padding(.top, 6)
 
             VStack(alignment: .leading, spacing: 12) {
                 timelineTimestamp(for: node)
@@ -344,6 +433,15 @@ struct MyCheckinsView: View {
         VStack(alignment: .leading, spacing: 14) {
             if let event = node.event {
                 VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        timelineEventHeadline(for: node, event: event)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                    }
+                    .padding(.bottom, 12)
+
                     Button {
                         selectedEventIDForDetail = event.id
                     } label: {
@@ -353,65 +451,70 @@ struct MyCheckinsView: View {
                     }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .top, spacing: 10) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                if let seriesName = eventSeriesName(for: node) {
-                                    Text(seriesName)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(Color(red: 0.84, green: 0.42, blue: 0.28))
-                                }
-
-                                Text(eventNodeTitle(for: node))
-                                    .font(.title3.weight(.bold))
-                                    .foregroundStyle(RaverTheme.primaryText)
-                                    .multilineTextAlignment(.leading)
-                                    .lineLimit(2)
-                            }
-                            Spacer(minLength: 8)
-                        }
-
-                        Text(eventTimelineSubtitle(event))
-                            .font(.subheadline)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                            .lineLimit(2)
-                    }
-                    .padding(.top, 14)
                 }
             } else {
                 standaloneDJHeader(manualEventName: node.manualEventName)
             }
 
-            if !node.djs.isEmpty {
+            let attendanceSections = attendanceSections(for: node)
+            if !attendanceSections.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text(node.isStandaloneDJNode ? "这次打卡的 DJ" : "这场打卡的 DJ")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(RaverTheme.primaryText)
+                    if node.isStandaloneDJNode {
+                        HStack {
+                            Text("这次打卡的 DJ")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
 
-                        Spacer()
+                            Spacer()
 
-                        Text("\(node.djs.count) 位")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color(red: 0.82, green: 0.39, blue: 0.20))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color(red: 1.00, green: 0.94, blue: 0.90), in: Capsule())
+                            checkinCountBadge(attendanceSections.reduce(0) { total, section in
+                                total + attendanceSectionDJCount(section)
+                            })
+                        }
                     }
 
-                    LazyVGrid(
-                        columns: [
-                            GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top),
-                            GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top),
-                            GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top),
-                            GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top)
-                        ],
-                        alignment: .leading,
-                        spacing: 10
-                    ) {
-                        ForEach(node.djs) { entry in
-                            timelineDJButton(entry)
+                    ForEach(attendanceSections) { section in
+                        VStack(alignment: .leading, spacing: 10) {
+                            if node.isStandaloneDJNode {
+                                Text(section.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Color(red: 0.84, green: 0.42, blue: 0.28))
+                            } else {
+                                HStack(alignment: .center, spacing: 10) {
+                                    Text(section.title)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(Color(red: 0.84, green: 0.42, blue: 0.28))
+
+                                    Spacer()
+
+                                    checkinCountBadge(attendanceSectionDJCount(section))
+                                }
+                            }
+
+                            if section.djs.isEmpty {
+                                Text("未选择 DJ")
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            } else {
+                                if let structured = section.structuredDJSelections {
+                                    timelineStructuredDJGrid(structured, sectionID: section.id)
+                                } else {
+                                    LazyVGrid(
+                                        columns: [
+                                            GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top),
+                                            GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top),
+                                            GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top),
+                                            GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top)
+                                        ],
+                                        alignment: .leading,
+                                        spacing: 10
+                                    ) {
+                                        ForEach(section.djs) { entry in
+                                            timelineDJButton(entry)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -468,32 +571,14 @@ struct MyCheckinsView: View {
 
     private func standaloneDJHeader(manualEventName: String?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.99, green: 0.74, blue: 0.66),
-                            Color(red: 0.96, green: 0.55, blue: 0.42)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(height: 144)
-                .overlay(
-                    VStack(spacing: 10) {
-                        Image(systemName: "waveform.path.ecg.rectangle.fill")
-                            .font(.title2)
-                        Text(manualEventName ?? "独立 DJ 打卡")
-                            .font(.headline.weight(.bold))
-                    }
-                    .foregroundStyle(Color.white.opacity(0.95))
-                )
+            Text(manualEventName ?? "单独 DJ 打卡")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(RaverTheme.primaryText)
 
             Text(
                 manualEventName == nil
-                    ? "这条记录附近没有匹配到活动打卡，所以先单独展示。"
-                    : "未在活动库中匹配到该活动，已按你手动填写的信息记录。"
+                    ? "这次是单独的 DJ 打卡，暂无匹配活动。"
+                    : "这次是单独的 DJ 打卡，暂无匹配活动，已按你填写的活动信息记录。"
             )
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
@@ -519,6 +604,209 @@ struct MyCheckinsView: View {
             .frame(maxWidth: .infinity, minHeight: 80, alignment: .top)
         }
         .buttonStyle(.plain)
+    }
+
+    private func timelineStructuredDJGrid(_ selections: [EventAttendanceDJSelection], sectionID: String) -> some View {
+        let acts = timelineActs(from: selections, sectionID: sectionID)
+        let b3bActs = acts.filter { $0.type == .b3b }
+        let b2bActs = acts.filter { $0.type == .b2b }
+        let otherActs = acts.filter { $0.type == .solo }
+
+        return VStack(alignment: .leading, spacing: TimelineAvatarLayout.groupSpacing) {
+            if !b3bActs.isEmpty {
+                VStack(alignment: .leading, spacing: TimelineAvatarLayout.sectionSpacing) {
+                    Text("B3B")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    ForEach(b3bActs) { act in
+                        timelineActItem(act, avatarSize: .large)
+                    }
+                }
+            }
+
+            if !b2bActs.isEmpty {
+                VStack(alignment: .leading, spacing: TimelineAvatarLayout.sectionSpacing) {
+                    Text("B2B")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(minimum: 0), spacing: TimelineAvatarLayout.gridSpacing, alignment: .top),
+                            GridItem(.flexible(minimum: 0), spacing: TimelineAvatarLayout.gridSpacing, alignment: .top)
+                        ],
+                        alignment: .leading,
+                        spacing: TimelineAvatarLayout.groupSpacing
+                    ) {
+                        ForEach(b2bActs) { act in
+                            timelineActItem(act, avatarSize: .medium)
+                        }
+                    }
+                }
+            }
+
+            if !otherActs.isEmpty {
+                VStack(alignment: .leading, spacing: TimelineAvatarLayout.sectionSpacing) {
+                    if !b2bActs.isEmpty || !b3bActs.isEmpty {
+                        Text("其他演出")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(minimum: 0), spacing: TimelineAvatarLayout.gridSpacing, alignment: .top),
+                            GridItem(.flexible(minimum: 0), spacing: TimelineAvatarLayout.gridSpacing, alignment: .top),
+                            GridItem(.flexible(minimum: 0), spacing: TimelineAvatarLayout.gridSpacing, alignment: .top),
+                            GridItem(.flexible(minimum: 0), spacing: TimelineAvatarLayout.gridSpacing, alignment: .top)
+                        ],
+                        alignment: .leading,
+                        spacing: TimelineAvatarLayout.groupSpacing
+                    ) {
+                        ForEach(otherActs) { act in
+                            timelineActItem(act, avatarSize: .small)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func timelineActItem(_ act: TimelineActEntry, avatarSize: TimelineCheckinAvatarSize) -> some View {
+        VStack(spacing: 7) {
+            timelineActAvatars(act, size: avatarSize)
+
+            Text(act.title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+                .lineLimit(3)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func timelineActAvatars(_ act: TimelineActEntry, size: TimelineCheckinAvatarSize) -> some View {
+        let avatarSize = size.performerSize
+        Group {
+            if act.type == .solo {
+                timelineSoloActAvatar(act, avatarSize: avatarSize)
+            } else {
+                timelineCollaborativeActAvatars(act, avatarSize: avatarSize)
+            }
+        }
+        .frame(width: size.frameWidth, height: size.frameHeight)
+    }
+
+    private func timelineSoloActAvatar(_ act: TimelineActEntry, avatarSize: CGFloat) -> some View {
+        timelinePerformerAvatarButton(act.performers.first, size: avatarSize)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private func timelineCollaborativeActAvatars(_ act: TimelineActEntry, avatarSize: CGFloat) -> some View {
+        let performers = Array(act.performers.prefix(act.type.performerCount))
+        let centerDistance = TimelineAvatarLayout.performerCenterDistance
+        let connectorSize = TimelineAvatarLayout.connectorSize
+        let contentWidth = TimelineAvatarLayout.contentWidth(for: performers.count)
+        let connectorText = act.type == .b2b ? "B2B" : "B3B"
+        let connectorColor = timelineConnectorColor(for: act.type)
+
+        return ZStack(alignment: .topLeading) {
+            ForEach(performers.indices, id: \.self) { index in
+                timelinePerformerAvatarButton(performers[index], size: avatarSize)
+                    .offset(x: CGFloat(index) * centerDistance)
+            }
+
+            ForEach(0..<max(0, performers.count - 1), id: \.self) { index in
+                timelineActConnectorLabel(text: connectorText, color: connectorColor)
+                    .frame(width: connectorSize, height: connectorSize)
+                    .offset(
+                        x: CGFloat(index) * centerDistance + (avatarSize + centerDistance - connectorSize) / 2,
+                        y: (avatarSize - connectorSize) / 2
+                    )
+            }
+        }
+        .frame(width: contentWidth, height: avatarSize, alignment: .center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private func timelineConnectorColor(for type: TimelineActType) -> Color {
+        switch type {
+        case .solo:
+            return Color(red: 0.98, green: 0.52, blue: 0.20)
+        case .b2b:
+            return Color(red: 0.98, green: 0.52, blue: 0.20)
+        case .b3b:
+            return Color(red: 0.98, green: 0.52, blue: 0.20)
+        }
+    }
+
+    @ViewBuilder
+    private func timelinePerformerAvatarButton(_ performer: TimelineActPerformer?, size: CGFloat) -> some View {
+        if let performer,
+           let djID = performer.djID,
+           !djID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Button {
+                selectedDJIDForDetail = djID
+            } label: {
+                timelinePerformerAvatar(performer, size: size)
+            }
+            .buttonStyle(.plain)
+        } else {
+            timelinePerformerAvatar(performer, size: size)
+        }
+    }
+
+    private func timelinePerformerAvatar(_ performer: TimelineActPerformer?, size: CGFloat) -> some View {
+        Group {
+            if let avatar = AppConfig.resolvedURLString(performer?.avatarUrl),
+               let url = URL(string: avatar) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Circle().fill(RaverTheme.card)
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure:
+                        timelinePerformerFallback(performer)
+                    @unknown default:
+                        timelinePerformerFallback(performer)
+                    }
+                }
+            } else {
+                timelinePerformerFallback(performer)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+
+    private func timelinePerformerFallback(_ performer: TimelineActPerformer?) -> some View {
+        let initial = String((performer?.name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1) ?? "?")).uppercased()
+        return Circle()
+            .fill(
+                LinearGradient(
+                    colors: [Color(red: 0.30, green: 0.67, blue: 0.97), Color(red: 0.42, green: 0.22, blue: 0.78)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                Text(initial)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Color.white)
+            )
+    }
+
+    private func timelineActConnectorLabel(text: String, color: Color) -> some View {
+        Circle()
+            .fill(color.opacity(0.24))
+            .overlay(
+                Text(text)
+                    .font(.system(size: 4.4, weight: .black, design: .rounded))
+                    .foregroundStyle(color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+            )
     }
 
     @ViewBuilder
@@ -562,30 +850,14 @@ struct MyCheckinsView: View {
         guard let event = node.event else {
             return "独立 DJ 打卡"
         }
-
-        guard let startDate = event.startDate else {
-            return event.name
-        }
-
-        let calendar = Calendar.current
-        let startDay = calendar.startOfDay(for: startDate)
-        let currentDay = calendar.startOfDay(for: node.day)
-        let dayOffset = calendar.dateComponents([.day], from: startDay, to: currentDay).day ?? 0
-        let totalDaySpan = event.endDate.map {
-            max(1, (calendar.dateComponents([.day], from: startDay, to: calendar.startOfDay(for: $0)).day ?? 0) + 1)
-        } ?? 1
-
-        guard totalDaySpan > 1, dayOffset >= 0 else {
-            return event.name
-        }
-
-        return "\(event.name) Day\(dayOffset + 1)"
+        return event.name
     }
 
-    private func eventSeriesName(for node: TimelineNode) -> String? {
-        guard let event = node.event else { return nil }
-        let titledName = eventNodeTitle(for: node)
-        return titledName == event.name ? nil : event.name
+    private func timelineEventHeadline(for node: TimelineNode, event: CheckinEventLite) -> Text {
+        let title = Text(eventNodeTitle(for: node))
+        let location = eventTimelineSubtitle(event)
+        guard !location.isEmpty else { return title }
+        return title + Text(" · \(location)")
     }
 
     private func eventTimelineSubtitle(_ event: CheckinEventLite) -> String {
@@ -595,7 +867,33 @@ struct MyCheckinsView: View {
                 return value
             }
             .joined(separator: " · ")
-        return location.isEmpty ? "当日观演记录" : location
+        return location
+    }
+
+    private func checkinCountBadge(_ count: Int) -> some View {
+        Text("\(count) 位")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color(red: 0.82, green: 0.39, blue: 0.20))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color(red: 1.00, green: 0.94, blue: 0.90), in: Capsule())
+    }
+
+    private func attendanceSectionDJCount(_ section: TimelineAttendanceSection) -> Int {
+        guard let structured = section.structuredDJSelections else {
+            return section.djs.count
+        }
+
+        return structured.reduce(0) { total, selection in
+            let rawName = selection.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let names = splitActNames(rawName, keyword: "B3B"), names.count >= 3 {
+                return total + 3
+            }
+            if let names = splitActNames(rawName, keyword: "B2B"), names.count >= 2 {
+                return total + 2
+            }
+            return total + 1
+        }
     }
 
     private func buildTimelineNodes(from items: [WebCheckin]) -> [TimelineNode] {
@@ -604,12 +902,19 @@ struct MyCheckinsView: View {
         for item in items where item.type == "event" {
             guard let event = item.event else { continue }
             let day = Calendar.current.startOfDay(for: item.attendedAt)
-            let key = "\(event.id)|\(Int(day.timeIntervalSince1970))"
+            let key = "event|\(event.id)"
+            let structuredSelections = item.eventAttendanceSelections
+            let structuredDJs = timelineDJEntries(from: structuredSelections, attendedAt: item.attendedAt)
 
             if var existing = nodesByKey[key] {
                 if item.attendedAt > existing.anchorDate {
                     existing.anchorDate = item.attendedAt
+                    existing.day = day
                     existing.eventCheckin = item
+                    existing.structuredSelections = structuredSelections
+                    if !structuredDJs.isEmpty {
+                        existing.djs = structuredDJs
+                    }
                 }
                 nodesByKey[key] = existing
             } else {
@@ -619,8 +924,9 @@ struct MyCheckinsView: View {
                     day: day,
                     event: event,
                     eventCheckin: item,
-                    djs: [],
-                    manualEventName: nil
+                    djs: structuredDJs,
+                    manualEventName: nil,
+                    structuredSelections: structuredSelections
                 )
             }
         }
@@ -629,9 +935,14 @@ struct MyCheckinsView: View {
             guard let dj = item.dj else { continue }
             let day = Calendar.current.startOfDay(for: item.attendedAt)
             let manualEventName = manualEventName(from: item.note)
+            if let eventID = item.eventId,
+               nodesByKey.values.contains(where: { $0.event?.id == eventID && !$0.structuredSelections.isEmpty }) {
+                continue
+            }
             let candidateKeys = nodesByKey.keys.filter { key in
                 guard let node = nodesByKey[key], node.day == day else { return false }
                 if let eventID = item.eventId {
+                    guard node.structuredSelections.isEmpty else { return false }
                     return node.event?.id == eventID
                 }
                 if let manualEventName {
@@ -700,7 +1011,8 @@ struct MyCheckinsView: View {
                         event: nil,
                         eventCheckin: nil,
                         djs: [entry],
-                        manualEventName: manualEventName
+                        manualEventName: manualEventName,
+                        structuredSelections: []
                     )
                 }
             }
@@ -709,6 +1021,235 @@ struct MyCheckinsView: View {
         return nodesByKey.values.sorted { lhs, rhs in
             lhs.anchorDate > rhs.anchorDate
         }
+    }
+
+    private func timelineDJEntries(from selections: [EventAttendanceDaySelectionPayload], attendedAt: Date) -> [TimelineDJEntry] {
+        selections
+            .sorted { $0.dayIndex < $1.dayIndex }
+            .enumerated()
+            .flatMap { sectionIndex, payload in
+                payload.djSelections.enumerated().map { index, selection in
+                    TimelineDJEntry(
+                        id: "structured-\(payload.dayID)-\(selection.id)",
+                        attendedAt: attendedAt.addingTimeInterval(TimeInterval(sectionIndex * 100 + index)),
+                        dj: CheckinDJLite(
+                            id: selection.id,
+                            name: selection.name,
+                            avatarUrl: selection.avatarUrl,
+                            country: selection.country
+                        )
+                    )
+                }
+            }
+    }
+
+    private func timelineActs(from selections: [EventAttendanceDJSelection], sectionID: String) -> [TimelineActEntry] {
+        selections.enumerated().compactMap { index, selection in
+            timelineAct(from: selection, entryID: "\(sectionID)-\(index)")
+        }
+    }
+
+    private func timelineAct(from selection: EventAttendanceDJSelection, entryID: String) -> TimelineActEntry? {
+        let rawName = selection.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawName.isEmpty else { return nil }
+
+        if let names = splitActNames(rawName, keyword: "B3B"), names.count >= 3 {
+            let performers = Array(names.prefix(3).enumerated()).map { offset, name in
+                timelineActPerformer(name: name, fallbackID: "\(entryID)-b3b-\(offset)")
+            }
+            return TimelineActEntry(id: "\(entryID)-b3b", title: rawName, type: .b3b, performers: performers)
+        }
+
+        if let names = splitActNames(rawName, keyword: "B2B"), names.count >= 2 {
+            let performers = Array(names.prefix(2).enumerated()).map { offset, name in
+                timelineActPerformer(name: name, fallbackID: "\(entryID)-b2b-\(offset)")
+            }
+            return TimelineActEntry(id: "\(entryID)-b2b", title: rawName, type: .b2b, performers: performers)
+        }
+
+        let explicitID = normalizedTimelineDJID(selection.id)
+        let performer = timelineActPerformer(
+            name: rawName,
+            fallbackID: "\(entryID)-solo",
+            explicitDJID: explicitID,
+            explicitAvatarURL: selection.avatarUrl
+        )
+        return TimelineActEntry(id: "\(entryID)-solo", title: rawName, type: .solo, performers: [performer])
+    }
+
+    private func timelineActPerformer(
+        name: String,
+        fallbackID: String,
+        explicitDJID: String? = nil,
+        explicitAvatarURL: String? = nil
+    ) -> TimelineActPerformer {
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lookupKey = normalizedTimelineNameKey(normalizedName)
+        let resolved = timelineDJIdentityByName[lookupKey]
+        let resolvedID = resolved?.id
+        let resolvedAvatar = resolved?.avatarUrl
+        let djID = (explicitDJID?.isEmpty == false) ? explicitDJID : resolvedID
+        let avatar = (explicitAvatarURL?.isEmpty == false) ? explicitAvatarURL : resolvedAvatar
+
+        return TimelineActPerformer(
+            id: fallbackID,
+            name: normalizedName,
+            djID: djID,
+            avatarUrl: avatar
+        )
+    }
+
+    private func splitActNames(_ raw: String, keyword: String) -> [String]? {
+        guard !raw.isEmpty else { return nil }
+        let token = "__CHECKIN_SPLIT_TOKEN__"
+        let pattern = "(?i)\\s*\(keyword)\\s*"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(raw.startIndex..<raw.endIndex, in: raw)
+        let replaced = regex.stringByReplacingMatches(in: raw, options: [], range: range, withTemplate: token)
+        let parts = replaced
+            .components(separatedBy: token)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts
+    }
+
+    private func normalizedTimelineDJID(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let lowered = trimmed.lowercased()
+        if lowered.hasPrefix("act-") || lowered.hasPrefix("solo-") {
+            return nil
+        }
+        return trimmed
+    }
+
+    private func normalizedTimelineNameKey(_ name: String) -> String {
+        name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    private func hydrateTimelineDJIdentityMap(from checkins: [WebCheckin]) async {
+        let names = unresolvedTimelinePerformerNames(from: checkins)
+        guard !names.isEmpty else { return }
+
+        var resolved: [String: CheckinDJLite] = [:]
+        for name in names {
+            let lookupKey = normalizedTimelineNameKey(name)
+            guard !lookupKey.isEmpty, timelineDJIdentityByName[lookupKey] == nil else { continue }
+            do {
+                let page = try await service.fetchDJs(page: 1, limit: 20, search: name, sortBy: "name")
+                if let match = page.items.first(where: { normalizedTimelineNameKey($0.name) == lookupKey }) {
+                    resolved[lookupKey] = CheckinDJLite(
+                        id: match.id,
+                        name: match.name,
+                        avatarUrl: match.avatarUrl,
+                        country: match.country
+                    )
+                }
+            } catch {
+                continue
+            }
+        }
+
+        guard !resolved.isEmpty else { return }
+        for (key, value) in resolved where timelineDJIdentityByName[key] == nil {
+            timelineDJIdentityByName[key] = value
+        }
+    }
+
+    private func unresolvedTimelinePerformerNames(from checkins: [WebCheckin]) -> [String] {
+        var names = Set<String>()
+        for checkin in checkins {
+            let selections = checkin.eventAttendanceSelections
+            guard !selections.isEmpty else { continue }
+            for day in selections {
+                for selection in day.djSelections {
+                    let rawName = selection.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !rawName.isEmpty else { continue }
+
+                    if let split = splitActNames(rawName, keyword: "B3B"), split.count >= 3 {
+                        for name in split.prefix(3) {
+                            let key = normalizedTimelineNameKey(name)
+                            if timelineDJIdentityByName[key] == nil {
+                                names.insert(name)
+                            }
+                        }
+                        continue
+                    }
+
+                    if let split = splitActNames(rawName, keyword: "B2B"), split.count >= 2 {
+                        for name in split.prefix(2) {
+                            let key = normalizedTimelineNameKey(name)
+                            if timelineDJIdentityByName[key] == nil {
+                                names.insert(name)
+                            }
+                        }
+                        continue
+                    }
+
+                    if normalizedTimelineDJID(selection.id) == nil {
+                        let key = normalizedTimelineNameKey(rawName)
+                        if timelineDJIdentityByName[key] == nil {
+                            names.insert(rawName)
+                        }
+                    }
+                }
+            }
+        }
+
+        return names.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private func attendanceSections(for node: TimelineNode) -> [TimelineAttendanceSection] {
+        if node.isStandaloneDJNode {
+            guard !node.djs.isEmpty else { return [] }
+            return [
+                    TimelineAttendanceSection(
+                        id: "standalone-\(node.id)",
+                        title: "单独 DJ 打卡",
+                        djs: node.djs,
+                        structuredDJSelections: nil
+                    )
+                ]
+        }
+
+        if !node.structuredSelections.isEmpty {
+            return node.structuredSelections
+                .sorted { $0.dayIndex < $1.dayIndex }
+                .map { selection in
+                    TimelineAttendanceSection(
+                        id: selection.dayID,
+                        title: "Day\(selection.dayIndex)",
+                        djs: timelineDJEntries(from: [selection], attendedAt: node.anchorDate),
+                        structuredDJSelections: selection.djSelections
+                    )
+                }
+        }
+
+        guard let title = fallbackDayLabel(for: node) else { return [] }
+        return [
+            TimelineAttendanceSection(
+                id: "fallback-\(node.id)",
+                title: title,
+                djs: node.djs,
+                structuredDJSelections: nil
+            )
+        ]
+    }
+
+    private func fallbackDayLabel(for node: TimelineNode) -> String? {
+        guard let event = node.event, let startDate = event.startDate else { return nil }
+        let calendar = Calendar.current
+        let startDay = calendar.startOfDay(for: startDate)
+        let currentDay = calendar.startOfDay(for: node.day)
+        let dayOffset = calendar.dateComponents([.day], from: startDay, to: currentDay).day ?? 0
+        let totalDaySpan = event.endDate.map {
+            max(1, (calendar.dateComponents([.day], from: startDay, to: calendar.startOfDay(for: $0)).day ?? 0) + 1)
+        } ?? 1
+        guard totalDaySpan > 1, dayOffset >= 0 else { return nil }
+        return "Day\(dayOffset + 1)"
     }
 
     private func manualEventName(from note: String?) -> String? {
@@ -759,6 +1300,7 @@ struct MyCheckinsView: View {
             }
             totalPages = result.pagination?.totalPages ?? 1
             page += 1
+            await hydrateTimelineDJIdentityMap(from: items)
         } catch {
             errorMessage = error.localizedDescription
         }

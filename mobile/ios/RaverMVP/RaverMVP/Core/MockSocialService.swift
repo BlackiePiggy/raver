@@ -145,6 +145,45 @@ actor MockSocialService: SocialService {
         return new
     }
 
+    func updatePost(postID: String, input: UpdatePostInput) async throws -> Post {
+        guard let index = posts.firstIndex(where: { $0.id == postID }) else {
+            throw ServiceError.message("动态不存在")
+        }
+        let target = posts[index]
+        guard target.author.id == currentUser.id else {
+            throw ServiceError.message("无权编辑该动态")
+        }
+
+        let trimmed = input.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedImages = input.images
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if trimmed.isEmpty && normalizedImages.isEmpty {
+            throw ServiceError.message("请填写正文或添加媒体")
+        }
+
+        var updated = target
+        updated.content = trimmed
+        updated.images = normalizedImages
+        posts[index] = updated
+        return updated
+    }
+
+    func deletePost(postID: String) async throws {
+        guard let index = posts.firstIndex(where: { $0.id == postID }) else {
+            throw ServiceError.message("动态不存在")
+        }
+        let target = posts[index]
+        guard target.author.id == currentUser.id else {
+            throw ServiceError.message("无权删除该动态")
+        }
+        posts.remove(at: index)
+        commentsByPost.removeValue(forKey: postID)
+        likeActionAtByPostID.removeValue(forKey: postID)
+        repostActionAtByPostID.removeValue(forKey: postID)
+        profilesByID[currentUser.id]?.postsCount = posts.filter { $0.author.id == currentUser.id }.count
+    }
+
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post {
         guard let index = posts.firstIndex(where: { $0.id == postID }) else {
             throw ServiceError.message("动态不存在")

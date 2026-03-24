@@ -34,6 +34,7 @@ model User {
   follows           Follow[] @relation("UserFollows")
   followers         Follow[] @relation("UserFollowers")
   uploadedSets      DJSet[]  @relation("UserUploadedSets")
+  djContributions   DJContributor[]
   publishedEvents   Event[] @relation("UserPublishedEvents")
   uploadedTracklists Tracklist[] @relation("UserUploadedTracklists")
   comments          Comment[] @relation("UserComments")
@@ -206,9 +207,26 @@ model DJ {
   follows        Follow[]
   sets           DJSet[]
   lineupSlots    EventLineupSlot[]
+  contributors   DJContributor[]
   foundedLabels  Label[]    @relation("LabelFounderDJ")
 
   @@map("djs")
+}
+
+model DJContributor {
+  id        String   @id @default(uuid())
+  djId      String   @map("dj_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  dj        DJ       @relation(fields: [djId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([djId, userId])
+  @@index([djId])
+  @@index([userId])
+  @@map("dj_contributors")
 }
 
 model Genre {

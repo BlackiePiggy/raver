@@ -51,13 +51,74 @@ final class LiveWebFeatureService: WebFeatureService {
         let _: BFFEnvelope<GenericSuccess> = try await request(path: "/v1/events/\(id)", method: "DELETE")
     }
 
-    func uploadEventImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
+    func uploadEventImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        eventID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse {
+        var fields: [String: String] = [:]
+        if let eventID, !eventID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["eventId"] = eventID
+        }
+        if let usage, !usage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["usage"] = usage
+        }
         let response: BFFEnvelope<UploadMediaResponse> = try await uploadMultipart(
             path: "/v1/events/upload-image",
             data: imageData,
             fileName: fileName,
             mimeType: mimeType,
+            fieldName: "image",
+            fields: fields
+        )
+        return response.data
+    }
+
+    func importEventLineupFromImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        startDate: Date?,
+        endDate: Date?
+    ) async throws -> EventLineupImageImportResponse {
+        var fields: [String: String] = [:]
+        if let startDate {
+            fields["startDate"] = ISO8601DateFormatter().string(from: startDate)
+        }
+        if let endDate {
+            fields["endDate"] = ISO8601DateFormatter().string(from: endDate)
+        }
+        let response: BFFEnvelope<EventLineupImageImportResponse> = try await uploadMultipart(
+            path: "/v1/events/lineup/import-image",
+            data: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
+            fieldName: "image",
+            fields: fields
+        )
+        return response.data
+    }
+
+    func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
+        let response: BFFEnvelope<UploadMediaResponse> = try await uploadMultipart(
+            path: "/v1/feed/upload-image",
+            data: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
             fieldName: "image"
+        )
+        return response.data
+    }
+
+    func uploadPostVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
+        let response: BFFEnvelope<UploadMediaResponse> = try await uploadMultipart(
+            path: "/v1/feed/upload-video",
+            data: videoData,
+            fileName: fileName,
+            mimeType: mimeType,
+            fieldName: "video"
         )
         return response.data
     }
@@ -77,6 +138,68 @@ final class LiveWebFeatureService: WebFeatureService {
 
     func fetchDJ(id: String) async throws -> WebDJ {
         let response: BFFEnvelope<WebDJ> = try await request(path: "/v1/djs/\(id)", method: "GET")
+        return response.data
+    }
+
+    func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let response: BFFEnvelope<BFFItems<SpotifyDJCandidate>> = try await request(
+            path: "/v1/djs/spotify/search",
+            method: "GET",
+            queryItems: [
+                URLQueryItem(name: "q", value: trimmed),
+                URLQueryItem(name: "limit", value: "\(max(1, min(20, limit)))")
+            ]
+        )
+        return response.data.items
+    }
+
+    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportSpotifyDJResponse {
+        let response: BFFEnvelope<ImportSpotifyDJResponse> = try await request(
+            path: "/v1/djs/spotify/import",
+            method: "POST",
+            body: input
+        )
+        return response.data
+    }
+
+    func importManualDJ(input: ImportManualDJInput) async throws -> ImportManualDJResponse {
+        let response: BFFEnvelope<ImportManualDJResponse> = try await request(
+            path: "/v1/djs/manual/import",
+            method: "POST",
+            body: input
+        )
+        return response.data
+    }
+
+    func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ {
+        let response: BFFEnvelope<WebDJ> = try await request(
+            path: "/v1/djs/\(id)",
+            method: "PATCH",
+            body: input
+        )
+        return response.data
+    }
+
+    func uploadDJImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        djID: String,
+        usage: String
+    ) async throws -> UploadMediaResponse {
+        let response: BFFEnvelope<UploadMediaResponse> = try await uploadMultipart(
+            path: "/v1/djs/upload-image",
+            data: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
+            fieldName: "image",
+            fields: [
+                "djId": djID,
+                "usage": usage
+            ]
+        )
         return response.data
     }
 
@@ -235,22 +358,32 @@ final class LiveWebFeatureService: WebFeatureService {
     }
 
     func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
+        try await fetchMyCheckins(page: page, limit: limit, type: type, eventID: nil, djID: nil)
+    }
+
+    func fetchMyCheckins(page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage {
         try await fetchCheckins(
             page: page,
             limit: limit,
             type: type,
             userID: nil,
-            djID: nil
+            eventID: eventID,
+            djID: djID
         )
     }
 
     func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
+        try await fetchUserCheckins(userID: userID, page: page, limit: limit, type: type, eventID: nil, djID: nil)
+    }
+
+    func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage {
         try await fetchCheckins(
             page: page,
             limit: limit,
             type: type,
             userID: userID,
-            djID: nil
+            eventID: eventID,
+            djID: djID
         )
     }
 
@@ -260,6 +393,7 @@ final class LiveWebFeatureService: WebFeatureService {
             limit: 1,
             type: "dj",
             userID: nil,
+            eventID: nil,
             djID: djID
         )
         return page.pagination?.total ?? page.items.count
@@ -270,6 +404,7 @@ final class LiveWebFeatureService: WebFeatureService {
         limit: Int,
         type: String?,
         userID: String?,
+        eventID: String?,
         djID: String?
     ) async throws -> CheckinListPage {
         var queryItems = [
@@ -282,6 +417,9 @@ final class LiveWebFeatureService: WebFeatureService {
         if let userID, !userID.isEmpty {
             queryItems.append(URLQueryItem(name: "userId", value: userID))
         }
+        if let eventID, !eventID.isEmpty {
+            queryItems.append(URLQueryItem(name: "eventId", value: eventID))
+        }
         if let djID, !djID.isEmpty {
             queryItems.append(URLQueryItem(name: "djId", value: djID))
         }
@@ -291,6 +429,11 @@ final class LiveWebFeatureService: WebFeatureService {
 
     func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin {
         let response: BFFEnvelope<WebCheckin> = try await request(path: "/v1/checkins", method: "POST", body: input)
+        return response.data
+    }
+
+    func updateCheckin(id: String, input: UpdateCheckinInput) async throws -> WebCheckin {
+        let response: BFFEnvelope<WebCheckin> = try await request(path: "/v1/checkins/\(id)", method: "PATCH", body: input)
         return response.data
     }
 
@@ -438,7 +581,8 @@ final class LiveWebFeatureService: WebFeatureService {
         data: Data,
         fileName: String,
         mimeType: String,
-        fieldName: String
+        fieldName: String,
+        fields: [String: String] = [:]
     ) async throws -> T {
         let url = try buildURL(path: path, queryItems: [])
         let boundary = "Boundary-\(UUID().uuidString)"
@@ -455,6 +599,11 @@ final class LiveWebFeatureService: WebFeatureService {
         }
 
         var body = Data()
+        for (name, value) in fields {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(value)\r\n".data(using: .utf8)!)
+        }
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)

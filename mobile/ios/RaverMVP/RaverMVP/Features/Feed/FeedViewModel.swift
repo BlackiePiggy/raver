@@ -89,6 +89,14 @@ final class FeedViewModel: ObservableObject {
         posts.insert(post, at: 0)
     }
 
+    func mergeUpdatedPost(_ post: Post) {
+        replace(post)
+    }
+
+    func removePost(_ postID: String) {
+        posts.removeAll { $0.id == postID }
+    }
+
     private func replace(_ post: Post) {
         guard let index = posts.firstIndex(where: { $0.id == post.id }) else { return }
         posts[index] = post

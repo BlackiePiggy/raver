@@ -500,6 +500,756 @@
       "id": "7f1fe4a3-3bf5-406e-a5a7-94978d3ac0c0",
       "slug": "amayo",
       "error": "This operation was aborted"
+    },
+    {
+      "id": "e66f14e1-3688-40fa-8ce4-aefcd1f94b6b",
+      "slug": "amex-uk",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "cef4c476-c8a3-4a9d-8f0b-bf9d2e81aa95",
+      "slug": "andg-luna",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "5b1ad956-2509-4b98-99c8-465320df0def",
+      "slug": "andrmeda",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "ac3469fc-414b-4820-9f97-6093e4a59d28",
+      "slug": "andrés-garcil",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "cf69917b-5128-4556-a1d3-4643bd7cd89e",
+      "slug": "amsl",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "74fec90a-8df5-4beb-a441-ff116180a72a",
+      "slug": "anii",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "161790b1-cd21-40e2-b02b-54e5caa2adac",
+      "slug": "angel-3",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "e8e90be9-5b96-40df-af9c-3e46264bec4d",
+      "slug": "annasnel",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "7079d97f-0c7c-40e7-b33d-7292d8cd72ed",
+      "slug": "annara",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "2ea88f69-46d6-4263-b419-976117317461",
+      "slug": "annawaffel",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "6149b206-6291-4368-8031-fe8989d839b1",
+      "slug": "anne",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "321da578-ae5a-4c75-8c6d-1902feb63637",
+      "slug": "antya",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "d5276b41-6dc8-45b9-9874-0b860f99dba0",
+      "slug": "aqfairii",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "070bbb4e-2ff1-4f71-9ab9-888e5dc66767",
+      "slug": "aoife",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "044a6daa-818d-4a53-8523-17aeec8a0cd3",
+      "slug": "aprs",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "a0643097-4cf4-452c-924b-f504ddc07e29",
+      "slug": "archangel-us",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "bef16820-e377-48ba-8f89-b40375036303",
+      "slug": "ara-u",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "d6cc9afb-c58b-4e0e-b72b-ecd33cccf7d7",
+      "slug": "area-101",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "8ed42c12-53f1-4491-88b7-290438691e76",
+      "slug": "arini",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "f98f1381-57cf-4758-b434-79fcfd0e0000",
+      "slug": "arliiiyah",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "d536b73f-7b26-4bf1-8499-3b9033a1d01f",
+      "slug": "arlyss",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "c47241e7-3ff4-44f6-9758-31ef1c7e6ab6",
+      "slug": "armana-khan",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "8df1bda4-50a0-469c-9f00-5d031d51aa19",
+      "slug": "arpl",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "3736beef-782c-415d-9aee-14e4adf027eb",
+      "slug": "arte-mas",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "67297df5-560e-4905-b903-22aa0035848e",
+      "slug": "arsa",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "7f36a96f-39b9-4c09-b8ca-72083022480f",
+      "slug": "asec",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "4ae5f72d-830c-4753-8ced-a28552a67f23",
+      "slug": "ashtattz",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "b96b4146-1818-492b-b8b1-ea1d7a414476",
+      "slug": "asia-de",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "63348007-e687-4d4b-a821-76f0cb631acd",
+      "slug": "aster-dj",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "8264e904-cdd1-4ff8-b657-d2dbf0d74bc3",
+      "slug": "atatr",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "d4e21005-b589-4bae-bcf4-2cfc1176f7c6",
+      "slug": "ateq",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "80a7c640-260c-4604-baa0-044c77c971f8",
+      "slug": "att1c",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "64eecbb4-94b2-451b-8223-2f8a7b7ead57",
+      "slug": "ava-3",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "eab4dbca-c7f9-4c06-98b9-392fa50127b8",
+      "slug": "atta-ger",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "267dd9f5-4791-4d6d-bb26-52f0eac658dd",
+      "slug": "avaion",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "4f500abf-6b7c-4e08-921c-038687b33f67",
+      "slug": "aydj",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "196ed20d-dd68-48b3-91ae-e9e9d0a0d1cd",
+      "slug": "ayim",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "8054500b-8123-44ee-87e6-11332995c321",
+      "slug": "aysha",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "e2728f9f-5252-4db0-bc28-73223e7c5809",
+      "slug": "aylin-idah",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "7185ee3d-b361-4ec9-b16a-af182a4c4673",
+      "slug": "azil-b2b-hastad",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "ef00178a-52b1-4321-8e73-5ccaaa9366f4",
+      "slug": "aaro-3",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "4fcd5646-33ed-439d-8876-9be8cdc59f25",
+      "slug": "aalia-iraki",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "1f9c01b9-7317-4ce8-9da6-a667bd75a30b",
+      "slug": "aaron-blau",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "70e39d87-9ca0-407d-9cb8-1dbbff9569fb",
+      "slug": "aaron-clark",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "dff58ab7-1ab8-40bd-9cca-1918fc923b76",
+      "slug": "aaron-burr-2",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "62df3815-8d1d-4590-8d1c-df2b15a50632",
+      "slug": "aaron-dae",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "def406eb-feef-4fef-9b58-d63a0a51047e",
+      "slug": "aaron-j",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "0fb86a63-c232-4806-91c4-6aad3c42be90",
+      "slug": "aaronovsky",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "d86ac125-d835-44ae-b2fb-ee7c0bbaada9",
+      "slug": "aat-1",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "33017f09-194b-439c-a095-5ada53986ef6",
+      "slug": "abdiablo",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "0805b516-3637-49a9-a87a-04179bf19bcc",
+      "slug": "aba-shanti-i",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "f9d7fb6a-4670-43ae-8108-51ba811c39e9",
+      "slug": "abby-harris",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "5d9deae6-980c-49a7-b333-6a7dd4c39323",
+      "slug": "abby-daze",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "1bae37a3-89d8-482b-ae8c-0c5ed7f1b8ff",
+      "slug": "abril-irl",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "f294d407-1959-48be-96cd-824fc011b74e",
+      "slug": "abiba-sokoto",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "5bb06858-79a5-46fb-8ad3-4b3e23642cd7",
+      "slug": "absoluut",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "945cbb08-f1f2-4f84-81ca-8ef97c148971",
+      "slug": "acid-astrid",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "f09d91b5-92ef-414c-a424-6d6bc5700e00",
+      "slug": "acid-hero",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "2709e733-fa29-4b45-898b-ffff9cb09d99",
+      "slug": "acid-dreams",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "12164064-7841-4c09-94a7-85e99470ddf3",
+      "slug": "acid-mama",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "4db7d1a0-5150-43f2-9fff-6e64cfbfcf2e",
+      "slug": "acid-oslo",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "cc577a89-8875-4746-bdfb-ecc314400988",
+      "slug": "acid-steve",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "1b259557-7784-4711-99b2-0a1773f78394",
+      "slug": "ada",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "ff641372-2386-47df-8ea9-5ed3d4b49921",
+      "slug": "acidfoxy",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "82f04d0d-b5b3-49dd-ba24-c54b40fc183e",
+      "slug": "adam-bfd",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "77a9bc0e-3b27-4e5e-a8ed-284d70e7ca64",
+      "slug": "adam-be-1",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "074bb3e0-f851-47b3-a712-506b047e4bf5",
+      "slug": "adam-fitz",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "cf228c7f-35d8-40e9-b8a3-f1b814c23b1c",
+      "slug": "adam-r",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "c35a566e-3ff8-4984-8bee-cbaeb72acf3c",
+      "slug": "adam-romo",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "40e1cf52-a3b3-4c08-a242-0c432681feeb",
+      "slug": "adam-x",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "1f619827-519c-4fef-8ab3-e59dd3a1f0cc",
+      "slug": "addsound",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "44b75a94-3640-4cc7-b478-1366d27966cf",
+      "slug": "adi-co",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "1ac11a06-5c2f-4c7e-bbb6-d464a8ece538",
+      "slug": "adorio",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "2162c0df-bdf2-4216-ac1d-94d6f16738d3",
+      "slug": "adri-alibi",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "4b46dfd3-2641-4d77-85f5-cd6a731872a1",
+      "slug": "adri",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "0d01e585-fd11-43ba-950e-e45f48f3f4e7",
+      "slug": "adrian-hex",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "753b3f44-d2da-44a5-a990-249436b4107b",
+      "slug": "adrian-cardoso",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "ba2e4ab5-9144-404a-be45-60a3d04ab934",
+      "slug": "adrien-calvet",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "a2e452d6-1da5-4d3a-beb1-0058f76a6666",
+      "slug": "aero-1",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "6a767a20-3d1e-4096-bd03-a12824901767",
+      "slug": "aes-dana",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "c0c0243d-6e95-4cbe-a6d0-77697fe8095f",
+      "slug": "afgeleid",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "17cc4106-7b64-4c99-bace-c43d04d060c0",
+      "slug": "agathe-mougin",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "a6635386-3293-48b3-82cc-c01a31c09ca7",
+      "slug": "aexhy",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "9d161440-7816-4f5e-92d1-4c8cea64214e",
+      "slug": "agem",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "f3678a0d-8c56-4ff3-bc7c-42b5a99b6899",
+      "slug": "agent-137",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "13d40202-9097-4a77-9d93-440992e6d3f0",
+      "slug": "aglaja-brix",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "0d7eecc0-5cb1-4191-a624-d12cb4c15657",
+      "slug": "agonis",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "b288982f-826b-4849-b0e2-f5dd71f3947f",
+      "slug": "agulla",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "d26c8ddf-5a03-48e8-9d4c-cf422ec07d63",
+      "slug": "ah-dek",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "661ad9b1-cc85-4f9a-a182-c9e30b193899",
+      "slug": "ahku",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "787c962a-a69f-4a9d-b276-84b5e0a58d82",
+      "slug": "ahlice-2",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "807919e6-fc1d-4b0b-a3b0-ee87e123a23f",
+      "slug": "aidan-doherty",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "4e7d6578-ac8a-4738-9316-57d7c9a21b43",
+      "slug": "aime-you",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "8a8baa97-500e-436b-8af9-3810e11c8f91",
+      "slug": "ahni",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "f3df39b3-ee47-4a71-8961-09a234ae6f61",
+      "slug": "aiden-de",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "6b17d0a9-e678-4ff0-9550-ea097f37af9e",
+      "slug": "ainse",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "bfda9ad3-e7fa-4947-ab10-0238999ae2ee",
+      "slug": "aio",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "c9f4746d-c5fb-4d79-ae3e-e3923317581c",
+      "slug": "akabema",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "c0010ae1-0673-47c8-8bd5-3bb683a4a4ba",
+      "slug": "akaj",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "26f20a7a-96cf-4c48-b926-425eeb1ca432",
+      "slug": "akanbi",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "ca393d89-394b-4b23-b562-e866eedc245a",
+      "slug": "akin-paksoy",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "2828a48e-de87-4c66-b80f-3eb8face7869",
+      "slug": "akira",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "7222f293-b687-48dc-927d-7a23073d6f81",
+      "slug": "akira-yamagata",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "7f9f29cd-7a6e-4532-b51e-eee4d1752396",
+      "slug": "akira-buntai",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "94efb062-6320-4d42-acf2-25bde8b77966",
+      "slug": "akii",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "86eaeda7-6a2e-47e5-a2c7-4fc960e9ffad",
+      "slug": "akollor",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "8d15396c-a1ab-46b8-a0bc-a4d8530aeef6",
+      "slug": "akua",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "1e97aac1-e18f-4ac3-a931-1a0864696515",
+      "slug": "al-aslan",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "4cf90cd1-77fb-4edb-8a31-319e34bbb4ed",
+      "slug": "alada",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "8968ef0c-2b64-45f2-9e19-a61113793bfe",
+      "slug": "aland",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "cc32aa96-3ba4-4ae5-baa2-4d2dfcf1c7a6",
+      "slug": "alba-heidari",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "636494f1-633b-482e-9b92-45696a5157f2",
+      "slug": "albane",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "249df87f-1e58-4e3d-a4ff-d577db146bfe",
+      "slug": "alci",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "826b8697-8a3a-4b5f-a06a-85fb6625cad9",
+      "slug": "albert_",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "b21e5dec-4b3d-4486-9413-f03a50042c32",
+      "slug": "ale-hope",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "86c4a273-facc-4be0-8b5a-809c4c5288d0",
+      "slug": "ale-kis",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "828ff68c-d15a-403b-89ec-fb3b02388291",
+      "slug": "alebcostantino",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "3ce2f2db-ab39-44ce-9c0e-8410a8614330",
+      "slug": "alejandro-gata",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "d9a21d79-92a1-4b6f-b562-f364432ea39c",
+      "slug": "aletha",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "e8886efc-b508-4628-a5ba-ab9038463879",
+      "slug": "alex-dima",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "52c0b114-6d92-4ca3-8a5b-6569b952ba2b",
+      "slug": "alex-downey",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "ad68698b-ba0c-472b-aec5-e066cdb0f066",
+      "slug": "alex-gallus",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "51751d43-b1a8-46e5-9c21-821aec7b3aac",
+      "slug": "alex-gaskill",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "4c27b446-7cc5-49c9-8866-badb65d3dc41",
+      "slug": "alex-grebe",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "9b926a30-7e3a-4a3d-a9fb-5d15009d6d0e",
+      "slug": "alex-hell-n",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "0388b5d0-84f4-4cde-b8de-00079977b023",
+      "slug": "alex-mccracken",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "e3883e27-b8a5-4ee0-a527-62bed3761421",
+      "slug": "alex-milo",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "078aa1a2-236b-4802-ba32-04f68c273b90",
+      "slug": "alex-moore",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "9ea30165-ea17-457f-ac68-43ba6bf7b200",
+      "slug": "alex-new",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "26c835e6-a0ea-46d3-81d8-27abf4a7be41",
+      "slug": "alex-pastor",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "c7d148ae-834a-406d-97b7-ed4770b21d4d",
+      "slug": "alex-q-3",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "c8952c0f-8140-4103-bebc-f7379fca0cb1",
+      "slug": "alex-xandra",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "7c79383d-f150-4ff2-aa7d-d640eeb2e311",
+      "slug": "alex-weremchuk",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "3d68804e-748c-4fcb-af46-0b795d592107",
+      "slug": "alexdo",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "692e8788-c3e5-4636-9849-b89e8d8432df",
+      "slug": "alexander-nut",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "15d62a4c-dd4e-4a4a-9b61-ae8b9d44fbd2",
+      "slug": "alexia-2",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "07bafd2d-19c2-49f8-9472-248410cb07e1",
+      "slug": "alexia-glensy",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "894064fc-26f6-4997-9d49-3b59bd67ee93",
+      "slug": "alexis-mariano",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "269cfbd7-a0a8-4053-bb1c-248100b6fa29",
+      "slug": "alexx-in-chainss",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "4abac9c8-92e7-43f3-9895-9841c1296cc6",
+      "slug": "alexy",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "51781236-7881-4989-9278-df0f3dea51c3",
+      "slug": "alfalfa-2",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "f289811c-0062-4763-b3f8-cf406515cbdb",
+      "slug": "alfie-panaiotis",
+      "error": "This operation was aborted"
+    },
+    {
+      "id": "e46daba6-eb3c-4fea-a3fd-48f37d4be7b6",
+      "slug": "alfandi",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "8985e24b-1d6c-4e78-abb9-4b8fc08f9154",
+      "slug": "alfaz",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "e067b9ff-762a-43a2-a160-178e58726c0b",
+      "slug": "alfonso-ares",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "686745fd-3f1e-4308-9ccc-d2943db7d9a3",
+      "slug": "alfred-czital",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "379d8d64-5d87-433f-b9f6-389429ae501e",
+      "slug": "algerics",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "61c17ff5-cece-498a-a0d4-7e70d3c02795",
+      "slug": "algorythm",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "3597e3a3-f7f0-4bb9-bacd-6430f5d76fd8",
+      "slug": "ali-berger",
+      "error": "spotify_artist_not_found"
+    },
+    {
+      "id": "15df8a09-9eef-4c3f-aeda-e87b97816cb7",
+      "slug": "ali-coleman",
+      "error": "spotify_artist_not_found"
     }
   ]
 }

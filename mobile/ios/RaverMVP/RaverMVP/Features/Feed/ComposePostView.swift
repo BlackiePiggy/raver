@@ -5,22 +5,59 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
 
+enum ComposePostMode {
+    case create
+    case edit(Post)
+}
+
 struct ComposePostView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
     private let webService: WebFeatureService = AppEnvironment.makeWebService()
     private let maxContentLength = 500
     private let maxMediaCount = 9
+    private let mode: ComposePostMode
+    private let onPostCreated: ((Post) -> Void)?
+    private let onPostUpdated: ((Post) -> Void)?
+    private let onPostDeleted: ((String) -> Void)?
 
-    @State private var text = ""
-    @State private var mediaEntries: [ComposeMediaEntry] = []
+    @State private var text: String
+    @State private var mediaEntries: [ComposeMediaEntry]
     @State private var selectedMediaItems: [PhotosPickerItem] = []
     @State private var draggingMedia: ComposeMediaEntry?
     @State private var selectedPreview: ComposeMediaPreviewSelection?
     @State private var contentEditorHeight: CGFloat = 96
     @State private var isSending = false
+    @State private var isDeleting = false
     @State private var isUploadingMedia = false
     @State private var toast: String?
+    @State private var isDeleteConfirmationPresented = false
+
+    init(
+        mode: ComposePostMode = .create,
+        onPostCreated: ((Post) -> Void)? = nil,
+        onPostUpdated: ((Post) -> Void)? = nil,
+        onPostDeleted: ((String) -> Void)? = nil
+    ) {
+        self.mode = mode
+        self.onPostCreated = onPostCreated
+        self.onPostUpdated = onPostUpdated
+        self.onPostDeleted = onPostDeleted
+
+        switch mode {
+        case .create:
+            _text = State(initialValue: "")
+            _mediaEntries = State(initialValue: [])
+        case .edit(let post):
+            _text = State(initialValue: post.content)
+            _mediaEntries = State(
+                initialValue: post.images
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .map { ComposeMediaEntry(url: $0) }
+            )
+        }
+    }
 
     private var trimmedText: String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -35,7 +72,30 @@ struct ComposePostView: View {
     private var canSend: Bool {
         (!trimmedText.isEmpty || !normalizedMediaURLs.isEmpty)
             && !isSending
+            && !isDeleting
             && !isUploadingMedia
+    }
+
+    private var isEditMode: Bool {
+        if case .edit = mode {
+            return true
+        }
+        return false
+    }
+
+    private var editingPost: Post? {
+        if case .edit(let post) = mode {
+            return post
+        }
+        return nil
+    }
+
+    private var submitButtonTitle: String {
+        isEditMode ? "重新发布" : "发布动态"
+    }
+
+    private var pageTitle: String {
+        isEditMode ? "编辑动态" : "发布动态"
     }
 
     var body: some View {
@@ -152,16 +212,32 @@ struct ComposePostView: View {
                 )
 
                 Button {
-                    Task { await publishPost() }
+                    Task { await submitPost() }
                 } label: {
                     if isSending {
                         ProgressView().tint(.white)
                     } else {
-                        Text("发布动态")
+                        Text(submitButtonTitle)
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(!canSend)
+
+                if isEditMode {
+                    Button(role: .destructive) {
+                        isDeleteConfirmationPresented = true
+                    } label: {
+                        if isDeleting {
+                            ProgressView()
+                                .tint(.red)
+                        } else {
+                            Text("删除动态")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isDeleting || isSending || isUploadingMedia)
+                }
 
                 Spacer()
             }
@@ -172,7 +248,7 @@ struct ComposePostView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("发布动态")
+                    Text(pageTitle)
                         .font(.headline)
                         .foregroundStyle(RaverTheme.primaryText)
                 }
@@ -197,6 +273,16 @@ struct ComposePostView: View {
             } message: {
                 Text(toast ?? "")
             }
+            .confirmationDialog(
+                "确认删除这条动态吗？",
+                isPresented: $isDeleteConfirmationPresented,
+                titleVisibility: .visible
+            ) {
+                Button("删除动态", role: .destructive) {
+                    Task { await deletePost() }
+                }
+                Button("取消", role: .cancel) {}
+            }
             .fullScreenCover(item: $selectedPreview) { preview in
                 ComposeMediaBrowserView(
                     entries: mediaEntries,
@@ -207,7 +293,7 @@ struct ComposePostView: View {
     }
 
     @MainActor
-    private func publishPost() async {
+    private func submitPost() async {
         isSending = true
         defer { isSending = false }
 
@@ -217,9 +303,35 @@ struct ComposePostView: View {
         }
 
         do {
-            _ = try await appState.service.createPost(
-                input: CreatePostInput(content: trimmedText, images: normalizedMediaURLs)
-            )
+            if let editingPost {
+                let updated = try await appState.service.updatePost(
+                    postID: editingPost.id,
+                    input: UpdatePostInput(content: trimmedText, images: normalizedMediaURLs)
+                )
+                onPostUpdated?(updated)
+            } else {
+                let created = try await appState.service.createPost(
+                    input: CreatePostInput(content: trimmedText, images: normalizedMediaURLs)
+                )
+                onPostCreated?(created)
+            }
+            dismiss()
+        } catch {
+            toast = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func deletePost() async {
+        guard let editingPost else { return }
+        guard !isDeleting else { return }
+
+        isDeleting = true
+        defer { isDeleting = false }
+
+        do {
+            try await appState.service.deletePost(postID: editingPost.id)
+            onPostDeleted?(editingPost.id)
             dismiss()
         } catch {
             toast = error.localizedDescription
@@ -247,14 +359,14 @@ struct ComposePostView: View {
                 if let contentType, contentType.conforms(to: .movie) {
                     let ext = contentType.preferredFilenameExtension ?? "mp4"
                     let mime = contentType.preferredMIMEType ?? "video/mp4"
-                    let upload = try await webService.uploadSetVideo(
+                    let upload = try await webService.uploadPostVideo(
                         videoData: data,
                         fileName: "post-video-\(UUID().uuidString).\(ext)",
                         mimeType: mime
                     )
                     mediaEntries.append(ComposeMediaEntry(url: upload.url))
                 } else {
-                    let upload = try await webService.uploadEventImage(
+                    let upload = try await webService.uploadPostImage(
                         imageData: normalizedImageData(from: data),
                         fileName: "post-image-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg"

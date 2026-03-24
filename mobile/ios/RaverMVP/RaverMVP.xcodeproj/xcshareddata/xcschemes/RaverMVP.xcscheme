@@ -63,7 +63,7 @@
          <EnvironmentVariable
             key = "RAVER_BFF_BASE_URL"
             value = "http://localhost:3001"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "RAVER_USE_MOCK"
@@ -73,7 +73,7 @@
          <EnvironmentVariable
             key = "RAVER_BFF_BASE_URL"
             value = "http://192.168.110.117:3001"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>
    </LaunchAction>

@@ -57,7 +57,8 @@ struct PostDetailView: View {
                         onAuthorTap: {
                             selectedUserForProfile = post.author
                         },
-                        onSquadTap: nil
+                        onSquadTap: nil,
+                        onEditTap: nil
                     )
 
                     GlassCard {

@@ -55,6 +55,14 @@ final class LiveSocialService: SocialService {
         try await request(path: "/v1/feed/posts", method: "POST", body: input)
     }
 
+    func updatePost(postID: String, input: UpdatePostInput) async throws -> Post {
+        try await request(path: "/v1/feed/posts/\(postID)", method: "PATCH", body: input)
+    }
+
+    func deletePost(postID: String) async throws {
+        let _: GenericSuccessResponse = try await request(path: "/v1/feed/posts/\(postID)", method: "DELETE")
+    }
+
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post {
         try await request(path: "/v1/feed/posts/\(postID)/like", method: shouldLike ? "POST" : "DELETE")
     }
