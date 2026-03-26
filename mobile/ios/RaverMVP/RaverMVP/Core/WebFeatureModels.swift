@@ -32,6 +32,45 @@ struct LearnLabelListPage: Codable {
     var pagination: BFFPagination?
 }
 
+struct LearnFestivalLinkPayload: Codable, Hashable {
+    var title: String
+    var icon: String
+    var url: String
+}
+
+struct WebLearnFestival: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var aliases: [String]
+    var country: String
+    var city: String
+    var foundedYear: String
+    var frequency: String
+    var tagline: String
+    var introduction: String
+    var avatarUrl: String?
+    var backgroundUrl: String?
+    var links: [LearnFestivalLinkPayload]
+    var contributors: [WebUserLite]
+    var canEdit: Bool?
+    var createdAt: Date?
+    var updatedAt: Date?
+}
+
+struct UpdateLearnFestivalInput: Codable {
+    var name: String?
+    var aliases: [String]?
+    var country: String?
+    var city: String?
+    var foundedYear: String?
+    var frequency: String?
+    var tagline: String?
+    var introduction: String?
+    var avatarUrl: String?
+    var backgroundUrl: String?
+    var links: [LearnFestivalLinkPayload]?
+}
+
 struct WebUserLite: Codable, Identifiable, Hashable {
     let id: String
     var username: String
@@ -458,6 +497,7 @@ struct WebRatingUnit: Codable, Identifiable, Hashable {
     var name: String
     var description: String?
     var imageUrl: String?
+    var linkedDJs: [WebEventLineupSlotDJ]? = nil
     var createdAt: Date
     var updatedAt: Date
     var rating: Double
@@ -472,6 +512,7 @@ struct WebRatingEvent: Codable, Identifiable, Hashable {
     var name: String
     var description: String?
     var imageUrl: String?
+    var sourceEventId: String? = nil
     var createdAt: Date
     var updatedAt: Date
     var createdBy: WebUserLite?
@@ -650,6 +691,37 @@ struct SpotifyDJCandidate: Codable, Hashable, Identifiable {
     var existingMatchType: String?
 }
 
+struct DiscogsDJCandidate: Codable, Hashable, Identifiable {
+    var id: Int { artistId }
+    var artistId: Int
+    var name: String
+    var thumbUrl: String?
+    var coverImageUrl: String?
+    var resourceUrl: String?
+    var uri: String?
+    var existingDJId: String?
+    var existingDJName: String?
+    var existingMatchType: String?
+}
+
+struct DiscogsDJArtistDetail: Codable, Hashable {
+    var artistId: Int
+    var name: String
+    var realName: String?
+    var profile: String?
+    var urls: [String]
+    var nameVariations: [String]
+    var aliases: [String]
+    var groups: [String]
+    var primaryImageUrl: String?
+    var thumbnailImageUrl: String?
+    var resourceUrl: String?
+    var uri: String?
+    var existingDJId: String?
+    var existingDJName: String?
+    var existingMatchType: String?
+}
+
 struct ImportSpotifyDJInput: Codable, Hashable {
     var spotifyId: String
     var name: String?
@@ -663,6 +735,26 @@ struct ImportSpotifyDJInput: Codable, Hashable {
 }
 
 struct ImportSpotifyDJResponse: Codable, Hashable {
+    var action: String
+    var avatarUploadedToOss: Bool
+    var replacedExistingAvatar: Bool
+    var dj: WebDJ
+}
+
+struct ImportDiscogsDJInput: Codable, Hashable {
+    var discogsArtistId: Int
+    var name: String?
+    var aliases: [String]?
+    var bio: String?
+    var country: String?
+    var instagramUrl: String?
+    var soundcloudUrl: String?
+    var twitterUrl: String?
+    var spotifyId: String?
+    var isVerified: Bool?
+}
+
+struct ImportDiscogsDJResponse: Codable, Hashable {
     var action: String
     var avatarUploadedToOss: Bool
     var replacedExistingAvatar: Bool

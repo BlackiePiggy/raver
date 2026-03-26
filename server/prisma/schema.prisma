@@ -11,55 +11,56 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(uuid())
-  username      String   @unique
-  email         String   @unique
-  passwordHash  String   @map("password_hash")
-  displayName   String?  @map("display_name")
-  avatarUrl     String?  @map("avatar_url")
-  bio           String?
-  location      String?
-  favoriteDjIds String[] @default([]) @map("favorite_dj_ids")
-  favoriteGenres String[] @default([]) @map("favorite_genres")
-  isFollowersListPublic Boolean @default(true) @map("is_followers_list_public")
-  isFollowingListPublic Boolean @default(true) @map("is_following_list_public")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  lastLoginAt   DateTime? @map("last_login_at")
-  isVerified    Boolean  @default(false) @map("is_verified")
-  isActive      Boolean  @default(true) @map("is_active")
-  role          String   @default("user")
+  id                    String    @id @default(uuid())
+  username              String    @unique
+  email                 String    @unique
+  passwordHash          String    @map("password_hash")
+  displayName           String?   @map("display_name")
+  avatarUrl             String?   @map("avatar_url")
+  bio                   String?
+  location              String?
+  favoriteDjIds         String[]  @default([]) @map("favorite_dj_ids")
+  favoriteGenres        String[]  @default([]) @map("favorite_genres")
+  isFollowersListPublic Boolean   @default(true) @map("is_followers_list_public")
+  isFollowingListPublic Boolean   @default(true) @map("is_following_list_public")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  lastLoginAt           DateTime? @map("last_login_at")
+  isVerified            Boolean   @default(false) @map("is_verified")
+  isActive              Boolean   @default(true) @map("is_active")
+  role                  String    @default("user")
 
-  checkins          Checkin[]
-  follows           Follow[] @relation("UserFollows")
-  followers         Follow[] @relation("UserFollowers")
-  uploadedSets      DJSet[]  @relation("UserUploadedSets")
-  djContributions   DJContributor[]
-  publishedEvents   Event[] @relation("UserPublishedEvents")
-  uploadedTracklists Tracklist[] @relation("UserUploadedTracklists")
-  comments          Comment[] @relation("UserComments")
-  createdRatingEvents RatingEvent[] @relation("RatingEventCreator")
-  createdRatingUnits RatingUnit[] @relation("RatingUnitCreator")
-  ratingComments    RatingComment[] @relation("RatingCommentAuthor")
+  checkins            Checkin[]
+  follows             Follow[]        @relation("UserFollows")
+  followers           Follow[]        @relation("UserFollowers")
+  uploadedSets        DJSet[]         @relation("UserUploadedSets")
+  djContributions     DJContributor[]
+  publishedEvents     Event[]         @relation("UserPublishedEvents")
+  uploadedTracklists  Tracklist[]     @relation("UserUploadedTracklists")
+  comments            Comment[]       @relation("UserComments")
+  createdRatingEvents RatingEvent[]   @relation("RatingEventCreator")
+  createdRatingUnits  RatingUnit[]    @relation("RatingUnitCreator")
+  ratingComments      RatingComment[] @relation("RatingCommentAuthor")
 
   // Community & Squad
-  posts             Post[] @relation("UserPosts")
-  postLikes         PostLike[]
-  postReposts       PostRepost[]
-  postComments      PostComment[]
-  ledSquads         Squad[] @relation("SquadLeader")
-  squadMemberships  SquadMember[]
-  sentInvites       SquadInvite[] @relation("SentInvites")
-  receivedInvites   SquadInvite[] @relation("ReceivedInvites")
-  squadMessages     SquadMessage[]
-  directConversationsA DirectConversation[] @relation("DirectConversationUserA")
-  directConversationsB DirectConversation[] @relation("DirectConversationUserB")
-  directConversationReads DirectConversationRead[]
-  directMessages    DirectMessage[]
-  notificationReads NotificationRead[]
-  createdActivities SquadActivity[]
-  createdAlbums     SquadAlbum[]
-  uploadedPhotos    SquadAlbumPhoto[]
+  posts                     Post[]                    @relation("UserPosts")
+  postLikes                 PostLike[]
+  postReposts               PostRepost[]
+  postComments              PostComment[]
+  ledSquads                 Squad[]                   @relation("SquadLeader")
+  squadMemberships          SquadMember[]
+  sentInvites               SquadInvite[]             @relation("SentInvites")
+  receivedInvites           SquadInvite[]             @relation("ReceivedInvites")
+  squadMessages             SquadMessage[]
+  directConversationsA      DirectConversation[]      @relation("DirectConversationUserA")
+  directConversationsB      DirectConversation[]      @relation("DirectConversationUserB")
+  directConversationReads   DirectConversationRead[]
+  directMessages            DirectMessage[]
+  notificationReads         NotificationRead[]
+  createdActivities         SquadActivity[]
+  createdAlbums             SquadAlbum[]
+  uploadedPhotos            SquadAlbumPhoto[]
+  wikiFestivalContributions WikiFestivalContributor[]
 
   @@map("users")
 }
@@ -93,7 +94,7 @@ model Event {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  organizer       User?    @relation("UserPublishedEvents", fields: [organizerId], references: [id], onDelete: SetNull)
+  organizer       User?             @relation("UserPublishedEvents", fields: [organizerId], references: [id], onDelete: SetNull)
   checkins        Checkin[]
   lineupSlots     EventLineupSlot[]
   ticketTiers     EventTicketTier[]
@@ -114,7 +115,7 @@ model EventTicketTier {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
   @@index([sortOrder])
@@ -122,19 +123,19 @@ model EventTicketTier {
 }
 
 model EventLineupSlot {
-  id         String   @id @default(uuid())
-  eventId    String   @map("event_id")
-  djId       String?  @map("dj_id")
-  djName     String   @map("dj_name")
-  stageName  String?  @map("stage_name")
-  sortOrder  Int      @default(0) @map("sort_order")
-  startTime  DateTime @map("start_time")
-  endTime    DateTime @map("end_time")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  eventId   String   @map("event_id")
+  djId      String?  @map("dj_id")
+  djName    String   @map("dj_name")
+  stageName String?  @map("stage_name")
+  sortOrder Int      @default(0) @map("sort_order")
+  startTime DateTime @map("start_time")
+  endTime   DateTime @map("end_time")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  event      Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  dj         DJ?      @relation(fields: [djId], references: [id], onDelete: SetNull)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  dj    DJ?   @relation(fields: [djId], references: [id], onDelete: SetNull)
 
   @@index([eventId])
   @@index([djId])
@@ -143,22 +144,22 @@ model EventLineupSlot {
 }
 
 model DJ {
-  id             String   @id @default(uuid())
-  name           String
-  aliases        String[] @default([])
-  slug           String   @unique
-  bio            String?
-  avatarUrl      String?  @map("avatar_url")
-  avatarSourceUrl String? @map("avatar_source_url")
-  bannerUrl      String?  @map("banner_url")
-  country        String?
-  spotifyId      String?  @map("spotify_id")
-  appleMusicId   String?  @map("apple_music_id")
-  soundcloudUrl  String?  @map("soundcloud_url")
-  instagramUrl   String?  @map("instagram_url")
-  twitterUrl     String?  @map("twitter_url")
-  isVerified     Boolean  @default(false) @map("is_verified")
-  followerCount  Int      @default(0) @map("follower_count")
+  id              String   @id @default(uuid())
+  name            String
+  aliases         String[] @default([])
+  slug            String   @unique
+  bio             String?
+  avatarUrl       String?  @map("avatar_url")
+  avatarSourceUrl String?  @map("avatar_source_url")
+  bannerUrl       String?  @map("banner_url")
+  country         String?
+  spotifyId       String?  @map("spotify_id")
+  appleMusicId    String?  @map("apple_music_id")
+  soundcloudUrl   String?  @map("soundcloud_url")
+  instagramUrl    String?  @map("instagram_url")
+  twitterUrl      String?  @map("twitter_url")
+  isVerified      Boolean  @default(false) @map("is_verified")
+  followerCount   Int      @default(0) @map("follower_count")
 
   // EDM Dance Directory source fields
   sourceId                 String?   @map("source_id")
@@ -195,20 +196,20 @@ model DJ {
   sourceSetlistFmFetchedAt DateTime? @map("source_setlistfm_fetched_at")
 
   // External data source IDs
-  raId           String?  @map("ra_id") // Resident Advisor ID
-  discogsId      String?  @map("discogs_id") // Discogs ID
-  beatportId     String?  @map("beatport_id") // Beatport ID
+  raId       String? @map("ra_id") // Resident Advisor ID
+  discogsId  String? @map("discogs_id") // Discogs ID
+  beatportId String? @map("beatport_id") // Beatport ID
 
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-  lastSyncedAt   DateTime? @map("last_synced_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lastSyncedAt DateTime? @map("last_synced_at")
 
-  checkins       Checkin[]
-  follows        Follow[]
-  sets           DJSet[]
-  lineupSlots    EventLineupSlot[]
-  contributors   DJContributor[]
-  foundedLabels  Label[]    @relation("LabelFounderDJ")
+  checkins      Checkin[]
+  follows       Follow[]
+  sets          DJSet[]
+  lineupSlots   EventLineupSlot[]
+  contributors  DJContributor[]
+  foundedLabels Label[]           @relation("LabelFounderDJ")
 
   @@map("djs")
 }
@@ -220,8 +221,8 @@ model DJContributor {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  dj        DJ       @relation(fields: [djId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dj   DJ   @relation(fields: [djId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([djId, userId])
   @@index([djId])
@@ -243,20 +244,20 @@ model Genre {
 }
 
 model Label {
-  id                    String   @id @default(uuid())
-  name                  String
-  slug                  String   @unique
-  profileUrl            String   @unique @map("profile_url")
-  profileSlug           String?  @map("profile_slug")
-  sourcePage            Int?     @map("source_page")
-  sourceListingUrl      String?  @map("source_listing_url")
-  cardId                String?  @map("card_id")
+  id               String  @id @default(uuid())
+  name             String
+  slug             String  @unique
+  profileUrl       String  @unique @map("profile_url")
+  profileSlug      String? @map("profile_slug")
+  sourcePage       Int?    @map("source_page")
+  sourceListingUrl String? @map("source_listing_url")
+  cardId           String? @map("card_id")
 
-  logoUrl               String?  @map("logo_url")
-  avatarSourceUrl       String?  @map("avatar_source_url")
-  backgroundSourceUrl   String?  @map("background_source_url")
-  avatarUrl             String?  @map("avatar_url")
-  backgroundUrl         String?  @map("background_url")
+  logoUrl             String? @map("logo_url")
+  avatarSourceUrl     String? @map("avatar_source_url")
+  backgroundSourceUrl String? @map("background_source_url")
+  avatarUrl           String? @map("avatar_url")
+  backgroundUrl       String? @map("background_url")
 
   soundcloudFollowers   Int?     @map("soundcloud_followers")
   likes                 Int?
@@ -273,18 +274,18 @@ model Label {
   demoSubmissionUrl     String?  @map("demo_submission_url")
   demoSubmissionDisplay String?  @map("demo_submission_display")
 
-  facebookUrl           String?  @map("facebook_url")
-  soundcloudUrl         String?  @map("soundcloud_url")
-  musicPurchaseUrl      String?  @map("music_purchase_url")
-  officialWebsiteUrl    String?  @map("official_website_url")
-  founderName           String?  @map("founder_name")
-  foundedAt             String?  @map("founded_at")
-  founderDjId           String?  @map("founder_dj_id")
+  facebookUrl        String? @map("facebook_url")
+  soundcloudUrl      String? @map("soundcloud_url")
+  musicPurchaseUrl   String? @map("music_purchase_url")
+  officialWebsiteUrl String? @map("official_website_url")
+  founderName        String? @map("founder_name")
+  foundedAt          String? @map("founded_at")
+  founderDjId        String? @map("founder_dj_id")
 
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  founderDj             DJ?      @relation("LabelFounderDJ", fields: [founderDjId], references: [id], onDelete: SetNull)
+  founderDj DJ? @relation("LabelFounderDJ", fields: [founderDjId], references: [id], onDelete: SetNull)
 
   @@index([name])
   @@index([nation])
@@ -294,21 +295,61 @@ model Label {
   @@map("labels")
 }
 
-model Checkin {
-  id          String   @id @default(uuid())
-  userId      String   @map("user_id")
-  eventId     String?  @map("event_id")
-  djId        String?  @map("dj_id")
-  type        String   // "event" or "dj"
-  note        String?
-  photoUrl    String?  @map("photo_url")
-  rating      Int?     // 1-5
-  attendedAt  DateTime @default(now()) @map("attended_at")
-  createdAt   DateTime @default(now()) @map("created_at")
+model WikiFestival {
+  id            String   @id
+  name          String
+  aliases       String[] @default([])
+  country       String
+  city          String
+  foundedYear   String   @map("founded_year")
+  frequency     String
+  tagline       String
+  introduction  String   @db.Text
+  avatarUrl     String?  @map("avatar_url")
+  backgroundUrl String?  @map("background_url")
+  links         Json?
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event       Event?   @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  dj          DJ?      @relation(fields: [djId], references: [id], onDelete: Cascade)
+  contributors WikiFestivalContributor[]
+
+  @@index([name])
+  @@index([country])
+  @@map("wiki_festivals")
+}
+
+model WikiFestivalContributor {
+  id         String   @id @default(uuid())
+  festivalId String   @map("festival_id")
+  userId     String   @map("user_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  festival WikiFestival @relation(fields: [festivalId], references: [id], onDelete: Cascade)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([festivalId, userId])
+  @@index([festivalId])
+  @@index([userId])
+  @@map("wiki_festival_contributors")
+}
+
+model Checkin {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  eventId    String?  @map("event_id")
+  djId       String?  @map("dj_id")
+  type       String // "event" or "dj"
+  note       String?
+  photoUrl   String?  @map("photo_url")
+  rating     Int? // 1-5
+  attendedAt DateTime @default(now()) @map("attended_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  dj    DJ?    @relation(fields: [djId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, attendedAt])
@@ -322,12 +363,12 @@ model Follow {
   followerId  String   @map("follower_id")
   followingId String?  @map("following_id")
   djId        String?  @map("dj_id")
-  type        String   // "user" or "dj"
+  type        String // "user" or "dj"
   createdAt   DateTime @default(now()) @map("created_at")
 
-  follower    User     @relation("UserFollows", fields: [followerId], references: [id], onDelete: Cascade)
-  following   User?    @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
-  dj          DJ?      @relation(fields: [djId], references: [id], onDelete: Cascade)
+  follower  User  @relation("UserFollows", fields: [followerId], references: [id], onDelete: Cascade)
+  following User? @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+  dj        DJ?   @relation(fields: [djId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
   @@unique([followerId, djId])
@@ -338,34 +379,34 @@ model Follow {
 }
 
 model DJSet {
-  id            String   @id @default(uuid())
-  djId          String   @map("dj_id")
-  coDjIds       String[] @default([]) @map("co_dj_ids")
-  customDjNames String[] @default([]) @map("custom_dj_names")
-  uploadedById  String?  @map("uploaded_by_id")
+  id            String    @id @default(uuid())
+  djId          String    @map("dj_id")
+  coDjIds       String[]  @default([]) @map("co_dj_ids")
+  customDjNames String[]  @default([]) @map("custom_dj_names")
+  uploadedById  String?   @map("uploaded_by_id")
   title         String
-  slug          String   @unique
+  slug          String    @unique
   description   String?
-  thumbnailUrl  String?  @map("thumbnail_url")
-  videoUrl      String   @map("video_url")
-  platform      String   // "youtube" or "bilibili"
-  videoId       String   @map("video_id") // Platform-specific video ID
-  duration      Int?     // Duration in seconds
+  thumbnailUrl  String?   @map("thumbnail_url")
+  videoUrl      String    @map("video_url")
+  platform      String // "youtube" or "bilibili"
+  videoId       String    @map("video_id") // Platform-specific video ID
+  duration      Int? // Duration in seconds
   recordedAt    DateTime? @map("recorded_at")
   venue         String?
-  eventName     String?  @map("event_name")
-  viewCount     Int      @default(0) @map("view_count")
-  likeCount     Int      @default(0) @map("like_count")
-  isVerified    Boolean  @default(false) @map("is_verified")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  eventName     String?   @map("event_name")
+  viewCount     Int       @default(0) @map("view_count")
+  likeCount     Int       @default(0) @map("like_count")
+  isVerified    Boolean   @default(false) @map("is_verified")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  dj            DJ         @relation(fields: [djId], references: [id], onDelete: Cascade)
-  uploader      User?      @relation("UserUploadedSets", fields: [uploadedById], references: [id], onDelete: SetNull)
-  tracks        Track[]
-  tracklists    Tracklist[]
-  comments      Comment[]
-  posts         Post[]
+  dj         DJ          @relation(fields: [djId], references: [id], onDelete: Cascade)
+  uploader   User?       @relation("UserUploadedSets", fields: [uploadedById], references: [id], onDelete: SetNull)
+  tracks     Track[]
+  tracklists Tracklist[]
+  comments   Comment[]
+  posts      Post[]
 
   @@index([djId])
   @@index([uploadedById])
@@ -376,14 +417,14 @@ model Tracklist {
   id           String   @id @default(uuid())
   setId        String   @map("set_id")
   uploadedById String   @map("uploaded_by_id")
-  title        String?  // Optional title for this tracklist version
+  title        String? // Optional title for this tracklist version
   isDefault    Boolean  @default(false) @map("is_default")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  set          DJSet    @relation(fields: [setId], references: [id], onDelete: Cascade)
-  uploader     User     @relation("UserUploadedTracklists", fields: [uploadedById], references: [id], onDelete: Cascade)
-  tracks       TracklistTrack[]
+  set      DJSet            @relation(fields: [setId], references: [id], onDelete: Cascade)
+  uploader User             @relation("UserUploadedTracklists", fields: [uploadedById], references: [id], onDelete: Cascade)
+  tracks   TracklistTrack[]
 
   @@index([setId])
   @@index([uploadedById])
@@ -391,32 +432,32 @@ model Tracklist {
 }
 
 model Track {
-  id              String   @id @default(uuid())
-  setId           String   @map("set_id")
-  position        Int      // Track order in the set
-  startTime       Int      @map("start_time") // Start time in seconds
-  endTime         Int?     @map("end_time") // End time in seconds
-  title           String
-  artist          String
-  status          String   @default("released") // "released", "id", "remix", "edit"
-  label           String?
-  releaseYear     Int?     @map("release_year")
+  id          String  @id @default(uuid())
+  setId       String  @map("set_id")
+  position    Int // Track order in the set
+  startTime   Int     @map("start_time") // Start time in seconds
+  endTime     Int?    @map("end_time") // End time in seconds
+  title       String
+  artist      String
+  status      String  @default("released") // "released", "id", "remix", "edit"
+  label       String?
+  releaseYear Int?    @map("release_year")
 
   // Streaming links
-  spotifyUrl      String?  @map("spotify_url")
-  spotifyId       String?  @map("spotify_id")
-  spotifyUri      String?  @map("spotify_uri")
-  appleMusicUrl   String?  @map("apple_music_url")
-  youtubeMusicUrl String?  @map("youtube_music_url")
-  soundcloudUrl   String?  @map("soundcloud_url")
-  beatportUrl     String?  @map("beatport_url")
-  neteaseUrl      String?  @map("netease_url")
-  neteaseId       String?  @map("netease_id")
+  spotifyUrl      String? @map("spotify_url")
+  spotifyId       String? @map("spotify_id")
+  spotifyUri      String? @map("spotify_uri")
+  appleMusicUrl   String? @map("apple_music_url")
+  youtubeMusicUrl String? @map("youtube_music_url")
+  soundcloudUrl   String? @map("soundcloud_url")
+  beatportUrl     String? @map("beatport_url")
+  neteaseUrl      String? @map("netease_url")
+  neteaseId       String? @map("netease_id")
 
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  set             DJSet    @relation(fields: [setId], references: [id], onDelete: Cascade)
+  set DJSet @relation(fields: [setId], references: [id], onDelete: Cascade)
 
   @@index([setId])
   @@index([status])
@@ -424,32 +465,32 @@ model Track {
 }
 
 model TracklistTrack {
-  id              String   @id @default(uuid())
-  tracklistId     String   @map("tracklist_id")
-  position        Int      // Track order in the tracklist
-  startTime       Int      @map("start_time") // Start time in seconds
-  endTime         Int?     @map("end_time") // End time in seconds
-  title           String
-  artist          String
-  status          String   @default("released") // "released", "id", "remix", "edit"
-  label           String?
-  releaseYear     Int?     @map("release_year")
+  id          String  @id @default(uuid())
+  tracklistId String  @map("tracklist_id")
+  position    Int // Track order in the tracklist
+  startTime   Int     @map("start_time") // Start time in seconds
+  endTime     Int?    @map("end_time") // End time in seconds
+  title       String
+  artist      String
+  status      String  @default("released") // "released", "id", "remix", "edit"
+  label       String?
+  releaseYear Int?    @map("release_year")
 
   // Streaming links
-  spotifyUrl      String?  @map("spotify_url")
-  spotifyId       String?  @map("spotify_id")
-  spotifyUri      String?  @map("spotify_uri")
-  appleMusicUrl   String?  @map("apple_music_url")
-  youtubeMusicUrl String?  @map("youtube_music_url")
-  soundcloudUrl   String?  @map("soundcloud_url")
-  beatportUrl     String?  @map("beatport_url")
-  neteaseUrl      String?  @map("netease_url")
-  neteaseId       String?  @map("netease_id")
+  spotifyUrl      String? @map("spotify_url")
+  spotifyId       String? @map("spotify_id")
+  spotifyUri      String? @map("spotify_uri")
+  appleMusicUrl   String? @map("apple_music_url")
+  youtubeMusicUrl String? @map("youtube_music_url")
+  soundcloudUrl   String? @map("soundcloud_url")
+  beatportUrl     String? @map("beatport_url")
+  neteaseUrl      String? @map("netease_url")
+  neteaseId       String? @map("netease_id")
 
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tracklist       Tracklist @relation(fields: [tracklistId], references: [id], onDelete: Cascade)
+  tracklist Tracklist @relation(fields: [tracklistId], references: [id], onDelete: Cascade)
 
   @@index([tracklistId])
   @@index([status])
@@ -457,18 +498,18 @@ model TracklistTrack {
 }
 
 model Comment {
-  id          String   @id @default(uuid())
-  setId       String   @map("set_id")
-  userId      String   @map("user_id")
-  parentId    String?  @map("parent_id") // For nested replies
-  content     String
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  setId     String   @map("set_id")
+  userId    String   @map("user_id")
+  parentId  String?  @map("parent_id") // For nested replies
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  set         DJSet    @relation(fields: [setId], references: [id], onDelete: Cascade)
-  user        User     @relation("UserComments", fields: [userId], references: [id], onDelete: Cascade)
-  parent      Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies     Comment[] @relation("CommentReplies")
+  set     DJSet     @relation(fields: [setId], references: [id], onDelete: Cascade)
+  user    User      @relation("UserComments", fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("CommentReplies")
 
   @@index([setId])
   @@index([userId])
@@ -486,8 +527,8 @@ model RatingEvent {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  createdBy   User     @relation("RatingEventCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  units       RatingUnit[]
+  createdBy User         @relation("RatingEventCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  units     RatingUnit[]
 
   @@index([createdById])
   @@index([createdAt])
@@ -504,9 +545,9 @@ model RatingUnit {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  event       RatingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  createdBy   User        @relation("RatingUnitCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  comments    RatingComment[]
+  event     RatingEvent     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy User            @relation("RatingUnitCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  comments  RatingComment[]
 
   @@index([eventId])
   @@index([createdById])
@@ -515,16 +556,16 @@ model RatingUnit {
 }
 
 model RatingComment {
-  id          String   @id @default(uuid())
-  unitId      String   @map("unit_id")
-  userId      String   @map("user_id")
-  score       Int
-  content     String
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  unitId    String   @map("unit_id")
+  userId    String   @map("user_id")
+  score     Int
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  unit        RatingUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  user        User       @relation("RatingCommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  unit RatingUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  user User       @relation("RatingCommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([unitId])
   @@index([userId])
@@ -542,7 +583,7 @@ model Post {
   content      String   @db.Text
   images       String[] @default([])
   type         String   @default("general") // general, event, set, squad
-  visibility   String   @default("public")  // public, friends, squad
+  visibility   String   @default("public") // public, friends, squad
   squadId      String?  @map("squad_id")
   eventId      String?  @map("event_id")
   setId        String?  @map("set_id")
@@ -552,13 +593,13 @@ model Post {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  user         User          @relation("UserPosts", fields: [userId], references: [id], onDelete: Cascade)
-  squad        Squad?        @relation(fields: [squadId], references: [id], onDelete: Cascade)
-  event        Event?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  set          DJSet?        @relation(fields: [setId], references: [id], onDelete: SetNull)
-  likes        PostLike[]
-  reposts      PostRepost[]
-  comments     PostComment[]
+  user     User          @relation("UserPosts", fields: [userId], references: [id], onDelete: Cascade)
+  squad    Squad?        @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  event    Event?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  set      DJSet?        @relation(fields: [setId], references: [id], onDelete: SetNull)
+  likes    PostLike[]
+  reposts  PostRepost[]
+  comments PostComment[]
 
   @@index([userId])
   @@index([squadId])
@@ -573,8 +614,8 @@ model PostLike {
   userId    String   @map("user_id")
   createdAt DateTime @default(now()) @map("created_at")
 
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
   @@index([postId])
@@ -588,8 +629,8 @@ model PostRepost {
   userId    String   @map("user_id")
   createdAt DateTime @default(now()) @map("created_at")
 
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
   @@index([postId])
@@ -606,8 +647,8 @@ model PostComment {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([postId])
   @@index([userId])
@@ -628,13 +669,13 @@ model Squad {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  leader      User            @relation("SquadLeader", fields: [leaderId], references: [id], onDelete: Cascade)
-  members     SquadMember[]
-  invites     SquadInvite[]
-  activities  SquadActivity[]
-  albums      SquadAlbum[]
-  messages    SquadMessage[]
-  posts       Post[]
+  leader     User            @relation("SquadLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  members    SquadMember[]
+  invites    SquadInvite[]
+  activities SquadActivity[]
+  albums     SquadAlbum[]
+  messages   SquadMessage[]
+  posts      Post[]
 
   @@index([leaderId])
   @@index([isPublic])
@@ -642,17 +683,17 @@ model Squad {
 }
 
 model SquadMember {
-  id        String   @id @default(uuid())
-  squadId   String   @map("squad_id")
-  userId    String   @map("user_id")
-  role      String   @default("member") // leader, admin, member
-  nickname  String?
-  notificationsEnabled Boolean @default(true) @map("notifications_enabled")
-  joinedAt  DateTime @default(now()) @map("joined_at")
-  lastReadAt DateTime? @map("last_read_at")
+  id                   String    @id @default(uuid())
+  squadId              String    @map("squad_id")
+  userId               String    @map("user_id")
+  role                 String    @default("member") // leader, admin, member
+  nickname             String?
+  notificationsEnabled Boolean   @default(true) @map("notifications_enabled")
+  joinedAt             DateTime  @default(now()) @map("joined_at")
+  lastReadAt           DateTime? @map("last_read_at")
 
-  squad     Squad    @relation(fields: [squadId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  squad Squad @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([squadId, userId])
   @@index([squadId])
@@ -661,17 +702,17 @@ model SquadMember {
 }
 
 model SquadInvite {
-  id         String   @id @default(uuid())
-  squadId    String   @map("squad_id")
-  inviterId  String   @map("inviter_id")
-  inviteeId  String   @map("invitee_id")
-  status     String   @default("pending") // pending, accepted, rejected
-  createdAt  DateTime @default(now()) @map("created_at")
-  expiresAt  DateTime @map("expires_at")
+  id        String   @id @default(uuid())
+  squadId   String   @map("squad_id")
+  inviterId String   @map("inviter_id")
+  inviteeId String   @map("invitee_id")
+  status    String   @default("pending") // pending, accepted, rejected
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
 
-  squad      Squad    @relation(fields: [squadId], references: [id], onDelete: Cascade)
-  inviter    User     @relation("SentInvites", fields: [inviterId], references: [id], onDelete: Cascade)
-  invitee    User     @relation("ReceivedInvites", fields: [inviteeId], references: [id], onDelete: Cascade)
+  squad   Squad @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  inviter User  @relation("SentInvites", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee User  @relation("ReceivedInvites", fields: [inviteeId], references: [id], onDelete: Cascade)
 
   @@unique([squadId, inviteeId])
   @@index([squadId])
@@ -693,10 +734,10 @@ model SquadActivity {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  squad        Squad    @relation(fields: [squadId], references: [id], onDelete: Cascade)
-  event        Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  createdBy    User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
-  albums       SquadAlbum[]
+  squad     Squad        @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  event     Event?       @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  createdBy User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  albums    SquadAlbum[]
 
   @@index([squadId])
   @@index([eventId])
@@ -715,10 +756,10 @@ model SquadAlbum {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  squad       Squad           @relation(fields: [squadId], references: [id], onDelete: Cascade)
-  activity    SquadActivity?  @relation(fields: [activityId], references: [id], onDelete: SetNull)
-  createdBy   User            @relation(fields: [createdById], references: [id], onDelete: Cascade)
-  photos      SquadAlbumPhoto[]
+  squad     Squad             @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  activity  SquadActivity?    @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  createdBy User              @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  photos    SquadAlbumPhoto[]
 
   @@index([squadId])
   @@index([activityId])
@@ -733,8 +774,8 @@ model SquadAlbumPhoto {
   uploadedById String   @map("uploaded_by_id")
   uploadedAt   DateTime @default(now()) @map("uploaded_at")
 
-  album        SquadAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
-  uploadedBy   User       @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  album      SquadAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  uploadedBy User       @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
 
   @@index([albumId])
   @@index([uploadedById])
@@ -750,8 +791,8 @@ model SquadMessage {
   imageUrl  String?  @map("image_url")
   createdAt DateTime @default(now()) @map("created_at")
 
-  squad     Squad    @relation(fields: [squadId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  squad Squad @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([squadId])
   @@index([userId])
@@ -766,9 +807,9 @@ model DirectConversation {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  userA     User     @relation("DirectConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
-  userB     User     @relation("DirectConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
-  messages  DirectMessage[]
+  userA      User                     @relation("DirectConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB      User                     @relation("DirectConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  messages   DirectMessage[]
   readStates DirectConversationRead[]
 
   @@unique([userAId, userBId])
@@ -779,13 +820,13 @@ model DirectConversation {
 }
 
 model DirectConversationRead {
-  id             String             @id @default(uuid())
-  conversationId String             @map("conversation_id")
-  userId         String             @map("user_id")
-  lastReadAt     DateTime           @default(now()) @map("last_read_at")
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  userId         String   @map("user_id")
+  lastReadAt     DateTime @default(now()) @map("last_read_at")
 
-  conversation   DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([conversationId, userId])
   @@index([conversationId])
@@ -794,15 +835,15 @@ model DirectConversationRead {
 }
 
 model DirectMessage {
-  id             String             @id @default(uuid())
-  conversationId String             @map("conversation_id")
-  senderId       String             @map("sender_id")
-  content        String             @db.Text
-  type           String             @default("text")
-  createdAt      DateTime           @default(now()) @map("created_at")
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  senderId       String   @map("sender_id")
+  content        String   @db.Text
+  type           String   @default("text")
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  conversation   DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender         User               @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  conversation DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User               @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([conversationId])
   @@index([senderId])
@@ -811,13 +852,13 @@ model DirectMessage {
 }
 
 model NotificationRead {
-  id             String   @id @default(uuid())
-  userId         String   @map("user_id")
-  type           String
-  sourceId       String   @map("source_id")
-  readAt         DateTime @default(now()) @map("read_at")
+  id       String   @id @default(uuid())
+  userId   String   @map("user_id")
+  type     String
+  sourceId String   @map("source_id")
+  readAt   DateTime @default(now()) @map("read_at")
 
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, type, sourceId])
   @@index([userId, type])

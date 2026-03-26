@@ -25,6 +25,10 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>用于将定制路线分享图保存到你的相册。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>用于读取和保存活动相关图片内容。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import djSetService from '../services/djset.service';
 import commentService from '../services/comment.service';
 import spotifyArtistService, { SpotifyUpstreamError } from '../services/spotify-artist.service';
+import discogsArtistService, { DiscogsUpstreamError } from '../services/discogs-artist.service';
 import { verifyToken, type JWTPayload } from '../utils/auth';
 
 const router: Router = Router();
@@ -197,7 +198,9 @@ const eventUploadDir = path.join(process.cwd(), 'uploads', 'events');
 const djSetUploadDir = path.join(process.cwd(), 'uploads', 'dj-sets');
 const feedUploadDir = path.join(process.cwd(), 'uploads', 'feed');
 const djUploadDir = path.join(process.cwd(), 'uploads', 'djs');
-for (const dir of [eventUploadDir, djSetUploadDir, feedUploadDir, djUploadDir]) {
+const ratingUploadDir = path.join(process.cwd(), 'uploads', 'ratings');
+const wikiBrandUploadDir = path.join(process.cwd(), 'uploads', 'wiki-brands');
+for (const dir of [eventUploadDir, djSetUploadDir, feedUploadDir, djUploadDir, ratingUploadDir, wikiBrandUploadDir]) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -250,6 +253,8 @@ const djSetVideoUpload = createVideoUpload(djSetUploadDir, 300 * 1024 * 1024);
 const feedImageUpload = createImageUpload(feedUploadDir, 10 * 1024 * 1024);
 const feedVideoUpload = createVideoUpload(feedUploadDir, 300 * 1024 * 1024);
 const djImageUpload = createImageUpload(djUploadDir, 10 * 1024 * 1024);
+const ratingImageUpload = createImageUpload(ratingUploadDir, 10 * 1024 * 1024);
+const wikiBrandImageUpload = createImageUpload(wikiBrandUploadDir, 10 * 1024 * 1024);
 
 const cleanEnv = (value: string | undefined): string | null => {
   if (!value) return null;
@@ -265,9 +270,18 @@ const ossEndpoint = cleanEnv(process.env.OSS_ENDPOINT);
 const ossPostsPrefix = (cleanEnv(process.env.OSS_POSTS_PREFIX) || 'posts').replace(/^\/+|\/+$/g, '');
 const ossEventsPrefix = (cleanEnv(process.env.OSS_EVENTS_PREFIX) || 'wen-jasonlee/events').replace(/^\/+|\/+$/g, '');
 const ossDjsPrefix = (cleanEnv(process.env.OSS_DJS_PREFIX) || 'wen-jasonlee/djs').replace(/^\/+|\/+$/g, '');
+const ossRatingsPrefix = (cleanEnv(process.env.OSS_RATINGS_PREFIX) || 'wen-jasonlee/ratings').replace(/^\/+|\/+$/g, '');
+const ossWikiBrandsPrefix = (cleanEnv(process.env.OSS_WIKI_BRANDS_PREFIX) || 'wiki/brands').replace(/^\/+|\/+$/g, '');
 const cozeWorkflowRunUrl = cleanEnv(process.env.COZE_WORKFLOW_RUN_URL) || 'https://dxy8zryvs2.coze.site/run';
 const cozeWorkflowToken = cleanEnv(process.env.COZE_WORKFLOW_TOKEN);
 const cozeWorkflowImageField = cleanEnv(process.env.COZE_WORKFLOW_IMAGE_FIELD) || 'festival_image';
+const cozeWorkflowTimeoutMs = (() => {
+  const parsed = Number(process.env.COZE_WORKFLOW_TIMEOUT_MS);
+  if (Number.isFinite(parsed) && parsed >= 10_000 && parsed <= 600_000) {
+    return Math.floor(parsed);
+  }
+  return 120_000;
+})();
 
 const postMediaOssClient =
   ossRegion && ossAccessKeyId && ossAccessKeySecret && ossBucket
@@ -332,6 +346,43 @@ const buildEventMediaObjectKey = (
   return `${ossEventsPrefix}/${safeEventId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
 };
 
+const buildRatingMediaObjectKey = (
+  owner: {
+    userId: string;
+    ratingEventId?: string | null;
+    ratingUnitId?: string | null;
+  },
+  fileName: string,
+  mimeType: string,
+  usage: string | null
+): string => {
+  const rawExt = path.extname(fileName || '').toLowerCase();
+  const mimeExt = mimeType.includes('png')
+    ? '.png'
+    : mimeType.includes('webp')
+      ? '.webp'
+      : mimeType.includes('gif')
+        ? '.gif'
+        : '.jpg';
+  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
+  const safeUsage = sanitizeOssPathSegment(usage || '') || 'image';
+
+  const safeRatingEventId = sanitizeOssPathSegment(owner.ratingEventId || '');
+  const safeRatingUnitId = sanitizeOssPathSegment(owner.ratingUnitId || '');
+  const safeUserId = sanitizeOssPathSegment(owner.userId) || 'unknown-user';
+
+  if (safeRatingEventId && safeRatingUnitId) {
+    return `${ossRatingsPrefix}/events/${safeRatingEventId}/units/${safeRatingUnitId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+  }
+  if (safeRatingEventId) {
+    return `${ossRatingsPrefix}/events/${safeRatingEventId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+  }
+  if (safeRatingUnitId) {
+    return `${ossRatingsPrefix}/units/${safeRatingUnitId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+  }
+  return `${ossRatingsPrefix}/drafts/${safeUserId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+};
+
 const parseOssObjectKeyFromUrl = (value: string | null | undefined): string | null => {
   if (!value) return null;
   const trimmed = value.trim();
@@ -361,6 +412,8 @@ const isDjAvatarOssObjectKey = (objectKey: string, djId: string): boolean => {
   if (!safeDJId) return false;
   return objectKey.startsWith(`${ossDjsPrefix}/${safeDJId}/`);
 };
+
+const isRatingOssObjectKey = (objectKey: string): boolean => objectKey.startsWith(`${ossRatingsPrefix}/`);
 
 const normalizeDJNameKey = (value: string): string => value.trim().toLowerCase();
 
@@ -603,6 +656,26 @@ const buildDJMediaObjectKey = (
   return `${ossDjsPrefix}/${safeDJId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
 };
 
+const buildWikiBrandMediaObjectKey = (
+  brandId: string | null,
+  fileName: string,
+  mimeType: string,
+  usage: string | null
+): string => {
+  const rawExt = path.extname(fileName || '').toLowerCase();
+  const mimeExt = mimeType.includes('png')
+    ? '.png'
+    : mimeType.includes('webp')
+      ? '.webp'
+      : mimeType.includes('gif')
+        ? '.gif'
+        : '.jpg';
+  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
+  const safeBrandId = sanitizeOssPathSegment(brandId || '') || 'unknown-brand';
+  const safeUsage = sanitizeOssPathSegment(usage || '') || 'image';
+  return `${ossWikiBrandsPrefix}/${safeBrandId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+};
+
 const uploadRemoteDJAvatarToOss = async (
   djId: string,
   sourceUrl: string
@@ -681,6 +754,13 @@ const deleteSingleDJMediaOssObjectIfOwned = async (url: string | null | undefine
   if (!postMediaOssClient || !url) return;
   const objectKey = parseOssObjectKeyFromUrl(url);
   if (!objectKey || !isDjAvatarOssObjectKey(objectKey, djId)) return;
+  await deleteOssObjects([objectKey]);
+};
+
+const deleteSingleRatingOssObjectIfOwned = async (url: string | null | undefined): Promise<void> => {
+  if (!postMediaOssClient || !url) return;
+  const objectKey = parseOssObjectKeyFromUrl(url);
+  if (!objectKey || !isRatingOssObjectKey(objectKey)) return;
   await deleteOssObjects([objectKey]);
 };
 
@@ -800,6 +880,94 @@ const uploadEventMediaToOss = async (
   };
 };
 
+const uploadRatingMediaToOss = async (
+  file: Express.Multer.File,
+  owner: {
+    userId: string;
+    ratingEventId?: string | null;
+    ratingUnitId?: string | null;
+  },
+  usage: string | null
+): Promise<{ url: string; fileName: string; mimeType: string; size: number }> => {
+  if (!postMediaOssClient) {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  const mimeType = file.mimetype || 'image/jpeg';
+  const objectKey = buildRatingMediaObjectKey(owner, file.originalname || file.filename || 'image.jpg', mimeType, usage);
+
+  let putResult: { url?: string };
+  try {
+    putResult = await postMediaOssClient.put(objectKey, file.path, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+  }
+
+  return {
+    url: normalizeUploadedOssUrl(putResult.url, objectKey),
+    fileName: path.basename(objectKey),
+    mimeType,
+    size: file.size,
+  };
+};
+
+const uploadRemoteImageToRatingOss = async (
+  owner: {
+    userId: string;
+    ratingEventId?: string | null;
+    ratingUnitId?: string | null;
+  },
+  sourceUrl: string,
+  usage: string | null
+): Promise<{ url: string; objectKey: string } | null> => {
+  if (!postMediaOssClient) return null;
+  const trimmed = sourceUrl.trim();
+  if (!trimmed) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const response = await fetch(trimmed, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: {
+        Accept: 'image/*',
+      },
+    });
+    if (!response.ok) return null;
+
+    const mimeType = (response.headers.get('content-type') || 'image/jpeg').toLowerCase();
+    if (!mimeType.startsWith('image/')) return null;
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length === 0) return null;
+
+    const objectKey = buildRatingMediaObjectKey(owner, path.basename(trimmed.split('?')[0] || 'image.jpg'), mimeType, usage);
+    const putResult = await postMediaOssClient.put(objectKey, buffer, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+
+    return {
+      url: normalizeUploadedOssUrl(putResult.url, objectKey),
+      objectKey,
+    };
+  } catch (_error) {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 const uploadDJMediaToOss = async (
   file: Express.Multer.File,
   djId: string,
@@ -812,6 +980,39 @@ const uploadDJMediaToOss = async (
 
   const mimeType = file.mimetype || 'image/jpeg';
   const objectKey = buildDJMediaObjectKey(djId, file.originalname || file.filename || 'image.jpg', mimeType, usage);
+
+  let putResult: { url?: string };
+  try {
+    putResult = await postMediaOssClient.put(objectKey, file.path, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+  }
+
+  return {
+    url: normalizeUploadedOssUrl(putResult.url, objectKey),
+    fileName: path.basename(objectKey),
+    mimeType,
+    size: file.size,
+  };
+};
+
+const uploadWikiBrandMediaToOss = async (
+  file: Express.Multer.File,
+  brandId: string | null,
+  usage: string | null
+): Promise<{ url: string; fileName: string; mimeType: string; size: number }> => {
+  if (!postMediaOssClient) {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  const mimeType = file.mimetype || 'image/jpeg';
+  const objectKey = buildWikiBrandMediaObjectKey(brandId, file.originalname || file.filename || 'image.jpg', mimeType, usage);
 
   let putResult: { url?: string };
   try {
@@ -898,6 +1099,36 @@ type SpotifyDJSearchItem = {
   existingMatchType: 'spotify_id' | 'name_case_insensitive' | null;
 };
 
+type DiscogsDJSearchItem = {
+  artistId: number;
+  name: string;
+  thumbUrl: string | null;
+  coverImageUrl: string | null;
+  resourceUrl: string | null;
+  uri: string | null;
+  existingDJId: string | null;
+  existingDJName: string | null;
+  existingMatchType: 'name_case_insensitive' | null;
+};
+
+type DiscogsDJArtistDetailItem = {
+  artistId: number;
+  name: string;
+  realName: string | null;
+  profile: string | null;
+  urls: string[];
+  nameVariations: string[];
+  aliases: string[];
+  groups: string[];
+  primaryImageUrl: string | null;
+  thumbnailImageUrl: string | null;
+  resourceUrl: string | null;
+  uri: string | null;
+  existingDJId: string | null;
+  existingDJName: string | null;
+  existingMatchType: 'name_case_insensitive' | null;
+};
+
 const isUnknownText = (value: string): boolean => {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return true;
@@ -919,6 +1150,27 @@ const sanitizeOptionalText = (value: unknown): string | null => {
   const trimmed = value.trim();
   if (!trimmed || isUnknownText(trimmed)) return null;
   return trimmed;
+};
+
+const pickFirstUrlByHosts = (
+  urls: string[] | null | undefined,
+  hostKeywords: string[]
+): string | null => {
+  if (!Array.isArray(urls) || urls.length === 0) return null;
+  for (const raw of urls) {
+    const trimmed = raw?.trim();
+    if (!trimmed) continue;
+    try {
+      const parsed = new URL(trimmed);
+      const host = parsed.hostname.toLowerCase();
+      if (hostKeywords.some((keyword) => host.includes(keyword.toLowerCase()))) {
+        return trimmed;
+      }
+    } catch (_error) {
+      continue;
+    }
+  }
+  return null;
 };
 
 const safeParseJson = (text: string): unknown | null => {
@@ -1188,8 +1440,15 @@ const runCozeLineupWorker = async (
     },
   };
 
+  const startedAt = Date.now();
+  console.info('[coze-lineup] run.start', {
+    runUrl: cozeWorkflowRunUrl,
+    imageUrl,
+    fileType,
+    timeoutMs: cozeWorkflowTimeoutMs,
+  });
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
+  const timeout = setTimeout(() => controller.abort(), cozeWorkflowTimeoutMs);
   let rawText = '';
   try {
     const response = await fetch(cozeWorkflowRunUrl, {
@@ -1202,9 +1461,19 @@ const runCozeLineupWorker = async (
       signal: controller.signal,
     });
     rawText = await response.text();
+    console.info('[coze-lineup] run.response', {
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+      responseLength: rawText.length,
+    });
     if (!response.ok) {
       throw new Error(`Coze workflow request failed (${response.status}): ${rawText.slice(0, 500)}`);
     }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`COZE_WORKFLOW_TIMEOUT after ${cozeWorkflowTimeoutMs}ms`);
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -1222,6 +1491,10 @@ const runCozeLineupWorker = async (
       lineupInfo = parseFormattedOutputToItems(formattedOutput);
     }
   }
+  console.info('[coze-lineup] run.parsed', {
+    durationMs: Date.now() - startedAt,
+    lineupCount: lineupInfo.length,
+  });
 
   return {
     normalizedText: JSON.stringify(
@@ -1289,6 +1562,84 @@ const mapUserLite = (row: any) => {
     username: row.username,
     displayName: row.displayName || row.username,
     avatarUrl: row.avatarUrl || null,
+  };
+};
+
+type WikiFestivalLinkPayload = {
+  title: string;
+  icon: string;
+  url: string;
+};
+
+const normalizeWikiFestivalText = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+};
+
+const parseWikiFestivalLinks = (value: unknown): WikiFestivalLinkPayload[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item !== 'object' || item === null) return null;
+      const title = normalizeWikiFestivalText((item as Record<string, unknown>).title);
+      const icon = normalizeWikiFestivalText((item as Record<string, unknown>).icon);
+      const url = normalizeWikiFestivalText((item as Record<string, unknown>).url);
+      if (!title || !url) return null;
+      return {
+        title,
+        icon: icon || 'link',
+        url,
+      } as WikiFestivalLinkPayload;
+    })
+    .filter((item): item is WikiFestivalLinkPayload => item !== null);
+};
+
+const parseWikiFestivalAliases = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeWikiFestivalText(item))
+      .filter((item) => item.length > 0);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/[,\uFF0C\/\u3001]/g)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+  return [];
+};
+
+const mapWikiFestival = (
+  row: any,
+  viewerId: string | null | undefined = null,
+  viewerRole: string | null | undefined = null
+) => {
+  const contributors = Array.isArray(row?.contributors)
+    ? row.contributors
+        .map((item: any) => mapUserLite(item?.user ?? item))
+        .filter((item: ReturnType<typeof mapUserLite>): item is NonNullable<ReturnType<typeof mapUserLite>> => Boolean(item))
+    : [];
+  const links = parseWikiFestivalLinks(row?.links);
+  const isContributor = !!viewerId && contributors.some((user: any) => user.id === viewerId);
+  const canEdit = viewerRole === 'admin' || isContributor;
+
+  return {
+    id: row.id,
+    name: row.name,
+    aliases: Array.isArray(row.aliases) ? row.aliases : [],
+    country: row.country,
+    city: row.city,
+    foundedYear: row.foundedYear,
+    frequency: row.frequency,
+    tagline: row.tagline,
+    introduction: row.introduction,
+    avatarUrl: row.avatarUrl ?? null,
+    backgroundUrl: row.backgroundUrl ?? null,
+    links,
+    contributors,
+    canEdit,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 };
 
@@ -1470,11 +1821,28 @@ const mapRatingUnit = (row: any, includeComments = false) => {
     name: row.name,
     description: row.description,
     imageUrl: row.imageUrl,
+    linkedDJs: Array.isArray(row.linkedDJs)
+      ? row.linkedDJs.map((dj: any) => ({
+          id: dj.id,
+          name: dj.name,
+          avatarUrl: dj.avatarUrl || null,
+          bannerUrl: dj.bannerUrl || null,
+          country: dj.country || null,
+        }))
+      : [],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     rating: summary.rating,
     ratingCount: summary.ratingCount,
     comments: includeComments && Array.isArray(row.comments) ? row.comments.map(mapRatingComment) : [],
+    event: row.event
+      ? {
+          id: row.event.id,
+          name: row.event.name,
+          description: row.event.description ?? null,
+          imageUrl: row.event.imageUrl ?? null,
+        }
+      : undefined,
     createdBy: mapUserLite(row.createdBy),
   };
 };
@@ -1484,11 +1852,166 @@ const mapRatingEvent = (row: any) => ({
   name: row.name,
   description: row.description,
   imageUrl: row.imageUrl,
+  sourceEventId: row.sourceEventId ?? null,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   createdBy: mapUserLite(row.createdBy),
   units: Array.isArray(row.units) ? row.units.map((unit: any) => mapRatingUnit(unit)) : [],
 });
+
+const parseActPerformerNames = (rawName: string): string[] => {
+  const trimmed = rawName.trim();
+  if (!trimmed) return [];
+  const separated = trimmed
+    .replace(/\s*[bB]\s*[23]\s*[bB]\s*/g, '|')
+    .split('|')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return separated.length > 0 ? separated : [trimmed];
+};
+
+const resolveSourceEventIdForRatingEvent = async (row: any): Promise<string | null> => {
+  const explicitSourceEventId = typeof row?.sourceEventId === 'string' ? row.sourceEventId.trim() : '';
+  if (explicitSourceEventId) {
+    return explicitSourceEventId;
+  }
+
+  const ratingEventName = typeof row?.name === 'string' ? row.name.trim() : '';
+  if (!ratingEventName) {
+    return null;
+  }
+
+  const ratingUnitNameKeys = new Set<string>(
+    (Array.isArray(row?.units) ? row.units : [])
+      .map((unit: any) => normalizeTextKey(typeof unit?.name === 'string' ? unit.name : ''))
+      .filter((name: string) => name.length > 0)
+  );
+
+  const candidateEvents = await prisma.event.findMany({
+    where: {
+      name: {
+        equals: ratingEventName,
+        mode: 'insensitive',
+      },
+    },
+    select: {
+      id: true,
+      lineupSlots: {
+        select: { djName: true },
+      },
+    },
+    take: 20,
+  });
+
+  if (candidateEvents.length === 0) {
+    return null;
+  }
+
+  if (ratingUnitNameKeys.size === 0) {
+    return candidateEvents[0]?.id ?? null;
+  }
+
+  let bestMatchedEventId: string | null = null;
+  let bestMatchedScore = 0;
+
+  for (const candidate of candidateEvents) {
+    const lineupNameKeys = new Set<string>(
+      candidate.lineupSlots
+        .map((slot) => normalizeTextKey(slot.djName))
+        .filter((name: string) => name.length > 0)
+    );
+    let overlap = 0;
+    for (const unitNameKey of ratingUnitNameKeys) {
+      if (lineupNameKeys.has(unitNameKey)) {
+        overlap += 1;
+      }
+    }
+    if (overlap > bestMatchedScore) {
+      bestMatchedScore = overlap;
+      bestMatchedEventId = candidate.id;
+    }
+  }
+
+  if (bestMatchedEventId) {
+    return bestMatchedEventId;
+  }
+
+  return candidateEvents.length === 1 ? candidateEvents[0].id : null;
+};
+
+const formatHourMinute = (value: Date): string => {
+  const hours = String(value.getHours()).padStart(2, '0');
+  const minutes = String(value.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
+const buildRatingUnitDescriptionFromLineupSlot = (slot: {
+  stageName?: string | null;
+  startTime: Date;
+  endTime: Date;
+}): string => {
+  const stageName = typeof slot.stageName === 'string' ? slot.stageName.trim() : '';
+  const timeRange = `${formatHourMinute(slot.startTime)}-${formatHourMinute(slot.endTime)}`;
+  return stageName ? `${stageName} · ${timeRange}` : timeRange;
+};
+
+const normalizeTextKey = (value: string): string =>
+  value.trim().toLowerCase();
+
+const attachLinkedDJsToRatingUnits = async (units: any[]): Promise<any[]> => {
+  if (!Array.isArray(units) || units.length === 0) return [];
+
+  const namesByUnitId = new Map<string, string[]>();
+  const allPerformerNameKeys = new Set<string>();
+
+  for (const unit of units) {
+    const actNames = parseActPerformerNames(typeof unit?.name === 'string' ? unit.name : '');
+    const normalizedNames = actNames.map(normalizeTextKey).filter(Boolean);
+    namesByUnitId.set(unit.id, normalizedNames);
+    for (const key of normalizedNames) {
+      allPerformerNameKeys.add(key);
+    }
+  }
+
+  const performerNames = Array.from(allPerformerNameKeys);
+  if (performerNames.length === 0) {
+    return units.map((unit) => ({ ...unit, linkedDJs: [] }));
+  }
+
+  const matchedDJs = await prisma.dJ.findMany({
+    where: {
+      OR: performerNames.map((name) => ({
+        name: {
+          equals: name,
+          mode: 'insensitive',
+        },
+      })),
+    },
+    select: {
+      id: true,
+      name: true,
+      avatarUrl: true,
+      bannerUrl: true,
+      country: true,
+    },
+  });
+
+  const djByNormalizedName = new Map<string, any>();
+  for (const dj of matchedDJs) {
+    djByNormalizedName.set(normalizeTextKey(dj.name), dj);
+  }
+
+  return units.map((unit) => {
+    const names = namesByUnitId.get(unit.id) || [];
+    const linkedDJs = names
+      .map((name) => djByNormalizedName.get(name))
+      .filter(Boolean);
+    return {
+      ...unit,
+      linkedDJs,
+    };
+  });
+};
 
 const RANKING_BOARDS: Record<string, { title: string; subtitle: string; years: number[]; coverImageUrl?: string }> = {
   djmag: {
@@ -1660,6 +2183,80 @@ router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Pro
     ok(res, mapEvent(row));
   } catch (error) {
     console.error('BFF web event detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/events/:id/rating-events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const eventId = req.params.id as string;
+    const sourceEvent = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        name: true,
+        lineupSlots: {
+          select: {
+            djName: true,
+          },
+        },
+      },
+    });
+
+    if (!sourceEvent) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+
+    const sourceEventName = normalizeTextKey(sourceEvent.name);
+    const sourceActNames = new Set(
+      sourceEvent.lineupSlots
+        .map((slot) => normalizeTextKey(slot.djName))
+        .filter(Boolean)
+    );
+
+    const rows = await prisma.ratingEvent.findMany({
+      orderBy: [{ createdAt: 'desc' }],
+      include: {
+        createdBy: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+        units: {
+          orderBy: [{ createdAt: 'asc' }],
+          include: {
+            comments: {
+              select: { score: true },
+            },
+            createdBy: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true },
+            },
+          },
+        },
+      },
+    });
+
+    const matchedRows: any[] = [];
+    for (const row of rows) {
+      const sameName = normalizeTextKey(row.name) === sourceEventName;
+      if (!sameName) continue;
+
+      const hasMatchingUnit =
+        sourceActNames.size === 0
+          ? true
+          : row.units.some((unit) => sourceActNames.has(normalizeTextKey(unit.name)));
+      if (!hasMatchingUnit) continue;
+
+      const linkedUnits = await attachLinkedDJsToRatingUnits(row.units as any[]);
+      matchedRows.push({
+        ...row,
+        sourceEventId: sourceEvent.id,
+        units: linkedUnits,
+      });
+    }
+
+    ok(res, { items: matchedRows.map(mapRatingEvent) });
+  } catch (error) {
+    console.error('BFF web event rating events error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1966,6 +2563,11 @@ router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image
       res.status(400).json({ error: 'No file uploaded' });
       return;
     }
+    if (!postMediaOssClient) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(503).json({ error: 'OSS is not configured for rating image upload' });
+      return;
+    }
 
     const formBody = req.body as Record<string, unknown>;
     const eventId = typeof formBody.eventId === 'string' ? formBody.eventId.trim() : '';
@@ -2012,7 +2614,40 @@ router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image
   }
 });
 
+router.post('/wiki/brands/upload-image', optionalAuth, wikiBrandImageUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    if (!postMediaOssClient) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(503).json({ error: 'OSS is not configured for wiki brand image upload' });
+      return;
+    }
+
+    const formBody = req.body as Record<string, unknown>;
+    const brandIdRaw = typeof formBody.brandId === 'string' ? formBody.brandId.trim() : '';
+    const usageRaw = typeof formBody.usage === 'string' ? formBody.usage.trim() : '';
+    const brandId = brandIdRaw.length > 0 ? brandIdRaw : null;
+    const usage = usageRaw.length > 0 ? usageRaw : null;
+
+    const uploaded = await uploadWikiBrandMediaToOss(file, brandId, usage);
+    ok(res, uploaded);
+  } catch (error) {
+    console.error('BFF web upload wiki brand image error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/events/lineup/import-image', optionalAuth, lineupImportImageUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
+  const requestStartedAt = Date.now();
   try {
     const authReq = req as BFFAuthRequest;
     const userId = requireAuth(authReq, res);
@@ -2038,12 +2673,30 @@ router.post('/events/lineup/import-image', optionalAuth, lineupImportImageUpload
     const uploaded = await uploadLineupImportImageToOss(file);
     try {
       const imported = await runCozeLineupWorker(uploaded.url, uploaded.mimeType);
+      console.info('[lineup-import] request.success', {
+        userId,
+        durationMs: Date.now() - requestStartedAt,
+        lineupCount: imported.lineupInfo.length,
+      });
       ok(res, imported);
     } finally {
       await deleteOssObjects([uploaded.objectKey]);
     }
   } catch (error) {
-    console.error('BFF web lineup import image error:', error);
+    const message = error instanceof Error ? error.message : '';
+    console.error('BFF web lineup import image error:', {
+      durationMs: Date.now() - requestStartedAt,
+      message,
+      error,
+    });
+    if (message.includes('COZE_WORKFLOW_TIMEOUT')) {
+      res.status(504).json({ error: '阵容识别超时，请稍后重试或换一张更清晰的图' });
+      return;
+    }
+    if (message.startsWith('Coze workflow request failed')) {
+      res.status(502).json({ error: '阵容识别服务暂时不可用，请稍后重试' });
+      return;
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -2330,6 +2983,152 @@ router.get('/djs/spotify/search', optionalAuth, async (req: Request, res: Respon
   }
 });
 
+router.get('/djs/discogs/search', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    if (!discogsArtistService.isConfigured()) {
+      res.status(503).json({ error: 'Discogs token is not configured' });
+      return;
+    }
+
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (!query) {
+      res.status(400).json({ error: 'q is required' });
+      return;
+    }
+
+    const limit = normalizeLimit(req.query.limit, 10, 20);
+    const candidates = await discogsArtistService.searchArtistsByName(query, limit);
+    if (candidates.length === 0) {
+      ok(res, { items: [] as DiscogsDJSearchItem[] });
+      return;
+    }
+
+    const nameConditions = candidates.map((item) => ({
+      name: { equals: item.name, mode: 'insensitive' as const },
+    }));
+    const existingRows = await prisma.dJ.findMany({
+      where: {
+        OR: nameConditions,
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    const byName = new Map<string, (typeof existingRows)[number]>();
+    for (const row of existingRows) {
+      const key = normalizeDJNameKey(row.name);
+      if (!byName.has(key)) {
+        byName.set(key, row);
+      }
+    }
+
+    const items: DiscogsDJSearchItem[] = candidates.map((item) => {
+      const matched = byName.get(normalizeDJNameKey(item.name)) ?? null;
+      return {
+        artistId: item.artistId,
+        name: item.name,
+        thumbUrl: item.thumbUrl,
+        coverImageUrl: item.coverImageUrl,
+        resourceUrl: item.resourceUrl,
+        uri: item.uri,
+        existingDJId: matched?.id ?? null,
+        existingDJName: matched?.name ?? null,
+        existingMatchType: matched ? 'name_case_insensitive' : null,
+      };
+    });
+
+    ok(res, { items });
+  } catch (error) {
+    if (error instanceof DiscogsUpstreamError) {
+      console.error('BFF web discogs dj search upstream error:', {
+        code: error.code,
+        status: error.status,
+        message: error.message,
+      });
+      res.status(503).json({
+        error: 'Discogs 服务暂时不可用，请稍后重试',
+        errorCode: error.code,
+      });
+      return;
+    }
+    console.error('BFF web discogs dj search error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/djs/discogs/artists/:artistId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    if (!discogsArtistService.isConfigured()) {
+      res.status(503).json({ error: 'Discogs token is not configured' });
+      return;
+    }
+
+    const parsedArtistId = Number(req.params.artistId);
+    if (!Number.isFinite(parsedArtistId) || parsedArtistId <= 0) {
+      res.status(400).json({ error: 'artistId must be a positive number' });
+      return;
+    }
+
+    const detail = await discogsArtistService.getArtistById(Math.floor(parsedArtistId));
+    if (!detail) {
+      res.status(404).json({ error: 'Discogs artist not found' });
+      return;
+    }
+
+    const existing = await prisma.dJ.findFirst({
+      where: { name: { equals: detail.name, mode: 'insensitive' } },
+      select: { id: true, name: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const payload: DiscogsDJArtistDetailItem = {
+      artistId: detail.artistId,
+      name: detail.name,
+      realName: detail.realName,
+      profile: detail.profile,
+      urls: detail.urls,
+      nameVariations: detail.nameVariations,
+      aliases: detail.aliases,
+      groups: detail.groups,
+      primaryImageUrl: detail.primaryImageUrl,
+      thumbnailImageUrl: detail.thumbnailImageUrl,
+      resourceUrl: detail.resourceUrl,
+      uri: detail.uri,
+      existingDJId: existing?.id ?? null,
+      existingDJName: existing?.name ?? null,
+      existingMatchType: existing ? 'name_case_insensitive' : null,
+    };
+
+    ok(res, payload);
+  } catch (error) {
+    if (error instanceof DiscogsUpstreamError) {
+      console.error('BFF web discogs artist detail upstream error:', {
+        code: error.code,
+        status: error.status,
+        message: error.message,
+      });
+      res.status(503).json({
+        error: 'Discogs 服务暂时不可用，请稍后重试',
+        errorCode: error.code,
+      });
+      return;
+    }
+    console.error('BFF web discogs artist detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const authReq = req as BFFAuthRequest;
@@ -2362,9 +3161,18 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
       return;
     }
 
-    const requestedAliases = Array.isArray(payload.aliases)
-      ? payload.aliases.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
-      : [];
+    const hasAliasesInput = Object.prototype.hasOwnProperty.call(payload, 'aliases');
+    let requestedAliases: string[] = [];
+    if (hasAliasesInput) {
+      const aliasValue = payload.aliases;
+      if (aliasValue !== null && !Array.isArray(aliasValue)) {
+        res.status(400).json({ error: 'aliases must be an array or null' });
+        return;
+      }
+      requestedAliases = Array.isArray(aliasValue)
+        ? aliasValue.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+        : [];
+    }
     const requestedBio = typeof payload.bio === 'string' ? payload.bio.trim() : '';
     const requestedCountry = typeof payload.country === 'string' ? payload.country.trim() : '';
     const requestedInstagram = typeof payload.instagramUrl === 'string' ? payload.instagramUrl.trim() : '';
@@ -2501,6 +3309,202 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
       return;
     }
     console.error('BFF web spotify dj import error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/djs/discogs/import', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    if (!discogsArtistService.isConfigured()) {
+      res.status(503).json({ error: 'Discogs token is not configured' });
+      return;
+    }
+
+    const payload = (req.body ?? {}) as Record<string, unknown>;
+    const rawArtistId = payload.discogsArtistId ?? payload.artistId;
+    const discogsArtistId = Number(rawArtistId);
+    if (!Number.isFinite(discogsArtistId) || discogsArtistId <= 0) {
+      res.status(400).json({ error: 'discogsArtistId is required and must be a positive number' });
+      return;
+    }
+
+    const discogsArtist = await discogsArtistService.getArtistById(Math.floor(discogsArtistId));
+    if (!discogsArtist) {
+      res.status(404).json({ error: 'Discogs artist not found' });
+      return;
+    }
+
+    const requestedName = typeof payload.name === 'string' ? payload.name.trim() : '';
+    const finalName = requestedName || discogsArtist.name.trim();
+    if (!finalName) {
+      res.status(400).json({ error: 'DJ name is empty' });
+      return;
+    }
+
+    const hasAliasesInput = Object.prototype.hasOwnProperty.call(payload, 'aliases');
+    let requestedAliases: string[] = [];
+    if (hasAliasesInput) {
+      const aliasValue = payload.aliases;
+      if (aliasValue !== null && !Array.isArray(aliasValue)) {
+        res.status(400).json({ error: 'aliases must be an array or null' });
+        return;
+      }
+      requestedAliases = Array.isArray(aliasValue)
+        ? aliasValue.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+        : [];
+    }
+    const requestedBio = typeof payload.bio === 'string' ? payload.bio.trim() : '';
+    const requestedCountry = typeof payload.country === 'string' ? payload.country.trim() : '';
+    const requestedInstagram = typeof payload.instagramUrl === 'string' ? payload.instagramUrl.trim() : '';
+    const requestedSoundcloud = typeof payload.soundcloudUrl === 'string' ? payload.soundcloudUrl.trim() : '';
+    const requestedTwitter = typeof payload.twitterUrl === 'string' ? payload.twitterUrl.trim() : '';
+    const requestedSpotifyId = typeof payload.spotifyId === 'string' ? payload.spotifyId.trim() : '';
+    const requestedVerified =
+      typeof payload.isVerified === 'boolean' ? payload.isVerified : true;
+
+    const existingBySpotifyId = requestedSpotifyId
+      ? await prisma.dJ.findFirst({
+          where: { spotifyId: requestedSpotifyId },
+        })
+      : null;
+    const existingByName = existingBySpotifyId
+      ? null
+      : await prisma.dJ.findFirst({
+          where: { name: { equals: finalName, mode: 'insensitive' } },
+          orderBy: { createdAt: 'asc' },
+        });
+    const target = existingBySpotifyId ?? existingByName;
+    if (target) {
+      const allowed = await canUserEditDJ(target.id, userId, viewerRole);
+      if (!allowed) {
+        res.status(403).json({ error: '仅该 DJ 的贡献者或管理员可修改信息' });
+        return;
+      }
+    }
+
+    const derivedBio = discogsArtist.profile?.trim() || '';
+    const derivedInstagram = pickFirstUrlByHosts(discogsArtist.urls, ['instagram.com']);
+    const derivedSoundcloud = pickFirstUrlByHosts(discogsArtist.urls, ['soundcloud.com']);
+    const derivedTwitter = pickFirstUrlByHosts(discogsArtist.urls, ['twitter.com', 'x.com']);
+    const mergedAliases = hasAliasesInput
+      ? mergeAliases(finalName, requestedAliases)
+      : mergeAliases(finalName, [
+          ...(target?.aliases ?? []),
+          discogsArtist.name,
+          discogsArtist.realName,
+          ...discogsArtist.nameVariations,
+          ...discogsArtist.aliases,
+          ...discogsArtist.groups,
+        ]);
+
+    let action: 'created' | 'updated' = 'created';
+    let previousAvatarUrl: string | null = null;
+    let persisted: any;
+
+    if (target) {
+      action = 'updated';
+      previousAvatarUrl = target.avatarUrl ?? null;
+      persisted = await prisma.dJ.update({
+        where: { id: target.id },
+        data: {
+          name: target.name || finalName,
+          aliases: mergedAliases,
+          bio: requestedBio || target.bio || derivedBio || null,
+          country: requestedCountry || target.country || null,
+          spotifyId: requestedSpotifyId || target.spotifyId || null,
+          instagramUrl: requestedInstagram || target.instagramUrl || derivedInstagram || null,
+          soundcloudUrl: requestedSoundcloud || target.soundcloudUrl || derivedSoundcloud || null,
+          twitterUrl: requestedTwitter || target.twitterUrl || derivedTwitter || null,
+          isVerified: target.isVerified || requestedVerified,
+          avatarSourceUrl: discogsArtist.primaryImageUrl || target.avatarSourceUrl || null,
+          sourceDataSource: mergeDJDataSources(target.sourceDataSource, [
+            'discogs',
+            requestedSpotifyId ? 'spotify' : null,
+          ]),
+        },
+      });
+    } else {
+      const slug = await uniqueDJSlugForName(finalName);
+      persisted = await prisma.dJ.create({
+        data: {
+          name: finalName,
+          aliases: mergedAliases,
+          slug,
+          bio: requestedBio || derivedBio || null,
+          country: requestedCountry || null,
+          spotifyId: requestedSpotifyId || null,
+          instagramUrl: requestedInstagram || derivedInstagram || null,
+          soundcloudUrl: requestedSoundcloud || derivedSoundcloud || null,
+          twitterUrl: requestedTwitter || derivedTwitter || null,
+          isVerified: requestedVerified,
+          avatarSourceUrl: discogsArtist.primaryImageUrl || null,
+          avatarUrl: null,
+          sourceDataSource: mergeDJDataSources(null, [
+            'discogs',
+            requestedSpotifyId ? 'spotify' : null,
+          ]),
+        },
+      });
+    }
+
+    let avatarUploadedToOss = false;
+    let replacedExistingAvatar = false;
+    if (discogsArtist.primaryImageUrl) {
+      const uploadedAvatar = await uploadRemoteDJAvatarToOss(persisted.id, discogsArtist.primaryImageUrl);
+      if (uploadedAvatar) {
+        avatarUploadedToOss = true;
+        replacedExistingAvatar = Boolean(previousAvatarUrl && previousAvatarUrl !== uploadedAvatar.url);
+        const updated = await prisma.dJ.update({
+          where: { id: persisted.id },
+          data: {
+            avatarUrl: uploadedAvatar.url,
+            avatarSourceUrl: discogsArtist.primaryImageUrl,
+          },
+        });
+        if (previousAvatarUrl && previousAvatarUrl !== uploadedAvatar.url) {
+          await deleteSingleDJAvatarOssObjectIfOwned(previousAvatarUrl, persisted.id);
+        }
+        persisted = updated;
+      } else if (!persisted.avatarUrl) {
+        persisted = await prisma.dJ.update({
+          where: { id: persisted.id },
+          data: {
+            avatarUrl: discogsArtist.primaryImageUrl,
+            avatarSourceUrl: discogsArtist.primaryImageUrl,
+          },
+        });
+      }
+    }
+
+    await ensureDJContributor(persisted.id, userId);
+    const hydrated = await fetchDJWithContributorsById(persisted.id);
+    const mapped = mapDJ(hydrated ?? persisted, false, userId, viewerRole);
+
+    ok(res, {
+      action,
+      avatarUploadedToOss,
+      replacedExistingAvatar,
+      dj: mapped,
+    });
+  } catch (error) {
+    if (error instanceof DiscogsUpstreamError) {
+      console.error('BFF web discogs dj import upstream error:', {
+        code: error.code,
+        status: error.status,
+        message: error.message,
+      });
+      res.status(503).json({
+        error: 'Discogs 服务暂时不可用，请稍后重试',
+        errorCode: error.code,
+      });
+      return;
+    }
+    console.error('BFF web discogs dj import error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -2725,16 +3729,25 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
       updateData.name = trimmed;
     }
 
-    if (Object.prototype.hasOwnProperty.call(payload, 'aliases') || hasNameInput) {
-      const inputAliases = Array.isArray(payload.aliases)
-        ? payload.aliases
-            .map((item) => (typeof item === 'string' ? item.trim() : ''))
-            .filter(Boolean)
-        : [];
-      const aliasCandidates = [
-        ...(existing.aliases ?? []),
-        ...inputAliases,
-      ];
+    const hasAliasesInput = Object.prototype.hasOwnProperty.call(payload, 'aliases');
+    if (hasAliasesInput || hasNameInput) {
+      let aliasCandidates: string[] = [];
+
+      if (hasAliasesInput) {
+        const aliasValue = payload.aliases;
+        if (aliasValue !== null && !Array.isArray(aliasValue)) {
+          res.status(400).json({ error: 'aliases must be an array or null' });
+          return;
+        }
+        aliasCandidates = Array.isArray(aliasValue)
+          ? aliasValue
+              .map((item) => (typeof item === 'string' ? item.trim() : ''))
+              .filter(Boolean)
+          : [];
+      } else {
+        aliasCandidates = [...(existing.aliases ?? [])];
+      }
+
       if (hasNameInput && normalizeDJNameKey(existing.name) !== normalizeDJNameKey(nextName)) {
         aliasCandidates.push(existing.name);
       }
@@ -2854,6 +3867,47 @@ router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response):
     ok(res, { items: rows.map(mapEvent) });
   } catch (error) {
     console.error('BFF web dj events error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/djs/:id/rating-units', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const djId = req.params.id as string;
+    const sourceDJ = await prisma.dJ.findUnique({
+      where: { id: djId },
+      select: { id: true, name: true },
+    });
+    if (!sourceDJ) {
+      res.status(404).json({ error: 'DJ not found' });
+      return;
+    }
+
+    const normalizedDJName = normalizeTextKey(sourceDJ.name);
+    const rows = await prisma.ratingUnit.findMany({
+      orderBy: [{ createdAt: 'desc' }],
+      include: {
+        event: {
+          select: { id: true, name: true, description: true, imageUrl: true },
+        },
+        comments: {
+          select: { score: true },
+        },
+        createdBy: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+      },
+    });
+
+    const matchedRows = rows.filter((row) => {
+      const names = parseActPerformerNames(row.name).map(normalizeTextKey);
+      return names.includes(normalizedDJName);
+    });
+
+    const linkedRows = await attachLinkedDJsToRatingUnits(matchedRows as any[]);
+    ok(res, { items: linkedRows.map((row) => mapRatingUnit(row)) });
+  } catch (error) {
+    console.error('BFF web dj rating units error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -3033,10 +4087,18 @@ router.get('/dj-sets', optionalAuth, async (req: Request, res: Response): Promis
     const limit = normalizeLimit(req.query.limit, 20, 100);
     const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : 'latest';
     const djIdFilter = typeof req.query.djId === 'string' ? req.query.djId.trim() : '';
+    const eventNameFilter = typeof req.query.eventName === 'string' ? req.query.eventName.trim() : '';
 
     let sets = await djSetService.getAllDJSets();
     if (djIdFilter) {
       sets = sets.filter((set) => set.djId === djIdFilter);
+    }
+    if (eventNameFilter) {
+      const normalizedEventName = eventNameFilter.toLowerCase();
+      sets = sets.filter((set) => {
+        const currentEventName = typeof set.eventName === 'string' ? set.eventName.trim().toLowerCase() : '';
+        return currentEventName.length > 0 && currentEventName === normalizedEventName;
+      });
     }
 
     if (sortBy === 'popular') {
@@ -3856,6 +4918,73 @@ router.delete('/checkins/:id', optionalAuth, async (req: Request, res: Response)
   }
 });
 
+router.post('/rating/upload-image', optionalAuth, ratingImageUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    const formBody = req.body as Record<string, unknown>;
+    const ratingEventId = typeof formBody.ratingEventId === 'string' ? formBody.ratingEventId.trim() : '';
+    const ratingUnitId = typeof formBody.ratingUnitId === 'string' ? formBody.ratingUnitId.trim() : '';
+    const usage = typeof formBody.usage === 'string' ? formBody.usage.trim() : '';
+
+    if (ratingEventId) {
+      const event = await prisma.ratingEvent.findUnique({
+        where: { id: ratingEventId },
+        select: { id: true, createdById: true },
+      });
+      if (!event) {
+        await fs.promises.unlink(file.path).catch(() => undefined);
+        res.status(404).json({ error: 'Rating event not found' });
+        return;
+      }
+      if (authReq.user?.role !== 'admin' && event.createdById !== userId) {
+        await fs.promises.unlink(file.path).catch(() => undefined);
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
+    }
+
+    if (ratingUnitId) {
+      const unit = await prisma.ratingUnit.findUnique({
+        where: { id: ratingUnitId },
+        select: { id: true, createdById: true, eventId: true },
+      });
+      if (!unit) {
+        await fs.promises.unlink(file.path).catch(() => undefined);
+        res.status(404).json({ error: 'Rating unit not found' });
+        return;
+      }
+      if (authReq.user?.role !== 'admin' && unit.createdById !== userId) {
+        await fs.promises.unlink(file.path).catch(() => undefined);
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
+    }
+
+    const uploaded = await uploadRatingMediaToOss(
+      file,
+      {
+        userId,
+        ratingEventId: ratingEventId || null,
+        ratingUnitId: ratingUnitId || null,
+      },
+      usage || null
+    );
+    ok(res, uploaded);
+  } catch (error) {
+    console.error('BFF web upload rating image error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/rating-events', optionalAuth, async (_req: Request, res: Response): Promise<void> => {
   try {
     const rows = await prisma.ratingEvent.findMany({
@@ -3878,7 +5007,15 @@ router.get('/rating-events', optionalAuth, async (_req: Request, res: Response):
       },
     });
 
-    ok(res, { items: rows.map(mapRatingEvent) });
+    const rowsWithLinkedDJs = await Promise.all(
+      rows.map(async (row) => ({
+        ...row,
+        sourceEventId: await resolveSourceEventIdForRatingEvent(row),
+        units: await attachLinkedDJsToRatingUnits(row.units as any[]),
+      }))
+    );
+
+    ok(res, { items: rowsWithLinkedDJs.map(mapRatingEvent) });
   } catch (error) {
     console.error('BFF web rating events error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -3913,7 +5050,9 @@ router.get('/rating-events/:id', optionalAuth, async (req: Request, res: Respons
       return;
     }
 
-    ok(res, mapRatingEvent(row));
+    const linkedUnits = await attachLinkedDJsToRatingUnits(row.units as any[]);
+    const sourceEventId = await resolveSourceEventIdForRatingEvent({ ...row, units: linkedUnits });
+    ok(res, mapRatingEvent({ ...row, sourceEventId, units: linkedUnits }));
   } catch (error) {
     console.error('BFF web rating event detail error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -3964,6 +5103,177 @@ router.post('/rating-events', optionalAuth, async (req: Request, res: Response):
   }
 });
 
+router.post('/rating-events/from-event', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const body = req.body as Record<string, unknown>;
+    const sourceEventId = typeof body.eventId === 'string' ? body.eventId.trim() : '';
+    if (!sourceEventId) {
+      res.status(400).json({ error: 'eventId is required' });
+      return;
+    }
+
+    const sourceEvent = await prisma.event.findUnique({
+      where: { id: sourceEventId },
+      include: {
+        lineupSlots: {
+          orderBy: [{ startTime: 'asc' }, { sortOrder: 'asc' }],
+          include: {
+            dj: {
+              select: { id: true, name: true, avatarUrl: true },
+            },
+          },
+        },
+      },
+    });
+    if (!sourceEvent) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+
+    const createdEvent = await prisma.ratingEvent.create({
+      data: {
+        createdById: userId,
+        name: sourceEvent.name,
+        description: sourceEvent.description ?? null,
+        imageUrl: null,
+      },
+      select: { id: true },
+    });
+
+    let nextEventImageUrl: string | null = null;
+    if (sourceEvent.coverImageUrl) {
+      const uploadedCover = await uploadRemoteImageToRatingOss(
+        {
+          userId,
+          ratingEventId: createdEvent.id,
+        },
+        sourceEvent.coverImageUrl,
+        'event-cover'
+      );
+      if (uploadedCover?.url) {
+        nextEventImageUrl = uploadedCover.url;
+      }
+    }
+
+    const performerNamesToResolve = new Set<string>();
+    const lineupActNamesBySlot = new Map<string, string[]>();
+    for (const slot of sourceEvent.lineupSlots) {
+      const names = parseActPerformerNames(slot.djName);
+      lineupActNamesBySlot.set(slot.id, names);
+      const firstName = names[0];
+      if (firstName) {
+        performerNamesToResolve.add(firstName.toLowerCase());
+      }
+    }
+
+    const nameCandidates = Array.from(performerNamesToResolve);
+    const allDJs = nameCandidates.length
+      ? await prisma.dJ.findMany({
+          where: {
+            OR: nameCandidates.map((name) => ({
+              name: {
+                equals: name,
+                mode: 'insensitive',
+              },
+            })),
+          },
+          select: { id: true, name: true, avatarUrl: true },
+        })
+      : [];
+    const djByNormalizedName = new Map<string, { id: string; name: string; avatarUrl: string | null }>();
+    for (const dj of allDJs) {
+      djByNormalizedName.set(dj.name.trim().toLowerCase(), dj);
+    }
+
+    for (const slot of sourceEvent.lineupSlots) {
+      const performerNames = lineupActNamesBySlot.get(slot.id) || [];
+      const firstPerformerName = performerNames[0]?.trim() || slot.djName;
+      const fallbackLineupDJ = slot.dj;
+      const matchedFirstDJ =
+        (firstPerformerName
+          ? djByNormalizedName.get(firstPerformerName.toLowerCase()) || null
+          : null) || fallbackLineupDJ;
+
+      let unitImageUrl: string | null = null;
+      const sourceAvatarUrl = matchedFirstDJ?.avatarUrl || null;
+
+      const createdUnit = await prisma.ratingUnit.create({
+        data: {
+          eventId: createdEvent.id,
+          createdById: userId,
+          name: slot.djName,
+          description: buildRatingUnitDescriptionFromLineupSlot(slot),
+          imageUrl: null,
+        },
+        select: { id: true },
+      });
+
+      if (sourceAvatarUrl) {
+        const uploadedAvatar = await uploadRemoteImageToRatingOss(
+          {
+            userId,
+            ratingEventId: createdEvent.id,
+            ratingUnitId: createdUnit.id,
+          },
+          sourceAvatarUrl,
+          'unit-cover'
+        );
+        if (uploadedAvatar?.url) {
+          unitImageUrl = uploadedAvatar.url;
+        }
+      }
+
+      if (unitImageUrl) {
+        await prisma.ratingUnit.update({
+          where: { id: createdUnit.id },
+          data: { imageUrl: unitImageUrl },
+        });
+      }
+    }
+
+    await prisma.ratingEvent.update({
+      where: { id: createdEvent.id },
+      data: {
+        imageUrl: nextEventImageUrl,
+      },
+    });
+
+    const created = await prisma.ratingEvent.findUnique({
+      where: { id: createdEvent.id },
+      include: {
+        createdBy: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+        units: {
+          orderBy: [{ createdAt: 'asc' }],
+          include: {
+            comments: {
+              select: { score: true },
+            },
+            createdBy: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!created) {
+      res.status(500).json({ error: 'Failed to create rating event' });
+      return;
+    }
+
+    const linkedUnits = await attachLinkedDJsToRatingUnits(created.units as any[]);
+    ok(res, mapRatingEvent({ ...created, sourceEventId, units: linkedUnits }));
+  } catch (error) {
+    console.error('BFF web create rating event from event error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/rating-events/:id/units', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = requireAuth(req as BFFAuthRequest, res);
@@ -4004,7 +5314,8 @@ router.post('/rating-events/:id/units', optionalAuth, async (req: Request, res: 
       },
     });
 
-    ok(res, mapRatingUnit(created));
+    const linkedRows = await attachLinkedDJsToRatingUnits([created as any]);
+    ok(res, mapRatingUnit(linkedRows[0]));
   } catch (error) {
     console.error('BFF web create rating unit error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -4020,7 +5331,7 @@ router.patch('/rating-events/:id', optionalAuth, async (req: Request, res: Respo
     const eventId = req.params.id as string;
     const existing = await prisma.ratingEvent.findUnique({
       where: { id: eventId },
-      select: { id: true, createdById: true },
+      select: { id: true, createdById: true, imageUrl: true },
     });
     if (!existing) {
       res.status(404).json({ error: 'Rating event not found' });
@@ -4032,12 +5343,13 @@ router.patch('/rating-events/:id', optionalAuth, async (req: Request, res: Respo
     }
 
     const body = req.body as Record<string, unknown>;
+    const nextImageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : undefined;
     const updated = await prisma.ratingEvent.update({
       where: { id: eventId },
       data: {
         name: typeof body.name === 'string' ? body.name.trim() : undefined,
         description: typeof body.description === 'string' ? body.description.trim() || null : undefined,
-        imageUrl: typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : undefined,
+        imageUrl: nextImageUrl,
       },
       include: {
         createdBy: {
@@ -4057,7 +5369,12 @@ router.patch('/rating-events/:id', optionalAuth, async (req: Request, res: Respo
       },
     });
 
-    ok(res, mapRatingEvent(updated));
+    if (nextImageUrl !== undefined && nextImageUrl !== existing.imageUrl) {
+      await deleteSingleRatingOssObjectIfOwned(existing.imageUrl);
+    }
+
+    const linkedUnits = await attachLinkedDJsToRatingUnits(updated.units as any[]);
+    ok(res, mapRatingEvent({ ...updated, units: linkedUnits }));
   } catch (error) {
     console.error('BFF web update rating event error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -4073,7 +5390,14 @@ router.delete('/rating-events/:id', optionalAuth, async (req: Request, res: Resp
     const eventId = req.params.id as string;
     const existing = await prisma.ratingEvent.findUnique({
       where: { id: eventId },
-      select: { id: true, createdById: true },
+      select: {
+        id: true,
+        createdById: true,
+        imageUrl: true,
+        units: {
+          select: { id: true, imageUrl: true },
+        },
+      },
     });
     if (!existing) {
       res.status(404).json({ error: 'Rating event not found' });
@@ -4085,6 +5409,10 @@ router.delete('/rating-events/:id', optionalAuth, async (req: Request, res: Resp
     }
 
     await prisma.ratingEvent.delete({ where: { id: eventId } });
+    await deleteSingleRatingOssObjectIfOwned(existing.imageUrl);
+    for (const unit of existing.units) {
+      await deleteSingleRatingOssObjectIfOwned(unit.imageUrl);
+    }
     ok(res, { success: true });
   } catch (error) {
     console.error('BFF web delete rating event error:', error);
@@ -4120,8 +5448,9 @@ router.get('/rating-units/:id', optionalAuth, async (req: Request, res: Response
       return;
     }
 
+    const linkedRows = await attachLinkedDJsToRatingUnits([row as any]);
     ok(res, {
-      ...mapRatingUnit(row, true),
+      ...mapRatingUnit(linkedRows[0], true),
       event: row.event,
     });
   } catch (error) {
@@ -4139,7 +5468,7 @@ router.patch('/rating-units/:id', optionalAuth, async (req: Request, res: Respon
     const unitId = req.params.id as string;
     const existing = await prisma.ratingUnit.findUnique({
       where: { id: unitId },
-      select: { id: true, createdById: true },
+      select: { id: true, createdById: true, imageUrl: true },
     });
     if (!existing) {
       res.status(404).json({ error: 'Rating unit not found' });
@@ -4151,12 +5480,13 @@ router.patch('/rating-units/:id', optionalAuth, async (req: Request, res: Respon
     }
 
     const body = req.body as Record<string, unknown>;
+    const nextImageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : undefined;
     const updated = await prisma.ratingUnit.update({
       where: { id: unitId },
       data: {
         name: typeof body.name === 'string' ? body.name.trim() : undefined,
         description: typeof body.description === 'string' ? body.description.trim() || null : undefined,
-        imageUrl: typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : undefined,
+        imageUrl: nextImageUrl,
       },
       include: {
         comments: {
@@ -4168,7 +5498,12 @@ router.patch('/rating-units/:id', optionalAuth, async (req: Request, res: Respon
       },
     });
 
-    ok(res, mapRatingUnit(updated));
+    if (nextImageUrl !== undefined && nextImageUrl !== existing.imageUrl) {
+      await deleteSingleRatingOssObjectIfOwned(existing.imageUrl);
+    }
+
+    const linkedRows = await attachLinkedDJsToRatingUnits([updated as any]);
+    ok(res, mapRatingUnit(linkedRows[0]));
   } catch (error) {
     console.error('BFF web update rating unit error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -4184,7 +5519,7 @@ router.delete('/rating-units/:id', optionalAuth, async (req: Request, res: Respo
     const unitId = req.params.id as string;
     const existing = await prisma.ratingUnit.findUnique({
       where: { id: unitId },
-      select: { id: true, createdById: true },
+      select: { id: true, createdById: true, imageUrl: true },
     });
     if (!existing) {
       res.status(404).json({ error: 'Rating unit not found' });
@@ -4196,6 +5531,7 @@ router.delete('/rating-units/:id', optionalAuth, async (req: Request, res: Respo
     }
 
     await prisma.ratingUnit.delete({ where: { id: unitId } });
+    await deleteSingleRatingOssObjectIfOwned(existing.imageUrl);
     ok(res, { success: true });
   } catch (error) {
     console.error('BFF web delete rating unit error:', error);
@@ -4295,6 +5631,191 @@ router.get('/learn/genres', (_req: Request, res: Response): void => {
   ];
 
   ok(res, genreTree);
+});
+
+router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const viewerId = authReq.user?.userId ?? null;
+    const viewerRole = authReq.user?.role ?? null;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
+
+    const rows = await prisma.wikiFestival.findMany({
+      where: { isActive: true },
+      orderBy: [{ name: 'asc' }],
+      include: {
+        contributors: {
+          include: {
+            user: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true },
+            },
+          },
+        },
+      },
+    });
+
+    const filteredRows = !search
+      ? rows
+      : rows.filter((row) => {
+          const pool = [
+            row.name,
+            ...(Array.isArray(row.aliases) ? row.aliases : []),
+            row.country,
+            row.city,
+            row.tagline,
+            row.introduction,
+          ]
+            .join(' ')
+            .toLowerCase();
+          return pool.includes(search);
+        });
+
+    ok(res, { items: filteredRows.map((row) => mapWikiFestival(row, viewerId, viewerRole)) });
+  } catch (error) {
+    console.error('BFF web learn festivals error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/learn/festivals/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    const festivalId = req.params.id as string;
+    const existing = await prisma.wikiFestival.findUnique({
+      where: { id: festivalId },
+      include: {
+        contributors: {
+          select: { userId: true },
+        },
+      },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Festival not found' });
+      return;
+    }
+
+    const isContributor = existing.contributors.some((item) => item.userId === userId);
+    const canEdit = viewerRole === 'admin' || isContributor;
+    if (!canEdit) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const updateData: Prisma.WikiFestivalUpdateInput = {};
+
+    if (Object.prototype.hasOwnProperty.call(body, 'name')) {
+      const name = normalizeWikiFestivalText(body.name);
+      if (!name) {
+        res.status(400).json({ error: 'name is required' });
+        return;
+      }
+      updateData.name = name;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'aliases')) {
+      updateData.aliases = parseWikiFestivalAliases(body.aliases);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'country')) {
+      updateData.country = normalizeWikiFestivalText(body.country);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'city')) {
+      updateData.city = normalizeWikiFestivalText(body.city);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'foundedYear')) {
+      updateData.foundedYear = normalizeWikiFestivalText(body.foundedYear);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'frequency')) {
+      updateData.frequency = normalizeWikiFestivalText(body.frequency);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'tagline')) {
+      updateData.tagline = normalizeWikiFestivalText(body.tagline);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'introduction')) {
+      updateData.introduction = normalizeWikiFestivalText(body.introduction);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'avatarUrl')) {
+      if (body.avatarUrl === null) {
+        updateData.avatarUrl = null;
+      } else {
+        const avatarUrl = normalizeWikiFestivalText(body.avatarUrl);
+        updateData.avatarUrl = avatarUrl.length > 0 ? avatarUrl : null;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'backgroundUrl')) {
+      if (body.backgroundUrl === null) {
+        updateData.backgroundUrl = null;
+      } else {
+        const backgroundUrl = normalizeWikiFestivalText(body.backgroundUrl);
+        updateData.backgroundUrl = backgroundUrl.length > 0 ? backgroundUrl : null;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'links')) {
+      updateData.links = parseWikiFestivalLinks(body.links) as unknown as Prisma.InputJsonValue;
+    }
+
+    const hasUpdateFields = Object.keys(updateData).length > 0;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (hasUpdateFields) {
+        await tx.wikiFestival.update({
+          where: { id: festivalId },
+          data: updateData,
+        });
+      }
+
+      await tx.wikiFestivalContributor.upsert({
+        where: {
+          festivalId_userId: {
+            festivalId,
+            userId,
+          },
+        },
+        create: {
+          festivalId,
+          userId,
+        },
+        update: {},
+      });
+
+      return tx.wikiFestival.findUnique({
+        where: { id: festivalId },
+        include: {
+          contributors: {
+            include: {
+              user: {
+                select: { id: true, username: true, displayName: true, avatarUrl: true },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    if (!updated) {
+      res.status(404).json({ error: 'Festival not found' });
+      return;
+    }
+
+    ok(res, mapWikiFestival(updated, userId, viewerRole));
+  } catch (error) {
+    console.error('BFF web update learn festival error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 type LearnLabelSortBy = 'soundcloudFollowers' | 'likes' | 'name' | 'nation' | 'latestRelease' | 'createdAt';

@@ -30,6 +30,7 @@ actor MockWebFeatureService: WebFeatureService {
     private var commentsBySetID: [String: [WebSetComment]]
     private var checkins: [WebCheckin]
     private var ratingEvents: [WebRatingEvent]
+    private var learnFestivals: [WebLearnFestival]
 
     init() {
         let now = Date()
@@ -365,6 +366,49 @@ actor MockWebFeatureService: WebFeatureService {
                 ]
             )
         ]
+
+        learnFestivals = [
+            WebLearnFestival(
+                id: "tomorrowland",
+                name: "Tomorrowland",
+                aliases: ["明日世界", "TL"],
+                country: "比利时",
+                city: "Boom",
+                foundedYear: "2005",
+                frequency: "每年 7 月",
+                tagline: "全球最具辨识度的沉浸式 EDM 电音节之一。",
+                introduction: "Tomorrowland 以大型主舞台叙事、超高制作和多舞台联动著称。",
+                avatarUrl: "https://logo.clearbit.com/tomorrowland.com",
+                backgroundUrl: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=1800&q=80",
+                links: [
+                    LearnFestivalLinkPayload(title: "官网", icon: "globe", url: "https://www.tomorrowland.com")
+                ],
+                contributors: [currentUser],
+                canEdit: true,
+                createdAt: now,
+                updatedAt: now
+            ),
+            WebLearnFestival(
+                id: "edc",
+                name: "Electric Daisy Carnival",
+                aliases: ["EDC", "EDC Las Vegas"],
+                country: "美国",
+                city: "Las Vegas",
+                foundedYear: "1997",
+                frequency: "每年 5 月",
+                tagline: "Insomniac 旗下头部 IP。",
+                introduction: "EDC 在北美和全球拥有多站点，核心站点为 EDC Las Vegas。",
+                avatarUrl: "https://logo.clearbit.com/electricdaisycarnival.com",
+                backgroundUrl: "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1800&q=80",
+                links: [
+                    LearnFestivalLinkPayload(title: "官网", icon: "globe", url: "https://lasvegas.electricdaisycarnival.com/")
+                ],
+                contributors: [currentUser],
+                canEdit: true,
+                createdAt: now,
+                updatedAt: now
+            )
+        ]
     }
 
     func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage {
@@ -504,6 +548,35 @@ actor MockWebFeatureService: WebFeatureService {
         return UploadMediaResponse(url: "/uploads/events/mock-\(fileName)", fileName: fileName, mimeType: mimeType, size: 1)
     }
 
+    func uploadRatingImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        ratingEventID: String?,
+        ratingUnitID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse {
+        _ = imageData
+        _ = usage
+        if let ratingUnitID, !ratingUnitID.isEmpty {
+            return UploadMediaResponse(
+                url: "/uploads/ratings/units/\(ratingUnitID)/mock-\(fileName)",
+                fileName: fileName,
+                mimeType: mimeType,
+                size: 1
+            )
+        }
+        if let ratingEventID, !ratingEventID.isEmpty {
+            return UploadMediaResponse(
+                url: "/uploads/ratings/events/\(ratingEventID)/mock-\(fileName)",
+                fileName: fileName,
+                mimeType: mimeType,
+                size: 1
+            )
+        }
+        return UploadMediaResponse(url: "/uploads/ratings/mock-\(fileName)", fileName: fileName, mimeType: mimeType, size: 1)
+    }
+
     func importEventLineupFromImage(
         imageData: Data,
         fileName: String,
@@ -554,6 +627,26 @@ actor MockWebFeatureService: WebFeatureService {
         _ = videoData
         let normalizedName = fileName.isEmpty ? "video-\(UUID().uuidString).mp4" : fileName
         return UploadMediaResponse(url: "/uploads/feed/mock-\(normalizedName)", fileName: normalizedName, mimeType: mimeType, size: 1)
+    }
+
+    func uploadWikiBrandImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        brandID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse {
+        _ = imageData
+        let safeBrand = brandID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let safeUsage = usage?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedBrand = (safeBrand?.isEmpty == false) ? (safeBrand ?? "unknown-brand") : "unknown-brand"
+        let resolvedUsage = (safeUsage?.isEmpty == false) ? (safeUsage ?? "image") : "image"
+        return UploadMediaResponse(
+            url: "/uploads/wiki/brands/\(resolvedBrand)/\(resolvedUsage)-mock-\(fileName)",
+            fileName: fileName,
+            mimeType: mimeType,
+            size: 1
+        )
     }
 
     func uploadDJImage(
@@ -661,6 +754,65 @@ actor MockWebFeatureService: WebFeatureService {
         }
     }
 
+    func searchDiscogsDJs(query: String, limit: Int) async throws -> [DiscogsDJCandidate] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let normalized = trimmed.lowercased()
+        let maxCount = max(1, min(20, limit))
+
+        let matched = djs.filter { $0.name.lowercased().contains(normalized) }
+        if matched.isEmpty {
+            return [
+                DiscogsDJCandidate(
+                    artistId: Int.random(in: 10_000...99_999),
+                    name: trimmed,
+                    thumbUrl: nil,
+                    coverImageUrl: nil,
+                    resourceUrl: nil,
+                    uri: nil,
+                    existingDJId: nil,
+                    existingDJName: nil,
+                    existingMatchType: nil
+                )
+            ]
+        }
+
+        return Array(matched.prefix(maxCount)).enumerated().map { index, dj in
+            DiscogsDJCandidate(
+                artistId: 50_000 + index,
+                name: dj.name,
+                thumbUrl: dj.avatarUrl,
+                coverImageUrl: dj.bannerUrl ?? dj.avatarUrl,
+                resourceUrl: "https://api.discogs.com/artists/\(50_000 + index)",
+                uri: "https://www.discogs.com/artist/\(50_000 + index)",
+                existingDJId: dj.id,
+                existingDJName: dj.name,
+                existingMatchType: "name_case_insensitive"
+            )
+        }
+    }
+
+    func fetchDiscogsDJArtist(id: Int) async throws -> DiscogsDJArtistDetail {
+        let fallbackName = djs.first?.name ?? "Discogs Artist \(id)"
+        return DiscogsDJArtistDetail(
+            artistId: id,
+            name: fallbackName,
+            realName: nil,
+            profile: "Discogs imported artist profile.",
+            urls: [],
+            nameVariations: [],
+            aliases: [],
+            groups: [],
+            primaryImageUrl: nil,
+            thumbnailImageUrl: nil,
+            resourceUrl: "https://api.discogs.com/artists/\(id)",
+            uri: "https://www.discogs.com/artist/\(id)",
+            existingDJId: nil,
+            existingDJName: nil,
+            existingMatchType: nil
+        )
+    }
+
     func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportSpotifyDJResponse {
         let spotifyId = input.spotifyId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !spotifyId.isEmpty else {
@@ -722,6 +874,77 @@ actor MockWebFeatureService: WebFeatureService {
         )
         djs.insert(created, at: 0)
         return ImportSpotifyDJResponse(
+            action: "created",
+            avatarUploadedToOss: false,
+            replacedExistingAvatar: false,
+            dj: created
+        )
+    }
+
+    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDiscogsDJResponse {
+        let discogsArtistId = input.discogsArtistId
+        guard discogsArtistId > 0 else {
+            throw ServiceError.message("discogsArtistId 不能为空")
+        }
+
+        let finalName = (input.name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            ? input.name!.trimmingCharacters(in: .whitespacesAndNewlines)
+            : "Discogs Artist \(discogsArtistId)"
+        let normalizedName = finalName.lowercased()
+        let spotifyId = normalizedOptional(input.spotifyId)
+
+        let existingBySpotify = spotifyId.flatMap { value in
+            djs.firstIndex(where: { ($0.spotifyId ?? "").caseInsensitiveCompare(value) == .orderedSame })
+        }
+        let existingByName = djs.firstIndex { $0.name.lowercased() == normalizedName }
+        let targetIndex = existingBySpotify ?? existingByName
+
+        let aliases = input.aliases?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty } ?? []
+        let bio = normalizedOptional(input.bio)
+
+        if let index = targetIndex {
+            var updated = djs[index]
+            updated.name = updated.name.isEmpty ? finalName : updated.name
+            updated.spotifyId = spotifyId ?? updated.spotifyId
+            updated.aliases = Array(Set((updated.aliases ?? []) + aliases)).sorted()
+            updated.bio = bio ?? updated.bio
+            updated.country = normalizedOptional(input.country) ?? updated.country
+            updated.instagramUrl = normalizedOptional(input.instagramUrl) ?? updated.instagramUrl
+            updated.soundcloudUrl = normalizedOptional(input.soundcloudUrl) ?? updated.soundcloudUrl
+            updated.twitterUrl = normalizedOptional(input.twitterUrl) ?? updated.twitterUrl
+            updated.isVerified = input.isVerified ?? updated.isVerified ?? true
+            updated.updatedAt = Date()
+            djs[index] = updated
+            return ImportDiscogsDJResponse(
+                action: "updated",
+                avatarUploadedToOss: false,
+                replacedExistingAvatar: false,
+                dj: updated
+            )
+        }
+
+        let created = WebDJ(
+            id: "dj_\(UUID().uuidString)",
+            name: finalName,
+            aliases: aliases,
+            slug: slugify(finalName),
+            bio: bio,
+            avatarUrl: nil,
+            bannerUrl: nil,
+            country: normalizedOptional(input.country),
+            spotifyId: spotifyId,
+            appleMusicId: nil,
+            soundcloudUrl: normalizedOptional(input.soundcloudUrl),
+            instagramUrl: normalizedOptional(input.instagramUrl),
+            twitterUrl: normalizedOptional(input.twitterUrl),
+            isVerified: input.isVerified ?? true,
+            followerCount: 0,
+            createdAt: Date(),
+            updatedAt: Date(),
+            isFollowing: false
+        )
+        djs.insert(created, at: 0)
+        return ImportDiscogsDJResponse(
             action: "created",
             avatarUploadedToOss: false,
             replacedExistingAvatar: false,
@@ -904,6 +1127,17 @@ actor MockWebFeatureService: WebFeatureService {
                 totalPages: max(1, Int(ceil(Double(filtered.count) / Double(normalizedLimit))))
             )
         )
+    }
+
+    func fetchEventDJSets(eventName: String) async throws -> [WebDJSet] {
+        let normalized = eventName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return [] }
+        return sets
+            .filter { set in
+                let value = (set.eventName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                return !value.isEmpty && value == normalized
+            }
+            .sorted(by: { $0.createdAt > $1.createdAt })
     }
 
     func fetchDJSet(id: String) async throws -> WebDJSet {
@@ -1349,6 +1583,35 @@ actor MockWebFeatureService: WebFeatureService {
             .sorted(by: { $0.createdAt > $1.createdAt })
             .map { event in
                 var normalized = event
+                normalized.sourceEventId = normalized.sourceEventId ?? inferSourceEventID(for: event)
+                normalized.units = event.units.map(normalizeRatingUnit)
+                return normalized
+            }
+    }
+
+    func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent] {
+        guard let sourceEvent = events.first(where: { $0.id == eventID }) else {
+            throw ServiceError.message("活动不存在")
+        }
+
+        let sourceActNames = Set(
+            sourceEvent.lineupSlots.map { normalizedActName($0.djName) }
+        )
+
+        return ratingEvents
+            .filter { ratingEvent in
+                if ratingEvent.name.compare(sourceEvent.name, options: .caseInsensitive) != .orderedSame {
+                    return false
+                }
+                if sourceActNames.isEmpty { return true }
+                return ratingEvent.units.contains(where: { unit in
+                    sourceActNames.contains(normalizedActName(unit.name))
+                })
+            }
+            .sorted(by: { $0.createdAt > $1.createdAt })
+            .map { event in
+                var normalized = event
+                normalized.sourceEventId = sourceEvent.id
                 normalized.units = event.units.map(normalizeRatingUnit)
                 return normalized
             }
@@ -1359,8 +1622,36 @@ actor MockWebFeatureService: WebFeatureService {
             throw ServiceError.message("打分事件不存在")
         }
         var normalized = event
+        normalized.sourceEventId = normalized.sourceEventId ?? inferSourceEventID(for: event)
         normalized.units = event.units.map(normalizeRatingUnit)
         return normalized
+    }
+
+    func fetchDJRatingUnits(djID: String) async throws -> [WebRatingUnit] {
+        guard let sourceDJ = djs.first(where: { $0.id == djID }) else {
+            throw ServiceError.message("DJ 不存在")
+        }
+        let normalizedName = sourceDJ.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        return ratingEvents
+            .flatMap { event in
+                event.units.compactMap { unit in
+                    let performerNames = parseDJActNames(from: unit.name)
+                    let contains = performerNames.contains { performer in
+                        performer.lowercased() == normalizedName
+                    }
+                    guard contains else { return nil }
+                    var normalized = normalizeRatingUnit(unit)
+                    normalized.event = WebRatingUnitEventLite(
+                        id: event.id,
+                        name: event.name,
+                        description: event.description,
+                        imageUrl: event.imageUrl
+                    )
+                    return normalized
+                }
+            }
+            .sorted(by: { $0.createdAt > $1.createdAt })
     }
 
     func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent {
@@ -1379,6 +1670,61 @@ actor MockWebFeatureService: WebFeatureService {
             updatedAt: now,
             createdBy: currentUser,
             units: []
+        )
+        ratingEvents.insert(created, at: 0)
+        return created
+    }
+
+    func createRatingEventFromEvent(eventID: String) async throws -> WebRatingEvent {
+        guard let sourceEvent = events.first(where: { $0.id == eventID }) else {
+            throw ServiceError.message("活动不存在")
+        }
+
+        let now = Date()
+        let ratingEventID = "rating_event_\(UUID().uuidString)"
+        let baseUnitTimeFormatter = DateFormatter()
+        baseUnitTimeFormatter.dateFormat = "MM-dd HH:mm"
+        baseUnitTimeFormatter.locale = Locale(identifier: "en_US_POSIX")
+
+        let units = sourceEvent.lineupSlots
+            .sorted(by: { $0.startTime < $1.startTime })
+            .enumerated()
+            .map { index, slot in
+                let firstPerformerName = parseDJActNames(from: slot.djName).first ?? slot.djName
+                let firstDJ = djs.first(where: { $0.name.compare(firstPerformerName, options: .caseInsensitive) == .orderedSame })
+                    ?? slot.dj.flatMap { embedded in
+                        djs.first(where: { $0.id == embedded.id })
+                    }
+
+                return WebRatingUnit(
+                    id: "rating_unit_\(UUID().uuidString)",
+                    eventId: ratingEventID,
+                    name: slot.djName,
+                    description: ratingUnitDescription(
+                        slot: slot,
+                        formatter: baseUnitTimeFormatter
+                    ),
+                    imageUrl: firstDJ?.avatarUrl ?? slot.dj?.avatarUrl,
+                    createdAt: now.addingTimeInterval(Double(index)),
+                    updatedAt: now.addingTimeInterval(Double(index)),
+                    rating: 0,
+                    ratingCount: 0,
+                    comments: [],
+                    event: nil,
+                    createdBy: currentUser
+                )
+            }
+
+        let created = WebRatingEvent(
+            id: ratingEventID,
+            name: sourceEvent.name,
+            description: sourceEvent.description,
+            imageUrl: sourceEvent.coverImageUrl,
+            sourceEventId: sourceEvent.id,
+            createdAt: now,
+            updatedAt: now,
+            createdBy: currentUser,
+            units: units
         )
         ratingEvents.insert(created, at: 0)
         return created
@@ -1709,6 +2055,77 @@ actor MockWebFeatureService: WebFeatureService {
         return LearnLabelListPage(items: items, pagination: pagination)
     }
 
+    func fetchLearnFestivals(search: String?) async throws -> [WebLearnFestival] {
+        let keyword = search?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        guard !keyword.isEmpty else {
+            return learnFestivals
+        }
+        return learnFestivals.filter { festival in
+            [
+                festival.name,
+                festival.aliases.joined(separator: " "),
+                festival.country,
+                festival.city,
+                festival.tagline,
+                festival.introduction
+            ]
+            .joined(separator: " ")
+            .lowercased()
+            .contains(keyword)
+        }
+    }
+
+    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival {
+        guard let index = learnFestivals.firstIndex(where: { $0.id == id }) else {
+            throw ServiceError.message("电音节不存在")
+        }
+
+        var festival = learnFestivals[index]
+        if let name = input.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            festival.name = name
+        }
+        if let aliases = input.aliases {
+            festival.aliases = aliases.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        }
+        if let country = input.country {
+            festival.country = country.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let city = input.city {
+            festival.city = city.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let foundedYear = input.foundedYear {
+            festival.foundedYear = foundedYear.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let frequency = input.frequency {
+            festival.frequency = frequency.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let tagline = input.tagline {
+            festival.tagline = tagline.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let introduction = input.introduction {
+            festival.introduction = introduction.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let avatarUrl = input.avatarUrl {
+            let trimmed = avatarUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            festival.avatarUrl = trimmed.isEmpty ? nil : trimmed
+        }
+        if let backgroundUrl = input.backgroundUrl {
+            let trimmed = backgroundUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            festival.backgroundUrl = trimmed.isEmpty ? nil : trimmed
+        }
+        if let links = input.links {
+            festival.links = links
+        }
+
+        festival.updatedAt = Date()
+        festival.canEdit = true
+        if !festival.contributors.contains(where: { $0.id == currentUser.id }) {
+            festival.contributors.append(currentUser)
+        }
+        learnFestivals[index] = festival
+        return festival
+    }
+
     func fetchRankingBoards() async throws -> [RankingBoard] {
         [
             RankingBoard(
@@ -1921,6 +2338,73 @@ actor MockWebFeatureService: WebFeatureService {
         normalized.ratingCount = scores.count
         normalized.rating = scores.reduce(0, +) / Double(scores.count)
         return normalized
+    }
+
+    private func parseDJActNames(from rawName: String) -> [String] {
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let separated = trimmed
+            .replacingOccurrences(
+                of: "\\s*[bB]\\s*[23]\\s*[bB]\\s*",
+                with: "|",
+                options: .regularExpression
+            )
+            .split(separator: "|")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return separated.isEmpty ? [trimmed] : separated
+    }
+
+    private func normalizedActName(_ name: String) -> String {
+        name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    private func inferSourceEventID(for ratingEvent: WebRatingEvent) -> String? {
+        let trimmedName = ratingEvent.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return nil }
+
+        let candidates = events.filter {
+            $0.name.compare(trimmedName, options: .caseInsensitive) == .orderedSame
+        }
+        guard !candidates.isEmpty else { return nil }
+
+        let ratingUnitNames = Set(ratingEvent.units.map { normalizedActName($0.name) }.filter { !$0.isEmpty })
+        if ratingUnitNames.isEmpty {
+            return candidates.first?.id
+        }
+
+        var bestEventID: String?
+        var bestScore = 0
+        for candidate in candidates {
+            let lineupNames = Set(candidate.lineupSlots.map { normalizedActName($0.djName) }.filter { !$0.isEmpty })
+            let score = ratingUnitNames.reduce(into: 0) { partial, name in
+                if lineupNames.contains(name) {
+                    partial += 1
+                }
+            }
+            if score > bestScore {
+                bestScore = score
+                bestEventID = candidate.id
+            }
+        }
+
+        if let bestEventID {
+            return bestEventID
+        }
+        return candidates.count == 1 ? candidates[0].id : nil
+    }
+
+    private func ratingUnitDescription(slot: WebEventLineupSlot, formatter: DateFormatter) -> String? {
+        let stage = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasStage = stage?.isEmpty == false
+        let timeText = "\(formatter.string(from: slot.startTime)) - \(formatter.string(from: slot.endTime))"
+
+        if hasStage, let stage {
+            return "\(stage) · \(timeText)"
+        }
+        return timeText
     }
 
     private func parseVideo(_ url: String) -> (platform: String, videoId: String) {

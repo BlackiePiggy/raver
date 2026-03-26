@@ -3,6 +3,7 @@ import PhotosUI
 import AVKit
 import AVFoundation
 import UIKit
+import Photos
 import CoreImage.CIFilterBuiltins
 
 private enum EventCalendarViewFilter: String, CaseIterable, Hashable, Identifiable {
@@ -585,7 +586,7 @@ struct EventsModuleView: View {
                     if !ongoingEvents.isEmpty {
                         sectionHeader("正在进行")
                         ForEach(ongoingEvents) { event in
-                            ZStack(alignment: .topTrailing) {
+                            ZStack(alignment: .bottomTrailing) {
                                 Button {
                                     selectedEventForDetail = event
                                 } label: {
@@ -594,7 +595,7 @@ struct EventsModuleView: View {
                                 .buttonStyle(.plain)
 
                                 eventActionButtons(event)
-                                    .padding(.top, 10)
+                                    .padding(.bottom, 10)
                                     .padding(.trailing, 10)
                             }
                         }
@@ -603,7 +604,7 @@ struct EventsModuleView: View {
                     if !events.isEmpty {
                         sectionHeader("即将开始")
                         ForEach(events) { event in
-                            ZStack(alignment: .topTrailing) {
+                            ZStack(alignment: .bottomTrailing) {
                                 Button {
                                     selectedEventForDetail = event
                                 } label: {
@@ -612,7 +613,7 @@ struct EventsModuleView: View {
                                 .buttonStyle(.plain)
 
                                 eventActionButtons(event)
-                                    .padding(.top, 10)
+                                    .padding(.bottom, 10)
                                     .padding(.trailing, 10)
                             }
                         }
@@ -631,7 +632,7 @@ struct EventsModuleView: View {
                     if !endedEvents.isEmpty {
                         sectionHeader("已结束活动")
                         ForEach(endedEvents) { event in
-                            ZStack(alignment: .topTrailing) {
+                            ZStack(alignment: .bottomTrailing) {
                                 Button {
                                     selectedEventForDetail = event
                                 } label: {
@@ -640,7 +641,7 @@ struct EventsModuleView: View {
                                 .buttonStyle(.plain)
 
                                 eventActionButtons(event)
-                                    .padding(.top, 10)
+                                    .padding(.bottom, 10)
                                     .padding(.trailing, 10)
                             }
                         }
@@ -663,7 +664,7 @@ struct EventsModuleView: View {
                     if !filteredMarkedEvents.isEmpty {
                         sectionHeader("我标记的活动")
                         ForEach(filteredMarkedEvents) { event in
-                            ZStack(alignment: .topTrailing) {
+                            ZStack(alignment: .bottomTrailing) {
                                 Button {
                                     selectedEventForDetail = event
                                 } label: {
@@ -672,7 +673,7 @@ struct EventsModuleView: View {
                                 .buttonStyle(.plain)
 
                                 eventActionButtons(event)
-                                    .padding(.top, 10)
+                                    .padding(.bottom, 10)
                                     .padding(.trailing, 10)
                             }
                         }
@@ -681,7 +682,7 @@ struct EventsModuleView: View {
                     if !filteredPlannedEvents.isEmpty {
                         sectionHeader("我计划前往")
                         ForEach(filteredPlannedEvents) { event in
-                            ZStack(alignment: .topTrailing) {
+                            ZStack(alignment: .bottomTrailing) {
                                 Button {
                                     selectedEventForDetail = event
                                 } label: {
@@ -690,7 +691,7 @@ struct EventsModuleView: View {
                                 .buttonStyle(.plain)
 
                                 eventActionButtons(event)
-                                    .padding(.top, 10)
+                                    .padding(.bottom, 10)
                                     .padding(.trailing, 10)
                             }
                         }
@@ -699,7 +700,7 @@ struct EventsModuleView: View {
                     if !filteredPublishedEvents.isEmpty {
                         sectionHeader("我发布的活动")
                         ForEach(filteredPublishedEvents) { event in
-                            ZStack(alignment: .topTrailing) {
+                            ZStack(alignment: .bottomTrailing) {
                                 Button {
                                     selectedEventForDetail = event
                                 } label: {
@@ -708,7 +709,7 @@ struct EventsModuleView: View {
                                 .buttonStyle(.plain)
 
                                 eventActionButtons(event)
-                                    .padding(.top, 10)
+                                    .padding(.bottom, 10)
                                     .padding(.trailing, 10)
                             }
                         }
@@ -813,17 +814,18 @@ struct EventsModuleView: View {
     }
 
     private func eventActionButtons(_ event: WebEvent) -> some View {
-        VStack(spacing: 8) {
+        let starYellow = Color(red: 0.99, green: 0.82, blue: 0.22)
+        return VStack(spacing: 8) {
             Button {
                 Task { await toggleMarked(event: event) }
             } label: {
-                Image(systemName: isMarked(event.id) ? "bookmark.fill" : "bookmark")
+                Image(systemName: isMarked(event.id) ? "star.fill" : "star")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(isMarked(event.id) ? .white : RaverTheme.secondaryText)
                     .frame(width: 34, height: 34)
                     .background(
                         Circle()
-                            .fill(isMarked(event.id) ? RaverTheme.accent : RaverTheme.card.opacity(0.92))
+                            .fill(isMarked(event.id) ? starYellow : RaverTheme.card.opacity(0.92))
                     )
             }
             .buttonStyle(.plain)
@@ -936,6 +938,9 @@ private struct OngoingStatusBars: View {
 
 private struct EventRow: View {
     let event: WebEvent
+    private let coverWidth: CGFloat = 144
+    private let coverHeight: CGFloat = 172
+    private let actionColumnReserveWidth: CGFloat = 48
 
     var body: some View {
         let visualStatus = EventVisualStatus.resolve(event: event)
@@ -943,7 +948,7 @@ private struct EventRow: View {
 
         HStack(alignment: .top, spacing: 12) {
             eventCoverLayer
-            .frame(width: 132, height: 150)
+            .frame(width: coverWidth, height: coverHeight)
             .clipShape(coverShape)
             .overlay(alignment: .topLeading) {
                 eventDateBadge
@@ -959,39 +964,45 @@ private struct EventRow: View {
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
                     .lineLimit(2)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text((event.eventType?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty) ?? "未分类")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(RaverTheme.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(RaverTheme.accent.opacity(0.15))
+                        )
 
-                Text((event.eventType?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty) ?? "未分类")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(RaverTheme.accent)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(RaverTheme.accent.opacity(0.15))
-                    )
-
-                Label(eventDateRangeText, systemImage: "calendar")
-                    .font(.caption)
-                    .foregroundStyle(RaverTheme.secondaryText)
-
-                if let venue = event.venueName, !venue.isEmpty {
-                    Label(venue, systemImage: "building.2")
+                    Label(eventDateRangeText, systemImage: "calendar")
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
-                        .lineLimit(1)
-                }
 
-                if !event.summaryLocation.isEmpty {
-                    Label(event.summaryLocation, systemImage: "mappin.and.ellipse")
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                        .lineLimit(1)
+                    if let venue = event.venueName, !venue.isEmpty {
+                        Label(venue, systemImage: "building.2")
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .lineLimit(nil)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if !event.summaryLocation.isEmpty {
+                        Label(event.summaryLocation, systemImage: "mappin.and.ellipse")
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .lineLimit(nil)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                .padding(.trailing, actionColumnReserveWidth)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.trailing, 38)
         }
-        .padding(10)
+        .frame(minHeight: coverHeight + 4, alignment: .topLeading)
+        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(RaverTheme.card)
@@ -2540,12 +2551,17 @@ struct EventDetailView: View {
     @State private var isPreparingEventCheckinSheet = false
     @State private var lineupIdentityByName: [String: WebDJ] = [:]
     @State private var lineupHydrationTask: Task<Void, Never>?
+    @State private var relatedRatingEvents: [WebRatingEvent] = []
+    @State private var relatedEventSets: [WebDJSet] = []
+    @State private var selectedRatingEventID: String?
 
     fileprivate enum EventDetailTab: String, CaseIterable, Identifiable {
         case info
         case posts
         case lineup
         case schedule
+        case ratings
+        case sets
 
         var id: String { rawValue }
 
@@ -2555,6 +2571,8 @@ struct EventDetailView: View {
             case .posts: return "动态"
             case .lineup: return "阵容"
             case .schedule: return "时间表"
+            case .ratings: return "打分"
+            case .sets: return "Sets"
             }
         }
     }
@@ -2568,6 +2586,7 @@ struct EventDetailView: View {
                     heroView: AnyView(heroSection(event)),
                     eventTitle: event.name,
                     tabTitles: EventDetailTab.allCases.map(\.title),
+                    tabBarView: AnyView(tabBar),
                     tabPageViews: EventDetailTab.allCases.map { tab in
                         AnyView(
                             VStack(alignment: .leading, spacing: 14) {
@@ -2638,6 +2657,26 @@ struct EventDetailView: View {
         .overlay(alignment: .top) {
             floatingTopBar
         }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { selectedRatingEventID != nil },
+                set: { if !$0 { selectedRatingEventID = nil } }
+            )
+        ) {
+            if let ratingEventID = selectedRatingEventID {
+                NavigationStack {
+                    CircleRatingEventDetailView(
+                        eventID: ratingEventID,
+                        onClose: {
+                            selectedRatingEventID = nil
+                        },
+                        onUpdated: {
+                            Task { await reloadEventRatings() }
+                        }
+                    )
+                }
+            }
+        }
         .task {
             await load()
         }
@@ -2657,15 +2696,15 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private var tabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        HorizontalAxisLockedScrollView(showsIndicators: false) {
             HStack(spacing: 24) {
                 ForEach(EventDetailTab.allCases) { tab in
                     Button {
                         selectEventDetailTab(tab)
                     } label: {
                         Text(tab.title)
-                            .font(.system(size: 17, weight: selectedTab == tab ? .semibold : .medium))
-                            .foregroundStyle(selectedTab == tab ? RaverTheme.accent : Color.white.opacity(0.92))
+                            .font(.system(size: 17, weight: tabVisualState(for: tab) ? .semibold : .medium))
+                            .foregroundStyle(tabVisualState(for: tab) ? RaverTheme.accent : Color.white.opacity(0.92))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 8)
                     }
@@ -2754,6 +2793,16 @@ struct EventDetailView: View {
                             )
                         }
                     )
+                eventTabPage(event, cardWidth: cardWidth, tab: .ratings)
+                    .tag(EventDetailTab.ratings)
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.preference(
+                                key: EventDetailPageOffsetPreferenceKey.self,
+                                value: [.ratings: geo.frame(in: .named("EventDetailPager")).minX]
+                            )
+                        }
+                    )
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .coordinateSpace(name: "EventDetailPager")
@@ -2804,6 +2853,10 @@ struct EventDetailView: View {
             eventLineupTabContent(event, cardWidth: cardWidth)
         case .schedule:
             eventScheduleTabContent(event)
+        case .ratings:
+            eventRatingsTabContent()
+        case .sets:
+            eventSetsTabContent()
         }
     }
 
@@ -3018,17 +3071,21 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private func eventScheduleTabContent(_ event: WebEvent) -> some View {
-        if event.lineupSlots.isEmpty {
-            Text("暂无时间表")
+        let scheduledSlots = event.lineupSlots
+            .filter { $0.endTime > $0.startTime }
+            .sorted(by: { $0.startTime < $1.startTime })
+
+        if scheduledSlots.isEmpty {
+            Text("等待时间表发布")
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
         } else {
             NavigationLink {
-                EventRoutineView(event: event)
+                EventRoutineView(event: event, scheduledSlots: scheduledSlots)
             } label: {
                 HStack {
-                    Label("查看完整时间表（\(event.lineupSlots.count) 场）", systemImage: "calendar.badge.clock")
+                    Label("查看完整时间表（\(scheduledSlots.count) 场）", systemImage: "calendar.badge.clock")
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.caption)
@@ -3037,16 +3094,139 @@ struct EventDetailView: View {
             }
             .buttonStyle(.plain)
 
-            ForEach(Array(event.lineupSlots.sorted(by: { $0.startTime < $1.startTime }).prefix(8))) { slot in
+            ForEach(Array(scheduledSlots.prefix(8))) { slot in
                 eventSchedulePreviewRow(slot)
             }
 
-            if event.lineupSlots.count > 8 {
-                Text("还有 \(event.lineupSlots.count - 8) 场，点击上方可查看全部")
+            if scheduledSlots.count > 8 {
+                Text("还有 \(scheduledSlots.count - 8) 场，点击上方可查看全部")
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .padding(.top, 2)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func eventRatingsTabContent() -> some View {
+        if relatedRatingEvents.isEmpty {
+            Text("暂无对应打分事件")
+                .font(.subheadline)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .padding(.vertical, 8)
+        } else {
+            ForEach(relatedRatingEvents) { ratingEvent in
+                Button {
+                    selectedRatingEventID = ratingEvent.id
+                } label: {
+                    HStack(spacing: 10) {
+                        eventRatingThumb(urlString: ratingEvent.imageUrl, size: 52)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(ratingEvent.name)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .lineLimit(2)
+                            Text("\(ratingEvent.units.count) 个打分对象")
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .lineLimit(1)
+                        }
+
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(RaverTheme.card)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func eventSetsTabContent() -> some View {
+        if relatedEventSets.isEmpty {
+            Text("暂无对应 Sets")
+                .font(.subheadline)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .padding(.vertical, 8)
+        } else {
+            ForEach(relatedEventSets) { set in
+                NavigationLink {
+                    DJSetDetailView(setID: set.id)
+                } label: {
+                    HStack(spacing: 10) {
+                        eventRatingThumb(urlString: set.thumbnailUrl, size: 52)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(set.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .lineLimit(2)
+                            Text(set.dj?.name ?? set.djId)
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .lineLimit(1)
+                            if let recordedAt = set.recordedAt {
+                                Text(recordedAt.formatted(date: .abbreviated, time: .omitted))
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .lineLimit(1)
+                            }
+                        }
+
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(RaverTheme.card)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func eventRatingThumb(urlString: String?, size: CGFloat) -> some View {
+        if let resolved = AppConfig.resolvedURLString(urlString),
+           let url = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(RaverTheme.card)
+                        .overlay(
+                            Image(systemName: "star.leadinghalf.filled")
+                                .font(.system(size: size * 0.32, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(0.9))
+                        )
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(RaverTheme.card)
+                .frame(width: size, height: size)
+                .overlay(
+                    Image(systemName: "star.leadinghalf.filled")
+                        .font(.system(size: size * 0.32, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.9))
+                )
         }
     }
 
@@ -3142,6 +3322,11 @@ struct EventDetailView: View {
 
     private func selectedIndex(for tab: EventDetailTab) -> Int {
         EventDetailTab.allCases.firstIndex(of: tab) ?? 0
+    }
+
+    private func tabVisualState(for tab: EventDetailTab) -> Bool {
+        let index = CGFloat(selectedIndex(for: tab))
+        return abs(pageProgress - index) < 0.5
     }
 
     private func updatePageProgress(with offsets: [EventDetailTab: CGFloat]) {
@@ -3341,7 +3526,9 @@ struct EventDetailView: View {
         }
         .frame(width: itemWidth, alignment: .top)
 
-        if dj.act.type == .solo, let djID = dj.djID, !djID.isEmpty {
+        if dj.act.type == .solo,
+           let primaryPerformer = dj.act.performers.first,
+           let djID = resolvedPerformerDJID(primaryPerformer) {
             NavigationLink {
                 DJDetailView(djID: djID)
             } label: {
@@ -3628,10 +3815,13 @@ struct EventDetailView: View {
                 let page = try? await service.fetchMyCheckins(page: 1, limit: 200, type: nil, eventID: eventID, djID: nil)
                 return page?.items ?? []
             }()
+            async let ratingEventsTask = service.fetchEventRatingEvents(eventID: eventID)
 
             let loadedEvent = try await eventTask
             event = loadedEvent
             relatedEventCheckins = await checkinsTask
+            relatedRatingEvents = (try? await ratingEventsTask) ?? []
+            relatedEventSets = (try? await service.fetchEventDJSets(eventName: loadedEvent.name)) ?? []
             lineupHydrationTask?.cancel()
             lineupIdentityByName = [:]
             lineupHydrationTask = Task {
@@ -3640,6 +3830,18 @@ struct EventDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func reloadEventRatings() async {
+        relatedRatingEvents = (try? await service.fetchEventRatingEvents(eventID: eventID)) ?? []
+    }
+
+    private func reloadEventSets() async {
+        guard let event else {
+            relatedEventSets = []
+            return
+        }
+        relatedEventSets = (try? await service.fetchEventDJSets(eventName: event.name)) ?? []
     }
 
     @MainActor
@@ -3971,79 +4173,968 @@ struct EventDetailView: View {
     }
 }
 
-private struct EventRoutineView: View {
-    let event: WebEvent
+private struct ActivityShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    let activities: [UIActivity]? = nil
+    let completion: UIActivityViewController.CompletionWithItemsHandler?
 
-    private struct DayStageGroup: Identifiable {
-        let id: String
-        let dayLabel: String
-        let stageName: String
-        let slots: [WebEventLineupSlot]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: activities)
+        controller.completionWithItemsHandler = completion
+        return controller
     }
 
-    private var grouped: [DayStageGroup] {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
 
-        var map: [String: [String: [WebEventLineupSlot]]] = [:]
-        for slot in event.lineupSlots {
-            let dayKey = formatter.string(from: slot.startTime)
-            let stage = (slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
-                ? slot.stageName!.trimmingCharacters(in: .whitespacesAndNewlines)
-                : "未命名舞台"
-            map[dayKey, default: [:]][stage, default: []].append(slot)
+private struct EventScheduleDay: Identifiable, Hashable {
+    let id: String
+    let index: Int
+    let date: Date
+    let slots: [WebEventLineupSlot]
+
+    var title: String { "Day\(index)" }
+    var subtitle: String { "\(title) · \(Self.subtitleFormatter.string(from: date))" }
+
+    static func build(from slots: [WebEventLineupSlot]) -> [EventScheduleDay] {
+        guard !slots.isEmpty else { return [] }
+        
+        // 临时调试
+        print("=== EventScheduleDay.build ===")
+        print("Total slots: \(slots.count)")
+        slots.forEach { slot in
+            print("  slot: \(slot.stageName ?? "nil") | startTime: \(slot.startTime)")
+        }
+        
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: slots) { slot in
+            calendar.startOfDay(for: slot.startTime)
+        }
+        
+        // 临时调试
+        print("Distinct days (\(grouped.keys.count)): \(grouped.keys.sorted())")
+        print("==============================")
+        
+        return grouped
+            .keys
+            .sorted()
+            .enumerated()
+            .map { offset, dayDate in
+                let items = (grouped[dayDate] ?? [])
+                    .sorted {
+                        if $0.startTime == $1.startTime {
+                            return $0.sortOrder < $1.sortOrder
+                        }
+                        return $0.startTime < $1.startTime
+                    }
+                return EventScheduleDay(
+                    id: Self.dayKey(for: dayDate),
+                    index: offset + 1,
+                    date: dayDate,
+                    slots: items
+                )
+            }
+    }
+
+    private static func dayKey(for date: Date) -> String {
+        dayKeyFormatter.string(from: date)
+    }
+
+    private static let dayKeyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    private static let subtitleFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "MMM d"
+        return formatter
+    }()
+}
+
+private struct EventTimelineCardFrame: Identifiable {
+    let id: String
+    let slot: WebEventLineupSlot
+    let top: CGFloat
+    let height: CGFloat
+}
+
+private enum EventScheduleTypography {
+    static func heavy(_ size: CGFloat) -> Font {
+        font(primary: "AvenirNext-Bold", fallbackWeight: .bold, size: size)
+    }
+
+    static func semibold(_ size: CGFloat) -> Font {
+        font(primary: "AvenirNext-DemiBold", fallbackWeight: .semibold, size: size)
+    }
+
+    static func medium(_ size: CGFloat) -> Font {
+        font(primary: "AvenirNext-Medium", fallbackWeight: .medium, size: size)
+    }
+
+    private static func font(primary: String, fallbackWeight: Font.Weight, size: CGFloat) -> Font {
+        if UIFont(name: primary, size: size) != nil {
+            return .custom(primary, size: size)
+        }
+        return .system(size: size, weight: fallbackWeight, design: .rounded)
+    }
+}
+
+private struct EventTimelineLayout {
+    static let axisWidth: CGFloat = 54
+    static let stageHeaderHeight: CGFloat = 74
+    static let stageGap: CGFloat = 4
+    static let timelineTopInset: CGFloat = 50
+    static let timelineBottomInset: CGFloat = 40
+    static let maxVisibleStageCount = 5
+    static let minStageWidth: CGFloat = 92
+    static let pixelsPerHour: CGFloat = 75
+
+    let stageNames: [String]
+    let slotsByStage: [String: [WebEventLineupSlot]]
+    let stageColorByName: [String: Color]
+    let stageWidth: CGFloat
+    let stageViewportWidth: CGFloat
+    let stageContentWidth: CGFloat
+    let requiresHorizontalScroll: Bool
+    let rangeStart: Date
+    let rangeEnd: Date
+    let timelineSpanHeight: CGFloat
+    let bodyHeight: CGFloat
+    let tickDates: [Date]
+
+    init(
+        slots: [WebEventLineupSlot],
+        availableWidth: CGFloat,
+        maxVisibleStages: Int = Self.maxVisibleStageCount
+    ) {
+        let normalizedSlots = slots.sorted {
+            if $0.startTime == $1.startTime {
+                return $0.sortOrder < $1.sortOrder
+            }
+            return $0.startTime < $1.startTime
+        }
+        let grouped = Dictionary(grouping: normalizedSlots) { slot in
+            let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? "MAIN STAGE" : trimmed
+        }
+        let orderedStages = grouped
+            .keys
+            .sorted { lhs, rhs in
+                let lhsOrder = grouped[lhs]?.map(\.sortOrder).min() ?? Int.max
+                let rhsOrder = grouped[rhs]?.map(\.sortOrder).min() ?? Int.max
+                if lhsOrder == rhsOrder {
+                    return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+                }
+                return lhsOrder < rhsOrder
+            }
+
+        var colorMap: [String: Color] = [:]
+        for (idx, stage) in orderedStages.enumerated() {
+            colorMap[stage] = Self.palette[idx % Self.palette.count]
         }
 
-        return map
-            .sorted(by: { $0.key < $1.key })
-            .flatMap { dayKey, stageMap in
-                stageMap.sorted(by: { $0.key < $1.key }).map { stageName, slots in
-                    DayStageGroup(
-                        id: "\(dayKey)-\(stageName)",
-                        dayLabel: dayKey,
-                        stageName: stageName,
-                        slots: slots.sorted(by: { $0.startTime < $1.startTime })
-                    )
-                }
-            }
+        let bounds = Self.timeBounds(for: normalizedSlots)
+        rangeStart = bounds.start
+        rangeEnd = bounds.end
+        let totalHours = max(bounds.end.timeIntervalSince(bounds.start) / 3600, 1)
+        timelineSpanHeight = max(760, CGFloat(totalHours) * Self.pixelsPerHour)
+        bodyHeight = Self.timelineTopInset + timelineSpanHeight + Self.timelineBottomInset
+        tickDates = Self.hourTicks(from: bounds.start, to: bounds.end)
+
+        let stageCount = max(1, orderedStages.count)
+        let stageViewport = max(availableWidth - Self.axisWidth, Self.minStageWidth)
+        let resolvedVisibleCap = max(1, maxVisibleStages)
+        let visibleCount = min(resolvedVisibleCap, stageCount)
+        let visibleGapTotal = CGFloat(max(visibleCount - 1, 0)) * Self.stageGap
+        let computedStageWidth = max((stageViewport - visibleGapTotal) / CGFloat(visibleCount), Self.minStageWidth)
+        stageWidth = computedStageWidth
+        stageViewportWidth = stageViewport
+        stageContentWidth = CGFloat(stageCount) * computedStageWidth + CGFloat(max(stageCount - 1, 0)) * Self.stageGap
+        requiresHorizontalScroll = stageCount > visibleCount
+
+        stageNames = orderedStages
+        slotsByStage = grouped
+        stageColorByName = colorMap
+    }
+
+    func yPosition(for date: Date) -> CGFloat {
+        let total = max(rangeEnd.timeIntervalSince(rangeStart), 1)
+        let clamped = min(max(date.timeIntervalSince(rangeStart), 0), total)
+        let progress = clamped / total
+        return Self.timelineTopInset + CGFloat(progress) * timelineSpanHeight
+    }
+
+    func color(for stageName: String) -> Color {
+        stageColorByName[stageName] ?? Self.palette[0]
+    }
+
+    static func estimatedHeight(for slots: [WebEventLineupSlot]) -> CGFloat {
+        let bounds = timeBounds(for: slots)
+        let totalHours = max(bounds.end.timeIntervalSince(bounds.start) / 3600, 1)
+        let span = max(760, CGFloat(totalHours) * pixelsPerHour)
+        return stageHeaderHeight + timelineTopInset + span + timelineBottomInset
+    }
+
+    static func stageCount(for slots: [WebEventLineupSlot]) -> Int {
+        let names = Set(slots.map { slot -> String in
+            let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? "MAIN STAGE" : trimmed
+        })
+        return max(1, names.count)
+    }
+
+    private static func timeBounds(for slots: [WebEventLineupSlot]) -> (start: Date, end: Date) {
+        let reference = slots.map(\.startTime).min() ?? Date()
+        let earliest = slots.map(\.startTime).min() ?? reference
+        let latest = slots.map(\.endTime).max() ?? earliest.addingTimeInterval(3600)
+        let roundedStart = floorToHour(earliest)
+        var roundedEnd = ceilToHour(latest)
+        if roundedEnd <= roundedStart {
+            roundedEnd = roundedStart.addingTimeInterval(3600)
+        }
+        return (roundedStart, roundedEnd)
+    }
+
+    private static func hourTicks(from start: Date, to end: Date) -> [Date] {
+        var result: [Date] = []
+        var cursor = start
+        while cursor <= end {
+            result.append(cursor)
+            guard let next = Calendar.current.date(byAdding: .hour, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        if result.isEmpty {
+            result = [start, end]
+        }
+        return result
+    }
+
+    private static func floorToHour(_ date: Date) -> Date {
+        let calendar = Calendar.current
+        let parts = calendar.dateComponents([.year, .month, .day, .hour], from: date)
+        return calendar.date(from: parts) ?? date
+    }
+
+    private static func ceilToHour(_ date: Date) -> Date {
+        let start = floorToHour(date)
+        if start == date { return start }
+        return Calendar.current.date(byAdding: .hour, value: 1, to: start) ?? date
+    }
+
+    private static let palette: [Color] = [
+        Color(red: 0.97, green: 0.54, blue: 0.89),
+        Color(red: 0.50, green: 0.87, blue: 0.98),
+        Color(red: 0.54, green: 0.95, blue: 0.62),
+        Color(red: 0.99, green: 0.73, blue: 0.42),
+        Color(red: 0.90, green: 0.96, blue: 0.50),
+        Color(red: 0.56, green: 0.67, blue: 0.99),
+        Color(red: 0.98, green: 0.57, blue: 0.63),
+        Color(red: 0.93, green: 0.56, blue: 0.79),
+        Color(red: 0.56, green: 0.86, blue: 0.94)
+    ]
+}
+
+private struct EventTimelineBoardView: View {
+    let event: WebEvent
+    let day: EventScheduleDay
+    let selectedSlotIDs: Set<String>
+    let selectable: Bool
+    let onToggleSlot: ((WebEventLineupSlot) -> Void)?
+    var maxVisibleStages: Int = EventTimelineLayout.maxVisibleStageCount
+
+    private var boardHeight: CGFloat {
+        EventTimelineLayout.estimatedHeight(for: day.slots)
     }
 
     var body: some View {
-        List {
-            if grouped.isEmpty {
-                ContentUnavailableView("暂无排期", systemImage: "calendar.badge.exclamationmark")
+        GeometryReader { geo in
+            let layout = EventTimelineLayout(
+                slots: day.slots,
+                availableWidth: max(geo.size.width, EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth),
+                maxVisibleStages: maxVisibleStages
+            )
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.09, green: 0.10, blue: 0.14),
+                                Color(red: 0.06, green: 0.06, blue: 0.09)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+
+                HStack(spacing: 0) {
+                    timelineAxis(layout: layout)
+                    stageMatrix(layout: layout)
+                }
+                .padding(.vertical, 10)
+            }
+        }
+        .frame(height: boardHeight)
+    }
+
+    @ViewBuilder
+    private func stageMatrix(layout: EventTimelineLayout) -> some View {
+        let stageContent = VStack(spacing: 0) {
+            stageHeaderRow(layout: layout)
+            stageColumnsRow(layout: layout)
+        }
+
+        ScrollView(.horizontal, showsIndicators: false) {
+            stageContent
+                .frame(width: layout.stageContentWidth, alignment: .leading)
+        }
+        .frame(width: layout.stageViewportWidth, alignment: .leading)
+    }
+
+    private func timelineAxis(layout: EventTimelineLayout) -> some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(width: EventTimelineLayout.axisWidth, height: EventTimelineLayout.stageHeaderHeight)
+
+            ZStack(alignment: .topTrailing) {
+                ForEach(layout.tickDates, id: \.timeIntervalSinceReferenceDate) { tick in
+                    Text(Self.axisTimeFormatter.string(from: tick))
+                        .font(EventScheduleTypography.semibold(15))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .frame(width: EventTimelineLayout.axisWidth - 8, alignment: .trailing)
+                        .offset(y: layout.yPosition(for: tick) - 12)
+                }
+            }
+            .frame(width: EventTimelineLayout.axisWidth, height: layout.bodyHeight, alignment: .topTrailing)
+        }
+        .frame(width: EventTimelineLayout.axisWidth)
+    }
+
+    private func stageHeaderRow(layout: EventTimelineLayout) -> some View {
+        HStack(spacing: EventTimelineLayout.stageGap) {
+            ForEach(layout.stageNames, id: \.self) { stageName in
+                let stageColor = layout.color(for: stageName)
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                stageColor.opacity(0.98),
+                                stageColor.opacity(0.78),
+                                stageColor.opacity(0.56)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .stroke(Color.white.opacity(0.36), lineWidth: 1)
+                    )
+                    .overlay(
+                        Text(stageName)
+                            .font(EventScheduleTypography.heavy(26))
+                            .minimumScaleFactor(0.24)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(Color.black.opacity(0.72))
+                            .padding(.horizontal, 4)
+                    )
+                    .frame(width: layout.stageWidth, height: EventTimelineLayout.stageHeaderHeight)
+            }
+        }
+    }
+
+    private func stageColumnsRow(layout: EventTimelineLayout) -> some View {
+        HStack(spacing: EventTimelineLayout.stageGap) {
+            ForEach(layout.stageNames, id: \.self) { stageName in
+                stageColumn(stageName: stageName, layout: layout)
+            }
+        }
+        .frame(height: layout.bodyHeight)
+    }
+
+    private func stageColumn(stageName: String, layout: EventTimelineLayout) -> some View {
+        let stageColor = layout.color(for: stageName)
+        let frames = cardFrames(for: stageName, layout: layout)
+
+        return ZStack(alignment: .top) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+
+            ForEach(layout.tickDates, id: \.timeIntervalSinceReferenceDate) { tick in
+                Rectangle()
+                    .fill(Color.white.opacity(0.10))
+                    .frame(height: 1)
+                    .offset(y: layout.yPosition(for: tick))
             }
 
-            ForEach(grouped) { group in
-                Section("\(group.dayLabel) · \(group.stageName)") {
-                    ForEach(group.slots) { slot in
-                        let act = EventLineupActCodec.parse(slot: slot)
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Text(act.displayName)
-                                    .font(.headline)
-                                if act.type != .solo {
-                                    Text(act.type.title)
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(RaverTheme.accent)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 3)
-                                        .background(RaverTheme.accent.opacity(0.14), in: Capsule())
-                                }
-                            }
-                            Text("\(slot.startTime.formatted(date: .omitted, time: .shortened)) - \(slot.endTime.formatted(date: .omitted, time: .shortened))")
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
+            ForEach(frames) { frame in
+                timelineCard(frame: frame, stageColor: stageColor)
+                    .frame(width: layout.stageWidth, height: frame.height, alignment: .top)
+                    .offset(y: frame.top)
+            }
+        }
+        .frame(width: layout.stageWidth, height: layout.bodyHeight)
+    }
+
+    private func timelineCard(frame: EventTimelineCardFrame, stageColor: Color) -> some View {
+        let isSelected = selectedSlotIDs.contains(frame.slot.id)
+        let displayAct = EventLineupActCodec.parse(slot: frame.slot)
+        let cardFill = isSelected ? Color.black.opacity(0.88) : stageColor.opacity(0.92)
+        let textColor = isSelected ? stageColor : Color.black.opacity(0.84)
+        let nameTimeSpacing: CGFloat = 1
+
+        let content = RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(cardFill)
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(
+                        isSelected ? stageColor.opacity(0.95) : Color.black.opacity(0.42),
+                        lineWidth: isSelected ? 2.0 : 1.1
+                    )
+            )
+            .shadow(color: stageColor.opacity(isSelected ? 0.58 : 0.30), radius: isSelected ? 12 : 8, x: 0, y: 2)
+            .overlay(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: nameTimeSpacing) {
+                    Text(displayAct.displayName)
+                        .font(EventScheduleTypography.heavy(28))
+                        .minimumScaleFactor(0.21)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                        .foregroundStyle(textColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(Self.cardStartTimeText(for: frame.slot))
+                        .font(EventScheduleTypography.semibold(12))
+                        .monospacedDigit()
+                        .foregroundStyle(textColor.opacity(0.95))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 8)
+                .padding(.top, 7)
+                .padding(.bottom, 6)
+            }
+
+        return Group {
+            if selectable, let onToggleSlot {
+                Button {
+                    onToggleSlot(frame.slot)
+                } label: {
+                    content
+                }
+                .buttonStyle(.plain)
+            } else {
+                content
+            }
+        }
+    }
+
+    private func cardFrames(for stageName: String, layout: EventTimelineLayout) -> [EventTimelineCardFrame] {
+        let stageSlots = (layout.slotsByStage[stageName] ?? []).sorted {
+            if $0.startTime == $1.startTime {
+                return $0.sortOrder < $1.sortOrder
+            }
+            return $0.startTime < $1.startTime
+        }
+
+        var result: [EventTimelineCardFrame] = []
+
+        for slot in stageSlots {
+            let startY = layout.yPosition(for: slot.startTime)
+            let endY = layout.yPosition(for: slot.endTime)
+            let resolvedHeight = max(44, endY - startY)
+            let frame = EventTimelineCardFrame(
+                id: slot.id,
+                slot: slot,
+                top: startY,
+                height: resolvedHeight
+            )
+            result.append(frame)
+        }
+
+        return result
+    }
+
+    private static func cardStartTimeText(for slot: WebEventLineupSlot) -> String {
+        cardTimeFormatter.string(from: slot.startTime)
+    }
+
+    private static let axisTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "h a"
+        return formatter
+    }()
+
+    private static let cardTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "h:mma"
+        return formatter
+    }()
+}
+
+private struct EventRouteSharePosterView: View {
+    let event: WebEvent
+    let day: EventScheduleDay
+    let selectedSlotIDs: Set<String>
+    let username: String
+    let coverImage: UIImage?
+
+    var body: some View {
+        ZStack {
+            if let coverImage {
+                Image(uiImage: coverImage)
+                    .resizable()
+                    .scaledToFill()
+                    .overlay(Color.black.opacity(0.70))
+                    .blur(radius: 12)
+                    .ignoresSafeArea()
+            } else {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.05, green: 0.07, blue: 0.14),
+                        Color(red: 0.11, green: 0.05, blue: 0.20),
+                        Color(red: 0.04, green: 0.05, blue: 0.08)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+            }
+
+            VStack(alignment: .leading, spacing: 16) {
+                Text("\(username)的\(event.name)电音节行程")
+                    .font(EventScheduleTypography.heavy(42))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
+
+                Text(day.subtitle)
+                    .font(EventScheduleTypography.semibold(26))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Color.white.opacity(0.14)))
+
+                EventTimelineBoardView(
+                    event: event,
+                    day: day,
+                    selectedSlotIDs: selectedSlotIDs,
+                    selectable: false,
+                    onToggleSlot: nil,
+                    maxVisibleStages: Int.max
+                )
+                .frame(height: EventTimelineLayout.estimatedHeight(for: day.slots))
+
+                HStack {
+                    Spacer()
+                    Text("RaveHub")
+                        .font(EventScheduleTypography.heavy(26))
+                        .foregroundStyle(Color.white.opacity(0.9))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(Color.black.opacity(0.42))
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.white.opacity(0.20), lineWidth: 1)
+                                )
+                        )
+                }
+            }
+            .padding(.horizontal, 36)
+            .padding(.top, 40)
+            .padding(.bottom, 28)
+        }
+    }
+}
+
+private struct EventRoutePlannerView: View {
+    let event: WebEvent
+    let days: [EventScheduleDay]
+    let initialDayID: String
+
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
+
+    @State private var selectedDayID: String
+    @State private var selectedSlotIDs: Set<String> = []
+    @State private var isGeneratingShare = false
+    @State private var shareImage: UIImage?
+    @State private var showShareSheet = false
+    @State private var feedbackMessage: String?
+    @State private var coverImage: UIImage?
+
+    init(event: WebEvent, days: [EventScheduleDay], initialDayID: String) {
+        self.event = event
+        self.days = days
+        self.initialDayID = initialDayID
+        _selectedDayID = State(initialValue: initialDayID)
+    }
+
+    private var selectedDay: EventScheduleDay? {
+        days.first(where: { $0.id == selectedDayID }) ?? days.first
+    }
+
+    private var displayNameForShare: String {
+        let trimmed = appState.session?.user.displayName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty { return trimmed }
+        return appState.session?.user.username ?? "Raver"
+    }
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.05, green: 0.06, blue: 0.11),
+                        Color(red: 0.03, green: 0.03, blue: 0.04)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        if days.count > 1 {
+                            daySelector
                         }
-                        .padding(.vertical, 2)
+
+                        if let selectedDay {
+                            EventTimelineBoardView(
+                                event: event,
+                                day: selectedDay,
+                                selectedSlotIDs: selectedSlotIDs,
+                                selectable: true,
+                                onToggleSlot: { slot in
+                                    if selectedSlotIDs.contains(slot.id) {
+                                        selectedSlotIDs.remove(slot.id)
+                                    } else {
+                                        selectedSlotIDs.insert(slot.id)
+                                    }
+                                }
+                            )
+                            .frame(height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots))
+                        } else {
+                            ContentUnavailableView("等待时间表发布", systemImage: "calendar.badge.exclamationmark")
+                        }
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.top, 12)
+                    .padding(.bottom, 24)
+                }
+            }
+            .navigationTitle("定制路线")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await exportSharePoster() }
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .disabled(isGeneratingShare)
+                    .opacity(isGeneratingShare ? 0.6 : 1)
+                }
+            }
+            .onAppear {
+                if selectedDayID.isEmpty {
+                    selectedDayID = days.first?.id ?? ""
+                }
+            }
+            .task {
+                await loadCoverImageIfNeeded()
+            }
+            .sheet(isPresented: $showShareSheet) {
+                if let shareImage {
+                    ActivityShareSheet(items: [shareImage], completion: nil)
+                }
+            }
+            .alert("提示", isPresented: Binding(
+                get: { feedbackMessage != nil },
+                set: { if !$0 { feedbackMessage = nil } }
+            )) {
+                Button("确定", role: .cancel) {}
+            } message: {
+                Text(feedbackMessage ?? "")
+            }
+        }
+    }
+
+    private var daySelector: some View {
+        //HorizontalAxisLockedScrollView(showsIndicators: false) {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(days) { day in
+                    let selected = day.id == selectedDayID
+                    Button {
+                        selectedDayID = day.id
+                    } label: {
+                        Text("\(day.title) · \(Self.routeDayFormatter.string(from: day.date))")
+                            .font(EventScheduleTypography.semibold(15))
+                            .foregroundStyle(selected ? Color.black.opacity(0.85) : Color.white.opacity(0.88))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                Capsule()
+                                    .fill(selected ? Color.white.opacity(0.92) : Color.white.opacity(0.13))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+
+    @MainActor
+    private func exportSharePoster() async {
+        guard !isGeneratingShare else { return }
+        guard let selectedDay else {
+            feedbackMessage = "暂无可分享的时间表"
+            return
+        }
+
+        isGeneratingShare = true
+        defer { isGeneratingShare = false }
+
+        let stageCount = EventTimelineLayout.stageCount(for: selectedDay.slots)
+        let stageRegionWidth =
+            CGFloat(stageCount) * EventTimelineLayout.minStageWidth +
+            CGFloat(max(stageCount - 1, 0)) * EventTimelineLayout.stageGap
+        let boardWidth = EventTimelineLayout.axisWidth + stageRegionWidth
+        let horizontalPadding: CGFloat = 72
+        let posterWidth = max(1080, boardWidth + horizontalPadding)
+        let boardHeight = EventTimelineLayout.estimatedHeight(for: selectedDay.slots)
+        let posterHeight = max(1920, boardHeight + 280)
+
+        let poster = EventRouteSharePosterView(
+            event: event,
+            day: selectedDay,
+            selectedSlotIDs: selectedSlotIDs,
+            username: displayNameForShare,
+            coverImage: coverImage
+        )
+        .frame(width: posterWidth, height: posterHeight)
+
+        let renderer = ImageRenderer(content: poster)
+        renderer.scale = UIScreen.main.scale
+
+        guard let image = renderer.uiImage else {
+            feedbackMessage = "行程图生成失败，请重试"
+            return
+        }
+
+        shareImage = image
+        showShareSheet = true
+        await savePosterToPhotos(image)
+    }
+
+    @MainActor
+    private func savePosterToPhotos(_ image: UIImage) async {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            feedbackMessage = "未获得相册权限，可先通过分享面板手动保存"
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetChangeRequest.creationRequestForAsset(from: image)
+            }) { success, error in
+                DispatchQueue.main.async {
+                    if success {
+                        feedbackMessage = "已保存到相册"
+                    } else if let error {
+                        feedbackMessage = "保存失败：\(error.localizedDescription)"
+                    } else {
+                        feedbackMessage = "保存失败，请重试"
+                    }
+                    continuation.resume()
                 }
             }
         }
-        .listStyle(.insetGrouped)
+    }
+
+    @MainActor
+    private func loadCoverImageIfNeeded() async {
+        guard coverImage == nil,
+              let urlString = AppConfig.resolvedURLString(event.coverImageUrl),
+              let url = URL(string: urlString) else {
+            return
+        }
+
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            if let image = UIImage(data: data) {
+                coverImage = image
+            }
+        } catch {
+            // Keep gradient fallback for poster background.
+        }
+    }
+
+    private static let routeDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "MMM d"
+        return formatter
+    }()
+}
+
+private struct EventRoutineView: View {
+    let event: WebEvent
+    let scheduledSlots: [WebEventLineupSlot]
+
+    @State private var selectedDayID: String = ""
+    @State private var showRoutePlanner = false
+
+    private var days: [EventScheduleDay] {
+        EventScheduleDay.build(from: scheduledSlots)
+    }
+
+    private var selectedDay: EventScheduleDay? {
+        days.first(where: { $0.id == selectedDayID }) ?? days.first
+    }
+
+    var body: some View {
+        Group {
+            if days.isEmpty {
+                ContentUnavailableView("等待时间表发布", systemImage: "calendar.badge.exclamationmark")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        eventHeader
+
+                        if days.count > 1 {
+                            daySelector
+                        }
+
+                        if let selectedDay {
+                            EventTimelineBoardView(
+                                event: event,
+                                day: selectedDay,
+                                selectedSlotIDs: [],
+                                selectable: false,
+                                onToggleSlot: nil
+                            )
+                            .frame(height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots))
+                        } else {
+                            ContentUnavailableView("等待时间表发布", systemImage: "calendar.badge.exclamationmark")
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.top, 12)
+                    .padding(.bottom, 24)
+                }
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.05, green: 0.06, blue: 0.11),
+                            RaverTheme.background
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .onAppear {
+                    if selectedDayID.isEmpty {
+                        selectedDayID = days.first?.id ?? ""
+                    }
+                }
+                .fullScreenCover(isPresented: $showRoutePlanner) {
+                    EventRoutePlannerView(
+                        event: event,
+                        days: days,
+                        initialDayID: selectedDayID
+                    )
+                }
+            }
+        }
         .navigationTitle("活动日程")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !days.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("定制路线") {
+                        showRoutePlanner = true
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.accent)
+                }
+            }
+        }
     }
+
+    private var eventHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(event.name)
+                .font(EventScheduleTypography.heavy(30))
+                .foregroundStyle(Color.white)
+                .lineLimit(2)
+                .minimumScaleFactor(0.74)
+        }
+    }
+
+    private var daySelector: some View {
+        //HorizontalAxisLockedScrollView(showsIndicators: false) {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(Array(days.enumerated()), id: \.offset) { _, day in
+                    let selected = day.id == selectedDayID
+                    Button {
+                        selectedDayID = day.id
+                    } label: {
+                        Text("\(day.title) · \(Self.dayButtonFormatter.string(from: day.date))")
+                            .font(EventScheduleTypography.semibold(15))
+                            .foregroundStyle(selected ? Color.black.opacity(0.85) : Color.white.opacity(0.88))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                Capsule()
+                                    .fill(selected ? Color.white.opacity(0.92) : Color.white.opacity(0.13))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+
+    private static let dayButtonFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "MMM d"
+        return formatter
+    }()
 }
 
 struct EventEditorView: View {
@@ -4963,6 +6054,9 @@ struct EventEditorView: View {
     }
 
     private func readonlyScheduleSummary(for slot: EditableLineupSlot) -> String {
+        if slot.startTime == nil && slot.endTime == nil {
+            return "未填写时间（不展示在时间表）"
+        }
         let draft = makeTimeDraft(from: slot)
         let start = draft.startText.isEmpty ? "--:--" : draft.startText
         let end = draft.endText.isEmpty ? "--:--" : draft.endText
@@ -7160,6 +8254,23 @@ struct DJsModuleView: View {
     @State private var spotifyDraftAliases = ""
     @State private var spotifyDraftBio = ""
     @State private var spotifyDraftCountry = ""
+    @State private var discogsSearchKeyword = ""
+    @State private var discogsCandidates: [DiscogsDJCandidate] = []
+    @State private var isSearchingDiscogs = false
+    @State private var selectedDiscogsCandidate: DiscogsDJCandidate?
+    @State private var isLoadingDiscogsDetail = false
+    @State private var discogsDraftName = ""
+    @State private var discogsDraftAliases = ""
+    @State private var discogsDraftBio = ""
+    @State private var discogsDraftCountry = ""
+    @State private var discogsDraftInstagram = ""
+    @State private var discogsDraftSoundcloud = ""
+    @State private var discogsDraftTwitter = ""
+    @State private var discogsDraftSpotifyID = ""
+    @State private var discogsLinkedSpotifyKeyword = ""
+    @State private var discogsLinkedSpotifyCandidates: [SpotifyDJCandidate] = []
+    @State private var isSearchingDiscogsLinkedSpotify = false
+    @State private var selectedDiscogsLinkedSpotifyCandidate: SpotifyDJCandidate?
     @State private var manualName = ""
     @State private var manualAliases = ""
     @State private var manualBio = ""
@@ -7559,7 +8670,7 @@ struct DJsModuleView: View {
                                 Button {
                                     applySpotifyCandidate(candidate)
                                 } label: {
-                                    spotifyCandidateRow(candidate)
+                                    spotifyCandidateRow(candidate, selectedSpotifyId: selectedSpotifyCandidate?.spotifyId)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -7579,6 +8690,134 @@ struct DJsModuleView: View {
 
                             if let existingName = selected.existingDJName, !existingName.isEmpty {
                                 Text("检测到同名/同Spotify DJ：\(existingName)，导入时将合并更新，不会重复创建。")
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                        }
+                    }
+                } else if importMode == .discogs {
+                    Section("搜索 Discogs Artist") {
+                        HStack(spacing: 8) {
+                            TextField("输入 DJ 名称", text: $discogsSearchKeyword)
+                                .textInputAutocapitalization(.words)
+                                .autocorrectionDisabled(true)
+                                .onSubmit {
+                                    Task { await searchDiscogsCandidates() }
+                                }
+
+                            Button(isSearchingDiscogs ? "搜索中..." : "搜索") {
+                                Task { await searchDiscogsCandidates() }
+                            }
+                            .disabled(isSearchingDiscogs || discogsSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+
+                        if isSearchingDiscogs {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("正在拉取 Discogs 候选列表...")
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                        }
+                    }
+
+                    Section("Discogs 候选结果") {
+                        if discogsCandidates.isEmpty {
+                            Text("暂无候选，可继续搜索或切换到手动导入。")
+                                .font(.subheadline)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        } else {
+                            ForEach(discogsCandidates) { candidate in
+                                Button {
+                                    applyDiscogsCandidate(candidate)
+                                } label: {
+                                    discogsCandidateRow(candidate)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    if selectedDiscogsCandidate != nil {
+                        Section("确认导入信息（支持二次修改）") {
+                            if isLoadingDiscogsDetail {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                    Text("正在读取 Discogs 详情并自动填充...")
+                                        .font(.caption)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                }
+                            }
+
+                            TextField("DJ 名称", text: $discogsDraftName)
+                            TextField("别名（英文逗号分隔）", text: $discogsDraftAliases)
+                            TextField("简介", text: $discogsDraftBio, axis: .vertical)
+                            TextField("国家（可选）", text: $discogsDraftCountry)
+                            TextField("Instagram（可选）", text: $discogsDraftInstagram)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled(true)
+                            TextField("SoundCloud（可选）", text: $discogsDraftSoundcloud)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled(true)
+                            TextField("X/Twitter（可选）", text: $discogsDraftTwitter)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled(true)
+                            TextField("Spotify ID（可选）", text: $discogsDraftSpotifyID)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled(true)
+
+                            if let selectedDiscogsCandidate,
+                               let existingName = selectedDiscogsCandidate.existingDJName,
+                               !existingName.isEmpty {
+                                Text("检测到同名 DJ：\(existingName)，导入时将合并更新，不会重复创建。")
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                        }
+
+                        Section("关联 Spotify（可选）") {
+                            HStack(spacing: 8) {
+                                TextField("搜索 Spotify 用于补全链接", text: $discogsLinkedSpotifyKeyword)
+                                    .textInputAutocapitalization(.words)
+                                    .autocorrectionDisabled(true)
+                                    .onSubmit {
+                                        Task { await searchDiscogsLinkedSpotifyCandidates() }
+                                    }
+
+                                Button(isSearchingDiscogsLinkedSpotify ? "搜索中..." : "搜索") {
+                                    Task { await searchDiscogsLinkedSpotifyCandidates() }
+                                }
+                                .disabled(isSearchingDiscogsLinkedSpotify || discogsLinkedSpotifyKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
+
+                            if isSearchingDiscogsLinkedSpotify {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                    Text("正在搜索 Spotify...")
+                                        .font(.caption)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                }
+                            }
+
+                            if !discogsLinkedSpotifyCandidates.isEmpty {
+                                ForEach(discogsLinkedSpotifyCandidates) { candidate in
+                                    Button {
+                                        applyDiscogsLinkedSpotifyCandidate(candidate)
+                                    } label: {
+                                        spotifyCandidateRow(
+                                            candidate,
+                                            selectedSpotifyId: selectedDiscogsLinkedSpotifyCandidate?.spotifyId
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+
+                            if let selectedDiscogsLinkedSpotifyCandidate {
+                                Text("已关联 Spotify：\(selectedDiscogsLinkedSpotifyCandidate.name)")
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             }
@@ -7660,6 +8899,9 @@ struct DJsModuleView: View {
         case .spotify:
             return selectedSpotifyCandidate == nil
                 || spotifyDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .discogs:
+            return selectedDiscogsCandidate == nil
+                || discogsDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .manual:
             return manualName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
@@ -7690,6 +8932,50 @@ struct DJsModuleView: View {
         }
     }
 
+    @MainActor
+    private func searchDiscogsCandidates() async {
+        let keyword = discogsSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else {
+            discogsCandidates = []
+            selectedDiscogsCandidate = nil
+            return
+        }
+
+        isSearchingDiscogs = true
+        defer { isSearchingDiscogs = false }
+
+        do {
+            let items = try await service.searchDiscogsDJs(query: keyword, limit: 12)
+            discogsCandidates = items
+            if let first = items.first {
+                applyDiscogsCandidate(first)
+            } else {
+                selectedDiscogsCandidate = nil
+            }
+        } catch {
+            errorMessage = "Discogs 搜索失败：\(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func searchDiscogsLinkedSpotifyCandidates() async {
+        let keyword = discogsLinkedSpotifyKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else {
+            discogsLinkedSpotifyCandidates = []
+            return
+        }
+
+        isSearchingDiscogsLinkedSpotify = true
+        defer { isSearchingDiscogsLinkedSpotify = false }
+
+        do {
+            let items = try await service.searchSpotifyDJs(query: keyword, limit: 8)
+            discogsLinkedSpotifyCandidates = items
+        } catch {
+            errorMessage = "Spotify 搜索失败：\(error.localizedDescription)"
+        }
+    }
+
     private func applySpotifyCandidate(_ candidate: SpotifyDJCandidate) {
         selectedSpotifyCandidate = candidate
         spotifyDraftName = candidate.name
@@ -7702,8 +8988,52 @@ struct DJsModuleView: View {
         }
     }
 
+    private func applyDiscogsCandidate(_ candidate: DiscogsDJCandidate) {
+        selectedDiscogsCandidate = candidate
+        discogsDraftName = candidate.name
+        discogsDraftAliases = ""
+        discogsDraftBio = ""
+        discogsDraftCountry = ""
+        discogsDraftInstagram = ""
+        discogsDraftSoundcloud = ""
+        discogsDraftTwitter = ""
+        discogsDraftSpotifyID = ""
+        selectedDiscogsLinkedSpotifyCandidate = nil
+        discogsLinkedSpotifyCandidates = []
+        discogsLinkedSpotifyKeyword = ""
+        Task { await loadDiscogsCandidateDetail(artistId: candidate.artistId) }
+    }
+
+    private func applyDiscogsLinkedSpotifyCandidate(_ candidate: SpotifyDJCandidate) {
+        selectedDiscogsLinkedSpotifyCandidate = candidate
+        discogsDraftSpotifyID = candidate.spotifyId
+    }
+
+    @MainActor
+    private func loadDiscogsCandidateDetail(artistId: Int) async {
+        isLoadingDiscogsDetail = true
+        defer { isLoadingDiscogsDetail = false }
+
+        do {
+            let detail = try await service.fetchDiscogsDJArtist(id: artistId)
+            if !detail.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                discogsDraftName = detail.name
+            }
+            discogsDraftAliases = buildDiscogsAliasesText(from: detail)
+            discogsDraftBio = detail.profile ?? ""
+            discogsDraftInstagram = pickSocialURL(from: detail.urls, hosts: ["instagram.com"]) ?? ""
+            discogsDraftSoundcloud = pickSocialURL(from: detail.urls, hosts: ["soundcloud.com"]) ?? ""
+            discogsDraftTwitter = pickSocialURL(from: detail.urls, hosts: ["twitter.com", "x.com"]) ?? ""
+            if let linkedSpotify = selectedDiscogsLinkedSpotifyCandidate {
+                discogsDraftSpotifyID = linkedSpotify.spotifyId
+            }
+        } catch {
+            errorMessage = "读取 Discogs 详情失败：\(error.localizedDescription)"
+        }
+    }
+
     @ViewBuilder
-    private func spotifyCandidateRow(_ candidate: SpotifyDJCandidate) -> some View {
+    private func spotifyCandidateRow(_ candidate: SpotifyDJCandidate, selectedSpotifyId: String?) -> some View {
         HStack(spacing: 10) {
             Group {
                 if let imageURL = AppConfig.resolvedURLString(candidate.imageUrl), let url = URL(string: imageURL) {
@@ -7745,7 +9075,66 @@ struct DJsModuleView: View {
 
             Spacer(minLength: 0)
 
-            if selectedSpotifyCandidate?.spotifyId == candidate.spotifyId {
+            if selectedSpotifyId == candidate.spotifyId {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color.green)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func discogsCandidateRow(_ candidate: DiscogsDJCandidate) -> some View {
+        HStack(spacing: 10) {
+            Group {
+                if let thumb = AppConfig.resolvedURLString(candidate.thumbUrl),
+                   let url = URL(string: thumb) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        default:
+                            Circle().fill(RaverTheme.card)
+                        }
+                    }
+                } else if let cover = AppConfig.resolvedURLString(candidate.coverImageUrl),
+                          let url = URL(string: cover) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        default:
+                            Circle().fill(RaverTheme.card)
+                        }
+                    }
+                } else {
+                    Circle().fill(RaverTheme.card)
+                }
+            }
+            .frame(width: 36, height: 36)
+            .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(candidate.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+
+                Text("Discogs ID \(candidate.artistId)")
+                    .font(.caption2)
+                    .foregroundStyle(RaverTheme.secondaryText)
+
+                if let existingName = candidate.existingDJName, !existingName.isEmpty {
+                    Text("将合并到：\(existingName)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if selectedDiscogsCandidate?.artistId == candidate.artistId {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(Color.green)
             }
@@ -7758,6 +9147,8 @@ struct DJsModuleView: View {
         switch importMode {
         case .spotify:
             await confirmSpotifyImport()
+        case .discogs:
+            await confirmDiscogsImport()
         case .manual:
             await confirmManualImport()
         }
@@ -7806,6 +9197,57 @@ struct DJsModuleView: View {
                 : "已更新 DJ：\(result.dj.name)"
         } catch {
             errorMessage = "导入失败：\(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func confirmDiscogsImport() async {
+        guard let selected = selectedDiscogsCandidate else {
+            errorMessage = "请先选择一个 Discogs DJ"
+            return
+        }
+        let finalName = discogsDraftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !finalName.isEmpty else {
+            errorMessage = "DJ 名称不能为空"
+            return
+        }
+
+        let aliases = discogsDraftAliases
+            .split(whereSeparator: { $0 == "," || $0 == "，" })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let bio = normalizedOptionalString(discogsDraftBio)
+        let country = normalizedOptionalString(discogsDraftCountry)
+        let instagram = normalizedOptionalString(discogsDraftInstagram)
+        let soundcloud = normalizedOptionalString(discogsDraftSoundcloud)
+        let twitter = normalizedOptionalString(discogsDraftTwitter)
+        let spotifyID = normalizedOptionalString(discogsDraftSpotifyID) ?? selectedDiscogsLinkedSpotifyCandidate?.spotifyId
+
+        isImportingDJ = true
+        defer { isImportingDJ = false }
+
+        do {
+            let result = try await service.importDiscogsDJ(
+                input: ImportDiscogsDJInput(
+                    discogsArtistId: selected.artistId,
+                    name: finalName,
+                    aliases: aliases,
+                    bio: bio,
+                    country: country,
+                    instagramUrl: instagram,
+                    soundcloudUrl: soundcloud,
+                    twitterUrl: twitter,
+                    spotifyId: spotifyID,
+                    isVerified: true
+                )
+            )
+            showDJImportSheet = false
+            await load()
+            errorMessage = result.action == "created"
+                ? "已导入 DJ：\(result.dj.name)"
+                : "已更新 DJ：\(result.dj.name)"
+        } catch {
+            errorMessage = "Discogs 导入失败：\(error.localizedDescription)"
         }
     }
 
@@ -7875,6 +9317,43 @@ struct DJsModuleView: View {
         }
     }
 
+    private func buildDiscogsAliasesText(from detail: DiscogsDJArtistDetail) -> String {
+        var values: [String] = []
+        values.append(contentsOf: detail.nameVariations)
+        values.append(contentsOf: detail.aliases)
+        values.append(contentsOf: detail.groups)
+        if let realName = detail.realName, !realName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            values.append(realName)
+        }
+
+        var deduplicated: [String] = []
+        var seen = Set<String>()
+        let normalizedPrimary = detail.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        for item in values {
+            let trimmed = item.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.lowercased()
+            guard key != normalizedPrimary else { continue }
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            deduplicated.append(trimmed)
+        }
+        return deduplicated.joined(separator: ", ")
+    }
+
+    private func pickSocialURL(from urls: [String], hosts: [String]) -> String? {
+        for raw in urls {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            guard let parsed = URL(string: trimmed) else { continue }
+            let host = parsed.host?.lowercased() ?? ""
+            if hosts.contains(where: { host.contains($0.lowercased()) }) {
+                return trimmed
+            }
+        }
+        return nil
+    }
+
     private enum ManualPhotoTarget {
         case avatar
         case banner
@@ -7932,6 +9411,7 @@ private enum DJsModuleSection: CaseIterable {
 
 private enum DJsImportMode: String, CaseIterable, Identifiable {
     case spotify
+    case discogs
     case manual
 
     var id: String { rawValue }
@@ -7939,6 +9419,7 @@ private enum DJsImportMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .spotify: return "Spotify 导入"
+        case .discogs: return "Discogs 导入"
         case .manual: return "手动导入"
         }
     }
@@ -8424,6 +9905,328 @@ private struct DJDetailPageOffsetPreferenceKey: PreferenceKey {
     }
 }
 
+private struct DJDetailRepresentable: UIViewControllerRepresentable {
+    let heroView: AnyView
+    let djTitle: String
+    let tabTitles: [String]
+    let tabBarView: AnyView
+    let tabPageViews: [AnyView]
+    let selectedIndex: Int
+    let pageProgress: CGFloat
+    let onTabChange: (Int) -> Void
+    let onPageProgress: (CGFloat) -> Void
+
+    @EnvironmentObject private var appState: AppState
+
+    func makeUIViewController(context: Context) -> DJDetailScrollViewController {
+        let controller = DJDetailScrollViewController()
+        controller.onTabIndexChange = { [weak coordinator = context.coordinator] index in
+            coordinator?.relayTabChange(index)
+        }
+        controller.onPageProgressChange = { [weak coordinator = context.coordinator] progress in
+            coordinator?.relayPageProgress(progress)
+        }
+
+        context.coordinator.scrollController = controller
+        context.coordinator.onTabChange = onTabChange
+        context.coordinator.onPageProgress = onPageProgress
+
+        controller.update(
+            heroView: wrapped(heroView),
+            djTitle: djTitle,
+            tabTitles: tabTitles,
+            tabBarView: wrapped(tabBarView),
+            tabPageViews: tabPageViews.map(wrapped),
+            selectedIndex: selectedIndex,
+            pageProgress: pageProgress,
+            animatedSelection: false
+        )
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: DJDetailScrollViewController, context: Context) {
+        context.coordinator.scrollController = uiViewController
+        context.coordinator.onTabChange = onTabChange
+        context.coordinator.onPageProgress = onPageProgress
+
+        uiViewController.onTabIndexChange = { [weak coordinator = context.coordinator] index in
+            coordinator?.relayTabChange(index)
+        }
+        uiViewController.onPageProgressChange = { [weak coordinator = context.coordinator] progress in
+            coordinator?.relayPageProgress(progress)
+        }
+
+        uiViewController.update(
+            heroView: wrapped(heroView),
+            djTitle: djTitle,
+            tabTitles: tabTitles,
+            tabBarView: wrapped(tabBarView),
+            tabPageViews: tabPageViews.map(wrapped),
+            selectedIndex: selectedIndex,
+            pageProgress: pageProgress,
+            animatedSelection: true
+        )
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    private func wrapped(_ view: AnyView) -> AnyView {
+        AnyView(view.environmentObject(appState))
+    }
+
+    final class Coordinator {
+        weak var scrollController: DJDetailScrollViewController?
+        var onTabChange: ((Int) -> Void)?
+        var onPageProgress: ((CGFloat) -> Void)?
+
+        func relayTabChange(_ index: Int) {
+            onTabChange?(index)
+        }
+
+        func relayPageProgress(_ progress: CGFloat) {
+            onPageProgress?(progress)
+        }
+    }
+}
+
+private final class DJDetailScrollViewController: UIViewController {
+    var onTabIndexChange: ((Int) -> Void)?
+    var onPageProgressChange: ((CGFloat) -> Void)?
+
+    private let heroHeight: CGFloat = 360
+    private let tabBarHeight: CGFloat = 52
+    private let topBarHeight: CGFloat = 44
+
+    private let pageViewController = EventDetailPageViewController()
+    private let heroViewController = UIHostingController(rootView: AnyView(EmptyView()))
+    private let tabBarViewController = UIHostingController(rootView: AnyView(EmptyView()))
+    private let tabBarContainer = UIView()
+    private let topOverlayView = UIView()
+    private let titleLabel = UILabel()
+
+    private var heroTopConstraint: NSLayoutConstraint!
+    private var tabBarTopConstraint: NSLayoutConstraint!
+    private var topOverlayHeightConstraint: NSLayoutConstraint!
+    private var didSetupHierarchy = false
+
+    private var pendingHeroView: AnyView?
+    private var pendingTitle: String = ""
+    private var pendingTabTitles: [String] = []
+    private var pendingTabBarView: AnyView?
+    private var pendingPageViews: [AnyView] = []
+    private var pendingSelectedIndex: Int = 0
+    private var pendingProgress: CGFloat = 0
+    private var currentSelectedIndex: Int = 0
+    private var isApplyingProgrammaticSelection = false
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = UIColor(RaverTheme.background)
+        heroViewController.view.backgroundColor = .clear
+        tabBarViewController.view.backgroundColor = .clear
+        pageViewController.view.backgroundColor = .clear
+        tabBarContainer.backgroundColor = UIColor(RaverTheme.background)
+        setupHierarchyIfNeeded()
+        if #available(iOS 16.4, *) {
+            heroViewController.safeAreaRegions = []
+            tabBarViewController.safeAreaRegions = []
+        }
+        wireCallbacks()
+        applyPendingState(animatedSelection: false)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        applyPageInsets()
+        updatePinnedHeader(forOffset: pageViewController.currentActiveOffset())
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        applyPageInsets()
+        updatePinnedHeader(forOffset: pageViewController.currentActiveOffset())
+    }
+
+    func update(
+        heroView: AnyView,
+        djTitle: String,
+        tabTitles: [String],
+        tabBarView: AnyView,
+        tabPageViews: [AnyView],
+        selectedIndex: Int,
+        pageProgress: CGFloat,
+        animatedSelection: Bool
+    ) {
+        pendingHeroView = heroView
+        pendingTitle = djTitle
+        pendingTabTitles = tabTitles
+        pendingTabBarView = tabBarView
+        pendingPageViews = tabPageViews
+        pendingSelectedIndex = selectedIndex
+        pendingProgress = pageProgress
+
+        guard isViewLoaded else { return }
+        applyPendingState(animatedSelection: animatedSelection)
+    }
+
+    private func setupHierarchyIfNeeded() {
+        guard !didSetupHierarchy else { return }
+        didSetupHierarchy = true
+
+        addChild(pageViewController)
+        pageViewController.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(pageViewController.view)
+        NSLayoutConstraint.activate([
+            pageViewController.view.topAnchor.constraint(equalTo: view.topAnchor),
+            pageViewController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            pageViewController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            pageViewController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+        pageViewController.didMove(toParent: self)
+
+        addChild(heroViewController)
+        heroViewController.view.translatesAutoresizingMaskIntoConstraints = false
+        heroViewController.view.clipsToBounds = true
+        view.addSubview(heroViewController.view)
+        heroTopConstraint = heroViewController.view.topAnchor.constraint(equalTo: view.topAnchor)
+        NSLayoutConstraint.activate([
+            heroTopConstraint,
+            heroViewController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            heroViewController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            heroViewController.view.heightAnchor.constraint(equalToConstant: heroHeight),
+        ])
+        heroViewController.didMove(toParent: self)
+
+        tabBarContainer.translatesAutoresizingMaskIntoConstraints = false
+        tabBarContainer.clipsToBounds = true
+        view.addSubview(tabBarContainer)
+
+        addChild(tabBarViewController)
+        tabBarViewController.view.translatesAutoresizingMaskIntoConstraints = false
+        tabBarContainer.addSubview(tabBarViewController.view)
+        tabBarTopConstraint = tabBarContainer.topAnchor.constraint(equalTo: view.topAnchor, constant: heroHeight)
+        NSLayoutConstraint.activate([
+            tabBarTopConstraint,
+            tabBarContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tabBarContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tabBarContainer.heightAnchor.constraint(equalToConstant: tabBarHeight),
+
+            tabBarViewController.view.topAnchor.constraint(equalTo: tabBarContainer.topAnchor),
+            tabBarViewController.view.leadingAnchor.constraint(equalTo: tabBarContainer.leadingAnchor),
+            tabBarViewController.view.trailingAnchor.constraint(equalTo: tabBarContainer.trailingAnchor),
+            tabBarViewController.view.bottomAnchor.constraint(equalTo: tabBarContainer.bottomAnchor),
+        ])
+        tabBarViewController.didMove(toParent: self)
+
+        setupTopOverlay()
+    }
+
+    private func wireCallbacks() {
+        pageViewController.onPageChange = { [weak self] index in
+            guard let self else { return }
+            currentSelectedIndex = index
+            if !isApplyingProgrammaticSelection {
+                onTabIndexChange?(index)
+            }
+        }
+
+        pageViewController.onPageProgress = { [weak self] progress in
+            self?.onPageProgressChange?(progress)
+        }
+
+        pageViewController.onActivePageVerticalOffsetChanged = { [weak self] offset in
+            self?.updatePinnedHeader(forOffset: offset)
+        }
+    }
+
+    private func applyPendingState(animatedSelection: Bool) {
+        if let hero = pendingHeroView {
+            heroViewController.rootView = hero
+        }
+        if let tabBar = pendingTabBarView {
+            tabBarViewController.rootView = tabBar
+        }
+
+        titleLabel.text = pendingTitle
+        _ = pendingTabTitles
+        pageViewController.configure(with: pendingPageViews)
+        applyPageInsets()
+
+        if pendingSelectedIndex != currentSelectedIndex {
+            currentSelectedIndex = pendingSelectedIndex
+            isApplyingProgrammaticSelection = true
+            pageViewController.setSelectedIndex(pendingSelectedIndex, animated: animatedSelection)
+            let releaseDelay = animatedSelection ? 0.4 : 0
+            DispatchQueue.main.asyncAfter(deadline: .now() + releaseDelay) { [weak self] in
+                self?.isApplyingProgrammaticSelection = false
+            }
+        } else {
+            isApplyingProgrammaticSelection = false
+        }
+
+        onPageProgressChange?(pendingProgress)
+        updatePinnedHeader(forOffset: pageViewController.currentActiveOffset())
+    }
+
+    private func applyPageInsets() {
+        let topInset = heroHeight + tabBarHeight
+        let bottomInset = view.safeAreaInsets.bottom + 20
+        pageViewController.setContentInsets(top: topInset, bottom: bottomInset)
+        topOverlayHeightConstraint.constant = pinnedTabTopLimit()
+    }
+
+    private func updatePinnedHeader(forOffset offset: CGFloat) {
+        let clamped = min(max(offset, 0), heroHeight)
+        heroTopConstraint.constant = -clamped
+
+        let topLimit = pinnedTabTopLimit()
+        let desiredTop = heroHeight - clamped
+        tabBarTopConstraint.constant = max(topLimit, desiredTop)
+
+        let pinStart = max(0, heroHeight - topLimit)
+        let overlayProgress = min(max((offset - pinStart + 8) / 20, 0), 1)
+        topOverlayView.alpha = overlayProgress
+        titleLabel.alpha = overlayProgress
+    }
+
+    private func pinnedTabTopLimit() -> CGFloat {
+        view.safeAreaInsets.top + topBarHeight
+    }
+
+    private func setupTopOverlay() {
+        topOverlayView.translatesAutoresizingMaskIntoConstraints = false
+        topOverlayView.backgroundColor = UIColor.black
+        topOverlayView.alpha = 0
+        topOverlayView.isUserInteractionEnabled = false
+        view.addSubview(topOverlayView)
+
+        topOverlayHeightConstraint = topOverlayView.heightAnchor.constraint(equalToConstant: 0)
+        NSLayoutConstraint.activate([
+            topOverlayView.topAnchor.constraint(equalTo: view.topAnchor),
+            topOverlayView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            topOverlayView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            topOverlayHeightConstraint,
+        ])
+
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.textColor = .white
+        titleLabel.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.textAlignment = .center
+        titleLabel.numberOfLines = 1
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.alpha = 0
+        topOverlayView.addSubview(titleLabel)
+
+        NSLayoutConstraint.activate([
+            titleLabel.centerXAnchor.constraint(equalTo: topOverlayView.centerXAnchor),
+            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            titleLabel.widthAnchor.constraint(equalToConstant: 176),
+        ])
+    }
+}
+
 struct DJDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -8435,6 +10238,7 @@ struct DJDetailView: View {
     @State private var dj: WebDJ?
     @State private var sets: [WebDJSet] = []
     @State private var djEvents: [WebEvent] = []
+    @State private var ratingUnits: [WebRatingUnit] = []
     @State private var watchedSetCount = 0
     @State private var isLoading = false
     @State private var selectedEventIDForDetail: String?
@@ -8442,6 +10246,8 @@ struct DJDetailView: View {
     @State private var errorMessage: String?
     @State private var selectedTab: DJDetailTab = .intro
     @State private var pageProgress: CGFloat = 0
+    @State private var isTabSwitchingByTap = false
+    @State private var tabSwitchUnlockWorkItem: DispatchWorkItem?
     @State private var tabFrames: [DJDetailTab: CGRect] = [:]
     @State private var pagerWidth: CGFloat = 1
     @State private var djNameLineCount: Int = 1
@@ -8497,18 +10303,36 @@ struct DJDetailView: View {
             if isLoading, dj == nil {
                 ProgressView("加载 DJ 详情...")
             } else if let dj {
-                VStack(spacing: 0) {
-                    heroSection(dj)
-                    tabBar
-                        .zIndex(2)
-
-                    GeometryReader { geo in
-                        let cardWidth = max(geo.size.width - 32, 0)
-
-                        tabPager(dj, cardWidth: cardWidth)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                DJDetailRepresentable(
+                    heroView: AnyView(heroSection(dj)),
+                    djTitle: dj.name,
+                    tabTitles: DJDetailTab.allCases.map(\.title),
+                    tabBarView: AnyView(tabBar),
+                    tabPageViews: DJDetailTab.allCases.map { tab in
+                        AnyView(
+                            VStack(alignment: .leading, spacing: 14) {
+                                tabContent(dj, tab: tab)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 20)
+                        )
+                    },
+                    selectedIndex: selectedIndex(for: selectedTab),
+                    pageProgress: pageProgress,
+                    onTabChange: { index in
+                        guard !isTabSwitchingByTap else { return }
+                        guard DJDetailTab.allCases.indices.contains(index) else { return }
+                        selectDJDetailTab(DJDetailTab.allCases[index])
+                    },
+                    onPageProgress: { progress in
+                        guard !isTabSwitchingByTap else { return }
+                        let maxProgress = CGFloat(max(0, DJDetailTab.allCases.count - 1))
+                        pageProgress = min(max(progress, 0), maxProgress)
                     }
-                }
+                )
+                .ignoresSafeArea(edges: .top)
             } else {
                 ContentUnavailableView("DJ 不存在", systemImage: "person.crop.circle.badge.exclamationmark")
             }
@@ -8519,13 +10343,8 @@ struct DJDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .overlay(alignment: .topLeading) {
-            floatingDismissButton
-        }
-        .overlay(alignment: .topTrailing) {
-            if (dj?.canEdit ?? false) {
-                editDJFloatingButton
-            }
+        .overlay(alignment: .top) {
+            floatingTopBar
         }
         .fullScreenCover(
             isPresented: Binding(
@@ -8553,6 +10372,9 @@ struct DJDetailView: View {
         .sheet(isPresented: $showDJEditSheet) {
             djEditSheet
         }
+        .sheet(isPresented: $showSpotifyImportSheet) {
+            spotifyImportSheet
+        }
         .navigationDestination(item: $selectedContributorUser) { user in
             UserProfileView(userID: user.id)
         }
@@ -8572,6 +10394,7 @@ struct DJDetailView: View {
             async let djTask = service.fetchDJ(id: djID)
             async let setsTask = service.fetchDJSets(djID: djID)
             async let eventsTask = service.fetchDJEvents(djID: djID)
+            async let ratingUnitsTask = service.fetchDJRatingUnits(djID: djID)
             async let watchedCountTask = service.fetchMyDJCheckinCount(djID: djID)
             dj = try await djTask
             if let loadedDJ = dj {
@@ -8579,10 +10402,15 @@ struct DJDetailView: View {
             }
             sets = try await setsTask
             djEvents = (try? await eventsTask) ?? []
+            ratingUnits = (try? await ratingUnitsTask) ?? []
             watchedSetCount = (try? await watchedCountTask) ?? 0
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func reloadDJRatingUnits() async {
+        ratingUnits = (try? await service.fetchDJRatingUnits(djID: djID)) ?? []
     }
 
     private func toggleFollow(_ item: WebDJ) async {
@@ -8854,7 +10682,7 @@ struct DJDetailView: View {
     }
 
     private func heroSection(_ dj: WebDJ) -> some View {
-        ZStack {
+        ZStack(alignment: .top) {
             GeometryReader { geo in
                 ZStack {
                     RaverTheme.card
@@ -8895,8 +10723,8 @@ struct DJDetailView: View {
                 endPoint: .bottom
             )
 
-            VStack {
-                Spacer()
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .center, spacing: 10) {
                         aliasPillsRow(for: dj)
@@ -8924,9 +10752,7 @@ struct DJDetailView: View {
                             .buttonStyle(.plain)
 
                             Button("去活动打卡") {
-                                withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.82)) {
-                                    selectedTab = .events
-                                }
+                                selectDJDetailTab(.events)
                                 errorMessage = djEvents.isEmpty
                                     ? "请在对应活动详情页完成打卡；当前暂未找到这位 DJ 的活动记录。"
                                     : "请进入对应活动详情页完成打卡，并在活动打卡里选择本场观看的 DJ。"
@@ -8978,15 +10804,33 @@ struct DJDetailView: View {
         .frame(maxWidth: .infinity)
         .frame(height: 360)
         .clipped()
-        .ignoresSafeArea(edges: .top)
         .zIndex(1)
     }
 
-    private var floatingDismissButton: some View {
-        Button {
-            dismiss()
-        } label: {
-            Image(systemName: "chevron.left")
+    private var floatingTopBar: some View {
+        HStack {
+            floatingCircleButton(systemName: "chevron.left") {
+                dismiss()
+            }
+
+            Spacer()
+
+            if dj?.canEdit == true {
+                floatingCircleButton(systemName: "square.and.pencil") {
+                    guard let currentDJ = dj else { return }
+                    prepareDJEditDraft(from: currentDJ)
+                    showDJEditSheet = true
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 0)
+        .zIndex(10)
+    }
+
+    private func floatingCircleButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Color.white)
                 .frame(width: 38, height: 38)
@@ -8997,32 +10841,6 @@ struct DJDetailView: View {
                 )
         }
         .buttonStyle(.plain)
-        .padding(.leading, 12)
-        //.padding(.top, max(topSafeAreaInset() - 6, 0))
-        .padding(.top, 0)
-        .zIndex(10)
-    }
-
-    private var editDJFloatingButton: some View {
-        Button {
-            guard let currentDJ = dj else { return }
-            prepareDJEditDraft(from: currentDJ)
-            showDJEditSheet = true
-        } label: {
-            Image(systemName: "square.and.pencil")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Color.white)
-                .frame(width: 38, height: 38)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
-                )
-        }
-        .buttonStyle(.plain)
-        .padding(.trailing, 12)
-        .padding(.top, 0)
-        .zIndex(10)
     }
 
     private var djEditSheet: some View {
@@ -9309,8 +11127,8 @@ struct DJDetailView: View {
                         selectDJDetailTab(tab)
                     } label: {
                         Text(tab.title)
-                            .font(.system(size: 17, weight: selectedTab == tab ? .semibold : .medium))
-                            .foregroundStyle(selectedTab == tab ? RaverTheme.accent : Color.white.opacity(0.92))
+                            .font(.system(size: 17, weight: tabVisualState(for: tab) ? .semibold : .medium))
+                            .foregroundStyle(tabVisualState(for: tab) ? RaverTheme.accent : Color.white.opacity(0.92))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 8)
                     }
@@ -9460,10 +11278,7 @@ struct DJDetailView: View {
         case .events:
             eventsTabContent
         case .ratings:
-            Text("暂无打分")
-                .font(.subheadline)
-                .foregroundStyle(RaverTheme.secondaryText)
-                .padding(.vertical, 8)
+            ratingsTabContent
         }
     }
 
@@ -9479,6 +11294,8 @@ struct DJDetailView: View {
                 infoPill(icon: "checkmark.seal.fill", text: "认证")
             }
         }
+
+        socialLinks(dj)
 
         if let bio = dj.bio, !bio.isEmpty {
             JustifiedUILabelText(
@@ -9504,13 +11321,9 @@ struct DJDetailView: View {
                         } label: {
                             HStack(spacing: 10) {
                                 contributorUserAvatar(user, size: 28)
-                                Text("@\(user.username)")
+                                Text(user.shownName)
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(RaverTheme.primaryText)
-                                Spacer(minLength: 0)
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(RaverTheme.secondaryText)
                             }
                             .contentShape(Rectangle())
                         }
@@ -9531,8 +11344,6 @@ struct DJDetailView: View {
                 }
             }
         }
-
-        socialLinks(dj)
     }
 
     @ViewBuilder
@@ -9597,6 +11408,31 @@ struct DJDetailView: View {
     }
 
     @ViewBuilder
+    private var ratingsTabContent: some View {
+        if ratingUnits.isEmpty {
+            Text("暂无关联打分")
+                .foregroundStyle(RaverTheme.secondaryText)
+                .padding(.vertical, 6)
+        } else {
+            ForEach(ratingUnits) { unit in
+                NavigationLink {
+                    CircleRatingUnitDetailView(
+                        unitID: unit.id,
+                        onSubmitted: {
+                            Task {
+                                await reloadDJRatingUnits()
+                            }
+                        }
+                    )
+                } label: {
+                    djRatingUnitRow(unit)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
     private func aliasPillsRow(for dj: WebDJ) -> some View {
         let aliases = (dj.aliases ?? [])
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -9645,10 +11481,25 @@ struct DJDetailView: View {
     }
 
     private func selectDJDetailTab(_ tab: DJDetailTab) {
+        let targetProgress = CGFloat(selectedIndex(for: tab))
+        if selectedTab == tab, abs(pageProgress - targetProgress) < 0.001 {
+            return
+        }
+
+        isTabSwitchingByTap = true
+        tabSwitchUnlockWorkItem?.cancel()
+
         withAnimation(.interactiveSpring(response: 0.26, dampingFraction: 0.84)) {
             selectedTab = tab
-            pageProgress = CGFloat(selectedIndex(for: tab))
+            pageProgress = targetProgress
         }
+
+        let unlockWorkItem = DispatchWorkItem {
+            isTabSwitchingByTap = false
+            tabSwitchUnlockWorkItem = nil
+        }
+        tabSwitchUnlockWorkItem = unlockWorkItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: unlockWorkItem)
     }
 
     private var indicatorRect: CGRect? {
@@ -9675,6 +11526,11 @@ struct DJDetailView: View {
 
     private func selectedIndex(for tab: DJDetailTab) -> Int {
         DJDetailTab.allCases.firstIndex(of: tab) ?? 0
+    }
+
+    private func tabVisualState(for tab: DJDetailTab) -> Bool {
+        let index = CGFloat(selectedIndex(for: tab))
+        return abs(pageProgress - index) < 0.5
     }
 
     private func updatePageProgress(with offsets: [DJDetailTab: CGFloat]) {
@@ -9763,6 +11619,78 @@ struct DJDetailView: View {
         .padding(.vertical, 8)
         .overlay(alignment: .bottom) {
             Divider().opacity(0.45)
+        }
+    }
+
+    private func djRatingUnitRow(_ unit: WebRatingUnit) -> some View {
+        let eventName = unit.event?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        return HStack(alignment: .top, spacing: 10) {
+            djRatingThumb(urlString: unit.imageUrl, size: 52)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(unit.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+
+                if !eventName.isEmpty {
+                    Text("事件：\(eventName)")
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(1)
+                }
+
+                Text("评分 \(unit.rating, specifier: "%.1f") · \(unit.ratingCount) 人")
+                    .font(.caption2)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .padding(.top, 2)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(RaverTheme.card)
+        )
+    }
+
+    @ViewBuilder
+    private func djRatingThumb(urlString: String?, size: CGFloat) -> some View {
+        if let resolved = AppConfig.resolvedURLString(urlString),
+           let url = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(RaverTheme.card)
+                        .overlay(
+                            Image(systemName: "star.bubble")
+                                .font(.system(size: size * 0.32, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(0.9))
+                        )
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(RaverTheme.card)
+                .frame(width: size, height: size)
+                .overlay(
+                    Image(systemName: "star.bubble")
+                        .font(.system(size: size * 0.32, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.9))
+                )
         }
     }
 
@@ -10126,6 +12054,8 @@ struct DJSetDetailView: View {
     @State private var isPlaybackPaused = true
     @State private var isTracklistHidden = false
     @State private var isScrubbingProgress = false
+    @State private var relatedEvent: WebEvent?
+    @State private var selectedRelatedEventID: String?
 
     var body: some View {
         Group {
@@ -10211,6 +12141,18 @@ struct DJSetDetailView: View {
         .navigationDestination(item: $selectedCommentUser) { user in
             UserProfileView(userID: user.id)
         }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { selectedRelatedEventID != nil },
+                set: { if !$0 { selectedRelatedEventID = nil } }
+            )
+        ) {
+            if let relatedEventID = selectedRelatedEventID {
+                NavigationStack {
+                    EventDetailView(eventID: relatedEventID)
+                }
+            }
+        }
         .task {
             await load()
         }
@@ -10291,6 +12233,37 @@ struct DJSetDetailView: View {
                             Text(set.djId)
                                 .foregroundStyle(RaverTheme.secondaryText)
                                 .font(.subheadline)
+                        }
+                    }
+
+                    let linkedEventName = (set.eventName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let relatedEvent {
+                        Button {
+                            selectedRelatedEventID = relatedEvent.id
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "calendar.badge.clock")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.accent)
+                                Text("Sets on：\(relatedEvent.name)")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.accent)
+                                    .lineLimit(1)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    } else if !linkedEventName.isEmpty {
+                        HStack(spacing: 8) {
+                            Image(systemName: "calendar.badge.clock")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.accent)
+                            Text("Sets on：\(linkedEventName)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.accent)
+                                .lineLimit(1)
                         }
                     }
 
@@ -11230,11 +13203,13 @@ struct DJSetDetailView: View {
         defer { isLoading = false }
 
         do {
+            relatedEvent = nil
             async let setTask = service.fetchDJSet(id: setID)
             async let commentsTask = service.fetchSetComments(setID: setID)
             async let tracklistsTask = service.fetchTracklists(setID: setID)
             let loadedSet = try await setTask
             set = loadedSet
+            relatedEvent = try? await resolveRelatedEvent(for: loadedSet)
             comments = try await commentsTask
             tracklists = try await tracklistsTask
             selectedTracklistID = nil
@@ -11259,6 +13234,24 @@ struct DJSetDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func resolveRelatedEvent(for set: WebDJSet) async throws -> WebEvent? {
+        let eventName = (set.eventName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !eventName.isEmpty else { return nil }
+
+        let page = try await service.fetchEvents(
+            page: 1,
+            limit: 200,
+            search: eventName,
+            eventType: nil,
+            status: "all"
+        )
+        let normalized = eventName.lowercased()
+        if let exact = page.items.first(where: { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalized }) {
+            return exact
+        }
+        return page.items.first
     }
 
     private var tracklistDisplayName: String {
@@ -12582,6 +14575,7 @@ struct DJSetEditorView: View {
     @State private var isUploadingVideo = false
     @State private var previewText = ""
     @State private var errorMessage: String?
+    @State private var showEventBindingSheet = false
 
     private let demoVideoURL = "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
 
@@ -12593,7 +14587,37 @@ struct DJSetEditorView: View {
                     TextField("标题", text: $title)
                     TextField("简介", text: $description, axis: .vertical)
                     TextField("场地", text: $venue)
-                    TextField("活动名称", text: $eventName)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        if eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("未绑定活动")
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        } else {
+                            Text("已绑定活动：\(eventName)")
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .lineLimit(2)
+                        }
+
+                        HStack(spacing: 10) {
+                            Button {
+                                showEventBindingSheet = true
+                            } label: {
+                                Label("绑定活动", systemImage: "magnifyingglass")
+                            }
+                            .buttonStyle(.bordered)
+
+                            if !eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Button(role: .destructive) {
+                                    eventName = ""
+                                } label: {
+                                    Text("清除")
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                    }
                 }
 
                 Section("视频资源") {
@@ -12654,6 +14678,13 @@ struct DJSetEditorView: View {
                 Button("确定", role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
+            }
+            .sheet(isPresented: $showEventBindingSheet) {
+                SetEventBindingSheet(
+                    initialEventName: eventName
+                ) { selectedEventName in
+                    eventName = selectedEventName
+                }
             }
         }
     }
@@ -12767,6 +14798,138 @@ struct DJSetEditorView: View {
             onSaved()
             dismiss()
         } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct SetEventBindingSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    private let service = AppEnvironment.makeWebService()
+
+    let initialEventName: String
+    let onSelected: (String) -> Void
+
+    @State private var searchText = ""
+    @State private var manualEventName = ""
+    @State private var events: [WebEvent] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var searchTask: Task<Void, Never>?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if !initialEventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Section("当前绑定") {
+                        Text(initialEventName)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .lineLimit(2)
+                    }
+                }
+
+                Section("从活动库搜索并绑定") {
+                    TextField("搜索活动名称", text: $searchText)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+
+                    if isLoading {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("搜索中...")
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                    } else if events.isEmpty {
+                        Text("没有找到匹配活动")
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    } else {
+                        ForEach(events) { event in
+                            Button {
+                                onSelected(event.name)
+                                dismiss()
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(event.name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                        .lineLimit(2)
+                                    Text("\(event.startDate.formatted(date: .abbreviated, time: .omitted)) · \(event.summaryLocation.isEmpty ? "地点待补充" : event.summaryLocation)")
+                                        .font(.caption2)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                        .lineLimit(2)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                Section("库里没有时可手动输入") {
+                    TextField("手动填写活动名称", text: $manualEventName)
+                    Button("使用手动名称") {
+                        let trimmed = manualEventName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { return }
+                        onSelected(trimmed)
+                        dismiss()
+                    }
+                    .disabled(manualEventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .navigationTitle("绑定活动")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") { dismiss() }
+                }
+            }
+            .task {
+                manualEventName = initialEventName
+                searchText = initialEventName
+                await loadEvents(query: initialEventName)
+            }
+            .onChange(of: searchText) { _, newValue in
+                searchTask?.cancel()
+                searchTask = Task {
+                    try? await Task.sleep(nanoseconds: 280_000_000)
+                    guard !Task.isCancelled else { return }
+                    await loadEvents(query: newValue)
+                }
+            }
+            .onDisappear {
+                searchTask?.cancel()
+                searchTask = nil
+            }
+            .alert("提示", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("确定", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
+        }
+    }
+
+    @MainActor
+    private func loadEvents(query: String) async {
+        isLoading = true
+        defer { isLoading = false }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            let page = try await service.fetchEvents(
+                page: 1,
+                limit: 100,
+                search: trimmed.isEmpty ? nil : trimmed,
+                eventType: nil,
+                status: "all"
+            )
+            events = page.items
+            errorMessage = nil
+        } catch {
+            events = []
             errorMessage = error.localizedDescription
         }
     }
@@ -13319,11 +15482,14 @@ struct LearnModuleView: View {
     @State private var genres: [LearnGenreNode] = []
     @State private var allLabels: [LearnLabel] = []
     @State private var labels: [LearnLabel] = []
+    @State private var allFestivals: [LearnFestival] = []
+    @State private var festivals: [LearnFestival] = []
     @State private var labelsPagination: BFFPagination?
     @State private var selectedSection: LearnModuleSection = .genres
     @State private var selectedSort: LearnLabelSortOption = .soundcloudFollowers
     @State private var sortOrder: LearnLabelSortOrder = .desc
     @State private var searchText = ""
+    @State private var festivalSearchText = ""
     @State private var committedSearch = ""
     @State private var selectedGenreFilters: Set<String> = []
     @State private var selectedNationFilters: Set<String> = []
@@ -13331,7 +15497,9 @@ struct LearnModuleView: View {
     @State private var searchTask: Task<Void, Never>?
     @State private var isLoadingGenres = false
     @State private var isLoadingLabels = false
+    @State private var isLoadingFestivals = false
     @State private var selectedLabelForDetail: LearnLabel?
+    @State private var selectedFestivalForDetail: LearnFestival?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -13346,13 +15514,20 @@ struct LearnModuleView: View {
                     labelsToolbar
                         .padding(.horizontal, 16)
                         .padding(.bottom, 6)
+                } else if selectedSection == .festivals {
+                    festivalsToolbar
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 6)
                 }
 
                 Group {
-                    if selectedSection == .genres {
+                    switch selectedSection {
+                    case .genres:
                         genresContent
-                    } else {
+                    case .labels:
                         labelsContent
+                    case .festivals:
+                        festivalsContent
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -13395,9 +15570,19 @@ struct LearnModuleView: View {
             .onDisappear {
                 searchTask?.cancel()
             }
+            .onChange(of: festivalSearchText) { _, _ in
+                applyFestivalFilters()
+            }
             .fullScreenCover(item: $selectedLabelForDetail) { label in
                 NavigationStack {
                     LearnLabelDetailView(label: label)
+                }
+            }
+            .fullScreenCover(item: $selectedFestivalForDetail) { festival in
+                NavigationStack {
+                    LearnFestivalDetailView(festival: festival) { updated in
+                        updateFestival(updated)
+                    }
                 }
             }
             .alert("提示", isPresented: Binding(
@@ -13587,6 +15772,40 @@ struct LearnModuleView: View {
     }
 
     @ViewBuilder
+    private var festivalsToolbar: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    TextField("搜索电音节名 / 城市 / 国家", text: $festivalSearchText)
+                        .font(.subheadline)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(RaverTheme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                if !festivalSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button("清空") {
+                        festivalSearchText = ""
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+
+            Text("筛选后 \(festivals.count) / 共 \(allFestivals.count) 个电音节 IP")
+                .font(.caption)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
     private var genresContent: some View {
         if isLoadingGenres && genres.isEmpty {
             ProgressView("学习内容加载中...")
@@ -13646,16 +15865,41 @@ struct LearnModuleView: View {
         }
     }
 
+    @ViewBuilder
+    private var festivalsContent: some View {
+        if isLoadingFestivals && festivals.isEmpty {
+            ProgressView("电音节加载中...")
+        } else if festivals.isEmpty {
+            ContentUnavailableView("暂无匹配电音节", systemImage: "music.quarternote.3")
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    ForEach(festivals) { festival in
+                        LearnFestivalCard(festival: festival)
+                            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .onTapGesture {
+                                selectedFestivalForDetail = festival
+                            }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+        }
+    }
+
     private func loadInitial() async {
         async let genresTask: Void = loadGenres()
         async let labelsTask: Void = loadLabels()
-        _ = await (genresTask, labelsTask)
+        async let festivalsTask: Void = loadFestivals()
+        _ = await (genresTask, labelsTask, festivalsTask)
     }
 
     private func refreshAll() async {
         async let genresTask: Void = loadGenres()
         async let labelsTask: Void = loadLabels()
-        _ = await (genresTask, labelsTask)
+        async let festivalsTask: Void = loadFestivals()
+        _ = await (genresTask, labelsTask, festivalsTask)
     }
 
     private func loadGenres() async {
@@ -13685,6 +15929,19 @@ struct LearnModuleView: View {
             allLabels = page.items
             applyLabelFilters()
             labelsPagination = page.pagination
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func loadFestivals() async {
+        isLoadingFestivals = true
+        defer { isLoadingFestivals = false }
+
+        do {
+            let fetched = try await service.fetchLearnFestivals(search: nil)
+            allFestivals = fetched.map { LearnFestival(web: $0) }
+            applyFestivalFilters()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -13751,6 +16008,35 @@ struct LearnModuleView: View {
     private func normalizeFilterToken(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
+
+    private func applyFestivalFilters() {
+        let keyword = festivalSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !keyword.isEmpty else {
+            festivals = allFestivals
+            return
+        }
+
+        festivals = allFestivals.filter { festival in
+            let pool = [
+                festival.name,
+                festival.aliases.joined(separator: " "),
+                festival.country,
+                festival.city,
+                festival.introduction,
+                festival.tagline
+            ]
+            .joined(separator: " ")
+            .lowercased()
+            return pool.contains(keyword)
+        }
+    }
+
+    private func updateFestival(_ updated: LearnFestival) {
+        if let index = allFestivals.firstIndex(where: { $0.id == updated.id }) {
+            allFestivals[index] = updated
+            applyFestivalFilters()
+        }
+    }
 }
 
 private struct GenreNodeView: View {
@@ -13785,6 +16071,7 @@ private struct GenreNodeView: View {
 private enum LearnModuleSection: String, CaseIterable, Identifiable {
     case genres
     case labels
+    case festivals
 
     var id: String { rawValue }
 
@@ -13792,6 +16079,7 @@ private enum LearnModuleSection: String, CaseIterable, Identifiable {
         switch self {
         case .genres: return "流派树"
         case .labels: return "厂牌"
+        case .festivals: return "电音节"
         }
     }
 }
@@ -14434,6 +16722,1503 @@ private struct LearnLabelDetailView: View {
     private func openPreview(urlString: String?, title: String) {
         guard let url = destinationURL(urlString) else { return }
         previewImage = LearnLabelPreviewImage(title: title, url: url)
+    }
+}
+
+private struct LearnFestival: Identifiable, Hashable {
+    var id: String
+    var name: String
+    var aliases: [String]
+    var country: String
+    var city: String
+    var foundedYear: String
+    var frequency: String
+    var tagline: String
+    var introduction: String
+    var genres: [String]
+    var avatarUrl: String?
+    var backgroundUrl: String?
+    var links: [LearnFestivalLink]
+    var contributors: [WebUserLite] = defaultContributors
+    var canEdit: Bool? = nil
+
+    static let defaultContributors: [WebUserLite] = [
+        WebUserLite(
+            id: "uploadtester",
+            username: "uploadtester",
+            displayName: "Upload Tester",
+            avatarUrl: "https://api.dicebear.com/9.x/adventurer-neutral/png?seed=uploadtester&backgroundType=gradientLinear"
+        )
+    ]
+
+    static let seedData: [LearnFestival] = [
+        LearnFestival(
+            id: "tomorrowland",
+            name: "Tomorrowland",
+            aliases: ["明日世界", "TL"],
+            country: "比利时",
+            city: "Boom",
+            foundedYear: "2005",
+            frequency: "每年 7 月",
+            tagline: "全球最具辨识度的沉浸式 EDM 电音节之一。",
+            introduction: "Tomorrowland 以大型主舞台叙事、超高制作和多舞台联动著称，覆盖 Mainstage、Techno、House、Trance 等多类电子音乐。",
+            genres: ["EDM", "Progressive House", "Techno", "Trance"],
+            avatarUrl: "https://logo.clearbit.com/tomorrowland.com",
+            backgroundUrl: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=1800&q=80",
+            links: [
+                LearnFestivalLink(title: "官网", icon: "globe", url: "https://www.tomorrowland.com"),
+                LearnFestivalLink(title: "Instagram", icon: "camera", url: "https://www.instagram.com/tomorrowland/"),
+                LearnFestivalLink(title: "Wikipedia", icon: "book", url: "https://en.wikipedia.org/wiki/Tomorrowland_(festival)")
+            ]
+        ),
+        LearnFestival(
+            id: "edc",
+            name: "Electric Daisy Carnival",
+            aliases: ["EDC", "EDC Las Vegas"],
+            country: "美国",
+            city: "Las Vegas",
+            foundedYear: "1997",
+            frequency: "每年 5 月（拉斯维加斯站）",
+            tagline: "Insomniac 旗下头部 IP，视觉与舞美强调霓虹和嘉年华体验。",
+            introduction: "EDC 在北美和全球拥有多站点，核心站点为 EDC Las Vegas，包含大量舞台和夜间演出，强调社区文化与沉浸体验。",
+            genres: ["EDM", "Bass", "House", "Hardstyle"],
+            avatarUrl: "https://logo.clearbit.com/electricdaisycarnival.com",
+            backgroundUrl: "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1800&q=80",
+            links: [
+                LearnFestivalLink(title: "官网", icon: "globe", url: "https://lasvegas.electricdaisycarnival.com/"),
+                LearnFestivalLink(title: "Instagram", icon: "camera", url: "https://www.instagram.com/edc_lasvegas/"),
+                LearnFestivalLink(title: "Wikipedia", icon: "book", url: "https://en.wikipedia.org/wiki/Electric_Daisy_Carnival")
+            ]
+        ),
+        LearnFestival(
+            id: "ultra",
+            name: "Ultra Music Festival",
+            aliases: ["Ultra", "UMF"],
+            country: "美国",
+            city: "Miami",
+            foundedYear: "1999",
+            frequency: "每年 3 月",
+            tagline: "Miami 春季大秀，Mainstage 与 Resistance 双核心舞台体系。",
+            introduction: "Ultra Music Festival 是全球电子音乐节标杆之一，Ultra Worldwide 在多个国家巡回举办，Miami 主站影响力最大。",
+            genres: ["EDM", "House", "Techno", "Trance"],
+            avatarUrl: "https://logo.clearbit.com/ultramusicfestival.com",
+            backgroundUrl: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1800&q=80",
+            links: [
+                LearnFestivalLink(title: "官网", icon: "globe", url: "https://ultramusicfestival.com"),
+                LearnFestivalLink(title: "Instagram", icon: "camera", url: "https://www.instagram.com/ultra/"),
+                LearnFestivalLink(title: "Wikipedia", icon: "book", url: "https://en.wikipedia.org/wiki/Ultra_Music_Festival")
+            ]
+        ),
+        LearnFestival(
+            id: "soundstorm",
+            name: "MDLBEAST Soundstorm",
+            aliases: ["Soundstorm", "利雅得 Soundstorm"],
+            country: "沙特阿拉伯",
+            city: "Riyadh",
+            foundedYear: "2019",
+            frequency: "每年冬季",
+            tagline: "中东地区高规格大型电子音乐节 IP。",
+            introduction: "Soundstorm 由 MDLBEAST 打造，舞台规模和阵容体量增长迅速，已成为中东地区讨论度极高的电子音乐节。",
+            genres: ["EDM", "House", "Techno", "Hip-Hop Crossover"],
+            avatarUrl: "https://logo.clearbit.com/mdlbeast.com",
+            backgroundUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1800&q=80",
+            links: [
+                LearnFestivalLink(title: "官网", icon: "globe", url: "https://mdlbeast.com"),
+                LearnFestivalLink(title: "Instagram", icon: "camera", url: "https://www.instagram.com/soundstorm/"),
+                LearnFestivalLink(title: "Wikipedia", icon: "book", url: "https://en.wikipedia.org/wiki/MDLBEAST")
+            ]
+        ),
+        LearnFestival(
+            id: "creamfields",
+            name: "Creamfields",
+            aliases: ["奶油田"],
+            country: "英国",
+            city: "Daresbury（主站）",
+            foundedYear: "1998",
+            frequency: "每年夏季",
+            tagline: "英国历史悠久的大型电子音乐节品牌。",
+            introduction: "Creamfields 以 UK 大型户外电子音乐节体验著称，除英国主站外也发展出国际系列站点。",
+            genres: ["EDM", "Tech House", "Techno", "Drum & Bass"],
+            avatarUrl: "https://logo.clearbit.com/creamfields.com",
+            backgroundUrl: "https://images.unsplash.com/photo-1571266028243-d220c9c3b5f2?auto=format&fit=crop&w=1800&q=80",
+            links: [
+                LearnFestivalLink(title: "官网", icon: "globe", url: "https://www.creamfields.com"),
+                LearnFestivalLink(title: "Instagram", icon: "camera", url: "https://www.instagram.com/creamfieldsofficial/"),
+                LearnFestivalLink(title: "Wikipedia", icon: "book", url: "https://en.wikipedia.org/wiki/Creamfields")
+            ]
+        ),
+        LearnFestival(
+            id: "vac-music-festival",
+            name: "VAC Music Festival",
+            aliases: ["VAC", "VAC 电音节"],
+            country: "中国",
+            city: "多城市巡回",
+            foundedYear: "近年兴起",
+            frequency: "年度 / 季度站点",
+            tagline: "中国本土电子音乐节 IP，强调国际阵容与本土场景融合。",
+            introduction: "VAC Music Festival 聚焦国际电子音乐艺人与本土社群联动，通常包含多舞台与 Day 分场配置。",
+            genres: ["EDM", "Bass", "Techno", "Future Rave"],
+            avatarUrl: "https://logo.clearbit.com/vacmusicfestival.com",
+            backgroundUrl: "https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=1800&q=80",
+            links: [
+                LearnFestivalLink(title: "官网", icon: "globe", url: "https://www.vacmusicfestival.com")
+            ]
+        ),
+        LearnFestival(
+            id: "storm-festival",
+            name: "STORM Festival",
+            aliases: ["Storm 风暴电音节", "风暴电音节"],
+            country: "中国",
+            city: "上海 / 多城市",
+            foundedYear: "2010 年代",
+            frequency: "年度站点",
+            tagline: "中国大型电子音乐节品牌之一，覆盖多风格舞台。",
+            introduction: "STORM Festival 在国内电子音乐场景中有较高认知度，阵容涵盖主流 EDM 与细分舞曲风格。",
+            genres: ["EDM", "House", "Bass", "Trance"],
+            avatarUrl: "https://logo.clearbit.com/stormfestival.cn",
+            backgroundUrl: "https://images.unsplash.com/photo-1487180144351-b8472da7d491?auto=format&fit=crop&w=1800&q=80",
+            links: [
+                LearnFestivalLink(title: "官网", icon: "globe", url: "https://stormfestival.cn")
+            ]
+        ),
+        LearnFestival(
+            id: "tmc-festival",
+            name: "TMC Festival",
+            aliases: ["TMC 电音节"],
+            country: "中国",
+            city: "多城市",
+            foundedYear: "近年兴起",
+            frequency: "年度站点",
+            tagline: "面向年轻受众的本土电音节 IP。",
+            introduction: "TMC Festival 以流行电子乐与现场体验为核心，常见多日程排布与跨风格艺人阵容。",
+            genres: ["EDM", "Future Bass", "House"],
+            avatarUrl: "https://logo.clearbit.com/tmcfestival.com",
+            backgroundUrl: "https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?auto=format&fit=crop&w=1800&q=80",
+            links: [
+                LearnFestivalLink(title: "官网", icon: "globe", url: "https://tmcfestival.com")
+            ]
+        )
+    ]
+}
+
+private struct LearnFestivalLink: Hashable {
+    let title: String
+    let icon: String
+    let url: String
+}
+
+private extension LearnFestival {
+    init(web: WebLearnFestival) {
+        self.id = web.id
+        self.name = web.name
+        self.aliases = web.aliases
+        self.country = web.country
+        self.city = web.city
+        self.foundedYear = web.foundedYear
+        self.frequency = web.frequency
+        self.tagline = web.tagline
+        self.introduction = web.introduction
+        self.genres = []
+        self.avatarUrl = web.avatarUrl
+        self.backgroundUrl = web.backgroundUrl
+        self.links = web.links.map { LearnFestivalLink(title: $0.title, icon: $0.icon, url: $0.url) }
+        self.contributors = web.contributors.isEmpty ? LearnFestival.defaultContributors : web.contributors
+        self.canEdit = web.canEdit
+    }
+}
+
+private struct LearnFestivalCard: View {
+    let festival: LearnFestival
+    @State private var avatarLuminance: CGFloat?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Color.clear
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .overlay {
+                    bannerView
+                        .allowsHitTesting(false)
+                }
+                .clipped()
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .frame(width: 66)
+                        .overlay {
+                            avatarView
+                                .allowsHitTesting(false)
+                        }
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(LearnLabelAvatarStyling.borderColor(for: avatarLuminance), lineWidth: 1)
+                        )
+                        .offset(y: -22)
+                        .padding(.bottom, -22)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(festival.name)
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .lineLimit(2)
+
+                        Text(metaLine)
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                Text(festival.tagline)
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(3)
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
+        }
+        .background(RaverTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .task(id: festival.avatarUrl ?? "") {
+            await resolveAvatarLuminance()
+        }
+    }
+
+    @ViewBuilder
+    private var bannerView: some View {
+        if let url = destinationURL(festival.backgroundUrl) {
+            fallbackBanner
+                .overlay {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            Color.clear
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        case .failure:
+                            Color.clear
+                        @unknown default:
+                            Color.clear
+                        }
+                    }
+                }
+        } else {
+            fallbackBanner
+        }
+    }
+
+    @ViewBuilder
+    private var avatarView: some View {
+        if let url = destinationURL(festival.avatarUrl) {
+            fallbackAvatar
+                .overlay {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            Color.clear
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        case .failure:
+                            Color.clear
+                        @unknown default:
+                            Color.clear
+                        }
+                    }
+                }
+        } else {
+            fallbackAvatar
+        }
+    }
+
+    private var fallbackBanner: some View {
+        LinearGradient(
+            colors: [Color(red: 0.17, green: 0.20, blue: 0.28), Color(red: 0.08, green: 0.09, blue: 0.14)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var fallbackAvatar: some View {
+        ZStack {
+            fallbackBanner
+            Text(String(festival.name.prefix(2)).uppercased())
+                .font(.system(size: 22, weight: .black, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.85))
+        }
+    }
+
+    private var metaLine: String {
+        "\(festival.country) · \(festival.city) · \(festival.foundedYear)"
+    }
+
+    private func destinationURL(_ raw: String?) -> URL? {
+        guard let resolved = AppConfig.resolvedURLString(raw) else { return nil }
+        return URL(string: resolved)
+    }
+
+    private func resolveAvatarLuminance() async {
+        guard let avatarURL = destinationURL(festival.avatarUrl) else {
+            await MainActor.run {
+                avatarLuminance = nil
+            }
+            return
+        }
+        let luminance = await LearnLabelAvatarStyling.luminance(for: avatarURL)
+        await MainActor.run {
+            avatarLuminance = luminance
+        }
+    }
+}
+
+private struct LearnFestivalDetailTabFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [LearnFestivalDetailView.LearnFestivalDetailTab: CGRect] = [:]
+
+    static func reduce(value: inout [LearnFestivalDetailView.LearnFestivalDetailTab: CGRect], nextValue: () -> [LearnFestivalDetailView.LearnFestivalDetailTab: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+private struct LearnFestivalDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
+    private let service = AppEnvironment.makeWebService()
+    private let socialService = AppEnvironment.makeService()
+    let onFestivalUpdated: ((LearnFestival) -> Void)?
+
+    @State private var currentFestival: LearnFestival
+
+    @State private var previewImage: LearnLabelPreviewImage?
+    @State private var avatarLuminance: CGFloat?
+    @State private var selectedContributorUser: WebUserLite?
+    @State private var selectedTab: LearnFestivalDetailTab = .basic
+    @State private var tabFrames: [LearnFestivalDetailTab: CGRect] = [:]
+    @State private var pageProgress: CGFloat = 0
+    @State private var isTabSwitchingByTap = false
+    @State private var tabSwitchUnlockWorkItem: DispatchWorkItem?
+    @State private var relatedEvents: [WebEvent] = []
+    @State private var relatedArticles: [DiscoverNewsArticle] = []
+    @State private var isLoadingRelatedContent = false
+    @State private var selectedEventIDForDetail: String?
+    @State private var selectedArticleForDetail: DiscoverNewsArticle?
+    @State private var errorMessage: String?
+    @State private var showFestivalEditSheet = false
+    @State private var isSavingFestival = false
+    @State private var editName = ""
+    @State private var editAliases = ""
+    @State private var editCountry = ""
+    @State private var editCity = ""
+    @State private var editFoundedYear = ""
+    @State private var editFrequency = ""
+    @State private var editTagline = ""
+    @State private var editIntroduction = ""
+    @State private var editWebsite = ""
+    @State private var editAvatarItem: PhotosPickerItem?
+    @State private var editBackgroundItem: PhotosPickerItem?
+    @State private var editAvatarData: Data?
+    @State private var editBackgroundData: Data?
+
+    init(festival: LearnFestival, onFestivalUpdated: ((LearnFestival) -> Void)? = nil) {
+        self.onFestivalUpdated = onFestivalUpdated
+        _currentFestival = State(initialValue: festival)
+    }
+
+    fileprivate enum LearnFestivalDetailTab: String, CaseIterable, Identifiable {
+        case basic
+        case events
+        case posts
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .basic: return "信息"
+            case .events: return "活动"
+            case .posts: return "动态"
+            }
+        }
+    }
+
+    var body: some View {
+        EventDetailRepresentable(
+            heroView: AnyView(heroSection),
+            eventTitle: currentFestival.name,
+            tabTitles: LearnFestivalDetailTab.allCases.map(\.title),
+            tabBarView: AnyView(tabBar),
+            tabPageViews: LearnFestivalDetailTab.allCases.map { tab in
+                AnyView(
+                    VStack(alignment: .leading, spacing: 14) {
+                        tabContent(tab)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 20)
+                )
+            },
+            selectedIndex: selectedIndex(for: selectedTab),
+            pageProgress: pageProgress,
+            onTabChange: { index in
+                guard !isTabSwitchingByTap else { return }
+                guard LearnFestivalDetailTab.allCases.indices.contains(index) else { return }
+                selectFestivalDetailTab(LearnFestivalDetailTab.allCases[index])
+            },
+            onPageProgress: { progress in
+                guard !isTabSwitchingByTap else { return }
+                let maxProgress = CGFloat(max(0, LearnFestivalDetailTab.allCases.count - 1))
+                pageProgress = min(max(progress, 0), maxProgress)
+            }
+        )
+        .ignoresSafeArea(edges: .top)
+        .background(RaverTheme.background)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .overlay(alignment: .top) {
+            floatingTopBar
+        }
+        .fullScreenCover(item: $previewImage) { item in
+            LearnLabelImagePreviewView(item: item)
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { selectedEventIDForDetail != nil },
+                set: { if !$0 { selectedEventIDForDetail = nil } }
+            )
+        ) {
+            if let eventID = selectedEventIDForDetail {
+                NavigationStack {
+                    EventDetailView(eventID: eventID)
+                }
+            }
+        }
+        .fullScreenCover(item: $selectedArticleForDetail) { article in
+            NavigationStack {
+                DiscoverNewsDetailView(article: article)
+            }
+        }
+        .task(id: currentFestival.id) {
+            prepareFestivalEditDraft()
+            await loadRelatedContent()
+            await hydrateFestivalContributorsIfNeeded()
+        }
+        .task(id: currentFestival.avatarUrl ?? "") {
+            await resolveAvatarLuminance()
+        }
+        .sheet(isPresented: $showFestivalEditSheet) {
+            festivalEditSheet
+        }
+        .navigationDestination(item: $selectedContributorUser) { user in
+            UserProfileView(userID: user.id)
+        }
+        .onChange(of: editAvatarItem) { _, item in
+            Task { await loadFestivalEditPhoto(item, target: .avatar) }
+        }
+        .onChange(of: editBackgroundItem) { _, item in
+            Task { await loadFestivalEditPhoto(item, target: .background) }
+        }
+        .alert("提示", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var floatingTopBar: some View {
+        HStack {
+            floatingCircleButton(systemName: "chevron.left") {
+                dismiss()
+            }
+            Spacer()
+            if canEditFestival {
+                floatingCircleButton(systemName: "square.and.pencil") {
+                    prepareFestivalEditDraft()
+                    showFestivalEditSheet = true
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 0)
+        .zIndex(10)
+    }
+
+    private func floatingCircleButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Color.white)
+                .frame(width: 38, height: 38)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var tabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 24) {
+                ForEach(LearnFestivalDetailTab.allCases) { tab in
+                    Button {
+                        selectFestivalDetailTab(tab)
+                    } label: {
+                        Text(tab.title)
+                            .font(.system(size: 17, weight: tabVisualState(for: tab) ? .semibold : .medium))
+                            .foregroundStyle(tabVisualState(for: tab) ? RaverTheme.accent : Color.white.opacity(0.92))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(
+                        TapGesture().onEnded {
+                            selectFestivalDetailTab(tab)
+                        }
+                    )
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.preference(
+                                key: LearnFestivalDetailTabFramePreferenceKey.self,
+                                value: [tab: geo.frame(in: .named("LearnFestivalDetailTabs"))]
+                            )
+                        }
+                    )
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        .coordinateSpace(name: "LearnFestivalDetailTabs")
+        .overlay(alignment: .bottomLeading) {
+            if let indicator = indicatorRect {
+                Capsule()
+                    .fill(RaverTheme.accent)
+                    .frame(width: indicator.width, height: 3)
+                    .offset(x: indicator.minX, y: 0)
+                    .animation(.interactiveSpring(response: 0.26, dampingFraction: 0.75), value: indicator.minX)
+                    .animation(.interactiveSpring(response: 0.24, dampingFraction: 0.72), value: indicator.width)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onPreferenceChange(LearnFestivalDetailTabFramePreferenceKey.self) { value in
+            tabFrames = value
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 40)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+        .background(RaverTheme.background)
+    }
+
+    @ViewBuilder
+    private var heroSection: some View {
+        ZStack(alignment: .top) {
+            GeometryReader { geo in
+                if let url = destinationURL(currentFestival.backgroundUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            fallbackBanner
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            fallbackBanner
+                        @unknown default:
+                            fallbackBanner
+                        }
+                    }
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                    .clipped()
+                } else {
+                    fallbackBanner
+                        .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                }
+            }
+
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.12),
+                    Color.black.opacity(0.26),
+                    RaverTheme.background.opacity(0.84),
+                    RaverTheme.background
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            VStack {
+                Spacer(minLength: 0)
+                HStack(alignment: .center, spacing: 12) {
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .frame(width: 88)
+                        .overlay { headerAvatar }
+                        .clipped()
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(LearnLabelAvatarStyling.borderColor(for: avatarLuminance), lineWidth: 1)
+                        )
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(currentFestival.name)
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(Color.white)
+                            .lineLimit(2)
+
+                        if !currentFestival.aliases.isEmpty {
+                            Text(currentFestival.aliases.joined(separator: " / "))
+                                .font(.caption)
+                                .foregroundStyle(Color.white.opacity(0.9))
+                                .lineLimit(2)
+                        }
+
+                        Text("\(currentFestival.country) \(currentFestival.city) · Since \(currentFestival.foundedYear)")
+                            .font(.caption)
+                            .foregroundStyle(Color.white.opacity(0.88))
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 14)
+            }
+        }
+        .frame(height: 360)
+        .clipped()
+        .zIndex(1)
+    }
+
+    @ViewBuilder
+    private func tabContent(_ tab: LearnFestivalDetailTab) -> some View {
+        switch tab {
+        case .basic:
+            basicInfoTabContent
+        case .events:
+            eventsTabContent
+        case .posts:
+            postsTabContent
+        }
+    }
+
+    @ViewBuilder
+    private var basicInfoTabContent: some View {
+        LearnLabelExpandableText(text: currentFestival.introduction, collapsedLineLimit: 6)
+
+        VStack(alignment: .leading, spacing: 10) {
+            LearnLabelInfoRow(title: "国家", value: currentFestival.country)
+            LearnLabelInfoRow(title: "城市", value: currentFestival.city)
+            LearnLabelInfoRow(title: "首办时间", value: currentFestival.foundedYear)
+            LearnLabelInfoRow(title: "举办频次", value: currentFestival.frequency)
+            LearnLabelInfoRow(title: "定位", value: currentFestival.tagline)
+        }
+
+        linksSection
+        contributorSection
+    }
+
+    @ViewBuilder
+    private var eventsTabContent: some View {
+        if isLoadingRelatedContent && relatedEvents.isEmpty {
+            ProgressView("正在加载关联活动...")
+                .padding(.vertical, 8)
+        } else if relatedEvents.isEmpty {
+            Text("暂无关联活动")
+                .foregroundStyle(RaverTheme.secondaryText)
+                .padding(.vertical, 8)
+        } else {
+            ForEach(relatedEvents) { event in
+                Button {
+                    selectedEventIDForDetail = event.id
+                } label: {
+                    festivalEventRow(event)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var postsTabContent: some View {
+        if isLoadingRelatedContent && relatedArticles.isEmpty {
+            ProgressView("正在加载品牌动态...")
+                .padding(.vertical, 8)
+        } else if relatedArticles.isEmpty {
+            Text("暂无相关动态")
+                .foregroundStyle(RaverTheme.secondaryText)
+                .padding(.vertical, 8)
+        } else {
+            ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
+                Button {
+                    selectedArticleForDetail = article
+                } label: {
+                    DiscoverNewsRow(article: article)
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+
+                if index < relatedArticles.count - 1 {
+                    Divider()
+                        .padding(.leading, 16)
+                }
+            }
+        }
+    }
+
+    private func festivalEventRow(_ event: WebEvent) -> some View {
+        let locationText = [event.city, event.country, event.venueName]
+            .compactMap { value in
+                guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " · ")
+
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(event.name)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+                .lineLimit(2)
+
+            Text(festivalEventDateText(event))
+                .font(.caption)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .lineLimit(1)
+
+            Text(locationText.isEmpty ? "地点待补充" : locationText)
+                .font(.caption)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) {
+            Divider().opacity(0.45)
+        }
+    }
+
+    private func festivalEventDateText(_ event: WebEvent) -> String {
+        let range = DateInterval(start: event.startDate, end: event.endDate)
+        let formatter = DateIntervalFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: range) ?? event.startDate.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    @ViewBuilder
+    private var headerAvatar: some View {
+        if let url = destinationURL(currentFestival.avatarUrl) {
+            fallbackAvatar
+                .overlay {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            Color.clear
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        case .failure:
+                            Color.clear
+                        @unknown default:
+                            Color.clear
+                        }
+                    }
+                }
+        } else {
+            fallbackAvatar
+        }
+    }
+
+    @ViewBuilder
+    private var linksSection: some View {
+        let validLinks = currentFestival.links.compactMap { link -> (String, String, URL)? in
+            guard let url = destinationURL(link.url) else { return nil }
+            return (link.icon, link.title, url)
+        }
+        if !validLinks.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Links")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                ForEach(validLinks, id: \.2.absoluteString) { item in
+                    LearnLabelExternalLinkRow(icon: item.0, title: item.1, url: item.2)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var contributorSection: some View {
+        let users = currentFestival.contributors.filter { !$0.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if !users.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("贡献者")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(users) { user in
+                        Button {
+                            Task { await openContributorProfile(user) }
+                        } label: {
+                            HStack(spacing: 10) {
+                                contributorUserAvatar(user, size: 30)
+                                Text(contributorDisplayName(user))
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func contributorUserAvatar(_ user: WebUserLite, size: CGFloat) -> some View {
+        if let avatar = AppConfig.resolvedURLString(user.avatarUrl), let url = URL(string: avatar) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    Circle().fill(RaverTheme.card)
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+        } else {
+            Circle()
+                .fill(RaverTheme.card)
+                .frame(width: size, height: size)
+                .overlay(
+                    Text(initials(of: contributorDisplayName(user)))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                )
+        }
+    }
+
+    private func contributorDisplayName(_ user: WebUserLite) -> String {
+        let trimmed = user.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? "未设置昵称" : trimmed
+    }
+
+    @MainActor
+    private func openContributorProfile(_ contributor: WebUserLite) async {
+        if let resolved = await resolveFestivalContributorUser(contributor) {
+            if let index = currentFestival.contributors.firstIndex(where: {
+                $0.id == contributor.id && $0.username.caseInsensitiveCompare(contributor.username) == .orderedSame
+            }) {
+                currentFestival.contributors[index] = resolved
+                onFestivalUpdated?(currentFestival)
+            }
+            selectedContributorUser = resolved
+            return
+        }
+        errorMessage = "未找到对应用户主页"
+    }
+
+    @MainActor
+    private func hydrateFestivalContributorsIfNeeded() async {
+        guard !currentFestival.contributors.isEmpty else { return }
+
+        var updated = currentFestival
+        var didChange = false
+
+        for index in updated.contributors.indices {
+            let contributor = updated.contributors[index]
+            guard shouldResolveFestivalContributor(contributor) else { continue }
+            guard let resolved = await resolveFestivalContributorUser(contributor) else { continue }
+            if resolved != contributor {
+                updated.contributors[index] = resolved
+                didChange = true
+            }
+        }
+
+        guard didChange else { return }
+        currentFestival = updated
+        onFestivalUpdated?(updated)
+    }
+
+    private func shouldResolveFestivalContributor(_ contributor: WebUserLite) -> Bool {
+        let trimmedID = contributor.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDisplayName = contributor.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmedDisplayName.isEmpty {
+            return true
+        }
+        if trimmedID.isEmpty {
+            return true
+        }
+        if trimmedID.caseInsensitiveCompare(contributor.username) == .orderedSame {
+            return true
+        }
+        return !looksLikeUUID(trimmedID)
+    }
+
+    private func looksLikeUUID(_ value: String) -> Bool {
+        UUID(uuidString: value) != nil
+    }
+
+    private func resolveFestivalContributorUser(_ contributor: WebUserLite) async -> WebUserLite? {
+        let contributorID = contributor.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !contributorID.isEmpty, let profile = try? await socialService.fetchUserProfile(userID: contributorID) {
+            return WebUserLite(
+                id: profile.id,
+                username: profile.username,
+                displayName: profile.displayName,
+                avatarUrl: profile.avatarURL ?? contributor.avatarUrl
+            )
+        }
+
+        let queryCandidates = [
+            contributor.username.trimmingCharacters(in: .whitespacesAndNewlines),
+            contributor.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        ]
+            .filter { !$0.isEmpty }
+
+        for query in queryCandidates {
+            guard let matched = await searchFestivalContributorMatch(
+                query: query,
+                expectedUsername: contributor.username,
+                expectedDisplayName: contributor.displayName
+            ) else { continue }
+            return WebUserLite(
+                id: matched.id,
+                username: matched.username,
+                displayName: matched.displayName,
+                avatarUrl: matched.avatarURL ?? contributor.avatarUrl
+            )
+        }
+        return nil
+    }
+
+    private func searchFestivalContributorMatch(
+        query: String,
+        expectedUsername: String,
+        expectedDisplayName: String?
+    ) async -> UserSummary? {
+        guard let users = try? await socialService.searchUsers(query: query), !users.isEmpty else {
+            return nil
+        }
+
+        let normalizedUsername = expectedUsername.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !normalizedUsername.isEmpty,
+           let exactUsername = users.first(where: { $0.username.lowercased() == normalizedUsername }) {
+            return exactUsername
+        }
+
+        let normalizedDisplayName = expectedDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        if !normalizedDisplayName.isEmpty,
+           let exactDisplayName = users.first(where: { $0.displayName.lowercased() == normalizedDisplayName }) {
+            return exactDisplayName
+        }
+
+        if users.count == 1 {
+            return users[0]
+        }
+        return nil
+    }
+
+    private var canEditFestival: Bool {
+        if let canEdit = currentFestival.canEdit {
+            return canEdit
+        }
+        guard let currentUser = currentSessionContributor else { return false }
+        return currentFestival.contributors.contains { contributor in
+            contributor.id == currentUser.id
+                || contributor.username.caseInsensitiveCompare(currentUser.username) == .orderedSame
+        }
+    }
+
+    private var currentSessionContributor: WebUserLite? {
+        guard let user = appState.session?.user else { return nil }
+        return WebUserLite(
+            id: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            avatarUrl: user.avatarURL
+        )
+    }
+
+    private var festivalEditSheet: some View {
+        NavigationStack {
+            Form {
+                Section("基础信息") {
+                    TextField("电音节名称", text: $editName)
+                    TextField("别名（英文逗号分隔）", text: $editAliases)
+                    TextField("国家", text: $editCountry)
+                    TextField("城市", text: $editCity)
+                    TextField("首办时间", text: $editFoundedYear)
+                    TextField("举办频次", text: $editFrequency)
+                    TextField("定位", text: $editTagline)
+                    TextField("简介", text: $editIntroduction, axis: .vertical)
+                    TextField("官网链接", text: $editWebsite)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                }
+
+                Section("媒体") {
+                    HStack(spacing: 12) {
+                        PhotosPicker(selection: $editAvatarItem, matching: .images) {
+                            Label("更换头像", systemImage: "person.crop.square")
+                        }
+                        .buttonStyle(.bordered)
+
+                        if let editAvatarData, let image = UIImage(data: editAvatarData) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 44, height: 44)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        } else if let current = currentFestival.avatarUrl,
+                                  let resolved = AppConfig.resolvedURLString(current),
+                                  let url = URL(string: resolved) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image.resizable().scaledToFill()
+                                default:
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card)
+                                }
+                            }
+                            .frame(width: 44, height: 44)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                    }
+
+                    HStack(spacing: 12) {
+                        PhotosPicker(selection: $editBackgroundItem, matching: .images) {
+                            Label("更换背景", systemImage: "photo.rectangle")
+                        }
+                        .buttonStyle(.bordered)
+
+                        if let editBackgroundData, let image = UIImage(data: editBackgroundData) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 88, height: 44)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        } else if let current = currentFestival.backgroundUrl,
+                                  let resolved = AppConfig.resolvedURLString(current),
+                                  let url = URL(string: resolved) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image.resizable().scaledToFill()
+                                default:
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card)
+                                }
+                            }
+                            .frame(width: 88, height: 44)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                    }
+                }
+
+                Section {
+                    Button(isSavingFestival ? "保存中..." : "保存电音节信息") {
+                        Task { await saveFestivalEdits() }
+                    }
+                    .disabled(isSavingFestival || editName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .navigationTitle("编辑电音节")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("关闭") {
+                        showFestivalEditSheet = false
+                    }
+                    .disabled(isSavingFestival)
+                }
+            }
+            .scrollDismissesKeyboard(.interactively)
+        }
+    }
+
+    private enum FestivalEditPhotoTarget {
+        case avatar
+        case background
+    }
+
+    private func prepareFestivalEditDraft() {
+        editName = currentFestival.name
+        editAliases = currentFestival.aliases.joined(separator: ", ")
+        editCountry = currentFestival.country
+        editCity = currentFestival.city
+        editFoundedYear = currentFestival.foundedYear
+        editFrequency = currentFestival.frequency
+        editTagline = currentFestival.tagline
+        editIntroduction = currentFestival.introduction
+        editWebsite = currentFestival.links.first(where: { $0.icon == "globe" })?.url ?? currentFestival.links.first?.url ?? ""
+        editAvatarItem = nil
+        editBackgroundItem = nil
+        editAvatarData = nil
+        editBackgroundData = nil
+    }
+
+    @MainActor
+    private func loadFestivalEditPhoto(_ item: PhotosPickerItem?, target: FestivalEditPhotoTarget) async {
+        guard let item else {
+            switch target {
+            case .avatar:
+                editAvatarData = nil
+            case .background:
+                editBackgroundData = nil
+            }
+            return
+        }
+
+        do {
+            let loaded = try await item.loadTransferable(type: Data.self)
+            switch target {
+            case .avatar:
+                editAvatarData = loaded
+            case .background:
+                editBackgroundData = loaded
+            }
+        } catch {
+            errorMessage = "读取图片失败，请重试"
+        }
+    }
+
+    @MainActor
+    private func saveFestivalEdits() async {
+        guard canEditFestival else {
+            errorMessage = "仅贡献者可编辑电音节信息"
+            return
+        }
+
+        let finalName = editName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !finalName.isEmpty else {
+            errorMessage = "电音节名称不能为空"
+            return
+        }
+
+        isSavingFestival = true
+        defer { isSavingFestival = false }
+
+        do {
+            var updated = currentFestival
+            updated.name = finalName
+            updated.aliases = parseAliasTokens(editAliases)
+            updated.country = editCountry.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.city = editCity.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.foundedYear = editFoundedYear.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.frequency = editFrequency.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.tagline = editTagline.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.introduction = editIntroduction.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if let editAvatarData {
+                let uploadedAvatar = try await service.uploadWikiBrandImage(
+                    imageData: jpegDataForFestivalImport(from: editAvatarData),
+                    fileName: "wiki-brand-avatar-\(UUID().uuidString).jpg",
+                    mimeType: "image/jpeg",
+                    brandID: updated.id,
+                    usage: "avatar"
+                )
+                updated.avatarUrl = uploadedAvatar.url
+            }
+
+            if let editBackgroundData {
+                let uploadedBackground = try await service.uploadWikiBrandImage(
+                    imageData: jpegDataForFestivalImport(from: editBackgroundData),
+                    fileName: "wiki-brand-background-\(UUID().uuidString).jpg",
+                    mimeType: "image/jpeg",
+                    brandID: updated.id,
+                    usage: "background"
+                )
+                updated.backgroundUrl = uploadedBackground.url
+            }
+
+            let website = normalizeURL(editWebsite)
+            var preservedLinks = updated.links.filter { link in
+                !(link.icon == "globe" && (link.title == "官网" || link.title == "Official"))
+            }
+            if let website {
+                preservedLinks.insert(
+                    LearnFestivalLink(title: "官网", icon: "globe", url: website),
+                    at: 0
+                )
+            }
+            updated.links = preservedLinks
+
+            let payload = UpdateLearnFestivalInput(
+                name: updated.name,
+                aliases: updated.aliases,
+                country: updated.country,
+                city: updated.city,
+                foundedYear: updated.foundedYear,
+                frequency: updated.frequency,
+                tagline: updated.tagline,
+                introduction: updated.introduction,
+                avatarUrl: updated.avatarUrl,
+                backgroundUrl: updated.backgroundUrl,
+                links: updated.links.map { link in
+                    LearnFestivalLinkPayload(title: link.title, icon: link.icon, url: link.url)
+                }
+            )
+
+            let persisted = try await service.updateLearnFestival(id: updated.id, input: payload)
+            let hydrated = LearnFestival(web: persisted)
+            currentFestival = hydrated
+            onFestivalUpdated?(hydrated)
+            showFestivalEditSheet = false
+            await loadRelatedContent()
+            errorMessage = "电音节信息已更新"
+        } catch {
+            errorMessage = "保存失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func parseAliasTokens(_ raw: String) -> [String] {
+        raw
+            .split(whereSeparator: { $0 == "," || $0 == "，" || $0 == "/" || $0 == "、" })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func jpegDataForFestivalImport(from data: Data) -> Data {
+        guard let image = UIImage(data: data),
+              let jpeg = image.jpegData(compressionQuality: 0.9) else {
+            return data
+        }
+        return jpeg
+    }
+
+    private func normalizeURL(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let lower = trimmed.lowercased()
+        if lower.hasPrefix("http://") || lower.hasPrefix("https://") {
+            return trimmed
+        }
+        return "https://\(trimmed)"
+    }
+
+    private var fallbackBanner: some View {
+        LinearGradient(
+            colors: [Color(red: 0.17, green: 0.20, blue: 0.28), Color(red: 0.08, green: 0.09, blue: 0.14)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var fallbackAvatar: some View {
+        ZStack {
+            fallbackBanner
+            Text(String(currentFestival.name.prefix(2)).uppercased())
+                .font(.system(size: 28, weight: .black, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.85))
+        }
+    }
+
+    private func selectFestivalDetailTab(_ tab: LearnFestivalDetailTab) {
+        let targetProgress = CGFloat(selectedIndex(for: tab))
+        if selectedTab == tab, abs(pageProgress - targetProgress) < 0.001 {
+            return
+        }
+
+        isTabSwitchingByTap = true
+        tabSwitchUnlockWorkItem?.cancel()
+
+        withAnimation(.interactiveSpring(response: 0.26, dampingFraction: 0.84)) {
+            selectedTab = tab
+            pageProgress = targetProgress
+        }
+
+        let unlockWorkItem = DispatchWorkItem {
+            isTabSwitchingByTap = false
+            tabSwitchUnlockWorkItem = nil
+        }
+        tabSwitchUnlockWorkItem = unlockWorkItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: unlockWorkItem)
+    }
+
+    private var indicatorRect: CGRect? {
+        let count = LearnFestivalDetailTab.allCases.count
+        guard count > 0 else { return nil }
+
+        let maxIndex = max(0, count - 1)
+        let clampedProgress = min(max(pageProgress, 0), CGFloat(maxIndex))
+        let leftIndex = Int(floor(clampedProgress))
+        let rightIndex = min(leftIndex + 1, maxIndex)
+        let t = clampedProgress - CGFloat(leftIndex)
+
+        let leftTab = LearnFestivalDetailTab.allCases[leftIndex]
+        let rightTab = LearnFestivalDetailTab.allCases[rightIndex]
+
+        guard let leftFrame = tabFrames[leftTab] else { return nil }
+        let rightFrame = tabFrames[rightTab] ?? leftFrame
+
+        let interpolatedX = leftFrame.minX + (rightFrame.minX - leftFrame.minX) * t
+        let interpolatedWidth = leftFrame.width + (rightFrame.width - leftFrame.width) * t
+        let elastic = (1 - abs(0.5 - t) * 2) * 16
+
+        return CGRect(
+            x: interpolatedX - elastic * 0.2,
+            y: 0,
+            width: max(0, interpolatedWidth + elastic),
+            height: 3
+        )
+    }
+
+    private func selectedIndex(for tab: LearnFestivalDetailTab) -> Int {
+        LearnFestivalDetailTab.allCases.firstIndex(of: tab) ?? 0
+    }
+
+    private func tabVisualState(for tab: LearnFestivalDetailTab) -> Bool {
+        let index = CGFloat(selectedIndex(for: tab))
+        return abs(pageProgress - index) < 0.5
+    }
+
+    private func destinationURL(_ raw: String?) -> URL? {
+        guard let resolved = AppConfig.resolvedURLString(raw) else { return nil }
+        return URL(string: resolved)
+    }
+
+    private func resolveAvatarLuminance() async {
+        guard let avatarURL = destinationURL(currentFestival.avatarUrl) else {
+            await MainActor.run {
+                avatarLuminance = nil
+            }
+            return
+        }
+        let luminance = await LearnLabelAvatarStyling.luminance(for: avatarURL)
+        await MainActor.run {
+            avatarLuminance = luminance
+        }
+    }
+
+    private func openPreview(urlString: String?, title: String) {
+        guard let url = destinationURL(urlString) else { return }
+        previewImage = LearnLabelPreviewImage(title: title, url: url)
+    }
+
+    @MainActor
+    private func loadRelatedContent() async {
+        isLoadingRelatedContent = true
+        defer { isLoadingRelatedContent = false }
+
+        do {
+            async let eventsTask = fetchRelatedEvents()
+            async let postsTask = fetchRelatedPosts()
+            relatedEvents = try await eventsTask
+            relatedArticles = try await postsTask
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func fetchRelatedEvents() async throws -> [WebEvent] {
+        let queries = festivalSearchKeywords
+        var merged: [WebEvent] = []
+        var seen = Set<String>()
+
+        for query in queries {
+            let page = try await service.fetchEvents(
+                page: 1,
+                limit: 120,
+                search: query,
+                eventType: nil,
+                status: "all"
+            )
+            for item in page.items where eventMatchesFestival(item) {
+                if seen.insert(item.id).inserted {
+                    merged.append(item)
+                }
+            }
+        }
+
+        return merged.sorted { $0.startDate > $1.startDate }
+    }
+
+    private func fetchRelatedPosts() async throws -> [DiscoverNewsArticle] {
+        var cursor: String?
+        var matched: [DiscoverNewsArticle] = []
+        var seen = Set<String>()
+        var pageCount = 0
+
+        repeat {
+            let feed = try await socialService.fetchFeed(cursor: cursor)
+            let decoded = feed.posts.compactMap { DiscoverNewsCodec.decode(post: $0) }
+            for article in decoded where articleMatchesFestival(article) {
+                if seen.insert(article.id).inserted {
+                    matched.append(article)
+                }
+            }
+            cursor = feed.nextCursor
+            pageCount += 1
+        } while cursor != nil && pageCount < 6
+
+        return matched.sorted { $0.publishedAt > $1.publishedAt }
+    }
+
+    private var festivalSearchKeywords: [String] {
+        let normalized = ([currentFestival.name] + currentFestival.aliases)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        var seen = Set<String>()
+        var deduped: [String] = []
+        for item in normalized {
+            let token = item.lowercased()
+            if seen.insert(token).inserted {
+                deduped.append(item)
+            }
+        }
+        return deduped
+    }
+
+    private func eventMatchesFestival(_ event: WebEvent) -> Bool {
+        let haystack = [
+            event.name,
+            event.eventType ?? "",
+            event.city ?? "",
+            event.country ?? "",
+            event.venueName ?? "",
+            event.summaryLocation
+        ]
+        .joined(separator: " ")
+        .lowercased()
+        return festivalSearchKeywords.contains { keyword in
+            haystack.contains(keyword.lowercased())
+        }
+    }
+
+    private func articleMatchesFestival(_ article: DiscoverNewsArticle) -> Bool {
+        let haystack = [
+            article.title,
+            article.summary,
+            article.body,
+            article.source
+        ]
+        .joined(separator: " ")
+        .lowercased()
+
+        return festivalSearchKeywords.contains { keyword in
+            haystack.contains(keyword.lowercased())
+        }
     }
 }
 

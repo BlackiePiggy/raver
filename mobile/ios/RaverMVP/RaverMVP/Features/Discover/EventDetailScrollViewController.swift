@@ -6,12 +6,12 @@ final class EventDetailScrollViewController: UIViewController {
     var onPageProgressChange: ((CGFloat) -> Void)?
 
     private let heroHeight: CGFloat = 360
-    private let tabBarHeight: CGFloat = 46
+    private let tabBarHeight: CGFloat = 52
     private let topBarHeight: CGFloat = 44
 
     private let pageViewController = EventDetailPageViewController()
     private let heroViewController = UIHostingController(rootView: AnyView(EmptyView()))
-    private let tabBarView = EventDetailTabBarView()
+    private let tabBarViewController = UIHostingController(rootView: AnyView(EmptyView()))
     private let tabBarContainer = UIView()
     private let topOverlayView = UIView()
     private let titleLabel = UILabel()
@@ -22,9 +22,10 @@ final class EventDetailScrollViewController: UIViewController {
     private var didSetupHierarchy = false
 
     private var pendingHeroView: AnyView?
-    private var pendingEventTitle: String = ""
-    private var pendingPageViews: [AnyView] = []
+    private var pendingTitle: String = ""
     private var pendingTabTitles: [String] = []
+    private var pendingTabBarView: AnyView?
+    private var pendingPageViews: [AnyView] = []
     private var pendingSelectedIndex: Int = 0
     private var pendingProgress: CGFloat = 0
     private var currentSelectedIndex: Int = 0
@@ -34,11 +35,13 @@ final class EventDetailScrollViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = UIColor(RaverTheme.background)
         heroViewController.view.backgroundColor = .clear
+        tabBarViewController.view.backgroundColor = .clear
         pageViewController.view.backgroundColor = .clear
         tabBarContainer.backgroundColor = UIColor(RaverTheme.background)
         setupHierarchyIfNeeded()
         if #available(iOS 16.4, *) {
             heroViewController.safeAreaRegions = []
+            tabBarViewController.safeAreaRegions = []
         }
         wireCallbacks()
         applyPendingState(animatedSelection: false)
@@ -60,14 +63,16 @@ final class EventDetailScrollViewController: UIViewController {
         heroView: AnyView,
         eventTitle: String,
         tabTitles: [String],
+        tabBarView: AnyView,
         tabPageViews: [AnyView],
         selectedIndex: Int,
         pageProgress: CGFloat,
         animatedSelection: Bool
     ) {
         pendingHeroView = heroView
-        pendingEventTitle = eventTitle
+        pendingTitle = eventTitle
         pendingTabTitles = tabTitles
+        pendingTabBarView = tabBarView
         pendingPageViews = tabPageViews
         pendingSelectedIndex = selectedIndex
         pendingProgress = pageProgress
@@ -108,8 +113,9 @@ final class EventDetailScrollViewController: UIViewController {
         tabBarContainer.clipsToBounds = true
         view.addSubview(tabBarContainer)
 
-        tabBarView.translatesAutoresizingMaskIntoConstraints = false
-        tabBarContainer.addSubview(tabBarView)
+        addChild(tabBarViewController)
+        tabBarViewController.view.translatesAutoresizingMaskIntoConstraints = false
+        tabBarContainer.addSubview(tabBarViewController.view)
         tabBarTopConstraint = tabBarContainer.topAnchor.constraint(equalTo: view.topAnchor, constant: heroHeight)
         NSLayoutConstraint.activate([
             tabBarTopConstraint,
@@ -117,38 +123,27 @@ final class EventDetailScrollViewController: UIViewController {
             tabBarContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tabBarContainer.heightAnchor.constraint(equalToConstant: tabBarHeight),
 
-            tabBarView.topAnchor.constraint(equalTo: tabBarContainer.topAnchor),
-            tabBarView.leadingAnchor.constraint(equalTo: tabBarContainer.leadingAnchor),
-            tabBarView.trailingAnchor.constraint(equalTo: tabBarContainer.trailingAnchor),
-            tabBarView.bottomAnchor.constraint(equalTo: tabBarContainer.bottomAnchor),
+            tabBarViewController.view.topAnchor.constraint(equalTo: tabBarContainer.topAnchor),
+            tabBarViewController.view.leadingAnchor.constraint(equalTo: tabBarContainer.leadingAnchor),
+            tabBarViewController.view.trailingAnchor.constraint(equalTo: tabBarContainer.trailingAnchor),
+            tabBarViewController.view.bottomAnchor.constraint(equalTo: tabBarContainer.bottomAnchor),
         ])
+        tabBarViewController.didMove(toParent: self)
 
         setupTopOverlay()
     }
 
     private func wireCallbacks() {
-        tabBarView.onSelect = { [weak self] index in
-            guard let self else { return }
-            isApplyingProgrammaticSelection = true
-            currentSelectedIndex = index
-            pageViewController.setSelectedIndex(index, animated: true)
-            onTabIndexChange?(index)
-            isApplyingProgrammaticSelection = false
-        }
-
         pageViewController.onPageChange = { [weak self] index in
             guard let self else { return }
             currentSelectedIndex = index
-            tabBarView.setSelectedIndex(index, animated: true)
             if !isApplyingProgrammaticSelection {
                 onTabIndexChange?(index)
             }
         }
 
         pageViewController.onPageProgress = { [weak self] progress in
-            guard let self else { return }
-            tabBarView.setProgress(progress)
-            onPageProgressChange?(progress)
+            self?.onPageProgressChange?(progress)
         }
 
         pageViewController.onActivePageVerticalOffsetChanged = { [weak self] offset in
@@ -160,17 +155,28 @@ final class EventDetailScrollViewController: UIViewController {
         if let hero = pendingHeroView {
             heroViewController.rootView = hero
         }
+        if let tabBar = pendingTabBarView {
+            tabBarViewController.rootView = tabBar
+        }
 
-        titleLabel.text = pendingEventTitle
-        tabBarView.configure(titles: pendingTabTitles)
+        titleLabel.text = pendingTitle
+        _ = pendingTabTitles
         pageViewController.configure(with: pendingPageViews)
         applyPageInsets()
+
         if pendingSelectedIndex != currentSelectedIndex {
             currentSelectedIndex = pendingSelectedIndex
+            isApplyingProgrammaticSelection = true
             pageViewController.setSelectedIndex(pendingSelectedIndex, animated: animatedSelection)
-            tabBarView.setSelectedIndex(pendingSelectedIndex, animated: animatedSelection)
+            let releaseDelay = animatedSelection ? 0.4 : 0
+            DispatchQueue.main.asyncAfter(deadline: .now() + releaseDelay) { [weak self] in
+                self?.isApplyingProgrammaticSelection = false
+            }
+        } else {
+            isApplyingProgrammaticSelection = false
         }
-        tabBarView.setProgress(pendingProgress)
+
+        onPageProgressChange?(pendingProgress)
         updatePinnedHeader(forOffset: pageViewController.currentActiveOffset())
     }
 

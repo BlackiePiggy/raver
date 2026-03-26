@@ -684,6 +684,7 @@ private struct CircleRatingHubView: View {
     @State private var events: [WebRatingEvent] = []
     @State private var presentedEventRoute: CircleRatingEventRoute?
     @State private var isPresentingCreateEvent = false
+    @State private var isPresentingImportFromEvent = false
     @State private var isLoading = false
     @State private var errorMessage: String?
 
@@ -695,6 +696,17 @@ private struct CircleRatingHubView: View {
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer()
+                    Button {
+                        isPresentingImportFromEvent = true
+                    } label: {
+                        Label("从活动导入", systemImage: "square.and.arrow.down")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(RaverTheme.card)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
                     Button {
                         isPresentingCreateEvent = true
                     } label: {
@@ -758,6 +770,14 @@ private struct CircleRatingHubView: View {
         .sheet(isPresented: $isPresentingCreateEvent) {
             CreateRatingEventSheet { input in
                 let created = try await service.createRatingEvent(input: input)
+                await MainActor.run {
+                    events.insert(created, at: 0)
+                }
+            }
+        }
+        .sheet(isPresented: $isPresentingImportFromEvent) {
+            CreateRatingEventFromEventSheet { sourceEventID in
+                let created = try await service.createRatingEventFromEvent(eventID: sourceEventID)
                 await MainActor.run {
                     events.insert(created, at: 0)
                 }
@@ -847,7 +867,7 @@ private struct CircleRatingHubView: View {
     }
 }
 
-private struct CircleRatingEventDetailView: View {
+struct CircleRatingEventDetailView: View {
     private let service = AppEnvironment.makeWebService()
 
     let eventID: String
@@ -858,132 +878,223 @@ private struct CircleRatingEventDetailView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var isPresentingCreateUnit = false
+    @State private var selectedSourceEventIDForDetail: String?
 
     var body: some View {
-        ZStack(alignment: .top) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if let event {
-                        HStack(alignment: .top, spacing: 10) {
-                            RatingSquareImage(
-                                imageURL: event.imageUrl,
-                                fallbackSymbol: "sparkles.rectangle.stack.fill",
-                                size: 72
-                            )
-                            
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(event.name)
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(RaverTheme.primaryText)
-                                Text((event.description?.isEmpty == false ? event.description : "暂无事件描述") ?? "暂无事件描述")
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                                    .lineLimit(4)
-                                Text("发布者：\(event.createdBy?.shownName ?? "匿名用户")")
-                                    .font(.caption2)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                                    .lineLimit(1)
-                            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if let event {
+                    ratingEventHeaderCard(event)
+
+                    if event.units.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("还没有打分单位")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                            Text("点击右上角 +，在这个事件下发布第一个打分单位。")
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
                         }
-                        
-                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
                         .background(RaverTheme.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                        if event.units.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("还没有打分单位")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(RaverTheme.primaryText)
-                                Text("点击右上角 +，在这个事件下发布第一个打分单位。")
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                            .padding(12)
-                            .background(RaverTheme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        } else {
-                            ForEach(event.units) { unit in
-                                NavigationLink {
-                                    CircleRatingUnitDetailView(
-                                        unitID: unit.id,
-                                        onSubmitted: {
-                                            Task {
-                                                await loadEvent()
-                                                onUpdated()
-                                            }
-                                        }
-                                    )
-                                } label: {
-                                    ratingUnitRow(unit: unit)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    } else if isLoading {
-                        ProgressView("正在加载事件…")
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     } else {
-                        Text(errorMessage ?? "事件不存在")
-                            .font(.caption)
-                            .foregroundStyle(.red.opacity(0.9))
+                        ForEach(event.units) { unit in
+                            NavigationLink {
+                                CircleRatingUnitDetailView(
+                                    unitID: unit.id,
+                                    onSubmitted: {
+                                        Task {
+                                            await loadEvent()
+                                            onUpdated()
+                                        }
+                                    }
+                                )
+                            } label: {
+                                ratingUnitRow(unit: unit)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
+                } else if isLoading {
+                    ProgressView("正在加载事件…")
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                } else {
+                    Text(errorMessage ?? "事件不存在")
+                        .font(.caption)
+                        .foregroundStyle(.red.opacity(0.9))
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 14)
-                .padding(.top, 54)
-                .padding(.bottom, 20)
             }
-            .background(RaverTheme.background)
-            .navigationBarBackButtonHidden(true)
-            .navigationBarHidden(true)
-            .toolbar(.hidden, for: .navigationBar)
-            .task {
-                await loadEvent()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Color.clear.frame(height: 60)
+        }
+        .overlay(alignment: .top) {
+            ratingEventTopBar
+        }
+        .background(RaverTheme.background)
+        .navigationBarBackButtonHidden(true)
+        .navigationBarHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .task {
+            await loadEvent()
+        }
+        .onDisappear {
+            onUpdated()
+        }
+        .sheet(isPresented: $isPresentingCreateUnit) {
+            CreateRatingUnitSheet(eventID: eventID) { input in
+                let created = try await service.createRatingUnit(eventID: eventID, input: input)
+                await MainActor.run {
+                    guard event != nil else { return }
+                    event?.units.append(created)
+                    event?.updatedAt = Date()
+                }
             }
-            .onDisappear {
-                onUpdated()
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { selectedSourceEventIDForDetail != nil },
+                set: { if !$0 { selectedSourceEventIDForDetail = nil } }
+            )
+        ) {
+            if let sourceEventID = selectedSourceEventIDForDetail {
+                NavigationStack {
+                    EventDetailView(eventID: sourceEventID)
+                }
             }
-            .sheet(isPresented: $isPresentingCreateUnit) {
-                CreateRatingUnitSheet { input in
-                    let created = try await service.createRatingUnit(eventID: eventID, input: input)
-                    await MainActor.run {
-                        guard event != nil else { return }
-                        event?.units.append(created)
-                        event?.updatedAt = Date()
+        }
+    }
+
+    @ViewBuilder
+    private func ratingEventHeaderCard(_ event: WebRatingEvent) -> some View {
+        let sourceEventID = event.sourceEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !sourceEventID.isEmpty {
+            Button {
+                selectedSourceEventIDForDetail = sourceEventID
+            } label: {
+                ratingEventHeaderCardContent(event, isLinkedToEvent: true)
+            }
+            .buttonStyle(.plain)
+        } else {
+            ratingEventHeaderCardContent(event, isLinkedToEvent: false)
+        }
+    }
+
+    private func ratingEventHeaderCardContent(_ event: WebRatingEvent, isLinkedToEvent: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                RatingSquareImage(
+                    imageURL: event.imageUrl,
+                    fallbackSymbol: "sparkles.rectangle.stack.fill",
+                    size: 72
+                )
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(event.name)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Text((event.description?.isEmpty == false ? event.description : "暂无事件描述") ?? "暂无事件描述")
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(4)
+                    Text("发布者：\(event.createdBy?.shownName ?? "匿名用户")")
+                        .font(.caption2)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(1)
+                }
+
+                if isLinkedToEvent {
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .padding(.top, 2)
+                }
+            }
+
+            if isLinkedToEvent {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.caption2.weight(.semibold))
+                    Text("进入对应电音节活动详情")
+                        .font(.caption2.weight(.semibold))
+                }
+                .foregroundStyle(RaverTheme.accent)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(RaverTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var topSafeAreaInset: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let keyWindow = scenes.flatMap(\.windows).first(where: \.isKeyWindow)
+        return keyWindow?.safeAreaInsets.top ?? 0
+    }
+
+    private var ratingEventTopBar: some View {
+        let safeTop = topSafeAreaInset
+        return ZStack(alignment: .top) {
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.95),
+                    Color.black.opacity(0.88),
+                    Color.black.opacity(0.58),
+                    Color.black.opacity(0.0),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .allowsHitTesting(false)
+
+            ZStack {
+                Text("打分事件详情")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                HStack {
+                    Button {
+                        onClose()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(Color.black.opacity(0.36))
+                            .clipShape(Circle())
                     }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+
+                    Button {
+                        isPresentingCreateUnit = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(Color.black.opacity(0.36))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
                 }
-            }
-            HStack {
-                Button {
-                    onClose()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(Color.black.opacity(0.36))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                Spacer()
-                Button {
-                    isPresentingCreateUnit = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(Color.black.opacity(0.36))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, 14)
-            .padding(.top, 4)  // safeAreaInset 里原来就是 .padding(.top, 4)
+            .padding(.top, safeTop + 4)
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: safeTop + 70, alignment: .top)
+        .ignoresSafeArea(edges: .top)
     }
 
     private func ratingUnitRow(unit: WebRatingUnit) -> some View {
@@ -1043,7 +1154,7 @@ private struct CircleRatingEventDetailView: View {
     }
 }
 
-private struct CircleRatingUnitDetailView: View {
+struct CircleRatingUnitDetailView: View {
     @EnvironmentObject private var appState: AppState
     private let socialService = AppEnvironment.makeService()
     private let webService = AppEnvironment.makeWebService()
@@ -1062,25 +1173,79 @@ private struct CircleRatingUnitDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 if let unit {
-                    HStack(alignment: .top, spacing: 10) {
-                        RatingSquareImage(
-                            imageURL: unit.imageUrl,
-                            fallbackSymbol: "music.mic",
-                            size: 72
-                        )
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(alignment: .top, spacing: 10) {
+                            RatingSquareImage(
+                                imageURL: unit.imageUrl,
+                                fallbackSymbol: "music.mic",
+                                size: 72
+                            )
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(unit.name)
-                                .font(.headline.weight(.bold))
-                                .foregroundStyle(RaverTheme.primaryText)
-                            Text((unit.description?.isEmpty == false ? unit.description : "暂无单位描述") ?? "暂无单位描述")
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                                .lineLimit(3)
-                            Text("发布者：\(unit.createdBy?.shownName ?? "匿名用户")")
-                                .font(.caption2)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                                .lineLimit(1)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(unit.name)
+                                    .font(.headline.weight(.bold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                Text((unit.description?.isEmpty == false ? unit.description : "暂无单位描述") ?? "暂无单位描述")
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .lineLimit(3)
+                                Text("发布者：\(unit.createdBy?.shownName ?? "匿名用户")")
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .lineLimit(1)
+                            }
+                        }
+                        if let linkedDJs = unit.linkedDJs, !linkedDJs.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("相关 DJ")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 12) {
+                                        ForEach(linkedDJs) { dj in
+                                            NavigationLink {
+                                                DJDetailView(djID: dj.id)
+                                            } label: {
+                                                VStack(spacing: 4) {
+                                                    Group {
+                                                        if let imageURL = AppConfig.resolvedURLString(dj.avatarUrl),
+                                                           let url = URL(string: imageURL),
+                                                           imageURL.hasPrefix("http://") || imageURL.hasPrefix("https://") {
+                                                            AsyncImage(url: url) { phase in
+                                                                switch phase {
+                                                                case .success(let image):
+                                                                    image.resizable().scaledToFill()
+                                                                default:
+                                                                    Circle().fill(RaverTheme.cardBorder)
+                                                                }
+                                                            }
+                                                        } else {
+                                                            Circle().fill(RaverTheme.cardBorder)
+                                                                .overlay(
+                                                                    Text(String(dj.name.prefix(1)).uppercased())
+                                                                        .font(.caption.weight(.semibold))
+                                                                        .foregroundStyle(RaverTheme.secondaryText)
+                                                                )
+                                                        }
+                                                    }
+                                                    .frame(width: 34, height: 34)
+                                                    .clipShape(Circle())
+
+                                                    Text(dj.name)
+                                                        .font(.caption2)
+                                                        .foregroundStyle(RaverTheme.secondaryText)
+                                                        .lineLimit(1)
+                                                        .frame(maxWidth: 64)
+                                                }
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                    .padding(.vertical, 2)
+                                }
+                            }
+                            .padding(.top, 10)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1403,10 +1568,13 @@ private struct CreateRatingEventSheet: View {
             if let selectedCoverData {
                 isUploadingCover = true
                 defer { isUploadingCover = false }
-                let upload = try await webService.uploadEventImage(
+                let upload = try await webService.uploadRatingImage(
                     imageData: jpegData(from: selectedCoverData),
                     fileName: "rating-event-cover-\(UUID().uuidString).jpg",
-                    mimeType: "image/jpeg"
+                    mimeType: "image/jpeg",
+                    ratingEventID: nil,
+                    ratingUnitID: nil,
+                    usage: "event-cover"
                 )
                 finalImageURL = upload.url
             }
@@ -1447,10 +1615,161 @@ private struct CreateRatingEventSheet: View {
     }
 }
 
+private struct CreateRatingEventFromEventSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    private let webService = AppEnvironment.makeWebService()
+    let onSubmit: (String) async throws -> Void
+
+    @State private var searchKeyword = ""
+    @State private var events: [WebEvent] = []
+    @State private var selectedEventID: String?
+    @State private var isLoading = false
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+
+    private let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "MM-dd HH:mm"
+        return formatter
+    }()
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if isLoading {
+                    HStack {
+                        Spacer()
+                        ProgressView("正在加载活动…")
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                } else if events.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("没有找到可导入活动")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Text("请尝试修改关键词，或先创建活动。")
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    .padding(.vertical, 6)
+                    .listRowBackground(Color.clear)
+                } else {
+                    ForEach(events) { event in
+                        Button {
+                            selectedEventID = event.id
+                        } label: {
+                            HStack(alignment: .center, spacing: 10) {
+                                RatingSquareImage(
+                                    imageURL: event.coverImageUrl,
+                                    fallbackSymbol: "sparkles.rectangle.stack.fill",
+                                    size: 48
+                                )
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(event.name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                        .lineLimit(1)
+                                    Text("\(dateFormatter.string(from: event.startDate)) - \(dateFormatter.string(from: event.endDate))")
+                                        .font(.caption2)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                        .lineLimit(1)
+                                    Text("\(event.city ?? "未知城市") · \(event.country ?? "未知国家")")
+                                        .font(.caption2)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                        .lineLimit(1)
+                                }
+
+                                Spacer(minLength: 0)
+
+                                Image(systemName: selectedEventID == event.id ? "checkmark.circle.fill" : "circle")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(selectedEventID == event.id ? RaverTheme.accent : RaverTheme.secondaryText.opacity(0.8))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red.opacity(0.92))
+                        .listRowBackground(Color.clear)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(RaverTheme.background)
+            .searchable(text: $searchKeyword, prompt: "搜索活动名称")
+            .onSubmit(of: .search) {
+                Task { await loadEvents() }
+            }
+            .navigationTitle("从活动导入打分")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(isSubmitting ? "导入中..." : "导入") {
+                        Task { await submit() }
+                    }
+                    .disabled(selectedEventID == nil || isSubmitting || isLoading)
+                }
+            }
+            .task {
+                await loadEvents()
+            }
+        }
+    }
+
+    @MainActor
+    private func loadEvents() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let response = try await webService.fetchEvents(
+                page: 1,
+                limit: 100,
+                search: searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines),
+                eventType: nil,
+                status: "all"
+            )
+            events = response.items.sorted(by: { $0.startDate < $1.startDate })
+            if let selectedEventID, !events.contains(where: { $0.id == selectedEventID }) {
+                self.selectedEventID = nil
+            }
+            errorMessage = nil
+        } catch {
+            events = []
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func submit() async {
+        guard let selectedEventID else { return }
+        isSubmitting = true
+        defer { isSubmitting = false }
+        do {
+            try await onSubmit(selectedEventID)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
 private struct CreateRatingUnitSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private let webService = AppEnvironment.makeWebService()
+    let eventID: String?
     let onSubmit: (CreateRatingUnitInput) async throws -> Void
 
     @State private var name = ""
@@ -1528,10 +1847,13 @@ private struct CreateRatingUnitSheet: View {
             if let selectedCoverData {
                 isUploadingCover = true
                 defer { isUploadingCover = false }
-                let upload = try await webService.uploadEventImage(
+                let upload = try await webService.uploadRatingImage(
                     imageData: jpegData(from: selectedCoverData),
                     fileName: "rating-unit-cover-\(UUID().uuidString).jpg",
-                    mimeType: "image/jpeg"
+                    mimeType: "image/jpeg",
+                    ratingEventID: eventID,
+                    ratingUnitID: nil,
+                    usage: "unit-cover"
                 )
                 finalImageURL = upload.url
             }

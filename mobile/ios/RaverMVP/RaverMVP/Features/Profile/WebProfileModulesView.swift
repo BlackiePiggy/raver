@@ -1773,10 +1773,13 @@ private struct RatingEventEditorSheet: View {
             if let selectedCoverData {
                 isUploadingCover = true
                 defer { isUploadingCover = false }
-                let upload = try await service.uploadEventImage(
+                let upload = try await service.uploadRatingImage(
                     imageData: jpegData(from: selectedCoverData),
                     fileName: "rating-event-edit-\(UUID().uuidString).jpg",
-                    mimeType: "image/jpeg"
+                    mimeType: "image/jpeg",
+                    ratingEventID: event.id,
+                    ratingUnitID: nil,
+                    usage: "event-cover"
                 )
                 finalImageURL = upload.url
             }
@@ -1912,10 +1915,13 @@ private struct RatingUnitEditorSheet: View {
             if let selectedCoverData {
                 isUploadingCover = true
                 defer { isUploadingCover = false }
-                let upload = try await service.uploadEventImage(
+                let upload = try await service.uploadRatingImage(
                     imageData: jpegData(from: selectedCoverData),
                     fileName: "rating-unit-edit-\(UUID().uuidString).jpg",
-                    mimeType: "image/jpeg"
+                    mimeType: "image/jpeg",
+                    ratingEventID: nil,
+                    ratingUnitID: unit.id,
+                    usage: "unit-cover"
                 )
                 finalImageURL = upload.url
             }

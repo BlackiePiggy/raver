@@ -14,6 +14,14 @@ protocol WebFeatureService {
         eventID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse
+    func uploadRatingImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        ratingEventID: String?,
+        ratingUnitID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse
     func importEventLineupFromImage(
         imageData: Data,
         fileName: String,
@@ -23,11 +31,21 @@ protocol WebFeatureService {
     ) async throws -> EventLineupImageImportResponse
     func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
     func uploadPostVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
+    func uploadWikiBrandImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        brandID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse
 
     func fetchDJs(page: Int, limit: Int, search: String?, sortBy: String) async throws -> DJListPage
     func fetchDJ(id: String) async throws -> WebDJ
     func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate]
+    func searchDiscogsDJs(query: String, limit: Int) async throws -> [DiscogsDJCandidate]
+    func fetchDiscogsDJArtist(id: Int) async throws -> DiscogsDJArtistDetail
     func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportSpotifyDJResponse
+    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDiscogsDJResponse
     func importManualDJ(input: ImportManualDJInput) async throws -> ImportManualDJResponse
     func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ
     func uploadDJImage(
@@ -43,6 +61,7 @@ protocol WebFeatureService {
     func toggleDJFollow(djID: String, shouldFollow: Bool) async throws -> WebDJ
 
     func fetchDJSets(page: Int, limit: Int, sortBy: String, djID: String?) async throws -> DJSetListPage
+    func fetchEventDJSets(eventName: String) async throws -> [WebDJSet]
     func fetchDJSet(id: String) async throws -> WebDJSet
     func fetchMyDJSets() async throws -> [WebDJSet]
     func createDJSet(input: CreateDJSetInput) async throws -> WebDJSet
@@ -72,8 +91,11 @@ protocol WebFeatureService {
     func deleteCheckin(id: String) async throws
 
     func fetchRatingEvents() async throws -> [WebRatingEvent]
+    func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent]
     func fetchRatingEvent(id: String) async throws -> WebRatingEvent
+    func fetchDJRatingUnits(djID: String) async throws -> [WebRatingUnit]
     func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent
+    func createRatingEventFromEvent(eventID: String) async throws -> WebRatingEvent
     func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent
     func deleteRatingEvent(id: String) async throws
     func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit
@@ -92,6 +114,8 @@ protocol WebFeatureService {
         nation: String?,
         genre: String?
     ) async throws -> LearnLabelListPage
+    func fetchLearnFestivals(search: String?) async throws -> [WebLearnFestival]
+    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival
     func fetchRankingBoards() async throws -> [RankingBoard]
     func fetchRankingBoardDetail(boardID: String, year: Int?) async throws -> RankingBoardDetail
 
@@ -105,6 +129,17 @@ extension WebFeatureService {
             fileName: fileName,
             mimeType: mimeType,
             eventID: nil,
+            usage: nil
+        )
+    }
+
+    func uploadRatingImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
+        try await uploadRatingImage(
+            imageData: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
+            ratingEventID: nil,
+            ratingUnitID: nil,
             usage: nil
         )
     }

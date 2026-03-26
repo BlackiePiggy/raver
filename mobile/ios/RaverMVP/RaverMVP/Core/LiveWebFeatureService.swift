@@ -76,6 +76,35 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data
     }
 
+    func uploadRatingImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        ratingEventID: String?,
+        ratingUnitID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse {
+        var fields: [String: String] = [:]
+        if let ratingEventID, !ratingEventID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["ratingEventId"] = ratingEventID
+        }
+        if let ratingUnitID, !ratingUnitID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["ratingUnitId"] = ratingUnitID
+        }
+        if let usage, !usage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["usage"] = usage
+        }
+        let response: BFFEnvelope<UploadMediaResponse> = try await uploadMultipart(
+            path: "/v1/rating/upload-image",
+            data: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
+            fieldName: "image",
+            fields: fields
+        )
+        return response.data
+    }
+
     func importEventLineupFromImage(
         imageData: Data,
         fileName: String,
@@ -96,7 +125,8 @@ final class LiveWebFeatureService: WebFeatureService {
             fileName: fileName,
             mimeType: mimeType,
             fieldName: "image",
-            fields: fields
+            fields: fields,
+            timeoutInterval: 120
         )
         return response.data
     }
@@ -119,6 +149,31 @@ final class LiveWebFeatureService: WebFeatureService {
             fileName: fileName,
             mimeType: mimeType,
             fieldName: "video"
+        )
+        return response.data
+    }
+
+    func uploadWikiBrandImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        brandID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse {
+        var fields: [String: String] = [:]
+        if let brandID, !brandID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["brandId"] = brandID
+        }
+        if let usage, !usage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["usage"] = usage
+        }
+        let response: BFFEnvelope<UploadMediaResponse> = try await uploadMultipart(
+            path: "/v1/wiki/brands/upload-image",
+            data: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
+            fieldName: "image",
+            fields: fields
         )
         return response.data
     }
@@ -155,9 +210,40 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data.items
     }
 
+    func searchDiscogsDJs(query: String, limit: Int) async throws -> [DiscogsDJCandidate] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let response: BFFEnvelope<BFFItems<DiscogsDJCandidate>> = try await request(
+            path: "/v1/djs/discogs/search",
+            method: "GET",
+            queryItems: [
+                URLQueryItem(name: "q", value: trimmed),
+                URLQueryItem(name: "limit", value: "\(max(1, min(20, limit)))")
+            ]
+        )
+        return response.data.items
+    }
+
+    func fetchDiscogsDJArtist(id: Int) async throws -> DiscogsDJArtistDetail {
+        let response: BFFEnvelope<DiscogsDJArtistDetail> = try await request(
+            path: "/v1/djs/discogs/artists/\(id)",
+            method: "GET"
+        )
+        return response.data
+    }
+
     func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportSpotifyDJResponse {
         let response: BFFEnvelope<ImportSpotifyDJResponse> = try await request(
             path: "/v1/djs/spotify/import",
+            method: "POST",
+            body: input
+        )
+        return response.data
+    }
+
+    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDiscogsDJResponse {
+        let response: BFFEnvelope<ImportDiscogsDJResponse> = try await request(
+            path: "/v1/djs/discogs/import",
             method: "POST",
             body: input
         )
@@ -237,6 +323,19 @@ final class LiveWebFeatureService: WebFeatureService {
         }
         let response: BFFEnvelope<BFFItems<WebDJSet>> = try await request(path: "/v1/dj-sets", method: "GET", queryItems: queryItems)
         return DJSetListPage(items: response.data.items, pagination: response.pagination)
+    }
+
+    func fetchEventDJSets(eventName: String) async throws -> [WebDJSet] {
+        let normalized = eventName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return [] }
+        let queryItems = [
+            URLQueryItem(name: "page", value: "1"),
+            URLQueryItem(name: "limit", value: "200"),
+            URLQueryItem(name: "sortBy", value: "latest"),
+            URLQueryItem(name: "eventName", value: normalized),
+        ]
+        let response: BFFEnvelope<BFFItems<WebDJSet>> = try await request(path: "/v1/dj-sets", method: "GET", queryItems: queryItems)
+        return response.data.items
     }
 
     func fetchDJSet(id: String) async throws -> WebDJSet {
@@ -446,13 +545,39 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data.items
     }
 
+    func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent] {
+        let response: BFFEnvelope<BFFItems<WebRatingEvent>> = try await request(
+            path: "/v1/events/\(eventID)/rating-events",
+            method: "GET"
+        )
+        return response.data.items
+    }
+
     func fetchRatingEvent(id: String) async throws -> WebRatingEvent {
         let response: BFFEnvelope<WebRatingEvent> = try await request(path: "/v1/rating-events/\(id)", method: "GET")
         return response.data
     }
 
+    func fetchDJRatingUnits(djID: String) async throws -> [WebRatingUnit] {
+        let response: BFFEnvelope<BFFItems<WebRatingUnit>> = try await request(
+            path: "/v1/djs/\(djID)/rating-units",
+            method: "GET"
+        )
+        return response.data.items
+    }
+
     func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent {
         let response: BFFEnvelope<WebRatingEvent> = try await request(path: "/v1/rating-events", method: "POST", body: input)
+        return response.data
+    }
+
+    func createRatingEventFromEvent(eventID: String) async throws -> WebRatingEvent {
+        let payload = ["eventId": eventID]
+        let response: BFFEnvelope<WebRatingEvent> = try await request(
+            path: "/v1/rating-events/from-event",
+            method: "POST",
+            body: payload
+        )
         return response.data
     }
 
@@ -527,6 +652,28 @@ final class LiveWebFeatureService: WebFeatureService {
         return LearnLabelListPage(items: response.data.items, pagination: response.pagination)
     }
 
+    func fetchLearnFestivals(search: String?) async throws -> [WebLearnFestival] {
+        var queryItems: [URLQueryItem] = []
+        if let search, !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "search", value: search))
+        }
+        let response: BFFEnvelope<BFFItems<WebLearnFestival>> = try await request(
+            path: "/v1/learn/festivals",
+            method: "GET",
+            queryItems: queryItems
+        )
+        return response.data.items
+    }
+
+    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival {
+        let response: BFFEnvelope<WebLearnFestival> = try await request(
+            path: "/v1/learn/festivals/\(id)",
+            method: "PATCH",
+            body: input
+        )
+        return response.data
+    }
+
     func fetchRankingBoards() async throws -> [RankingBoard] {
         let response: BFFEnvelope<[RankingBoard]> = try await request(path: "/v1/learn/rankings", method: "GET")
         return response.data
@@ -582,14 +729,15 @@ final class LiveWebFeatureService: WebFeatureService {
         fileName: String,
         mimeType: String,
         fieldName: String,
-        fields: [String: String] = [:]
+        fields: [String: String] = [:],
+        timeoutInterval: TimeInterval = 30
     ) async throws -> T {
         let url = try buildURL(path: path, queryItems: [])
         let boundary = "Boundary-\(UUID().uuidString)"
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 30
+        request.timeoutInterval = timeoutInterval
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")

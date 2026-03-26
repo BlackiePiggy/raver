@@ -17,7 +17,9 @@
     "djs:import:edmdd": "ts-node prisma/import-edmdancedirectory-djs.ts",
     "djs:avatars:oss": "ts-node prisma/upload-dj-avatars-to-oss.ts",
     "djs:avatars:spotify-placeholder-fix": "ts-node prisma/backfill-dj-placeholder-avatars-via-spotify.ts",
-    "djs:contributors:backfill-uploadtester": "ts-node prisma/backfill-dj-contributors-uploadtester.ts"
+    "djs:contributors:backfill-uploadtester": "ts-node prisma/backfill-dj-contributors-uploadtester.ts",
+    "wiki:festivals:seed-uploadtester": "ts-node prisma/seed-wiki-festivals.ts",
+    "wiki:festivals:media:backfill-oss": "ts-node prisma/backfill-wiki-festival-media-from-oss.ts"
   },
   "keywords": [
     "raver",

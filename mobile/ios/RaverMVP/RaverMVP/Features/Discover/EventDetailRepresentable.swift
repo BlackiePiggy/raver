@@ -5,6 +5,7 @@ struct EventDetailRepresentable: UIViewControllerRepresentable {
     let heroView: AnyView
     let eventTitle: String
     let tabTitles: [String]
+    let tabBarView: AnyView
     let tabPageViews: [AnyView]
     let selectedIndex: Int
     let pageProgress: CGFloat
@@ -30,6 +31,7 @@ struct EventDetailRepresentable: UIViewControllerRepresentable {
             heroView: wrapped(heroView),
             eventTitle: eventTitle,
             tabTitles: tabTitles,
+            tabBarView: wrapped(tabBarView),
             tabPageViews: tabPageViews.map(wrapped),
             selectedIndex: selectedIndex,
             pageProgress: pageProgress,
@@ -54,6 +56,7 @@ struct EventDetailRepresentable: UIViewControllerRepresentable {
             heroView: wrapped(heroView),
             eventTitle: eventTitle,
             tabTitles: tabTitles,
+            tabBarView: wrapped(tabBarView),
             tabPageViews: tabPageViews.map(wrapped),
             selectedIndex: selectedIndex,
             pageProgress: pageProgress,
