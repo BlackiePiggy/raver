@@ -1,5 +1,6 @@
 import AVFoundation
 import AVKit
+import MapKit
 import SwiftUI
 import UIKit
 
@@ -14,6 +15,7 @@ struct PostCardView: View {
     let onAuthorTap: (() -> Void)?
     let onSquadTap: (() -> Void)?
     let onEditTap: (() -> Void)?
+    @State private var isShowingLocationMap = false
 
     init(
         post: Post,
@@ -88,6 +90,32 @@ struct PostCardView: View {
                     PostMediaGridView(mediaURLs: post.images)
                 }
 
+                if let locationText = normalizedLocationText {
+                    Button {
+                        isShowingLocationMap = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "mappin.and.ellipse")
+                                .font(.caption.weight(.semibold))
+                            Text(locationText)
+                                .font(.caption.weight(.semibold))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .foregroundStyle(Color.white.opacity(0.94))
+                        .frame(maxWidth: locationLabelMaxWidth, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.36))
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.white.opacity(0.14), lineWidth: 0.8)
+                        )
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 HStack(spacing: 18) {
                     Button(action: onLikeTap) {
                         Label("\(post.likeCount)", systemImage: post.isLiked ? "heart.fill" : "heart")
@@ -133,6 +161,20 @@ struct PostCardView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $isShowingLocationMap) {
+            if let locationText = normalizedLocationText {
+                PostLocationMapView(locationText: locationText)
+            }
+        }
+    }
+
+    private var normalizedLocationText: String? {
+        let trimmed = post.location?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var locationLabelMaxWidth: CGFloat {
+        max(150, min(UIScreen.main.bounds.width * 0.48, 210))
     }
 
     private var authorMeta: some View {
@@ -187,6 +229,133 @@ struct PostCardView: View {
         .frame(width: 34, height: 34)
         .background(RaverTheme.card)
         .clipShape(Circle())
+    }
+}
+
+private struct PostLocationMapView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let locationText: String
+
+    @State private var mapPosition: MapCameraPosition
+    @State private var resolvedCoordinate: CLLocationCoordinate2D?
+    @State private var isResolving = false
+    @State private var resolveFailed = false
+
+    init(locationText: String) {
+        self.locationText = locationText
+        let fallback = CLLocationCoordinate2D(latitude: 31.2304, longitude: 121.4737)
+        _mapPosition = State(
+            initialValue: .region(
+                MKCoordinateRegion(
+                    center: fallback,
+                    span: MKCoordinateSpan(latitudeDelta: 0.06, longitudeDelta: 0.06)
+                )
+            )
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                Map(position: $mapPosition, interactionModes: .all) {
+                    if let resolvedCoordinate {
+                        Marker(locationText, coordinate: resolvedCoordinate)
+                    }
+                }
+                .mapStyle(.standard(elevation: .realistic))
+                .ignoresSafeArea(edges: .bottom)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("定位信息")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    Text(locationText)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(2)
+
+                    if isResolving {
+                        ProgressView("正在解析位置…")
+                            .font(.caption)
+                            .tint(RaverTheme.secondaryText)
+                    } else if resolveFailed {
+                        Text("未能精确定位，仍可在地图中拖动查看区域。")
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+
+                    Button {
+                        openInSystemMaps()
+                    } label: {
+                        Label("系统地图打开", systemImage: "arrow.up.right.square")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(RaverTheme.accent)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("返回") { dismiss() }
+                        .font(.subheadline.weight(.semibold))
+                }
+            }
+            .navigationTitle("位置地图")
+            .navigationBarTitleDisplayMode(.inline)
+            .task {
+                await resolveLocation()
+            }
+        }
+    }
+
+    @MainActor
+    private func resolveLocation() async {
+        guard !isResolving else { return }
+        isResolving = true
+        defer { isResolving = false }
+
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = locationText
+        request.resultTypes = [.address, .pointOfInterest]
+        do {
+            let response = try await MKLocalSearch(request: request).start()
+            if let coordinate = response.mapItems.first?.placemark.coordinate {
+                resolvedCoordinate = coordinate
+                resolveFailed = false
+                mapPosition = .region(
+                    MKCoordinateRegion(
+                        center: coordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
+                    )
+                )
+                return
+            }
+            resolveFailed = true
+        } catch {
+            resolveFailed = true
+        }
+    }
+
+    private func openInSystemMaps() {
+        if let resolvedCoordinate {
+            let placemark = MKPlacemark(coordinate: resolvedCoordinate)
+            let item = MKMapItem(placemark: placemark)
+            item.name = locationText
+            item.openInMaps()
+            return
+        }
+
+        let encoded = locationText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? locationText
+        if let url = URL(string: "http://maps.apple.com/?q=\(encoded)") {
+            UIApplication.shared.open(url)
+        }
     }
 }
 
@@ -293,6 +462,7 @@ struct PostMediaGridView: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        //.contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private func mediaThumbnail(_ item: PostMediaItem) -> some View {

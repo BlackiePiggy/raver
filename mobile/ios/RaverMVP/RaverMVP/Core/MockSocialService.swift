@@ -122,6 +122,10 @@ actor MockSocialService: SocialService {
     func createPost(input: CreatePostInput) async throws -> Post {
         let trimmed = input.content.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedImages = input.images.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let normalizedLocation: String? = {
+            let trimmed = input.location?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }()
         if trimmed.isEmpty && normalizedImages.isEmpty {
             throw ServiceError.message("请填写正文或添加媒体")
         }
@@ -131,6 +135,7 @@ actor MockSocialService: SocialService {
             author: currentUser,
             content: trimmed,
             images: normalizedImages,
+            location: normalizedLocation,
             squad: nil,
             createdAt: Date(),
             likeCount: 0,
@@ -158,6 +163,10 @@ actor MockSocialService: SocialService {
         let normalizedImages = input.images
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+        let normalizedLocation: String? = {
+            let trimmed = input.location?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }()
         if trimmed.isEmpty && normalizedImages.isEmpty {
             throw ServiceError.message("请填写正文或添加媒体")
         }
@@ -165,6 +174,7 @@ actor MockSocialService: SocialService {
         var updated = target
         updated.content = trimmed
         updated.images = normalizedImages
+        updated.location = normalizedLocation
         posts[index] = updated
         return updated
     }

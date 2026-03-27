@@ -32,8 +32,8 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "2966"
             endingLineNumber = "2966"
-            landmarkName = "eventInfoTabContent(_:cardWidth:)"
-            landmarkType = "7">
+            landmarkName = "body"
+            landmarkType = "24">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -48,8 +48,8 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "2965"
             endingLineNumber = "2965"
-            landmarkName = "eventInfoTabContent(_:cardWidth:)"
-            landmarkType = "7">
+            landmarkName = "body"
+            landmarkType = "24">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -64,8 +64,8 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "5061"
             endingLineNumber = "5061"
-            landmarkName = "body"
-            landmarkType = "24">
+            landmarkName = "stageHeaderRow(layout:)"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -80,7 +80,7 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "4200"
             endingLineNumber = "4200"
-            landmarkName = "build(from:)"
+            landmarkName = "lineupPerformerAvatar(_:size:)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -96,7 +96,7 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "4218"
             endingLineNumber = "4218"
-            landmarkName = "build(from:)"
+            landmarkName = "eventInfoRow(icon:title:value:linkStyle:)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -112,7 +112,7 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "5172"
             endingLineNumber = "5172"
-            landmarkName = "init(id:djId:djName:)"
+            landmarkName = "cardFrames(for:layout:)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>

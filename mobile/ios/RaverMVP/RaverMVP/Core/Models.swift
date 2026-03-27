@@ -49,6 +49,7 @@ struct Post: Codable, Identifiable, Hashable {
     var author: UserSummary
     var content: String
     var images: [String]
+    var location: String? = nil
     var squad: PostSquad?
     var createdAt: Date
     var likeCount: Int
@@ -113,11 +114,25 @@ struct FollowListPage: Codable {
 struct CreatePostInput: Codable {
     let content: String
     let images: [String]
+    var location: String?
+
+    init(content: String, images: [String], location: String? = nil) {
+        self.content = content
+        self.images = images
+        self.location = location
+    }
 }
 
 struct UpdatePostInput: Codable {
     let content: String
     let images: [String]
+    var location: String?
+
+    init(content: String, images: [String], location: String? = nil) {
+        self.content = content
+        self.images = images
+        self.location = location
+    }
 }
 
 struct UpdateMyProfileInput: Codable {

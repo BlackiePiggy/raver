@@ -1,5 +1,6 @@
 import AVFoundation
 import AVKit
+import MapKit
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
@@ -32,6 +33,8 @@ struct ComposePostView: View {
     @State private var isUploadingMedia = false
     @State private var toast: String?
     @State private var isDeleteConfirmationPresented = false
+    @State private var locationTag: String
+    @State private var showLocationPicker = false
 
     init(
         mode: ComposePostMode = .create,
@@ -48,6 +51,7 @@ struct ComposePostView: View {
         case .create:
             _text = State(initialValue: "")
             _mediaEntries = State(initialValue: [])
+            _locationTag = State(initialValue: "")
         case .edit(let post):
             _text = State(initialValue: post.content)
             _mediaEntries = State(
@@ -56,6 +60,7 @@ struct ComposePostView: View {
                     .filter { !$0.isEmpty }
                     .map { ComposeMediaEntry(url: $0) }
             )
+            _locationTag = State(initialValue: post.location ?? "")
         }
     }
 
@@ -67,6 +72,11 @@ struct ComposePostView: View {
         mediaEntries
             .map(\.url)
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    private var normalizedLocationTag: String? {
+        let trimmed = locationTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private var canSend: Bool {
@@ -211,6 +221,8 @@ struct ComposePostView: View {
                     delegate: ComposeMediaDropOutsideDelegate(draggingItem: $draggingMedia)
                 )
 
+                locationSection
+
                 Button {
                     Task { await submitPost() }
                 } label: {
@@ -289,6 +301,14 @@ struct ComposePostView: View {
                     initialIndex: preview.index
                 )
             }
+            .fullScreenCover(isPresented: $showLocationPicker) {
+                PostLocationPickerSheet(
+                    initialQuery: normalizedLocationTag ?? "",
+                    onSelect: { selected in
+                        locationTag = selected
+                    }
+                )
+            }
         }
     }
 
@@ -306,12 +326,20 @@ struct ComposePostView: View {
             if let editingPost {
                 let updated = try await appState.service.updatePost(
                     postID: editingPost.id,
-                    input: UpdatePostInput(content: trimmedText, images: normalizedMediaURLs)
+                    input: UpdatePostInput(
+                        content: trimmedText,
+                        images: normalizedMediaURLs,
+                        location: normalizedLocationTag
+                    )
                 )
                 onPostUpdated?(updated)
             } else {
                 let created = try await appState.service.createPost(
-                    input: CreatePostInput(content: trimmedText, images: normalizedMediaURLs)
+                    input: CreatePostInput(
+                        content: trimmedText,
+                        images: normalizedMediaURLs,
+                        location: normalizedLocationTag
+                    )
                 )
                 onPostCreated?(created)
             }
@@ -457,6 +485,48 @@ struct ComposePostView: View {
             Image(systemName: "photo")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(RaverTheme.secondaryText)
+        }
+    }
+
+    private var locationSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("定位标签")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                if normalizedLocationTag != nil {
+                    Button("清除") {
+                        locationTag = ""
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+
+            Button {
+                showLocationPicker = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    Text(normalizedLocationTag ?? "添加定位标签")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(normalizedLocationTag == nil ? RaverTheme.secondaryText : RaverTheme.primaryText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText.opacity(0.8))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .background(RaverTheme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
         }
     }
 }
@@ -861,6 +931,245 @@ private struct AutoGrowingTextView: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
             parent.recalculateHeight(for: textView)
+        }
+    }
+}
+
+private struct PostLocationCandidate: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let coordinate: CLLocationCoordinate2D?
+
+    var displayLabel: String {
+        subtitle.isEmpty ? title : "\(title) · \(subtitle)"
+    }
+
+    static func == (lhs: PostLocationCandidate, rhs: PostLocationCandidate) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+private final class PostLocationSearchModel: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
+    @Published private(set) var candidates: [PostLocationCandidate] = []
+    private let completer = MKLocalSearchCompleter()
+    private var query: String = ""
+
+    override init() {
+        super.init()
+        completer.delegate = self
+        completer.resultTypes = [.address, .pointOfInterest]
+    }
+
+    func updateQuery(_ value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        query = trimmed
+        if trimmed.isEmpty {
+            candidates = []
+            completer.queryFragment = ""
+            return
+        }
+        completer.queryFragment = trimmed
+    }
+
+    func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+        guard !query.isEmpty else {
+            candidates = []
+            return
+        }
+        candidates = completer.results.map { item in
+            PostLocationCandidate(
+                id: "\(item.title)|\(item.subtitle)",
+                title: item.title,
+                subtitle: item.subtitle,
+                coordinate: nil
+            )
+        }
+    }
+
+    func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
+        print("Post location completer error: \(error.localizedDescription)")
+        candidates = []
+    }
+}
+
+private struct PostLocationPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var searchModel = PostLocationSearchModel()
+
+    let initialQuery: String
+    let onSelect: (String) -> Void
+
+    @State private var query: String
+    @State private var mapPosition: MapCameraPosition
+    @State private var selectedCandidate: PostLocationCandidate?
+    @State private var selectedCoordinate: CLLocationCoordinate2D?
+    @State private var isResolving = false
+    @State private var errorMessage: String?
+
+    init(initialQuery: String, onSelect: @escaping (String) -> Void) {
+        self.initialQuery = initialQuery
+        self.onSelect = onSelect
+        _query = State(initialValue: initialQuery)
+        let fallbackCenter = CLLocationCoordinate2D(latitude: 31.2304, longitude: 121.4737)
+        _mapPosition = State(
+            initialValue: .region(
+                MKCoordinateRegion(
+                    center: fallbackCenter,
+                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                )
+            )
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                mapArea
+                Divider().overlay(Color.white.opacity(0.08))
+                locationListArea
+            }
+            .background(RaverTheme.background)
+            .navigationTitle("选择定位")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") { dismiss() }
+                        .font(.subheadline.weight(.semibold))
+                }
+            }
+            .safeAreaInset(edge: .top) {
+                VStack(spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(RaverTheme.secondaryText)
+                        TextField("搜索地点", text: $query)
+                            .textInputAutocapitalization(.never)
+                            .disableAutocorrection(true)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(RaverTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
+                    .padding(.bottom, 6)
+                }
+                .background(.ultraThinMaterial)
+            }
+            .onAppear {
+                searchModel.updateQuery(query)
+            }
+            .onChange(of: query) { _, newValue in
+                searchModel.updateQuery(newValue)
+            }
+            .alert("提示", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("确定", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
+        }
+    }
+
+    private var mapArea: some View {
+        ZStack {
+            Map(position: $mapPosition, interactionModes: .all) {
+                if let selectedCoordinate {
+                    let selectedTitle = selectedCandidate?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let markerTitle = selectedTitle.isEmpty ? "已选地点" : selectedTitle
+                    Marker(
+                        markerTitle,
+                        coordinate: selectedCoordinate
+                    )
+                }
+            }
+            .mapStyle(.standard(elevation: .realistic))
+            .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 360)
+
+            if isResolving {
+                ProgressView()
+                    .padding(10)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+    }
+
+    private var locationListArea: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if searchModel.candidates.isEmpty {
+                    Text(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "输入关键词搜索地点" : "未找到匹配地点")
+                        .font(.subheadline)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 18)
+                        .padding(.bottom, 22)
+                } else {
+                    ForEach(searchModel.candidates) { candidate in
+                        Button {
+                            Task { await chooseCandidate(candidate) }
+                        } label: {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "mappin.and.ellipse")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.accent)
+                                    .padding(.top, 1)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(candidate.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                        .lineLimit(1)
+                                    if !candidate.subtitle.isEmpty {
+                                        Text(candidate.subtitle)
+                                            .font(.caption)
+                                            .foregroundStyle(RaverTheme.secondaryText)
+                                            .lineLimit(2)
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Divider().overlay(Color.white.opacity(0.06))
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @MainActor
+    private func chooseCandidate(_ candidate: PostLocationCandidate) async {
+        guard !isResolving else { return }
+        isResolving = true
+        defer { isResolving = false }
+
+        do {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = candidate.displayLabel
+            request.resultTypes = [.address, .pointOfInterest]
+            let response = try await MKLocalSearch(request: request).start()
+            let resolved = response.mapItems.first
+            selectedCandidate = candidate
+            selectedCoordinate = resolved?.placemark.coordinate
+            if let coordinate = selectedCoordinate {
+                mapPosition = .region(
+                    MKCoordinateRegion(
+                        center: coordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
+                    )
+                )
+            }
+            onSelect(candidate.displayLabel)
+            dismiss()
+        } catch {
+            errorMessage = "地点解析失败，请重试"
         }
     }
 }

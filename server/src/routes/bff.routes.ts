@@ -265,6 +265,7 @@ const mapPost = (
     squad: { id: string; name: string; avatarUrl: string | null } | null;
     content: string;
     images: string[];
+    location?: string | null;
     createdAt: Date;
     likeCount: number;
     repostCount: number;
@@ -279,6 +280,7 @@ const mapPost = (
     author: toUserSummary(post.user, followingSet.has(post.user.id)),
     content: post.content,
     images: post.images,
+    location: post.location ?? null,
     createdAt: post.createdAt,
     likeCount: post.likeCount,
     repostCount: post.repostCount,
@@ -2214,15 +2216,17 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
 
-    const { content, images, squadId } = req.body as {
+    const { content, images, squadId, location } = req.body as {
       content?: string;
       images?: string[];
       squadId?: string;
+      location?: string;
     };
 
     const normalizedImages = Array.isArray(images)
       ? images.filter((url): url is string => typeof url === 'string' && !!url.trim())
       : [];
+    const normalizedLocation = typeof location === 'string' ? location.trim().slice(0, 160) : '';
     const trimmed = String(content || '').trim();
     if (!trimmed && normalizedImages.length === 0) {
       res.status(400).json({ error: 'content or images is required' });
@@ -2263,9 +2267,10 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
         squadId: linkedSquadId,
         content: trimmed,
         images: normalizedImages,
+        location: normalizedLocation || null,
         type: linkedSquadId ? 'squad' : 'general',
         visibility: 'public',
-      },
+      } as any,
       include: {
         user: {
           select: {
@@ -2301,15 +2306,17 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
     if (!userId) return;
 
     const postId = req.params.id as string;
-    const { content, images } = req.body as {
+    const { content, images, location } = req.body as {
       content?: string;
       images?: string[];
+      location?: string;
     };
 
     const hasContent = typeof content === 'string';
     const hasImages = Array.isArray(images);
-    if (!hasContent && !hasImages) {
-      res.status(400).json({ error: 'content or images is required' });
+    const hasLocation = typeof location === 'string';
+    if (!hasContent && !hasImages && !hasLocation) {
+      res.status(400).json({ error: 'content, images or location is required' });
       return;
     }
 
@@ -2357,19 +2364,23 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
       return;
     }
 
-    const updateData: { content?: string; images?: string[] } = {};
+    const updateData: { content?: string; images?: string[]; location?: string | null } = {};
     if (hasContent) {
       updateData.content = nextContent;
     }
     if (hasImages) {
       updateData.images = nextImages;
     }
+    if (hasLocation) {
+      const normalizedLocation = String(location || '').trim().slice(0, 160);
+      updateData.location = normalizedLocation || null;
+    }
 
     const updated =
       Object.keys(updateData).length > 0
         ? await prisma.post.update({
             where: { id: postId },
-            data: updateData,
+            data: updateData as any,
             include: {
               user: {
                 select: {

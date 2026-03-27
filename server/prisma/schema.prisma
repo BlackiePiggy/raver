@@ -582,6 +582,7 @@ model Post {
   userId       String   @map("user_id")
   content      String   @db.Text
   images       String[] @default([])
+  location     String?
   type         String   @default("general") // general, event, set, squad
   visibility   String   @default("public") // public, friends, squad
   squadId      String?  @map("squad_id")

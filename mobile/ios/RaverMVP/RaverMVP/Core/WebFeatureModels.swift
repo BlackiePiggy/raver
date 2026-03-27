@@ -120,6 +120,13 @@ struct EventLineupSlotInput: Codable, Hashable {
     var endTime: Date?
 }
 
+struct EventTicketTierInput: Codable, Hashable {
+    var name: String
+    var price: Double
+    var currency: String?
+    var sortOrder: Int?
+}
+
 struct WebEvent: Codable, Identifiable, Hashable {
     let id: String
     var name: String
@@ -163,10 +170,18 @@ struct CreateEventInput: Codable {
     var city: String?
     var country: String?
     var venueName: String?
+    var venueAddress: String? = nil
+    var latitude: Double? = nil
+    var longitude: Double? = nil
+    var ticketUrl: String? = nil
+    var ticketCurrency: String? = nil
+    var ticketNotes: String? = nil
+    var officialWebsite: String? = nil
     var startDate: Date
     var endDate: Date
     var coverImageUrl: String?
     var lineupImageUrl: String?
+    var ticketTiers: [EventTicketTierInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
     var status: String?
 }
@@ -178,10 +193,18 @@ struct UpdateEventInput: Codable {
     var city: String?
     var country: String?
     var venueName: String?
+    var venueAddress: String? = nil
+    var latitude: Double? = nil
+    var longitude: Double? = nil
+    var ticketUrl: String? = nil
+    var ticketCurrency: String? = nil
+    var ticketNotes: String? = nil
+    var officialWebsite: String? = nil
     var startDate: Date?
     var endDate: Date?
     var coverImageUrl: String?
     var lineupImageUrl: String?
+    var ticketTiers: [EventTicketTierInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
     var status: String?
 }

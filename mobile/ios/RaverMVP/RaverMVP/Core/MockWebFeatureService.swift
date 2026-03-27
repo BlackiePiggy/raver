@@ -443,6 +443,19 @@ actor MockWebFeatureService: WebFeatureService {
     func createEvent(input: CreateEventInput) async throws -> WebEvent {
         let now = Date()
         let eventID = "evt_\(UUID().uuidString)"
+        let normalizedTicketCurrency = normalizedOptional(input.ticketCurrency)
+        let normalizedTicketNotes = normalizedOptional(input.ticketNotes)
+        let normalizedOfficialWebsite = normalizedOptional(input.officialWebsite)
+        let normalizedTicketTiers: [WebEventTicketTier] = (input.ticketTiers ?? []).enumerated().map { index, tier in
+            WebEventTicketTier(
+                id: "tier_\(UUID().uuidString)",
+                name: tier.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                price: tier.price,
+                currency: normalizedOptional(tier.currency) ?? normalizedTicketCurrency,
+                sortOrder: tier.sortOrder ?? (index + 1)
+            )
+        }
+        let ticketPrices = normalizedTicketTiers.compactMap(\.price)
         let lineupSlots = buildLineupSlots(
             from: input.lineupSlots ?? [],
             eventID: eventID,
@@ -461,25 +474,28 @@ actor MockWebFeatureService: WebFeatureService {
             }(),
             organizerName: currentUser.displayName,
             venueName: input.venueName,
-            venueAddress: nil,
+            venueAddress: normalizedOptional(input.venueAddress),
             city: input.city,
             country: input.country,
-            latitude: nil,
-            longitude: nil,
+            latitude: input.latitude,
+            longitude: input.longitude,
             startDate: input.startDate,
             endDate: input.endDate,
-            ticketUrl: nil,
-            ticketPriceMin: nil,
-            ticketPriceMax: nil,
-            ticketCurrency: nil,
-            ticketNotes: nil,
-            officialWebsite: nil,
+            ticketUrl: {
+                let trimmed = input.ticketUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return trimmed.isEmpty ? nil : trimmed
+            }(),
+            ticketPriceMin: ticketPrices.min(),
+            ticketPriceMax: ticketPrices.max(),
+            ticketCurrency: normalizedTicketCurrency,
+            ticketNotes: normalizedTicketNotes,
+            officialWebsite: normalizedOfficialWebsite,
             status: input.status ?? "upcoming",
             isVerified: false,
             createdAt: now,
             updatedAt: now,
             organizer: currentUser,
-            ticketTiers: [],
+            ticketTiers: normalizedTicketTiers,
             lineupSlots: lineupSlots
         )
         events.insert(event, at: 0)
@@ -498,6 +514,21 @@ actor MockWebFeatureService: WebFeatureService {
         if let city = input.city { events[idx].city = city }
         if let country = input.country { events[idx].country = country }
         if let venueName = input.venueName { events[idx].venueName = venueName }
+        if let venueAddress = input.venueAddress {
+            events[idx].venueAddress = normalizedOptional(venueAddress)
+        }
+        if let latitude = input.latitude { events[idx].latitude = latitude }
+        if let longitude = input.longitude { events[idx].longitude = longitude }
+        if let ticketUrl = input.ticketUrl { events[idx].ticketUrl = ticketUrl }
+        if let ticketCurrency = input.ticketCurrency {
+            events[idx].ticketCurrency = normalizedOptional(ticketCurrency)
+        }
+        if let ticketNotes = input.ticketNotes {
+            events[idx].ticketNotes = normalizedOptional(ticketNotes)
+        }
+        if let officialWebsite = input.officialWebsite {
+            events[idx].officialWebsite = normalizedOptional(officialWebsite)
+        }
         if let startDate = input.startDate { events[idx].startDate = startDate }
         if let endDate = input.endDate { events[idx].endDate = endDate }
         if let coverImageUrl = input.coverImageUrl { events[idx].coverImageUrl = coverImageUrl }
@@ -507,6 +538,21 @@ actor MockWebFeatureService: WebFeatureService {
             events[idx].eventType = trimmed.isEmpty ? nil : trimmed
         }
         if let status = input.status { events[idx].status = status }
+        if let ticketTiers = input.ticketTiers {
+            let fallbackCurrency = normalizedOptional(events[idx].ticketCurrency)
+            events[idx].ticketTiers = ticketTiers.enumerated().map { index, tier in
+                WebEventTicketTier(
+                    id: "tier_\(UUID().uuidString)",
+                    name: tier.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                    price: tier.price,
+                    currency: normalizedOptional(tier.currency) ?? fallbackCurrency,
+                    sortOrder: tier.sortOrder ?? (index + 1)
+                )
+            }
+            let prices = events[idx].ticketTiers.compactMap(\.price)
+            events[idx].ticketPriceMin = prices.min()
+            events[idx].ticketPriceMax = prices.max()
+        }
         if let lineupSlots = input.lineupSlots {
             events[idx].lineupSlots = buildLineupSlots(
                 from: lineupSlots,

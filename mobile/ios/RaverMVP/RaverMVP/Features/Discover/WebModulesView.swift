@@ -5,6 +5,8 @@ import AVFoundation
 import UIKit
 import Photos
 import CoreImage.CIFilterBuiltins
+import MapKit
+import CoreLocation
 
 private enum EventCalendarViewFilter: String, CaseIterable, Hashable, Identifiable {
     case all
@@ -124,6 +126,76 @@ private struct JustifiedUILabelText: UIViewRepresentable {
                 .paragraphStyle: paragraph
             ]
         )
+    }
+}
+
+private struct UIKitInlineTextField: UIViewRepresentable {
+    @Binding var text: String
+
+    var placeholder: String = ""
+    var keyboardType: UIKeyboardType = .default
+    var textAlignment: NSTextAlignment = .natural
+    var font: UIFont = .systemFont(ofSize: 13)
+    var textColor: UIColor = .label
+    var tintColor: UIColor = .label
+    var maxLength: Int? = nil
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, maxLength: maxLength)
+    }
+
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField()
+        textField.borderStyle = .none
+        textField.backgroundColor = .clear
+        textField.placeholder = placeholder
+        textField.keyboardType = keyboardType
+        textField.textAlignment = textAlignment
+        textField.font = font
+        textField.textColor = textColor
+        textField.tintColor = tintColor
+        textField.autocorrectionType = .no
+        textField.autocapitalizationType = .none
+        textField.spellCheckingType = .no
+        textField.delegate = context.coordinator
+        textField.addTarget(context.coordinator, action: #selector(Coordinator.textDidChange(_:)), for: .editingChanged)
+        return textField
+    }
+
+    func updateUIView(_ uiView: UITextField, context: Context) {
+        uiView.placeholder = placeholder
+        uiView.keyboardType = keyboardType
+        uiView.textAlignment = textAlignment
+        uiView.font = font
+        uiView.textColor = textColor
+        uiView.tintColor = tintColor
+        if uiView.text != text {
+            uiView.text = text
+        }
+        context.coordinator.maxLength = maxLength
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        @Binding var text: String
+        var maxLength: Int?
+
+        init(text: Binding<String>, maxLength: Int?) {
+            _text = text
+            self.maxLength = maxLength
+        }
+
+        @objc func textDidChange(_ textField: UITextField) {
+            var next = textField.text ?? ""
+            if let maxLength {
+                next = String(next.prefix(maxLength))
+                if textField.text != next {
+                    textField.text = next
+                }
+            }
+            if text != next {
+                text = next
+            }
+        }
     }
 }
 
@@ -950,6 +1022,7 @@ private struct EventRow: View {
             eventCoverLayer
             .frame(width: coverWidth, height: coverHeight)
             .clipShape(coverShape)
+            .contentShape(coverShape) //加上这行看看会不会限制点击区域
             .overlay(alignment: .topLeading) {
                 eventDateBadge
                     .padding(8)
@@ -2520,6 +2593,7 @@ private struct EventDetailPageOffsetPreferenceKey: PreferenceKey {
 
 struct EventDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject private var appState: AppState
     private let service = AppEnvironment.makeWebService()
 
@@ -2554,6 +2628,8 @@ struct EventDetailView: View {
     @State private var relatedRatingEvents: [WebRatingEvent] = []
     @State private var relatedEventSets: [WebDJSet] = []
     @State private var selectedRatingEventID: String?
+    @State private var showExpandedLineupList = false
+    @State private var venueMapContext: EventVenueMapContext?
 
     fileprivate enum EventDetailTab: String, CaseIterable, Identifiable {
         case info
@@ -2573,6 +2649,218 @@ struct EventDetailView: View {
             case .schedule: return "时间表"
             case .ratings: return "打分"
             case .sets: return "Sets"
+            }
+        }
+    }
+
+    private struct EventVenueMapContext: Identifiable {
+        let id = UUID()
+        let eventName: String
+        let venueDisplayText: String
+        let summaryLocation: String
+        let coordinate: CLLocationCoordinate2D?
+        let queryText: String
+        let mapURL: URL?
+    }
+
+    private struct EventVenueMapSheet: View {
+        @Environment(\.dismiss) private var dismiss
+        @Environment(\.openURL) private var openURL
+
+        let context: EventVenueMapContext
+
+        @State private var mapPosition: MapCameraPosition
+        @State private var currentRegion: MKCoordinateRegion
+        @State private var resolvedCoordinate: CLLocationCoordinate2D?
+        @State private var isGeocoding = false
+
+        init(context: EventVenueMapContext) {
+            self.context = context
+            let fallbackCenter = CLLocationCoordinate2D(latitude: 31.2304, longitude: 121.4737)
+            let center = context.coordinate ?? fallbackCenter
+            let initialRegion = MKCoordinateRegion(
+                center: center,
+                span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
+            )
+            _mapPosition = State(
+                initialValue: .region(initialRegion)
+            )
+            _currentRegion = State(initialValue: initialRegion)
+            _resolvedCoordinate = State(initialValue: context.coordinate)
+        }
+
+        var body: some View {
+            NavigationStack {
+                ZStack(alignment: .top) {
+                    Map(position: $mapPosition, interactionModes: .all) {
+                        if let markerCoordinate = resolvedCoordinate {
+                            Marker(context.venueDisplayText, coordinate: markerCoordinate)
+                                .tint(RaverTheme.accent)
+                        }
+                    }
+                    .ignoresSafeArea(edges: .bottom)
+                    .onMapCameraChange(frequency: .continuous) { camera in
+                        currentRegion = camera.region
+                    }
+
+                    if isGeocoding {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("正在定位场地...")
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(Color.black.opacity(0.58))
+                        )
+                        .padding(.top, 12)
+                    }
+
+                    VStack(spacing: 10) {
+                        mapZoomButton(systemName: "plus") {
+                            adjustZoom(multiplier: 0.72)
+                        }
+                        mapZoomButton(systemName: "minus") {
+                            adjustZoom(multiplier: 1.38)
+                        }
+                    }
+                    .padding(.trailing, 14)
+                    .padding(.top, 12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                }
+                .navigationTitle("活动场地")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("关闭") { dismiss() }
+                    }
+                }
+                .safeAreaInset(edge: .bottom) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(context.eventName)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .lineLimit(2)
+
+                        Text(context.venueDisplayText)
+                            .font(.subheadline)
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if !context.summaryLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(context.summaryLocation)
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .lineLimit(1)
+                        }
+
+                        if let coordinate = resolvedCoordinate {
+                            Text(String(format: "纬度 %.6f，经度 %.6f", coordinate.latitude, coordinate.longitude))
+                                .font(.caption2)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+
+                        HStack(spacing: 12) {
+                            Button {
+                                UIPasteboard.general.string = context.venueDisplayText
+                            } label: {
+                                Label("复制地址", systemImage: "doc.on.doc")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.bordered)
+
+                            if let mapURL = context.mapURL {
+                                Button {
+                                    openURL(mapURL)
+                                } label: {
+                                    Label("系统地图", systemImage: "arrow.up.right.square")
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(RaverTheme.accent)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.ultraThinMaterial)
+                    .overlay(alignment: .top) {
+                        Divider().opacity(0.25)
+                    }
+                }
+                .task {
+                    await geocodeIfNeeded()
+                }
+            }
+        }
+
+        @MainActor
+        private func geocodeIfNeeded() async {
+            guard resolvedCoordinate == nil else { return }
+            let query = context.queryText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !query.isEmpty else { return }
+
+            isGeocoding = true
+            defer { isGeocoding = false }
+            do {
+                guard let placemark = try await geocodeAddress(query) else { return }
+                guard let location = placemark.location else { return }
+                let coordinate = location.coordinate
+                resolvedCoordinate = coordinate
+                let geocodedRegion = MKCoordinateRegion(
+                    center: coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
+                )
+                currentRegion = geocodedRegion
+                mapPosition = .region(geocodedRegion)
+            } catch {
+                // Keep interactive map usable even if geocoding fails.
+            }
+        }
+
+        private func mapZoomButton(systemName: String, action: @escaping () -> Void) -> some View {
+            Button(action: action) {
+                Image(systemName: systemName)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .frame(width: 38, height: 38)
+                    .background(
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(0.18), lineWidth: 0.6)
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+
+        private func adjustZoom(multiplier: Double) {
+            var next = currentRegion
+            let minDelta = 0.0004
+            let maxDelta = 170.0
+            next.span.latitudeDelta = min(max(next.span.latitudeDelta * multiplier, minDelta), maxDelta)
+            next.span.longitudeDelta = min(max(next.span.longitudeDelta * multiplier, minDelta), maxDelta)
+            currentRegion = next
+            mapPosition = .region(next)
+        }
+
+        private func geocodeAddress(_ address: String) async throws -> CLPlacemark? {
+            try await withCheckedThrowingContinuation { continuation in
+                CLGeocoder().geocodeAddressString(address, in: nil, preferredLocale: Locale(identifier: "zh_CN")) { placemarks, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    continuation.resume(returning: placemarks?.first)
+                }
             }
         }
     }
@@ -2643,6 +2931,9 @@ struct EventDetailView: View {
                         Task { await submitEventCheckinSelections(selectedDJIDsByDayID: selectionsByDayID) }
                     }
                     .presentationDetents([.fraction(0.78), .large])
+                }
+                .sheet(item: $venueMapContext) { context in
+                    EventVenueMapSheet(context: context)
                 }
             } else {
                 ContentUnavailableView("活动不存在", systemImage: "calendar.badge.exclamationmark")
@@ -2877,18 +3168,16 @@ struct EventDetailView: View {
                 eventInfoRow(
                     icon: "calendar",
                     title: "开始时间",
-                    value: event.startDate.formatted(date: .complete, time: .shortened)
+                    value: event.startDate.formatted(date: .complete, time: .omitted)
                 )
                 eventInfoRow(
                     icon: "clock",
                     title: "结束时间",
-                    value: event.endDate.formatted(date: .complete, time: .shortened)
+                    value: event.endDate.formatted(date: .complete, time: .omitted)
                 )
-                if let venue = event.venueName, !venue.isEmpty {
-                    eventInfoRow(icon: "building.2", title: "场地", value: venue)
-                }
-                if let address = event.venueAddress, !address.isEmpty {
-                    eventInfoRow(icon: "map", title: "地址", value: address)
+                if hasEventVenueContent(event) {
+                    eventVenueActionRow(event)
+                    eventVenueInlineMapCard(event)
                 }
                 if !event.summaryLocation.isEmpty {
                     eventInfoRow(icon: "mappin.and.ellipse", title: "城市 / 国家", value: event.summaryLocation)
@@ -3437,6 +3726,180 @@ struct EventDetailView: View {
             )
     }
 
+    private func hasEventVenueContent(_ event: WebEvent) -> Bool {
+        let venue = event.venueName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let address = event.venueAddress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let summary = event.summaryLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !venue.isEmpty || !address.isEmpty || !summary.isEmpty || event.latitude != nil || event.longitude != nil
+    }
+
+    private func eventVenueDisplayText(_ event: WebEvent) -> String {
+        let venue = event.venueName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let address = event.venueAddress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let manual = [venue, address].filter { !$0.isEmpty }.joined(separator: " · ")
+        if !manual.isEmpty { return manual }
+        if !event.summaryLocation.isEmpty { return event.summaryLocation }
+        return "未填写场地信息"
+    }
+
+    private func eventMapURL(for event: WebEvent) -> URL? {
+        let queryText = eventVenueDisplayText(event)
+        if let latitude = event.latitude, let longitude = event.longitude {
+            var components = URLComponents(string: "http://maps.apple.com/")
+            components?.queryItems = [
+                URLQueryItem(name: "ll", value: "\(latitude),\(longitude)"),
+                URLQueryItem(name: "q", value: queryText)
+            ]
+            return components?.url
+        }
+
+        var components = URLComponents(string: "http://maps.apple.com/")
+        components?.queryItems = [URLQueryItem(name: "q", value: queryText)]
+        return components?.url
+    }
+
+    private func eventVenueCoordinate(_ event: WebEvent) -> CLLocationCoordinate2D? {
+        guard let latitude = event.latitude, let longitude = event.longitude else { return nil }
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    private func copyEventVenueText(_ event: WebEvent) {
+        UIPasteboard.general.string = eventVenueDisplayText(event)
+        errorMessage = "场地信息已复制"
+    }
+
+    private func openEventVenueInMap(_ event: WebEvent) {
+        let venueText = eventVenueDisplayText(event)
+        let summary = event.summaryLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackQuery = (venueText == "未填写场地信息" ? summary : venueText).trimmingCharacters(in: .whitespacesAndNewlines)
+        let coordinate = eventVenueCoordinate(event)
+        guard coordinate != nil || !fallbackQuery.isEmpty else {
+            errorMessage = "暂无场地定位信息"
+            return
+        }
+
+        venueMapContext = EventVenueMapContext(
+            eventName: event.name,
+            venueDisplayText: venueText,
+            summaryLocation: summary,
+            coordinate: coordinate,
+            queryText: fallbackQuery,
+            mapURL: eventMapURL(for: event)
+        )
+    }
+
+    private func eventVenueActionRow(_ event: WebEvent) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(RaverTheme.card.opacity(1))
+                    .frame(width: 28, height: 28)
+                Image(systemName: "mappin.and.ellipse")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("场地")
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText.opacity(0.88))
+                Text(eventVenueDisplayText(event))
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 6)
+
+            HStack(spacing: 10) {
+                Button {
+                    copyEventVenueText(event)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    openEventVenueInMap(event)
+                } label: {
+                    Image(systemName: "map")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    @ViewBuilder
+    private func eventVenueInlineMapCard(_ event: WebEvent) -> some View {
+        Button {
+            openEventVenueInMap(event)
+        } label: {
+            ZStack(alignment: .bottomLeading) {
+                if let coordinate = eventVenueCoordinate(event) {
+                    let camera = MapCameraPosition.region(
+                        MKCoordinateRegion(
+                            center: coordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)
+                        )
+                    )
+                    Map(initialPosition: camera, interactionModes: []) {
+                        Marker("场地", coordinate: coordinate)
+                            .tint(RaverTheme.accent)
+                    }
+                    .allowsHitTesting(false)
+                } else {
+                    ZStack {
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.10, green: 0.12, blue: 0.18),
+                                Color(red: 0.08, green: 0.10, blue: 0.15)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        Image(systemName: "map")
+                            .font(.system(size: 30, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.42))
+                    }
+                }
+
+                LinearGradient(
+                    colors: [Color.clear, Color.black.opacity(0.58)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                HStack(spacing: 6) {
+                    Image(systemName: "location.viewfinder")
+                    Text("查看地图")
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule()
+                        .fill(Color.black.opacity(0.38))
+                )
+                .padding(10)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 146)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 0.8)
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 2)
+    }
+
     private func normalizedEventURL(_ raw: String) -> URL? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -3491,11 +3954,30 @@ struct EventDetailView: View {
     @ViewBuilder
     private func lineupDJsStrip(for event: WebEvent) -> some View {
         let djs = lineupDJEntries(for: event)
+        let canExpand = djs.count > 8
         if !djs.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Text("参演 DJ")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
+                HStack(spacing: 8) {
+                    Text("参演 DJ")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Spacer(minLength: 0)
+                    if canExpand {
+                        Button {
+                            withAnimation(.interactiveSpring(response: 0.26, dampingFraction: 0.85)) {
+                                showExpandedLineupList.toggle()
+                            }
+                        } label: {
+                            Label(
+                                showExpandedLineupList ? "收起名单" : "下拉完整名单",
+                                systemImage: showExpandedLineupList ? "chevron.up" : "chevron.down"
+                            )
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.accent)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
 
                 HorizontalAxisLockedScrollView(showsIndicators: false) {
                     HStack(alignment: .top, spacing: 7) {
@@ -3506,6 +3988,21 @@ struct EventDetailView: View {
                     .padding(.vertical, 2)
                 }
                 .frame(height: 82)
+
+                if showExpandedLineupList {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 74), spacing: 10)],
+                        alignment: .leading,
+                        spacing: 12
+                    ) {
+                        ForEach(djs) { dj in
+                            lineupDJAvatarItem(dj)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
         }
     }
@@ -3819,6 +4316,7 @@ struct EventDetailView: View {
 
             let loadedEvent = try await eventTask
             event = loadedEvent
+            showExpandedLineupList = false
             relatedEventCheckins = await checkinsTask
             relatedRatingEvents = (try? await ratingEventsTask) ?? []
             relatedEventSets = (try? await service.fetchEventDJSets(eventName: loadedEvent.name)) ?? []
@@ -4323,16 +4821,24 @@ private struct EventTimelineLayout {
             let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return trimmed.isEmpty ? "MAIN STAGE" : trimmed
         }
-        let orderedStages = grouped
-            .keys
-            .sorted { lhs, rhs in
-                let lhsOrder = grouped[lhs]?.map(\.sortOrder).min() ?? Int.max
-                let rhsOrder = grouped[rhs]?.map(\.sortOrder).min() ?? Int.max
-                if lhsOrder == rhsOrder {
-                    return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
-                }
-                return lhsOrder < rhsOrder
+        let slotsOrderedBySort = normalizedSlots.sorted {
+            if $0.sortOrder == $1.sortOrder {
+                return $0.startTime < $1.startTime
             }
+            return $0.sortOrder < $1.sortOrder
+        }
+        var orderedStages: [String] = []
+        var seenStages = Set<String>()
+        for slot in slotsOrderedBySort {
+            let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let stage = trimmed.isEmpty ? "MAIN STAGE" : trimmed
+            if seenStages.insert(stage).inserted {
+                orderedStages.append(stage)
+            }
+        }
+        for stage in grouped.keys where !seenStages.contains(stage) {
+            orderedStages.append(stage)
+        }
 
         var colorMap: [String: Color] = [:]
         for (idx, stage) in orderedStages.enumerated() {
@@ -5223,6 +5729,20 @@ struct EventEditorView: View {
         var endNextDay: Bool
     }
 
+    private struct TicketTierDraft: Identifiable, Hashable {
+        let id: UUID
+        var name: String
+        var price: String
+        var currency: String
+
+        init(id: UUID = UUID(), name: String = "", price: String = "", currency: String = "CNY") {
+            self.id = id
+            self.name = name
+            self.price = price
+            self.currency = currency
+        }
+    }
+
     @Environment(\.dismiss) private var dismiss
     private let service = AppEnvironment.makeWebService()
 
@@ -5235,6 +5755,16 @@ struct EventEditorView: View {
     @State private var city = ""
     @State private var country = ""
     @State private var venueName = ""
+    @State private var venueAddress = ""
+    @State private var ticketUrl = ""
+    @State private var officialWebsite = ""
+    @State private var ticketCurrency = "CNY"
+    @State private var ticketNotes = ""
+    @State private var ticketTierDrafts: [TicketTierDraft] = []
+    @State private var pickedLatitude: Double?
+    @State private var pickedLongitude: Double?
+    @State private var pickedMapAddress = ""
+    @State private var showLocationPicker = false
     @State private var startDate = EventEditorView.normalizedStartOfDay(Date())
     @State private var endDate = EventEditorView.normalizedStartOfDay(Date())
     @State private var coverImageUrl = ""
@@ -5277,6 +5807,99 @@ struct EventEditorView: View {
                     TextField("城市", text: $city)
                     TextField("国家", text: $country)
                     TextField("场地", text: $venueName)
+                    TextField("详细地址（手动输入）", text: $venueAddress, axis: .vertical)
+                    TextField("购票链接（可选）", text: $ticketUrl)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                }
+
+                Section("场地定位") {
+                    Button {
+                        showLocationPicker = true
+                    } label: {
+                        Label("地图选点", systemImage: "map")
+                    }
+
+                    if let lat = pickedLatitude, let lng = pickedLongitude {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("已选定位")
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            Text("\(lat), \(lng)")
+                                .font(.caption2)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            if !pickedMapAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text("定位地址：\(pickedMapAddress)")
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    } else {
+                        Text("尚未在地图选择定位，仍可仅使用手动输入地址。")
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+
+                Section("票务信息") {
+                    TextField("官网链接（可选）", text: $officialWebsite)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+
+                    TextField("默认币种（例如 CNY / USD）", text: $ticketCurrency)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled(true)
+
+                    TextField("票务备注（可选）", text: $ticketNotes, axis: .vertical)
+
+                    if ticketTierDrafts.isEmpty {
+                        Text("暂无票档，点击下方按钮添加。")
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    } else {
+                        ForEach(ticketTierDrafts.indices, id: \.self) { index in
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 8) {
+                                    TextField("票档名称（如 Early Bird）", text: Binding(
+                                        get: { ticketTierDrafts[index].name },
+                                        set: { ticketTierDrafts[index].name = $0 }
+                                    ))
+                                    Button(role: .destructive) {
+                                        ticketTierDrafts.remove(at: index)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                }
+
+                                HStack(spacing: 8) {
+                                    TextField("价格", text: Binding(
+                                        get: { ticketTierDrafts[index].price },
+                                        set: { ticketTierDrafts[index].price = $0 }
+                                    ))
+                                    .keyboardType(.decimalPad)
+
+                                    TextField("币种", text: Binding(
+                                        get: { ticketTierDrafts[index].currency },
+                                        set: { ticketTierDrafts[index].currency = $0 }
+                                    ))
+                                    .textInputAutocapitalization(.characters)
+                                    .autocorrectionDisabled(true)
+                                    .frame(width: 88)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+
+                    Button {
+                        let fallbackCurrency = ticketCurrency.trimmingCharacters(in: .whitespacesAndNewlines)
+                        ticketTierDrafts.append(
+                            TicketTierDraft(currency: fallbackCurrency.isEmpty ? "CNY" : fallbackCurrency)
+                        )
+                    } label: {
+                        Label("添加票档", systemImage: "plus")
+                    }
                 }
 
                 Section("时间") {
@@ -5287,9 +5910,7 @@ struct EventEditorView: View {
                             set: { newValue in
                                 let normalized = Self.normalizedStartOfDay(newValue)
                                 startDate = normalized
-                                if endDate < normalized {
-                                    endDate = normalized
-                                }
+                                endDate = normalized
                             }
                         ),
                         displayedComponents: [.date]
@@ -5360,6 +5981,20 @@ struct EventEditorView: View {
                             ))
                             .textInputAutocapitalization(.words)
 
+                            Button {
+                                moveStageEntry(from: index, to: index - 1)
+                            } label: {
+                                Image(systemName: "arrow.up")
+                            }
+                            .disabled(index == 0)
+
+                            Button {
+                                moveStageEntry(from: index, to: index + 1)
+                            } label: {
+                                Image(systemName: "arrow.down")
+                            }
+                            .disabled(index >= stageEntries.count - 1)
+
                             Button(role: .destructive) {
                                 stageEntries.remove(at: index)
                             } label: {
@@ -5401,6 +6036,13 @@ struct EventEditorView: View {
                         Label("添加 DJ", systemImage: "plus")
                     }
                     .disabled(pendingLineupEntry != nil)
+
+                    Button(role: .destructive) {
+                        clearAllLineupEntries()
+                    } label: {
+                        Label("一键清空已添加 DJ", systemImage: "trash")
+                    }
+                    .disabled(lineupEntries.isEmpty && pendingLineupEntry == nil)
 
                     if let pendingBinding = pendingLineupSlotBinding {
                         VStack(alignment: .leading, spacing: 6) {
@@ -5495,6 +6137,32 @@ struct EventEditorView: View {
                 resetLineupImportDrafts()
             }) {
                 lineupImportEditorSheet()
+            }
+            .sheet(isPresented: $showLocationPicker) {
+                EventLocationPickerSheet(
+                    initialLatitude: pickedLatitude,
+                    initialLongitude: pickedLongitude,
+                    initialAddress: pickedMapAddress
+                ) { result in
+                    pickedLatitude = result.latitude
+                    pickedLongitude = result.longitude
+                    pickedMapAddress = result.displayAddress
+
+                    if !result.displayAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        venueAddress = result.displayAddress
+                    }
+                    if let city = result.city, !city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        self.city = city
+                    }
+                    if let country = result.country, !country.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        self.country = country
+                    }
+                    if venueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                       let placeName = result.placeName,
+                       !placeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        venueName = placeName
+                    }
+                }
             }
         }
     }
@@ -5812,12 +6480,15 @@ struct EventEditorView: View {
                     .font(.caption2)
                     .frame(width: 46)
 
-                    TextField("分钟", text: durationMinutesBinding(for: slot))
-                        .font(.caption)
-                        .keyboardType(.numberPad)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                        .multilineTextAlignment(.trailing)
+                    UIKitInlineTextField(
+                        text: durationMinutesBinding(for: slot),
+                        placeholder: "分钟",
+                        keyboardType: .numberPad,
+                        textAlignment: .right,
+                        font: .systemFont(ofSize: 12),
+                        textColor: .secondaryLabel,
+                        tintColor: .secondaryLabel
+                    )
                         .frame(width: 42)
 
                     Text("分")
@@ -5859,12 +6530,14 @@ struct EventEditorView: View {
                 .foregroundStyle(RaverTheme.secondaryText)
                 .frame(width: 22, alignment: .leading)
 
-            TextField("时", text: hour)
-                .font(.caption)
-                .keyboardType(.numberPad)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-                .multilineTextAlignment(.center)
+            UIKitInlineTextField(
+                text: hour,
+                placeholder: "时",
+                keyboardType: .numberPad,
+                textAlignment: .center,
+                font: .systemFont(ofSize: 12),
+                maxLength: 2
+            )
                 .frame(width: 24)
                 .padding(.vertical, 4)
                 .background(RoundedRectangle(cornerRadius: 6).fill(RaverTheme.card))
@@ -5873,12 +6546,14 @@ struct EventEditorView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(RaverTheme.secondaryText)
 
-            TextField("分", text: minute)
-                .font(.caption)
-                .keyboardType(.numberPad)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-                .multilineTextAlignment(.center)
+            UIKitInlineTextField(
+                text: minute,
+                placeholder: "分",
+                keyboardType: .numberPad,
+                textAlignment: .center,
+                font: .systemFont(ofSize: 12),
+                maxLength: 2
+            )
                 .frame(width: 24)
                 .padding(.vertical, 4)
                 .background(RoundedRectangle(cornerRadius: 6).fill(RaverTheme.card))
@@ -6344,6 +7019,40 @@ struct EventEditorView: View {
         return trimmed
     }
 
+    private func buildTicketTierInputs(defaultCurrency: String?) -> [EventTicketTierInput]? {
+        let fallbackCurrency = defaultCurrency?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        var result: [EventTicketTierInput] = []
+
+        for (index, draft) in ticketTierDrafts.enumerated() {
+            let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let priceText = draft.price.trimmingCharacters(in: .whitespacesAndNewlines)
+            let currency = draft.currency.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? fallbackCurrency
+
+            if name.isEmpty && priceText.isEmpty {
+                continue
+            }
+            guard !name.isEmpty, !priceText.isEmpty else {
+                errorMessage = "请完整填写票档名称和价格，或删除空票档"
+                return nil
+            }
+            guard let price = Double(priceText.replacingOccurrences(of: ",", with: ".")), price >= 0 else {
+                errorMessage = "票档价格格式不正确，请输入数字"
+                return nil
+            }
+
+            result.append(
+                EventTicketTierInput(
+                    name: name,
+                    price: price,
+                    currency: currency,
+                    sortOrder: index + 1
+                )
+            )
+        }
+
+        return result
+    }
+
     private func dateFrom(dayID: String, timeText: String, extraDays: Int) -> Date? {
         let normalized = normalizeTimeInput(timeText)
         guard let (hour, minute) = parseHourMinute(normalized),
@@ -6429,6 +7138,25 @@ struct EventEditorView: View {
         city = event.city ?? ""
         country = event.country ?? ""
         venueName = event.venueName ?? ""
+        venueAddress = event.venueAddress ?? ""
+        ticketUrl = event.ticketUrl ?? ""
+        officialWebsite = event.officialWebsite ?? ""
+        ticketCurrency = event.ticketCurrency?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "CNY"
+        ticketNotes = event.ticketNotes ?? ""
+        ticketTierDrafts = event.ticketTiers
+            .sorted { $0.sortOrder < $1.sortOrder }
+            .map { tier in
+                let value = tier.price ?? 0
+                let priceText = value.rounded(.towardZero) == value ? String(Int(value)) : String(value)
+                return TicketTierDraft(
+                    name: tier.name,
+                    price: priceText,
+                    currency: tier.currency?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? ticketCurrency
+                )
+            }
+        pickedLatitude = event.latitude
+        pickedLongitude = event.longitude
+        pickedMapAddress = event.venueAddress ?? ""
         startDate = Self.normalizedStartOfDay(event.startDate)
         endDate = Self.normalizedStartOfDay(event.endDate)
         coverImageUrl = event.coverImageUrl ?? ""
@@ -6519,6 +7247,11 @@ struct EventEditorView: View {
 
         let normalizedStartDate = Self.normalizedStartOfDay(startDate)
         let normalizedEndDate = Self.normalizedEndOfDay(max(endDate, startDate))
+        let resolvedVenueAddress = venueAddress.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedTicketUrl = ticketUrl.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedOfficialWebsite = officialWebsite.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedTicketCurrency = ticketCurrency.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedTicketNotes = ticketNotes.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
 
         if normalizedEndDate < normalizedStartDate {
             errorMessage = "结束时间不能早于开始时间"
@@ -6531,6 +7264,9 @@ struct EventEditorView: View {
         }
 
         guard let lineupSlotsInput = buildLineupSlotsInput() else {
+            return
+        }
+        guard let ticketTierInputs = buildTicketTierInputs(defaultCurrency: resolvedTicketCurrency) else {
             return
         }
 
@@ -6551,10 +7287,18 @@ struct EventEditorView: View {
                         city: city.nilIfEmpty,
                         country: country.nilIfEmpty,
                         venueName: venueName.nilIfEmpty,
+                        venueAddress: resolvedVenueAddress,
+                        latitude: pickedLatitude,
+                        longitude: pickedLongitude,
+                        ticketUrl: resolvedTicketUrl,
+                        ticketCurrency: resolvedTicketCurrency,
+                        ticketNotes: resolvedTicketNotes,
+                        officialWebsite: resolvedOfficialWebsite,
                         startDate: normalizedStartDate,
                         endDate: normalizedEndDate,
                         coverImageUrl: nil,
                         lineupImageUrl: nil,
+                        ticketTiers: ticketTierInputs,
                         lineupSlots: lineupSlotsInput,
                         status: resolvedStatus
                     )
@@ -6629,10 +7373,18 @@ struct EventEditorView: View {
                         city: city.nilIfEmpty,
                         country: country.nilIfEmpty,
                         venueName: venueName.nilIfEmpty,
+                        venueAddress: resolvedVenueAddress ?? "",
+                        latitude: pickedLatitude,
+                        longitude: pickedLongitude,
+                        ticketUrl: resolvedTicketUrl ?? "",
+                        ticketCurrency: resolvedTicketCurrency ?? "",
+                        ticketNotes: resolvedTicketNotes ?? "",
+                        officialWebsite: resolvedOfficialWebsite ?? "",
                         startDate: normalizedStartDate,
                         endDate: normalizedEndDate,
                         coverImageUrl: finalCover.nilIfEmpty ?? "",
                         lineupImageUrl: finalLineup.nilIfEmpty ?? "",
+                        ticketTiers: ticketTierInputs,
                         lineupSlots: lineupSlotsInput,
                         status: resolvedStatus
                     )
@@ -7239,6 +7991,22 @@ struct EventEditorView: View {
         syncTimeDraft(with: newSlot)
     }
 
+    private func moveStageEntry(from source: Int, to destination: Int) {
+        guard stageEntries.indices.contains(source), stageEntries.indices.contains(destination) else { return }
+        guard source != destination else { return }
+        let value = stageEntries.remove(at: source)
+        stageEntries.insert(value, at: destination)
+    }
+
+    private func clearAllLineupEntries() {
+        let existingPerformerIDs = lineupEntries.flatMap { $0.performers.map(\.id) }
+        let pendingPerformerIDs = pendingLineupEntry?.performers.map(\.id) ?? []
+        lineupEntries.removeAll()
+        pendingLineupEntry = nil
+        lineupTimeDraftBySlotID.removeAll()
+        clearSearchState(for: existingPerformerIDs + pendingPerformerIDs)
+    }
+
     private func scheduleDJSearch(for performerID: UUID, keyword: String) {
         djSearchTaskByPerformerID[performerID]?.cancel()
 
@@ -7428,6 +8196,232 @@ struct EventEditorView: View {
         return formatter
     }()
 
+}
+
+private struct EventLocationPickerResult {
+    let latitude: Double
+    let longitude: Double
+    let displayAddress: String
+    let city: String?
+    let country: String?
+    let placeName: String?
+}
+
+private struct EventLocationPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let initialLatitude: Double?
+    let initialLongitude: Double?
+    let initialAddress: String
+    let onConfirm: (EventLocationPickerResult) -> Void
+
+    @State private var region: MKCoordinateRegion
+    @State private var isResolving = false
+    @State private var errorMessage: String?
+    @State private var previewAddress: String
+
+    init(
+        initialLatitude: Double?,
+        initialLongitude: Double?,
+        initialAddress: String,
+        onConfirm: @escaping (EventLocationPickerResult) -> Void
+    ) {
+        self.initialLatitude = initialLatitude
+        self.initialLongitude = initialLongitude
+        self.initialAddress = initialAddress
+        self.onConfirm = onConfirm
+
+        let fallbackCenter = CLLocationCoordinate2D(latitude: 31.2304, longitude: 121.4737)
+        let center = CLLocationCoordinate2D(
+            latitude: initialLatitude ?? fallbackCenter.latitude,
+            longitude: initialLongitude ?? fallbackCenter.longitude
+        )
+        _region = State(
+            initialValue: MKCoordinateRegion(
+                center: center,
+                span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
+            )
+        )
+        _previewAddress = State(initialValue: initialAddress)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack(alignment: .top) {
+                Map(
+                    coordinateRegion: $region,
+                    interactionModes: .all,
+                    showsUserLocation: true,
+                    userTrackingMode: .constant(.none)
+                )
+                .ignoresSafeArea(edges: .bottom)
+
+                VStack(spacing: 10) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.accent)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("拖动地图，中心点即为活动定位")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.white)
+                            if !previewAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text(previewAddress)
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.white.opacity(0.84))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.black.opacity(0.58))
+                    )
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
+
+                    Spacer()
+
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 36, weight: .bold))
+                        .foregroundStyle(RaverTheme.accent)
+                        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 6)
+                        .offset(y: -16)
+
+                    if isResolving {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("正在解析地址...")
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(Color.black.opacity(0.62))
+                        )
+                        .padding(.bottom, 16)
+                    }
+
+                    Button {
+                        Task { await confirmCurrentLocation() }
+                    } label: {
+                        Text("确认此位置")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(RaverTheme.accent)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isResolving)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 14)
+                }
+            }
+            .navigationTitle("选择活动定位")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                    .disabled(isResolving)
+                }
+            }
+            .alert("提示", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("确定", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
+        }
+    }
+
+    @MainActor
+    private func confirmCurrentLocation() async {
+        guard !isResolving else { return }
+        isResolving = true
+        defer { isResolving = false }
+
+        let coordinate = region.center
+        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+
+        var resolvedAddress = previewAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        var city: String?
+        var country: String?
+        var placeName: String?
+
+        do {
+            if let placemark = try await reverseGeocode(location: location) {
+                placeName = placemark.name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                city = (placemark.locality ?? placemark.subAdministrativeArea)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+                country = placemark.country?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+
+                let components = [
+                    placemark.country,
+                    placemark.administrativeArea,
+                    placemark.locality,
+                    placemark.subLocality,
+                    placemark.thoroughfare,
+                    placemark.subThoroughfare,
+                    placemark.name
+                ]
+                let merged = components
+                    .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
+                if !merged.isEmpty {
+                    let unique = Array(NSOrderedSet(array: merged)) as? [String] ?? merged
+                    resolvedAddress = unique.joined(separator: " ")
+                    previewAddress = resolvedAddress
+                }
+            }
+        } catch {
+            errorMessage = "地址解析失败，已保留经纬度定位"
+        }
+
+        let finalAddress = resolvedAddress.isEmpty
+            ? "\(coordinate.latitude), \(coordinate.longitude)"
+            : resolvedAddress
+
+        onConfirm(
+            EventLocationPickerResult(
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude,
+                displayAddress: finalAddress,
+                city: city,
+                country: country,
+                placeName: placeName
+            )
+        )
+        dismiss()
+    }
+
+    private func reverseGeocode(location: CLLocation) async throws -> CLPlacemark? {
+        try await withCheckedThrowingContinuation { continuation in
+            CLGeocoder().reverseGeocodeLocation(
+                location,
+                preferredLocale: Locale(identifier: "zh_CN")
+            ) { placemarks, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: placemarks?.first)
+            }
+        }
+    }
 }
 
 private enum DiscoverNewsCategory: String, CaseIterable, Identifiable {
@@ -15485,7 +16479,7 @@ struct LearnModuleView: View {
     @State private var allFestivals: [LearnFestival] = []
     @State private var festivals: [LearnFestival] = []
     @State private var labelsPagination: BFFPagination?
-    @State private var selectedSection: LearnModuleSection = .genres
+    @State private var selectedSection: LearnModuleSection = .festivals
     @State private var selectedSort: LearnLabelSortOption = .soundcloudFollowers
     @State private var sortOrder: LearnLabelSortOrder = .desc
     @State private var searchText = ""
@@ -16069,17 +17063,17 @@ private struct GenreNodeView: View {
 }
 
 private enum LearnModuleSection: String, CaseIterable, Identifiable {
-    case genres
-    case labels
     case festivals
+    case labels
+    case genres
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .genres: return "流派树"
-        case .labels: return "厂牌"
         case .festivals: return "电音节"
+        case .labels: return "厂牌"
+        case .genres: return "流派树"
         }
     }
 }
@@ -17112,6 +18106,7 @@ private struct LearnFestivalDetailView: View {
     @State private var selectedEventIDForDetail: String?
     @State private var selectedArticleForDetail: DiscoverNewsArticle?
     @State private var errorMessage: String?
+    @State private var showCreateEventSheet = false
     @State private var showFestivalEditSheet = false
     @State private var isSavingFestival = false
     @State private var editName = ""
@@ -17218,6 +18213,11 @@ private struct LearnFestivalDetailView: View {
         }
         .sheet(isPresented: $showFestivalEditSheet) {
             festivalEditSheet
+        }
+        .sheet(isPresented: $showCreateEventSheet) {
+            EventEditorView(mode: .create) {
+                Task { await loadRelatedContent() }
+            }
         }
         .navigationDestination(item: $selectedContributorUser) { user in
             UserProfileView(userID: user.id)
@@ -17439,23 +18439,77 @@ private struct LearnFestivalDetailView: View {
 
     @ViewBuilder
     private var eventsTabContent: some View {
-        if isLoadingRelatedContent && relatedEvents.isEmpty {
-            ProgressView("正在加载关联活动...")
-                .padding(.vertical, 8)
-        } else if relatedEvents.isEmpty {
-            Text("暂无关联活动")
-                .foregroundStyle(RaverTheme.secondaryText)
-                .padding(.vertical, 8)
-        } else {
-            ForEach(relatedEvents) { event in
-                Button {
-                    selectedEventIDForDetail = event.id
-                } label: {
-                    festivalEventRow(event)
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                showCreateEventSheet = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 16, weight: .bold))
+                    Text("发布新活动")
+                        .font(.subheadline.weight(.semibold))
                 }
-                .buttonStyle(.plain)
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(RaverTheme.accent)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            if isLoadingRelatedContent && relatedEvents.isEmpty {
+                ProgressView("正在加载关联活动...")
+                    .padding(.vertical, 8)
+            } else if upcomingRelatedEvents.isEmpty && endedRelatedEvents.isEmpty {
+                Text("暂无关联活动")
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .padding(.vertical, 8)
+            } else {
+                if !upcomingRelatedEvents.isEmpty {
+                    festivalEventsSectionHeader("即将开始")
+                    ForEach(upcomingRelatedEvents) { event in
+                        Button {
+                            selectedEventIDForDetail = event.id
+                        } label: {
+                            festivalEventRow(event)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                if !endedRelatedEvents.isEmpty {
+                    festivalEventsSectionHeader("已结束活动")
+                    ForEach(endedRelatedEvents) { event in
+                        Button {
+                            selectedEventIDForDetail = event.id
+                        } label: {
+                            festivalEventRow(event)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
+    }
+
+    private var upcomingRelatedEvents: [WebEvent] {
+        relatedEvents
+            .filter { EventVisualStatus.resolve(event: $0) != .ended }
+            .sorted(by: { $0.startDate < $1.startDate })
+    }
+
+    private var endedRelatedEvents: [WebEvent] {
+        relatedEvents
+            .filter { EventVisualStatus.resolve(event: $0) == .ended }
+            .sorted(by: { $0.startDate > $1.startDate })
+    }
+
+    private func festivalEventsSectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.headline)
+            .foregroundStyle(RaverTheme.primaryText)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
     }
 
     @ViewBuilder
@@ -17493,26 +18547,65 @@ private struct LearnFestivalDetailView: View {
             }
             .joined(separator: " · ")
 
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(event.name)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(RaverTheme.primaryText)
-                .lineLimit(2)
+        return HStack(alignment: .top, spacing: 10) {
+            festivalEventCoverImage(event)
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-            Text(festivalEventDateText(event))
-                .font(.caption)
-                .foregroundStyle(RaverTheme.secondaryText)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(event.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
 
-            Text(locationText.isEmpty ? "地点待补充" : locationText)
-                .font(.caption)
-                .foregroundStyle(RaverTheme.secondaryText)
-                .lineLimit(1)
+                Text(festivalEventDateText(event))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+
+                Text(locationText.isEmpty ? "地点待补充" : locationText)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 8)
         .overlay(alignment: .bottom) {
             Divider().opacity(0.45)
+        }
+    }
+
+    @ViewBuilder
+    private func festivalEventCoverImage(_ event: WebEvent) -> some View {
+        if let cover = AppConfig.resolvedURLString(event.coverImageUrl),
+           let url = URL(string: cover) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                default:
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(RaverTheme.card)
+                }
+            }
+        } else {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [RaverTheme.accent.opacity(0.35), RaverTheme.card],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    Image(systemName: "ticket.fill")
+                        .font(.title3)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                )
         }
     }
 
