@@ -20,7 +20,7 @@ struct SquadProfileView: View {
         ScrollView {
             VStack(spacing: 14) {
                 if viewModel.isLoading && viewModel.profile == nil {
-                    ProgressView("加载小队中...")
+                    ProgressView(L("加载小队中...", "Loading squads..."))
                         .padding(.top, 80)
                 } else if let profile = viewModel.profile {
                     headerCard(profile)
@@ -37,7 +37,7 @@ struct SquadProfileView: View {
                         Button {
                             showManageSheet = true
                         } label: {
-                            Label("编辑小队信息", systemImage: "square.and.pencil")
+                            Label(L("编辑小队信息", "Edit Squad"), systemImage: "square.and.pencil")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
@@ -53,19 +53,28 @@ struct SquadProfileView: View {
                         if viewModel.isProcessingJoin {
                             ProgressView().tint(.white)
                         } else {
-                            Text(profile.isMember ? "进入小队" : "加入并进入小队")
+                            Text(profile.isMember ? L("进入小队", "Enter Squad") : L("加入并进入小队", "Join & Enter Squad"))
                         }
                     }
                     .buttonStyle(PrimaryButtonStyle())
                 } else {
-                    ContentUnavailableView("小队不存在", systemImage: "person.3.sequence")
+                    ContentUnavailableView(LL("小队不存在"), systemImage: "person.3.sequence")
                         .padding(.top, 80)
                 }
             }
             .padding(16)
         }
         .background(RaverTheme.background)
+        .scrollDismissesKeyboard(.interactively)
         .toolbar(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(L("收起", "Dismiss")) {
+                    dismissKeyboard()
+                }
+            }
+        }
         .safeAreaInset(edge: .top) {
             HStack {
                 Button {
@@ -82,7 +91,7 @@ struct SquadProfileView: View {
 
                 Spacer()
 
-                Text("小队")
+                Text(LL("小队"))
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
 
@@ -127,11 +136,11 @@ struct SquadProfileView: View {
         .onChange(of: viewModel.profile?.updatedAt) { _, _ in
             syncMySettingsFromProfile()
         }
-        .alert("提示", isPresented: Binding(
+        .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.error != nil },
             set: { if !$0 { viewModel.error = nil } }
         )) {
-            Button("确定", role: .cancel) {}
+            Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
         }
@@ -146,7 +155,7 @@ struct SquadProfileView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(profile.name)
                             .font(.title3.bold())
-                        Text("\(profile.isPublic ? "公开小队" : "私密小队")（\(profile.memberCount)/\(profile.maxMembers)）")
+                        Text("\(profile.isPublic ? L("公开小队", "Public Squad") : L("私密小队", "Private Squad")) (\(profile.memberCount)/\(profile.maxMembers))")
                             .font(.caption)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
@@ -169,7 +178,7 @@ struct SquadProfileView: View {
     private func membersCard(_ profile: SquadProfile) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("小队成员")
+                Text(LL("小队成员"))
                     .font(.headline)
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -198,19 +207,19 @@ struct SquadProfileView: View {
     private func groupDetailsCard(_ profile: SquadProfile) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
-                Text("小队详情")
+                Text(LL("小队详情"))
                     .font(.headline)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("小队通知")
+                    Text(LL("小队通知"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
-                    Text(profile.notice.isEmpty ? "暂无小队通知" : profile.notice)
+                    Text(profile.notice.isEmpty ? L("暂无小队通知", "No Squad Notice Yet") : profile.notice)
                         .font(.subheadline)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("小队二维码")
+                    Text(LL("小队二维码"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                     groupQRCode(urlString: profile.qrCodeURL)
@@ -222,11 +231,11 @@ struct SquadProfileView: View {
     private func activitiesCard(_ profile: SquadProfile) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("小队活动")
+                Text(LL("小队活动"))
                     .font(.headline)
 
                 if profile.activities.isEmpty {
-                    Text("近期暂无活动")
+                    Text(LL("近期暂无活动"))
                         .font(.subheadline)
                         .foregroundStyle(RaverTheme.secondaryText)
                 } else {
@@ -253,11 +262,11 @@ struct SquadProfileView: View {
     private func chatHistoryCard(_ profile: SquadProfile) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("聊天历史记录")
+                Text(LL("聊天历史记录"))
                     .font(.headline)
 
                 if profile.recentMessages.isEmpty {
-                    Text("还没有消息，加入后来发第一条吧。")
+                    Text(LL("还没有消息，加入后来发第一条吧。"))
                         .font(.subheadline)
                         .foregroundStyle(RaverTheme.secondaryText)
                 } else {
@@ -283,23 +292,27 @@ struct SquadProfileView: View {
     private func mySettingsCard(_ profile: SquadProfile) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("我的小队设置")
+                Text(LL("我的小队设置"))
                     .font(.headline)
 
-                TextField("本小队昵称", text: $myNicknameDraft)
+                TextField(LL("本小队昵称"), text: $myNicknameDraft)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        dismissKeyboard()
+                    }
                     .padding(10)
                     .background(RaverTheme.card)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                 Toggle(isOn: $myNotificationsEnabled) {
-                    Text("通知权限")
+                    Text(LL("通知权限"))
                         .font(.subheadline)
                 }
                 .tint(RaverTheme.accent)
 
                 HStack {
                     if let role = profile.myRole, !role.isEmpty {
-                        Text("当前身份：\(roleLabel(role))")
+                        Text(L("当前身份：\(roleLabel(role))", "Role: \(roleLabel(role))"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -315,7 +328,7 @@ struct SquadProfileView: View {
                         if viewModel.isSavingMySettings {
                             ProgressView()
                         } else {
-                            Text("保存")
+                            Text(L("保存", "Save"))
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -332,9 +345,9 @@ struct SquadProfileView: View {
 
     private func roleLabel(_ role: String) -> String {
         switch role {
-        case "leader": return "队长"
-        case "admin": return "管理员"
-        default: return "成员"
+        case "leader": return L("队长", "Leader")
+        case "admin": return L("管理员", "Admin")
+        default: return L("成员", "Member")
         }
     }
 
@@ -478,10 +491,10 @@ struct SquadProfileView: View {
 
     private func memberRoleBadge(_ member: SquadMemberProfile) -> (title: String, color: Color)? {
         if member.isCaptain {
-            return ("队长", .orange)
+            return (L("队长", "Leader"), .orange)
         }
         if member.isAdmin {
-            return ("管理员", .blue)
+            return (L("管理员", "Admin"), .blue)
         }
         return nil
     }
@@ -499,6 +512,15 @@ struct SquadProfileView: View {
                     .stroke(Color.white.opacity(0.75), lineWidth: 0.7)
             )
     }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
+    }
 }
 
 private struct SquadManageSheet: View {
@@ -509,8 +531,8 @@ private struct SquadManageSheet: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .public: return "公开小队"
-            case .private: return "私密小队"
+            case .public: return L("公开小队", "Public Squad")
+            case .private: return L("私密小队", "Private Squad")
             }
         }
 
@@ -554,11 +576,15 @@ private struct SquadManageSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("基础") {
-                    TextField("小队名称", text: $name)
-                    TextField("简介", text: $descriptionText, axis: .vertical)
+                Section(LL("基础")) {
+                    TextField(LL("小队名称"), text: $name)
+                        .submitLabel(.done)
+                        .onSubmit {
+                            dismissKeyboard()
+                        }
+                    TextField(LL("简介"), text: $descriptionText, axis: .vertical)
                         .lineLimit(2...4)
-                    Picker("小队性质", selection: $privacyOption) {
+                    Picker(LL("小队性质"), selection: $privacyOption) {
                         ForEach(PrivacyOption.allCases) { item in
                             Text(item.title).tag(item)
                         }
@@ -566,44 +592,57 @@ private struct SquadManageSheet: View {
                     .pickerStyle(.segmented)
                 }
 
-                Section("展示") {
-                    TextField("头像 URL（可选）", text: $avatarURL)
+                Section(LL("展示")) {
+                    TextField(LL("头像 URL（可选）"), text: $avatarURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        .onSubmit {
+                            dismissKeyboard()
+                        }
                     PhotosPicker(selection: $selectedAvatarPhotoItem, matching: .images) {
                         if isUploadingAvatar {
-                            Label("头像上传中...", systemImage: "arrow.trianglehead.2.clockwise")
+                            Label(LL("头像上传中..."), systemImage: "arrow.trianglehead.2.clockwise")
                         } else {
-                            Label("从相册选择小队头像", systemImage: "person.crop.circle.badge.plus")
+                            Label(LL("从相册选择小队头像"), systemImage: "person.crop.circle.badge.plus")
                         }
                     }
                     .disabled(isUploadingAvatar || isUploadingFlag)
-                    TextField("旗帜图 URL（可选）", text: $bannerURL)
+                    TextField(LL("旗帜图 URL（可选）"), text: $bannerURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        .onSubmit {
+                            dismissKeyboard()
+                        }
                     PhotosPicker(selection: $selectedFlagPhotoItem, matching: .images) {
                         if isUploadingFlag {
-                            Label("旗帜图上传中...", systemImage: "arrow.trianglehead.2.clockwise")
+                            Label(LL("旗帜图上传中..."), systemImage: "arrow.trianglehead.2.clockwise")
                         } else {
-                            Label("从相册选择旗帜图", systemImage: "flag.pattern.checkered")
+                            Label(LL("从相册选择旗帜图"), systemImage: "flag.pattern.checkered")
                         }
                     }
                     .disabled(isUploadingFlag)
-                    TextField("小队二维码 URL（可选）", text: $qrCodeURL)
+                    TextField(LL("小队二维码 URL（可选）"), text: $qrCodeURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        .onSubmit {
+                            dismissKeyboard()
+                        }
                 }
 
-                Section("小队通知") {
-                    TextField("小队通知内容", text: $notice, axis: .vertical)
+                Section(LL("小队通知")) {
+                    TextField(LL("小队通知内容"), text: $notice, axis: .vertical)
                         .lineLimit(2...4)
                 }
             }
-            .navigationTitle("编辑小队信息")
+            .navigationTitle(LL("编辑小队信息"))
             .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(L("取消", "Cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
@@ -622,10 +661,16 @@ private struct SquadManageSheet: View {
                         if isSaving {
                             ProgressView()
                         } else {
-                            Text("保存")
+                            Text(L("保存", "Save"))
                         }
                     }
                     .disabled(isSaving || isUploadingAvatar || isUploadingFlag || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button(L("收起", "Dismiss")) {
+                        dismissKeyboard()
+                    }
                 }
             }
         }
@@ -643,14 +688,23 @@ private struct SquadManageSheet: View {
                 await uploadFlagImage(data: data)
             }
         }
-        .alert("上传失败", isPresented: Binding(
+        .alert(LL("上传失败"), isPresented: Binding(
             get: { uploadError != nil },
             set: { if !$0 { uploadError = nil } }
         )) {
-            Button("确定", role: .cancel) {}
+            Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(uploadError ?? "")
         }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
     }
 
     @MainActor
@@ -672,7 +726,7 @@ private struct SquadManageSheet: View {
             )
             avatarURL = uploaded.avatarURL
         } catch {
-            uploadError = error.localizedDescription
+            uploadError = error.userFacingMessage
         }
     }
 
@@ -688,7 +742,7 @@ private struct SquadManageSheet: View {
             )
             bannerURL = uploaded.url
         } catch {
-            uploadError = error.localizedDescription
+            uploadError = error.userFacingMessage
         }
     }
 }

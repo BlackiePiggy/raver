@@ -1,0 +1,2 @@
+ALTER TABLE "djs"
+ADD COLUMN IF NOT EXISTS "facebook_url" TEXT;

@@ -12,9 +12,9 @@ final class ProfileViewModel: ObservableObject {
 
         var title: String {
             switch self {
-            case .recent: return "近期动态"
-            case .likes: return "点赞历史"
-            case .reposts: return "转发历史"
+            case .recent: return L("近期动态", "Recent")
+            case .likes: return L("点赞历史", "Likes")
+            case .reposts: return L("转发历史", "Reposts")
             }
         }
     }
@@ -60,7 +60,7 @@ final class ProfileViewModel: ObservableObject {
             }
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -84,7 +84,7 @@ final class ProfileViewModel: ObservableObject {
             }
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -100,7 +100,7 @@ final class ProfileViewModel: ObservableObject {
                 likedItems.removeAll { $0.post.id == updated.id }
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -112,7 +112,7 @@ final class ProfileViewModel: ObservableObject {
                 repostedItems.removeAll { $0.post.id == updated.id }
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 

@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import AVKit
 
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
@@ -10,23 +11,23 @@ struct MainTabView: View {
         TabView {
             DiscoverHomeView()
                 .tabItem {
-                    Label("发现", systemImage: "safari.fill")
+                    Label(L("发现", "Discover"), systemImage: "safari.fill")
                 }
 
             CircleHomeView()
                 .tabItem {
-                    Label("圈子", systemImage: "person.3.fill")
+                    Label(L("圈子", "Circle"), systemImage: "person.3.fill")
                 }
 
             MessagesHomeView()
                 .tabItem {
-                    Label("消息", systemImage: "bubble.left.and.bubble.right.fill")
+                    Label(L("消息", "Messages"), systemImage: "bubble.left.and.bubble.right.fill")
                 }
                 .badge(appState.unreadMessagesCount > 0 ? Text("\(appState.unreadMessagesCount)") : nil)
 
             ProfileView()
                 .tabItem {
-                    Label("我的", systemImage: "person.crop.circle.fill")
+                    Label(L("我的", "Me"), systemImage: "person.crop.circle.fill")
                 }
         }
         .tint(RaverTheme.accent)
@@ -44,14 +45,16 @@ private struct CircleHomeView: View {
     private enum Section: String, CaseIterable, Identifiable {
         case feed
         case squads
+        case ids
         case ratings
 
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .feed: return "动态"
-            case .squads: return "小队"
-            case .ratings: return "打分"
+            case .feed: return L("动态", "Feed")
+            case .squads: return L("小队", "Squads")
+            case .ids: return "ID"
+            case .ratings: return L("打分", "Ratings")
             }
         }
 
@@ -59,6 +62,7 @@ private struct CircleHomeView: View {
             switch self {
             case .feed: return Color(red: 0.95, green: 0.30, blue: 0.38)
             case .squads: return Color(red: 0.30, green: 0.67, blue: 0.97)
+            case .ids: return Color(red: 0.58, green: 0.43, blue: 0.95)
             case .ratings: return Color(red: 0.98, green: 0.71, blue: 0.22)
             }
         }
@@ -177,6 +181,8 @@ private struct CircleHomeView: View {
             FeedView()
         case .squads:
             SquadHallView()
+        case .ids:
+            CircleIDHubView()
         case .ratings:
             CircleRatingHubView()
         }
@@ -250,6 +256,1682 @@ private struct CircleHomeView: View {
     }
 }
 
+private struct CircleIDUserSnapshot: Identifiable, Codable, Hashable {
+    var id: String
+    var username: String
+    var displayName: String
+    var avatarURL: String?
+
+    var shownName: String {
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return username
+    }
+}
+
+private struct CircleIDEventSnapshot: Identifiable, Codable, Hashable {
+    var id: String
+    var name: String
+    var startDate: Date
+    var endDate: Date
+    var coverImageUrl: String?
+}
+
+private struct CircleIDDJSnapshot: Identifiable, Codable, Hashable {
+    var id: String
+    var name: String
+    var avatarUrl: String?
+    var avatarSmallUrl: String?
+}
+
+private struct CircleIDComment: Identifiable, Codable, Hashable {
+    var id: String
+    var author: CircleIDUserSnapshot
+    var content: String
+    var createdAt: Date
+}
+
+private struct CircleIDEntry: Identifiable, Codable, Hashable {
+    var id: String
+    var songName: String
+    var event: CircleIDEventSnapshot?
+    var djs: [CircleIDDJSnapshot]
+    var audioUrl: String?
+    var videoUrl: String?
+    var contributor: CircleIDUserSnapshot
+    var createdAt: Date
+    var likedUserIDs: [String]
+    var favoritedUserIDs: [String]
+    var repostedUserIDs: [String]
+    var comments: [CircleIDComment]
+}
+
+private enum CircleIDReaction {
+    case like
+    case favorite
+    case repost
+}
+
+private struct CircleIDDetailRoute: Identifiable {
+    let id: String
+}
+
+private struct CircleIDHubView: View {
+    @EnvironmentObject private var appState: AppState
+
+    @State private var entries: [CircleIDEntry] = []
+    @State private var hasLoaded = false
+    @State private var isPresentingComposer = false
+    @State private var selectedDetailRoute: CircleIDDetailRoute?
+    @State private var selectedEventIDForDetail: String?
+    @State private var selectedDJIDForDetail: String?
+    @State private var selectedContributorUserID: String?
+    @State private var errorMessage: String?
+
+    private let storageKey = "circle.id.entries.v1"
+
+    private var sortedEntries: [CircleIDEntry] {
+        entries.sorted { lhs, rhs in
+            lhs.createdAt > rhs.createdAt
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+                HStack {
+                    Text(L("ID（未发行）", "ID (Unreleased)"))
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Spacer()
+                    Button {
+                        isPresentingComposer = true
+                    } label: {
+                        Label(L("发布 ID", "Post ID"), systemImage: "plus.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(RaverTheme.card)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+
+                if sortedEntries.isEmpty {
+                    Spacer()
+                    ContentUnavailableView(
+                        L("还没有 ID 讨论", "No ID Discussion Yet"),
+                        systemImage: "music.note.list",
+                        description: Text(L("点击右上角“发布 ID”，记录一首未发行歌曲。", "Tap “Post ID” to record an unreleased track."))
+                    )
+                    Spacer()
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(sortedEntries) { entry in
+                                idEntryCard(entry)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 20)
+                    }
+                }
+            }
+            .background(RaverTheme.background)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .task {
+                await loadEntriesIfNeeded()
+            }
+            .sheet(isPresented: $isPresentingComposer) {
+                CircleIDComposerSheet { entry in
+                    entries.insert(entry, at: 0)
+                    persistEntries()
+                }
+                .environmentObject(appState)
+            }
+            .fullScreenCover(item: $selectedDetailRoute) { route in
+                NavigationStack {
+                    if let entryBinding = bindingForEntry(id: route.id) {
+                        CircleIDDetailView(
+                            entry: entryBinding,
+                            onPersist: {
+                                persistEntries()
+                            }
+                        )
+                        .environmentObject(appState)
+                    } else {
+                        VStack(spacing: 12) {
+                            Text(L("该 ID 已不存在", "This ID no longer exists"))
+                                .font(.headline)
+                                .foregroundStyle(RaverTheme.primaryText)
+                            Button(L("关闭", "Close")) {
+                                selectedDetailRoute = nil
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(RaverTheme.background)
+                    }
+                }
+            }
+            .fullScreenCover(
+                isPresented: Binding(
+                    get: { selectedEventIDForDetail != nil },
+                    set: { if !$0 { selectedEventIDForDetail = nil } }
+                )
+            ) {
+                if let eventID = selectedEventIDForDetail {
+                    NavigationStack {
+                        EventDetailView(eventID: eventID)
+                    }
+                }
+            }
+            .fullScreenCover(
+                isPresented: Binding(
+                    get: { selectedDJIDForDetail != nil },
+                    set: { if !$0 { selectedDJIDForDetail = nil } }
+                )
+            ) {
+                if let djID = selectedDJIDForDetail {
+                    NavigationStack {
+                        DJDetailView(djID: djID)
+                    }
+                }
+            }
+            .fullScreenCover(
+                isPresented: Binding(
+                    get: { selectedContributorUserID != nil },
+                    set: { if !$0 { selectedContributorUserID = nil } }
+                )
+            ) {
+                if let userID = selectedContributorUserID {
+                    NavigationStack {
+                        UserProfileView(userID: userID)
+                            .environmentObject(appState)
+                    }
+                }
+            }
+            .alert(LL("提示"), isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button(L("确定", "OK"), role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
+        }
+    }
+
+    private func idEntryCard(_ entry: CircleIDEntry) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            CircleIDCardPlayerView(
+                songName: entry.songName,
+                audioURLString: entry.audioUrl,
+                videoURLString: entry.videoUrl
+            )
+
+            if let event = entry.event {
+                Button {
+                    selectedEventIDForDetail = event.id
+                } label: {
+                    HStack(spacing: 10) {
+                        circleIDEventCover(event)
+                            .frame(width: 44, height: 44)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(event.name)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .lineLimit(2)
+                            Text(circleIDEventScheduleText(event))
+                                .font(.caption2)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    .padding(10)
+                    .background(RaverTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if !entry.djs.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(entry.djs) { dj in
+                        Button {
+                            selectedDJIDForDetail = dj.id
+                        } label: {
+                            HStack(spacing: 8) {
+                                circleIDDJAvatar(dj, size: 24)
+                                Text(dj.name)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            HStack(spacing: 10) {
+                circleIDActionButton(
+                    icon: reactionContainsUser(entry.likedUserIDs) ? "heart.fill" : "heart",
+                    count: entry.likedUserIDs.count,
+                    isActive: reactionContainsUser(entry.likedUserIDs)
+                ) {
+                    toggleReaction(for: entry.id, reaction: .like)
+                }
+
+                circleIDActionButton(
+                    icon: reactionContainsUser(entry.favoritedUserIDs) ? "star.fill" : "star",
+                    count: entry.favoritedUserIDs.count,
+                    isActive: reactionContainsUser(entry.favoritedUserIDs)
+                ) {
+                    toggleReaction(for: entry.id, reaction: .favorite)
+                }
+
+                circleIDActionButton(
+                    icon: reactionContainsUser(entry.repostedUserIDs) ? "arrow.2.squarepath.circle.fill" : "arrow.2.squarepath.circle",
+                    count: entry.repostedUserIDs.count,
+                    isActive: reactionContainsUser(entry.repostedUserIDs)
+                ) {
+                    toggleReaction(for: entry.id, reaction: .repost)
+                }
+
+                circleIDActionButton(
+                    icon: "text.bubble",
+                    count: entry.comments.count,
+                    isActive: false
+                ) {
+                    selectedDetailRoute = CircleIDDetailRoute(id: entry.id)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    selectedContributorUserID = entry.contributor.id
+                } label: {
+                    HStack(spacing: 8) {
+                        circleIDUserAvatar(entry.contributor, size: 28)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(entry.contributor.shownName)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .lineLimit(1)
+                            Text(L("贡献者", "Contributor"))
+                                .font(.caption2)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 0)
+
+                Text(entry.createdAt.feedTimeText)
+                    .font(.caption2)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .padding(12)
+        .background(RaverTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedDetailRoute = CircleIDDetailRoute(id: entry.id)
+        }
+    }
+
+    private func circleIDActionButton(
+        icon: String,
+        count: Int,
+        isActive: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 17, weight: .semibold))
+                Text("\(count)")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(isActive ? RaverTheme.accent : RaverTheme.primaryText)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background((isActive ? RaverTheme.accent.opacity(0.14) : RaverTheme.cardBorder.opacity(0.42)))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func circleIDUserAvatar(_ user: CircleIDUserSnapshot, size: CGFloat) -> some View {
+        if let resolved = AppConfig.resolvedURLString(user.avatarURL),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.cardBorder)
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    circleIDUserAvatarFallback(user: user, size: size)
+                @unknown default:
+                    circleIDUserAvatarFallback(user: user, size: size)
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+        } else {
+            circleIDUserAvatarFallback(user: user, size: size)
+        }
+    }
+
+    private func circleIDUserAvatarFallback(user: CircleIDUserSnapshot, size: CGFloat) -> some View {
+        Image(
+            AppConfig.resolvedUserAvatarAssetName(
+                userID: user.id,
+                username: user.username,
+                avatarURL: user.avatarURL
+            )
+        )
+        .resizable()
+        .scaledToFill()
+        .frame(width: size, height: size)
+        .background(RaverTheme.cardBorder)
+        .clipShape(Circle())
+    }
+
+    @ViewBuilder
+    private func circleIDDJAvatar(_ dj: CircleIDDJSnapshot, size: CGFloat) -> some View {
+        if let resolved = AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarUrl, size: .small),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.cardBorder)
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    circleIDDJAvatarFallback(dj: dj, size: size)
+                @unknown default:
+                    circleIDDJAvatarFallback(dj: dj, size: size)
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+        } else {
+            circleIDDJAvatarFallback(dj: dj, size: size)
+        }
+    }
+
+    private func circleIDDJAvatarFallback(dj: CircleIDDJSnapshot, size: CGFloat) -> some View {
+        Circle()
+            .fill(RaverTheme.cardBorder)
+            .frame(width: size, height: size)
+            .overlay(
+                Text(String(dj.name.prefix(1)).uppercased())
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            )
+    }
+
+    @ViewBuilder
+    private func circleIDEventCover(_ event: CircleIDEventSnapshot) -> some View {
+        if let resolved = AppConfig.resolvedURLString(event.coverImageUrl),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
+                @unknown default:
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
+                }
+            }
+        } else {
+            RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
+        }
+    }
+
+    private func circleIDEventScheduleText(_ event: CircleIDEventSnapshot) -> String {
+        event.startDate.appLocalizedDateRangeText(to: event.endDate)
+    }
+
+    private func reactionContainsUser(_ userIDs: [String]) -> Bool {
+        userIDs.contains(currentUserSnapshot().id)
+    }
+
+    private func toggleReaction(for entryID: String, reaction: CircleIDReaction) {
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
+        let userID = currentUserSnapshot().id
+        switch reaction {
+        case .like:
+            toggleUserID(userID, in: &entries[index].likedUserIDs)
+        case .favorite:
+            toggleUserID(userID, in: &entries[index].favoritedUserIDs)
+        case .repost:
+            toggleUserID(userID, in: &entries[index].repostedUserIDs)
+        }
+        persistEntries()
+    }
+
+    private func toggleUserID(_ userID: String, in userIDs: inout [String]) {
+        if let index = userIDs.firstIndex(of: userID) {
+            userIDs.remove(at: index)
+        } else {
+            userIDs.append(userID)
+        }
+    }
+
+    private func loadEntriesIfNeeded() async {
+        guard !hasLoaded else { return }
+        hasLoaded = true
+        loadEntries()
+    }
+
+    private func loadEntries() {
+        guard let data = UserDefaults.standard.data(forKey: storageKey) else {
+            entries = []
+            return
+        }
+        do {
+            entries = try JSONDecoder.raver.decode([CircleIDEntry].self, from: data)
+        } catch {
+            entries = []
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    private func persistEntries() {
+        do {
+            let data = try JSONEncoder.raver.encode(entries)
+            UserDefaults.standard.set(data, forKey: storageKey)
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    private func currentUserSnapshot() -> CircleIDUserSnapshot {
+        if let user = appState.session?.user {
+            return CircleIDUserSnapshot(
+                id: user.id,
+                username: user.username,
+                displayName: user.displayName,
+                avatarURL: user.avatarURL
+            )
+        }
+        let fallbackName = L("游客", "Guest")
+        return CircleIDUserSnapshot(
+            id: "local-guest",
+            username: fallbackName,
+            displayName: fallbackName,
+            avatarURL: nil
+        )
+    }
+
+    private func bindingForEntry(id: String) -> Binding<CircleIDEntry>? {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return nil }
+        return $entries[index]
+    }
+}
+
+private struct CircleIDDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
+
+    @Binding var entry: CircleIDEntry
+    let onPersist: () -> Void
+
+    @State private var commentDraft = ""
+    @State private var selectedEventIDForDetail: String?
+    @State private var selectedDJIDForDetail: String?
+    @State private var selectedUserIDForDetail: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                CircleIDCardPlayerView(
+                    songName: entry.songName,
+                    audioURLString: entry.audioUrl,
+                    videoURLString: entry.videoUrl
+                )
+
+                if !entry.djs.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(entry.djs) { dj in
+                            Button {
+                                selectedDJIDForDetail = dj.id
+                            } label: {
+                                HStack(spacing: 8) {
+                                    circleIDDJAvatar(dj, size: 24)
+                                    Text(dj.name)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 0)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                if let event = entry.event {
+                    Button {
+                        selectedEventIDForDetail = event.id
+                    } label: {
+                        HStack(spacing: 10) {
+                            circleIDEventCover(event)
+                                .frame(width: 44, height: 44)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(event.name)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                    .lineLimit(2)
+                                Text(circleIDEventScheduleText(event))
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .lineLimit(2)
+                            }
+
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                        .padding(10)
+                        .background(RaverTheme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                HStack(spacing: 10) {
+                    reactionButton(
+                        icon: reactionContainsCurrentUser(entry.likedUserIDs) ? "heart.fill" : "heart",
+                        count: entry.likedUserIDs.count,
+                        isActive: reactionContainsCurrentUser(entry.likedUserIDs)
+                    ) {
+                        toggleReaction(.like)
+                    }
+
+                    reactionButton(
+                        icon: reactionContainsCurrentUser(entry.favoritedUserIDs) ? "star.fill" : "star",
+                        count: entry.favoritedUserIDs.count,
+                        isActive: reactionContainsCurrentUser(entry.favoritedUserIDs)
+                    ) {
+                        toggleReaction(.favorite)
+                    }
+
+                    reactionButton(
+                        icon: reactionContainsCurrentUser(entry.repostedUserIDs) ? "arrow.2.squarepath.circle.fill" : "arrow.2.squarepath.circle",
+                        count: entry.repostedUserIDs.count,
+                        isActive: reactionContainsCurrentUser(entry.repostedUserIDs)
+                    ) {
+                        toggleReaction(.repost)
+                    }
+
+                    reactionButton(
+                        icon: "text.bubble",
+                        count: entry.comments.count,
+                        isActive: false
+                    ) {}
+                }
+
+                HStack(spacing: 8) {
+                    Button {
+                        selectedUserIDForDetail = entry.contributor.id
+                    } label: {
+                        HStack(spacing: 8) {
+                            circleIDUserAvatar(entry.contributor, size: 28)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(entry.contributor.shownName)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                    .lineLimit(1)
+                                Text(L("贡献者", "Contributor"))
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer(minLength: 0)
+
+                    Text(entry.createdAt.feedTimeText)
+                        .font(.caption2)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(LL("评论区"))
+                        .font(.headline)
+                        .foregroundStyle(RaverTheme.primaryText)
+
+                    if entry.comments.isEmpty {
+                        Text(LL("还没有评论，来抢沙发吧。"))
+                            .font(.subheadline)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    } else {
+                        ForEach(entry.comments) { comment in
+                            Button {
+                                selectedUserIDForDetail = comment.author.id
+                            } label: {
+                                HStack(alignment: .top, spacing: 10) {
+                                    circleIDUserAvatar(comment.author, size: 30)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(comment.author.shownName)
+                                            .font(.subheadline.bold())
+                                            .foregroundStyle(RaverTheme.primaryText)
+                                        Text(comment.content)
+                                            .font(.body)
+                                            .foregroundStyle(RaverTheme.primaryText)
+                                        Text(comment.createdAt.feedTimeText)
+                                            .font(.caption)
+                                            .foregroundStyle(RaverTheme.secondaryText)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        TextField(L("说点什么...", "Say something..."), text: $commentDraft)
+                            .padding(12)
+                            .background(RaverTheme.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                        Button(L("发送", "Send")) {
+                            addComment()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                .padding(12)
+                .background(RaverTheme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .padding(14)
+            .padding(.bottom, 20)
+        }
+        .background(RaverTheme.background)
+        .navigationTitle(L("ID详情", "ID Detail"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(L("关闭", "Close")) {
+                    dismiss()
+                }
+            }
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { selectedEventIDForDetail != nil },
+                set: { if !$0 { selectedEventIDForDetail = nil } }
+            )
+        ) {
+            if let eventID = selectedEventIDForDetail {
+                NavigationStack {
+                    EventDetailView(eventID: eventID)
+                }
+            }
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { selectedDJIDForDetail != nil },
+                set: { if !$0 { selectedDJIDForDetail = nil } }
+            )
+        ) {
+            if let djID = selectedDJIDForDetail {
+                NavigationStack {
+                    DJDetailView(djID: djID)
+                }
+            }
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { selectedUserIDForDetail != nil },
+                set: { if !$0 { selectedUserIDForDetail = nil } }
+            )
+        ) {
+            if let userID = selectedUserIDForDetail {
+                NavigationStack {
+                    UserProfileView(userID: userID)
+                        .environmentObject(appState)
+                }
+            }
+        }
+    }
+
+    private func reactionButton(icon: String, count: Int, isActive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 17, weight: .semibold))
+                Text("\(count)")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(isActive ? RaverTheme.accent : RaverTheme.primaryText)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background((isActive ? RaverTheme.accent.opacity(0.14) : RaverTheme.cardBorder.opacity(0.42)))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toggleReaction(_ reaction: CircleIDReaction) {
+        let userID = currentUserSnapshot().id
+        switch reaction {
+        case .like:
+            toggleUserID(userID, in: &entry.likedUserIDs)
+        case .favorite:
+            toggleUserID(userID, in: &entry.favoritedUserIDs)
+        case .repost:
+            toggleUserID(userID, in: &entry.repostedUserIDs)
+        }
+        onPersist()
+    }
+
+    private func toggleUserID(_ userID: String, in userIDs: inout [String]) {
+        if let index = userIDs.firstIndex(of: userID) {
+            userIDs.remove(at: index)
+        } else {
+            userIDs.append(userID)
+        }
+    }
+
+    private func reactionContainsCurrentUser(_ userIDs: [String]) -> Bool {
+        userIDs.contains(currentUserSnapshot().id)
+    }
+
+    private func addComment() {
+        let trimmed = commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let comment = CircleIDComment(
+            id: UUID().uuidString,
+            author: currentUserSnapshot(),
+            content: trimmed,
+            createdAt: Date()
+        )
+        entry.comments.append(comment)
+        commentDraft = ""
+        onPersist()
+    }
+
+    private func currentUserSnapshot() -> CircleIDUserSnapshot {
+        if let user = appState.session?.user {
+            return CircleIDUserSnapshot(
+                id: user.id,
+                username: user.username,
+                displayName: user.displayName,
+                avatarURL: user.avatarURL
+            )
+        }
+        let fallbackName = L("游客", "Guest")
+        return CircleIDUserSnapshot(
+            id: "local-guest",
+            username: fallbackName,
+            displayName: fallbackName,
+            avatarURL: nil
+        )
+    }
+
+    private func circleIDEventScheduleText(_ event: CircleIDEventSnapshot) -> String {
+        event.startDate.appLocalizedDateRangeText(to: event.endDate)
+    }
+
+    @ViewBuilder
+    private func circleIDEventCover(_ event: CircleIDEventSnapshot) -> some View {
+        if let resolved = AppConfig.resolvedURLString(event.coverImageUrl),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
+                @unknown default:
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
+                }
+            }
+        } else {
+            RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
+        }
+    }
+
+    @ViewBuilder
+    private func circleIDDJAvatar(_ dj: CircleIDDJSnapshot, size: CGFloat) -> some View {
+        if let resolved = AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarUrl, size: .small),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.cardBorder)
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    circleIDDJAvatarFallback(dj: dj, size: size)
+                @unknown default:
+                    circleIDDJAvatarFallback(dj: dj, size: size)
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+        } else {
+            circleIDDJAvatarFallback(dj: dj, size: size)
+        }
+    }
+
+    private func circleIDDJAvatarFallback(dj: CircleIDDJSnapshot, size: CGFloat) -> some View {
+        Circle()
+            .fill(RaverTheme.cardBorder)
+            .frame(width: size, height: size)
+            .overlay(
+                Text(String(dj.name.prefix(1)).uppercased())
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            )
+    }
+
+    @ViewBuilder
+    private func circleIDUserAvatar(_ user: CircleIDUserSnapshot, size: CGFloat) -> some View {
+        if let resolved = AppConfig.resolvedURLString(user.avatarURL),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.cardBorder)
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    circleIDUserAvatarFallback(user: user, size: size)
+                @unknown default:
+                    circleIDUserAvatarFallback(user: user, size: size)
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+        } else {
+            circleIDUserAvatarFallback(user: user, size: size)
+        }
+    }
+
+    private func circleIDUserAvatarFallback(user: CircleIDUserSnapshot, size: CGFloat) -> some View {
+        Image(
+            AppConfig.resolvedUserAvatarAssetName(
+                userID: user.id,
+                username: user.username,
+                avatarURL: user.avatarURL
+            )
+        )
+        .resizable()
+        .scaledToFill()
+        .frame(width: size, height: size)
+        .background(RaverTheme.cardBorder)
+        .clipShape(Circle())
+    }
+}
+
+private struct CircleIDCardPlayerView: View {
+    let songName: String
+    let audioURLString: String?
+    let videoURLString: String?
+
+    @State private var player: AVPlayer?
+    @State private var isPlaying = false
+    @State private var progress: Double = 0
+    @State private var currentSeconds: Double = 0
+    @State private var durationSeconds: Double = 0
+    @State private var timeObserverToken: Any?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                togglePlayback()
+            } label: {
+                Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 34, height: 34)
+                    .background(RaverTheme.accent)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(playbackURL == nil)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(songName)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+
+                ProgressView(value: progress, total: 1)
+                    .progressViewStyle(.linear)
+                    .tint(RaverTheme.accent)
+
+                Text(timeText(currentSeconds) + " / " + timeText(durationSeconds))
+                    .font(.caption2)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(RaverTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .onAppear {
+            preparePlayerIfNeeded()
+        }
+        .onDisappear {
+            cleanupPlayer()
+        }
+    }
+
+    private var playbackURL: URL? {
+        if let audio = validatedURL(from: audioURLString) { return audio }
+        if let video = validatedURL(from: videoURLString) { return video }
+        return nil
+    }
+
+    private func validatedURL(from raw: String?) -> URL? {
+        guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        guard let url = URL(string: raw), let scheme = url.scheme, !scheme.isEmpty else { return nil }
+        return url
+    }
+
+    private func preparePlayerIfNeeded() {
+        guard player == nil, let playbackURL else { return }
+        let avPlayer = AVPlayer(url: playbackURL)
+        player = avPlayer
+        attachTimeObserver(to: avPlayer)
+        updateDuration(from: avPlayer)
+    }
+
+    private func togglePlayback() {
+        guard let player else { return }
+        if isPlaying {
+            player.pause()
+            isPlaying = false
+            return
+        }
+        player.play()
+        isPlaying = true
+        updateDuration(from: player)
+    }
+
+    private func attachTimeObserver(to player: AVPlayer) {
+        guard timeObserverToken == nil else { return }
+        let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
+        timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak player] time in
+            guard let player else { return }
+            currentSeconds = max(0, time.seconds)
+            let duration = max(0, player.currentItem?.duration.seconds ?? 0)
+            durationSeconds = duration
+            if duration > 0 {
+                progress = min(max(currentSeconds / duration, 0), 1)
+            } else {
+                progress = 0
+            }
+            isPlaying = player.timeControlStatus == .playing
+        }
+    }
+
+    private func updateDuration(from player: AVPlayer) {
+        durationSeconds = max(0, player.currentItem?.duration.seconds ?? 0)
+        if durationSeconds <= 0 {
+            progress = 0
+            currentSeconds = 0
+        }
+    }
+
+    private func cleanupPlayer() {
+        player?.pause()
+        isPlaying = false
+        if let token = timeObserverToken, let player {
+            player.removeTimeObserver(token)
+        }
+        timeObserverToken = nil
+        player = nil
+    }
+
+    private func timeText(_ seconds: Double) -> String {
+        guard seconds.isFinite, seconds > 0 else { return "00:00" }
+        let total = Int(seconds.rounded(.down))
+        let minute = total / 60
+        let second = total % 60
+        return String(format: "%02d:%02d", minute, second)
+    }
+}
+
+private struct CircleIDComposerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
+
+    let onCreated: (CircleIDEntry) -> Void
+
+    @State private var songName = ""
+    @State private var audioUrl = ""
+    @State private var videoUrl = ""
+    @State private var selectedEvent: WebEvent?
+    @State private var selectedDJs: [CircleIDDJSnapshot] = []
+    @State private var showEventPicker = false
+    @State private var showDJPicker = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L("歌曲名", "Song Name"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                        TextField(L("例如：ID - Intro Edit", "e.g. ID - Intro Edit"), text: $songName)
+                            .textInputAutocapitalization(.never)
+                            .padding(10)
+                            .background(RaverTheme.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L("音频链接（可选）", "Audio URL (optional)"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                        TextField("https://", text: $audioUrl)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding(10)
+                            .background(RaverTheme.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L("视频链接（可选）", "Video URL (optional)"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                        TextField("https://", text: $videoUrl)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding(10)
+                            .background(RaverTheme.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(L("关联活动", "Linked Event"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            Spacer()
+                            Button(selectedEvent == nil ? L("选择活动", "Select Event") : L("更换活动", "Change Event")) {
+                                showEventPicker = true
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
+                        if let event = selectedEvent {
+                            HStack(spacing: 8) {
+                                Text(event.name)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                    .lineLimit(2)
+                                Spacer()
+                                Button(role: .destructive) {
+                                    selectedEvent = nil
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(10)
+                            .background(RaverTheme.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(L("关联 DJ（可多选）", "Linked DJs (multi-select)"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            Spacer()
+                            Button(L("选择 DJ", "Select DJs")) {
+                                showDJPicker = true
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
+                        if selectedDJs.isEmpty {
+                            Text(L("尚未选择 DJ", "No DJ selected"))
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        } else {
+                            LazyVGrid(
+                                columns: [
+                                    GridItem(.flexible(minimum: 0), spacing: 8, alignment: .leading),
+                                    GridItem(.flexible(minimum: 0), spacing: 8, alignment: .leading)
+                                ],
+                                spacing: 8
+                            ) {
+                                ForEach(selectedDJs) { dj in
+                                    HStack(spacing: 8) {
+                                        Circle()
+                                            .fill(RaverTheme.cardBorder)
+                                            .frame(width: 22, height: 22)
+                                            .overlay(
+                                                Text(String(dj.name.prefix(1)).uppercased())
+                                                    .font(.caption2.weight(.semibold))
+                                                    .foregroundStyle(RaverTheme.secondaryText)
+                                            )
+                                        Text(dj.name)
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(RaverTheme.primaryText)
+                                            .lineLimit(1)
+                                        Spacer(minLength: 0)
+                                        Button(role: .destructive) {
+                                            selectedDJs.removeAll { $0.id == dj.id }
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.caption)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 7)
+                                    .background(RaverTheme.card)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .background(RaverTheme.background)
+            .navigationTitle(L("发布 ID", "Post ID"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(L("取消", "Cancel")) {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L("发布", "Post")) {
+                        createEntry()
+                    }
+                }
+            }
+            .sheet(isPresented: $showEventPicker) {
+                CircleIDEventPickerSheet { event in
+                    selectedEvent = event
+                }
+            }
+            .sheet(isPresented: $showDJPicker) {
+                CircleIDDJPickerSheet(selected: selectedDJs) { picked in
+                    selectedDJs = picked
+                }
+            }
+            .alert(LL("提示"), isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button(L("确定", "OK"), role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
+        }
+    }
+
+    private func createEntry() {
+        let trimmedSongName = songName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAudioURL = audioUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedVideoURL = videoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedSongName.isEmpty else {
+            errorMessage = L("请填写歌曲名", "Please enter the song name")
+            return
+        }
+        guard selectedEvent != nil else {
+            errorMessage = L("请先选择活动", "Please select an event")
+            return
+        }
+        guard !selectedDJs.isEmpty else {
+            errorMessage = L("请至少选择一位 DJ", "Please select at least one DJ")
+            return
+        }
+        guard !trimmedAudioURL.isEmpty || !trimmedVideoURL.isEmpty else {
+            errorMessage = L("请至少填写音频或视频链接", "Please provide at least one audio or video URL")
+            return
+        }
+
+        let contributor = currentUserSnapshot()
+        let eventSnapshot: CircleIDEventSnapshot?
+        if let selectedEvent {
+            eventSnapshot = CircleIDEventSnapshot(
+                id: selectedEvent.id,
+                name: selectedEvent.name,
+                startDate: selectedEvent.startDate,
+                endDate: selectedEvent.endDate,
+                coverImageUrl: selectedEvent.coverImageUrl
+            )
+        } else {
+            eventSnapshot = nil
+        }
+
+        let entry = CircleIDEntry(
+            id: UUID().uuidString,
+            songName: trimmedSongName,
+            event: eventSnapshot,
+            djs: selectedDJs,
+            audioUrl: trimmedAudioURL.isEmpty ? nil : trimmedAudioURL,
+            videoUrl: trimmedVideoURL.isEmpty ? nil : trimmedVideoURL,
+            contributor: contributor,
+            createdAt: Date(),
+            likedUserIDs: [],
+            favoritedUserIDs: [],
+            repostedUserIDs: [],
+            comments: []
+        )
+
+        onCreated(entry)
+        dismiss()
+    }
+
+    private func currentUserSnapshot() -> CircleIDUserSnapshot {
+        if let user = appState.session?.user {
+            return CircleIDUserSnapshot(
+                id: user.id,
+                username: user.username,
+                displayName: user.displayName,
+                avatarURL: user.avatarURL
+            )
+        }
+        let fallbackName = L("游客", "Guest")
+        return CircleIDUserSnapshot(
+            id: "local-guest",
+            username: fallbackName,
+            displayName: fallbackName,
+            avatarURL: nil
+        )
+    }
+}
+
+private struct CircleIDEventPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    private let webService = AppEnvironment.makeWebService()
+
+    let onSelect: (WebEvent) -> Void
+
+    @State private var events: [WebEvent] = []
+    @State private var searchText = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    private var filteredEvents: [WebEvent] {
+        let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else {
+            return events
+        }
+        return events.filter { event in
+            event.name.localizedCaseInsensitiveContains(keyword)
+                || (event.city?.localizedCaseInsensitiveContains(keyword) ?? false)
+                || (event.country?.localizedCaseInsensitiveContains(keyword) ?? false)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 10) {
+                TextField(L("搜索活动名/城市/国家", "Search event/city/country"), text: $searchText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(10)
+                    .background(RaverTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+
+                if isLoading && events.isEmpty {
+                    Spacer()
+                    ProgressView(LL("加载活动中..."))
+                    Spacer()
+                } else if let errorMessage, events.isEmpty {
+                    Spacer()
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red.opacity(0.9))
+                    Spacer()
+                } else if filteredEvents.isEmpty {
+                    Spacer()
+                    ContentUnavailableView(
+                        L("没有匹配活动", "No Matching Events"),
+                        systemImage: "calendar.badge.exclamationmark"
+                    )
+                    Spacer()
+                } else {
+                    List(filteredEvents) { event in
+                        Button {
+                            onSelect(event)
+                            dismiss()
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(event.name)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                Text(circleIDEventDateText(event))
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .background(RaverTheme.background)
+            .navigationTitle(L("选择活动", "Select Event"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(L("取消", "Cancel")) {
+                        dismiss()
+                    }
+                }
+            }
+            .task {
+                await loadEvents()
+            }
+        }
+    }
+
+    private func circleIDEventDateText(_ event: WebEvent) -> String {
+        "\(event.startDate.appLocalizedYMDHMText()) - \(event.endDate.appLocalizedYMDHMText())"
+    }
+
+    @MainActor
+    private func loadEvents() async {
+        if isLoading { return }
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            var page = 1
+            var merged: [WebEvent] = []
+            while page <= 6 {
+                let result = try await webService.fetchEvents(
+                    page: page,
+                    limit: 50,
+                    search: nil,
+                    eventType: nil,
+                    status: nil
+                )
+                merged.append(contentsOf: result.items)
+                let totalPages = result.pagination?.totalPages ?? page
+                if result.items.isEmpty || page >= totalPages {
+                    break
+                }
+                page += 1
+            }
+
+            let unique = Dictionary(merged.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            events = unique.values.sorted { lhs, rhs in
+                lhs.startDate > rhs.startDate
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+}
+
+private struct CircleIDDJPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    private let webService = AppEnvironment.makeWebService()
+
+    let selected: [CircleIDDJSnapshot]
+    let onDone: ([CircleIDDJSnapshot]) -> Void
+
+    @State private var djs: [WebDJ] = []
+    @State private var selectedIDs: Set<String> = []
+    @State private var searchText = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    private var filteredDJs: [WebDJ] {
+        let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else {
+            return djs
+        }
+        return djs.filter { dj in
+            dj.name.localizedCaseInsensitiveContains(keyword)
+                || (dj.aliases?.contains(where: { $0.localizedCaseInsensitiveContains(keyword) }) ?? false)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 10) {
+                TextField(L("搜索 DJ 名称或别名", "Search DJ name or alias"), text: $searchText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(10)
+                    .background(RaverTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+
+                if isLoading && djs.isEmpty {
+                    Spacer()
+                    ProgressView(LL("加载 DJ 中..."))
+                    Spacer()
+                } else if let errorMessage, djs.isEmpty {
+                    Spacer()
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red.opacity(0.9))
+                    Spacer()
+                } else if filteredDJs.isEmpty {
+                    Spacer()
+                    ContentUnavailableView(
+                        L("没有匹配 DJ", "No Matching DJs"),
+                        systemImage: "person.crop.circle.badge.questionmark"
+                    )
+                    Spacer()
+                } else {
+                    List(filteredDJs) { dj in
+                        Button {
+                            toggleDJSelection(djID: dj.id)
+                        } label: {
+                            HStack(spacing: 10) {
+                                circleIDDJAvatar(dj: dj, size: 30)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(dj.name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                        .lineLimit(1)
+                                    if let aliases = dj.aliases, !aliases.isEmpty {
+                                        Text(aliases.prefix(2).joined(separator: " · "))
+                                            .font(.caption2)
+                                            .foregroundStyle(RaverTheme.secondaryText)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: selectedIDs.contains(dj.id) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(selectedIDs.contains(dj.id) ? RaverTheme.accent : RaverTheme.secondaryText)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .background(RaverTheme.background)
+            .navigationTitle(L("选择 DJ", "Select DJs"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(L("取消", "Cancel")) {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L("完成", "Done")) {
+                        finishSelection()
+                    }
+                }
+            }
+            .task {
+                selectedIDs = Set(selected.map(\.id))
+                await loadDJs()
+            }
+        }
+    }
+
+    private func toggleDJSelection(djID: String) {
+        if selectedIDs.contains(djID) {
+            selectedIDs.remove(djID)
+        } else {
+            selectedIDs.insert(djID)
+        }
+    }
+
+    private func finishSelection() {
+        let fetchedByID = Dictionary(djs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let selectedByID = Dictionary(selected.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let snapshots = selectedIDs.compactMap { id -> CircleIDDJSnapshot? in
+            if let dj = fetchedByID[id] {
+                return CircleIDDJSnapshot(
+                    id: dj.id,
+                    name: dj.name,
+                    avatarUrl: dj.avatarUrl,
+                    avatarSmallUrl: dj.avatarSmallUrl
+                )
+            }
+            return selectedByID[id]
+        }
+            .sorted { lhs, rhs in
+                lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+
+        onDone(snapshots)
+        dismiss()
+    }
+
+    @ViewBuilder
+    private func circleIDDJAvatar(dj: WebDJ, size: CGFloat) -> some View {
+        if let resolved = AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarUrl, size: .small),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    Circle().fill(RaverTheme.cardBorder)
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    Circle()
+                        .fill(RaverTheme.cardBorder)
+                        .overlay(
+                            Text(String(dj.name.prefix(1)).uppercased())
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        )
+                @unknown default:
+                    Circle()
+                        .fill(RaverTheme.cardBorder)
+                        .overlay(
+                            Text(String(dj.name.prefix(1)).uppercased())
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        )
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+        } else {
+            Circle()
+                .fill(RaverTheme.cardBorder)
+                .frame(width: size, height: size)
+                .overlay(
+                    Text(String(dj.name.prefix(1)).uppercased())
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                )
+        }
+    }
+
+    @MainActor
+    private func loadDJs() async {
+        if isLoading { return }
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            var page = 1
+            var merged: [WebDJ] = []
+            while page <= 6 {
+                let result = try await webService.fetchDJs(
+                    page: page,
+                    limit: 50,
+                    search: nil,
+                    sortBy: "name"
+                )
+                merged.append(contentsOf: result.items)
+                let totalPages = result.pagination?.totalPages ?? page
+                if result.items.isEmpty || page >= totalPages {
+                    break
+                }
+                page += 1
+            }
+
+            let unique = Dictionary(merged.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            djs = unique.values.sorted { lhs, rhs in
+                lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+}
+
 private struct SquadHallView: View {
     private enum SquadListMode: String, CaseIterable, Identifiable {
         case plaza
@@ -259,8 +1941,8 @@ private struct SquadHallView: View {
 
         var title: String {
             switch self {
-            case .plaza: return "小队广场"
-            case .mine: return "我的小队"
+            case .plaza: return L("小队广场", "Squad Plaza")
+            case .mine: return L("我的小队", "My Squads")
             }
         }
     }
@@ -285,7 +1967,7 @@ private struct SquadHallView: View {
         NavigationStack {
             VStack(spacing: 12) {
                 HStack {
-                    Text("小队广场")
+                    Text(L("小队广场", "Squad Plaza"))
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer()
@@ -295,7 +1977,7 @@ private struct SquadHallView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "plus.circle.fill")
                                 .font(.subheadline.weight(.bold))
-                            Text("创建小队")
+                            Text(L("创建小队", "Create Squad"))
                                 .font(.subheadline.weight(.semibold))
                         }
                         .foregroundStyle(RaverTheme.primaryText)
@@ -337,14 +2019,14 @@ private struct SquadHallView: View {
 
                 if isLoading && displayedSquads.isEmpty {
                     Spacer()
-                    ProgressView("加载小队中...")
+                    ProgressView(L("加载小队中...", "Loading squads..."))
                     Spacer()
                 } else if displayedSquads.isEmpty {
                     Spacer()
                     ContentUnavailableView(
-                        selectedMode == .mine ? "还没有加入小队" : "暂无小队",
+                        selectedMode == .mine ? L("还没有加入小队", "Not Joined Any Squad Yet") : L("暂无小队", "No Squads Yet"),
                         systemImage: "flag.2.crossed",
-                        description: Text(selectedMode == .mine ? "去小队广场逛逛，加入你感兴趣的小队。" : "创建一个小队，和朋友一起记录活动。")
+                        description: Text(selectedMode == .mine ? L("去小队广场逛逛，加入你感兴趣的小队。", "Visit the squad square and join squads you like.") : L("创建一个小队，和朋友一起记录活动。", "Create a squad and record events with friends."))
                     )
                     Spacer()
                 } else {
@@ -393,14 +2075,14 @@ private struct SquadHallView: View {
                         .environmentObject(appState)
                 }
             }
-            .alert("加载失败", isPresented: Binding(
+            .alert(L("加载失败", "Load Failed"), isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
             )) {
-                Button("重试") {
+                Button(L("重试", "Retry")) {
                     Task { await loadSquads() }
                 }
-                Button("取消", role: .cancel) {}
+                Button(L("取消", "Cancel"), role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
             }
@@ -511,7 +2193,7 @@ private struct SquadHallView: View {
 
     private func squadIPText(_ squad: SquadSummary) -> String {
         // 当前数据模型暂未提供地区字段，先保留展示位以满足卡片结构。
-        "IP地区：暂未公开"
+        L("IP地区：暂未公开", "IP region: not disclosed")
     }
 
     private func squadFlagCard(_ squad: SquadSummary) -> some View {
@@ -572,7 +2254,7 @@ private struct SquadHallView: View {
                         Text("·")
                             .foregroundStyle(Color.white.opacity(0.72))
 
-                        Text("\(squad.memberCount) 人")
+                        Text(L("\(squad.memberCount) 人", "\(squad.memberCount) members"))
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(Color.white.opacity(0.92))
                     }
@@ -586,9 +2268,9 @@ private struct SquadHallView: View {
     private func leaderLabelText(for squad: SquadSummary) -> String {
         if let name = leaderUserSummary(for: squad)?.displayName,
            !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "队长 \(name)"
+            return L("队长 \(name)", "Leader \(name)")
         }
-        return "队长"
+        return L("队长", "Leader")
     }
 
     @MainActor
@@ -631,7 +2313,7 @@ private struct SquadHallView: View {
             }
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingMessage
         }
     }
 }
@@ -692,14 +2374,14 @@ private struct CircleRatingHubView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("事件驱动打分")
+                    Text(LL("事件驱动打分"))
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer()
                     Button {
                         isPresentingImportFromEvent = true
                     } label: {
-                        Label("从活动导入", systemImage: "square.and.arrow.down")
+                        Label(L("从活动导入", "Import from Event"), systemImage: "square.and.arrow.down")
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
@@ -710,7 +2392,7 @@ private struct CircleRatingHubView: View {
                     Button {
                         isPresentingCreateEvent = true
                     } label: {
-                        Label("发布事件", systemImage: "plus")
+                        Label(L("发布事件", "Publish Event"), systemImage: "plus")
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
@@ -723,7 +2405,7 @@ private struct CircleRatingHubView: View {
                 .padding(.top, 8)
 
                 if isLoading && events.isEmpty {
-                    ProgressView("正在加载打分事件…")
+                    ProgressView(LL("正在加载打分事件…"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .padding(.horizontal, 16)
@@ -736,10 +2418,10 @@ private struct CircleRatingHubView: View {
                         .padding(.top, 4)
                 } else if events.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("还没有打分事件")
+                        Text(LL("还没有打分事件"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
-                        Text("点击右上角“发布事件”，先创建一个事件，再在事件内添加打分单位。")
+                        Text(LL("点击右上角“发布事件”，先创建一个事件，再在事件内添加打分单位。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -817,11 +2499,11 @@ private struct CircleRatingHubView: View {
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(RaverTheme.primaryText)
                         .lineLimit(1)
-                    Text((event.description?.isEmpty == false ? event.description : "暂无事件描述") ?? "暂无事件描述")
+                    Text((event.description?.isEmpty == false ? event.description : L("暂无事件描述", "No event description")) ?? L("暂无事件描述", "No event description"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(3)
-                    Text("发布者：\(event.createdBy?.shownName ?? "匿名用户")")
+                    Text(L("发布者：\(event.createdBy?.shownName ?? "匿名用户")", "Publisher: \(event.createdBy?.shownName ?? L("匿名用户", "Anonymous"))"))
                         .font(.caption2)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(1)
@@ -835,12 +2517,17 @@ private struct CircleRatingHubView: View {
             }
 
             HStack(spacing: 8) {
-                Label("\(event.units.count) 个单位", systemImage: "square.grid.2x2")
+                Label(L("\(event.units.count) 个单位", "\(event.units.count) units"), systemImage: "square.grid.2x2")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
                 Text("·")
                     .foregroundStyle(RaverTheme.secondaryText.opacity(0.7))
-                Text("均分 \(average, specifier: "%.1f")/10")
+                Text(
+                    L(
+                        "均分 \(String(format: "%.1f", average))/10",
+                        "Average \(String(format: "%.1f", average))/10"
+                    )
+                )
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
                 Spacer()
@@ -862,7 +2549,7 @@ private struct CircleRatingHubView: View {
             events = try await service.fetchRatingEvents()
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingMessage
         }
     }
 }
@@ -888,10 +2575,10 @@ struct CircleRatingEventDetailView: View {
 
                     if event.units.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("还没有打分单位")
+                            Text(LL("还没有打分单位"))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(RaverTheme.primaryText)
-                            Text("点击右上角 +，在这个事件下发布第一个打分单位。")
+                            Text(LL("点击右上角 +，在这个事件下发布第一个打分单位。"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
@@ -917,11 +2604,11 @@ struct CircleRatingEventDetailView: View {
                         }
                     }
                 } else if isLoading {
-                    ProgressView("正在加载事件…")
+                    ProgressView(LL("正在加载事件…"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                 } else {
-                    Text(errorMessage ?? "事件不存在")
+                    Text(errorMessage ?? L("事件不存在", "Event not found"))
                         .font(.caption)
                         .foregroundStyle(.red.opacity(0.9))
                 }
@@ -999,11 +2686,11 @@ struct CircleRatingEventDetailView: View {
                     Text(event.name)
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(RaverTheme.primaryText)
-                    Text((event.description?.isEmpty == false ? event.description : "暂无事件描述") ?? "暂无事件描述")
+                    Text((event.description?.isEmpty == false ? event.description : L("暂无事件描述", "No event description")) ?? L("暂无事件描述", "No event description"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(4)
-                    Text("发布者：\(event.createdBy?.shownName ?? "匿名用户")")
+                    Text(L("发布者：\(event.createdBy?.shownName ?? "匿名用户")", "Publisher: \(event.createdBy?.shownName ?? L("匿名用户", "Anonymous"))"))
                         .font(.caption2)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(1)
@@ -1022,7 +2709,7 @@ struct CircleRatingEventDetailView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "calendar.badge.clock")
                         .font(.caption2.weight(.semibold))
-                    Text("进入对应电音节活动详情")
+                    Text(LL("进入对应电音节活动详情"))
                         .font(.caption2.weight(.semibold))
                 }
                 .foregroundStyle(RaverTheme.accent)
@@ -1056,7 +2743,7 @@ struct CircleRatingEventDetailView: View {
             .allowsHitTesting(false)
 
             ZStack {
-                Text("打分事件详情")
+                Text(LL("打分事件详情"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
@@ -1110,11 +2797,11 @@ struct CircleRatingEventDetailView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
                     .lineLimit(1)
-                Text((unit.description?.isEmpty == false ? unit.description : "暂无单位描述") ?? "暂无单位描述")
+                Text((unit.description?.isEmpty == false ? unit.description : L("暂无单位描述", "No unit description")) ?? L("暂无单位描述", "No unit description"))
                     .font(.caption2)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .lineLimit(1)
-                Text("发布者：\(unit.createdBy?.shownName ?? "匿名用户")")
+                Text(L("发布者：\(unit.createdBy?.shownName ?? "匿名用户")", "Publisher: \(unit.createdBy?.shownName ?? L("匿名用户", "Anonymous"))"))
                     .font(.caption2)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .lineLimit(1)
@@ -1126,7 +2813,7 @@ struct CircleRatingEventDetailView: View {
                 Text("\(unit.rating, specifier: "%.1f")")
                     .font(.system(size: 21, weight: .bold))
                     .foregroundStyle(RaverTheme.primaryText)
-                Text("\(unit.ratingCount) 人评分")
+                Text(L("\(unit.ratingCount) 人评分", "\(unit.ratingCount) ratings"))
                     .font(.caption2)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -1149,7 +2836,7 @@ struct CircleRatingEventDetailView: View {
             event = try await service.fetchRatingEvent(id: eventID)
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingMessage
         }
     }
 }
@@ -1185,11 +2872,11 @@ struct CircleRatingUnitDetailView: View {
                                 Text(unit.name)
                                     .font(.headline.weight(.bold))
                                     .foregroundStyle(RaverTheme.primaryText)
-                                Text((unit.description?.isEmpty == false ? unit.description : "暂无单位描述") ?? "暂无单位描述")
+                                Text((unit.description?.isEmpty == false ? unit.description : L("暂无单位描述", "No unit description")) ?? L("暂无单位描述", "No unit description"))
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                                     .lineLimit(3)
-                                Text("发布者：\(unit.createdBy?.shownName ?? "匿名用户")")
+                                Text(L("发布者：\(unit.createdBy?.shownName ?? "匿名用户")", "Publisher: \(unit.createdBy?.shownName ?? L("匿名用户", "Anonymous"))"))
                                     .font(.caption2)
                                     .foregroundStyle(RaverTheme.secondaryText)
                                     .lineLimit(1)
@@ -1197,7 +2884,7 @@ struct CircleRatingUnitDetailView: View {
                         }
                         if let linkedDJs = unit.linkedDJs, !linkedDJs.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("相关 DJ")
+                                Text(LL("相关 DJ"))
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(RaverTheme.secondaryText)
 
@@ -1209,7 +2896,7 @@ struct CircleRatingUnitDetailView: View {
                                             } label: {
                                                 VStack(spacing: 4) {
                                                     Group {
-                                                        if let imageURL = AppConfig.resolvedURLString(dj.avatarUrl),
+                                                        if let imageURL = AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarUrl, size: .small),
                                                            let url = URL(string: imageURL),
                                                            imageURL.hasPrefix("http://") || imageURL.hasPrefix("https://") {
                                                             AsyncImage(url: url) { phase in
@@ -1254,7 +2941,7 @@ struct CircleRatingUnitDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("评分")
+                        Text(LL("评分"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
                         HalfStarDragRatingControl(
@@ -1269,12 +2956,12 @@ struct CircleRatingUnitDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("评论")
+                        Text(LL("评论"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
 
                         if unit.comments.isEmpty {
-                            Text("还没有评论，来写第一条吧")
+                            Text(LL("还没有评论，来写第一条吧"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                                 .padding(.vertical, 4)
@@ -1317,14 +3004,14 @@ struct CircleRatingUnitDetailView: View {
                         }
 
                         HStack(spacing: 8) {
-                            TextField("写评论…", text: $commentDraft)
+                            TextField(LL("写评论…"), text: $commentDraft)
                                 .font(.caption)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 7)
                                 .background(RaverTheme.background)
                                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-                            Button("发送") {
+                            Button(L("发送", "Send")) {
                                 Task {
                                     await addComment()
                                 }
@@ -1347,7 +3034,7 @@ struct CircleRatingUnitDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    ProgressView("正在加载评分单位…")
+                    ProgressView(LL("正在加载评分单位…"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
@@ -1357,7 +3044,7 @@ struct CircleRatingUnitDetailView: View {
             .padding(.bottom, 20)
         }
         .background(RaverTheme.background)
-        .navigationTitle("评论列表")
+        .navigationTitle(LL("评论列表"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .task {
@@ -1385,14 +3072,14 @@ struct CircleRatingUnitDetailView: View {
             return (
                 userID: myID,
                 username: myProfile?.username ?? appState.session?.user.username ?? "me",
-                displayName: myProfile?.displayName ?? appState.session?.user.displayName ?? "我",
+                displayName: myProfile?.displayName ?? appState.session?.user.displayName ?? L("我", "Me"),
                 avatarURL: myProfile?.avatarURL ?? appState.session?.user.avatarURL
             )
         }
         return (
             userID: comment.userId,
             username: "user",
-            displayName: "用户",
+            displayName: L("用户", "User"),
             avatarURL: nil
         )
     }
@@ -1449,7 +3136,7 @@ struct CircleRatingUnitDetailView: View {
             unit = try await webService.fetchRatingUnit(id: unitID)
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingMessage
         }
     }
 
@@ -1482,7 +3169,7 @@ struct CircleRatingUnitDetailView: View {
             errorMessage = nil
             onSubmitted()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingMessage
         }
     }
 }
@@ -1505,15 +3192,15 @@ private struct CreateRatingEventSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("基础信息") {
-                    TextField("事件名称", text: $name)
-                    TextField("事件描述（选填）", text: $description, axis: .vertical)
+                Section(LL("基础信息")) {
+                    TextField(LL("事件名称"), text: $name)
+                    TextField(LL("事件描述（选填）"), text: $description, axis: .vertical)
                         .lineLimit(2...4)
-                    TextField("封面图 URL（选填）", text: $imageURL)
+                    TextField(LL("封面图 URL（选填）"), text: $imageURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     PhotosPicker(selection: $selectedCoverPhoto, matching: .images) {
-                        Label(selectedCoverData == nil ? "上传封面图" : "更换封面图", systemImage: "photo")
+                        Label(selectedCoverData == nil ? L("上传封面图", "Upload Cover") : L("更换封面图", "Replace Cover"), systemImage: "photo")
                     }
                     if let selectedCoverData,
                        let preview = UIImage(data: selectedCoverData) {
@@ -1525,7 +3212,7 @@ private struct CreateRatingEventSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     if selectedCoverData != nil {
-                        Text("已选择本地封面图，发布时会自动上传并使用该图片。")
+                        Text(LL("已选择本地封面图，发布时会自动上传并使用该图片。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -1538,14 +3225,14 @@ private struct CreateRatingEventSheet: View {
                     }
                 }
             }
-            .navigationTitle("发布打分事件")
+            .navigationTitle(L("发布打分事件", "Publish Rating Event"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
+                    Button(L("取消", "Cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("发布") {
+                    Button(L("发布", "Publish")) {
                         Task { await submit() }
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting || isUploadingCover)
@@ -1588,7 +3275,7 @@ private struct CreateRatingEventSheet: View {
             )
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingMessage
         }
     }
 
@@ -1602,7 +3289,7 @@ private struct CreateRatingEventSheet: View {
             selectedCoverData = try await item.loadTransferable(type: Data.self)
         } catch {
             selectedCoverData = nil
-            errorMessage = "读取图片失败，请重试"
+            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
         }
     }
 
@@ -1628,20 +3315,13 @@ private struct CreateRatingEventFromEventSheet: View {
     @State private var isSubmitting = false
     @State private var errorMessage: String?
 
-    private let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "MM-dd HH:mm"
-        return formatter
-    }()
-
     var body: some View {
         NavigationStack {
             List {
                 if isLoading {
                     HStack {
                         Spacer()
-                        ProgressView("正在加载活动…")
+                        ProgressView(L("正在加载活动…", "Loading events..."))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                         Spacer()
@@ -1649,10 +3329,10 @@ private struct CreateRatingEventFromEventSheet: View {
                     .listRowBackground(Color.clear)
                 } else if events.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("没有找到可导入活动")
+                        Text(LL("没有找到可导入活动"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
-                        Text("请尝试修改关键词，或先创建活动。")
+                        Text(LL("请尝试修改关键词，或先创建活动。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -1675,11 +3355,11 @@ private struct CreateRatingEventFromEventSheet: View {
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(RaverTheme.primaryText)
                                         .lineLimit(1)
-                                    Text("\(dateFormatter.string(from: event.startDate)) - \(dateFormatter.string(from: event.endDate))")
+                                    Text("\(event.startDate.appLocalizedYMDHMText()) - \(event.endDate.appLocalizedYMDHMText())")
                                         .font(.caption2)
                                         .foregroundStyle(RaverTheme.secondaryText)
                                         .lineLimit(1)
-                                    Text("\(event.city ?? "未知城市") · \(event.country ?? "未知国家")")
+                                    Text("\(event.city ?? L("未知城市", "Unknown City")) · \(event.country ?? L("未知国家", "Unknown Country"))")
                                         .font(.caption2)
                                         .foregroundStyle(RaverTheme.secondaryText)
                                         .lineLimit(1)
@@ -1705,18 +3385,18 @@ private struct CreateRatingEventFromEventSheet: View {
             }
             .scrollContentBackground(.hidden)
             .background(RaverTheme.background)
-            .searchable(text: $searchKeyword, prompt: "搜索活动名称")
+            .searchable(text: $searchKeyword, prompt: L("搜索活动名称", "Search event name"))
             .onSubmit(of: .search) {
                 Task { await loadEvents() }
             }
-            .navigationTitle("从活动导入打分")
+            .navigationTitle(L("从活动导入打分", "Import Ratings from Event"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
+                    Button(L("取消", "Cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(isSubmitting ? "导入中..." : "导入") {
+                    Button(isSubmitting ? L("导入中...", "Importing...") : L("导入", "Import")) {
                         Task { await submit() }
                     }
                     .disabled(selectedEventID == nil || isSubmitting || isLoading)
@@ -1747,7 +3427,7 @@ private struct CreateRatingEventFromEventSheet: View {
             errorMessage = nil
         } catch {
             events = []
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingMessage
         }
     }
 
@@ -1760,7 +3440,7 @@ private struct CreateRatingEventFromEventSheet: View {
             try await onSubmit(selectedEventID)
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingMessage
         }
     }
 }
@@ -1784,15 +3464,15 @@ private struct CreateRatingUnitSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("单位信息") {
-                    TextField("单位名称", text: $name)
-                    TextField("单位描述（选填）", text: $description, axis: .vertical)
+                Section(LL("单位信息")) {
+                    TextField(LL("单位名称"), text: $name)
+                    TextField(LL("单位描述（选填）"), text: $description, axis: .vertical)
                         .lineLimit(2...4)
-                    TextField("图片 URL（选填）", text: $imageURL)
+                    TextField(LL("图片 URL（选填）"), text: $imageURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     PhotosPicker(selection: $selectedCoverPhoto, matching: .images) {
-                        Label(selectedCoverData == nil ? "上传单位图片" : "更换单位图片", systemImage: "photo")
+                        Label(selectedCoverData == nil ? L("上传单位图片", "Upload Unit Image") : L("更换单位图片", "Replace Unit Image"), systemImage: "photo")
                     }
                     if let selectedCoverData,
                        let preview = UIImage(data: selectedCoverData) {
@@ -1804,7 +3484,7 @@ private struct CreateRatingUnitSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     if selectedCoverData != nil {
-                        Text("已选择本地图片，发布时会自动上传并作为打分单位封面。")
+                        Text(LL("已选择本地图片，发布时会自动上传并作为打分单位封面。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -1817,14 +3497,14 @@ private struct CreateRatingUnitSheet: View {
                     }
                 }
             }
-            .navigationTitle("发布打分单位")
+            .navigationTitle(L("发布打分单位", "Publish Rating Unit"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
+                    Button(L("取消", "Cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("发布") {
+                    Button(L("发布", "Publish")) {
                         Task { await submit() }
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting || isUploadingCover)
@@ -1867,7 +3547,7 @@ private struct CreateRatingUnitSheet: View {
             )
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingMessage
         }
     }
 
@@ -1881,7 +3561,7 @@ private struct CreateRatingUnitSheet: View {
             selectedCoverData = try await item.loadTransferable(type: Data.self)
         } catch {
             selectedCoverData = nil
-            errorMessage = "读取图片失败，请重试"
+            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
         }
     }
 
@@ -1984,8 +3664,8 @@ private struct HalfStarDragRatingControl: View {
                 )
             }
         }
-        .accessibilityLabel("星级评分")
-        .accessibilityValue("\(Int(score))/10 分")
+        .accessibilityLabel(L("星级评分", "Star Rating"))
+        .accessibilityValue(L("\(Int(score))/10 分", "\(Int(score))/10 points"))
     }
 
     private var controlWidth: CGFloat {

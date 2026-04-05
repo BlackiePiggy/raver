@@ -1,0 +1,667 @@
+{
+  "startedAt": "2026-04-05T02:05:21.028Z",
+  "finishedAt": "2026-04-05T02:05:21.199Z",
+  "durationMs": 171,
+  "config": {
+    "dryRun": false,
+    "limit": null,
+    "eventId": null,
+    "batchSize": 1000,
+    "txChunk": 200
+  },
+  "totals": {
+    "totalSlots": 16642,
+    "scanned": 16642,
+    "touchedSlots": 34,
+    "appliedBindings": 34,
+    "updatesWritten": 34,
+    "affectedEvents": 24
+  },
+  "topAffectedEvents": [
+    {
+      "eventId": "21a822e1-a5bf-4a04-8936-07d6be37d73c",
+      "slotCount": 3
+    },
+    {
+      "eventId": "e3d3957b-085c-443d-8e29-4864a64cb8c4",
+      "slotCount": 3
+    },
+    {
+      "eventId": "32b234ea-90e4-4bd6-ab88-86e17cec4f2b",
+      "slotCount": 3
+    },
+    {
+      "eventId": "2e378ca0-0598-4880-be57-a4ef408acba4",
+      "slotCount": 2
+    },
+    {
+      "eventId": "6168fd10-cb49-439d-bfac-5e4bf71b8deb",
+      "slotCount": 2
+    },
+    {
+      "eventId": "579cd698-b0fb-4e30-8c85-19fc659161a1",
+      "slotCount": 2
+    },
+    {
+      "eventId": "25764286-639b-4c1f-bc43-22a4e5c62093",
+      "slotCount": 2
+    },
+    {
+      "eventId": "1ea8d6bd-a684-423f-b70a-c75f7bda64c1",
+      "slotCount": 1
+    },
+    {
+      "eventId": "64fd1d64-bfb6-4de0-90bd-f8eeace94bc6",
+      "slotCount": 1
+    },
+    {
+      "eventId": "20c60449-35da-4b9f-8699-7590da12f3fb",
+      "slotCount": 1
+    },
+    {
+      "eventId": "7aef4ad3-e88c-4c9d-8d18-a410d3c53bc1",
+      "slotCount": 1
+    },
+    {
+      "eventId": "346ade44-3df4-4368-9096-b04430c3a663",
+      "slotCount": 1
+    },
+    {
+      "eventId": "b10d8a5d-95eb-46a1-a924-ca1646e077e3",
+      "slotCount": 1
+    },
+    {
+      "eventId": "da6dba2b-edec-4f3d-8a2f-da718107b2d9",
+      "slotCount": 1
+    },
+    {
+      "eventId": "8c678148-83ea-445a-823c-772de667cefc",
+      "slotCount": 1
+    },
+    {
+      "eventId": "2c36f0b3-6dbc-464e-8a6c-6aa5d78cb5fd",
+      "slotCount": 1
+    },
+    {
+      "eventId": "ab7d85ea-7c56-4f7a-9568-666dc475aa1d",
+      "slotCount": 1
+    },
+    {
+      "eventId": "864cf724-9d02-4748-8dad-ef9c18d2b400",
+      "slotCount": 1
+    },
+    {
+      "eventId": "4d6c72a8-dd7a-464b-9c76-be83f392dea3",
+      "slotCount": 1
+    },
+    {
+      "eventId": "61ec4b26-1820-432f-96dd-106f858573dd",
+      "slotCount": 1
+    },
+    {
+      "eventId": "4b62d0c3-32de-44b9-94dc-eae2a5bb38b1",
+      "slotCount": 1
+    },
+    {
+      "eventId": "573be9d7-a7a7-4194-8c47-2f39e441e389",
+      "slotCount": 1
+    },
+    {
+      "eventId": "35c4e9fa-ce29-40a3-955b-06cc7f25960c",
+      "slotCount": 1
+    },
+    {
+      "eventId": "e2cc377d-94ca-41cc-b9b3-2e68a6198f58",
+      "slotCount": 1
+    }
+  ],
+  "samples": [
+    {
+      "slotId": "099c49ca-4ff5-4035-9344-2689b25f19a5",
+      "eventId": "21a822e1-a5bf-4a04-8936-07d6be37d73c",
+      "djName": "BEN STERUNG B2B AHMED SPINS",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "84b983e3-06af-4150-8311-c8cd736200d6"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "0e43227f-ec98-4755-a500-38ffc3d1a2b6",
+      "eventId": "1ea8d6bd-a684-423f-b70a-c75f7bda64c1",
+      "djName": "72Blue b2b S2",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "e83a286f-e315-41a4-801f-e72c3458e755"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "1b5f6634-f780-4291-97d9-bb2185893e67",
+      "eventId": "21a822e1-a5bf-4a04-8936-07d6be37d73c",
+      "djName": "BEN STERUNG B2B ROSSI.",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "80ab1dde-f706-49d5-a3fa-5b7a089e0ed6"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "1ba715ad-5459-45c9-8be8-e816ca0a1d61",
+      "eventId": "2e378ca0-0598-4880-be57-a4ef408acba4",
+      "djName": "SIMONNE VITULLO B2B SHERRY",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "19cd14b6-49de-421e-9ab8-1719b36bc130"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "1d0930a7-91d7-4be4-8754-3062820e5e1e",
+      "eventId": "64fd1d64-bfb6-4de0-90bd-f8eeace94bc6",
+      "djName": "銀製品 AGPROD B2B OUUUUUU",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "1320d70d-d727-453e-81d4-f8f1ad7d1b81"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "27a3a679-7dd5-4c3e-be5e-688ac5d41a01",
+      "eventId": "6168fd10-cb49-439d-bfac-5e4bf71b8deb",
+      "djName": "HECTOR OAKS B2B SPFDJ",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "17fcc881-fd17-4b65-94ac-52a47012ca34"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "29d0d228-589f-4db5-bc78-73701193c897",
+      "eventId": "579cd698-b0fb-4e30-8c85-19fc659161a1",
+      "djName": "HI-LO B2B TESTPILOT",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "0aaa3610-79bc-4cf1-8f67-a55160a2291a"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "2eead06c-f2d6-4c58-836a-5458f92a8c7e",
+      "eventId": "20c60449-35da-4b9f-8699-7590da12f3fb",
+      "djName": "EBANGISSO B2B TOM ENZY",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "d346de9e-4f60-40b8-b0b3-39b50dd34289"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "3263964b-9f20-498d-aadb-468c0d517dbd",
+      "eventId": "7aef4ad3-e88c-4c9d-8d18-a410d3c53bc1",
+      "djName": "KARLIE B3B iLT1K B3B YAAT",
+      "before": {
+        "djId": "cc1284ce-104f-42b3-b3aa-6ef6706785c7",
+        "djIds": [
+          "cc1284ce-104f-42b3-b3aa-6ef6706785c7"
+        ]
+      },
+      "after": {
+        "djId": "cc1284ce-104f-42b3-b3aa-6ef6706785c7",
+        "djIds": [
+          "cc1284ce-104f-42b3-b3aa-6ef6706785c7",
+          "f99a6986-d09d-4cd7-8578-e50eeb2decfe"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "3eaf4ca4-f14d-4c15-a60a-29d152d02826",
+      "eventId": "e3d3957b-085c-443d-8e29-4864a64cb8c4",
+      "djName": "HI-LO B2B LAYTON GIORDANI",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "645c3214-1f8e-48ae-9632-3ea5051daeb0"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "4173144e-acf9-4d47-85e5-16844308910f",
+      "eventId": "346ade44-3df4-4368-9096-b04430c3a663",
+      "djName": "Ben Nicky presents Xtreme B2B Sub Zero Project",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "cff233aa-71ba-40ba-a42b-c85bde1f799a"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "4728d5f8-9064-4e8d-a5db-f38200bcc83d",
+      "eventId": "b10d8a5d-95eb-46a1-a924-ca1646e077e3",
+      "djName": "EXCISION DETOX B2B LIQUID STRANGER",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "b55eeb9f-ac6c-4d15-b6eb-c1b33ca769c9"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "4b541c1a-da32-4bca-93b0-b0ffd4465fd6",
+      "eventId": "2e378ca0-0598-4880-be57-a4ef408acba4",
+      "djName": "KALIN BROTHERS B2B RHUM G",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "3b13fcd7-5648-4219-ab03-0626f35a57cf"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "5d50d7d1-0ab6-4f92-baa5-032be9322fb0",
+      "eventId": "da6dba2b-edec-4f3d-8a2f-da718107b2d9",
+      "djName": "Daybreak Session: Antdot b2b Maz",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "93cba111-fbbf-4375-9e59-cc5bef7cf384"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "6b6a3a79-9673-4ca4-8ae7-5ca0c147e7d4",
+      "eventId": "8c678148-83ea-445a-823c-772de667cefc",
+      "djName": "CLSTR 56 (TERRY ZHONG PRES) B2B CHIYOU",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "b44e3d5f-3082-41f4-ba30-4946c1ca8461"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "74dccc2a-5cc2-4cd1-8782-2a99e19d46f1",
+      "eventId": "2c36f0b3-6dbc-464e-8a6c-6aa5d78cb5fd",
+      "djName": "Yumil Leafe b2b Khazed",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "4f2640f6-5583-49f4-aeba-ae2480872802"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "75621a43-a039-49c3-9ec3-ccbccb45def2",
+      "eventId": "ab7d85ea-7c56-4f7a-9568-666dc475aa1d",
+      "djName": "HI-LO b2b Maddix",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "6361efbe-bf94-4585-a6f7-d89b5a9f7ad8"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "79f21ba4-d6a7-41c6-a955-66106bd84464",
+      "eventId": "e3d3957b-085c-443d-8e29-4864a64cb8c4",
+      "djName": "THIERRY VONDERWARTH B2B JAN V",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "08e8ee6d-32c4-44f2-a301-6a1460d8510c"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "7aba8b90-2b57-4f8c-9995-662b56493b48",
+      "eventId": "32b234ea-90e4-4bd6-ab88-86e17cec4f2b",
+      "djName": "Rockefellababe b2b Nayla",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "9ea2a143-34b2-4f36-aace-b0dee793bbde"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "7c5f1353-52e0-4477-bd4e-8ff5bd3762a9",
+      "eventId": "25764286-639b-4c1f-bc43-22a4e5c62093",
+      "djName": "The Fishhouse B2B Carol",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "66b45b2c-f638-4108-af68-10651989fc17"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "887f4d1b-cae0-499d-ba31-80499282cf1c",
+      "eventId": "864cf724-9d02-4748-8dad-ef9c18d2b400",
+      "djName": "FLAMINGO EN TUTU B2B LA CATALINA",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "4352d792-f1a7-46f5-b8de-da29df0247d9"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "9c9aedf1-13b1-4582-888d-33c33bdd733d",
+      "eventId": "579cd698-b0fb-4e30-8c85-19fc659161a1",
+      "djName": "ENDLESS SUMMER SAM FELDT B2B JONAS BLUE",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "4972470c-4f9e-44c4-ab2b-48e17023eac9"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "9ce1a813-88a8-4fe9-b64c-94ed7a504331",
+      "eventId": "e3d3957b-085c-443d-8e29-4864a64cb8c4",
+      "djName": "DR USHUU B2B IVORY",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "60646cc4-a999-48a5-ae40-fed72d94f7e4"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "a9cd689e-848d-441b-b305-64939a7a12ad",
+      "eventId": "32b234ea-90e4-4bd6-ab88-86e17cec4f2b",
+      "djName": "HI-LO B2B Eli Brown",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "b085d8fa-76eb-4b04-b766-8a420edaf009"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "b42d0641-f461-4f83-bc21-655681d6a6c4",
+      "eventId": "4d6c72a8-dd7a-464b-9c76-be83f392dea3",
+      "djName": "HI-LO b2b Eli Brown",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "b085d8fa-76eb-4b04-b766-8a420edaf009"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "b5c6985b-041e-4a1c-9da2-9904685292ea",
+      "eventId": "61ec4b26-1820-432f-96dd-106f858573dd",
+      "djName": "Adrián Mills B2B Cloudy",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "30da2823-35d3-40d2-bab8-df7b4f48f0ae"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "c5c94011-f523-4f1f-b39a-73296f86062e",
+      "eventId": "4b62d0c3-32de-44b9-94dc-eae2a5bb38b1",
+      "djName": "IVY KST B2B MANUSHK",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "4d698d29-893c-4013-8fd5-57c5d41884ea"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "c63ef053-3475-459d-adc4-5e4d533cadf0",
+      "eventId": "32b234ea-90e4-4bd6-ab88-86e17cec4f2b",
+      "djName": "Daybreak: Arielle Free b2b Sam Divine",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "8d1221d1-e801-47af-98d3-5e1c567f066a"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "cd5d5337-63c5-4964-8c4f-8b5c7cf6a6eb",
+      "eventId": "573be9d7-a7a7-4194-8c47-2f39e441e389",
+      "djName": "VANDALROCK B2B GLORY",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "8db78cf2-53a3-44b7-b160-30d151896cae"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "e42addb1-9ccc-4709-98f5-7065e87dadad",
+      "eventId": "25764286-639b-4c1f-bc43-22a4e5c62093",
+      "djName": "Inndive B2B Bewav",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "d1f0745e-f3e6-4bea-a2b7-9e8d0f0da7fa"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "eabb9466-90a1-400a-8ac1-b921b34e3252",
+      "eventId": "21a822e1-a5bf-4a04-8936-07d6be37d73c",
+      "djName": "BEN STERUNG B2B BELTRAN",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "03e73017-0fe7-4754-a887-c312f33c615e"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "f4142ad6-34a4-4d14-a0c6-de58e9dcaadd",
+      "eventId": "35c4e9fa-ce29-40a3-955b-06cc7f25960c",
+      "djName": "Endless Summer: Sam Feldt B2B Jonas Blue",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "4972470c-4f9e-44c4-ab2b-48e17023eac9"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "fda2564e-af74-4b6c-9438-5ed011086967",
+      "eventId": "6168fd10-cb49-439d-bfac-5e4bf71b8deb",
+      "djName": "HI-LO B2B REBŪKE",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "434b3cfa-a054-4c12-a111-a09449163ec1"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "ffd81966-25c2-4c48-b8f5-6798ef579656",
+      "eventId": "e2cc377d-94ca-41cc-b9b3-2e68a6198f58",
+      "djName": "KIËSTO B2B AMn.",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": null,
+        "djIds": [
+          "b0365da5-4422-43ce-ad17-9bd92dcf8e7d"
+        ]
+      },
+      "appliedCount": 1
+    }
+  ]
+}

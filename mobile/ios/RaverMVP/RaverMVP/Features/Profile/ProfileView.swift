@@ -34,7 +34,7 @@ struct ProfileView: View {
         NavigationStack {
             Group {
                 if viewModel.isLoading && viewModel.profile == nil {
-                    ProgressView("加载中...")
+                    ProgressView(L("加载中...", "Loading..."))
                 } else if let profile = viewModel.profile {
                     ScrollView {
                         VStack(spacing: 14) {
@@ -55,16 +55,16 @@ struct ProfileView: View {
                             )
 
                             ProfileRecentCheckinsCard(
-                                title: "我的近期打卡",
+                                title: L("我的近期打卡", "My Recent Check-ins"),
                                 checkins: viewModel.recentCheckins,
-                                emptyText: "去发现页完成活动或 DJ 打卡，记录会显示在这里。"
+                                emptyText: L("去发现页完成活动或 DJ 打卡，记录会显示在这里。", "Complete event or DJ check-ins from Discover. Records will appear here.")
                             ) {
                                 showMyCheckins = true
                             }
 
                             profileQuickActions
 
-                            Picker("内容", selection: $viewModel.selectedSection) {
+                            Picker(LL("内容"), selection: $viewModel.selectedSection) {
                                 ForEach(ProfileViewModel.Section.allCases) { section in
                                     Text(section.title).tag(section)
                                 }
@@ -80,7 +80,7 @@ struct ProfileView: View {
                         await viewModel.refreshSection()
                     }
                 } else {
-                    ContentUnavailableView("资料加载失败", systemImage: "person.crop.circle.badge.exclam")
+                    ContentUnavailableView(L("资料加载失败", "Failed to Load Profile"), systemImage: "person.crop.circle.badge.exclam")
                 }
             }
             .background(RaverTheme.background)
@@ -92,7 +92,7 @@ struct ProfileView: View {
                         Button {
                             showEditProfile = true
                         } label: {
-                            Label("编辑", systemImage: "square.and.pencil")
+                            Label(L("编辑", "Edit"), systemImage: "square.and.pencil")
                         }
                     }
                 }
@@ -159,11 +159,11 @@ struct ProfileView: View {
                     }
                 }
             }
-            .alert("提示", isPresented: Binding(
+            .alert(L("提示", "Notice"), isPresented: Binding(
                 get: { viewModel.error != nil },
                 set: { if !$0 { viewModel.error = nil } }
             )) {
-                Button("确定", role: .cancel) {}
+                Button(L("确定", "OK"), role: .cancel) {}
             } message: {
                 Text(viewModel.error ?? "")
             }
@@ -173,28 +173,28 @@ struct ProfileView: View {
     private var profileQuickActions: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("快捷入口")
+                Text(L("快捷入口", "Quick Actions"))
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
 
                 Button {
                     selectedProfileDestination = .myPublishes
                 } label: {
-                    quickActionRow(title: "我的发布", icon: "square.stack.3d.up")
+                    quickActionRow(title: L("我的发布", "My Posts"), icon: "square.stack.3d.up")
                 }
                 .buttonStyle(.plain)
 
                 Button {
                     showPublishEvent = true
                 } label: {
-                    quickActionRow(title: "发布活动", icon: "calendar.badge.plus")
+                    quickActionRow(title: L("发布活动", "Publish Event"), icon: "calendar.badge.plus")
                 }
                 .buttonStyle(.plain)
 
                 Button {
                     showUploadSet = true
                 } label: {
-                    quickActionRow(title: "上传 Set", icon: "square.and.arrow.up")
+                    quickActionRow(title: L("上传 Set", "Upload Set"), icon: "square.and.arrow.up")
                 }
                 .buttonStyle(.plain)
             }
@@ -220,19 +220,19 @@ struct ProfileView: View {
         switch viewModel.selectedSection {
         case .recent:
             if viewModel.recentPosts.isEmpty {
-                ContentUnavailableView("还没有动态", systemImage: "square.and.pencil")
+                ContentUnavailableView(LL("还没有动态"), systemImage: "square.and.pencil")
             } else {
                 feedList(viewModel.recentPosts, actionAt: nil)
             }
         case .likes:
             if viewModel.likedItems.isEmpty {
-                ContentUnavailableView("还没有点赞记录", systemImage: "heart")
+                ContentUnavailableView(LL("还没有点赞记录"), systemImage: "heart")
             } else {
                 feedList(viewModel.likedItems.map(\.post), actionAt: Dictionary(uniqueKeysWithValues: viewModel.likedItems.map { ($0.post.id, $0.actionAt) }))
             }
         case .reposts:
             if viewModel.repostedItems.isEmpty {
-                ContentUnavailableView("还没有转发记录", systemImage: "arrow.2.squarepath")
+                ContentUnavailableView(LL("还没有转发记录"), systemImage: "arrow.2.squarepath")
             } else {
                 feedList(viewModel.repostedItems.map(\.post), actionAt: Dictionary(uniqueKeysWithValues: viewModel.repostedItems.map { ($0.post.id, $0.actionAt) }))
             }
@@ -246,7 +246,7 @@ struct ProfileView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     if let actionAt,
                        let at = actionAt[post.id] {
-                        Text("操作于 \(at.feedTimeText)")
+                        Text(L("操作于 \(at.feedTimeText)", "Action at \(at.feedTimeText)"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                             .padding(.horizontal, 4)
@@ -326,10 +326,10 @@ struct ProfileHeaderCard<Actions: View>: View {
             }
 
             HStack(spacing: 24) {
-                stat("动态", value: profile.postsCount)
-                stat("粉丝", value: profile.followersCount, onTap: onFollowersTap)
-                stat("关注", value: profile.followingCount, onTap: onFollowingTap)
-                stat("好友", value: profile.friendsCount, onTap: onFriendsTap)
+                stat(L("动态", "Posts"), value: profile.postsCount)
+                stat(L("粉丝", "Followers"), value: profile.followersCount, onTap: onFollowersTap)
+                stat(L("关注", "Following"), value: profile.followingCount, onTap: onFollowingTap)
+                stat(L("好友", "Friends"), value: profile.friendsCount, onTap: onFriendsTap)
             }
 
             actions()
@@ -457,7 +457,7 @@ struct ProfileRecentCheckinsCard: View {
                         .font(.headline)
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer()
-                    Button("查看全部") {
+                    Button(LL("查看全部")) {
                         onShowAll()
                     }
                     .font(.subheadline.weight(.semibold))
@@ -502,28 +502,60 @@ struct ProfileRecentCheckinsCard: View {
 
     private func checkinTitle(_ item: WebCheckin) -> String {
         if item.type == "event" {
-            return item.event?.name ?? "活动打卡"
+            if let event = item.event {
+                if let nameI18n = event.nameI18n {
+                    let localized = nameI18n.text(for: AppLanguagePreference.current.effectiveLanguage)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !localized.isEmpty { return localized }
+                }
+                let fallback = event.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !fallback.isEmpty { return fallback }
+            }
+            return L("活动打卡", "Event Check-in")
         }
-        return item.dj?.name ?? "DJ 打卡"
+        return item.dj?.name ?? L("DJ 打卡", "DJ Check-in")
     }
 
     private func checkinSubtitle(_ item: WebCheckin) -> String {
         let location: String = {
             if let event = item.event {
+                if let locationI18n = event.locationI18n {
+                    let localized = locationI18n.text(for: AppLanguagePreference.current.effectiveLanguage)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !localized.isEmpty {
+                        return localized
+                    }
+                }
+
+                let localizedCountry: String? = {
+                    if let countryI18n = event.countryI18n {
+                        let localized = countryI18n.text(for: AppLanguagePreference.current.effectiveLanguage)
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        return localized.isEmpty ? nil : localized
+                    }
+                    return nil
+                }()
                 let text = [event.city, event.country]
                     .compactMap { value in
                         guard let value, !value.isEmpty else { return nil }
                         return value
                     }
                     .joined(separator: " · ")
-                return text.isEmpty ? "现场记录" : text
+                let localizedText = [event.city, localizedCountry]
+                    .compactMap { value in
+                        guard let value, !value.isEmpty else { return nil }
+                        return value
+                    }
+                    .joined(separator: " · ")
+                if !localizedText.isEmpty { return localizedText }
+                return text.isEmpty ? L("现场记录", "Live Record") : text
             }
             if let country = item.dj?.country, !country.isEmpty {
                 return country
             }
-            return "现场记录"
+            return L("现场记录", "Live Record")
         }()
-        return "\(item.attendedAt.formatted(date: .abbreviated, time: .omitted)) · \(location)"
+        return "\(item.attendedAt.appLocalizedYMDText()) · \(location)"
     }
 }
 

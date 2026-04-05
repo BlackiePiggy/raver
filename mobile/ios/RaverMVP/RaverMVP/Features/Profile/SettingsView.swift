@@ -6,111 +6,111 @@ struct SettingsView: View {
     var body: some View {
         List {
                 // 账号设置
-                Section("账号") {
+                Section(L("账号", "Account")) {
                     NavigationLink {
-                        Text("编辑资料")
+                        Text(L("编辑资料", "Edit Profile"))
                     } label: {
-                        Label("编辑资料", systemImage: "person.circle")
+                        Label(L("编辑资料", "Edit Profile"), systemImage: "person.circle")
                     }
 
                     NavigationLink {
-                        Text("账号安全")
+                        Text(L("账号安全", "Account Security"))
                     } label: {
-                        Label("账号安全", systemImage: "lock.shield")
+                        Label(L("账号安全", "Account Security"), systemImage: "lock.shield")
                     }
 
                     NavigationLink {
-                        Text("隐私设置")
+                        Text(L("隐私设置", "Privacy Settings"))
                     } label: {
-                        Label("隐私设置", systemImage: "hand.raised")
+                        Label(L("隐私设置", "Privacy Settings"), systemImage: "hand.raised")
                     }
                 }
 
                 // 通知设置
-                Section("通知") {
+                Section(L("通知", "Notifications")) {
                     NavigationLink {
-                        Text("推送通知")
+                        Text(L("推送通知", "Push Notifications"))
                     } label: {
-                        Label("推送通知", systemImage: "bell")
+                        Label(L("推送通知", "Push Notifications"), systemImage: "bell")
                     }
 
                     NavigationLink {
-                        Text("消息提醒")
+                        Text(L("消息提醒", "Message Alerts"))
                     } label: {
-                        Label("消息提醒", systemImage: "message")
+                        Label(L("消息提醒", "Message Alerts"), systemImage: "message")
                     }
                 }
 
                 // 内容偏好
-                Section("内容偏好") {
+                Section(L("内容偏好", "Content Preferences")) {
                     NavigationLink {
-                        Text("兴趣标签")
+                        Text(L("兴趣标签", "Interest Tags"))
                     } label: {
-                        Label("兴趣标签", systemImage: "tag")
+                        Label(L("兴趣标签", "Interest Tags"), systemImage: "tag")
                     }
 
                     NavigationLink {
-                        Text("语言设置")
+                        LanguageSettingsView()
                     } label: {
-                        Label("语言设置", systemImage: "globe")
+                        Label(L("语言设置", "Language"), systemImage: "globe")
                     }
 
                     NavigationLink {
-                        Text("内容过滤")
+                        Text(L("内容过滤", "Content Filter"))
                     } label: {
-                        Label("内容过滤", systemImage: "eye.slash")
+                        Label(L("内容过滤", "Content Filter"), systemImage: "eye.slash")
                     }
                 }
 
                 // 数据与存储
-                Section("数据与存储") {
+                Section(L("数据与存储", "Data & Storage")) {
                     NavigationLink {
-                        Text("缓存管理")
+                        Text(L("缓存管理", "Cache Management"))
                     } label: {
-                        Label("缓存管理", systemImage: "externaldrive")
+                        Label(L("缓存管理", "Cache Management"), systemImage: "externaldrive")
                     }
 
                     NavigationLink {
-                        Text("数据使用")
+                        Text(L("数据使用", "Data Usage"))
                     } label: {
-                        Label("数据使用", systemImage: "chart.bar")
+                        Label(L("数据使用", "Data Usage"), systemImage: "chart.bar")
                     }
 
                     NavigationLink {
-                        Text("下载设置")
+                        Text(L("下载设置", "Download Settings"))
                     } label: {
-                        Label("下载设置", systemImage: "arrow.down.circle")
+                        Label(L("下载设置", "Download Settings"), systemImage: "arrow.down.circle")
                     }
                 }
 
                 // 关于
-                Section("关于") {
+                Section(L("关于", "About")) {
                     NavigationLink {
-                        Text("帮助中心")
+                        Text(L("帮助中心", "Help Center"))
                     } label: {
-                        Label("帮助中心", systemImage: "questionmark.circle")
+                        Label(L("帮助中心", "Help Center"), systemImage: "questionmark.circle")
                     }
 
                     NavigationLink {
-                        Text("服务条款")
+                        Text(L("服务条款", "Terms of Service"))
                     } label: {
-                        Label("服务条款", systemImage: "doc.text")
+                        Label(L("服务条款", "Terms of Service"), systemImage: "doc.text")
                     }
 
                     NavigationLink {
-                        Text("隐私政策")
+                        Text(L("隐私政策", "Privacy Policy"))
                     } label: {
-                        Label("隐私政策", systemImage: "hand.raised.shield")
+                        Label(L("隐私政策", "Privacy Policy"), systemImage: "hand.raised.shield")
                     }
 
                     NavigationLink {
-                        Text("关于我们")
+                        Text(L("关于我们", "About Us"))
                     } label: {
-                        Label("关于我们", systemImage: "info.circle")
+                        Label(L("关于我们", "About Us"), systemImage: "info.circle")
                     }
 
                     HStack {
-                        Text("版本")
+                        Text(L("版本", "Version"))
                         Spacer()
                         Text("1.0.0")
                             .foregroundStyle(RaverTheme.secondaryText)
@@ -122,14 +122,44 @@ struct SettingsView: View {
                     Button(role: .destructive) {
                         appState.logout()
                     } label: {
-                        Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
+                        Label(L("退出登录", "Log Out"), systemImage: "rectangle.portrait.and.arrow.right")
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
             }
             .scrollContentBackground(.hidden)
             .background(RaverTheme.background)
-            .navigationTitle("设置")
+            .navigationTitle(L("设置", "Settings"))
             .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct LanguageSettingsView: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        List {
+            Section(L("显示语言", "Display Language")) {
+                ForEach(AppLanguage.allCases) { language in
+                    Button {
+                        appState.setPreferredLanguage(language)
+                    } label: {
+                        HStack {
+                            Text(language.title)
+                            Spacer()
+                            if appState.preferredLanguage == language {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(RaverTheme.accent)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(RaverTheme.background)
+        .navigationTitle(L("语言设置", "Language"))
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

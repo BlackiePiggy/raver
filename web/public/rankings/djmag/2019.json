@@ -1,0 +1,508 @@
+{
+  "boardId": "djmag",
+  "year": 2019,
+  "source": "manual_update",
+  "updatedAt": "2026-04-03T13:35:51.155Z",
+  "entries": [
+    {
+      "rank": 1,
+      "name": "DIMITRI VEGAS & LIKE MIKE",
+      "entityId": "dcf69f80-d292-4890-a938-59990334cfe0"
+    },
+    {
+      "rank": 2,
+      "name": "MARTIN GARRIX",
+      "entityId": "76a3e1f3-a398-492d-92e0-8875d5494fce"
+    },
+    {
+      "rank": 3,
+      "name": "DAVID GUETTA",
+      "entityId": "2c20feac-42c6-4b53-831a-4bc4c453cda5"
+    },
+    {
+      "rank": 4,
+      "name": "ARMIN VAN BUUREN",
+      "entityId": "a4f3eb91-b58c-41c8-8aaf-79f4e29cefe4"
+    },
+    {
+      "rank": 5,
+      "name": "MARSHMELLO",
+      "entityId": "9a3c1172-44c1-46e7-8e14-2129e1f31d37"
+    },
+    {
+      "rank": 6,
+      "name": "DON DIABLO",
+      "entityId": "b44c8575-a548-4923-a5d6-6de75ca47ac5"
+    },
+    {
+      "rank": 7,
+      "name": "OLIVER HELDENS",
+      "entityId": "137c5341-cb7c-4e8f-b232-fe101b220ada"
+    },
+    {
+      "rank": 8,
+      "name": "TIËSTO",
+      "entityId": "782838a6-4b02-4708-8a25-7ed2d6b2578b"
+    },
+    {
+      "rank": 9,
+      "name": "AFROJACK",
+      "entityId": "92f3a388-efeb-4b1e-8615-0bf646b7120e"
+    },
+    {
+      "rank": 10,
+      "name": "STEVE AOKI",
+      "entityId": "27b3f238-350f-44cc-af9f-156a1cb2e711"
+    },
+    {
+      "rank": 11,
+      "name": "ALOK",
+      "entityId": "6327393c-03fe-4da5-95fc-049ccbc80ed1"
+    },
+    {
+      "rank": 12,
+      "name": "HARDWELL",
+      "entityId": "d05a5541-5ac6-434c-9460-9ad98b2d316b"
+    },
+    {
+      "rank": 13,
+      "name": "TIMMY TRUMPET",
+      "entityId": "1deda849-0e59-452e-9a6c-7ae91478ee60"
+    },
+    {
+      "rank": 14,
+      "name": "R3HAB",
+      "entityId": "6c06efdf-4afe-4c44-9e38-ea9632326c12"
+    },
+    {
+      "rank": 15,
+      "name": "KSHMR",
+      "entityId": "2ad518ec-0abf-463c-b103-6e1e83e63132"
+    },
+    {
+      "rank": 16,
+      "name": "DJ SNAKE",
+      "entityId": "73c4b7d4-3467-4e0e-86f8-bed5172cd86f"
+    },
+    {
+      "rank": 17,
+      "name": "ERIC PRYDZ",
+      "entityId": "c401a012-f9cc-4a6f-a7c1-33b5ff76a1fd"
+    },
+    {
+      "rank": 18,
+      "name": "W & W",
+      "entityId": "1dc24cd4-f0aa-401d-8ae4-e6dccdfeaeca"
+    },
+    {
+      "rank": 19,
+      "name": "CALVIN HARRIS",
+      "entityId": "9601daff-7fed-4919-bc5a-8c896ecb53e9"
+    },
+    {
+      "rank": 20,
+      "name": "LOST FREQUENCIES",
+      "entityId": "af930368-d13e-4e77-b277-de3ce6cf8c20"
+    },
+    {
+      "rank": 21,
+      "name": "SKRILLEX",
+      "entityId": "91aa5b7d-2c57-4c42-a66a-56881b261eb6"
+    },
+    {
+      "rank": 22,
+      "name": "ABOVE & BEYOND",
+      "entityId": "36f63c49-b308-4db8-9ab3-3ce90748af4e"
+    },
+    {
+      "rank": 23,
+      "name": "DVBBS",
+      "entityId": "109d5fdd-5465-4f51-a86b-1f1a09b6c05d"
+    },
+    {
+      "rank": 24,
+      "name": "NERVO",
+      "entityId": "f35b34aa-886b-4fa5-a2f1-e8731014d671"
+    },
+    {
+      "rank": 25,
+      "name": "QUINTINO",
+      "entityId": "1426d147-51ac-4974-bbf8-849879eb0c44"
+    },
+    {
+      "rank": 26,
+      "name": "THE CHAINSMOKERS",
+      "entityId": "820b04a9-db36-49e7-9530-cf953536ded5"
+    },
+    {
+      "rank": 27,
+      "name": "ALAN WALKER",
+      "entityId": "6003d579-2d3d-4d89-87ee-ba8e46b0760d"
+    },
+    {
+      "rank": 28,
+      "name": "VINAI",
+      "entityId": "b27e4cc0-613c-4460-97b6-1f0cadf4e6e8"
+    },
+    {
+      "rank": 29,
+      "name": "HEADHUNTERZ",
+      "entityId": "67da10d8-10f7-4163-a497-9e073d33d761"
+    },
+    {
+      "rank": 30,
+      "name": "FEDDE LE GRAND",
+      "entityId": "810f1c49-e062-45ce-9ea8-eb341de7736d"
+    },
+    {
+      "rank": 31,
+      "name": "VINI VICI",
+      "entityId": "0ab3f4d6-d565-462e-af12-bc7ac4ea6cdf"
+    },
+    {
+      "rank": 32,
+      "name": "UMMET OZCAN",
+      "entityId": "51d85413-0fee-4d92-8a34-07b949b91954"
+    },
+    {
+      "rank": 33,
+      "name": "ANGERFIST",
+      "entityId": "ee124de8-701a-4d04-8e6b-1f4b957a02b7"
+    },
+    {
+      "rank": 34,
+      "name": "BASSJACKERS",
+      "entityId": "dc55c644-6469-4fa0-a61f-d56c8a077618"
+    },
+    {
+      "rank": 35,
+      "name": "CARL COX",
+      "entityId": "f85186ec-61d4-48ed-ae52-2e5cc0cebf3c"
+    },
+    {
+      "rank": 36,
+      "name": "BLASTERJAXX",
+      "entityId": "6e2059ab-ec48-448d-9016-8bbb990d80d7"
+    },
+    {
+      "rank": 37,
+      "name": "NICKY ROMERO",
+      "entityId": "5f8ebeb5-f6fa-43e2-9342-58f6ab6b10f1"
+    },
+    {
+      "rank": 38,
+      "name": "WOLFPACK",
+      "entityId": "3428ad6f-d8e0-4d32-a06b-9193df7ea1d1"
+    },
+    {
+      "rank": 39,
+      "name": "ATB",
+      "entityId": "4f4f65b7-4a88-47a8-aef8-80b13f9fb35e"
+    },
+    {
+      "rank": 40,
+      "name": "KURA",
+      "entityId": "3c5c2f7c-7bb9-4ef8-87b1-725ce6e225d8"
+    },
+    {
+      "rank": 41,
+      "name": "DANNY AVILA",
+      "entityId": "b62757b0-8089-4aac-83f4-b5e5280d716f"
+    },
+    {
+      "rank": 42,
+      "name": "SWEDISH HOUSE MAFIA",
+      "entityId": "1445ea1e-3b68-414a-b850-b5e65af6270a"
+    },
+    {
+      "rank": 43,
+      "name": "TUJAMO",
+      "entityId": "dcfc3ec7-b24f-41d5-b05d-a526ca6bea39"
+    },
+    {
+      "rank": 44,
+      "name": "ALISON WONDERLAND",
+      "entityId": "5dd09b5f-47c4-4381-8580-92635f025543"
+    },
+    {
+      "rank": 45,
+      "name": "MARTIN JENSEN",
+      "entityId": "29c9a1e2-8519-43e0-a6b9-e25a1be21fcd"
+    },
+    {
+      "rank": 46,
+      "name": "CAT DEALERS",
+      "entityId": "d14ecac6-600b-4b76-ab01-ecd0dad26e35"
+    },
+    {
+      "rank": 47,
+      "name": "VINTAGE CULTURE",
+      "entityId": "4322376a-174d-4476-a1d1-40bde98af843"
+    },
+    {
+      "rank": 48,
+      "name": "ADAM BEYER",
+      "entityId": "3be1e003-66e4-4ec4-acfd-72b31fadb951"
+    },
+    {
+      "rank": 49,
+      "name": "MARIANA BO",
+      "entityId": "0786ca00-f5a9-46d2-88d1-6eff187ae102"
+    },
+    {
+      "rank": 50,
+      "name": "ZEDD",
+      "entityId": "a0e4fad1-e8ef-44d0-98c5-612ad1f3db3d"
+    },
+    {
+      "rank": 51,
+      "name": "MATTN",
+      "entityId": "ddc455ba-f03b-4c01-9465-84df569b2b73"
+    },
+    {
+      "rank": 52,
+      "name": "KYGO",
+      "entityId": "cd4c6e58-b073-4d57-a443-45c560dbfb6a"
+    },
+    {
+      "rank": 53,
+      "name": "CLAPTONE",
+      "entityId": "a5c6c02c-9dad-43c4-8a91-bd2a3eeb900b"
+    },
+    {
+      "rank": 54,
+      "name": "MIKE WILLIAMS",
+      "entityId": "d47b2fc5-84e0-4ccf-9819-2205246c1358"
+    },
+    {
+      "rank": 55,
+      "name": "DIEGO MIRANDA",
+      "entityId": "a3f21b23-a452-4e28-ad8d-54a07a09bbc3"
+    },
+    {
+      "rank": 56,
+      "name": "YVES V",
+      "entityId": "a3c3a45c-3a69-423d-af5a-39857a8d6673"
+    },
+    {
+      "rank": 57,
+      "name": "WILL SPARKS",
+      "entityId": "219bc40d-16c3-4cc2-81d9-8cd13d91b877"
+    },
+    {
+      "rank": 58,
+      "name": "STEVE ANGELLO",
+      "entityId": "a720ba62-799d-40b5-85a1-145faaf93069"
+    },
+    {
+      "rank": 59,
+      "name": "FERRY CORSTEN",
+      "entityId": "ed071c00-3ced-475a-82a1-2878c1eafc92"
+    },
+    {
+      "rank": 60,
+      "name": "NINA KRAVIZ",
+      "entityId": "512c0d49-5b91-49c0-a752-7e2280c94254"
+    },
+    {
+      "rank": 61,
+      "name": "ALESSO",
+      "entityId": "4198c014-6ec4-40ea-b38b-a44ea08cac0d"
+    },
+    {
+      "rank": 62,
+      "name": "BREATHE CAROLINA",
+      "entityId": "4d8ac11b-bb6f-4b53-bbd3-4a1d018692b3"
+    },
+    {
+      "rank": 63,
+      "name": "FISHER",
+      "entityId": "1ba398ee-8ff7-45d9-9f65-48efff5815b2"
+    },
+    {
+      "rank": 64,
+      "name": "ILLENIUM",
+      "entityId": "1566bc8f-9d6b-4a8a-9389-ca4aa5618f31"
+    },
+    {
+      "rank": 65,
+      "name": "DEORRO",
+      "entityId": "e44ba66d-a381-44d6-b2a8-2731aa9cd566"
+    },
+    {
+      "rank": 66,
+      "name": "RICHIE HAWTIN",
+      "entityId": "590370d5-d4e5-48cc-ae6d-3949a28f288f"
+    },
+    {
+      "rank": 67,
+      "name": "DIPLO",
+      "entityId": "387f1f06-b48c-4531-9b4c-2600f057171a"
+    },
+    {
+      "rank": 68,
+      "name": "DA TWEEKAZ",
+      "entityId": "bb9d377f-f4b1-4d13-a8e6-c8f611182335"
+    },
+    {
+      "rank": 69,
+      "name": "MISS K8",
+      "entityId": "6ea9b888-ea20-4611-a950-5c1f8a9fae6d"
+    },
+    {
+      "rank": 70,
+      "name": "3 ARE LEGEND",
+      "entityId": "95358c5c-8ce7-4625-870d-75ff999dca97"
+    },
+    {
+      "rank": 71,
+      "name": "DEADMAU5",
+      "entityId": "36a80704-e7f4-4b5b-a260-3f0cc066ac14"
+    },
+    {
+      "rank": 72,
+      "name": "CARTA",
+      "entityId": "b1fc7662-85e9-4542-859b-88fd57699c19"
+    },
+    {
+      "rank": 73,
+      "name": "CARL NUNES",
+      "entityId": "49ac113d-5314-4a5d-bc2d-57a0fd0cfbc6"
+    },
+    {
+      "rank": 74,
+      "name": "CHARLOTTE DE WITTE",
+      "entityId": "6f89fae0-160d-427e-a8df-826cadef2f08"
+    },
+    {
+      "rank": 75,
+      "name": "WARFACE",
+      "entityId": "c5374824-1d42-45d0-a7b1-4b9e2da29e97"
+    },
+    {
+      "rank": 76,
+      "name": "CEDRIC GERVAIS",
+      "entityId": "a7877ebc-3af1-4028-8d9f-c097c42bdeb8"
+    },
+    {
+      "rank": 77,
+      "name": "YELLOW CLAW",
+      "entityId": "a4bc3f31-1915-406b-8641-886158bcff65"
+    },
+    {
+      "rank": 78,
+      "name": "LUCAS & STEVE",
+      "entityId": "37f87153-6033-4fc5-b8ee-f1116f49fd43"
+    },
+    {
+      "rank": 79,
+      "name": "ANDY C",
+      "entityId": "28f2b068-2577-4346-988b-af8a7f4ddfe1"
+    },
+    {
+      "rank": 80,
+      "name": "PEGGY GOU",
+      "entityId": "214596f0-1db3-475f-a0db-6711a3f5914e"
+    },
+    {
+      "rank": 81,
+      "name": "DENIZ KOYU",
+      "entityId": "e9c6c160-4489-4eb7-9b67-c3c53298d8e7"
+    },
+    {
+      "rank": 82,
+      "name": "ROBIN SCHULZ",
+      "entityId": "89de74f3-9597-4a86-9141-7fbf8dd0b604"
+    },
+    {
+      "rank": 83,
+      "name": "VICETONE",
+      "entityId": "d06e381b-3e6f-49e8-a7bf-4a5283de7aca"
+    },
+    {
+      "rank": 84,
+      "name": "TOM & COLLINS",
+      "entityId": "b065869e-7fd5-4fdd-8041-e8548baee14b"
+    },
+    {
+      "rank": 85,
+      "name": "BORIS BREJCHA",
+      "entityId": "53f2aaa7-4d98-47c3-b769-fdb7a9491435"
+    },
+    {
+      "rank": 86,
+      "name": "MARCO CAROLA",
+      "entityId": "66bb2c51-5adc-4ba0-bd79-d887dcd111bf"
+    },
+    {
+      "rank": 87,
+      "name": "PAUL VAN DYK",
+      "entityId": "f555ac93-479f-469d-9ae9-10c09e7c0b54"
+    },
+    {
+      "rank": 88,
+      "name": "SOLARDO",
+      "entityId": "37a51e1c-2eb4-4ef6-ba90-106692b0b7b2"
+    },
+    {
+      "rank": 89,
+      "name": "THOMAS GOLD",
+      "entityId": "85625c9b-f2e6-40e4-bd58-5d0afbb61576"
+    },
+    {
+      "rank": 90,
+      "name": "BLACK COFFEE",
+      "entityId": "495c748a-7de2-433f-9544-e8adc6d91c76"
+    },
+    {
+      "rank": 91,
+      "name": "PAUL KALKBRENNER",
+      "entityId": "b85be4ff-dd49-4c37-b526-02af888bab1b"
+    },
+    {
+      "rank": 92,
+      "name": "DADDY'S GROOVE",
+      "entityId": "f13fcb28-1051-4c1e-83d7-52210a64aaea"
+    },
+    {
+      "rank": 93,
+      "name": "JULIAN JORDAN",
+      "entityId": "7aee89bd-9c4f-4c4d-82dc-42a6bb353f9a"
+    },
+    {
+      "rank": 94,
+      "name": "RAVE REPUBLIC",
+      "entityId": "64a0a4a3-b0b4-4d11-a30b-717fbb3aa2e3"
+    },
+    {
+      "rank": 95,
+      "name": "SUB ZERO PROJECT",
+      "entityId": "cff233aa-71ba-40ba-a42b-c85bde1f799a"
+    },
+    {
+      "rank": 96,
+      "name": "D.O.D",
+      "entityId": "434c001c-a444-4539-9d3c-a16d0cf09346"
+    },
+    {
+      "rank": 97,
+      "name": "HENRI PFR",
+      "entityId": "13a440ea-43ef-425d-809d-211b6941a2e5"
+    },
+    {
+      "rank": 98,
+      "name": "FLORIAN PICASSO",
+      "entityId": "67ad1ef7-09fe-40c3-891b-3563a3788e74"
+    },
+    {
+      "rank": 99,
+      "name": "SWANKY TUNES",
+      "entityId": "358c187b-7a87-4d52-aed2-9e72059eff47"
+    },
+    {
+      "rank": 100,
+      "name": "SOLOMUN",
+      "entityId": "571b8e98-1e8a-49cc-bbfe-ffac74ba774b"
+    }
+  ]
+}

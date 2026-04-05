@@ -6,6 +6,12 @@ enum AppRuntimeMode: String {
 }
 
 enum AppConfig {
+    enum DJAvatarSize {
+        case original
+        case medium
+        case small
+    }
+
     private static let localUserAvatarAssets: [String] = (1...24).map { String(format: "LocalUserAvatar%02d", $0) }
     private static let localGroupAvatarAssets: [String] = (1...12).map { String(format: "LocalGroupAvatar%02d", $0) }
 
@@ -36,6 +42,35 @@ enum AppConfig {
             return "\(base)\(value)"
         }
         return value
+    }
+
+    static func resolvedDJAvatarURLString(_ value: String?, size: DJAvatarSize = .original) -> String? {
+        guard let resolved = resolvedURLString(value), !resolved.isEmpty else { return nil }
+        guard size != .original else { return resolved }
+        guard var components = URLComponents(string: resolved),
+              let host = components.host?.lowercased() else {
+            return resolved
+        }
+
+        let pathLooksLikeDJMedia = components.path.lowercased().contains("/djs/")
+        if !isLikelyOssImageHost(host) && !pathLooksLikeDJMedia {
+            return resolved
+        }
+
+        let process: String
+        switch size {
+        case .original:
+            return resolved
+        case .medium:
+            process = "image/resize,m_fill,w_480,h_480/quality,q_88/format,webp"
+        case .small:
+            process = "image/resize,m_fill,w_160,h_160/quality,q_82/format,webp"
+        }
+
+        var items = components.queryItems?.filter { $0.name.lowercased() != "x-oss-process" } ?? []
+        items.append(URLQueryItem(name: "x-oss-process", value: process))
+        components.queryItems = items
+        return components.string ?? resolved
     }
 
     static func resolvedUserAvatarAssetName(
@@ -94,5 +129,18 @@ enum AppConfig {
         }
         let index = Int(hash % UInt64(pool.count))
         return pool[index]
+    }
+
+    private static func isLikelyOssImageHost(_ host: String) -> Bool {
+        if host == "aliyuncs.com" || host.hasSuffix(".aliyuncs.com") {
+            return true
+        }
+        let extraHosts = ProcessInfo.processInfo.environment["RAVER_OSS_IMAGE_HOSTS"]?
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty } ?? []
+        return extraHosts.contains(where: { suffix in
+            host == suffix || host.hasSuffix(".\(suffix)")
+        })
     }
 }

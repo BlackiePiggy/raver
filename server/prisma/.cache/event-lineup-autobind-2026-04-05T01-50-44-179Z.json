@@ -1,0 +1,1415 @@
+{
+  "startedAt": "2026-04-05T01:50:44.191Z",
+  "finishedAt": "2026-04-05T01:50:44.733Z",
+  "durationMs": 542,
+  "config": {
+    "dryRun": false,
+    "limit": null,
+    "eventId": null,
+    "batchSize": 1000,
+    "txChunk": 200
+  },
+  "totals": {
+    "totalSlots": 16642,
+    "scanned": 16642,
+    "touchedSlots": 836,
+    "appliedBindings": 1414,
+    "updatesWritten": 836,
+    "affectedEvents": 95
+  },
+  "topAffectedEvents": [
+    {
+      "eventId": "32b234ea-90e4-4bd6-ab88-86e17cec4f2b",
+      "slotCount": 47
+    },
+    {
+      "eventId": "8b3829ba-9cb5-4dfd-a55d-5810c67ea85c",
+      "slotCount": 45
+    },
+    {
+      "eventId": "787676c3-eef9-4f6a-9e4c-ae439eeb0da8",
+      "slotCount": 43
+    },
+    {
+      "eventId": "e7ce7d50-7875-43f6-a9f9-cd2ea7b912cb",
+      "slotCount": 31
+    },
+    {
+      "eventId": "6168fd10-cb49-439d-bfac-5e4bf71b8deb",
+      "slotCount": 28
+    },
+    {
+      "eventId": "aeca0fc2-7067-4d4f-89a6-15ef85d1eea5",
+      "slotCount": 28
+    },
+    {
+      "eventId": "28236c8b-8615-40fa-95f3-3aafda2df134",
+      "slotCount": 27
+    },
+    {
+      "eventId": "21a822e1-a5bf-4a04-8936-07d6be37d73c",
+      "slotCount": 25
+    },
+    {
+      "eventId": "346ade44-3df4-4368-9096-b04430c3a663",
+      "slotCount": 24
+    },
+    {
+      "eventId": "e2cc377d-94ca-41cc-b9b3-2e68a6198f58",
+      "slotCount": 20
+    },
+    {
+      "eventId": "7722342a-a654-4134-9b0f-f8a843092ca7",
+      "slotCount": 20
+    },
+    {
+      "eventId": "c6594185-0d83-45fe-abf5-7013d9b2bc4c",
+      "slotCount": 20
+    },
+    {
+      "eventId": "b6241110-ce39-4179-98d0-b54c57bd4428",
+      "slotCount": 20
+    },
+    {
+      "eventId": "61ec4b26-1820-432f-96dd-106f858573dd",
+      "slotCount": 18
+    },
+    {
+      "eventId": "47e3ef7b-7842-41b1-85ed-797869686607",
+      "slotCount": 17
+    },
+    {
+      "eventId": "0e3e6d01-c924-4f33-b17d-ff16cc71a2c1",
+      "slotCount": 16
+    },
+    {
+      "eventId": "579cd698-b0fb-4e30-8c85-19fc659161a1",
+      "slotCount": 15
+    },
+    {
+      "eventId": "4d6c72a8-dd7a-464b-9c76-be83f392dea3",
+      "slotCount": 15
+    },
+    {
+      "eventId": "a96ff15e-c445-408b-a88b-8c8afe9bd526",
+      "slotCount": 15
+    },
+    {
+      "eventId": "0391b74b-268d-4bc0-a78b-1f114272f18e",
+      "slotCount": 14
+    },
+    {
+      "eventId": "4b62d0c3-32de-44b9-94dc-eae2a5bb38b1",
+      "slotCount": 13
+    },
+    {
+      "eventId": "864cf724-9d02-4748-8dad-ef9c18d2b400",
+      "slotCount": 13
+    },
+    {
+      "eventId": "a8b831be-80d8-4a59-921f-aeed2822f992",
+      "slotCount": 13
+    },
+    {
+      "eventId": "35c4e9fa-ce29-40a3-955b-06cc7f25960c",
+      "slotCount": 11
+    },
+    {
+      "eventId": "b0563831-2f42-4425-b0cb-83abc52e7c86",
+      "slotCount": 11
+    },
+    {
+      "eventId": "b10d8a5d-95eb-46a1-a924-ca1646e077e3",
+      "slotCount": 10
+    },
+    {
+      "eventId": "ab7d85ea-7c56-4f7a-9568-666dc475aa1d",
+      "slotCount": 10
+    },
+    {
+      "eventId": "0bda20c0-bfad-47d3-9fc2-73038f79644c",
+      "slotCount": 10
+    },
+    {
+      "eventId": "af71c50a-c669-4454-9da2-94abc1460df3",
+      "slotCount": 9
+    },
+    {
+      "eventId": "2e378ca0-0598-4880-be57-a4ef408acba4",
+      "slotCount": 9
+    },
+    {
+      "eventId": "5314bab6-8f7e-4935-9b5a-857215a2c7d8",
+      "slotCount": 9
+    },
+    {
+      "eventId": "20c60449-35da-4b9f-8699-7590da12f3fb",
+      "slotCount": 9
+    },
+    {
+      "eventId": "708421e6-ea73-49e7-ad16-ef0c5e92960a",
+      "slotCount": 9
+    },
+    {
+      "eventId": "be87b197-a6f4-41b7-bbe9-42a8f9addd50",
+      "slotCount": 9
+    },
+    {
+      "eventId": "00e0d916-4752-46b7-9136-01382a658f13",
+      "slotCount": 8
+    },
+    {
+      "eventId": "79c8c8fd-f868-4d86-b02e-44581a1df704",
+      "slotCount": 8
+    },
+    {
+      "eventId": "ac05e890-3a2a-4197-a6cd-a0427f57729c",
+      "slotCount": 8
+    },
+    {
+      "eventId": "0c429a51-81ed-4053-b5b6-5e7885b16ccd",
+      "slotCount": 8
+    },
+    {
+      "eventId": "03f74dce-0da1-4fff-8057-48fd7571676a",
+      "slotCount": 7
+    },
+    {
+      "eventId": "e3d3957b-085c-443d-8e29-4864a64cb8c4",
+      "slotCount": 7
+    },
+    {
+      "eventId": "25764286-639b-4c1f-bc43-22a4e5c62093",
+      "slotCount": 6
+    },
+    {
+      "eventId": "f1cced9a-6a21-44cf-8244-bac4dec14148",
+      "slotCount": 6
+    },
+    {
+      "eventId": "b863abbf-1174-4516-93c1-ee6f5ef36719",
+      "slotCount": 6
+    },
+    {
+      "eventId": "1263b7fc-353c-4806-8fc3-07db887f5ecd",
+      "slotCount": 6
+    },
+    {
+      "eventId": "e09131cf-4233-46b3-8a78-8509fe32b16a",
+      "slotCount": 6
+    },
+    {
+      "eventId": "a02c2932-064c-49e5-8b1c-0994fed96a17",
+      "slotCount": 5
+    },
+    {
+      "eventId": "222306d8-50cc-4485-8816-2deb695bf630",
+      "slotCount": 5
+    },
+    {
+      "eventId": "db8972a8-c0d9-4749-9c3e-3b69ce0cb230",
+      "slotCount": 5
+    },
+    {
+      "eventId": "c18d007d-c4c6-4a45-b887-27d063dbe5b8",
+      "slotCount": 5
+    },
+    {
+      "eventId": "03969a51-597e-4ec6-8c46-10f45c8a4727",
+      "slotCount": 5
+    },
+    {
+      "eventId": "06d206a2-f2bf-42b6-ba15-27dba891c9c4",
+      "slotCount": 4
+    },
+    {
+      "eventId": "981b09d7-e8b3-417e-a5d5-6a4c4a70c076",
+      "slotCount": 4
+    },
+    {
+      "eventId": "855b704d-7c87-4b51-9905-8691f7b4ec02",
+      "slotCount": 4
+    },
+    {
+      "eventId": "e331514a-b14c-4315-8bb0-387ea19c17eb",
+      "slotCount": 4
+    },
+    {
+      "eventId": "1056d3b9-c2e9-4b0d-8bf8-590f0e7bd60a",
+      "slotCount": 4
+    },
+    {
+      "eventId": "1ea8d6bd-a684-423f-b70a-c75f7bda64c1",
+      "slotCount": 4
+    },
+    {
+      "eventId": "4a397b2e-6b8e-4c13-bd2c-0b5debf9b1b0",
+      "slotCount": 4
+    },
+    {
+      "eventId": "fcd28b27-d0c4-4bc0-9ff3-523929312a56",
+      "slotCount": 3
+    },
+    {
+      "eventId": "14d99e95-0bf6-4b7f-9775-8fc9a11863ce",
+      "slotCount": 3
+    },
+    {
+      "eventId": "b14d4ff2-e70f-4dab-a2b4-cb796a9995c4",
+      "slotCount": 3
+    },
+    {
+      "eventId": "69eacf9d-379e-4423-a569-675b6f8225a3",
+      "slotCount": 3
+    },
+    {
+      "eventId": "573be9d7-a7a7-4194-8c47-2f39e441e389",
+      "slotCount": 3
+    },
+    {
+      "eventId": "74e4e49f-ebf1-4bbe-bcca-044b09dc9d03",
+      "slotCount": 3
+    },
+    {
+      "eventId": "1d46f5dc-19b4-44b7-b2e9-5ac020c4a9e5",
+      "slotCount": 3
+    },
+    {
+      "eventId": "6ed8bd48-ed76-42aa-9f59-7412310352be",
+      "slotCount": 3
+    },
+    {
+      "eventId": "da6dba2b-edec-4f3d-8a2f-da718107b2d9",
+      "slotCount": 3
+    },
+    {
+      "eventId": "3df0d50e-3f57-4134-bd73-6769596bf426",
+      "slotCount": 3
+    },
+    {
+      "eventId": "fbfaea27-9f8b-4578-8ee5-32cfafad5de7",
+      "slotCount": 3
+    },
+    {
+      "eventId": "8dcd4024-b51a-415b-ace5-d9a3d2a57743",
+      "slotCount": 3
+    },
+    {
+      "eventId": "0577afc2-a362-4e0d-8856-ab01c338ba92",
+      "slotCount": 3
+    },
+    {
+      "eventId": "179ad9eb-b26d-4675-9b71-6c939a5e2635",
+      "slotCount": 3
+    },
+    {
+      "eventId": "7aef4ad3-e88c-4c9d-8d18-a410d3c53bc1",
+      "slotCount": 2
+    },
+    {
+      "eventId": "89406cf1-3c94-4f3f-b5a0-8167f8bcc345",
+      "slotCount": 2
+    },
+    {
+      "eventId": "a8e7692a-7a98-43f9-8625-086c014c7526",
+      "slotCount": 2
+    },
+    {
+      "eventId": "de5342fd-1971-42be-8bd8-7ff72147debd",
+      "slotCount": 2
+    },
+    {
+      "eventId": "2c36f0b3-6dbc-464e-8a6c-6aa5d78cb5fd",
+      "slotCount": 2
+    },
+    {
+      "eventId": "69b58914-6ec9-4955-b796-16ef4bbc633c",
+      "slotCount": 2
+    },
+    {
+      "eventId": "bb442b7e-ed5b-41ae-81d1-9f173fb2437a",
+      "slotCount": 2
+    },
+    {
+      "eventId": "ce08d747-59d0-4018-a28b-1f73dcfdb85b",
+      "slotCount": 2
+    },
+    {
+      "eventId": "27dec11c-4217-426e-b1dc-d4ce4b1a3040",
+      "slotCount": 1
+    },
+    {
+      "eventId": "95fc9227-f3a4-4021-857e-25e237f65db3",
+      "slotCount": 1
+    },
+    {
+      "eventId": "abc70d74-a9ce-4133-9c99-b549af8a7adc",
+      "slotCount": 1
+    },
+    {
+      "eventId": "c5341fd9-f2bf-4528-ba71-7c796a0e0617",
+      "slotCount": 1
+    },
+    {
+      "eventId": "e9629aa9-6449-428d-8a1f-cc35e32ca529",
+      "slotCount": 1
+    },
+    {
+      "eventId": "8dcf0293-d55d-42d9-b970-4dc13280b781",
+      "slotCount": 1
+    },
+    {
+      "eventId": "4f4fc780-ea84-4723-a160-0e766ac83a0c",
+      "slotCount": 1
+    },
+    {
+      "eventId": "c7d032b0-fe59-4581-a2c9-dd0a336d12c1",
+      "slotCount": 1
+    },
+    {
+      "eventId": "4c0bb9e7-3bb7-4693-b9cc-5617e64f52cb",
+      "slotCount": 1
+    },
+    {
+      "eventId": "73857818-3434-4010-be96-e8b759629ca6",
+      "slotCount": 1
+    },
+    {
+      "eventId": "7add5c83-88b9-4fe2-b171-4072fea513e9",
+      "slotCount": 1
+    },
+    {
+      "eventId": "1311d65b-0439-47a1-a2fb-8fc1aa0afb22",
+      "slotCount": 1
+    },
+    {
+      "eventId": "23728abc-6a6e-4bd2-b545-716ce3f124cf",
+      "slotCount": 1
+    },
+    {
+      "eventId": "89da84d7-9b3a-4af6-97bc-38a2b9dfbd18",
+      "slotCount": 1
+    },
+    {
+      "eventId": "6d074d52-2cb4-43a0-9107-f0d9ac25adcd",
+      "slotCount": 1
+    },
+    {
+      "eventId": "37a1a4d1-3083-4c65-88c2-0647aef536a3",
+      "slotCount": 1
+    }
+  ],
+  "samples": [
+    {
+      "slotId": "003d59a1-6e32-4ff5-91c7-cb705ec46d0b",
+      "eventId": "787676c3-eef9-4f6a-9e4c-ae439eeb0da8",
+      "djName": "SOUND RUSH",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "20558312-2099-4206-a849-42ce3c7a93c3",
+        "djIds": [
+          "20558312-2099-4206-a849-42ce3c7a93c3"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "00697162-1896-439e-83aa-f323dae99057",
+      "eventId": "35c4e9fa-ce29-40a3-955b-06cc7f25960c",
+      "djName": "Chee B2B Tsuruda",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "fef92950-f78d-49b2-b0de-719315bcb338",
+        "djIds": [
+          "fef92950-f78d-49b2-b0de-719315bcb338",
+          "8c81c6eb-4289-4268-af3f-daacee0ef9b1"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0070854d-34e3-441f-b249-3207257410f3",
+      "eventId": "21a822e1-a5bf-4a04-8936-07d6be37d73c",
+      "djName": "33 BELOW B2B MPH",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "5a91f900-afdf-42b1-9881-5de5c73ad804",
+        "djIds": [
+          "5a91f900-afdf-42b1-9881-5de5c73ad804",
+          "9ccbf3f2-1dd8-48db-ac31-f5a0d1d48061"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "00b98627-d693-44b3-b1cc-4c90532b2ae3",
+      "eventId": "a02c2932-064c-49e5-8b1c-0994fed96a17",
+      "djName": "HIGHUP B2B PH4NTAM",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "2916a6fe-6eed-4175-a850-18ca87444ade",
+        "djIds": [
+          "2916a6fe-6eed-4175-a850-18ca87444ade",
+          "55f9780c-fb21-4200-8290-4cb5f508cdcd"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "01219c74-317a-4161-80df-2d7427244114",
+      "eventId": "25764286-639b-4c1f-bc43-22a4e5c62093",
+      "djName": "Dubfire B2B Nicole Moudaber B2B Paco Osuna",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "f186c622-77e4-48d9-8493-40f29399b528",
+        "djIds": [
+          "f186c622-77e4-48d9-8493-40f29399b528",
+          "2bb32847-0cf7-444e-aec4-a4bc5fb387e8",
+          "8df6aec9-4669-458d-a0a4-d651fae088f0"
+        ]
+      },
+      "appliedCount": 3
+    },
+    {
+      "slotId": "01a6bd88-0f9b-4757-804d-1865f309dc1f",
+      "eventId": "579cd698-b0fb-4e30-8c85-19fc659161a1",
+      "djName": "ELIO RISO B3B ANDY PATE B3B ROD B",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "df9517f2-912d-40e7-af5c-b0369593af53",
+        "djIds": [
+          "df9517f2-912d-40e7-af5c-b0369593af53",
+          "686cabbc-5a61-4fb4-b337-94e3099b5c5d",
+          "baa97e5e-61ec-4ddc-a109-e12afcdd7238"
+        ]
+      },
+      "appliedCount": 3
+    },
+    {
+      "slotId": "02a50cc7-c1e2-4fc8-a3e6-03668045cf49",
+      "eventId": "e7ce7d50-7875-43f6-a9f9-cd2ea7b912cb",
+      "djName": "Vintage Culture B2B James Hype",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "4322376a-174d-4476-a1d1-40bde98af843",
+        "djIds": [
+          "4322376a-174d-4476-a1d1-40bde98af843",
+          "28a868f1-4e12-4802-835f-9c0ab1b5fc23"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "03654fd8-738c-4554-932c-584c72322286",
+      "eventId": "4b62d0c3-32de-44b9-94dc-eae2a5bb38b1",
+      "djName": "ABEL RAMOS B3B ALBERT NEVE B3B HAJJ",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "7f973a22-c324-4dbd-8897-48796757e1a4",
+        "djIds": [
+          "7f973a22-c324-4dbd-8897-48796757e1a4",
+          "f9c35c34-b1d2-44e6-a4ae-f39ffe710f1e",
+          "ee00ff96-74df-4b4e-b81b-c19f719138db"
+        ]
+      },
+      "appliedCount": 3
+    },
+    {
+      "slotId": "036ff3d0-5b3e-41bb-a11a-650fce7b0fe5",
+      "eventId": "6168fd10-cb49-439d-bfac-5e4bf71b8deb",
+      "djName": "DOMBRESKY B2B NOIZU",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "784fd581-a1b5-406c-aa66-f3fde2fb9160",
+        "djIds": [
+          "784fd581-a1b5-406c-aa66-f3fde2fb9160",
+          "5a32decf-025a-44bb-a462-76fdc44ff5f2"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "03cfc62c-6221-4f98-8ee1-b0c02d2f8255",
+      "eventId": "f1cced9a-6a21-44cf-8244-bac4dec14148",
+      "djName": "SM1LE B2B KZ BEATZ",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "e0815240-b479-49af-ba48-6898bf37d486",
+        "djIds": [
+          "e0815240-b479-49af-ba48-6898bf37d486",
+          "584d2a78-2951-4a68-89d3-9b65142dc143"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0432236a-4eb1-4280-ac32-5a8a40eca787",
+      "eventId": "32b234ea-90e4-4bd6-ab88-86e17cec4f2b",
+      "djName": "Matisse & Sadko b2b Third Party (1001 Recordings)",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "54485c8e-8441-4ffc-9a2d-a7410f96c5e3",
+        "djIds": [
+          "54485c8e-8441-4ffc-9a2d-a7410f96c5e3"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "051f8334-8418-48aa-853e-2266ef26f301",
+      "eventId": "47e3ef7b-7842-41b1-85ed-797869686607",
+      "djName": "KAIKAI",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "10318f1b-9589-489c-906c-af9241eb4bd7",
+        "djIds": [
+          "10318f1b-9589-489c-906c-af9241eb4bd7"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "054c5f3d-893d-4c17-ba1f-652043f724c3",
+      "eventId": "4b62d0c3-32de-44b9-94dc-eae2a5bb38b1",
+      "djName": "BAGHA B2B DECEIVER",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "7a30bca7-7b8b-4c6a-afeb-50c75df6d4c7",
+        "djIds": [
+          "7a30bca7-7b8b-4c6a-afeb-50c75df6d4c7",
+          "5510d17f-9d43-41e6-9826-151ad108dfef"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "05f738bf-57ba-4408-a369-4b06d1f96904",
+      "eventId": "0e3e6d01-c924-4f33-b17d-ff16cc71a2c1",
+      "djName": "DEADMAU5 B2B PENDULUM DJ SET",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "36a80704-e7f4-4b5b-a260-3f0cc066ac14",
+        "djIds": [
+          "36a80704-e7f4-4b5b-a260-3f0cc066ac14"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "06d753dc-4408-4169-b1f5-1f53af3d8db5",
+      "eventId": "03f74dce-0da1-4fff-8057-48fd7571676a",
+      "djName": "Oona Dahl B2B DJ Three",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "6b5e5d37-1932-4bb9-a706-fdcab1a79aeb",
+        "djIds": [
+          "6b5e5d37-1932-4bb9-a706-fdcab1a79aeb",
+          "7f8828a6-2959-4e90-96a7-7fd9ea5b61e6"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "06f8b6ee-566d-451a-be89-6502cc483b31",
+      "eventId": "61ec4b26-1820-432f-96dd-106f858573dd",
+      "djName": "Alatriste B2B Mara Santiago",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "281d4ace-3b7d-4053-89dc-c7b7c347e5f0",
+        "djIds": [
+          "281d4ace-3b7d-4053-89dc-c7b7c347e5f0",
+          "ec933c9a-9a37-412e-bb51-5dd75f920225"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "07402648-b36a-48f4-bcf2-3c7ba75a2e3b",
+      "eventId": "e2cc377d-94ca-41cc-b9b3-2e68a6198f58",
+      "djName": "Matroda B2B San Pacho",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "4cf45a8c-b3dd-43de-820d-82bd1c595f52",
+        "djIds": [
+          "4cf45a8c-b3dd-43de-820d-82bd1c595f52",
+          "062212ed-a136-43bc-914c-56e66cdffd9f"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "07555189-d5c7-4089-8c20-b597a516716e",
+      "eventId": "579cd698-b0fb-4e30-8c85-19fc659161a1",
+      "djName": "LUIGI MADONNA B2B ROBERTO CAPUANO",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "7fe34c8b-22d7-4bcd-8a15-ddb8570b3a8c",
+        "djIds": [
+          "7fe34c8b-22d7-4bcd-8a15-ddb8570b3a8c",
+          "f2bcdbaf-1289-4013-a6e3-2f924c282639"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "07a28485-25a7-4433-bdf1-296c62486f5c",
+      "eventId": "7722342a-a654-4134-9b0f-f8a843092ca7",
+      "djName": "7GRAMS",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "2cf64d4e-8cd2-4fa7-824d-37ed50b77e9e",
+        "djIds": [
+          "2cf64d4e-8cd2-4fa7-824d-37ed50b77e9e"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "07a6441b-fe58-416c-8f6e-e807b1bc07de",
+      "eventId": "aeca0fc2-7067-4d4f-89a6-15ef85d1eea5",
+      "djName": "MAD-R",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "f8adf2ff-62a6-47d2-844f-bb855d9116b4",
+        "djIds": [
+          "f8adf2ff-62a6-47d2-844f-bb855d9116b4"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "07b657f9-003d-4c58-a32a-ff46d7f9fe11",
+      "eventId": "fcd28b27-d0c4-4bc0-9ff3-523929312a56",
+      "djName": "SEANTRAX B2B KODY B2B KYLE",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "27615fc7-fe01-42a0-bf81-5fb9baa805c1",
+        "djIds": [
+          "27615fc7-fe01-42a0-bf81-5fb9baa805c1",
+          "a9db10a4-334d-4fd1-9f16-5ddbe1b8bc08",
+          "aa63bd3b-e301-40f2-a5bb-08ce021f6d02"
+        ]
+      },
+      "appliedCount": 3
+    },
+    {
+      "slotId": "07c6c5b3-4fba-410a-9b38-93600c36acff",
+      "eventId": "af71c50a-c669-4454-9da2-94abc1460df3",
+      "djName": "Franky Wah B2B Korolova",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "bf2f1712-7c70-4c28-9e25-79187fe98b57",
+        "djIds": [
+          "bf2f1712-7c70-4c28-9e25-79187fe98b57",
+          "6f9a2ef3-a0c1-4f12-802d-71de7a8de6b4"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "07ed4a07-4d1d-4dca-845e-6660c34025b1",
+      "eventId": "00e0d916-4752-46b7-9136-01382a658f13",
+      "djName": "BLOODTHINNERZ B2B DECIMATE",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "dfb3e3fb-64f7-4b49-89d3-41657fb481b7",
+        "djIds": [
+          "dfb3e3fb-64f7-4b49-89d3-41657fb481b7",
+          "6d9b3664-b968-4f13-8c13-50c163d8fa76"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "08458e72-025f-400c-aebd-d96594f96e28",
+      "eventId": "7722342a-a654-4134-9b0f-f8a843092ca7",
+      "djName": "OLIVE ANGUZ",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "39be03e4-ed6f-4ca4-9861-60e1d52e2cb9",
+        "djIds": [
+          "39be03e4-ed6f-4ca4-9861-60e1d52e2cb9"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "0853742a-6a51-4b8f-b058-0d1dac02f18c",
+      "eventId": "21a822e1-a5bf-4a04-8936-07d6be37d73c",
+      "djName": "MADDIX B2B BEN NICKY",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "6361efbe-bf94-4585-a6f7-d89b5a9f7ad8",
+        "djIds": [
+          "6361efbe-bf94-4585-a6f7-d89b5a9f7ad8",
+          "052d5c99-f74b-431b-9df7-c5fc515e3b6e"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "08646370-f41e-403f-9aa2-60fdbca5f24d",
+      "eventId": "27dec11c-4217-426e-b1dc-d4ce4b1a3040",
+      "djName": "SEAN TYAS",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "e771996a-7055-4da8-848d-4ae06469276a",
+        "djIds": [
+          "e771996a-7055-4da8-848d-4ae06469276a"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "086f4973-2098-4f4f-8526-9ee8a7741aa2",
+      "eventId": "14d99e95-0bf6-4b7f-9775-8fc9a11863ce",
+      "djName": "SURAJ B2B EUGGY",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "34566378-2331-4667-a89b-7db2de6148e2",
+        "djIds": [
+          "34566378-2331-4667-a89b-7db2de6148e2",
+          "1da1253c-9367-4812-b32b-fad4578cc488"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "08c1bd79-8852-4df0-8dba-37a36c04c32c",
+      "eventId": "787676c3-eef9-4f6a-9e4c-ae439eeb0da8",
+      "djName": "MEDUZA",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "86fddd5d-925b-4639-bcdb-b97a34149893",
+        "djIds": [
+          "86fddd5d-925b-4639-bcdb-b97a34149893"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "08ea8787-a9de-4cd9-8053-627bbca6e05e",
+      "eventId": "95fc9227-f3a4-4021-857e-25e237f65db3",
+      "djName": "Papa Bear B2B Jasper Loong",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "1c214ebe-b6ce-4b18-b583-62a99a1c1ce3",
+        "djIds": [
+          "1c214ebe-b6ce-4b18-b583-62a99a1c1ce3",
+          "4f7bbe3c-58e5-4930-bd47-969caefe7ce4"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "09c872e1-be08-4fb8-84cf-04e42b145efc",
+      "eventId": "7aef4ad3-e88c-4c9d-8d18-a410d3c53bc1",
+      "djName": "OBEAHMIX B2B FEATURZ",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "878f97f8-5f67-4b0c-bd93-e05f6d6647bd",
+        "djIds": [
+          "878f97f8-5f67-4b0c-bd93-e05f6d6647bd",
+          "9ccf85e1-3a60-4d80-8f72-595419b284cf"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "09f44ee5-1f1d-4216-9059-3bde72ec52f2",
+      "eventId": "4b62d0c3-32de-44b9-94dc-eae2a5bb38b1",
+      "djName": "GERU B2B MACIEL",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "d77e6dc4-abd0-4666-8f68-f8b39fe49ed2",
+        "djIds": [
+          "d77e6dc4-abd0-4666-8f68-f8b39fe49ed2",
+          "6849d675-4823-4234-9cfa-cdec26e4fd69"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0a52778c-2318-411b-b627-70a97a64670d",
+      "eventId": "6168fd10-cb49-439d-bfac-5e4bf71b8deb",
+      "djName": "SCEPTICZ B2B SVB",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "048a440e-7b76-4345-bd8b-3059b6f89dcd",
+        "djIds": [
+          "048a440e-7b76-4345-bd8b-3059b6f89dcd",
+          "aa4e3b54-3c9e-4180-8832-0bd9a4c2c2a9"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0a7082e6-6a71-4e3d-9d4e-a92246cea6b0",
+      "eventId": "06d206a2-f2bf-42b6-ba15-27dba891c9c4",
+      "djName": "NIO B2B W2",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "103a7c58-7166-4ea3-8bbe-a49086e7f208",
+        "djIds": [
+          "103a7c58-7166-4ea3-8bbe-a49086e7f208",
+          "d7a583dd-05ab-4a95-97fb-0ef2f2b6487e"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0acb41dd-8019-4b71-88c9-7e55da757409",
+      "eventId": "b0563831-2f42-4425-b0cb-83abc52e7c86",
+      "djName": "Vegas b2b Blazy",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "0e7c1f31-b38a-4a60-8f64-2c20edce3e70",
+        "djIds": [
+          "0e7c1f31-b38a-4a60-8f64-2c20edce3e70",
+          "00a9d6fb-951a-4d25-a0c2-e863b66a044a"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0b3343c8-f17c-43da-a381-343a409c1343",
+      "eventId": "03f74dce-0da1-4fff-8057-48fd7571676a",
+      "djName": "Marco Nobel B2B AVADOX",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "57421e29-1d2f-41e2-946d-cc34f8466ea0",
+        "djIds": [
+          "57421e29-1d2f-41e2-946d-cc34f8466ea0",
+          "65af98e6-aec5-46e2-932d-c74cde387f54"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0c24f38e-ed60-4f3b-9dfc-822aa7daf0f7",
+      "eventId": "b14d4ff2-e70f-4dab-a2b4-cb796a9995c4",
+      "djName": "Alan Fitzpatrick b2b wAFF",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "c3958dc0-ab8b-4ada-911e-7cefaa65e839",
+        "djIds": [
+          "c3958dc0-ab8b-4ada-911e-7cefaa65e839",
+          "678e896e-3202-4482-9179-973597274c7c"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0cf5a72b-1d52-4032-b775-2df139538beb",
+      "eventId": "787676c3-eef9-4f6a-9e4c-ae439eeb0da8",
+      "djName": "COLYN",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "11d84f9f-c306-4e34-b9d4-fe8a46276a99",
+        "djIds": [
+          "11d84f9f-c306-4e34-b9d4-fe8a46276a99"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "0d5f8bcf-1c60-4000-b3c9-f1e04f501ac1",
+      "eventId": "787676c3-eef9-4f6a-9e4c-ae439eeb0da8",
+      "djName": "TOPGREAT",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "d96eff40-c01a-44a0-95bd-e205ac6938d3",
+        "djIds": [
+          "d96eff40-c01a-44a0-95bd-e205ac6938d3"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "0d74990f-6a8c-480e-8c59-c71d0b110457",
+      "eventId": "8b3829ba-9cb5-4dfd-a55d-5810c67ea85c",
+      "djName": "WINSON",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "668584bb-db3f-4a9d-a2bb-afcbfba6aa83",
+        "djIds": [
+          "668584bb-db3f-4a9d-a2bb-afcbfba6aa83"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "0db05cf5-ca35-4522-b4db-3be2045eb0b2",
+      "eventId": "864cf724-9d02-4748-8dad-ef9c18d2b400",
+      "djName": "BLOND:ISH B2B VINTAGE CULTURE",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "9595c37e-0623-4f11-9de2-f33414ba695e",
+        "djIds": [
+          "9595c37e-0623-4f11-9de2-f33414ba695e",
+          "4322376a-174d-4476-a1d1-40bde98af843"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0dcfafcd-3d86-46f3-9363-3a7d77dd791c",
+      "eventId": "79c8c8fd-f868-4d86-b02e-44581a1df704",
+      "djName": "KOLOMBO B2B FRANBORTO LOSSI",
+      "before": {
+        "djId": "c1864f96-929b-4ccd-8f59-ff538aee10db",
+        "djIds": [
+          "c1864f96-929b-4ccd-8f59-ff538aee10db"
+        ]
+      },
+      "after": {
+        "djId": "c1864f96-929b-4ccd-8f59-ff538aee10db",
+        "djIds": [
+          "c1864f96-929b-4ccd-8f59-ff538aee10db",
+          "86fc44a3-459f-46e2-8050-06a43176c8da"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "0e3e6d02-42c1-47d6-a029-5217afff21ca",
+      "eventId": "b10d8a5d-95eb-46a1-a924-ca1646e077e3",
+      "djName": "JIQUI B2B SISTO",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "f6efa9f8-32a2-4329-be9e-e7fcad18481a",
+        "djIds": [
+          "f6efa9f8-32a2-4329-be9e-e7fcad18481a",
+          "22e569aa-081c-4199-8caf-06dd594c9c34"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0e41927b-b563-4e5f-9968-837fe51361da",
+      "eventId": "21a822e1-a5bf-4a04-8936-07d6be37d73c",
+      "djName": "BONTAN B2B CALUSSA",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "be5a7656-07be-41fc-875d-d8e91878b4ec",
+        "djIds": [
+          "be5a7656-07be-41fc-875d-d8e91878b4ec",
+          "e9f63160-db06-424b-bc7c-9a5c07504b40"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0ee9018b-9e88-44ef-a978-527cfc14bb96",
+      "eventId": "69eacf9d-379e-4423-a569-675b6f8225a3",
+      "djName": "Netsky B2B Andromedik",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "708a179f-961e-4a5d-9614-82670ccd44be",
+        "djIds": [
+          "708a179f-961e-4a5d-9614-82670ccd44be",
+          "8da687aa-b091-42f5-a993-18c073a9991d"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0f372c55-a96b-45b8-b75a-7114a7306b63",
+      "eventId": "a02c2932-064c-49e5-8b1c-0994fed96a17",
+      "djName": "ETWAS B2B SARAH ARMSTRONG",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "99ef6bb2-498e-4250-8e43-722623217c04",
+        "djIds": [
+          "99ef6bb2-498e-4250-8e43-722623217c04",
+          "e47b88fe-8698-494b-8625-37f460a61253"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0f7e6f29-6bd6-4532-a078-afbf70ac6db4",
+      "eventId": "346ade44-3df4-4368-9096-b04430c3a663",
+      "djName": "Riot Ten B2B Jessica Audiffred",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "212dbb62-6527-4b00-927a-45ba5a5fec23",
+        "djIds": [
+          "212dbb62-6527-4b00-927a-45ba5a5fec23",
+          "01971ca7-cae4-42c6-b6d7-224dfb8bf2a2"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0fcbe6aa-c2a9-498f-b476-a232e76a39e0",
+      "eventId": "6168fd10-cb49-439d-bfac-5e4bf71b8deb",
+      "djName": "OGENN B2B ONE TRACK BRAIN",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "8073e8e5-1356-4fd5-ba39-2ab8ef40abbe",
+        "djIds": [
+          "8073e8e5-1356-4fd5-ba39-2ab8ef40abbe",
+          "1b43a9a2-2165-4b47-8686-f6e33aa799e5"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0fd51408-c5ba-4686-a834-c76e1ddd9b19",
+      "eventId": "32b234ea-90e4-4bd6-ab88-86e17cec4f2b",
+      "djName": "Odymel b2b Pegassi",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "9cb8d7a9-3e0b-4906-a9c3-fe6a8fe6dbc5",
+        "djIds": [
+          "9cb8d7a9-3e0b-4906-a9c3-fe6a8fe6dbc5",
+          "7f20b01a-6da3-424e-8aa7-4fd44d0fa853"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "0fddfbc7-1f58-4039-a67d-0ad75cdda959",
+      "eventId": "28236c8b-8615-40fa-95f3-3aafda2df134",
+      "djName": "GARETH EMERY",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "9f4a5d25-3240-4757-ae9e-5592a2fdf7fa",
+        "djIds": [
+          "9f4a5d25-3240-4757-ae9e-5592a2fdf7fa"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "0fea3a26-d334-49b6-911b-0aaa39b05924",
+      "eventId": "f1cced9a-6a21-44cf-8244-bac4dec14148",
+      "djName": "ADAM BEYER B2B MAU P",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "3be1e003-66e4-4ec4-acfd-72b31fadb951",
+        "djIds": [
+          "3be1e003-66e4-4ec4-acfd-72b31fadb951",
+          "feb28236-60bc-4d11-b167-5279c3a84e3d"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "100d37cd-1429-4642-a60c-4c318a06a62b",
+      "eventId": "6168fd10-cb49-439d-bfac-5e4bf71b8deb",
+      "djName": "MURDËR B2B SAVAGERY",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "3edd0cf5-862f-4f57-b3ff-9cb5715c79f9",
+        "djIds": [
+          "3edd0cf5-862f-4f57-b3ff-9cb5715c79f9",
+          "1cc7851d-abcb-4c4e-95fb-3f78539d3602"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "107ec6a0-a34e-43a3-86c3-d609942a47c7",
+      "eventId": "21a822e1-a5bf-4a04-8936-07d6be37d73c",
+      "djName": "DEATH CODE B2B KAMI",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "61130dcc-ea50-4910-bba7-b6a376567662",
+        "djIds": [
+          "61130dcc-ea50-4910-bba7-b6a376567662",
+          "45fd2364-117b-47f0-9ca5-452361456d39"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "10a76201-c8f0-4ad4-8903-bc127d1aa4be",
+      "eventId": "21a822e1-a5bf-4a04-8936-07d6be37d73c",
+      "djName": "GREG MIKE B2B LARRY LOUD",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "b00bca38-897a-4c1e-aab5-ed2ae1c13e03",
+        "djIds": [
+          "b00bca38-897a-4c1e-aab5-ed2ae1c13e03",
+          "9d83c270-1067-4a2f-a09b-6dce886d0b79"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "1117aa0d-80cc-49af-91b3-8e2ab1cab10d",
+      "eventId": "32b234ea-90e4-4bd6-ab88-86e17cec4f2b",
+      "djName": "Suttlek b2b Revenja",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "ad62567d-8209-46bc-a06a-d76c7d7de066",
+        "djIds": [
+          "ad62567d-8209-46bc-a06a-d76c7d7de066",
+          "2bf562c7-b0a9-4111-929d-beb29f0ac5dd"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "119002f6-05bc-4a55-bc55-5ac201f76e91",
+      "eventId": "8b3829ba-9cb5-4dfd-a55d-5810c67ea85c",
+      "djName": "MARTIN X",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "149abcb9-b3d5-41e9-b001-1bb7cac9ad6b",
+        "djIds": [
+          "149abcb9-b3d5-41e9-b001-1bb7cac9ad6b"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "11b103e6-f259-4433-b535-49739741a1db",
+      "eventId": "8b3829ba-9cb5-4dfd-a55d-5810c67ea85c",
+      "djName": "YOUNG",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "02f487af-61af-4fa3-9539-5efd0bd69906",
+        "djIds": [
+          "02f487af-61af-4fa3-9539-5efd0bd69906"
+        ]
+      },
+      "appliedCount": 1
+    },
+    {
+      "slotId": "11f7bbba-113a-49c1-92b0-258d67713845",
+      "eventId": "af71c50a-c669-4454-9da2-94abc1460df3",
+      "djName": "Dirt Monkey B2B SubDocta",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "e003bb86-f343-4ac4-94b7-bd8659bb479a",
+        "djIds": [
+          "e003bb86-f343-4ac4-94b7-bd8659bb479a",
+          "3eb1d82a-36b1-4f45-ab90-d1db86126934"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "120de493-edb9-4ddf-85ed-8205e4063710",
+      "eventId": "89406cf1-3c94-4f3f-b5a0-8167f8bcc345",
+      "djName": "KayteK B2B Liwaa",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "9efc2a91-5052-4fba-9883-250c714fb070",
+        "djIds": [
+          "9efc2a91-5052-4fba-9883-250c714fb070",
+          "7f34b385-2f63-482b-9104-b7a3a895fc57"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "1225df1d-485e-4f3e-bb46-74d461ebc5f7",
+      "eventId": "4b62d0c3-32de-44b9-94dc-eae2a5bb38b1",
+      "djName": "ISAAC MAYA B2B AIOKAI",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "7c20dd53-c516-47d7-b09d-f051512ad0fd",
+        "djIds": [
+          "7c20dd53-c516-47d7-b09d-f051512ad0fd",
+          "ce8a90df-9204-44ae-853c-d8e3d1c5547c"
+        ]
+      },
+      "appliedCount": 2
+    },
+    {
+      "slotId": "122fb933-34c5-49cf-a5ed-19fc3f6a0015",
+      "eventId": "00e0d916-4752-46b7-9136-01382a658f13",
+      "djName": "FUNTCASE B2B VERSA",
+      "before": {
+        "djId": null,
+        "djIds": []
+      },
+      "after": {
+        "djId": "664b2846-4bba-4820-bac9-daef212482b1",
+        "djIds": [
+          "664b2846-4bba-4820-bac9-daef212482b1",
+          "6dc2d3bb-6a08-40b7-8616-fe62f6a2a81e"
+        ]
+      },
+      "appliedCount": 2
+    }
+  ]
+}

@@ -68,11 +68,22 @@ model User {
 model Event {
   id              String   @id @default(uuid())
   organizerId     String?  @map("organizer_id")
+  wikiFestivalId  String?  @map("wiki_festival_id")
+  archiveFestivalId String? @unique @map("archive_festival_id")
   name            String
+  nameI18n        Json?    @map("name_i18n")
   slug            String   @unique
   description     String?
+  descriptionI18n Json?    @map("description_i18n")
+  locationI18n    Json?    @map("location_i18n")
+  countryI18n     Json?    @map("country_i18n")
   coverImageUrl   String?  @map("cover_image_url")
   lineupImageUrl  String?  @map("lineup_image_url")
+  imageAssets     Json?    @map("image_assets")
+  referenceLinks  String[] @default([]) @map("reference_links")
+  socialLinks     Json?    @map("social_links")
+  sourceProvider  String?  @map("source_provider")
+  sourceEventUrl  String?  @map("source_event_url")
   eventType       String?  @map("event_type")
   organizerName   String?  @map("organizer_name")
   venueName       String?  @map("venue_name")
@@ -83,6 +94,7 @@ model Event {
   longitude       Decimal? @db.Decimal(11, 8)
   startDate       DateTime @map("start_date")
   endDate         DateTime @map("end_date")
+  dayRolloverHour Int      @default(6) @map("day_rollover_hour")
   ticketUrl       String?  @map("ticket_url")
   ticketPriceMin  Decimal? @map("ticket_price_min") @db.Decimal(10, 2)
   ticketPriceMax  Decimal? @map("ticket_price_max") @db.Decimal(10, 2)
@@ -95,6 +107,7 @@ model Event {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   organizer       User?             @relation("UserPublishedEvents", fields: [organizerId], references: [id], onDelete: SetNull)
+  wikiFestival    WikiFestival?     @relation(fields: [wikiFestivalId], references: [id], onDelete: SetNull)
   checkins        Checkin[]
   lineupSlots     EventLineupSlot[]
   ticketTiers     EventTicketTier[]
@@ -102,6 +115,7 @@ model Event {
   squadActivities SquadActivity[]
 
   @@index([organizerId])
+  @@index([wikiFestivalId])
   @@map("events")
 }
 
@@ -126,6 +140,8 @@ model EventLineupSlot {
   id        String   @id @default(uuid())
   eventId   String   @map("event_id")
   djId      String?  @map("dj_id")
+  djIds     String[] @default([]) @map("dj_ids")
+  festivalDayIndex Int?    @map("festival_day_index")
   djName    String   @map("dj_name")
   stageName String?  @map("stage_name")
   sortOrder Int      @default(0) @map("sort_order")
@@ -146,18 +162,31 @@ model EventLineupSlot {
 model DJ {
   id              String   @id @default(uuid())
   name            String
+  nameI18n        Json?    @map("name_i18n")
   aliases         String[] @default([])
+  genres          String[] @default([])
   slug            String   @unique
   bio             String?
+  bioI18n         Json?    @map("bio_i18n")
   avatarUrl       String?  @map("avatar_url")
   avatarSourceUrl String?  @map("avatar_source_url")
   bannerUrl       String?  @map("banner_url")
   country         String?
+  countryI18n     Json?    @map("country_i18n")
   spotifyId       String?  @map("spotify_id")
+  spotifyFollowers Int?    @map("spotify_followers")
   appleMusicId    String?  @map("apple_music_id")
   soundcloudUrl   String?  @map("soundcloud_url")
+  soundcloudId    String?  @map("soundcloud_id")
+  website         String?  @map("website")
+  trackCount      Int?     @map("track_count")
+  playlistCount   Int?     @map("playlist_count")
+  soundCloudFollowers Int? @map("soundcloud_followers")
+  soundCloudFavorites Int? @map("soundcloud_favorites")
   instagramUrl    String?  @map("instagram_url")
+  facebookUrl     String?  @map("facebook_url")
   twitterUrl      String?  @map("twitter_url")
+  youtubeUrl      String?  @map("youtube_url")
   isVerified      Boolean  @default(false) @map("is_verified")
   followerCount   Int      @default(0) @map("follower_count")
 
@@ -296,23 +325,37 @@ model Label {
 }
 
 model WikiFestival {
-  id            String   @id
-  name          String
-  aliases       String[] @default([])
-  country       String
-  city          String
-  foundedYear   String   @map("founded_year")
-  frequency     String
-  tagline       String
-  introduction  String   @db.Text
-  avatarUrl     String?  @map("avatar_url")
-  backgroundUrl String?  @map("background_url")
-  links         Json?
-  isActive      Boolean  @default(true) @map("is_active")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id              String   @id
+  sourceRowId     Int?     @unique @map("source_row_id")
+  name            String
+  nameI18n        Json?    @map("name_i18n")
+  abbreviation    String?  @default("")
+  aliases         String[] @default([])
+  country         String
+  countryI18n     Json?    @map("country_i18n")
+  city            String
+  cityI18n        Json?    @map("city_i18n")
+  foundedYear     String   @map("founded_year")
+  frequency       String
+  frequencyI18n   Json?    @map("frequency_i18n")
+  tagline         String
+  introduction    String   @db.Text
+  descriptionI18n Json?    @map("description_i18n")
+  officialWebsite String?  @map("official_website")
+  facebookUrl     String?  @map("facebook_url")
+  instagramUrl    String?  @map("instagram_url")
+  twitterUrl      String?  @map("twitter_url")
+  youtubeUrl      String?  @map("youtube_url")
+  tiktokUrl       String?  @map("tiktok_url")
+  avatarUrl       String?  @map("avatar_url")
+  backgroundUrl   String?  @map("background_url")
+  links           Json?
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   contributors WikiFestivalContributor[]
+  events       Event[]
 
   @@index([name])
   @@index([country])
@@ -588,6 +631,9 @@ model Post {
   squadId      String?  @map("squad_id")
   eventId      String?  @map("event_id")
   setId        String?  @map("set_id")
+  boundDjIds   String[] @default([]) @map("bound_dj_ids")
+  boundBrandIds String[] @default([]) @map("bound_brand_ids")
+  boundEventIds String[] @default([]) @map("bound_event_ids")
   likeCount    Int      @default(0) @map("like_count")
   repostCount  Int      @default(0) @map("repost_count")
   commentCount Int      @default(0) @map("comment_count")

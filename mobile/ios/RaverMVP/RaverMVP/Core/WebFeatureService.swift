@@ -115,6 +115,7 @@ protocol WebFeatureService {
         genre: String?
     ) async throws -> LearnLabelListPage
     func fetchLearnFestivals(search: String?) async throws -> [WebLearnFestival]
+    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> WebLearnFestival
     func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival
     func fetchRankingBoards() async throws -> [RankingBoard]
     func fetchRankingBoardDetail(boardID: String, year: Int?) async throws -> RankingBoardDetail

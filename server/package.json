@@ -4,9 +4,9 @@
   "description": "Raver API Server",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "nodemon src/index.ts",
+    "dev": "NODE_OPTIONS='--use-env-proxy' nodemon src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "NODE_OPTIONS='--use-env-proxy' node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -17,9 +17,15 @@
     "djs:import:edmdd": "ts-node prisma/import-edmdancedirectory-djs.ts",
     "djs:avatars:oss": "ts-node prisma/upload-dj-avatars-to-oss.ts",
     "djs:avatars:spotify-placeholder-fix": "ts-node prisma/backfill-dj-placeholder-avatars-via-spotify.ts",
+    "djs:backfill:soundcloud-links": "NODE_OPTIONS='--use-env-proxy' ts-node prisma/backfill-dj-soundcloud-links.ts",
+    "djs:backfill:soundcloud-links:20s": "SOUNDCLOUD_MIN_REQUEST_INTERVAL_MS=20000 DJ_SC_BACKFILL_CONCURRENCY=1 NODE_OPTIONS='--use-env-proxy' ts-node prisma/backfill-dj-soundcloud-links.ts",
     "djs:contributors:backfill-uploadtester": "ts-node prisma/backfill-dj-contributors-uploadtester.ts",
+    "events:import:archive-bilingual": "NODE_OPTIONS='--use-env-proxy' ts-node prisma/import-events-archive-bilingual.ts",
+    "events:lineup:autobind-djs": "ts-node prisma/backfill-event-lineup-autobind-djs.ts",
     "wiki:festivals:seed-uploadtester": "ts-node prisma/seed-wiki-festivals.ts",
-    "wiki:festivals:media:backfill-oss": "ts-node prisma/backfill-wiki-festival-media-from-oss.ts"
+    "wiki:festivals:media:backfill-oss": "ts-node prisma/backfill-wiki-festival-media-from-oss.ts",
+    "brands:import:downloads": "ts-node prisma/import-wiki-festivals-from-downloads.ts",
+    "brands:import:complete-json": "ts-node prisma/import-wiki-festivals-complete-json.ts"
   },
   "keywords": [
     "raver",

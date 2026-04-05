@@ -32,7 +32,7 @@ final class FollowListViewModel: ObservableObject {
             hasMore = page.nextCursor != nil
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -56,7 +56,7 @@ final class FollowListViewModel: ObservableObject {
             hasMore = page.nextCursor != nil
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -78,7 +78,7 @@ final class FollowListViewModel: ObservableObject {
                 users[index] = updated
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 }

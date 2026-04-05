@@ -27,7 +27,7 @@ final class MessagesViewModel: ObservableObject {
             unreadTotal = merged.reduce(0) { $0 + max(0, $1.unreadCount) }
             self.error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -49,7 +49,7 @@ final class MessagesViewModel: ObservableObject {
             }
             conversations = Self.sortConversations(conversations)
             unreadTotal = conversations.reduce(0) { $0 + max(0, $1.unreadCount) }
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 

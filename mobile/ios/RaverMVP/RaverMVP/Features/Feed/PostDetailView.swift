@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct PostDetailView: View {
     @Environment(\.dismiss) private var dismiss
@@ -30,7 +31,7 @@ struct PostDetailView: View {
                                 do {
                                     post = try await service.toggleLike(postID: post.id, shouldLike: !post.isLiked)
                                 } catch {
-                                    self.error = error.localizedDescription
+                                    self.error = error.userFacingMessage
                                 }
                             }
                         },
@@ -39,7 +40,7 @@ struct PostDetailView: View {
                                 do {
                                     post = try await service.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
                                 } catch {
-                                    self.error = error.localizedDescription
+                                    self.error = error.userFacingMessage
                                 }
                             }
                         },
@@ -49,7 +50,7 @@ struct PostDetailView: View {
                                     let author = try await service.toggleFollow(userID: post.author.id, shouldFollow: !post.author.isFollowing)
                                     post.author = author
                                 } catch {
-                                    self.error = error.localizedDescription
+                                    self.error = error.userFacingMessage
                                 }
                             }
                         },
@@ -63,13 +64,13 @@ struct PostDetailView: View {
 
                     GlassCard {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("评论")
+                            Text(LL("评论"))
                                 .font(.headline)
 
                             if isLoading {
                                 ProgressView()
                             } else if comments.isEmpty {
-                                Text("还没有评论，来抢沙发吧。")
+                                Text(LL("还没有评论，来抢沙发吧。"))
                                     .font(.subheadline)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             } else {
@@ -103,27 +104,22 @@ struct PostDetailView: View {
                 }
                 .padding(16)
             }
+            .scrollDismissesKeyboard(.interactively)
 
             Divider()
 
             HStack(spacing: 8) {
-                TextField("说点什么...", text: $commentInput)
+                TextField(LL("说点什么..."), text: $commentInput)
+                    .submitLabel(.send)
+                    .onSubmit {
+                        submitComment()
+                    }
                     .padding(12)
                     .background(RaverTheme.card)
                     .clipShape(RoundedRectangle(cornerRadius: 1, style: .continuous))
 
-                Button("发送") {
-                    Task {
-                        let text = commentInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !text.isEmpty else { return }
-                        do {
-                            let comment = try await service.addComment(postID: post.id, content: text)
-                            comments.append(comment)
-                            commentInput = ""
-                        } catch {
-                            self.error = error.localizedDescription
-                        }
-                    }
+                Button(L("发送", "Send")) {
+                    submitComment()
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -132,6 +128,14 @@ struct PostDetailView: View {
         }
         .background(RaverTheme.background)
         .toolbar(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(L("收起", "Collapse")) {
+                    dismissKeyboard()
+                }
+            }
+        }
         .safeAreaInset(edge: .top) {
             HStack {
                 Button {
@@ -148,7 +152,7 @@ struct PostDetailView: View {
 
                 Spacer()
 
-                Text("动态详情")
+                Text(LL("动态详情"))
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
 
@@ -167,11 +171,11 @@ struct PostDetailView: View {
         .task {
             await loadComments()
         }
-        .alert("失败", isPresented: Binding(
+        .alert(LL("失败"), isPresented: Binding(
             get: { error != nil },
             set: { if !$0 { error = nil } }
         )) {
-            Button("确定", role: .cancel) {}
+            Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(error ?? "")
         }
@@ -185,7 +189,7 @@ struct PostDetailView: View {
         do {
             comments = try await service.fetchComments(postID: post.id)
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -228,5 +232,24 @@ struct PostDetailView: View {
         .frame(width: 30, height: 30)
         .background(RaverTheme.card)
         .clipShape(Circle())
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    private func submitComment() {
+        Task {
+            let text = commentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return }
+            do {
+                let comment = try await service.addComment(postID: post.id, content: text)
+                comments.append(comment)
+                commentInput = ""
+                dismissKeyboard()
+            } catch {
+                self.error = error.userFacingMessage
+            }
+        }
     }
 }

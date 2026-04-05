@@ -6,6 +6,8 @@ const prisma = new PrismaClient();
 
 type RawLineupSlotInput = {
   djId?: string;
+  djIds?: string[];
+  festivalDayIndex?: number;
   djName?: string;
   stageName?: string;
   sortOrder?: number;
@@ -15,6 +17,8 @@ type RawLineupSlotInput = {
 
 type LineupSlotInput = {
   djId?: string;
+  djIds?: string[];
+  festivalDayIndex?: number;
   djName?: string;
   stageName?: string;
   sortOrder?: number;
@@ -59,7 +63,16 @@ const parseOptionalDate = (value: unknown): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-const resolveEventStatus = (startDate: Date, endDate: Date, fallbackStatus?: string | null): 'upcoming' | 'ongoing' | 'ended' => {
+const resolveEventStatus = (
+  startDate: Date,
+  endDate: Date,
+  fallbackStatus?: string | null
+): 'upcoming' | 'ongoing' | 'ended' | 'cancelled' => {
+  const normalizedFallback = typeof fallbackStatus === 'string' ? fallbackStatus.trim().toLowerCase() : '';
+  if (normalizedFallback === 'cancelled' || normalizedFallback === 'canceled') {
+    return 'cancelled';
+  }
+
   const now = Date.now();
   const start = startDate.getTime();
   const end = endDate.getTime();
@@ -70,8 +83,8 @@ const resolveEventStatus = (startDate: Date, endDate: Date, fallbackStatus?: str
     return 'ongoing';
   }
 
-  if (fallbackStatus === 'ongoing' || fallbackStatus === 'ended') {
-    return fallbackStatus;
+  if (normalizedFallback === 'ongoing' || normalizedFallback === 'ended' || normalizedFallback === 'upcoming') {
+    return normalizedFallback as 'upcoming' | 'ongoing' | 'ended';
   }
   return 'upcoming';
 };
@@ -81,11 +94,52 @@ const withDerivedStatus = <T extends { startDate: Date; endDate: Date; status?: 
   status: resolveEventStatus(new Date(event.startDate), new Date(event.endDate), event.status ?? null),
 });
 
-const normalizeLineupSlots = (slots: unknown, eventStartDate: Date): LineupSlotInput[] => {
+const LINEUP_DJ_ID_PLACEHOLDER = '__UNBOUND__';
+const isLineupDjIdPlaceholder = (value: string): boolean => value === LINEUP_DJ_ID_PLACEHOLDER;
+const normalizeDayRolloverHour = (value: unknown, fallback = 6): number => {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  const hour = Math.floor(numeric);
+  if (hour < 0 || hour > 23) return fallback;
+  return hour;
+};
+
+const startOfDay = (date: Date): Date => {
+  const out = new Date(date);
+  out.setHours(0, 0, 0, 0);
+  return out;
+};
+
+const diffDays = (from: Date, to: Date): number => {
+  const millis = startOfDay(to).getTime() - startOfDay(from).getTime();
+  return Math.floor(millis / 86_400_000);
+};
+
+const inferFestivalDayIndex = (
+  startTime: Date,
+  eventStartDate: Date,
+  dayRolloverHour: number
+): number | null => {
+  if (Number.isNaN(startTime.getTime()) || Number.isNaN(eventStartDate.getTime())) {
+    return null;
+  }
+  let dayOffset = diffDays(eventStartDate, startTime);
+  if (dayOffset > 0 && startTime.getHours() < dayRolloverHour) {
+    dayOffset -= 1;
+  }
+  return Math.max(1, dayOffset + 1);
+};
+
+const normalizeLineupSlots = (
+  slots: unknown,
+  eventStartDate: Date,
+  dayRolloverHourRaw: unknown = 6
+): LineupSlotInput[] => {
   if (!Array.isArray(slots)) {
     return [];
   }
 
+  const dayRolloverHour = normalizeDayRolloverHour(dayRolloverHourRaw, 6);
   const safeEventStart = Number.isNaN(eventStartDate.getTime()) ? new Date() : eventStartDate;
   return slots
     .filter((slot) => slot && typeof slot === 'object')
@@ -108,8 +162,30 @@ const normalizeLineupSlots = (slots: unknown, eventStartDate: Date): LineupSlotI
         startTime = new Date(parsedEnd.getTime() - 3_600_000);
       }
 
+      const rawDjId = typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId.trim() : '';
+      const djIds = Array.isArray(slot.djIds)
+        ? slot.djIds
+            .map((id) => (typeof id === 'string' ? id.trim() : ''))
+            .filter((id) => !!id)
+        : [];
+      const djId = rawDjId && !isLineupDjIdPlaceholder(rawDjId) ? rawDjId : undefined;
+      const firstBoundDjId = djIds.find((id) => !isLineupDjIdPlaceholder(id)) || undefined;
+      const mergedDjIds = djIds.length
+        ? djIds
+        : (djId ? [djId] : []);
+      const effectiveDjId = djId || firstBoundDjId;
+      const explicitFestivalDayIndex =
+        typeof slot.festivalDayIndex === 'number' && Number.isFinite(slot.festivalDayIndex)
+          ? Math.max(1, Math.floor(slot.festivalDayIndex))
+          : null;
+      const festivalDayIndex =
+        explicitFestivalDayIndex
+        ?? inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour);
+
       return {
-        djId: slot.djId,
+        djId: effectiveDjId,
+        djIds: mergedDjIds,
+        festivalDayIndex: festivalDayIndex ?? undefined,
         djName: slot.djName,
         stageName: slot.stageName,
         sortOrder: slot.sortOrder,
@@ -117,7 +193,7 @@ const normalizeLineupSlots = (slots: unknown, eventStartDate: Date): LineupSlotI
         endTime: endTime.toISOString(),
       };
     })
-    .filter((slot) => String(slot.djName || '').trim() || String(slot.djId || '').trim());
+    .filter((slot) => String(slot.djName || '').trim() || String(slot.djId || '').trim() || (Array.isArray(slot.djIds) && slot.djIds.length > 0));
 };
 
 const normalizeTicketTiers = (tiers: unknown): TicketTierInput[] => {
@@ -141,6 +217,9 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
       eventType,
       status = 'upcoming'
     } = req.query;
+    const normalizedStatus = String(status || 'upcoming').trim().toLowerCase() === 'canceled'
+      ? 'cancelled'
+      : String(status || 'upcoming').trim().toLowerCase();
 
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -148,17 +227,22 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
 
     const where: any = {};
     const now = new Date();
-    if (status === 'upcoming') {
+    if (normalizedStatus === 'upcoming') {
       where.startDate = { gt: now };
-    } else if (status === 'ongoing') {
+      where.status = { not: 'cancelled' };
+    } else if (normalizedStatus === 'ongoing') {
       where.startDate = { lte: now };
       where.endDate = { gte: now };
-    } else if (status === 'ended') {
+      where.status = { not: 'cancelled' };
+    } else if (normalizedStatus === 'ended') {
       where.endDate = { lt: now };
-    } else if (status === 'all' || status === '') {
+      where.status = { not: 'cancelled' };
+    } else if (normalizedStatus === 'cancelled') {
+      where.status = 'cancelled';
+    } else if (normalizedStatus === 'all' || normalizedStatus === '') {
       // no status filter
-    } else if (status) {
-      where.status = status;
+    } else if (normalizedStatus) {
+      where.status = normalizedStatus;
     }
 
     if (search) {
@@ -331,6 +415,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       longitude,
       startDate,
       endDate,
+      dayRolloverHour,
       ticketUrl,
       ticketPriceMin,
       ticketPriceMax,
@@ -339,6 +424,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       ticketTiers,
       officialWebsite,
       lineupSlots,
+      status,
     } = req.body;
 
     if (!name || !startDate || !endDate) {
@@ -363,7 +449,8 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       res.status(400).json({ error: 'Invalid event date range' });
       return;
     }
-    const normalizedSlots = normalizeLineupSlots(lineupSlots, parsedStartDate);
+    const normalizedDayRolloverHour = normalizeDayRolloverHour(dayRolloverHour, 6);
+    const normalizedSlots = normalizeLineupSlots(lineupSlots, parsedStartDate, normalizedDayRolloverHour);
 
     const event = await prisma.event.create({
       data: {
@@ -383,7 +470,8 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
         longitude: toNumberOrNull(longitude),
         startDate: parsedStartDate,
         endDate: parsedEndDate,
-        status: resolveEventStatus(parsedStartDate, parsedEndDate, null),
+        dayRolloverHour: normalizedDayRolloverHour,
+        status: resolveEventStatus(parsedStartDate, parsedEndDate, typeof status === 'string' ? status : null),
         ticketUrl,
         ticketPriceMin: toNumberOrNull(ticketPriceMin),
         ticketPriceMax: toNumberOrNull(ticketPriceMax),
@@ -404,6 +492,8 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
           ? {
               create: normalizedSlots.map((slot, index) => ({
                 djId: slot.djId || null,
+                djIds: Array.isArray(slot.djIds) ? slot.djIds : [],
+                festivalDayIndex: slot.festivalDayIndex ?? null,
                 djName: slot.djName || 'Unknown DJ',
                 stageName: slot.stageName || null,
                 sortOrder: slot.sortOrder ?? index + 1,
@@ -469,6 +559,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       longitude,
       startDate,
       endDate,
+      dayRolloverHour,
       ticketUrl,
       ticketPriceMin,
       ticketPriceMax,
@@ -477,11 +568,12 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       ticketTiers,
       officialWebsite,
       lineupSlots,
+      status,
     } = req.body;
 
     const existing = await prisma.event.findUnique({
       where: { id: id as string },
-      select: { id: true, organizerId: true, startDate: true, endDate: true, status: true },
+      select: { id: true, organizerId: true, startDate: true, endDate: true, dayRolloverHour: true, status: true },
     });
     if (!existing) {
       res.status(404).json({ error: 'Event not found' });
@@ -504,7 +596,10 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
     }
     const effectiveStartDate = nextStartDate ?? existing.startDate;
     const effectiveEndDate = nextEndDate ?? existing.endDate;
-    const normalizedSlots = normalizeLineupSlots(lineupSlots, nextStartDate ?? existing.startDate);
+    const nextDayRolloverHour = dayRolloverHour !== undefined
+      ? normalizeDayRolloverHour(dayRolloverHour, existing.dayRolloverHour ?? 6)
+      : (existing.dayRolloverHour ?? 6);
+    const normalizedSlots = normalizeLineupSlots(lineupSlots, nextStartDate ?? existing.startDate, nextDayRolloverHour);
     const normalizedTicketTiers = normalizeTicketTiers(ticketTiers);
 
     const event = await prisma.event.update({
@@ -525,6 +620,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         longitude: longitude !== undefined ? toNumberOrNull(longitude) : undefined,
         startDate: startDate ? nextStartDate ?? undefined : undefined,
         endDate: endDate ? nextEndDate ?? undefined : undefined,
+        dayRolloverHour: dayRolloverHour !== undefined ? nextDayRolloverHour : undefined,
         ticketUrl: ticketUrl ?? undefined,
         ticketPriceMin: ticketPriceMin !== undefined ? toNumberOrNull(ticketPriceMin) : undefined,
         ticketPriceMax: ticketPriceMax !== undefined ? toNumberOrNull(ticketPriceMax) : undefined,
@@ -542,12 +638,18 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
             }
           : undefined,
         officialWebsite: officialWebsite ?? undefined,
-        status: resolveEventStatus(effectiveStartDate, effectiveEndDate, existing.status),
+        status: resolveEventStatus(
+          effectiveStartDate,
+          effectiveEndDate,
+          typeof status === 'string' ? status : existing.status
+        ),
         lineupSlots: Array.isArray(lineupSlots)
           ? {
               deleteMany: {},
               create: normalizedSlots.map((slot, index) => ({
                 djId: slot.djId || null,
+                djIds: Array.isArray(slot.djIds) ? slot.djIds : [],
+                festivalDayIndex: slot.festivalDayIndex ?? null,
                 djName: slot.djName || 'Unknown DJ',
                 stageName: slot.stageName || null,
                 sortOrder: slot.sortOrder ?? index + 1,

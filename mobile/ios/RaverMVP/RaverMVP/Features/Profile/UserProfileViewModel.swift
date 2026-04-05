@@ -43,7 +43,7 @@ final class UserProfileViewModel: ObservableObject {
             hasMore = page.nextCursor != nil
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -67,7 +67,7 @@ final class UserProfileViewModel: ObservableObject {
             hasMore = page.nextCursor != nil
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -82,7 +82,7 @@ final class UserProfileViewModel: ObservableObject {
                 posts[index].author = updated
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -93,7 +93,7 @@ final class UserProfileViewModel: ObservableObject {
                 posts[index] = updated
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -104,7 +104,7 @@ final class UserProfileViewModel: ObservableObject {
                 posts[index] = updated
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 }

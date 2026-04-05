@@ -49,3 +49,7 @@ yarn-error.log*
 # Logs
 logs/
 *.log
+
+# scrapeRave
+scrapRave/
+cached_dj_profile/

@@ -1,0 +1,70 @@
+{
+  "updatedAt": "2026-04-04T14:04:11.236Z",
+  "boards": [
+    {
+      "id": "djmag",
+      "title": "DJ MAG TOP 100",
+      "subtitle": "全球电子音乐最有影响力榜单之一",
+      "description": "",
+      "coverImageUrl": "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/wiki/brands/djmag/cover-1775203947258-8g85jbxn.webp",
+      "entityType": "dj",
+      "years": [
+        2004,
+        2005,
+        2006,
+        2007,
+        2008,
+        2009,
+        2010,
+        2011,
+        2012,
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "createdAt": "2026-04-03T07:56:11.009Z",
+      "updatedAt": "2026-04-04T14:04:11.236Z"
+    },
+    {
+      "id": "djmag_festival",
+      "title": "DJ MAG TOP 100 Festivals",
+      "subtitle": "全球电音节品牌百大榜单",
+      "description": "",
+      "coverImageUrl": "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/wiki/brands/djmag_festival/cover-1775203987491-9x5ciy6d.jpg",
+      "entityType": "festival",
+      "years": [
+        2025
+      ],
+      "createdAt": "2026-04-03T07:56:11.009Z",
+      "updatedAt": "2026-04-04T14:04:11.236Z"
+    },
+    {
+      "id": "dongye",
+      "title": "东野 DJ 榜",
+      "subtitle": "中文圈 DJ 热度与影响力榜单",
+      "description": "",
+      "coverImageUrl": "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/wiki/brands/dongye/cover-1775204535058-qcjg90ym.png",
+      "entityType": "dj",
+      "years": [
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "createdAt": "2026-04-03T07:56:11.009Z",
+      "updatedAt": "2026-04-04T14:04:11.236Z"
+    }
+  ]
+}

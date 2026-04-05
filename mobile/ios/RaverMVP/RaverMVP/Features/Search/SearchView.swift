@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SearchView: View {
     @EnvironmentObject private var appState: AppState
@@ -15,24 +16,24 @@ struct SearchView: View {
         NavigationStack {
             VStack(spacing: 12) {
                 HStack(spacing: 8) {
-                    TextField("搜索用户或动态", text: $viewModel.query)
+                    TextField(L("搜索用户或动态", "Search users or posts"), text: $viewModel.query)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .padding(12)
                         .background(RaverTheme.card)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .onSubmit {
-                            Task { await viewModel.search() }
+                            Task { await performSearch() }
                         }
 
-                    Button("搜索") {
-                        Task { await viewModel.search() }
+                    Button(L("搜索", "Search")) {
+                        Task { await performSearch() }
                     }
                     .buttonStyle(.borderedProminent)
                 }
                 .padding(.horizontal, 16)
 
-                Picker("范围", selection: $viewModel.scope) {
+                Picker(L("范围", "Scope"), selection: $viewModel.scope) {
                     ForEach(SearchViewModel.Scope.allCases) { scope in
                         Text(scope.title).tag(scope)
                     }
@@ -40,22 +41,30 @@ struct SearchView: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16)
                 .onChange(of: viewModel.scope) { _, _ in
-                    Task { await viewModel.search() }
+                    Task { await performSearch() }
                 }
                 .onAppear {
-                    Task { await viewModel.search() }
+                    Task { await performSearch() }
                 }
 
                 if viewModel.isLoading {
                     Spacer()
-                    ProgressView("搜索中...")
+                    ProgressView(L("搜索中...", "Searching..."))
                     Spacer()
                 } else {
                     content
                 }
             }
             .background(RaverTheme.background)
-            .navigationTitle("发现")
+            .navigationTitle(L("发现", "Discover"))
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button(L("收起", "Dismiss")) {
+                        dismissKeyboard()
+                    }
+                }
+            }
             .navigationDestination(item: $selectedUserForProfile) { user in
                 UserProfileView(userID: user.id)
             }
@@ -70,15 +79,30 @@ struct SearchView: View {
                         .environmentObject(appState)
                 }
             }
-            .alert("搜索失败", isPresented: Binding(
+            .alert(L("搜索失败", "Search Failed"), isPresented: Binding(
                 get: { viewModel.error != nil },
                 set: { if !$0 { viewModel.error = nil } }
             )) {
-                Button("确定", role: .cancel) {}
+                Button(L("确定", "OK"), role: .cancel) {}
             } message: {
                 Text(viewModel.error ?? "")
             }
         }
+    }
+
+    @MainActor
+    private func performSearch() async {
+        await viewModel.search()
+        dismissKeyboard()
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
     }
 
     @ViewBuilder
@@ -86,9 +110,9 @@ struct SearchView: View {
         if viewModel.scope == .users {
             if viewModel.users.isEmpty {
                 ContentUnavailableView(
-                    "暂无用户结果",
+                    L("暂无用户结果", "No User Results"),
                     systemImage: "person.2",
-                    description: Text("试试输入更完整的用户名")
+                    description: Text(LL("试试输入更完整的用户名"))
                 )
             } else {
                 List(viewModel.users) { user in
@@ -101,7 +125,7 @@ struct SearchView: View {
                                     .foregroundStyle(RaverTheme.secondaryText)
                             }
                             Spacer()
-                            Button(user.isFollowing ? "已关注" : "关注") {
+                            Button(user.isFollowing ? L("已关注", "Following") : L("关注", "Follow")) {
                                 Task { await viewModel.toggleFollow(user: user) }
                             }
                             .buttonStyle(.bordered)
@@ -119,9 +143,9 @@ struct SearchView: View {
         } else if viewModel.scope == .posts {
             if viewModel.posts.isEmpty {
                 ContentUnavailableView(
-                    "暂无动态结果",
+                    L("暂无动态结果", "No Post Results"),
                     systemImage: "text.magnifyingglass",
-                    description: Text("试试不同关键词")
+                    description: Text(LL("试试不同关键词"))
                 )
             } else {
                 ScrollView {
@@ -157,9 +181,9 @@ struct SearchView: View {
         } else {
             if viewModel.squads.isEmpty {
                 ContentUnavailableView(
-                    "暂无小队推荐",
+                    L("暂无小队推荐", "No Squad Recommendations"),
                     systemImage: "person.3",
-                    description: Text("稍后再来看看新的社群")
+                    description: Text(LL("稍后再来看看新的社群"))
                 )
             } else {
                 List(viewModel.squads) { squad in
@@ -176,12 +200,12 @@ struct SearchView: View {
                                 }
                             }
                             Spacer()
-                            Text("\(squad.memberCount) 人")
+                            Text(L("\(squad.memberCount) 人", "\(squad.memberCount) members"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
 
-                        Button(squad.isMember ? "进入小队" : "加入并进入") {
+                        Button(squad.isMember ? L("进入小队", "Enter Squad") : L("加入并进入", "Join & Enter")) {
                             selectedSquadForProfile = PostSquad(
                                 id: squad.id,
                                 name: squad.name,

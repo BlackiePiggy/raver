@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ChatView: View {
     @EnvironmentObject private var appState: AppState
@@ -31,7 +32,7 @@ struct ChatView: View {
                     } label: {
                         Image(systemName: "person.crop.circle")
                     }
-                    .accessibilityLabel("查看用户主页")
+                    .accessibilityLabel(L("查看用户主页", "View User Profile"))
                 }
             }
             if conversation.type == .group {
@@ -41,6 +42,12 @@ struct ChatView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
+                }
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(L("收起", "Dismiss")) {
+                    dismissKeyboard()
                 }
             }
         }
@@ -62,14 +69,14 @@ struct ChatView: View {
         }
         .overlay {
             if isLoading {
-                ProgressView("同步中...")
+                ProgressView(LL("同步中..."))
             }
         }
-        .alert("发送失败", isPresented: Binding(
+        .alert(L("发送失败", "Send Failed"), isPresented: Binding(
             get: { error != nil },
             set: { if !$0 { error = nil } }
         )) {
-            Button("确定", role: .cancel) {}
+            Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(error ?? "")
         }
@@ -86,6 +93,7 @@ struct ChatView: View {
                 }
                 .padding(16)
             }
+            .scrollDismissesKeyboard(.interactively)
             .onChange(of: messages.count) { _, _ in
                 if let last = messages.last {
                     withAnimation {
@@ -98,23 +106,17 @@ struct ChatView: View {
 
     private var composerBar: some View {
         HStack(spacing: 8) {
-            TextField("发消息...", text: $input)
+            TextField(L("发消息...", "Message..."), text: $input)
+                .submitLabel(.send)
+                .onSubmit {
+                    Task { await sendMessage() }
+                }
                 .padding(12)
                 .background(RaverTheme.card)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            Button("发送") {
-                Task {
-                    let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !text.isEmpty else { return }
-                    do {
-                        let sent = try await service.sendMessage(conversationID: conversation.id, content: text)
-                        messages.append(sent)
-                        input = ""
-                    } catch {
-                        self.error = error.localizedDescription
-                    }
-                }
+            Button(L("发送", "Send")) {
+                Task { await sendMessage() }
             }
             .buttonStyle(.borderedProminent)
         }
@@ -276,7 +278,30 @@ struct ChatView: View {
         do {
             messages = try await service.fetchMessages(conversationID: conversation.id)
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
+        }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
+    }
+
+    @MainActor
+    private func sendMessage() async {
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        do {
+            let sent = try await service.sendMessage(conversationID: conversation.id, content: text)
+            messages.append(sent)
+            input = ""
+            dismissKeyboard()
+        } catch {
+            self.error = error.userFacingMessage
         }
     }
 }

@@ -11,9 +11,9 @@ final class SearchViewModel: ObservableObject {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .users: return "用户"
-            case .posts: return "动态"
-            case .squads: return "小队"
+            case .users: return L("用户", "Users")
+            case .posts: return L("动态", "Posts")
+            case .squads: return L("小队", "Squads")
             }
         }
     }
@@ -58,7 +58,7 @@ final class SearchViewModel: ObservableObject {
                 posts = []
                 error = nil
             } catch {
-                self.error = error.localizedDescription
+                self.error = error.userFacingMessage
             }
             return
         }
@@ -83,7 +83,7 @@ final class SearchViewModel: ObservableObject {
             }
             self.error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -97,7 +97,7 @@ final class SearchViewModel: ObservableObject {
                 posts[index].author = updated
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -108,7 +108,7 @@ final class SearchViewModel: ObservableObject {
                 posts[index] = updated
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -119,7 +119,7 @@ final class SearchViewModel: ObservableObject {
                 posts[index] = updated
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 }

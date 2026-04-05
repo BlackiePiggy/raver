@@ -27,7 +27,7 @@ final class SquadProfileViewModel: ObservableObject {
             profile = try await service.fetchSquadProfile(squadID: squadID)
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -43,7 +43,7 @@ final class SquadProfileViewModel: ObservableObject {
             self.profile = try await service.fetchSquadProfile(squadID: profile.id)
             return true
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
             return false
         }
     }
@@ -55,7 +55,7 @@ final class SquadProfileViewModel: ObservableObject {
             type: .group,
             title: profile.name,
             avatarURL: profile.avatarURL,
-            lastMessage: profile.lastMessage ?? "暂无消息",
+            lastMessage: profile.lastMessage ?? L("暂无消息", "No messages yet"),
             lastMessageSenderID: nil,
             unreadCount: 0,
             updatedAt: profile.updatedAt,
@@ -82,7 +82,7 @@ final class SquadProfileViewModel: ObservableObject {
             error = nil
             return true
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
             return false
         }
     }
@@ -100,7 +100,7 @@ final class SquadProfileViewModel: ObservableObject {
             error = nil
             return true
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
             return false
         }
     }

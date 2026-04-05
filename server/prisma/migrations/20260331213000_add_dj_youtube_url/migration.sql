@@ -1,0 +1,2 @@
+ALTER TABLE "djs"
+ADD COLUMN IF NOT EXISTS "youtube_url" TEXT;

@@ -24,6 +24,29 @@ dotenv.config();
 const app: Express = express();
 const port = process.env.PORT || 3001;
 
+const detectProxyEnv = (): string | null => {
+  const keys = [
+    'HTTPS_PROXY',
+    'https_proxy',
+    'HTTP_PROXY',
+    'http_proxy',
+    'ALL_PROXY',
+    'all_proxy',
+  ] as const;
+  for (const key of keys) {
+    const value = process.env[key];
+    if (typeof value === 'string' && value.trim()) {
+      return `${key}=${value.trim()}`;
+    }
+  }
+  return null;
+};
+
+const hasUseEnvProxyFlag = (): boolean => {
+  const nodeOptions = String(process.env.NODE_OPTIONS || '');
+  return process.execArgv.includes('--use-env-proxy') || nodeOptions.includes('--use-env-proxy');
+};
+
 // Middleware
 app.use(
   helmet({
@@ -92,5 +115,13 @@ app.use((err: Error, _req: Request, res: Response) => {
 });
 
 app.listen(port, () => {
+  const proxyHint = detectProxyEnv();
+  if (proxyHint) {
+    if (hasUseEnvProxyFlag()) {
+      console.log(`🌐 Proxy enabled via --use-env-proxy (${proxyHint})`);
+    } else {
+      console.warn(`⚠️ Proxy env detected but --use-env-proxy is not enabled (${proxyHint})`);
+    }
+  }
   console.log(`🎵 RaveHub API Server running on http://localhost:${port}`);
 });

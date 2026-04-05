@@ -1,11 +1,514 @@
 import Foundation
 import Combine
 
+enum AppLanguage: String, CaseIterable, Codable, Hashable, Identifiable {
+    case system
+    case zh
+    case en
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch AppLanguagePreference.current.effectiveLanguage {
+        case .zh:
+            switch self {
+            case .system: return "跟随系统"
+            case .zh: return "中文"
+            case .en: return "English"
+            }
+        case .en, .system:
+            switch self {
+            case .system: return "System"
+            case .zh: return "Chinese"
+            case .en: return "English"
+            }
+        }
+    }
+
+    var localeIdentifier: String {
+        switch self {
+        case .system:
+            return Locale.preferredLanguages.first ?? "zh-Hans"
+        case .zh:
+            return "zh-Hans"
+        case .en:
+            return "en"
+        }
+    }
+
+    var effectiveLanguage: AppLanguage {
+        switch self {
+        case .system:
+            let preferred = Locale.preferredLanguages.first?.lowercased() ?? ""
+            return preferred.hasPrefix("zh") ? .zh : .en
+        case .zh, .en:
+            return self
+        }
+    }
+}
+
+@inline(__always)
+func L(_ zh: String, _ en: String) -> String {
+    AppLanguagePreference.current.effectiveLanguage == .en ? en : zh
+}
+
+private enum AppLocalizedText {
+    static let enMap: [String: String] = [
+        "DJ 不存在": "DJ does not exist",
+        "DJ 名称": "DJ name",
+        "DJ 名称（必填）": "DJ name (required)",
+        "Discogs 候选结果": "Discogs candidate results",
+        "Instagram（可选）": "Instagram (optional)",
+        "JSON 导入文本（Coze 格式）": "JSON import text (Coze format)",
+        "Set 不存在": "Set does not exist",
+        "Sets 加载中...": "Sets Loading...",
+        "SoundCloud（可选）": "SoundCloud (optional)",
+        "Spotify ID（可选）": "Spotify ID (optional)",
+        "Spotify 导入": "Spotify import",
+        "Spotify 链接（可选）": "Spotify link (optional)",
+        "Tag（逗号分隔）": "Tags (comma separated)",
+        "Tracklist 标题": "Tracklist title",
+        "X/Twitter（可选）": "X/Twitter (optional)",
+        "— 其他登录方式 —": "— Other login methods —",
+        "一键清空已添加 DJ": "Clear added DJs with one click",
+        "一键登录/注册": "One-click login/registration",
+        "上传": "upload",
+        "上传失败": "Upload failed",
+        "上传封面": "Upload cover",
+        "上传我的 Tracklist": "Upload my Tracklist",
+        "上传活动封面图": "Upload event cover image",
+        "上传活动阵容图": "Upload event lineup map",
+        "上传视频到资源库": "Upload video to resource library",
+        "不填则使用默认名称": "If left blank, use the default name.",
+        "举办频次": "Frequency of holding",
+        "事件名称": "event name",
+        "事件描述（选填）": "Event description (optional)",
+        "事件驱动打分": "event driven scoring",
+        "仅支持从系统相册选择图片；保存后将上传并绑定到该活动。": "Only supports selecting pictures from the system album; after saving, they will be uploaded and bound to the event.",
+        "从可视化生成文本": "Generate text from visualizations",
+        "从活动库搜索并绑定": "Search and bind from active library",
+        "从用户主页发起私信或加入小队后会显示在这里": "After you send a private message or join a team from the user's homepage, it will be displayed here.",
+        "从相册选择小队头像": "Select squad avatar from album",
+        "从相册选择旗帜图": "Select flag image from album",
+        "价格": "price",
+        "位置地图": "location map",
+        "使用手动名称": "Use manual name",
+        "例如：我的版本": "For example: my version",
+        "候选结果": "Candidate results",
+        "允许他人查看我的关注列表": "Allow others to view my watchlist",
+        "允许他人查看我的粉丝列表": "Allow others to view my follower list",
+        "先去打个招呼吧": "Let's go say hello first.",
+        "先看看": "Take a look first",
+        "先粘贴文本并解析，或手动新增 Track。": "Paste the text and parse it first, or add a track manually.",
+        "关联 Spotify（可选）": "Connect to Spotify (optional)",
+        "其他手机号登录": "Log in with other mobile phone numbers",
+        "其他演出": "Other performances",
+        "内容": "content",
+        "写评论...": "Write a review...",
+        "写评论…": "Write a review…",
+        "分": "point",
+        "分享这一刻...": "Share this moment...",
+        "分类": "Classification",
+        "创始人": "Founder",
+        "创建": "create",
+        "删除": "delete",
+        "删除 Set": "Delete Set",
+        "删除动态": "Delete updates",
+        "删除活动": "Delete activity",
+        "别名（英文逗号分隔）": "Aliases (comma separated)",
+        "加载地图中...": "Loading map...",
+        "加载更多即将开始": "Loading more will start soon",
+        "加载更多资讯": "Load more information",
+        "动态详情": "动态详情",
+        "单位信息": "Unit information",
+        "单位名称": "Unit name",
+        "单位描述（选填）": "Unit description (optional)",
+        "厂牌加载中...": "Brand loading...",
+        "厂牌详情": "Brand details",
+        "原文链接": "Original link",
+        "去发现页完成活动或 DJ 打卡，记录会按你选择的观演时间展示。": "Go to the discovery page to complete activities or DJ check-ins, and the records will be displayed according to the viewing time you selected.",
+        "去活动打卡": "Check in at the event",
+        "参演 DJ": "Participating DJ",
+        "双方互相关注后会出现在这里": "Both parties will appear here after paying attention to each other",
+        "发布": "release",
+        "发布新活动": "Post a new event",
+        "发布方": "publisher",
+        "发布类型": "Release type",
+        "发布资讯": "Publish information",
+        "发送评论": "发送评论",
+        "同步中...": "Syncing...",
+        "名称": "name",
+        "启用多 Week 时间表": "Enable multiple Week schedules",
+        "国家": "nation",
+        "国家（可选）": "Country (optional)",
+        "图片": "picture",
+        "图片 URL（选填）": "Image URL (optional)",
+        "图片加载失败": "Image loading failed",
+        "图片（上传到 OSS 的 DJ 文件夹）": "Pictures (uploaded to DJ folder in OSS)",
+        "地图选点": "Map point selection",
+        "场地": "site",
+        "场地定位": "Site positioning",
+        "城市": "City",
+        "基础": "Base",
+        "基础信息": "Basic information",
+        "填入 Demo 视频": "Fill in Demo video",
+        "复制地址": "Copy address",
+        "外链（选填）": "External links (optional)",
+        "失败": "fail",
+        "头像 URL（可选）": "Avatar URL (optional)",
+        "头像上传中...": "Avatar uploading...",
+        "如: Techno, House": "Such as: Techno, House",
+        "媒体": "media",
+        "学习内容加载中...": "Learning content is loading...",
+        "完成": "Finish",
+        "官网链接": "Official website link",
+        "官网链接（可选）": "Official website link (optional)",
+        "定位": "position",
+        "定位信息": "Positioning information",
+        "定位标签": "Positioning tags",
+        "定制路线": "Customized route",
+        "导入 DJ": "Import DJ",
+        "导入方式": "Import method",
+        "导入草稿（可编辑）": "Import draft (editable)",
+        "封面": "cover",
+        "封面 URL": "Cover URL",
+        "封面 URL（选填）": "Cover URL (optional)",
+        "封面图": "cover image",
+        "封面图 URL（选填）": "Cover image URL (optional)",
+        "小队": "squad",
+        "小队不存在": "The team does not exist",
+        "小队二维码": "Team QR code",
+        "小队二维码 URL（可选）": "Squad QR code URL (optional)",
+        "小队名称": "Team name",
+        "小队名称（可选）": "Squad name (optional)",
+        "小队性质": "Team nature",
+        "小队性质（必选）": "Team nature (required)",
+        "小队成员": "team member",
+        "小队旗帜图（可选，用于小队卡片背景）": "Squad flag image (optional, used for squad card background)",
+        "小队活动": "Team activities",
+        "小队简介（可选）": "Team introduction (optional)",
+        "小队详情": "Squad details",
+        "小队通知": "Squad notification",
+        "小队通知内容": "Team notification content",
+        "尚未在地图选择定位，仍可仅使用手动输入地址。": "If you haven't selected a location on the map yet, you can still just enter the address manually.",
+        "尚未添加 DJ，点击上方按钮新增。": "No DJ has been added yet, click the button above to add it.",
+        "展示": "exhibit",
+        "已启用后，DJ 时间可按 WeekN · DayN 选择；未启用则按 DayN 选择。": "When enabled, DJ time can be selected by WeekN · DayN; when not enabled, DJ time can be selected by DayN.",
+        "已添加阵容": "Lineup added",
+        "已选定位": "Targeting selected",
+        "已选择本地单位图，保存时会自动上传并使用该图片。": "A local unit image has been selected and will be automatically uploaded and used when saving.",
+        "已选择本地图片，发布时会自动上传并作为打分单位封面。": "A local image has been selected and will be automatically uploaded and used as the cover of the scoring unit when publishing.",
+        "已选择本地封面图，保存时会自动上传并使用该图片。": "A local cover image has been selected and will be automatically uploaded and used when saving.",
+        "已选择本地封面图，发布时会自动上传并使用该图片。": "A local cover image has been selected and will be automatically uploaded and used when publishing.",
+        "币种": "Currency",
+        "平台信息": "Platform information",
+        "库里没有时可手动输入": "If it is not available in the library, it can be entered manually.",
+        "开始时间（如 0:00）": "Start time (e.g. 0:00)",
+        "当前 Set 信息": "Current Set information",
+        "当前 Tracklist 信息": "Current Tracklist information",
+        "当前仅支持原生直连媒体地址（mp4/mov/webm/m3u8）。": "Currently only native direct media addresses (mp4/mov/webm/m3u8) are supported.",
+        "当前歌单文本（已填充）": "Current playlist text (filled in)",
+        "当前绑定": "current binding",
+        "当日暂无活动": "There are no activities on that day",
+        "成为第一个发帖的人，开始你的社群互动。": "Be the first to post and start your community interaction.",
+        "我发布的打分事件": "Scoring events I posted",
+        "我发布的打分单位": "The scoring unit I published",
+        "我同意《用户服务条款》《用户协议》《隐私政策》": "I agree to the \"User Terms of Service\", \"User Agreement\" and \"Privacy Policy\"",
+        "我的小队设置": "My squad settings",
+        "我的活动历史": "My activity history",
+        "手动填写": "Fill in manually",
+        "手动填写 DJ 信息": "Manually fill in DJ information",
+        "手动填写活动名称": "Manually fill in event name",
+        "打分": "Score",
+        "打分事件详情": "Scoring event details",
+        "打卡方式": "Check-in method",
+        "打开地图App": "Open the map app",
+        "批量粘贴": "Batch paste",
+        "描述（选填）": "Description (optional)",
+        "搜索": "search",
+        "搜索 DJ 中...": "Searching for DJ...",
+        "搜索 Discogs Artist": "Search Discogs Artist",
+        "搜索 Sets / DJ": "Search Sets / DJ",
+        "搜索 Spotify DJ": "Search Spotify DJ",
+        "搜索 Spotify 用于补全链接": "Search Spotify for link completion",
+        "搜索厂牌名 / 简介": "Search brand name / introduction",
+        "搜索地点": "Search places",
+        "搜索活动中...": "Search active...",
+        "搜索电音节名 / 城市 / 国家": "Search electronic syllable name / city / country",
+        "搜索结果": "Search results",
+        "支持 Coze 返回格式：`normalized_text + lineup_info`，也支持直接粘贴数组。": "Supports Coze return format: `normalized_text + lineup_info`, and also supports direct pasting of arrays.",
+        "收到新的关注、点赞、评论或小队邀请后会显示在这里": "New follows, likes, comments or squad invitations will appear here.",
+        "新增 DJ（点击右侧勾勾后并入下方列表）": "Add a new DJ (click the check mark on the right to merge it into the list below)",
+        "新增 Track": "Add Track",
+        "新增电音节": "Added electronic music festival",
+        "新增舞台": "Add new stage",
+        "旗帜图 URL（可选）": "Flag image URL (optional)",
+        "旗帜图上传中...": "Flag image is uploading...",
+        "无法直接播放该视频地址": "The video address cannot be played directly",
+        "时间": "time",
+        "昵称": "Nick name",
+        "显示名（可选）": "Display name (optional)",
+        "暂无 DJ": "No DJ yet",
+        "暂无 Tracklist": "No Tracklist yet",
+        "暂无候选，可切换到手动导入。": "There are no candidates yet, you can switch to manual import.",
+        "暂无候选，可继续搜索或切换到手动导入。": "There are no candidates yet. You can continue searching or switch to manual import.",
+        "暂无候选，输入名称后点击搜索。": "There are no candidates yet. Enter the name and click Search.",
+        "暂无关联打分": "No related scoring yet",
+        "暂无关联活动": "No related activities yet",
+        "暂无内容": "暂无内容",
+        "暂无动态": "No news yet",
+        "暂无匹配电音节": "No matching electronic syllables yet",
+        "暂无厂牌": "No brand yet",
+        "暂无历史活动": "No historical events yet",
+        "暂无发布 Set": "No set released yet",
+        "暂无发布打分": "No ratings released yet",
+        "暂无发布活动": "No publishing activities yet",
+        "暂无发布资讯": "No release information yet",
+        "暂无可导入条目，请先识别阵容图或粘贴 JSON 后解析。": "There are currently no entries to import. Please identify the lineup diagram or paste the JSON and then parse it.",
+        "暂无对应 Sets": "No corresponding Sets yet",
+        "暂无对应打分事件": "There is currently no corresponding scoring event",
+        "暂无我的活动": "There are no activities for me yet",
+        "暂无榜单": "No list yet",
+        "暂无活动": "No activity yet",
+        "暂无相关动态": "No related news yet",
+        "暂无票档，点击下方按钮添加。": "There is currently no ticket slot, click the button below to add it.",
+        "暂无评论": "no comments",
+        "暂无资讯": "No information yet",
+        "暂无阵容信息": "No lineup information yet",
+        "更换头像": "Change avatar",
+        "更换横幅": "Change banner",
+        "更换背景": "Change background",
+        "最新": "up to date",
+        "未绑定活动": "Unbound activities",
+        "未能精确定位，仍可在地图中拖动查看区域。": "If the precise positioning is not possible, you can still drag the viewing area on the map.",
+        "未选择 DJ": "No DJ selected",
+        "未选择舞台": "No stage selected",
+        "本小队昵称": "Nickname of this team",
+        "来源名称": "source name",
+        "查看全部": "View all",
+        "查看原文链接": "View original link",
+        "查看地图": "View map",
+        "标题": "title",
+        "榜单": "List",
+        "榜单为空": "List is empty",
+        "榜单分区": "List partition",
+        "模式": "model",
+        "歌手": "singer",
+        "歌曲名": "song title",
+        "正在加载事件…": "Loading events…",
+        "正在加载关联活动...": "Loading associated activities...",
+        "正在加载品牌动态...": "Loading brand updates...",
+        "正在加载打分事件…": "Loading scoring events...",
+        "正在加载评分单位…": "Loading scoring units…",
+        "正在定位场地...": "Locating venue...",
+        "正在拉取 Discogs 候选列表...": "Pulling Discogs candidate list...",
+        "正在拉取 Spotify 候选列表...": "Pulling Spotify shortlist...",
+        "正在搜索 Spotify...": "Searching Spotify...",
+        "正在解析位置…": "Resolving location...",
+        "正在识别图片并生成导入草稿...": "Recognizing images and generating import drafts...",
+        "正在读取 Discogs 详情并自动填充...": "Reading Discogs details and autofilling...",
+        "正文": "text",
+        "正文（选填）": "Text (optional)",
+        "每行格式：`0:00~3:30 - 艺术家 - 歌曲名 | Spotify链接(可选) | 网易云链接(可选)`": "每行格式：`0:00~3:30 - 艺术家 - 歌曲名 | Spotify链接(可选) | 网易云链接(可选)`",
+        "没有找到匹配活动": "No matching event found",
+        "没有找到可导入活动": "No importable activities found",
+        "没有更多匹配活动": "No more matching activity",
+        "活动不存在": "Activity does not exist",
+        "活动介绍": "Activity introduction",
+        "活动加载中...": "Activities loading...",
+        "活动名称": "Activity name",
+        "活动性质": "Nature of activity",
+        "活动日历": "events calendar",
+        "活动阵容图": "Event lineup chart",
+        "流派树": "genre tree",
+        "添加": "Add to",
+        "添加 DJ": "Add DJ",
+        "添加票档": "Add ticket slot",
+        "清空全部": "Clear all",
+        "清除": "Clear",
+        "演出形式": "Performance form",
+        "点击右上角 +，在这个事件下发布第一个打分单位。": "Click + in the upper right corner to publish the first scoring unit under this event.",
+        "点击右上角“发布事件”，先创建一个事件，再在事件内添加打分单位。": "Click \"Publish Event\" in the upper right corner, first create an event, and then add a scoring unit to the event.",
+        "点击右上角“发布资讯”发布图文内容后会显示在这里。": "Click \"Publish Information\" in the upper right corner to publish graphic content and it will be displayed here.",
+        "热门": "Popular",
+        "用户上传版本": "User uploaded version",
+        "用户不存在": "User does not exist",
+        "用户名": "username",
+        "电音节加载中...": "Electronic music festival loading...",
+        "电音节名称": "Electronic syllable name",
+        "相关 DJ": "Related DJs",
+        "知道了": "knew",
+        "确认导入信息": "Confirm import information",
+        "确认导入信息（支持二次修改）": "Confirm the import information (supports secondary modification)",
+        "票务信息": "Ticket information",
+        "票务备注（可选）": "Ticketing notes (optional)",
+        "票档信息": "Ticket information",
+        "票档名称（如 Early Bird）": "Ticket stall name (e.g. Early Bird)",
+        "私信": "private message",
+        "移除封面图": "Remove cover image",
+        "移除阵容图": "Remove lineup chart",
+        "稍后再来看看新的社群": "Check back later for new communities",
+        "等待时间表发布": "Waiting for schedule release",
+        "签名": "sign",
+        "简介": "Introduction",
+        "简介（可选）": "Introduction (optional)",
+        "绑定到活动（优先）": "Bind to activity (preferred)",
+        "绑定活动": "Binding activity",
+        "结束时间（可选）": "End time (optional)",
+        "编辑": "edit",
+        "编辑 DJ": "Edit DJ",
+        "编辑 Set": "Edit Set",
+        "编辑 Tracklist": "Edit Tracklist",
+        "编辑小队信息": "Edit squad information",
+        "编辑打分事件": "Edit scoring event",
+        "编辑打分单位": "Edit scoring unit",
+        "编辑电音节": "Edit electronic syllables",
+        "网易云链接（可选）": "NetEase Cloud link (optional)",
+        "聊天历史记录": "Chat history",
+        "粉丝列表不可见": "Followers list is private",
+        "关注列表不可见": "Following list is private",
+        "接口返回格式不匹配，请检查 BFF 契约": "Response format mismatch. Please check BFF contract.",
+        "接口返回格式不匹配，请检查 Web BFF 契约": "Response format mismatch. Please check Web BFF contract.",
+        "权限不足": "Forbidden",
+        "请填写正文或添加媒体": "Please enter content or add media.",
+        "动态不存在": "Post does not exist.",
+        "无权编辑该动态": "No permission to edit this post.",
+        "无权删除该动态": "No permission to delete this post.",
+        "评论不能为空": "Comment cannot be empty.",
+        "请输入用户名": "Please enter a username.",
+        "只能从好友列表中选择小队成员": "Squad members can only be selected from friends.",
+        "仅小队管理员可修改小队头像": "Only squad admins can update squad avatar.",
+        "你还不是小队成员": "You are not a squad member yet.",
+        "仅小队管理员可修改小队资料": "Only squad admins can update squad info.",
+        "小队名称不能为空": "Squad name cannot be empty.",
+        "昵称不能为空": "Nickname cannot be empty.",
+        "缓存响应未命中最新数据，请下拉刷新重试": "Cached response is stale. Pull down to refresh.",
+        "spotifyId 不能为空": "spotifyId cannot be empty.",
+        "discogsArtistId 不能为空": "discogsArtistId cannot be empty.",
+        "DJ 名称不能为空": "DJ name cannot be empty.",
+        "Tracklist 不存在": "Tracklist does not exist.",
+        "Tracklist 至少包含 1 条有效曲目": "Tracklist must include at least 1 valid track.",
+        "评论不存在": "Comment does not exist.",
+        "type 必须是 event 或 dj": "type must be event or dj.",
+        "该活动已打卡，请直接编辑原有记录": "This event is already checked in. Please edit the existing record.",
+        "打卡不存在": "Check-in does not exist.",
+        "打分事件不存在": "Rating event does not exist.",
+        "事件名称不能为空": "Event name cannot be empty.",
+        "打分单位名称不能为空": "Rating unit name cannot be empty.",
+        "打分单位不存在": "Rating unit does not exist.",
+        "请先评分": "Please rate first.",
+        "电音节名称不能为空": "Festival name cannot be empty.",
+        "电音节不存在": "Festival does not exist.",
+        "榜单不存在": "Ranking does not exist.",
+        "自动链接": "automatic link",
+        "舞台信息": "stage information",
+        "视频上传中...": "Video uploading...",
+        "视频资源": "Video resources",
+        "视频链接（可选）": "Video link (optional)",
+        "解析并替换": "parse and replace",
+        "解析并追加": "parse and append",
+        "认证 DJ": "Certified DJ",
+        "评分": "score",
+        "评论": "Comment",
+        "评论列表": "Comment list",
+        "识别完成，可直接修改后一键导入。": "After the recognition is completed, you can modify it directly and import it with one click.",
+        "试试不同关键词": "Try different keywords",
+        "试试输入更完整的用户名": "Try entering a more complete username",
+        "详细地址（手动输入）": "Detailed address (enter manually)",
+        "说点什么...": "Say something...",
+        "请在搜索或历史中选择一场活动。": "Please select an event in search or history.",
+        "请尝试修改关键词，或先创建活动。": "Please try modifying the keywords, or create an event first.",
+        "请输入昵称": "Please enter a nickname",
+        "读取你的活动历史...": "Read your activity history...",
+        "贡献者": "Contributor",
+        "购票链接（可选）": "Ticket purchase link (optional)",
+        "资讯": "Information",
+        "资讯加载中...": "Information loading...",
+        "资讯摘要": "Information summary",
+        "资讯标题": "Information title",
+        "资讯详情": "Information details",
+        "输入 DJ 名称": "Enter DJ name",
+        "输入旗帜图 URL 或选择本地图片上传": "Enter the flag image URL or select a local image to upload",
+        "近期暂无活动": "No recent activity",
+        "还没有动态": "No updates yet",
+        "还没有打分事件": "There are no rated events yet",
+        "还没有打分单位": "No scoring unit yet",
+        "还没有消息，加入后来发第一条吧。": "There is no news yet, please join and post the first one.",
+        "还没有点赞记录": "There is no like record yet",
+        "还没有观演记录": "No performance record yet",
+        "还没有评论，来写第一条吧": "There are no comments yet. Be the first one.",
+        "还没有评论，来抢沙发吧。": "There are no comments yet, be the first to be the first.",
+        "还没有转发记录": "There is no forwarding record yet",
+        "这次打卡的 DJ": "The DJ who checked in this time",
+        "进入对应电音节活动详情": "Enter the details of the corresponding electronic music festival activities",
+        "进入榜单详情": "Enter list details",
+        "进小队": "Join the team",
+        "选择 Tracklist": "Select Tracklist",
+        "选择头像": "Select avatar",
+        "选择好友": "Select friends",
+        "选择定位": "Select targeting",
+        "选择旗帜图": "Select flag chart",
+        "选择横幅": "Select banner",
+        "选择活动定位": "Select activity targeting",
+        "选择版本": "Select version",
+        "选择背景": "Select background",
+        "通知权限": "Notification permissions",
+        "通过 JSON 文本导入": "Import via JSON text",
+        "邮箱": "Mail",
+        "阵容导入": "Lineup import",
+        "预解析视频": "Pre-parsed video",
+        "首办时间": "First opening time",
+        "默认 Tracklist": "Default Tracklist",
+        "默认币种（例如 CNY / USD）": "Default currency (e.g. CNY/USD)",
+    ]
+
+    static let zhMap: [String: String] = {
+        var mapping: [String: String] = [:]
+        for (zh, en) in enMap where mapping[en] == nil {
+            mapping[en] = zh
+        }
+        return mapping
+    }()
+
+    @inline(__always)
+    static func resolveForCurrentLanguage(_ text: String) -> String {
+        switch AppLanguagePreference.current.effectiveLanguage {
+        case .en:
+            return enMap[text] ?? text
+        case .zh, .system:
+            return zhMap[text] ?? text
+        }
+    }
+}
+
+@inline(__always)
+func LL(_ zh: String) -> String {
+    AppLocalizedText.resolveForCurrentLanguage(zh)
+}
+
+enum AppLanguagePreference {
+    private static let key = "raver.app.language"
+
+    static var current: AppLanguage {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: key),
+                  let value = AppLanguage(rawValue: raw) else {
+                return .system
+            }
+            return value
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: key)
+        }
+    }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var session: Session?
     @Published var errorMessage: String?
     @Published var unreadMessagesCount: Int = 0
+    @Published var preferredLanguage: AppLanguage = AppLanguagePreference.current
 
     let service: SocialService
     private var cancellables: Set<AnyCancellable> = []
@@ -18,7 +521,7 @@ final class AppState: ObservableObject {
                 guard let self else { return }
                 self.session = nil
                 self.unreadMessagesCount = 0
-                self.errorMessage = "登录状态已失效，请重新登录"
+                self.errorMessage = L("登录状态已失效，请重新登录", "Session expired. Please log in again.")
             }
             .store(in: &cancellables)
     }
@@ -33,7 +536,7 @@ final class AppState: ObservableObject {
             await refreshUnreadMessages()
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingMessage
         }
     }
 
@@ -48,7 +551,7 @@ final class AppState: ObservableObject {
             await refreshUnreadMessages()
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingMessage
         }
     }
 
@@ -58,6 +561,12 @@ final class AppState: ObservableObject {
         }
         session = nil
         unreadMessagesCount = 0
+    }
+
+    func setPreferredLanguage(_ language: AppLanguage) {
+        guard preferredLanguage != language else { return }
+        preferredLanguage = language
+        AppLanguagePreference.current = language
     }
 
     func refreshUnreadMessages() async {

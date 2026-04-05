@@ -16,13 +16,13 @@ struct FeedView: View {
         NavigationStack {
             Group {
                 if viewModel.isLoading && viewModel.posts.isEmpty {
-                    ProgressView("加载中...")
+                    ProgressView(L("加载中...", "Loading..."))
                         .padding(.top, 12)
                 } else if viewModel.posts.isEmpty {
                     ContentUnavailableView(
-                        "还没有动态",
+                        L("还没有动态", "No Posts Yet"),
                         systemImage: "square.and.pencil",
-                        description: Text("成为第一个发帖的人，开始你的社群互动。")
+                        description: Text(LL("成为第一个发帖的人，开始你的社群互动。"))
                     )
                     .padding(.top, 12)
                 } else {
@@ -65,7 +65,7 @@ struct FeedView: View {
                             if viewModel.isLoadingMore {
                                 HStack {
                                     Spacer()
-                                    ProgressView("加载更多...")
+                                    ProgressView(L("加载更多...", "Loading more..."))
                                     Spacer()
                                 }
                                 .padding(.vertical, 10)
@@ -97,7 +97,7 @@ struct FeedView: View {
                                 .shadow(color: Color.black.opacity(0.28), radius: 10, x: 0, y: 6)
                         )
                 }
-                .accessibilityLabel("发布动态")
+                .accessibilityLabel(L("发布动态", "Publish Post"))
                 .padding(.trailing, 8)
                 .padding(.bottom, 42)
             }
@@ -137,14 +137,14 @@ struct FeedView: View {
             .task {
                 await viewModel.load()
             }
-            .alert("加载失败", isPresented: Binding(
+            .alert(L("加载失败", "Load Failed"), isPresented: Binding(
                 get: { viewModel.error != nil },
                 set: { if !$0 { viewModel.error = nil } }
             )) {
-                Button("重试") {
+                Button(L("重试", "Retry")) {
                     Task { await viewModel.load() }
                 }
-                Button("取消", role: .cancel) {}
+                Button(L("取消", "Cancel"), role: .cancel) {}
             } message: {
                 Text(viewModel.error ?? "")
             }

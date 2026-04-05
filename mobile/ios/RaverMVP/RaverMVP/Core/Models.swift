@@ -7,8 +7,8 @@ enum ConversationType: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .direct: return "私信"
-        case .group: return "小队"
+        case .direct: return L("私信", "Direct")
+        case .group: return L("小队", "Squad")
         }
     }
 }
@@ -50,6 +50,10 @@ struct Post: Codable, Identifiable, Hashable {
     var content: String
     var images: [String]
     var location: String? = nil
+    var eventID: String? = nil
+    var boundDjIDs: [String] = []
+    var boundBrandIDs: [String] = []
+    var boundEventIDs: [String] = []
     var squad: PostSquad?
     var createdAt: Date
     var likeCount: Int
@@ -115,11 +119,24 @@ struct CreatePostInput: Codable {
     let content: String
     let images: [String]
     var location: String?
+    var boundDjIDs: [String]
+    var boundBrandIDs: [String]
+    var boundEventIDs: [String]
 
-    init(content: String, images: [String], location: String? = nil) {
+    init(
+        content: String,
+        images: [String],
+        location: String? = nil,
+        boundDjIDs: [String] = [],
+        boundBrandIDs: [String] = [],
+        boundEventIDs: [String] = []
+    ) {
         self.content = content
         self.images = images
         self.location = location
+        self.boundDjIDs = boundDjIDs
+        self.boundBrandIDs = boundBrandIDs
+        self.boundEventIDs = boundEventIDs
     }
 }
 
@@ -127,11 +144,24 @@ struct UpdatePostInput: Codable {
     let content: String
     let images: [String]
     var location: String?
+    var boundDjIDs: [String]?
+    var boundBrandIDs: [String]?
+    var boundEventIDs: [String]?
 
-    init(content: String, images: [String], location: String? = nil) {
+    init(
+        content: String,
+        images: [String],
+        location: String? = nil,
+        boundDjIDs: [String]? = nil,
+        boundBrandIDs: [String]? = nil,
+        boundEventIDs: [String]? = nil
+    ) {
         self.content = content
         self.images = images
         self.location = location
+        self.boundDjIDs = boundDjIDs
+        self.boundBrandIDs = boundBrandIDs
+        self.boundEventIDs = boundEventIDs
     }
 }
 
@@ -262,10 +292,10 @@ enum AppNotificationType: String, Codable, Hashable {
 
     var title: String {
         switch self {
-        case .follow: return "关注"
-        case .like: return "点赞"
-        case .comment: return "评论"
-        case .squadInvite: return "小队邀请"
+        case .follow: return L("关注", "Follow")
+        case .like: return L("点赞", "Like")
+        case .comment: return L("评论", "Comment")
+        case .squadInvite: return L("小队邀请", "Squad Invite")
         }
     }
 
@@ -319,15 +349,15 @@ extension Post {
     }
 
     var raverNewsTitle: String {
-        raverNewsValue(for: ["标题", "title"]) ?? "未命名资讯"
+        raverNewsValue(for: ["标题", "title"]) ?? L("未命名资讯", "Untitled News")
     }
 
     var raverNewsSource: String {
-        raverNewsValue(for: ["来源", "source"]) ?? "社区投稿"
+        raverNewsValue(for: ["来源", "source"]) ?? L("社区投稿", "Community Submission")
     }
 
     var raverNewsSummary: String {
-        raverNewsValue(for: ["摘要", "summary"]) ?? "暂无摘要"
+        raverNewsValue(for: ["摘要", "summary"]) ?? L("暂无摘要", "No Summary")
     }
 
     private func raverNewsValue(for keys: [String]) -> String? {

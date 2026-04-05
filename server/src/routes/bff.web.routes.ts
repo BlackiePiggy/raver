@@ -9,6 +9,7 @@ import djSetService from '../services/djset.service';
 import commentService from '../services/comment.service';
 import spotifyArtistService, { SpotifyUpstreamError } from '../services/spotify-artist.service';
 import discogsArtistService, { DiscogsUpstreamError } from '../services/discogs-artist.service';
+import soundcloudArtistService, { SoundCloudUpstreamError } from '../services/soundcloud-artist.service';
 import { verifyToken, type JWTPayload } from '../utils/auth';
 
 const router: Router = Router();
@@ -92,8 +93,151 @@ const toNumber = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+type EventBiTextPayload = {
+  en: string;
+  zh: string;
+};
+
+type EventSocialLinkPayload = {
+  type: string;
+  url: string;
+  label?: string;
+};
+
+type EventImageAssetPayload = {
+  type: 'cover' | 'luall' | 'tt' | 'other';
+  label: string;
+  url: string;
+  source?: string;
+  originalUrl?: string;
+  fileName?: string;
+  order?: number;
+  sort?: number;
+};
+
+const normalizeEventText = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+};
+
+const normalizeEventBiText = (value: unknown, fallback = ''): EventBiTextPayload | null => {
+  const fallbackText = fallback.trim();
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const row = value as Record<string, unknown>;
+    const en = normalizeEventText(row.en ?? row.EN ?? row.english) || fallbackText;
+    const zh = normalizeEventText(row.zh ?? row.ZH ?? row.cn ?? row.chinese) || en || fallbackText;
+    const normalizedEn = en || zh || fallbackText;
+    const normalizedZh = zh || en || fallbackText;
+    if (!normalizedEn && !normalizedZh) return null;
+    return {
+      en: normalizedEn,
+      zh: normalizedZh,
+    };
+  }
+
+  const plain = normalizeEventText(value) || fallbackText;
+  if (!plain) return null;
+  return {
+    en: plain,
+    zh: plain,
+  };
+};
+
+const normalizeDJBiText = (value: unknown, fallback = ''): EventBiTextPayload | null =>
+  normalizeEventBiText(value, fallback);
+
+const resolveBiTextWithFallback = (value: unknown, fallback = ''): EventBiTextPayload | null =>
+  normalizeEventBiText(value, fallback);
+
+const parseEventReferenceLinks = (value: unknown): string[] => {
+  const list = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(/\r?\n/g)
+      : [];
+
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const item of list) {
+    const url = normalizeEventText(item);
+    if (!url) continue;
+    const key = url.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(url);
+  }
+  return result;
+};
+
+const parseEventSocialLinks = (value: unknown): EventSocialLinkPayload[] => {
+  if (!Array.isArray(value)) return [];
+
+  const normalized = value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const url = normalizeEventText(row.url);
+      if (!url) return null;
+
+      const type = normalizeEventText(row.type).toLowerCase() || 'website';
+      const label = normalizeEventText(row.label);
+      return {
+        type,
+        url,
+        ...(label ? { label } : {}),
+      } as EventSocialLinkPayload;
+    })
+    .filter((item): item is EventSocialLinkPayload => item !== null);
+
+  const deduped: EventSocialLinkPayload[] = [];
+  const seen = new Set<string>();
+  for (const item of normalized) {
+    const key = `${item.type}::${item.url}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+
+  return deduped;
+};
+
+const parseEventImageAssets = (value: unknown): EventImageAssetPayload[] => {
+  if (!Array.isArray(value)) return [];
+  const allowedTypes = new Set(['cover', 'luall', 'tt', 'other']);
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const typeRaw = normalizeEventText(row.type).toLowerCase();
+      if (!allowedTypes.has(typeRaw)) return null;
+      const url = normalizeEventText(row.url);
+      if (!url) return null;
+      const label = normalizeEventText(row.label) || typeRaw.toUpperCase();
+
+      const order = typeof row.order === 'number' && Number.isFinite(row.order) ? row.order : undefined;
+      const sort = typeof row.sort === 'number' && Number.isFinite(row.sort) ? row.sort : undefined;
+      const source = normalizeEventText(row.source) || undefined;
+      const originalUrl = normalizeEventText(row.originalUrl) || undefined;
+      const fileName = normalizeEventText(row.fileName) || undefined;
+
+      return {
+        type: typeRaw as EventImageAssetPayload['type'],
+        label,
+        url,
+        ...(source ? { source } : {}),
+        ...(originalUrl ? { originalUrl } : {}),
+        ...(fileName ? { fileName } : {}),
+        ...(order !== undefined ? { order } : {}),
+        ...(sort !== undefined ? { sort } : {}),
+      } as EventImageAssetPayload;
+    })
+    .filter((item): item is EventImageAssetPayload => item !== null);
+};
+
 type NormalizedLineupSlot = {
   djId: string | null;
+  djIds: string[];
+  festivalDayIndex: number | null;
   djName: string;
   stageName: string | null;
   sortOrder: number;
@@ -116,7 +260,16 @@ const parseDateInput = (value: unknown): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-const resolveEventStatus = (startDate: Date, endDate: Date, fallbackStatus?: string | null): 'upcoming' | 'ongoing' | 'ended' => {
+const resolveEventStatus = (
+  startDate: Date,
+  endDate: Date,
+  fallbackStatus?: string | null
+): 'upcoming' | 'ongoing' | 'ended' | 'cancelled' => {
+  const normalizedFallback = typeof fallbackStatus === 'string' ? fallbackStatus.trim().toLowerCase() : '';
+  if (normalizedFallback === 'cancelled' || normalizedFallback === 'canceled') {
+    return 'cancelled';
+  }
+
   const now = Date.now();
   const start = startDate.getTime();
   const end = endDate.getTime();
@@ -127,17 +280,91 @@ const resolveEventStatus = (startDate: Date, endDate: Date, fallbackStatus?: str
     return 'ongoing';
   }
 
-  if (fallbackStatus === 'ongoing' || fallbackStatus === 'ended') {
-    return fallbackStatus;
+  if (normalizedFallback === 'ongoing' || normalizedFallback === 'ended' || normalizedFallback === 'upcoming') {
+    return normalizedFallback as 'upcoming' | 'ongoing' | 'ended';
   }
   return 'upcoming';
 };
 
-const normalizeLineupSlots = (slots: unknown, eventStartDate: Date): NormalizedLineupSlot[] => {
+const EVENT_TYPE_FILTER_ALIASES: Record<string, string[]> = {
+  festival: ['festival', '电音节'],
+  bar_event: ['bar_event', 'bar event', 'bar-event', '酒吧活动'],
+  outdoor_event: ['outdoor_event', 'outdoor event', 'outdoor-event', '露天活动'],
+  club_party: ['club_party', 'club party', 'club-party', '俱乐部派对'],
+  warehouse_party: ['warehouse_party', 'warehouse party', 'warehouse-party', '仓库派对'],
+  tour_special: ['tour_special', 'tour special', 'tour-special', '巡演专场'],
+  other: ['other', '其他'],
+};
+
+const normalizeEventTypeFilterKey = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, '_')
+    .replace(/\s+/g, '_');
+
+const resolveEventTypeFilterValues = (rawValue: string): string[] => {
+  const trimmed = rawValue.trim();
+  if (!trimmed) return [];
+  const key = normalizeEventTypeFilterKey(trimmed);
+  const aliases = EVENT_TYPE_FILTER_ALIASES[key];
+  if (!aliases || aliases.length === 0) {
+    return [trimmed];
+  }
+  return aliases;
+};
+
+const LINEUP_DJ_ID_PLACEHOLDER = '__UNBOUND__';
+const isLineupDjIdPlaceholder = (value: string): boolean => value === LINEUP_DJ_ID_PLACEHOLDER;
+
+const normalizeDayRolloverHour = (value: unknown, fallback = 6): number => {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  const hour = Math.floor(numeric);
+  if (hour < 0 || hour > 23) return fallback;
+  return hour;
+};
+
+const inferFestivalDayIndex = (
+  startTime: Date,
+  eventStartDate: Date,
+  dayRolloverHour: number
+): number | null => {
+  if (Number.isNaN(startTime.getTime()) || Number.isNaN(eventStartDate.getTime())) {
+    return null;
+  }
+  const calendar = CalendarJS;
+  const eventStartDay = calendar.startOfDay(eventStartDate);
+  const slotStartDay = calendar.startOfDay(startTime);
+  let dayOffset = calendar.diffDays(eventStartDay, slotStartDay);
+  if (dayOffset > 0 && startTime.getHours() < dayRolloverHour) {
+    dayOffset -= 1;
+  }
+  return Math.max(1, dayOffset + 1);
+};
+
+const CalendarJS = {
+  startOfDay(date: Date): Date {
+    const out = new Date(date);
+    out.setHours(0, 0, 0, 0);
+    return out;
+  },
+  diffDays(from: Date, to: Date): number {
+    const millis = this.startOfDay(to).getTime() - this.startOfDay(from).getTime();
+    return Math.floor(millis / 86_400_000);
+  },
+};
+
+const normalizeLineupSlots = (
+  slots: unknown,
+  eventStartDate: Date,
+  dayRolloverHourRaw: unknown = 6
+): NormalizedLineupSlot[] => {
   if (!Array.isArray(slots)) {
     return [];
   }
 
+  const dayRolloverHour = normalizeDayRolloverHour(dayRolloverHourRaw, 6);
   const safeEventStart = Number.isNaN(eventStartDate.getTime()) ? new Date() : eventStartDate;
   return slots
     .filter((slot): slot is Record<string, unknown> => typeof slot === 'object' && slot !== null)
@@ -161,14 +388,31 @@ const normalizeLineupSlots = (slots: unknown, eventStartDate: Date): NormalizedL
       }
 
       const djName = typeof slot.djName === 'string' ? slot.djName.trim() : '';
-      const djId = typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId.trim() : null;
-      const hasIdentity = djName.length > 0 || !!djId;
+      const rawDjId = typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId.trim() : '';
+      const rawDjIds = Array.isArray(slot.djIds) ? slot.djIds : [];
+      const cleanedDjIds = rawDjIds
+        .map((id) => (typeof id === 'string' ? id.trim() : ''))
+        .filter((id) => !!id);
+      const normalizedRawDjId = rawDjId && !isLineupDjIdPlaceholder(rawDjId) ? rawDjId : '';
+      const firstBoundDjId = cleanedDjIds.find((id) => !isLineupDjIdPlaceholder(id)) || '';
+      const effectiveDjId = normalizedRawDjId || firstBoundDjId || null;
+      // Always recompute festivalDayIndex from the effective startTime.
+      // This prevents stale historical indices (e.g. previously imported Day7/Day8)
+      // from being preserved after users edit and save timetable rows.
+      const festivalDayIndex =
+        inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour);
+      const djIds = cleanedDjIds.length
+        ? cleanedDjIds
+        : (effectiveDjId ? [effectiveDjId] : []);
+      const hasIdentity = djName.length > 0 || !!effectiveDjId || djIds.length > 0;
       if (!hasIdentity) {
         return null;
       }
 
       return {
-        djId,
+        djId: effectiveDjId,
+        djIds,
+        festivalDayIndex,
         djName: djName || 'Unknown DJ',
         stageName: typeof slot.stageName === 'string' && slot.stageName.trim() ? slot.stageName.trim() : null,
         sortOrder: typeof slot.sortOrder === 'number' && Number.isFinite(slot.sortOrder) ? slot.sortOrder : index + 1,
@@ -413,6 +657,12 @@ const isDjAvatarOssObjectKey = (objectKey: string, djId: string): boolean => {
   return objectKey.startsWith(`${ossDjsPrefix}/${safeDJId}/`);
 };
 
+const isWikiBrandOssObjectKey = (objectKey: string, brandId: string): boolean => {
+  const safeBrandId = sanitizeOssPathSegment(brandId);
+  if (!safeBrandId) return false;
+  return objectKey.startsWith(`${ossWikiBrandsPrefix}/${safeBrandId}/`);
+};
+
 const isRatingOssObjectKey = (objectKey: string): boolean => objectKey.startsWith(`${ossRatingsPrefix}/`);
 
 const normalizeDJNameKey = (value: string): string => value.trim().toLowerCase();
@@ -433,6 +683,62 @@ const mergeAliases = (baseName: string, values: Array<string | null | undefined>
   }
 
   return result;
+};
+
+const normalizeGenres = (value: unknown): string[] => {
+  const list = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(/[,\n/\uFF0C\u3001|;]+/g)
+      : [];
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const item of list) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+};
+
+const parseOptionalNonNegativeInt = (value: unknown, fieldName: string): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new Error(`${fieldName} must be a finite number or null`);
+    }
+    return Math.max(0, Math.floor(value));
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (!/^\d+$/.test(trimmed)) {
+      throw new Error(`${fieldName} must be a non-negative integer or null`);
+    }
+    return Math.max(0, Math.floor(Number(trimmed)));
+  }
+  throw new Error(`${fieldName} must be a number, string, or null`);
+};
+
+const payloadHasAnyKey = (payload: Record<string, unknown>, keys: string[]): boolean =>
+  keys.some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+
+const payloadValueByKeys = (payload: Record<string, unknown>, keys: string[]): unknown => {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(payload, key)) {
+      return payload[key];
+    }
+  }
+  return undefined;
+};
+
+const parseOptionalStringFromPayload = (payload: Record<string, unknown>, keys: string[]): string => {
+  const value = payloadValueByKeys(payload, keys);
+  return typeof value === 'string' ? value.trim() : '';
 };
 
 const splitDataSources = (value: string | null | undefined): string[] => {
@@ -591,6 +897,49 @@ const canUserEditDJ = async (
 ): Promise<boolean> => {
   if (role === 'admin') return true;
   return isDJContributor(djId, userId);
+};
+
+const parseCommaSeparatedSet = (value: string | undefined, fallback: string[]): Set<string> => {
+  const raw = String(value || '').trim();
+  const values = (raw ? raw.split(',') : fallback)
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter(Boolean);
+  return new Set(values);
+};
+
+const WEB_SUPER_ADMIN_USERNAMES = parseCommaSeparatedSet(
+  process.env.WEB_SUPER_ADMIN_USERNAMES,
+  ['uploadtester']
+);
+const WEB_SUPER_ADMIN_EMAILS = parseCommaSeparatedSet(
+  process.env.WEB_SUPER_ADMIN_EMAILS,
+  []
+);
+
+const canUserManageEvent = async (
+  userId: string,
+  role: string | null | undefined,
+  organizerId: string | null | undefined,
+  tokenEmail: string | null | undefined
+): Promise<boolean> => {
+  if (role === 'admin') return true;
+  const normalizedTokenEmail = String(tokenEmail || '').trim().toLowerCase();
+  if (normalizedTokenEmail && WEB_SUPER_ADMIN_EMAILS.has(normalizedTokenEmail)) return true;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, username: true, email: true },
+  });
+  if (!user) return false;
+
+  if (user.role === 'admin') return true;
+  const normalizedUsername = String(user.username || '').trim().toLowerCase();
+  if (normalizedUsername && WEB_SUPER_ADMIN_USERNAMES.has(normalizedUsername)) return true;
+
+  const normalizedEmail = String(user.email || '').trim().toLowerCase();
+  if (normalizedEmail && WEB_SUPER_ADMIN_EMAILS.has(normalizedEmail)) return true;
+
+  return organizerId === userId;
 };
 
 const ensureDJContributor = async (djId: string, userId: string): Promise<void> => {
@@ -757,6 +1106,16 @@ const deleteSingleDJMediaOssObjectIfOwned = async (url: string | null | undefine
   await deleteOssObjects([objectKey]);
 };
 
+const deleteSingleWikiBrandOssObjectIfOwned = async (
+  url: string | null | undefined,
+  brandId: string
+): Promise<void> => {
+  if (!postMediaOssClient || !url) return;
+  const objectKey = parseOssObjectKeyFromUrl(url);
+  if (!objectKey || !isWikiBrandOssObjectKey(objectKey, brandId)) return;
+  await deleteOssObjects([objectKey]);
+};
+
 const deleteSingleRatingOssObjectIfOwned = async (url: string | null | undefined): Promise<void> => {
   if (!postMediaOssClient || !url) return;
   const objectKey = parseOssObjectKeyFromUrl(url);
@@ -813,9 +1172,108 @@ const deleteEventOssFolder = async (eventId: string): Promise<void> => {
   await deleteOssObjects(keys);
 };
 
+const deleteDJOssFolder = async (djId: string): Promise<void> => {
+  if (!postMediaOssClient) return;
+  const safeDJId = sanitizeOssPathSegment(djId);
+  if (!safeDJId) return;
+  const prefix = `${ossDjsPrefix}/${safeDJId}/`;
+
+  let marker: string | undefined;
+  const keys: string[] = [];
+
+  do {
+    let listed:
+      | {
+          objects?: Array<{ name?: string }>;
+          nextMarker?: string;
+          isTruncated?: boolean;
+        }
+      | undefined;
+
+    try {
+      listed = await postMediaOssClient.list(
+        {
+          prefix,
+          marker,
+          'max-keys': 1000,
+        },
+        {}
+      );
+    } catch (error) {
+      console.error('BFF web list DJ OSS folder error:', error);
+      return;
+    }
+
+    const objects = Array.isArray(listed?.objects) ? listed.objects : [];
+    for (const item of objects) {
+      if (item?.name) {
+        keys.push(item.name);
+      }
+    }
+
+    if (listed?.isTruncated && listed.nextMarker) {
+      marker = listed.nextMarker;
+    } else {
+      marker = undefined;
+    }
+  } while (marker);
+
+  await deleteOssObjects(keys);
+};
+
+const deleteWikiBrandOssFolder = async (brandId: string): Promise<void> => {
+  if (!postMediaOssClient) return;
+  const safeBrandId = sanitizeOssPathSegment(brandId);
+  if (!safeBrandId) return;
+  const prefix = `${ossWikiBrandsPrefix}/${safeBrandId}/`;
+
+  let marker: string | undefined;
+  const keys: string[] = [];
+
+  do {
+    let listed:
+      | {
+          objects?: Array<{ name?: string }>;
+          nextMarker?: string;
+          isTruncated?: boolean;
+        }
+      | undefined;
+
+    try {
+      listed = await postMediaOssClient.list(
+        {
+          prefix,
+          marker,
+          'max-keys': 1000,
+        },
+        {}
+      );
+    } catch (error) {
+      console.error('BFF web list wiki brand OSS folder error:', error);
+      return;
+    }
+
+    const objects = Array.isArray(listed?.objects) ? listed.objects : [];
+    for (const item of objects) {
+      if (item?.name) {
+        keys.push(item.name);
+      }
+    }
+
+    if (listed?.isTruncated && listed.nextMarker) {
+      marker = listed.nextMarker;
+    } else {
+      marker = undefined;
+    }
+  } while (marker);
+
+  await deleteOssObjects(keys);
+};
+
 const uploadPostMediaToOss = async (
   file: Express.Multer.File,
-  kind: 'image' | 'video'
+  kind: 'image' | 'video',
+  scopeKey?: string | null
 ): Promise<{ url: string; fileName: string; mimeType: string; size: number }> => {
   if (!postMediaOssClient) {
     throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
@@ -824,7 +1282,9 @@ const uploadPostMediaToOss = async (
   const originalExt = path.extname(file.originalname || '').toLowerCase();
   const fallbackExt = kind === 'image' ? '.jpg' : '.mp4';
   const safeExt = originalExt && originalExt.length <= 10 ? originalExt : fallbackExt;
-  const objectKey = `${ossPostsPrefix}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}${safeExt}`;
+  const safeScopeKey = scopeKey ? sanitizeOssPathSegment(scopeKey) : '';
+  const postMediaDir = safeScopeKey ? `${ossPostsPrefix}/news/${safeScopeKey}` : ossPostsPrefix;
+  const objectKey = `${postMediaDir}/${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${safeExt}`;
   const mimeType = file.mimetype || (kind === 'image' ? 'image/jpeg' : 'video/mp4');
 
   let putResult: { url?: string };
@@ -1106,6 +1566,39 @@ type DiscogsDJSearchItem = {
   coverImageUrl: string | null;
   resourceUrl: string | null;
   uri: string | null;
+  existingDJId: string | null;
+  existingDJName: string | null;
+  existingMatchType: 'name_case_insensitive' | null;
+};
+
+type SoundCloudDJSearchItem = {
+  soundcloudid: string;
+  soundcloudId: string;
+  soundCloudId: string;
+  name: string;
+  username: string;
+  avatarUrl: string | null;
+  permalink: string | null;
+  permalinkUrl: string | null;
+  city: string | null;
+  country: string | null;
+  description: string | null;
+  website: string | null;
+  spotifyUrl: string | null;
+  instagramUrl: string | null;
+  facebookUrl: string | null;
+  twitterUrl: string | null;
+  youtubeUrl: string | null;
+  track_count: number;
+  playlist_count: number;
+  followers_count: number;
+  public_favorites_count: number;
+  trackCount: number;
+  playlistCount: number;
+  followersCount: number;
+  publicFavoritesCount: number;
+  soundCloudFollowers: number;
+  soundCloudFavorites: number;
   existingDJId: string | null;
   existingDJName: string | null;
   existingMatchType: 'name_case_insensitive' | null;
@@ -1513,12 +2006,64 @@ const runCozeLineupWorker = async (
   };
 };
 
+const extraOssImageHostSuffixes = (process.env.RAVER_OSS_IMAGE_HOSTS || process.env.OSS_IMAGE_HOSTS || '')
+  .split(',')
+  .map((item) => item.trim().toLowerCase())
+  .filter(Boolean);
+
+const isLikelyAliyunOssHost = (host: string): boolean => {
+  const normalized = host.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized === 'aliyuncs.com' || normalized.endsWith('.aliyuncs.com')) {
+    return true;
+  }
+  return extraOssImageHostSuffixes.some((suffix) => normalized === suffix || normalized.endsWith(`.${suffix}`));
+};
+
+const buildOssAvatarVariantUrl = (
+  rawUrl: string | null | undefined,
+  size: 'small' | 'medium' | 'original'
+): string | null => {
+  const normalized = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  if (!normalized) return null;
+  if (size === 'original') return normalized;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    return normalized;
+  }
+
+  const pathLooksLikeDJMedia = parsed.pathname.toLowerCase().includes('/djs/');
+  if (!isLikelyAliyunOssHost(parsed.hostname) && !pathLooksLikeDJMedia) {
+    return normalized;
+  }
+
+  const process = size === 'small'
+    ? 'image/resize,m_fill,w_160,h_160/quality,q_82/format,webp'
+    : 'image/resize,m_fill,w_480,h_480/quality,q_88/format,webp';
+  parsed.searchParams.set('x-oss-process', process);
+  return parsed.toString();
+};
+
 const mapDJ = (
   row: any,
   isFollowing = false,
   viewerId: string | null | undefined = null,
   viewerRole: string | null | undefined = null
 ) => {
+  const resolvedAvatarUrl =
+    typeof row.avatarUrl === 'string' && row.avatarUrl.trim().length > 0
+      ? row.avatarUrl.trim()
+      : null;
+  const nameI18n = resolveBiTextWithFallback(row.nameI18n ?? null, row.name ?? '');
+  const bioI18n = row.bio
+    ? resolveBiTextWithFallback(row.bioI18n ?? null, row.bio ?? '')
+    : (row.bioI18n ? resolveBiTextWithFallback(row.bioI18n, '') : null);
+  const countryI18n = row.country
+    ? resolveBiTextWithFallback(row.countryI18n ?? null, row.country ?? '')
+    : (row.countryI18n ? resolveBiTextWithFallback(row.countryI18n, '') : null);
   const contributorInfo = contributorInfoFromRow(row);
   const contributorUsernames = contributorInfo.usernames;
   const contributors = contributorInfo.users.map((user) => mapUserLite(user));
@@ -1529,18 +2074,35 @@ const mapDJ = (
   return {
     id: row.id,
     name: row.name,
+    nameI18n: nameI18n ?? null,
     aliases: Array.isArray(row.aliases) ? row.aliases : [],
+    genres: Array.isArray(row.genres) ? row.genres : [],
     slug: row.slug,
     bio: row.bio,
-    avatarUrl: row.avatarUrl,
+    bioI18n: bioI18n ?? null,
+    avatarUrl: resolvedAvatarUrl,
+    avatarOriginalUrl: resolvedAvatarUrl,
+    avatarMediumUrl: buildOssAvatarVariantUrl(resolvedAvatarUrl, 'medium'),
+    avatarSmallUrl: buildOssAvatarVariantUrl(resolvedAvatarUrl, 'small'),
     avatarSourceUrl: row.avatarSourceUrl ?? null,
     bannerUrl: row.bannerUrl,
     country: row.country,
+    countryI18n: countryI18n ?? null,
     spotifyId: row.spotifyId,
+    spotifyFollowers: row.spotifyFollowers ?? null,
     appleMusicId: row.appleMusicId,
     soundcloudUrl: row.soundcloudUrl,
+    soundcloudId: row.soundcloudId ?? null,
+    soundCloudId: row.soundcloudId ?? null,
+    website: row.website ?? null,
+    trackCount: row.trackCount ?? null,
+    playlistCount: row.playlistCount ?? null,
+    soundCloudFollowers: row.soundCloudFollowers ?? null,
+    soundCloudFavorites: row.soundCloudFavorites ?? null,
     instagramUrl: row.instagramUrl,
+    facebookUrl: row.facebookUrl,
     twitterUrl: row.twitterUrl,
+    youtubeUrl: row.youtubeUrl ?? null,
     isVerified: row.isVerified,
     followerCount: row.followerCount,
     sourceDataSource: row.sourceDataSource ?? null,
@@ -1576,6 +2138,23 @@ const normalizeWikiFestivalText = (value: unknown): string => {
   return value.trim();
 };
 
+const normalizeWikiFestivalInteger = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.trunc(parsed);
+};
+
+const normalizeWikiFestivalBiText = (value: unknown, fallback = ''): EventBiTextPayload | null =>
+  normalizeEventBiText(value, fallback);
+
+const pickWikiFestivalPrimaryText = (value: EventBiTextPayload | null, fallback = ''): string => {
+  const zh = normalizeWikiFestivalText(value?.zh);
+  const en = normalizeWikiFestivalText(value?.en);
+  const fallbackText = normalizeWikiFestivalText(fallback);
+  return zh || en || fallbackText;
+};
+
 const parseWikiFestivalLinks = (value: unknown): WikiFestivalLinkPayload[] => {
   if (!Array.isArray(value)) return [];
   return value
@@ -1594,6 +2173,42 @@ const parseWikiFestivalLinks = (value: unknown): WikiFestivalLinkPayload[] => {
     .filter((item): item is WikiFestivalLinkPayload => item !== null);
 };
 
+const mergeWikiFestivalLinks = (
+  baseLinks: WikiFestivalLinkPayload[],
+  fields: {
+    officialWebsite?: string | null;
+    facebookUrl?: string | null;
+    instagramUrl?: string | null;
+    twitterUrl?: string | null;
+    youtubeUrl?: string | null;
+    tiktokUrl?: string | null;
+  }
+): WikiFestivalLinkPayload[] => {
+  const merged: WikiFestivalLinkPayload[] = Array.isArray(baseLinks) ? [...baseLinks] : [];
+  const seen = new Set(
+    merged
+      .map((item) => normalizeWikiFestivalText(item.url).toLowerCase())
+      .filter((item) => item.length > 0)
+  );
+
+  const push = (title: string, icon: string, url: string | null | undefined): void => {
+    const normalizedUrl = normalizeWikiFestivalText(url);
+    if (!normalizedUrl) return;
+    const key = normalizedUrl.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push({ title, icon, url: normalizedUrl });
+  };
+
+  push('Official', 'globe', fields.officialWebsite);
+  push('Facebook', 'f.square', fields.facebookUrl);
+  push('Instagram', 'camera', fields.instagramUrl);
+  push('X / Twitter', 'bird', fields.twitterUrl);
+  push('YouTube', 'play.rectangle', fields.youtubeUrl);
+  push('TikTok', 'music.note', fields.tiktokUrl);
+  return merged;
+};
+
 const parseWikiFestivalAliases = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value
@@ -1609,6 +2224,24 @@ const parseWikiFestivalAliases = (value: unknown): string[] => {
   return [];
 };
 
+const uniqueWikiFestivalIdForName = async (name: string): Promise<string> => {
+  const base = slugify(name) || `festival-${Date.now()}`;
+  let candidate = base;
+  let seq = 1;
+
+  while (true) {
+    const exists = await prisma.wikiFestival.findUnique({
+      where: { id: candidate },
+      select: { id: true },
+    });
+    if (!exists) {
+      return candidate;
+    }
+    seq += 1;
+    candidate = `${base}-${seq}`;
+  }
+};
+
 const mapWikiFestival = (
   row: any,
   viewerId: string | null | undefined = null,
@@ -1619,20 +2252,45 @@ const mapWikiFestival = (
         .map((item: any) => mapUserLite(item?.user ?? item))
         .filter((item: ReturnType<typeof mapUserLite>): item is NonNullable<ReturnType<typeof mapUserLite>> => Boolean(item))
     : [];
-  const links = parseWikiFestivalLinks(row?.links);
+  const nameI18n = resolveBiTextWithFallback(row?.nameI18n ?? null, row?.name ?? '');
+  const descriptionI18n = resolveBiTextWithFallback(row?.descriptionI18n ?? null, row?.introduction ?? '');
+  const cityI18n = resolveBiTextWithFallback(row?.cityI18n ?? null, row?.city ?? '');
+  const countryI18n = resolveBiTextWithFallback(row?.countryI18n ?? null, row?.country ?? '');
+  const frequencyI18n = resolveBiTextWithFallback(row?.frequencyI18n ?? null, row?.frequency ?? '');
+  const links = mergeWikiFestivalLinks(parseWikiFestivalLinks(row?.links), {
+    officialWebsite: row?.officialWebsite ?? null,
+    facebookUrl: row?.facebookUrl ?? null,
+    instagramUrl: row?.instagramUrl ?? null,
+    twitterUrl: row?.twitterUrl ?? null,
+    youtubeUrl: row?.youtubeUrl ?? null,
+    tiktokUrl: row?.tiktokUrl ?? null,
+  });
   const isContributor = !!viewerId && contributors.some((user: any) => user.id === viewerId);
   const canEdit = viewerRole === 'admin' || isContributor;
 
   return {
     id: row.id,
     name: row.name,
+    nameI18n: nameI18n ?? null,
+    sourceRowId: row.sourceRowId ?? null,
+    abbreviation: row.abbreviation ?? null,
     aliases: Array.isArray(row.aliases) ? row.aliases : [],
     country: row.country,
+    countryI18n: countryI18n ?? null,
     city: row.city,
+    cityI18n: cityI18n ?? null,
     foundedYear: row.foundedYear,
     frequency: row.frequency,
+    frequencyI18n: frequencyI18n ?? null,
     tagline: row.tagline,
     introduction: row.introduction,
+    descriptionI18n: descriptionI18n ?? null,
+    officialWebsite: row.officialWebsite ?? null,
+    facebookUrl: row.facebookUrl ?? null,
+    instagramUrl: row.instagramUrl ?? null,
+    twitterUrl: row.twitterUrl ?? null,
+    youtubeUrl: row.youtubeUrl ?? null,
+    tiktokUrl: row.tiktokUrl ?? null,
     avatarUrl: row.avatarUrl ?? null,
     backgroundUrl: row.backgroundUrl ?? null,
     links,
@@ -1646,10 +2304,21 @@ const mapWikiFestival = (
 const mapEvent = (row: any) => ({
   id: row.id,
   name: row.name,
+  nameI18n: row.nameI18n ?? null,
+  wikiFestivalId: row.wikiFestivalId ?? null,
   slug: row.slug,
+  archiveFestivalId: row.archiveFestivalId ?? null,
   description: row.description,
+  descriptionI18n: row.descriptionI18n ?? null,
+  locationI18n: row.locationI18n ?? null,
+  countryI18n: row.countryI18n ?? null,
   coverImageUrl: row.coverImageUrl,
   lineupImageUrl: row.lineupImageUrl,
+  imageAssets: row.imageAssets ?? null,
+  referenceLinks: Array.isArray(row.referenceLinks) ? row.referenceLinks : [],
+  socialLinks: row.socialLinks ?? null,
+  sourceProvider: row.sourceProvider ?? null,
+  sourceEventUrl: row.sourceEventUrl ?? null,
   eventType: row.eventType,
   organizerName: row.organizerName,
   venueName: row.venueName,
@@ -1660,6 +2329,7 @@ const mapEvent = (row: any) => ({
   longitude: toNumber(row.longitude),
   startDate: row.startDate,
   endDate: row.endDate,
+  dayRolloverHour: row.dayRolloverHour ?? 6,
   ticketUrl: row.ticketUrl,
   ticketPriceMin: toNumber(row.ticketPriceMin),
   ticketPriceMax: toNumber(row.ticketPriceMax),
@@ -1671,6 +2341,19 @@ const mapEvent = (row: any) => ({
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   organizer: mapUserLite(row.organizer),
+  wikiFestival: row.wikiFestival
+    ? {
+        id: row.wikiFestival.id,
+        name: row.wikiFestival.name,
+        nameI18n: row.wikiFestival.nameI18n ?? null,
+        country: row.wikiFestival.country,
+        countryI18n: row.wikiFestival.countryI18n ?? null,
+        city: row.wikiFestival.city,
+        cityI18n: row.wikiFestival.cityI18n ?? null,
+        avatarUrl: row.wikiFestival.avatarUrl ?? null,
+        backgroundUrl: row.wikiFestival.backgroundUrl ?? null,
+      }
+    : null,
   ticketTiers: Array.isArray(row.ticketTiers)
     ? row.ticketTiers.map((tier: any) => ({
         id: tier.id,
@@ -1685,7 +2368,9 @@ const mapEvent = (row: any) => ({
         id: slot.id,
         eventId: slot.eventId,
         djId: slot.djId,
+        djIds: Array.isArray(slot.djIds) ? slot.djIds : (slot.djId ? [slot.djId] : []),
         djName: slot.djName,
+        festivalDayIndex: typeof slot.festivalDayIndex === 'number' ? slot.festivalDayIndex : null,
         stageName: slot.stageName,
         sortOrder: slot.sortOrder,
         startTime: slot.startTime,
@@ -1695,8 +2380,12 @@ const mapEvent = (row: any) => ({
               id: slot.dj.id,
               name: slot.dj.name,
               avatarUrl: slot.dj.avatarUrl,
+              avatarOriginalUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'original'),
+              avatarMediumUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'medium'),
+              avatarSmallUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'small'),
               bannerUrl: slot.dj.bannerUrl,
               country: slot.dj.country,
+              soundCloudFollowers: slot.dj.soundCloudFollowers ?? null,
             }
           : null,
       }))
@@ -1770,12 +2459,22 @@ const mapDJSet = (row: any) => ({
         name: row.dj.name,
         slug: row.dj.slug,
         avatarUrl: row.dj.avatarUrl,
+        avatarOriginalUrl: buildOssAvatarVariantUrl(row.dj.avatarUrl, 'original'),
+        avatarMediumUrl: buildOssAvatarVariantUrl(row.dj.avatarUrl, 'medium'),
+        avatarSmallUrl: buildOssAvatarVariantUrl(row.dj.avatarUrl, 'small'),
         bannerUrl: row.dj.bannerUrl,
         country: row.dj.country,
       }
     : null,
   lineupDjs: Array.isArray(row.lineupDjs)
-    ? row.lineupDjs.map((dj: any) => ({ id: dj.id, name: dj.name, avatarUrl: dj.avatarUrl }))
+    ? row.lineupDjs.map((dj: any) => ({
+        id: dj.id,
+        name: dj.name,
+        avatarUrl: dj.avatarUrl,
+        avatarOriginalUrl: buildOssAvatarVariantUrl(dj.avatarUrl, 'original'),
+        avatarMediumUrl: buildOssAvatarVariantUrl(dj.avatarUrl, 'medium'),
+        avatarSmallUrl: buildOssAvatarVariantUrl(dj.avatarUrl, 'small'),
+      }))
     : [],
   tracks: Array.isArray(row.tracks) ? row.tracks.map(mapTrack) : [],
   trackCount: Array.isArray(row.tracks) ? row.tracks.length : 0,
@@ -2013,32 +2712,311 @@ const attachLinkedDJsToRatingUnits = async (units: any[]): Promise<any[]> => {
   });
 };
 
-const RANKING_BOARDS: Record<string, { title: string; subtitle: string; years: number[]; coverImageUrl?: string }> = {
+type RankingEntityType = 'dj' | 'festival';
+
+type RankingBoardRecord = {
+  id: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  coverImageUrl: string | null;
+  entityType: RankingEntityType;
+  years: number[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+type RankingEntryRecord = {
+  rank: number;
+  name: string;
+  entityId?: string | null;
+};
+
+type RankingYearFile = {
+  boardId: string;
+  year: number;
+  source?: string;
+  updatedAt: string;
+  entries: RankingEntryRecord[];
+};
+
+const LEGACY_RANKING_BOARDS: Record<
+  string,
+  {
+    title: string;
+    subtitle: string;
+    years: number[];
+    coverImageUrl?: string;
+    entityType: RankingEntityType;
+  }
+> = {
   djmag: {
     title: 'DJ MAG TOP 100',
     subtitle: '全球电子音乐最有影响力榜单之一',
     years: [2022, 2023, 2024, 2025],
+    entityType: 'dj',
   },
   dongye: {
     title: '东野 DJ 榜',
     subtitle: '中文圈 DJ 热度与影响力榜单',
     years: [2024, 2025],
+    entityType: 'dj',
+  },
+  djmag_festival: {
+    title: 'DJ MAG TOP 100 Festivals',
+    subtitle: '全球电音节品牌百大榜单',
+    years: [2025],
+    entityType: 'festival',
   },
 };
 
-const rankingFilePath = (boardId: string, year: number): string | null => {
-  const candidates = [
-    path.join(process.cwd(), '..', 'web', 'public', 'rankings', boardId, `${year}.txt`),
-    path.join(process.cwd(), 'web', 'public', 'rankings', boardId, `${year}.txt`),
-  ];
+const rankingRootCandidates = [
+  path.join(process.cwd(), '..', 'web', 'public', 'rankings'),
+  path.join(process.cwd(), 'web', 'public', 'rankings'),
+];
 
+const rankingBoardManifestFile = '_boards.json';
+
+const sanitizeRankingBoardId = (value: string): string => {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/^_+|_+$/g, '');
+  return normalized || `ranking-${Date.now()}`;
+};
+
+const resolveRankingRootDir = (): string => {
+  for (const dir of rankingRootCandidates) {
+    if (fs.existsSync(dir)) return dir;
+  }
+  const fallback = rankingRootCandidates[0];
+  fs.mkdirSync(fallback, { recursive: true });
+  return fallback;
+};
+
+const rankingBoardManifestPath = (): string =>
+  path.join(resolveRankingRootDir(), rankingBoardManifestFile);
+
+const rankingBoardDirPath = (boardId: string): string =>
+  path.join(resolveRankingRootDir(), sanitizeRankingBoardId(boardId));
+
+const rankingYearJsonPath = (boardId: string, year: number): string =>
+  path.join(rankingBoardDirPath(boardId), `${year}.json`);
+
+const rankingYearTxtPath = (boardId: string, year: number): string =>
+  path.join(rankingBoardDirPath(boardId), `${year}.txt`);
+
+const rankingYearPathLegacy = (boardId: string, year: number): string | null => {
+  const candidates = [
+    rankingYearTxtPath(boardId, year),
+    ...rankingRootCandidates.map((root) => path.join(root, sanitizeRankingBoardId(boardId), `${year}.txt`)),
+  ];
   for (const filePath of candidates) {
-    if (fs.existsSync(filePath)) {
-      return filePath;
+    if (fs.existsSync(filePath)) return filePath;
+  }
+  return null;
+};
+
+const normalizeRankingYears = (value: unknown): number[] => {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .map((item) => Number(item))
+        .filter((item) => Number.isFinite(item))
+        .map((item) => Math.max(1900, Math.min(2200, Math.floor(item))))
+    )
+  ).sort((a, b) => a - b);
+};
+
+const normalizeRankingBoard = (input: unknown, fallbackId = ''): RankingBoardRecord | null => {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const row = input as Record<string, unknown>;
+  const id = sanitizeRankingBoardId(String(row.id || fallbackId || ''));
+  const title = String(row.title || '').trim() || id;
+  const subtitle = String(row.subtitle || '').trim();
+  const description = String(row.description || '').trim();
+  const entityType: RankingEntityType = String(row.entityType || '').trim() === 'festival' ? 'festival' : 'dj';
+  const coverImageUrlRaw = String(row.coverImageUrl || '').trim();
+  const coverImageUrl = coverImageUrlRaw || null;
+  const years = normalizeRankingYears(row.years);
+  const nowIso = new Date().toISOString();
+  const createdAt = String(row.createdAt || '').trim() || nowIso;
+  const updatedAt = String(row.updatedAt || '').trim() || nowIso;
+  return {
+    id,
+    title,
+    subtitle,
+    description,
+    coverImageUrl,
+    entityType,
+    years,
+    createdAt,
+    updatedAt,
+  };
+};
+
+const collectRankingBoardYearsFromFiles = (boardId: string): number[] => {
+  const dirPath = rankingBoardDirPath(boardId);
+  if (!fs.existsSync(dirPath)) return [];
+  const yearSet = new Set<number>();
+  for (const file of fs.readdirSync(dirPath)) {
+    const match = file.match(/^(\d{4})\.(json|txt)$/i);
+    if (!match) continue;
+    const year = Number(match[1]);
+    if (Number.isFinite(year)) yearSet.add(year);
+  }
+  return Array.from(yearSet).sort((a, b) => a - b);
+};
+
+const rankingEntriesToText = (entries: RankingEntryRecord[]): string =>
+  entries
+    .slice()
+    .sort((a, b) => a.rank - b.rank)
+    .map((item) => `${item.rank}. ${item.name}`)
+    .join('\n');
+
+const parseRankingEntries = (value: unknown): RankingEntryRecord[] => {
+  if (!Array.isArray(value)) return [];
+  const rows = value
+    .map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+      const row = item as Record<string, unknown>;
+      const rank = Number(row.rank);
+      const name = String(row.name || '').trim();
+      if (!Number.isFinite(rank) || rank <= 0 || !name) return null;
+      const entityIdRaw = String(row.entityId || '').trim();
+      const entityId = entityIdRaw.length > 0 ? entityIdRaw : null;
+      return {
+        rank: Math.floor(rank),
+        name,
+        ...(entityId ? { entityId } : {}),
+      } as RankingEntryRecord;
+    })
+    .filter((item): item is RankingEntryRecord => item !== null);
+
+  const deduped = new Map<number, RankingEntryRecord>();
+  for (const item of rows) {
+    deduped.set(item.rank, item);
+  }
+  return Array.from(deduped.values()).sort((a, b) => a.rank - b.rank);
+};
+
+const loadRankingBoards = (): RankingBoardRecord[] => {
+  const manifestPath = rankingBoardManifestPath();
+  let boards = Array.from(Object.entries(LEGACY_RANKING_BOARDS)).map(([id, board]) => ({
+    id,
+    title: board.title,
+    subtitle: board.subtitle,
+    description: '',
+    coverImageUrl: board.coverImageUrl || null,
+    entityType: board.entityType,
+    years: board.years.slice().sort((a, b) => a - b),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  })) as RankingBoardRecord[];
+
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const payload = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      const rows = Array.isArray(payload?.boards) ? payload.boards : [];
+      const normalizedRows = rows
+        .map((item: unknown) => normalizeRankingBoard(item))
+        .filter((item: RankingBoardRecord | null): item is RankingBoardRecord => item !== null);
+      if (normalizedRows.length > 0) {
+        boards = normalizedRows;
+      }
+    } catch (_error) {
+      // Keep legacy fallback when manifest is corrupted.
     }
   }
 
-  return null;
+  const dedupedById = new Map<string, RankingBoardRecord>();
+  for (const board of boards) {
+    const fileYears = collectRankingBoardYearsFromFiles(board.id);
+    const years = Array.from(new Set([...board.years, ...fileYears])).sort((a, b) => a - b);
+    dedupedById.set(board.id, { ...board, years });
+  }
+  return Array.from(dedupedById.values()).sort((a, b) => a.title.localeCompare(b.title));
+};
+
+const saveRankingBoards = (boards: RankingBoardRecord[]): void => {
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    boards: boards
+      .map((item) => ({
+        id: sanitizeRankingBoardId(item.id),
+        title: String(item.title || '').trim(),
+        subtitle: String(item.subtitle || '').trim(),
+        description: String(item.description || '').trim(),
+        coverImageUrl: String(item.coverImageUrl || '').trim() || null,
+        entityType: item.entityType === 'festival' ? 'festival' : 'dj',
+        years: normalizeRankingYears(item.years),
+        createdAt: item.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }))
+      .filter((item) => item.id && item.title),
+  };
+  fs.writeFileSync(rankingBoardManifestPath(), JSON.stringify(payload, null, 2), 'utf8');
+};
+
+const loadRankingYearData = (boardId: string, year: number): RankingYearFile | null => {
+  const yearJsonPath = rankingYearJsonPath(boardId, year);
+  if (fs.existsSync(yearJsonPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(yearJsonPath, 'utf8'));
+      if (parsed && typeof parsed === 'object') {
+        const entries = parseRankingEntries((parsed as Record<string, unknown>).entries);
+        return {
+          boardId: sanitizeRankingBoardId(boardId),
+          year: Math.floor(year),
+          source: String((parsed as Record<string, unknown>).source || '').trim() || undefined,
+          updatedAt: String((parsed as Record<string, unknown>).updatedAt || '').trim() || new Date().toISOString(),
+          entries,
+        };
+      }
+    } catch (_error) {
+      // Fall through to legacy parser.
+    }
+  }
+
+  const legacyTxtPath = rankingYearPathLegacy(boardId, year);
+  if (!legacyTxtPath) return null;
+  const parsed = parseRankingText(fs.readFileSync(legacyTxtPath, 'utf8')).map((item) => ({
+    rank: item.rank,
+    name: item.name,
+  }));
+  return {
+    boardId: sanitizeRankingBoardId(boardId),
+    year: Math.floor(year),
+    source: 'legacy_txt',
+    updatedAt: new Date().toISOString(),
+    entries: parsed,
+  };
+};
+
+const saveRankingYearData = (boardId: string, year: number, entries: RankingEntryRecord[], source = 'manual'): RankingYearFile => {
+  const boardDir = rankingBoardDirPath(boardId);
+  fs.mkdirSync(boardDir, { recursive: true });
+  const normalizedEntries = parseRankingEntries(entries);
+  const payload: RankingYearFile = {
+    boardId: sanitizeRankingBoardId(boardId),
+    year: Math.floor(year),
+    source,
+    updatedAt: new Date().toISOString(),
+    entries: normalizedEntries,
+  };
+  fs.writeFileSync(rankingYearJsonPath(boardId, year), JSON.stringify(payload, null, 2), 'utf8');
+  fs.writeFileSync(rankingYearTxtPath(boardId, year), rankingEntriesToText(normalizedEntries), 'utf8');
+  return payload;
+};
+
+const normalizeEventWikiFestivalId = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 };
 
 router.get('/events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
@@ -2051,17 +3029,23 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
     const city = typeof req.query.city === 'string' ? req.query.city.trim() : '';
     const country = typeof req.query.country === 'string' ? req.query.country.trim() : '';
     const eventType = typeof req.query.eventType === 'string' ? req.query.eventType.trim() : '';
-    const status = typeof req.query.status === 'string' ? req.query.status.trim() : 'upcoming';
+    const statusRaw = typeof req.query.status === 'string' ? req.query.status.trim() : 'upcoming';
+    const status = statusRaw.toLowerCase() === 'canceled' ? 'cancelled' : statusRaw.toLowerCase();
 
     const where: any = {};
     const now = new Date();
     if (status === 'upcoming') {
       where.startDate = { gt: now };
+      where.status = { not: 'cancelled' };
     } else if (status === 'ongoing') {
       where.startDate = { lte: now };
       where.endDate = { gte: now };
+      where.status = { not: 'cancelled' };
     } else if (status === 'ended') {
       where.endDate = { lt: now };
+      where.status = { not: 'cancelled' };
+    } else if (status === 'cancelled') {
+      where.status = 'cancelled';
     } else if (status === 'all' || status === '') {
       // no status filter
     } else if (status) {
@@ -2071,11 +3055,32 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
+        { slug: { contains: search, mode: 'insensitive' } },
+        { city: { contains: search, mode: 'insensitive' } },
+        { country: { contains: search, mode: 'insensitive' } },
+        { venueName: { contains: search, mode: 'insensitive' } },
+        { organizerName: { contains: search, mode: 'insensitive' } },
+        { wikiFestivalId: { contains: search, mode: 'insensitive' } },
+        { nameI18n: { path: ['zh'], string_contains: search } },
+        { nameI18n: { path: ['en'], string_contains: search } },
+        { descriptionI18n: { path: ['zh'], string_contains: search } },
+        { descriptionI18n: { path: ['en'], string_contains: search } },
+        { locationI18n: { path: ['zh'], string_contains: search } },
+        { locationI18n: { path: ['en'], string_contains: search } },
+        { countryI18n: { path: ['zh'], string_contains: search } },
+        { countryI18n: { path: ['en'], string_contains: search } },
       ];
     }
     if (city) where.city = city;
     if (country) where.country = country;
-    if (eventType) where.eventType = eventType;
+    if (eventType) {
+      const eventTypeValues = resolveEventTypeFilterValues(eventType);
+      if (eventTypeValues.length <= 1) {
+        where.eventType = eventTypeValues[0] ?? eventType;
+      } else {
+        where.eventType = { in: eventTypeValues };
+      }
+    }
 
     const [rows, total] = await Promise.all([
       prisma.event.findMany({
@@ -2091,12 +3096,25 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
             orderBy: { startTime: 'asc' },
             include: {
               dj: {
-                select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true },
+                select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
               },
             },
           },
           organizer: {
             select: { id: true, username: true, displayName: true, avatarUrl: true },
+          },
+          wikiFestival: {
+            select: {
+              id: true,
+              name: true,
+              nameI18n: true,
+              country: true,
+              countryI18n: true,
+              city: true,
+              cityI18n: true,
+              avatarUrl: true,
+              backgroundUrl: true,
+            },
           },
         },
       }),
@@ -2135,12 +3153,25 @@ router.get('/events/my', optionalAuth, async (req: Request, res: Response): Prom
           orderBy: { startTime: 'asc' },
           include: {
             dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true },
+              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
             },
           },
         },
         organizer: {
           select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+        wikiFestival: {
+          select: {
+            id: true,
+            name: true,
+            nameI18n: true,
+            country: true,
+            countryI18n: true,
+            city: true,
+            cityI18n: true,
+            avatarUrl: true,
+            backgroundUrl: true,
+          },
         },
       },
     });
@@ -2165,12 +3196,25 @@ router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Pro
           orderBy: { startTime: 'asc' },
           include: {
             dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true },
+              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
             },
           },
         },
         organizer: {
           select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+        wikiFestival: {
+          select: {
+            id: true,
+            name: true,
+            nameI18n: true,
+            country: true,
+            countryI18n: true,
+            city: true,
+            cityI18n: true,
+            avatarUrl: true,
+            backgroundUrl: true,
+          },
         },
       },
     });
@@ -2291,8 +3335,9 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       return;
     }
 
+    const dayRolloverHour = normalizeDayRolloverHour(body.dayRolloverHour, 6);
     const rawSlots = Array.isArray(body.lineupSlots) ? body.lineupSlots : [];
-    const lineupSlots = normalizeLineupSlots(rawSlots, parsedStartDate);
+    const lineupSlots = normalizeLineupSlots(rawSlots, parsedStartDate, dayRolloverHour);
     const coverImageUrlInput =
       typeof body.coverImageUrl === 'string' && body.coverImageUrl.trim()
         ? body.coverImageUrl.trim()
@@ -2301,6 +3346,46 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       typeof body.lineupImageUrl === 'string' && body.lineupImageUrl.trim()
         ? body.lineupImageUrl.trim()
         : null;
+    const archiveFestivalIdInput =
+      typeof body.archiveFestivalId === 'string' && body.archiveFestivalId.trim()
+        ? body.archiveFestivalId.trim()
+        : null;
+    const wikiFestivalIdInput = normalizeEventWikiFestivalId(body.wikiFestivalId ?? body.brandId);
+    const sourceProviderInput =
+      typeof body.sourceProvider === 'string' && body.sourceProvider.trim()
+        ? body.sourceProvider.trim()
+        : null;
+    const sourceEventUrlInput =
+      typeof body.sourceEventUrl === 'string' && body.sourceEventUrl.trim()
+        ? body.sourceEventUrl.trim()
+        : null;
+
+    const locationSeed =
+      (typeof body.location === 'string' && body.location.trim()) ||
+      (typeof body.venueName === 'string' && body.venueName.trim()) ||
+      (typeof body.city === 'string' && body.city.trim()) ||
+      '';
+    const countrySeed = typeof body.country === 'string' ? body.country : '';
+    const descriptionSeed = typeof body.description === 'string' ? body.description : '';
+
+    const nameI18n = normalizeEventBiText(body.nameI18n, name);
+    const locationI18n = normalizeEventBiText(body.locationI18n, locationSeed);
+    const countryI18n = normalizeEventBiText(body.countryI18n, countrySeed);
+    const descriptionI18n = normalizeEventBiText(body.descriptionI18n, descriptionSeed);
+    const referenceLinks = parseEventReferenceLinks(body.referenceLinks ?? body.relatedLinks);
+    const socialLinks = parseEventSocialLinks(body.socialLinks);
+    const imageAssets = parseEventImageAssets(body.imageAssets);
+
+    if (wikiFestivalIdInput) {
+      const brand = await prisma.wikiFestival.findUnique({
+        where: { id: wikiFestivalIdInput },
+        select: { id: true, isActive: true },
+      });
+      if (!brand || !brand.isActive) {
+        res.status(400).json({ error: 'Invalid wikiFestivalId' });
+        return;
+      }
+    }
 
     const rawTicketTiers = Array.isArray(body.ticketTiers) ? body.ticketTiers : [];
     const ticketCurrency = typeof body.ticketCurrency === 'string' ? body.ticketCurrency : null;
@@ -2320,14 +3405,24 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         sortOrder: tier.sortOrder,
       }));
 
-    const created = await prisma.event.create({
-      data: {
+    const createEventData: any = {
         organizerId: userId,
         name,
+        nameI18n: nameI18n ? (nameI18n as unknown as Prisma.InputJsonValue) : undefined,
         slug: desiredSlug,
+        wikiFestivalId: wikiFestivalIdInput,
+        archiveFestivalId: archiveFestivalIdInput,
         description: typeof body.description === 'string' ? body.description : null,
+        descriptionI18n: descriptionI18n ? (descriptionI18n as unknown as Prisma.InputJsonValue) : undefined,
+        locationI18n: locationI18n ? (locationI18n as unknown as Prisma.InputJsonValue) : undefined,
+        countryI18n: countryI18n ? (countryI18n as unknown as Prisma.InputJsonValue) : undefined,
         coverImageUrl: coverImageUrlInput,
         lineupImageUrl: lineupImageUrlInput,
+        imageAssets: imageAssets.length > 0 ? (imageAssets as unknown as Prisma.InputJsonValue) : undefined,
+        referenceLinks,
+        socialLinks: socialLinks.length > 0 ? (socialLinks as unknown as Prisma.InputJsonValue) : undefined,
+        sourceProvider: sourceProviderInput,
+        sourceEventUrl: sourceEventUrlInput,
         eventType: typeof body.eventType === 'string' ? body.eventType : null,
         organizerName: typeof body.organizerName === 'string' ? body.organizerName : null,
         venueName: typeof body.venueName === 'string' ? body.venueName : null,
@@ -2338,6 +3433,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         longitude: toNumber(body.longitude),
         startDate: parsedStartDate,
         endDate: parsedEndDate,
+        dayRolloverHour,
         status: resolveEventStatus(parsedStartDate, parsedEndDate, typeof body.status === 'string' ? body.status : null),
         ticketUrl: typeof body.ticketUrl === 'string' ? body.ticketUrl : null,
         ticketPriceMin: toNumber(body.ticketPriceMin),
@@ -2347,7 +3443,10 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         officialWebsite: typeof body.officialWebsite === 'string' ? body.officialWebsite : null,
         lineupSlots: lineupSlots.length ? { create: lineupSlots } : undefined,
         ticketTiers: ticketTiers.length ? { create: ticketTiers } : undefined,
-      },
+      };
+
+    const created = await prisma.event.create({
+      data: createEventData,
       include: {
         ticketTiers: {
           orderBy: { sortOrder: 'asc' },
@@ -2356,12 +3455,25 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
           orderBy: { startTime: 'asc' },
           include: {
             dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true },
+              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
             },
           },
         },
         organizer: {
           select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+        wikiFestival: {
+          select: {
+            id: true,
+            name: true,
+            nameI18n: true,
+            country: true,
+            countryI18n: true,
+            city: true,
+            cityI18n: true,
+            avatarUrl: true,
+            backgroundUrl: true,
+          },
         },
       },
     });
@@ -2385,11 +3497,14 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       select: {
         id: true,
         organizerId: true,
+        wikiFestivalId: true,
         startDate: true,
         endDate: true,
+        dayRolloverHour: true,
         status: true,
         coverImageUrl: true,
         lineupImageUrl: true,
+        imageAssets: true,
       },
     });
 
@@ -2398,7 +3513,13 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       return;
     }
 
-    if (authReq.user?.role !== 'admin' && existing.organizerId !== userId) {
+    const canManage = await canUserManageEvent(
+      userId,
+      authReq.user?.role ?? null,
+      existing.organizerId,
+      authReq.user?.email ?? null
+    );
+    if (!canManage) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
@@ -2408,6 +3529,20 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const rawTicketTiers = Array.isArray(body.ticketTiers) ? body.ticketTiers : null;
     const hasCoverImageField = Object.prototype.hasOwnProperty.call(body, 'coverImageUrl');
     const hasLineupImageField = Object.prototype.hasOwnProperty.call(body, 'lineupImageUrl');
+    const hasArchiveFestivalIdField = Object.prototype.hasOwnProperty.call(body, 'archiveFestivalId');
+    const hasWikiFestivalIdField = Object.prototype.hasOwnProperty.call(body, 'wikiFestivalId')
+      || Object.prototype.hasOwnProperty.call(body, 'brandId');
+    const hasNameI18nField = Object.prototype.hasOwnProperty.call(body, 'nameI18n');
+    const hasDescriptionI18nField = Object.prototype.hasOwnProperty.call(body, 'descriptionI18n');
+    const hasLocationI18nField = Object.prototype.hasOwnProperty.call(body, 'locationI18n');
+    const hasCountryI18nField = Object.prototype.hasOwnProperty.call(body, 'countryI18n');
+    const hasReferenceLinksField = Object.prototype.hasOwnProperty.call(body, 'referenceLinks')
+      || Object.prototype.hasOwnProperty.call(body, 'relatedLinks');
+    const hasSocialLinksField = Object.prototype.hasOwnProperty.call(body, 'socialLinks');
+    const hasImageAssetsField = Object.prototype.hasOwnProperty.call(body, 'imageAssets');
+    const hasSourceProviderField = Object.prototype.hasOwnProperty.call(body, 'sourceProvider');
+    const hasSourceEventUrlField = Object.prototype.hasOwnProperty.call(body, 'sourceEventUrl');
+
     const nextCoverImageUrl =
       hasCoverImageField
         ? (typeof body.coverImageUrl === 'string' && body.coverImageUrl.trim() ? body.coverImageUrl.trim() : null)
@@ -2415,6 +3550,50 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const nextLineupImageUrl =
       hasLineupImageField
         ? (typeof body.lineupImageUrl === 'string' && body.lineupImageUrl.trim() ? body.lineupImageUrl.trim() : null)
+        : undefined;
+    const nextArchiveFestivalId =
+      hasArchiveFestivalIdField
+        ? (typeof body.archiveFestivalId === 'string' && body.archiveFestivalId.trim() ? body.archiveFestivalId.trim() : null)
+        : undefined;
+    const nextWikiFestivalId =
+      hasWikiFestivalIdField
+        ? normalizeEventWikiFestivalId(body.wikiFestivalId ?? body.brandId)
+        : undefined;
+
+    if (hasWikiFestivalIdField && nextWikiFestivalId) {
+      const brand = await prisma.wikiFestival.findUnique({
+        where: { id: nextWikiFestivalId },
+        select: { id: true, isActive: true },
+      });
+      if (!brand || !brand.isActive) {
+        res.status(400).json({ error: 'Invalid wikiFestivalId' });
+        return;
+      }
+    }
+
+    const updateName = typeof body.name === 'string' ? body.name : '';
+    const updateDescription = typeof body.description === 'string' ? body.description : '';
+    const updateLocationSeed =
+      (typeof body.location === 'string' && body.location.trim())
+      || (typeof body.venueName === 'string' && body.venueName.trim())
+      || (typeof body.city === 'string' && body.city.trim())
+      || '';
+    const updateCountrySeed = typeof body.country === 'string' ? body.country : '';
+
+    const nextNameI18n = hasNameI18nField ? normalizeEventBiText(body.nameI18n, updateName) : null;
+    const nextDescriptionI18n = hasDescriptionI18nField ? normalizeEventBiText(body.descriptionI18n, updateDescription) : null;
+    const nextLocationI18n = hasLocationI18nField ? normalizeEventBiText(body.locationI18n, updateLocationSeed) : null;
+    const nextCountryI18n = hasCountryI18nField ? normalizeEventBiText(body.countryI18n, updateCountrySeed) : null;
+    const nextReferenceLinks = hasReferenceLinksField ? parseEventReferenceLinks(body.referenceLinks ?? body.relatedLinks) : null;
+    const nextSocialLinks = hasSocialLinksField ? parseEventSocialLinks(body.socialLinks) : null;
+    const nextImageAssets = hasImageAssetsField ? parseEventImageAssets(body.imageAssets) : null;
+    const nextSourceProvider =
+      hasSourceProviderField
+        ? (typeof body.sourceProvider === 'string' && body.sourceProvider.trim() ? body.sourceProvider.trim() : null)
+        : undefined;
+    const nextSourceEventUrl =
+      hasSourceEventUrlField
+        ? (typeof body.sourceEventUrl === 'string' && body.sourceEventUrl.trim() ? body.sourceEventUrl.trim() : null)
         : undefined;
 
     const parsedStartDate = body.startDate !== undefined ? parseDateInput(body.startDate) : null;
@@ -2428,10 +3607,13 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       return;
     }
 
+    const nextDayRolloverHour = body.dayRolloverHour !== undefined
+      ? normalizeDayRolloverHour(body.dayRolloverHour, existing.dayRolloverHour ?? 6)
+      : (existing.dayRolloverHour ?? 6);
     const lineupBaseDate = parsedStartDate ?? existing.startDate;
     const effectiveStartDate = parsedStartDate ?? existing.startDate;
     const effectiveEndDate = parsedEndDate ?? existing.endDate;
-    const lineupSlots = normalizeLineupSlots(rawSlots || [], lineupBaseDate);
+    const lineupSlots = normalizeLineupSlots(rawSlots || [], lineupBaseDate, nextDayRolloverHour);
 
     const ticketCurrency = typeof body.ticketCurrency === 'string' ? body.ticketCurrency : null;
     const ticketTiers = (rawTicketTiers || [])
@@ -2450,14 +3632,37 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         sortOrder: tier.sortOrder,
       }));
 
-    const updated = await prisma.event.update({
-      where: { id: eventId },
-      data: {
+    const updateEventData: any = {
         name: typeof body.name === 'string' ? body.name : undefined,
+        nameI18n: hasNameI18nField
+          ? (nextNameI18n ? (nextNameI18n as unknown as Prisma.InputJsonValue) : undefined)
+          : undefined,
         slug: typeof body.slug === 'string' ? body.slug : undefined,
+        wikiFestivalId: hasWikiFestivalIdField ? nextWikiFestivalId : undefined,
+        archiveFestivalId: nextArchiveFestivalId,
         description: typeof body.description === 'string' ? body.description : undefined,
+        descriptionI18n: hasDescriptionI18nField
+          ? (nextDescriptionI18n ? (nextDescriptionI18n as unknown as Prisma.InputJsonValue) : undefined)
+          : undefined,
+        locationI18n: hasLocationI18nField
+          ? (nextLocationI18n ? (nextLocationI18n as unknown as Prisma.InputJsonValue) : undefined)
+          : undefined,
+        countryI18n: hasCountryI18nField
+          ? (nextCountryI18n ? (nextCountryI18n as unknown as Prisma.InputJsonValue) : undefined)
+          : undefined,
         coverImageUrl: nextCoverImageUrl,
         lineupImageUrl: nextLineupImageUrl,
+        imageAssets: hasImageAssetsField
+          ? (nextImageAssets && nextImageAssets.length > 0
+              ? (nextImageAssets as unknown as Prisma.InputJsonValue)
+              : Prisma.DbNull)
+          : undefined,
+        referenceLinks: hasReferenceLinksField ? (nextReferenceLinks ?? []) : undefined,
+        socialLinks: hasSocialLinksField
+          ? (nextSocialLinks && nextSocialLinks.length > 0 ? (nextSocialLinks as unknown as Prisma.InputJsonValue) : undefined)
+          : undefined,
+        sourceProvider: nextSourceProvider,
+        sourceEventUrl: nextSourceEventUrl,
         eventType: typeof body.eventType === 'string' ? body.eventType : undefined,
         organizerName: typeof body.organizerName === 'string' ? body.organizerName : undefined,
         venueName: typeof body.venueName === 'string' ? body.venueName : undefined,
@@ -2468,6 +3673,7 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         longitude: body.longitude !== undefined ? toNumber(body.longitude) : undefined,
         startDate: body.startDate !== undefined ? parsedStartDate ?? undefined : undefined,
         endDate: body.endDate !== undefined ? parsedEndDate ?? undefined : undefined,
+        dayRolloverHour: body.dayRolloverHour !== undefined ? nextDayRolloverHour : undefined,
         ticketUrl: typeof body.ticketUrl === 'string' ? body.ticketUrl : undefined,
         ticketPriceMin: body.ticketPriceMin !== undefined ? toNumber(body.ticketPriceMin) : undefined,
         ticketPriceMax: body.ticketPriceMax !== undefined ? toNumber(body.ticketPriceMax) : undefined,
@@ -2489,7 +3695,11 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
                 create: ticketTiers,
               }
             : undefined,
-      },
+      };
+
+    const updated = await prisma.event.update({
+      where: { id: eventId },
+      data: updateEventData,
       include: {
         ticketTiers: {
           orderBy: { sortOrder: 'asc' },
@@ -2498,12 +3708,25 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
           orderBy: { startTime: 'asc' },
           include: {
             dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true },
+              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
             },
           },
         },
         organizer: {
           select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+        wikiFestival: {
+          select: {
+            id: true,
+            name: true,
+            nameI18n: true,
+            country: true,
+            countryI18n: true,
+            city: true,
+            cityI18n: true,
+            avatarUrl: true,
+            backgroundUrl: true,
+          },
         },
       },
     });
@@ -2513,6 +3736,23 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     }
     if (hasLineupImageField && existing.lineupImageUrl && existing.lineupImageUrl !== updated.lineupImageUrl) {
       await deleteSingleEventOssObjectIfOwned(existing.lineupImageUrl, eventId);
+    }
+    if (hasImageAssetsField) {
+      const previousAssets = parseEventImageAssets(existing.imageAssets ?? []);
+      const nextAssets = parseEventImageAssets(updated.imageAssets ?? []);
+      const nextUrlSet = new Set(
+        nextAssets
+          .map((asset) => String(asset.url || '').trim().toLowerCase())
+          .filter(Boolean)
+      );
+      const removedAssets = previousAssets.filter((asset) => {
+        const key = String(asset.url || '').trim().toLowerCase();
+        if (!key) return false;
+        return !nextUrlSet.has(key);
+      });
+      for (const asset of removedAssets) {
+        await deleteSingleEventOssObjectIfOwned(asset.url, eventId);
+      }
     }
 
     ok(res, mapEvent(updated));
@@ -2539,7 +3779,13 @@ router.delete('/events/:id', optionalAuth, async (req: Request, res: Response): 
       return;
     }
 
-    if (authReq.user?.role !== 'admin' && existing.organizerId !== userId) {
+    const canManage = await canUserManageEvent(
+      userId,
+      authReq.user?.role ?? null,
+      existing.organizerId,
+      authReq.user?.email ?? null
+    );
+    if (!canManage) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
@@ -2585,7 +3831,13 @@ router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image
         return;
       }
 
-      if (authReq.user?.role !== 'admin' && event.organizerId !== userId) {
+      const canManage = await canUserManageEvent(
+        userId,
+        authReq.user?.role ?? null,
+        event.organizerId,
+        authReq.user?.email ?? null
+      );
+      if (!canManage) {
         await fs.promises.unlink(file.path).catch(() => undefined);
         res.status(403).json({ error: 'Forbidden' });
         return;
@@ -2711,7 +3963,14 @@ router.post('/feed/upload-image', optionalAuth, feedImageUpload.single('image'),
       return;
     }
 
-    const uploaded = await uploadPostMediaToOss(file, 'image');
+    const formBody = req.body as Record<string, unknown>;
+    const postIdRaw = typeof formBody.postId === 'string' ? formBody.postId.trim() : '';
+    const newsKeyRaw = typeof formBody.newsKey === 'string' ? formBody.newsKey.trim() : '';
+    const scopeKey = postIdRaw
+      ? `post-${postIdRaw}`
+      : (newsKeyRaw ? `draft-${newsKeyRaw}` : null);
+
+    const uploaded = await uploadPostMediaToOss(file, 'image', scopeKey);
     ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload feed image error:', error);
@@ -2729,7 +3988,14 @@ router.post('/feed/upload-video', optionalAuth, feedVideoUpload.single('video'),
       return;
     }
 
-    const uploaded = await uploadPostMediaToOss(file, 'video');
+    const formBody = req.body as Record<string, unknown>;
+    const postIdRaw = typeof formBody.postId === 'string' ? formBody.postId.trim() : '';
+    const newsKeyRaw = typeof formBody.newsKey === 'string' ? formBody.newsKey.trim() : '';
+    const scopeKey = postIdRaw
+      ? `post-${postIdRaw}`
+      : (newsKeyRaw ? `draft-${newsKeyRaw}` : null);
+
+    const uploaded = await uploadPostMediaToOss(file, 'video', scopeKey);
     ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload feed video error:', error);
@@ -2766,7 +4032,108 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
     let rows: any[] = [];
     let total = 0;
 
-    if (sortBy === 'random') {
+    // When keyword search is present, prioritize textual relevance:
+    // name match relevance > aliases match relevance > bio match relevance.
+    // `sortBy=random` remains an explicit override.
+    if (search && sortBy !== 'random') {
+      const searchPattern = `%${search}%`;
+      const whereSqlParts: Prisma.Sql[] = [
+        Prisma.sql`(
+          "d"."name" ILIKE ${searchPattern}
+          OR COALESCE("d"."bio", '') ILIKE ${searchPattern}
+          OR EXISTS (
+            SELECT 1
+            FROM unnest("d"."aliases") AS "alias"
+            WHERE "alias" ILIKE ${searchPattern}
+          )
+          OR "d"."name" % ${search}
+          OR COALESCE("d"."bio", '') % ${search}
+          OR EXISTS (
+            SELECT 1
+            FROM unnest("d"."aliases") AS "alias"
+            WHERE "alias" % ${search}
+          )
+        )`,
+      ];
+
+      if (country) {
+        whereSqlParts.push(Prisma.sql`"d"."country" = ${country}`);
+      }
+
+      const whereSql = Prisma.sql`WHERE ${Prisma.join(whereSqlParts, ' AND ')}`;
+
+      const [idRows, totalCountRows] = await Promise.all([
+        prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          WITH scored AS (
+            SELECT
+              "d"."id",
+              "d"."name",
+              "d"."follower_count",
+              CASE
+                WHEN "d"."name" ILIKE ${searchPattern} OR "d"."name" % ${search} THEN 0
+                WHEN EXISTS (
+                  SELECT 1
+                  FROM unnest("d"."aliases") AS "alias"
+                  WHERE "alias" ILIKE ${searchPattern} OR "alias" % ${search}
+                ) THEN 1
+                WHEN COALESCE("d"."bio", '') ILIKE ${searchPattern} OR COALESCE("d"."bio", '') % ${search} THEN 2
+                ELSE 3
+              END AS "match_bucket",
+              GREATEST(
+                similarity(COALESCE("d"."name", ''), ${search}),
+                word_similarity(COALESCE("d"."name", ''), ${search})
+              ) AS "name_score",
+              COALESCE((
+                SELECT MAX(
+                  GREATEST(
+                    similarity("alias", ${search}),
+                    word_similarity("alias", ${search})
+                  )
+                )
+                FROM unnest("d"."aliases") AS "alias"
+              ), 0) AS "alias_score",
+              GREATEST(
+                similarity(COALESCE("d"."bio", ''), ${search}),
+                word_similarity(COALESCE("d"."bio", ''), ${search})
+              ) AS "bio_score"
+            FROM "djs" AS "d"
+            ${whereSql}
+          )
+          SELECT "id"
+          FROM scored
+          ORDER BY
+            "match_bucket" ASC,
+            CASE
+              WHEN "match_bucket" = 0 THEN "name_score"
+              WHEN "match_bucket" = 1 THEN "alias_score"
+              WHEN "match_bucket" = 2 THEN "bio_score"
+              ELSE 0
+            END DESC,
+            GREATEST("name_score", "alias_score", "bio_score") DESC,
+            "follower_count" DESC,
+            "name" ASC
+          LIMIT ${limit}
+          OFFSET ${skip}
+        `),
+        prisma.$queryRaw<Array<{ total: number }>>(Prisma.sql`
+          SELECT COUNT(*)::int AS "total"
+          FROM "djs" AS "d"
+          ${whereSql}
+        `),
+      ]);
+
+      total = Number(totalCountRows[0]?.total ?? 0);
+      const orderedIds = idRows.map((row) => row.id);
+      if (orderedIds.length > 0) {
+        const idOrder = new Map(orderedIds.map((id, index) => [id, index]));
+        rows = await prisma.dJ.findMany({
+          where: {
+            id: { in: orderedIds },
+          },
+        });
+        rows.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
+      }
+    } else if (sortBy === 'random') {
       const whereSqlParts: Prisma.Sql[] = [];
 
       if (search) {
@@ -3129,6 +4496,108 @@ router.get('/djs/discogs/artists/:artistId', optionalAuth, async (req: Request, 
   }
 });
 
+router.get('/djs/soundcloud/search', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    if (!soundcloudArtistService.isConfigured()) {
+      res.status(503).json({ error: 'SoundCloud credentials are not configured' });
+      return;
+    }
+
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (!query) {
+      res.status(400).json({ error: 'q is required' });
+      return;
+    }
+
+    const limit = normalizeLimit(req.query.limit, 10, 30);
+    const candidates = await soundcloudArtistService.searchUsersByName(query, limit);
+    if (candidates.length === 0) {
+      ok(res, { items: [] as SoundCloudDJSearchItem[] });
+      return;
+    }
+
+    const nameConditions = candidates.map((item) => ({
+      name: { equals: item.name, mode: 'insensitive' as const },
+    }));
+    const existingRows = await prisma.dJ.findMany({
+      where: {
+        OR: nameConditions,
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    const byName = new Map<string, (typeof existingRows)[number]>();
+    for (const row of existingRows) {
+      const key = normalizeDJNameKey(row.name);
+      if (!byName.has(key)) {
+        byName.set(key, row);
+      }
+    }
+
+    const items: SoundCloudDJSearchItem[] = candidates.map((item) => {
+      const matched = byName.get(normalizeDJNameKey(item.name)) ?? null;
+      return {
+        soundcloudid: item.soundcloudId,
+        soundcloudId: item.soundcloudId,
+        soundCloudId: item.soundcloudId,
+        name: item.name,
+        username: item.username,
+        avatarUrl: item.avatarUrl,
+        permalink: item.permalink,
+        permalinkUrl: item.permalinkUrl,
+        city: item.city,
+        country: item.country,
+        description: item.description,
+        website: item.website,
+        spotifyUrl: item.spotifyUrl,
+        instagramUrl: item.instagramUrl,
+        facebookUrl: item.facebookUrl,
+        twitterUrl: item.twitterUrl,
+        youtubeUrl: item.youtubeUrl,
+        track_count: item.trackCount,
+        playlist_count: item.playlistCount,
+        followers_count: item.followersCount,
+        public_favorites_count: item.publicFavoritesCount,
+        trackCount: item.trackCount,
+        playlistCount: item.playlistCount,
+        followersCount: item.followersCount,
+        publicFavoritesCount: item.publicFavoritesCount,
+        soundCloudFollowers: item.followersCount,
+        soundCloudFavorites: item.publicFavoritesCount,
+        existingDJId: matched?.id ?? null,
+        existingDJName: matched?.name ?? null,
+        existingMatchType: matched ? 'name_case_insensitive' : null,
+      };
+    });
+
+    ok(res, { items });
+  } catch (error) {
+    if (error instanceof SoundCloudUpstreamError) {
+      console.error('BFF web soundcloud dj search upstream error:', {
+        code: error.code,
+        status: error.status,
+        message: error.message,
+      });
+      res.status(503).json({
+        error: 'SoundCloud 服务暂时不可用，请稍后重试',
+        errorCode: error.code,
+      });
+      return;
+    }
+    console.error('BFF web soundcloud dj search error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const authReq = req as BFFAuthRequest;
@@ -3175,9 +4644,74 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
     }
     const requestedBio = typeof payload.bio === 'string' ? payload.bio.trim() : '';
     const requestedCountry = typeof payload.country === 'string' ? payload.country.trim() : '';
+    const hasGenresInput = Object.prototype.hasOwnProperty.call(payload, 'genres');
+    if (hasGenresInput && payload.genres !== null && !Array.isArray(payload.genres) && typeof payload.genres !== 'string') {
+      res.status(400).json({ error: 'genres must be an array, string, or null' });
+      return;
+    }
+    const requestedGenres = hasGenresInput ? normalizeGenres(payload.genres) : [];
     const requestedInstagram = typeof payload.instagramUrl === 'string' ? payload.instagramUrl.trim() : '';
+    const requestedFacebook = typeof payload.facebookUrl === 'string' ? payload.facebookUrl.trim() : '';
     const requestedSoundcloud = typeof payload.soundcloudUrl === 'string' ? payload.soundcloudUrl.trim() : '';
     const requestedTwitter = typeof payload.twitterUrl === 'string' ? payload.twitterUrl.trim() : '';
+    const requestedYoutube = typeof payload.youtubeUrl === 'string' ? payload.youtubeUrl.trim() : '';
+    const requestedSoundcloudId = parseOptionalStringFromPayload(payload, ['soundcloudId', 'soundcloudid']);
+    const requestedWebsite = parseOptionalStringFromPayload(payload, ['website', 'websiteUrl', 'officialWebsite']);
+    const hasTrackCountInput = payloadHasAnyKey(payload, ['trackCount', 'track_count']);
+    const hasPlaylistCountInput = payloadHasAnyKey(payload, ['playlistCount', 'playlist_count']);
+    const hasSoundCloudFollowersInput = payloadHasAnyKey(payload, [
+      'soundCloudFollowers',
+      'soundcloudFollowers',
+      'followers_count',
+    ]);
+    const hasSoundCloudFavoritesInput = payloadHasAnyKey(payload, [
+      'soundCloudFavorites',
+      'soundcloudFavorites',
+      'public_favorites_count',
+    ]);
+    let requestedTrackCount: number | null = null;
+    let requestedPlaylistCount: number | null = null;
+    let requestedSoundCloudFollowers: number | null = null;
+    let requestedSoundCloudFavorites: number | null = null;
+    try {
+      if (hasTrackCountInput) {
+        requestedTrackCount = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['trackCount', 'track_count']),
+          'trackCount'
+        );
+      }
+      if (hasPlaylistCountInput) {
+        requestedPlaylistCount = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['playlistCount', 'playlist_count']),
+          'playlistCount'
+        );
+      }
+      if (hasSoundCloudFollowersInput) {
+        requestedSoundCloudFollowers = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['soundCloudFollowers', 'soundcloudFollowers', 'followers_count']),
+          'soundCloudFollowers'
+        );
+      }
+      if (hasSoundCloudFavoritesInput) {
+        requestedSoundCloudFavorites = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['soundCloudFavorites', 'soundcloudFavorites', 'public_favorites_count']),
+          'soundCloudFavorites'
+        );
+      }
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message });
+      return;
+    }
+    const hasSpotifyFollowersInput = Object.prototype.hasOwnProperty.call(payload, 'spotifyFollowers');
+    let requestedSpotifyFollowers: number | null = null;
+    if (hasSpotifyFollowersInput) {
+      try {
+        requestedSpotifyFollowers = parseOptionalNonNegativeInt(payload.spotifyFollowers, 'spotifyFollowers');
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+        return;
+      }
+    }
     const requestedVerified =
       typeof payload.isVerified === 'boolean' ? payload.isVerified : true;
 
@@ -3185,6 +4719,10 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
     const derivedBio = spotifyArtist.genres.length
       ? `Spotify genres: ${spotifyArtist.genres.slice(0, 4).join(', ')}`
       : '';
+    const derivedGenres = normalizeGenres(spotifyArtist.genres);
+    const derivedSpotifyFollowers = Number.isFinite(spotifyArtist.followers)
+      ? Math.max(0, Math.floor(spotifyArtist.followers))
+      : 0;
 
     const existingBySpotifyId = await prisma.dJ.findFirst({
       where: { spotifyId: spotifyArtist.id },
@@ -3221,14 +4759,31 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
         where: { id: target.id },
         data: {
           name: target.name || finalName,
+          nameI18n: (normalizeDJBiText(target.nameI18n ?? null, target.name || finalName) as unknown as Prisma.InputJsonValue | null) ?? undefined,
           aliases: mergedAliases,
+          genres: hasGenresInput ? requestedGenres : normalizeGenres([...(target.genres ?? []), ...derivedGenres]),
           bio: requestedBio || target.bio || derivedBio || null,
+          bioI18n: (normalizeDJBiText(target.bioI18n ?? null, requestedBio || target.bio || derivedBio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: requestedCountry || target.country || null,
+          countryI18n: (normalizeDJBiText(target.countryI18n ?? null, requestedCountry || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyId: spotifyArtist.id,
+          spotifyFollowers: hasSpotifyFollowersInput ? requestedSpotifyFollowers : derivedSpotifyFollowers,
           followerCount: spotifyArtist.followers || target.followerCount || 0,
           instagramUrl: requestedInstagram || target.instagramUrl || null,
+          facebookUrl: requestedFacebook || target.facebookUrl || null,
           soundcloudUrl: requestedSoundcloud || target.soundcloudUrl || null,
+          soundcloudId: requestedSoundcloudId || target.soundcloudId || null,
+          website: requestedWebsite || target.website || null,
+          trackCount: hasTrackCountInput ? requestedTrackCount : (target.trackCount ?? null),
+          playlistCount: hasPlaylistCountInput ? requestedPlaylistCount : (target.playlistCount ?? null),
+          soundCloudFollowers: hasSoundCloudFollowersInput
+            ? requestedSoundCloudFollowers
+            : (target.soundCloudFollowers ?? null),
+          soundCloudFavorites: hasSoundCloudFavoritesInput
+            ? requestedSoundCloudFavorites
+            : (target.soundCloudFavorites ?? null),
           twitterUrl: requestedTwitter || target.twitterUrl || null,
+          youtubeUrl: requestedYoutube || target.youtubeUrl || null,
           isVerified: target.isVerified || requestedVerified,
           avatarSourceUrl: spotifyArtist.imageUrl || target.avatarSourceUrl || null,
           sourceDataSource: mergeDJDataSources(target.sourceDataSource, ['spotify']),
@@ -3239,15 +4794,28 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
       persisted = await prisma.dJ.create({
         data: {
           name: finalName,
+          nameI18n: (normalizeDJBiText(payload.nameI18n ?? null, finalName) as unknown as Prisma.InputJsonValue | null) ?? undefined,
           aliases: mergedAliases,
+          genres: hasGenresInput ? requestedGenres : derivedGenres,
           slug,
           bio: requestedBio || derivedBio || null,
+          bioI18n: (normalizeDJBiText(payload.bioI18n ?? null, requestedBio || derivedBio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: requestedCountry || null,
+          countryI18n: (normalizeDJBiText(payload.countryI18n ?? null, requestedCountry || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyId: spotifyArtist.id,
+          spotifyFollowers: hasSpotifyFollowersInput ? requestedSpotifyFollowers : derivedSpotifyFollowers,
           followerCount: spotifyArtist.followers || 0,
           instagramUrl: requestedInstagram || null,
+          facebookUrl: requestedFacebook || null,
           soundcloudUrl: requestedSoundcloud || null,
+          soundcloudId: requestedSoundcloudId || null,
+          website: requestedWebsite || null,
+          trackCount: hasTrackCountInput ? requestedTrackCount : null,
+          playlistCount: hasPlaylistCountInput ? requestedPlaylistCount : null,
+          soundCloudFollowers: hasSoundCloudFollowersInput ? requestedSoundCloudFollowers : null,
+          soundCloudFavorites: hasSoundCloudFavoritesInput ? requestedSoundCloudFavorites : null,
           twitterUrl: requestedTwitter || null,
+          youtubeUrl: requestedYoutube || null,
           isVerified: requestedVerified,
           avatarSourceUrl: spotifyArtist.imageUrl || null,
           avatarUrl: null,
@@ -3360,10 +4928,75 @@ router.post('/djs/discogs/import', optionalAuth, async (req: Request, res: Respo
     }
     const requestedBio = typeof payload.bio === 'string' ? payload.bio.trim() : '';
     const requestedCountry = typeof payload.country === 'string' ? payload.country.trim() : '';
+    const hasGenresInput = Object.prototype.hasOwnProperty.call(payload, 'genres');
+    if (hasGenresInput && payload.genres !== null && !Array.isArray(payload.genres) && typeof payload.genres !== 'string') {
+      res.status(400).json({ error: 'genres must be an array, string, or null' });
+      return;
+    }
+    const requestedGenres = hasGenresInput ? normalizeGenres(payload.genres) : [];
     const requestedInstagram = typeof payload.instagramUrl === 'string' ? payload.instagramUrl.trim() : '';
+    const requestedFacebook = typeof payload.facebookUrl === 'string' ? payload.facebookUrl.trim() : '';
     const requestedSoundcloud = typeof payload.soundcloudUrl === 'string' ? payload.soundcloudUrl.trim() : '';
     const requestedTwitter = typeof payload.twitterUrl === 'string' ? payload.twitterUrl.trim() : '';
+    const requestedYoutube = typeof payload.youtubeUrl === 'string' ? payload.youtubeUrl.trim() : '';
     const requestedSpotifyId = typeof payload.spotifyId === 'string' ? payload.spotifyId.trim() : '';
+    const requestedSoundcloudId = parseOptionalStringFromPayload(payload, ['soundcloudId', 'soundcloudid']);
+    const requestedWebsite = parseOptionalStringFromPayload(payload, ['website', 'websiteUrl', 'officialWebsite']);
+    const hasTrackCountInput = payloadHasAnyKey(payload, ['trackCount', 'track_count']);
+    const hasPlaylistCountInput = payloadHasAnyKey(payload, ['playlistCount', 'playlist_count']);
+    const hasSoundCloudFollowersInput = payloadHasAnyKey(payload, [
+      'soundCloudFollowers',
+      'soundcloudFollowers',
+      'followers_count',
+    ]);
+    const hasSoundCloudFavoritesInput = payloadHasAnyKey(payload, [
+      'soundCloudFavorites',
+      'soundcloudFavorites',
+      'public_favorites_count',
+    ]);
+    let requestedTrackCount: number | null = null;
+    let requestedPlaylistCount: number | null = null;
+    let requestedSoundCloudFollowers: number | null = null;
+    let requestedSoundCloudFavorites: number | null = null;
+    try {
+      if (hasTrackCountInput) {
+        requestedTrackCount = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['trackCount', 'track_count']),
+          'trackCount'
+        );
+      }
+      if (hasPlaylistCountInput) {
+        requestedPlaylistCount = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['playlistCount', 'playlist_count']),
+          'playlistCount'
+        );
+      }
+      if (hasSoundCloudFollowersInput) {
+        requestedSoundCloudFollowers = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['soundCloudFollowers', 'soundcloudFollowers', 'followers_count']),
+          'soundCloudFollowers'
+        );
+      }
+      if (hasSoundCloudFavoritesInput) {
+        requestedSoundCloudFavorites = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['soundCloudFavorites', 'soundcloudFavorites', 'public_favorites_count']),
+          'soundCloudFavorites'
+        );
+      }
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message });
+      return;
+    }
+    const hasSpotifyFollowersInput = Object.prototype.hasOwnProperty.call(payload, 'spotifyFollowers');
+    let requestedSpotifyFollowers: number | null = null;
+    if (hasSpotifyFollowersInput) {
+      try {
+        requestedSpotifyFollowers = parseOptionalNonNegativeInt(payload.spotifyFollowers, 'spotifyFollowers');
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+        return;
+      }
+    }
     const requestedVerified =
       typeof payload.isVerified === 'boolean' ? payload.isVerified : true;
 
@@ -3389,8 +5022,10 @@ router.post('/djs/discogs/import', optionalAuth, async (req: Request, res: Respo
 
     const derivedBio = discogsArtist.profile?.trim() || '';
     const derivedInstagram = pickFirstUrlByHosts(discogsArtist.urls, ['instagram.com']);
+    const derivedFacebook = pickFirstUrlByHosts(discogsArtist.urls, ['facebook.com', 'fb.com']);
     const derivedSoundcloud = pickFirstUrlByHosts(discogsArtist.urls, ['soundcloud.com']);
     const derivedTwitter = pickFirstUrlByHosts(discogsArtist.urls, ['twitter.com', 'x.com']);
+    const derivedYoutube = pickFirstUrlByHosts(discogsArtist.urls, ['youtube.com', 'youtu.be']);
     const mergedAliases = hasAliasesInput
       ? mergeAliases(finalName, requestedAliases)
       : mergeAliases(finalName, [
@@ -3413,13 +5048,30 @@ router.post('/djs/discogs/import', optionalAuth, async (req: Request, res: Respo
         where: { id: target.id },
         data: {
           name: target.name || finalName,
+          nameI18n: (normalizeDJBiText(target.nameI18n ?? null, target.name || finalName) as unknown as Prisma.InputJsonValue | null) ?? undefined,
           aliases: mergedAliases,
+          genres: hasGenresInput ? requestedGenres : (target.genres ?? []),
           bio: requestedBio || target.bio || derivedBio || null,
+          bioI18n: (normalizeDJBiText(target.bioI18n ?? null, requestedBio || target.bio || derivedBio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: requestedCountry || target.country || null,
+          countryI18n: (normalizeDJBiText(target.countryI18n ?? null, requestedCountry || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyId: requestedSpotifyId || target.spotifyId || null,
+          spotifyFollowers: hasSpotifyFollowersInput ? requestedSpotifyFollowers : (target.spotifyFollowers ?? null),
           instagramUrl: requestedInstagram || target.instagramUrl || derivedInstagram || null,
+          facebookUrl: requestedFacebook || target.facebookUrl || derivedFacebook || null,
           soundcloudUrl: requestedSoundcloud || target.soundcloudUrl || derivedSoundcloud || null,
+          soundcloudId: requestedSoundcloudId || target.soundcloudId || null,
+          website: requestedWebsite || target.website || null,
+          trackCount: hasTrackCountInput ? requestedTrackCount : (target.trackCount ?? null),
+          playlistCount: hasPlaylistCountInput ? requestedPlaylistCount : (target.playlistCount ?? null),
+          soundCloudFollowers: hasSoundCloudFollowersInput
+            ? requestedSoundCloudFollowers
+            : (target.soundCloudFollowers ?? null),
+          soundCloudFavorites: hasSoundCloudFavoritesInput
+            ? requestedSoundCloudFavorites
+            : (target.soundCloudFavorites ?? null),
           twitterUrl: requestedTwitter || target.twitterUrl || derivedTwitter || null,
+          youtubeUrl: requestedYoutube || target.youtubeUrl || derivedYoutube || null,
           isVerified: target.isVerified || requestedVerified,
           avatarSourceUrl: discogsArtist.primaryImageUrl || target.avatarSourceUrl || null,
           sourceDataSource: mergeDJDataSources(target.sourceDataSource, [
@@ -3433,14 +5085,27 @@ router.post('/djs/discogs/import', optionalAuth, async (req: Request, res: Respo
       persisted = await prisma.dJ.create({
         data: {
           name: finalName,
+          nameI18n: (normalizeDJBiText(payload.nameI18n ?? null, finalName) as unknown as Prisma.InputJsonValue | null) ?? undefined,
           aliases: mergedAliases,
+          genres: hasGenresInput ? requestedGenres : [],
           slug,
           bio: requestedBio || derivedBio || null,
+          bioI18n: (normalizeDJBiText(payload.bioI18n ?? null, requestedBio || derivedBio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: requestedCountry || null,
+          countryI18n: (normalizeDJBiText(payload.countryI18n ?? null, requestedCountry || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyId: requestedSpotifyId || null,
+          spotifyFollowers: hasSpotifyFollowersInput ? requestedSpotifyFollowers : null,
           instagramUrl: requestedInstagram || derivedInstagram || null,
+          facebookUrl: requestedFacebook || derivedFacebook || null,
           soundcloudUrl: requestedSoundcloud || derivedSoundcloud || null,
+          soundcloudId: requestedSoundcloudId || null,
+          website: requestedWebsite || null,
+          trackCount: hasTrackCountInput ? requestedTrackCount : null,
+          playlistCount: hasPlaylistCountInput ? requestedPlaylistCount : null,
+          soundCloudFollowers: hasSoundCloudFollowersInput ? requestedSoundCloudFollowers : null,
+          soundCloudFavorites: hasSoundCloudFavoritesInput ? requestedSoundCloudFavorites : null,
           twitterUrl: requestedTwitter || derivedTwitter || null,
+          youtubeUrl: requestedYoutube || derivedYoutube || null,
           isVerified: requestedVerified,
           avatarSourceUrl: discogsArtist.primaryImageUrl || null,
           avatarUrl: null,
@@ -3529,9 +5194,74 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
       : [];
     const bio = typeof payload.bio === 'string' ? payload.bio.trim() : '';
     const country = typeof payload.country === 'string' ? payload.country.trim() : '';
+    const hasGenresInput = Object.prototype.hasOwnProperty.call(payload, 'genres');
+    if (hasGenresInput && payload.genres !== null && !Array.isArray(payload.genres) && typeof payload.genres !== 'string') {
+      res.status(400).json({ error: 'genres must be an array, string, or null' });
+      return;
+    }
+    const genres = hasGenresInput ? normalizeGenres(payload.genres) : [];
+    const hasSpotifyFollowersInput = Object.prototype.hasOwnProperty.call(payload, 'spotifyFollowers');
+    let spotifyFollowers: number | null = null;
+    if (hasSpotifyFollowersInput) {
+      try {
+        spotifyFollowers = parseOptionalNonNegativeInt(payload.spotifyFollowers, 'spotifyFollowers');
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+        return;
+      }
+    }
     const instagramUrl = typeof payload.instagramUrl === 'string' ? payload.instagramUrl.trim() : '';
+    const facebookUrl = typeof payload.facebookUrl === 'string' ? payload.facebookUrl.trim() : '';
     const soundcloudUrl = typeof payload.soundcloudUrl === 'string' ? payload.soundcloudUrl.trim() : '';
     const twitterUrl = typeof payload.twitterUrl === 'string' ? payload.twitterUrl.trim() : '';
+    const youtubeUrl = typeof payload.youtubeUrl === 'string' ? payload.youtubeUrl.trim() : '';
+    const soundcloudId = parseOptionalStringFromPayload(payload, ['soundcloudId', 'soundcloudid']);
+    const website = parseOptionalStringFromPayload(payload, ['website', 'websiteUrl', 'officialWebsite']);
+    const hasTrackCountInput = payloadHasAnyKey(payload, ['trackCount', 'track_count']);
+    const hasPlaylistCountInput = payloadHasAnyKey(payload, ['playlistCount', 'playlist_count']);
+    const hasSoundCloudFollowersInput = payloadHasAnyKey(payload, [
+      'soundCloudFollowers',
+      'soundcloudFollowers',
+      'followers_count',
+    ]);
+    const hasSoundCloudFavoritesInput = payloadHasAnyKey(payload, [
+      'soundCloudFavorites',
+      'soundcloudFavorites',
+      'public_favorites_count',
+    ]);
+    let trackCount: number | null = null;
+    let playlistCount: number | null = null;
+    let soundCloudFollowers: number | null = null;
+    let soundCloudFavorites: number | null = null;
+    try {
+      if (hasTrackCountInput) {
+        trackCount = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['trackCount', 'track_count']),
+          'trackCount'
+        );
+      }
+      if (hasPlaylistCountInput) {
+        playlistCount = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['playlistCount', 'playlist_count']),
+          'playlistCount'
+        );
+      }
+      if (hasSoundCloudFollowersInput) {
+        soundCloudFollowers = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['soundCloudFollowers', 'soundcloudFollowers', 'followers_count']),
+          'soundCloudFollowers'
+        );
+      }
+      if (hasSoundCloudFavoritesInput) {
+        soundCloudFavorites = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['soundCloudFavorites', 'soundcloudFavorites', 'public_favorites_count']),
+          'soundCloudFavorites'
+        );
+      }
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message });
+      return;
+    }
     const isVerified = typeof payload.isVerified === 'boolean' ? payload.isVerified : true;
 
     const existingBySpotifyId = spotifyId
@@ -3564,13 +5294,30 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
         where: { id: target.id },
         data: {
           name: target.name || name,
+          nameI18n: (normalizeDJBiText(target.nameI18n ?? null, target.name || name) as unknown as Prisma.InputJsonValue | null) ?? undefined,
           aliases: mergedAliases,
+          genres: hasGenresInput ? genres : (target.genres ?? []),
           bio: bio || target.bio || null,
+          bioI18n: (normalizeDJBiText(target.bioI18n ?? null, bio || target.bio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: country || target.country || null,
+          countryI18n: (normalizeDJBiText(target.countryI18n ?? null, country || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyId: spotifyId || target.spotifyId || null,
+          spotifyFollowers: hasSpotifyFollowersInput ? spotifyFollowers : (target.spotifyFollowers ?? null),
           instagramUrl: instagramUrl || target.instagramUrl || null,
+          facebookUrl: facebookUrl || target.facebookUrl || null,
           soundcloudUrl: soundcloudUrl || target.soundcloudUrl || null,
+          soundcloudId: soundcloudId || target.soundcloudId || null,
+          website: website || target.website || null,
+          trackCount: hasTrackCountInput ? trackCount : (target.trackCount ?? null),
+          playlistCount: hasPlaylistCountInput ? playlistCount : (target.playlistCount ?? null),
+          soundCloudFollowers: hasSoundCloudFollowersInput
+            ? soundCloudFollowers
+            : (target.soundCloudFollowers ?? null),
+          soundCloudFavorites: hasSoundCloudFavoritesInput
+            ? soundCloudFavorites
+            : (target.soundCloudFavorites ?? null),
           twitterUrl: twitterUrl || target.twitterUrl || null,
+          youtubeUrl: youtubeUrl || target.youtubeUrl || null,
           isVerified: target.isVerified || isVerified,
           sourceDataSource: mergeDJDataSources(target.sourceDataSource, ['manual']),
         },
@@ -3580,14 +5327,27 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
       persisted = await prisma.dJ.create({
         data: {
           name,
+          nameI18n: (normalizeDJBiText(payload.nameI18n ?? null, name) as unknown as Prisma.InputJsonValue | null) ?? undefined,
           aliases: mergedAliases,
+          genres,
           slug,
           bio: bio || null,
+          bioI18n: (normalizeDJBiText(payload.bioI18n ?? null, bio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: country || null,
+          countryI18n: (normalizeDJBiText(payload.countryI18n ?? null, country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyId: spotifyId || null,
+          spotifyFollowers,
           instagramUrl: instagramUrl || null,
+          facebookUrl: facebookUrl || null,
           soundcloudUrl: soundcloudUrl || null,
+          soundcloudId: soundcloudId || null,
+          website: website || null,
+          trackCount: hasTrackCountInput ? trackCount : null,
+          playlistCount: hasPlaylistCountInput ? playlistCount : null,
+          soundCloudFollowers: hasSoundCloudFollowersInput ? soundCloudFollowers : null,
+          soundCloudFavorites: hasSoundCloudFavoritesInput ? soundCloudFavorites : null,
           twitterUrl: twitterUrl || null,
+          youtubeUrl: youtubeUrl || null,
           isVerified,
           sourceDataSource: mergeDJDataSources(null, ['manual']),
         },
@@ -3711,6 +5471,9 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
 
     const payload = (req.body ?? {}) as Record<string, unknown>;
     const updateData: Prisma.DJUpdateInput = {};
+    const hasNameI18nField = Object.prototype.hasOwnProperty.call(payload, 'nameI18n');
+    const hasBioI18nField = Object.prototype.hasOwnProperty.call(payload, 'bioI18n');
+    const hasCountryI18nField = Object.prototype.hasOwnProperty.call(payload, 'countryI18n');
 
     let nextName = existing.name;
     let hasNameInput = false;
@@ -3754,6 +5517,99 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
       updateData.aliases = mergeAliases(nextName, aliasCandidates);
     }
 
+    if (Object.prototype.hasOwnProperty.call(payload, 'genres')) {
+      const genreValue = payload.genres;
+      if (genreValue === null) {
+        updateData.genres = [];
+      } else if (Array.isArray(genreValue) || typeof genreValue === 'string') {
+        updateData.genres = normalizeGenres(genreValue);
+      } else {
+        res.status(400).json({ error: 'genres must be an array, string, or null' });
+        return;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'spotifyFollowers')) {
+      try {
+        updateData.spotifyFollowers = parseOptionalNonNegativeInt(payload.spotifyFollowers, 'spotifyFollowers');
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+        return;
+      }
+    }
+
+    if (payloadHasAnyKey(payload, ['trackCount', 'track_count'])) {
+      try {
+        updateData.trackCount = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['trackCount', 'track_count']),
+          'trackCount'
+        );
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+        return;
+      }
+    }
+
+    if (payloadHasAnyKey(payload, ['playlistCount', 'playlist_count'])) {
+      try {
+        updateData.playlistCount = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['playlistCount', 'playlist_count']),
+          'playlistCount'
+        );
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+        return;
+      }
+    }
+
+    if (payloadHasAnyKey(payload, ['soundCloudFollowers', 'soundcloudFollowers', 'followers_count'])) {
+      try {
+        updateData.soundCloudFollowers = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['soundCloudFollowers', 'soundcloudFollowers', 'followers_count']),
+          'soundCloudFollowers'
+        );
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+        return;
+      }
+    }
+
+    if (payloadHasAnyKey(payload, ['soundCloudFavorites', 'soundcloudFavorites', 'public_favorites_count'])) {
+      try {
+        updateData.soundCloudFavorites = parseOptionalNonNegativeInt(
+          payloadValueByKeys(payload, ['soundCloudFavorites', 'soundcloudFavorites', 'public_favorites_count']),
+          'soundCloudFavorites'
+        );
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+        return;
+      }
+    }
+
+    if (payloadHasAnyKey(payload, ['soundcloudId', 'soundcloudid'])) {
+      const value = payloadValueByKeys(payload, ['soundcloudId', 'soundcloudid']);
+      if (value === null) {
+        updateData.soundcloudId = null;
+      } else if (typeof value === 'string') {
+        updateData.soundcloudId = value.trim() || null;
+      } else {
+        res.status(400).json({ error: 'soundcloudId must be a string or null' });
+        return;
+      }
+    }
+
+    if (payloadHasAnyKey(payload, ['website', 'websiteUrl', 'officialWebsite'])) {
+      const value = payloadValueByKeys(payload, ['website', 'websiteUrl', 'officialWebsite']);
+      if (value === null) {
+        updateData.website = null;
+      } else if (typeof value === 'string') {
+        updateData.website = value.trim() || null;
+      } else {
+        res.status(400).json({ error: 'website must be a string or null' });
+        return;
+      }
+    }
+
     const assignOptionalString = (
       payloadKey: string,
       targetKey:
@@ -3762,8 +5618,12 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
         | 'spotifyId'
         | 'appleMusicId'
         | 'instagramUrl'
+        | 'facebookUrl'
         | 'soundcloudUrl'
+        | 'soundcloudId'
+        | 'website'
         | 'twitterUrl'
+        | 'youtubeUrl'
     ) => {
       if (!Object.prototype.hasOwnProperty.call(payload, payloadKey)) return;
       const value = payload[payloadKey];
@@ -3784,11 +5644,61 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
       assignOptionalString('spotifyId', 'spotifyId');
       assignOptionalString('appleMusicId', 'appleMusicId');
       assignOptionalString('instagramUrl', 'instagramUrl');
+      assignOptionalString('facebookUrl', 'facebookUrl');
       assignOptionalString('soundcloudUrl', 'soundcloudUrl');
+      assignOptionalString('soundcloudId', 'soundcloudId');
+      assignOptionalString('website', 'website');
       assignOptionalString('twitterUrl', 'twitterUrl');
+      assignOptionalString('youtubeUrl', 'youtubeUrl');
     } catch (error) {
       res.status(400).json({ error: (error as Error).message });
       return;
+    }
+
+    if (hasNameI18nField) {
+      const normalized = normalizeDJBiText(payload.nameI18n, nextName);
+      if (normalized) {
+        updateData.nameI18n = normalized as unknown as Prisma.InputJsonValue;
+      }
+    } else if (hasNameInput) {
+      const normalized = normalizeDJBiText(existing.nameI18n ?? null, nextName);
+      if (normalized) {
+        updateData.nameI18n = normalized as unknown as Prisma.InputJsonValue;
+      }
+    }
+
+    const hasBioField = Object.prototype.hasOwnProperty.call(payload, 'bio');
+    if (hasBioI18nField) {
+      const bioSeed = hasBioField
+        ? (typeof payload.bio === 'string' ? payload.bio.trim() : '')
+        : (existing.bio ?? '');
+      const normalized = normalizeDJBiText(payload.bioI18n, bioSeed);
+      if (normalized) {
+        updateData.bioI18n = normalized as unknown as Prisma.InputJsonValue;
+      }
+    } else if (hasBioField) {
+      const bioSeed = typeof payload.bio === 'string' ? payload.bio.trim() : '';
+      const normalized = normalizeDJBiText(existing.bioI18n ?? null, bioSeed);
+      if (normalized) {
+        updateData.bioI18n = normalized as unknown as Prisma.InputJsonValue;
+      }
+    }
+
+    const hasCountryField = Object.prototype.hasOwnProperty.call(payload, 'country');
+    if (hasCountryI18nField) {
+      const countrySeed = hasCountryField
+        ? (typeof payload.country === 'string' ? payload.country.trim() : '')
+        : (existing.country ?? '');
+      const normalized = normalizeDJBiText(payload.countryI18n, countrySeed);
+      if (normalized) {
+        updateData.countryI18n = normalized as unknown as Prisma.InputJsonValue;
+      }
+    } else if (hasCountryField) {
+      const countrySeed = typeof payload.country === 'string' ? payload.country.trim() : '';
+      const normalized = normalizeDJBiText(existing.countryI18n ?? null, countrySeed);
+      if (normalized) {
+        updateData.countryI18n = normalized as unknown as Prisma.InputJsonValue;
+      }
     }
 
     if (Object.prototype.hasOwnProperty.call(payload, 'isVerified')) {
@@ -3819,6 +5729,58 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
     ok(res, mapDJ(updated, false, userId, viewerRole));
   } catch (error) {
     console.error('BFF web update dj error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/djs/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    const djId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    if (!djId) {
+      res.status(400).json({ error: 'DJ id is required' });
+      return;
+    }
+
+    const existing = await prisma.dJ.findUnique({
+      where: { id: djId },
+      select: {
+        id: true,
+        avatarUrl: true,
+        avatarSourceUrl: true,
+        bannerUrl: true,
+      },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'DJ not found' });
+      return;
+    }
+
+    const allowed = await canUserEditDJ(existing.id, userId, viewerRole);
+    if (!allowed) {
+      res.status(403).json({ error: '仅该 DJ 的贡献者或管理员可删除' });
+      return;
+    }
+
+    const urlsToDelete = [
+      existing.avatarUrl,
+      existing.avatarSourceUrl,
+      existing.bannerUrl,
+    ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+    await prisma.dJ.delete({ where: { id: djId } });
+    for (const url of urlsToDelete) {
+      await deleteSingleDJMediaOssObjectIfOwned(url, djId);
+    }
+    await deleteDJOssFolder(djId);
+
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF web delete dj error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -3854,7 +5816,7 @@ router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response):
           orderBy: { startTime: 'asc' },
           include: {
             dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true },
+              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
             },
           },
         },
@@ -4616,6 +6578,9 @@ router.get('/checkins', optionalAuth, async (req: Request, res: Response): Promi
             select: {
               id: true,
               name: true,
+              nameI18n: true,
+              locationI18n: true,
+              countryI18n: true,
               coverImageUrl: true,
               city: true,
               country: true,
@@ -4627,8 +6592,10 @@ router.get('/checkins', optionalAuth, async (req: Request, res: Response): Promi
             select: {
               id: true,
               name: true,
+              nameI18n: true,
               avatarUrl: true,
               country: true,
+              countryI18n: true,
             },
           },
         },
@@ -4706,7 +6673,6 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
           type: 'event',
           eventId,
           NOT: [
-            { note: 'planned' },
             { note: 'marked' },
           ],
         },
@@ -4736,6 +6702,9 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
           select: {
             id: true,
             name: true,
+            nameI18n: true,
+            locationI18n: true,
+            countryI18n: true,
             coverImageUrl: true,
             city: true,
             country: true,
@@ -4747,8 +6716,10 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
           select: {
             id: true,
             name: true,
+            nameI18n: true,
             avatarUrl: true,
             country: true,
+            countryI18n: true,
           },
         },
       },
@@ -4775,6 +6746,9 @@ router.patch('/checkins/:id', optionalAuth, async (req: Request, res: Response):
           select: {
             id: true,
             name: true,
+            nameI18n: true,
+            locationI18n: true,
+            countryI18n: true,
             coverImageUrl: true,
             city: true,
             country: true,
@@ -4786,8 +6760,10 @@ router.patch('/checkins/:id', optionalAuth, async (req: Request, res: Response):
           select: {
             id: true,
             name: true,
+            nameI18n: true,
             avatarUrl: true,
             country: true,
+            countryI18n: true,
           },
         },
       },
@@ -4836,7 +6812,6 @@ router.patch('/checkins/:id', optionalAuth, async (req: Request, res: Response):
           type: 'event',
           eventId: nextEventId,
           NOT: [
-            { note: 'planned' },
             { note: 'marked' },
           ],
         },
@@ -4863,6 +6838,9 @@ router.patch('/checkins/:id', optionalAuth, async (req: Request, res: Response):
           select: {
             id: true,
             name: true,
+            nameI18n: true,
+            locationI18n: true,
+            countryI18n: true,
             coverImageUrl: true,
             city: true,
             country: true,
@@ -4874,8 +6852,10 @@ router.patch('/checkins/:id', optionalAuth, async (req: Request, res: Response):
           select: {
             id: true,
             name: true,
+            nameI18n: true,
             avatarUrl: true,
             country: true,
+            countryI18n: true,
           },
         },
       },
@@ -5657,13 +7637,36 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
     const filteredRows = !search
       ? rows
       : rows.filter((row) => {
+          const nameI18n = resolveBiTextWithFallback(row.nameI18n ?? null, row.name ?? '');
+          const descriptionI18n = resolveBiTextWithFallback(row.descriptionI18n ?? null, row.introduction ?? '');
+          const countryI18n = resolveBiTextWithFallback(row.countryI18n ?? null, row.country ?? '');
+          const cityI18n = resolveBiTextWithFallback(row.cityI18n ?? null, row.city ?? '');
+          const frequencyI18n = resolveBiTextWithFallback(row.frequencyI18n ?? null, row.frequency ?? '');
           const pool = [
             row.name,
+            nameI18n?.zh,
+            nameI18n?.en,
+            row.abbreviation,
             ...(Array.isArray(row.aliases) ? row.aliases : []),
             row.country,
+            countryI18n?.zh,
+            countryI18n?.en,
             row.city,
+            cityI18n?.zh,
+            cityI18n?.en,
+            row.frequency,
+            frequencyI18n?.zh,
+            frequencyI18n?.en,
             row.tagline,
             row.introduction,
+            descriptionI18n?.zh,
+            descriptionI18n?.en,
+            row.officialWebsite,
+            row.facebookUrl,
+            row.instagramUrl,
+            row.twitterUrl,
+            row.youtubeUrl,
+            row.tiktokUrl,
           ]
             .join(' ')
             .toLowerCase();
@@ -5673,6 +7676,113 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
     ok(res, { items: filteredRows.map((row) => mapWikiFestival(row, viewerId, viewerRole)) });
   } catch (error) {
     console.error('BFF web learn festivals error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/learn/festivals', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const sourceRowIdRaw = normalizeWikiFestivalInteger(body.sourceRowId);
+    if (Object.prototype.hasOwnProperty.call(body, 'sourceRowId') && body.sourceRowId !== null && body.sourceRowId !== '' && sourceRowIdRaw === null) {
+      res.status(400).json({ error: 'sourceRowId must be an integer' });
+      return;
+    }
+
+    const rawName = normalizeWikiFestivalText(body.name);
+    const nameI18n = normalizeWikiFestivalBiText(body.nameI18n, rawName);
+    const name = rawName || pickWikiFestivalPrimaryText(nameI18n);
+    if (!name) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    const abbreviation = normalizeWikiFestivalText(body.abbreviation);
+    const aliases = parseWikiFestivalAliases(body.aliases);
+    const rawCountry = normalizeWikiFestivalText(body.country);
+    const countryI18n = normalizeWikiFestivalBiText(body.countryI18n, rawCountry);
+    const country = rawCountry || pickWikiFestivalPrimaryText(countryI18n);
+    const rawCity = normalizeWikiFestivalText(body.city);
+    const cityI18n = normalizeWikiFestivalBiText(body.cityI18n, rawCity);
+    const city = rawCity || pickWikiFestivalPrimaryText(cityI18n);
+    const foundedYear = normalizeWikiFestivalText(body.foundedYear);
+    const rawFrequency = normalizeWikiFestivalText(body.frequency);
+    const frequencyI18n = normalizeWikiFestivalBiText(body.frequencyI18n, rawFrequency);
+    const frequency = rawFrequency || pickWikiFestivalPrimaryText(frequencyI18n);
+    const tagline = normalizeWikiFestivalText(body.tagline);
+    const rawIntroduction = normalizeWikiFestivalText(body.introduction);
+    const descriptionI18n = normalizeWikiFestivalBiText(body.descriptionI18n, rawIntroduction);
+    const introduction = rawIntroduction || pickWikiFestivalPrimaryText(descriptionI18n);
+    const officialWebsite = normalizeWikiFestivalText(body.officialWebsite);
+    const facebookUrl = normalizeWikiFestivalText(body.facebookUrl);
+    const instagramUrl = normalizeWikiFestivalText(body.instagramUrl);
+    const twitterUrl = normalizeWikiFestivalText(body.twitterUrl);
+    const youtubeUrl = normalizeWikiFestivalText(body.youtubeUrl);
+    const tiktokUrl = normalizeWikiFestivalText(body.tiktokUrl);
+    const avatarUrl = normalizeWikiFestivalText(body.avatarUrl);
+    const backgroundUrl = normalizeWikiFestivalText(body.backgroundUrl);
+    const links = mergeWikiFestivalLinks(parseWikiFestivalLinks(body.links), {
+      officialWebsite,
+      facebookUrl,
+      instagramUrl,
+      twitterUrl,
+      youtubeUrl,
+      tiktokUrl,
+    });
+    const festivalId = await uniqueWikiFestivalIdForName(name);
+
+    const created = await prisma.wikiFestival.create({
+      data: {
+        id: festivalId,
+        sourceRowId: sourceRowIdRaw,
+        name,
+        nameI18n: nameI18n ? (nameI18n as unknown as Prisma.InputJsonValue) : undefined,
+        abbreviation: abbreviation.length > 0 ? abbreviation : '',
+        aliases,
+        country: country || '',
+        countryI18n: countryI18n ? (countryI18n as unknown as Prisma.InputJsonValue) : undefined,
+        city: city || '',
+        cityI18n: cityI18n ? (cityI18n as unknown as Prisma.InputJsonValue) : undefined,
+        foundedYear,
+        frequency: frequency || '',
+        frequencyI18n: frequencyI18n ? (frequencyI18n as unknown as Prisma.InputJsonValue) : undefined,
+        tagline,
+        introduction: introduction || '',
+        descriptionI18n: descriptionI18n ? (descriptionI18n as unknown as Prisma.InputJsonValue) : undefined,
+        officialWebsite: officialWebsite.length > 0 ? officialWebsite : null,
+        facebookUrl: facebookUrl.length > 0 ? facebookUrl : null,
+        instagramUrl: instagramUrl.length > 0 ? instagramUrl : null,
+        twitterUrl: twitterUrl.length > 0 ? twitterUrl : null,
+        youtubeUrl: youtubeUrl.length > 0 ? youtubeUrl : null,
+        tiktokUrl: tiktokUrl.length > 0 ? tiktokUrl : null,
+        avatarUrl: avatarUrl.length > 0 ? avatarUrl : null,
+        backgroundUrl: backgroundUrl.length > 0 ? backgroundUrl : null,
+        links: links as unknown as Prisma.InputJsonValue,
+        contributors: {
+          create: {
+            userId,
+          },
+        },
+      },
+      include: {
+        contributors: {
+          include: {
+            user: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true },
+            },
+          },
+        },
+      },
+    });
+
+    ok(res, mapWikiFestival(created, userId, viewerRole));
+  } catch (error) {
+    console.error('BFF web create learn festival error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -5708,42 +7818,118 @@ router.patch('/learn/festivals/:id', optionalAuth, async (req: Request, res: Res
 
     const body = (req.body ?? {}) as Record<string, unknown>;
     const updateData: Prisma.WikiFestivalUpdateInput = {};
+    const hasNameField = Object.prototype.hasOwnProperty.call(body, 'name');
+    const hasNameI18nField = Object.prototype.hasOwnProperty.call(body, 'nameI18n');
+    const hasSourceRowIdField = Object.prototype.hasOwnProperty.call(body, 'sourceRowId');
+    const hasAbbreviationField = Object.prototype.hasOwnProperty.call(body, 'abbreviation');
+    const hasCountryField = Object.prototype.hasOwnProperty.call(body, 'country');
+    const hasCountryI18nField = Object.prototype.hasOwnProperty.call(body, 'countryI18n');
+    const hasCityField = Object.prototype.hasOwnProperty.call(body, 'city');
+    const hasCityI18nField = Object.prototype.hasOwnProperty.call(body, 'cityI18n');
+    const hasFrequencyField = Object.prototype.hasOwnProperty.call(body, 'frequency');
+    const hasFrequencyI18nField = Object.prototype.hasOwnProperty.call(body, 'frequencyI18n');
+    const hasIntroductionField = Object.prototype.hasOwnProperty.call(body, 'introduction');
+    const hasDescriptionI18nField = Object.prototype.hasOwnProperty.call(body, 'descriptionI18n');
+    const hasOfficialWebsiteField = Object.prototype.hasOwnProperty.call(body, 'officialWebsite');
+    const hasFacebookUrlField = Object.prototype.hasOwnProperty.call(body, 'facebookUrl');
+    const hasInstagramUrlField = Object.prototype.hasOwnProperty.call(body, 'instagramUrl');
+    const hasTwitterUrlField = Object.prototype.hasOwnProperty.call(body, 'twitterUrl');
+    const hasYoutubeUrlField = Object.prototype.hasOwnProperty.call(body, 'youtubeUrl');
+    const hasTiktokUrlField = Object.prototype.hasOwnProperty.call(body, 'tiktokUrl');
+    const hasLinksField = Object.prototype.hasOwnProperty.call(body, 'links');
 
-    if (Object.prototype.hasOwnProperty.call(body, 'name')) {
-      const name = normalizeWikiFestivalText(body.name);
-      if (!name) {
+    if (hasSourceRowIdField) {
+      if (body.sourceRowId === null || body.sourceRowId === '') {
+        updateData.sourceRowId = null;
+      } else {
+        const sourceRowId = normalizeWikiFestivalInteger(body.sourceRowId);
+        if (sourceRowId === null) {
+          res.status(400).json({ error: 'sourceRowId must be an integer' });
+          return;
+        }
+        updateData.sourceRowId = sourceRowId;
+      }
+    }
+
+    let nextName = hasNameField ? normalizeWikiFestivalText(body.name) : existing.name;
+    if (hasNameI18nField) {
+      const normalized = normalizeWikiFestivalBiText(body.nameI18n, nextName);
+      updateData.nameI18n = normalized ? (normalized as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
+      if (!hasNameField && normalized) {
+        nextName = pickWikiFestivalPrimaryText(normalized, existing.name);
+      }
+    }
+    if (hasNameField || hasNameI18nField) {
+      const finalName = nextName || existing.name;
+      if (!finalName) {
         res.status(400).json({ error: 'name is required' });
         return;
       }
-      updateData.name = name;
+      updateData.name = finalName;
+    }
+
+    if (hasAbbreviationField) {
+      updateData.abbreviation = normalizeWikiFestivalText(body.abbreviation);
     }
 
     if (Object.prototype.hasOwnProperty.call(body, 'aliases')) {
       updateData.aliases = parseWikiFestivalAliases(body.aliases);
     }
 
-    if (Object.prototype.hasOwnProperty.call(body, 'country')) {
-      updateData.country = normalizeWikiFestivalText(body.country);
+    if (hasCountryField || hasCountryI18nField) {
+      let nextCountry = hasCountryField ? normalizeWikiFestivalText(body.country) : existing.country;
+      if (hasCountryI18nField) {
+        const normalized = normalizeWikiFestivalBiText(body.countryI18n, nextCountry);
+        updateData.countryI18n = normalized ? (normalized as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
+        if (!hasCountryField && normalized) {
+          nextCountry = pickWikiFestivalPrimaryText(normalized, existing.country);
+        }
+      }
+      updateData.country = nextCountry || '';
     }
 
-    if (Object.prototype.hasOwnProperty.call(body, 'city')) {
-      updateData.city = normalizeWikiFestivalText(body.city);
+    if (hasCityField || hasCityI18nField) {
+      let nextCity = hasCityField ? normalizeWikiFestivalText(body.city) : existing.city;
+      if (hasCityI18nField) {
+        const normalized = normalizeWikiFestivalBiText(body.cityI18n, nextCity);
+        updateData.cityI18n = normalized ? (normalized as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
+        if (!hasCityField && normalized) {
+          nextCity = pickWikiFestivalPrimaryText(normalized, existing.city);
+        }
+      }
+      updateData.city = nextCity || '';
     }
 
     if (Object.prototype.hasOwnProperty.call(body, 'foundedYear')) {
       updateData.foundedYear = normalizeWikiFestivalText(body.foundedYear);
     }
 
-    if (Object.prototype.hasOwnProperty.call(body, 'frequency')) {
-      updateData.frequency = normalizeWikiFestivalText(body.frequency);
+    if (hasFrequencyField || hasFrequencyI18nField) {
+      let nextFrequency = hasFrequencyField ? normalizeWikiFestivalText(body.frequency) : existing.frequency;
+      if (hasFrequencyI18nField) {
+        const normalized = normalizeWikiFestivalBiText(body.frequencyI18n, nextFrequency);
+        updateData.frequencyI18n = normalized ? (normalized as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
+        if (!hasFrequencyField && normalized) {
+          nextFrequency = pickWikiFestivalPrimaryText(normalized, existing.frequency);
+        }
+      }
+      updateData.frequency = nextFrequency || '';
     }
 
     if (Object.prototype.hasOwnProperty.call(body, 'tagline')) {
       updateData.tagline = normalizeWikiFestivalText(body.tagline);
     }
 
-    if (Object.prototype.hasOwnProperty.call(body, 'introduction')) {
-      updateData.introduction = normalizeWikiFestivalText(body.introduction);
+    if (hasIntroductionField || hasDescriptionI18nField) {
+      let nextIntroduction = hasIntroductionField ? normalizeWikiFestivalText(body.introduction) : existing.introduction;
+      if (hasDescriptionI18nField) {
+        const normalized = normalizeWikiFestivalBiText(body.descriptionI18n, nextIntroduction);
+        updateData.descriptionI18n = normalized ? (normalized as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
+        if (!hasIntroductionField && normalized) {
+          nextIntroduction = pickWikiFestivalPrimaryText(normalized, existing.introduction);
+        }
+      }
+      updateData.introduction = nextIntroduction || '';
     }
 
     if (Object.prototype.hasOwnProperty.call(body, 'avatarUrl')) {
@@ -5764,8 +7950,63 @@ router.patch('/learn/festivals/:id', optionalAuth, async (req: Request, res: Res
       }
     }
 
-    if (Object.prototype.hasOwnProperty.call(body, 'links')) {
-      updateData.links = parseWikiFestivalLinks(body.links) as unknown as Prisma.InputJsonValue;
+    const nextOfficialWebsite = hasOfficialWebsiteField
+      ? normalizeWikiFestivalText(body.officialWebsite)
+      : (existing.officialWebsite ?? '');
+    const nextFacebookUrl = hasFacebookUrlField
+      ? normalizeWikiFestivalText(body.facebookUrl)
+      : (existing.facebookUrl ?? '');
+    const nextInstagramUrl = hasInstagramUrlField
+      ? normalizeWikiFestivalText(body.instagramUrl)
+      : (existing.instagramUrl ?? '');
+    const nextTwitterUrl = hasTwitterUrlField
+      ? normalizeWikiFestivalText(body.twitterUrl)
+      : (existing.twitterUrl ?? '');
+    const nextYoutubeUrl = hasYoutubeUrlField
+      ? normalizeWikiFestivalText(body.youtubeUrl)
+      : (existing.youtubeUrl ?? '');
+    const nextTiktokUrl = hasTiktokUrlField
+      ? normalizeWikiFestivalText(body.tiktokUrl)
+      : (existing.tiktokUrl ?? '');
+
+    if (hasOfficialWebsiteField) {
+      updateData.officialWebsite = nextOfficialWebsite.length > 0 ? nextOfficialWebsite : null;
+    }
+    if (hasFacebookUrlField) {
+      updateData.facebookUrl = nextFacebookUrl.length > 0 ? nextFacebookUrl : null;
+    }
+    if (hasInstagramUrlField) {
+      updateData.instagramUrl = nextInstagramUrl.length > 0 ? nextInstagramUrl : null;
+    }
+    if (hasTwitterUrlField) {
+      updateData.twitterUrl = nextTwitterUrl.length > 0 ? nextTwitterUrl : null;
+    }
+    if (hasYoutubeUrlField) {
+      updateData.youtubeUrl = nextYoutubeUrl.length > 0 ? nextYoutubeUrl : null;
+    }
+    if (hasTiktokUrlField) {
+      updateData.tiktokUrl = nextTiktokUrl.length > 0 ? nextTiktokUrl : null;
+    }
+
+    if (
+      hasLinksField ||
+      hasOfficialWebsiteField ||
+      hasFacebookUrlField ||
+      hasInstagramUrlField ||
+      hasTwitterUrlField ||
+      hasYoutubeUrlField ||
+      hasTiktokUrlField
+    ) {
+      const baseLinks = hasLinksField ? parseWikiFestivalLinks(body.links) : parseWikiFestivalLinks(existing.links);
+      const mergedLinks = mergeWikiFestivalLinks(baseLinks, {
+        officialWebsite: nextOfficialWebsite,
+        facebookUrl: nextFacebookUrl,
+        instagramUrl: nextInstagramUrl,
+        twitterUrl: nextTwitterUrl,
+        youtubeUrl: nextYoutubeUrl,
+        tiktokUrl: nextTiktokUrl,
+      });
+      updateData.links = mergedLinks as unknown as Prisma.InputJsonValue;
     }
 
     const hasUpdateFields = Object.keys(updateData).length > 0;
@@ -5814,6 +8055,53 @@ router.patch('/learn/festivals/:id', optionalAuth, async (req: Request, res: Res
     ok(res, mapWikiFestival(updated, userId, viewerRole));
   } catch (error) {
     console.error('BFF web update learn festival error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/learn/festivals/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    const festivalId = req.params.id as string;
+    const existing = await prisma.wikiFestival.findUnique({
+      where: { id: festivalId },
+      include: {
+        contributors: {
+          select: { userId: true },
+        },
+      },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Festival not found' });
+      return;
+    }
+
+    const isContributor = existing.contributors.some((item) => item.userId === userId);
+    const canDelete = viewerRole === 'admin' || isContributor;
+    if (!canDelete) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const urlsToDelete = [
+      existing.avatarUrl,
+      existing.backgroundUrl,
+    ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+    await prisma.wikiFestival.delete({ where: { id: festivalId } });
+    for (const url of urlsToDelete) {
+      await deleteSingleWikiBrandOssObjectIfOwned(url, festivalId);
+    }
+    await deleteWikiBrandOssFolder(festivalId);
+
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF web delete learn festival error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -5951,24 +8239,45 @@ router.get('/learn/labels', async (req: Request, res: Response): Promise<void> =
 });
 
 router.get('/learn/rankings', (_req: Request, res: Response): void => {
+  const boards = loadRankingBoards();
   ok(
     res,
-    Object.entries(RANKING_BOARDS).map(([id, board]) => ({
-      id,
+    boards.map((board) => ({
+      id: board.id,
       title: board.title,
       subtitle: board.subtitle,
+      description: board.description,
       coverImageUrl: board.coverImageUrl || null,
       years: board.years,
+      entityType: board.entityType,
+      createdAt: board.createdAt,
+      updatedAt: board.updatedAt,
     }))
   );
 });
 
 router.get('/learn/rankings/:boardId', async (req: Request, res: Response): Promise<void> => {
   try {
-    const boardId = req.params.boardId as string;
-    const board = RANKING_BOARDS[boardId];
+    const boardId = sanitizeRankingBoardId(req.params.boardId as string);
+    const boards = loadRankingBoards();
+    const board = boards.find((item) => item.id === boardId);
     if (!board) {
       res.status(404).json({ error: 'Board not found' });
+      return;
+    }
+
+    if (board.years.length === 0) {
+      ok(res, {
+        boardId: board.id,
+        title: board.title,
+        subtitle: board.subtitle,
+        description: board.description,
+        coverImageUrl: board.coverImageUrl || null,
+        entityType: board.entityType,
+        years: [],
+        year: null,
+        entries: [],
+      });
       return;
     }
 
@@ -5979,22 +8288,13 @@ router.get('/learn/rankings/:boardId', async (req: Request, res: Response): Prom
       return;
     }
 
-    const currentFile = rankingFilePath(boardId, year);
-    if (!currentFile) {
-      res.status(404).json({ error: 'Ranking data not found' });
-      return;
-    }
-
-    const currentText = fs.readFileSync(currentFile, 'utf8');
-    const current = parseRankingText(currentText);
+    const currentYearData = loadRankingYearData(boardId, year);
+    const current = currentYearData?.entries ?? [];
+    const strictEntityBinding = Boolean(currentYearData && currentYearData.source !== 'legacy_txt');
 
     const prevYear = board.years[board.years.indexOf(year) - 1];
     const prev = prevYear
-      ? (() => {
-          const prevFile = rankingFilePath(boardId, prevYear);
-          if (!prevFile) return [] as Array<{ rank: number; name: string }>;
-          return parseRankingText(fs.readFileSync(prevFile, 'utf8'));
-        })()
+      ? loadRankingYearData(boardId, prevYear)?.entries ?? []
       : [];
 
     const previousRankMap: Record<string, number> = {};
@@ -6002,52 +8302,335 @@ router.get('/learn/rankings/:boardId', async (req: Request, res: Response): Prom
       previousRankMap[normalizeName(item.name)] = item.rank;
     }
 
-    const djs = await prisma.dJ.findMany({
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        avatarUrl: true,
-        bannerUrl: true,
-        followerCount: true,
-        country: true,
-      },
-    });
-    const djMap: Record<string, any> = {};
-    for (const dj of djs) {
-      djMap[normalizeName(dj.name)] = dj;
+    let entries: Array<Record<string, unknown>> = [];
+
+    if (board.entityType === 'festival') {
+      const festivals = await prisma.wikiFestival.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          name: true,
+          nameI18n: true,
+          aliases: true,
+          avatarUrl: true,
+          backgroundUrl: true,
+          country: true,
+          city: true,
+          tagline: true,
+        },
+      });
+
+      const festivalMap: Record<string, any> = {};
+      const festivalMapById: Record<string, any> = {};
+      for (const fest of festivals) {
+        festivalMapById[fest.id] = fest;
+        festivalMap[normalizeName(fest.name)] = fest;
+        const nameI18n = resolveBiTextWithFallback(fest.nameI18n ?? null, fest.name ?? '');
+        if (nameI18n?.zh) {
+          festivalMap[normalizeName(nameI18n.zh)] = fest;
+        }
+        if (nameI18n?.en) {
+          festivalMap[normalizeName(nameI18n.en)] = fest;
+        }
+        for (const alias of Array.isArray(fest.aliases) ? fest.aliases : []) {
+          festivalMap[normalizeName(alias)] = fest;
+        }
+      }
+
+      entries = current.map((item) => {
+        const key = normalizeName(item.name);
+        const prevRank = previousRankMap[key];
+        const fest = (item.entityId ? festivalMapById[item.entityId] : null)
+          || (strictEntityBinding ? null : festivalMap[key]);
+        return {
+          rank: item.rank,
+          name: item.name,
+          entityId: fest?.id || item.entityId || null,
+          delta: prevYear && prevRank !== undefined ? prevRank - item.rank : null,
+          festival: fest
+            ? {
+                id: fest.id,
+                name: fest.name,
+                avatarUrl: fest.avatarUrl,
+                backgroundUrl: fest.backgroundUrl,
+                country: fest.country,
+                city: fest.city,
+                tagline: fest.tagline,
+              }
+            : null,
+          dj: null,
+        };
+      });
+    } else {
+      const djs = await prisma.dJ.findMany({
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          avatarUrl: true,
+          bannerUrl: true,
+          followerCount: true,
+          country: true,
+          aliases: true,
+        },
+      });
+      const djMap: Record<string, any> = {};
+      const djMapById: Record<string, any> = {};
+      for (const dj of djs) {
+        djMapById[dj.id] = dj;
+        djMap[normalizeName(dj.name)] = dj;
+        for (const alias of Array.isArray(dj.aliases) ? dj.aliases : []) {
+          djMap[normalizeName(alias)] = dj;
+        }
+      }
+
+      entries = current.map((item) => {
+        const key = normalizeName(item.name);
+        const prevRank = previousRankMap[key];
+        const matchedDJ = (item.entityId ? djMapById[item.entityId] : null)
+          || (strictEntityBinding ? null : djMap[key]);
+        return {
+          rank: item.rank,
+          name: item.name,
+          entityId: matchedDJ?.id || item.entityId || null,
+          delta: prevYear && prevRank !== undefined ? prevRank - item.rank : null,
+          dj: matchedDJ
+            ? {
+                id: matchedDJ.id,
+                name: matchedDJ.name,
+                slug: matchedDJ.slug,
+                avatarUrl: matchedDJ.avatarUrl,
+                bannerUrl: matchedDJ.bannerUrl,
+                followerCount: matchedDJ.followerCount,
+                country: matchedDJ.country,
+              }
+            : null,
+          festival: null,
+        };
+      });
     }
 
-    const entries = current.map((item) => {
-      const key = normalizeName(item.name);
-      const prevRank = previousRankMap[key];
-      return {
-        rank: item.rank,
-        name: item.name,
-        delta: prevYear && prevRank !== undefined ? prevRank - item.rank : null,
-        dj: djMap[key]
-          ? {
-              id: djMap[key].id,
-              name: djMap[key].name,
-              slug: djMap[key].slug,
-              avatarUrl: djMap[key].avatarUrl,
-              bannerUrl: djMap[key].bannerUrl,
-              followerCount: djMap[key].followerCount,
-              country: djMap[key].country,
-            }
-          : null,
-      };
-    });
-
     ok(res, {
-      boardId,
+      boardId: board.id,
       title: board.title,
+      subtitle: board.subtitle,
+      description: board.description,
+      coverImageUrl: board.coverImageUrl || null,
+      entityType: board.entityType,
       years: board.years,
       year,
+      strictEntityBinding,
       entries,
     });
   } catch (error) {
     console.error('BFF web rankings detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/learn/rankings/upload-image', optionalAuth, wikiBrandImageUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    if (!req.file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    if (!postMediaOssClient) {
+      res.status(503).json({ error: 'OSS is not configured for ranking image upload' });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const boardId = sanitizeRankingBoardId(String(body?.boardId || 'ranking-temp'));
+    const usage = 'cover';
+    const uploaded = await uploadWikiBrandMediaToOss(req.file, boardId, usage);
+    ok(res, uploaded);
+  } catch (error) {
+    console.error('BFF web upload ranking image error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/learn/rankings', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const title = String(body.title || '').trim();
+    if (!title) {
+      res.status(400).json({ error: 'title is required' });
+      return;
+    }
+
+    const entityType: RankingEntityType = String(body.entityType || '').trim() === 'festival' ? 'festival' : 'dj';
+    const requestedId = String(body.id || '').trim();
+    const boardId = sanitizeRankingBoardId(requestedId || title);
+    const boards = loadRankingBoards();
+    if (boards.some((item) => item.id === boardId)) {
+      res.status(409).json({ error: 'board id already exists' });
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const board: RankingBoardRecord = {
+      id: boardId,
+      title,
+      subtitle: String(body.subtitle || '').trim(),
+      description: String(body.description || '').trim(),
+      coverImageUrl: String(body.coverImageUrl || '').trim() || null,
+      entityType,
+      years: normalizeRankingYears(body.years),
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    const year = Number(body.year);
+    const importText = String(body.importText || '').trim();
+    const explicitEntries = parseRankingEntries(body.entries);
+    const importedEntries = importText
+      ? parseRankingText(importText).map((item) => ({ rank: item.rank, name: item.name }))
+      : [];
+    const finalEntries = explicitEntries.length > 0 ? explicitEntries : importedEntries;
+
+    if (Number.isFinite(year) && year > 1900 && year < 2201 && finalEntries.length > 0) {
+      saveRankingYearData(boardId, Math.floor(year), finalEntries, importText ? 'import_text' : 'manual_create');
+      board.years = Array.from(new Set([...board.years, Math.floor(year)])).sort((a, b) => a - b);
+    }
+
+    saveRankingBoards([...boards, board]);
+
+    ok(res, board);
+  } catch (error) {
+    console.error('BFF web create ranking board error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/learn/rankings/:boardId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const boardId = sanitizeRankingBoardId(String(req.params.boardId ?? ''));
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const boards = loadRankingBoards();
+    const index = boards.findIndex((item) => item.id === boardId);
+    if (index < 0) {
+      res.status(404).json({ error: 'Board not found' });
+      return;
+    }
+
+    const current = boards[index];
+    const next: RankingBoardRecord = {
+      ...current,
+      title: Object.prototype.hasOwnProperty.call(body, 'title')
+        ? String(body.title || '').trim() || current.title
+        : current.title,
+      subtitle: Object.prototype.hasOwnProperty.call(body, 'subtitle')
+        ? String(body.subtitle || '').trim()
+        : current.subtitle,
+      description: Object.prototype.hasOwnProperty.call(body, 'description')
+        ? String(body.description || '').trim()
+        : current.description,
+      coverImageUrl: Object.prototype.hasOwnProperty.call(body, 'coverImageUrl')
+        ? (String(body.coverImageUrl || '').trim() || null)
+        : current.coverImageUrl,
+      entityType: Object.prototype.hasOwnProperty.call(body, 'entityType')
+        ? (String(body.entityType || '').trim() === 'festival' ? 'festival' : 'dj')
+        : current.entityType,
+      years: Object.prototype.hasOwnProperty.call(body, 'years')
+        ? normalizeRankingYears(body.years)
+        : current.years,
+      updatedAt: new Date().toISOString(),
+    };
+
+    boards[index] = next;
+    saveRankingBoards(boards);
+    ok(res, next);
+  } catch (error) {
+    console.error('BFF web update ranking board error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/learn/rankings/:boardId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const boardId = sanitizeRankingBoardId(String(req.params.boardId ?? ''));
+    const boards = loadRankingBoards();
+    const target = boards.find((item) => item.id === boardId);
+    if (!target) {
+      res.status(404).json({ error: 'Board not found' });
+      return;
+    }
+
+    if (target.coverImageUrl) {
+      await deleteSingleWikiBrandOssObjectIfOwned(target.coverImageUrl, boardId);
+    }
+    await deleteWikiBrandOssFolder(boardId);
+    fs.rmSync(rankingBoardDirPath(boardId), { recursive: true, force: true });
+    saveRankingBoards(boards.filter((item) => item.id !== boardId));
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF web delete ranking board error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/learn/rankings/:boardId/years/:year/upsert', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const boardId = sanitizeRankingBoardId(String(req.params.boardId ?? ''));
+    const year = Number(String(req.params.year ?? ''));
+    if (!Number.isFinite(year) || year < 1900 || year > 2200) {
+      res.status(400).json({ error: 'year is invalid' });
+      return;
+    }
+
+    const boards = loadRankingBoards();
+    const boardIndex = boards.findIndex((item) => item.id === boardId);
+    if (boardIndex < 0) {
+      res.status(404).json({ error: 'Board not found' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const explicitEntries = parseRankingEntries(body.entries);
+    const importText = String(body.importText || '').trim();
+    const importedEntries = importText
+      ? parseRankingText(importText).map((item) => ({ rank: item.rank, name: item.name }))
+      : [];
+    const entries = explicitEntries.length > 0 ? explicitEntries : importedEntries;
+
+    saveRankingYearData(boardId, Math.floor(year), entries, importText ? 'import_text' : 'manual_update');
+
+    const board = boards[boardIndex];
+    board.years = Array.from(new Set([...board.years, Math.floor(year)])).sort((a, b) => a - b);
+    board.updatedAt = new Date().toISOString();
+    boards[boardIndex] = board;
+    saveRankingBoards(boards);
+
+    ok(res, {
+      boardId,
+      year: Math.floor(year),
+      count: entries.length,
+      years: board.years,
+    });
+  } catch (error) {
+    console.error('BFF web upsert ranking year error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

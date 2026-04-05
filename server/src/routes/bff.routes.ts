@@ -266,6 +266,10 @@ const mapPost = (
     content: string;
     images: string[];
     location?: string | null;
+    eventId?: string | null;
+    boundDjIds?: string[] | null;
+    boundBrandIds?: string[] | null;
+    boundEventIds?: string[] | null;
     createdAt: Date;
     likeCount: number;
     repostCount: number;
@@ -281,6 +285,10 @@ const mapPost = (
     content: post.content,
     images: post.images,
     location: post.location ?? null,
+    eventID: post.eventId ?? null,
+    boundDjIDs: Array.isArray(post.boundDjIds) ? post.boundDjIds : [],
+    boundBrandIDs: Array.isArray(post.boundBrandIds) ? post.boundBrandIds : [],
+    boundEventIDs: Array.isArray(post.boundEventIds) ? post.boundEventIds : [],
     createdAt: post.createdAt,
     likeCount: post.likeCount,
     repostCount: post.repostCount,
@@ -355,6 +363,23 @@ const normalizeTags = (input: unknown): string[] => {
   }
 
   return [];
+};
+
+const normalizePostBindingIDs = (input: unknown, maxCount = 50): string[] => {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const deduped = Array.from(
+    new Set(
+      input
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+    )
+  );
+
+  return deduped.slice(0, maxCount);
 };
 
 const normalizeDirectPair = (userOneId: string, userTwoId: string): [string, string] => {
@@ -2216,7 +2241,8 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
 
-    const { content, images, squadId, location } = req.body as {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const { content, images, squadId, location } = body as {
       content?: string;
       images?: string[];
       squadId?: string;
@@ -2227,6 +2253,15 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
       ? images.filter((url): url is string => typeof url === 'string' && !!url.trim())
       : [];
     const normalizedLocation = typeof location === 'string' ? location.trim().slice(0, 160) : '';
+    const normalizedBoundDjIDs = normalizePostBindingIDs(
+      body.boundDjIDs ?? body.boundDjIds ?? body.boundDJIDs ?? body.bound_dj_ids
+    );
+    const normalizedBoundBrandIDs = normalizePostBindingIDs(
+      body.boundBrandIDs ?? body.boundBrandIds ?? body.bound_brand_ids
+    );
+    const normalizedBoundEventIDs = normalizePostBindingIDs(
+      body.boundEventIDs ?? body.boundEventIds ?? body.bound_event_ids
+    );
     const trimmed = String(content || '').trim();
     if (!trimmed && normalizedImages.length === 0) {
       res.status(400).json({ error: 'content or images is required' });
@@ -2270,6 +2305,9 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
         location: normalizedLocation || null,
         type: linkedSquadId ? 'squad' : 'general',
         visibility: 'public',
+        boundDjIds: normalizedBoundDjIDs,
+        boundBrandIds: normalizedBoundBrandIDs,
+        boundEventIds: normalizedBoundEventIDs,
       } as any,
       include: {
         user: {
@@ -2306,17 +2344,24 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
     if (!userId) return;
 
     const postId = req.params.id as string;
-    const { content, images, location } = req.body as {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const { content, images, location } = body as {
       content?: string;
       images?: string[];
       location?: string;
     };
+    const boundDjIDs = body.boundDjIDs ?? body.boundDjIds ?? body.boundDJIDs ?? body.bound_dj_ids;
+    const boundBrandIDs = body.boundBrandIDs ?? body.boundBrandIds ?? body.bound_brand_ids;
+    const boundEventIDs = body.boundEventIDs ?? body.boundEventIds ?? body.bound_event_ids;
 
     const hasContent = typeof content === 'string';
     const hasImages = Array.isArray(images);
     const hasLocation = typeof location === 'string';
-    if (!hasContent && !hasImages && !hasLocation) {
-      res.status(400).json({ error: 'content, images or location is required' });
+    const hasBoundDjIDs = Array.isArray(boundDjIDs);
+    const hasBoundBrandIDs = Array.isArray(boundBrandIDs);
+    const hasBoundEventIDs = Array.isArray(boundEventIDs);
+    if (!hasContent && !hasImages && !hasLocation && !hasBoundDjIDs && !hasBoundBrandIDs && !hasBoundEventIDs) {
+      res.status(400).json({ error: 'content, images, location or binding fields is required' });
       return;
     }
 
@@ -2364,7 +2409,14 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
       return;
     }
 
-    const updateData: { content?: string; images?: string[]; location?: string | null } = {};
+    const updateData: {
+      content?: string;
+      images?: string[];
+      location?: string | null;
+      boundDjIds?: string[];
+      boundBrandIds?: string[];
+      boundEventIds?: string[];
+    } = {};
     if (hasContent) {
       updateData.content = nextContent;
     }
@@ -2374,6 +2426,15 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
     if (hasLocation) {
       const normalizedLocation = String(location || '').trim().slice(0, 160);
       updateData.location = normalizedLocation || null;
+    }
+    if (hasBoundDjIDs) {
+      updateData.boundDjIds = normalizePostBindingIDs(boundDjIDs);
+    }
+    if (hasBoundBrandIDs) {
+      updateData.boundBrandIds = normalizePostBindingIDs(boundBrandIDs);
+    }
+    if (hasBoundEventIDs) {
+      updateData.boundEventIds = normalizePostBindingIDs(boundEventIDs);
     }
 
     const updated =

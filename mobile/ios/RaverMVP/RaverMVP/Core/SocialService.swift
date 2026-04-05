@@ -56,11 +56,34 @@ enum ServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "服务响应无效"
+            return L("服务响应无效", "Invalid service response")
         case .unauthorized:
-            return "登录状态已失效，请重新登录"
+            return L("登录状态已失效，请重新登录", "Session expired. Please log in again.")
         case .message(let text):
-            return text
+            return LL(text)
         }
+    }
+}
+
+extension Error {
+    var isUserInitiatedCancellation: Bool {
+        if self is CancellationError {
+            return true
+        }
+
+        if let urlError = self as? URLError, urlError.code == .cancelled {
+            return true
+        }
+
+        let nsError = self as NSError
+        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
+            return true
+        }
+
+        return false
+    }
+
+    var userFacingMessage: String? {
+        isUserInitiatedCancellation ? nil : localizedDescription
     }
 }

@@ -1,0 +1,508 @@
+{
+  "boardId": "djmag_festival",
+  "year": 2025,
+  "source": "manual_update",
+  "updatedAt": "2026-04-04T14:04:11.235Z",
+  "entries": [
+    {
+      "rank": 1,
+      "name": "Tomorrowland",
+      "entityId": "tomorrowland"
+    },
+    {
+      "rank": 2,
+      "name": "Ultra Music Festival",
+      "entityId": "ultra"
+    },
+    {
+      "rank": 3,
+      "name": "UNTOLD Festival",
+      "entityId": "untold_festival"
+    },
+    {
+      "rank": 4,
+      "name": "EDC Las Vegas",
+      "entityId": "edc"
+    },
+    {
+      "rank": 5,
+      "name": "Glastonbury Festival",
+      "entityId": "glastonbury_festival"
+    },
+    {
+      "rank": 6,
+      "name": "Kappa FuturFestival",
+      "entityId": "kappa_futurfestival"
+    },
+    {
+      "rank": 7,
+      "name": "Coachella Valley Music and Arts Festival",
+      "entityId": "coachella_valley_music_and_arts_festival"
+    },
+    {
+      "rank": 8,
+      "name": "Sunburn Festival",
+      "entityId": "sunburn_festival"
+    },
+    {
+      "rank": 9,
+      "name": "Creamfields",
+      "entityId": "creamfields"
+    },
+    {
+      "rank": 10,
+      "name": "Defqon.1",
+      "entityId": "defqon_1"
+    },
+    {
+      "rank": 11,
+      "name": "World Club Dome",
+      "entityId": "world_club_dome"
+    },
+    {
+      "rank": 12,
+      "name": "Parklife Festival",
+      "entityId": "parklife_festival"
+    },
+    {
+      "rank": 13,
+      "name": "Sziget Festival",
+      "entityId": "sziget_festival"
+    },
+    {
+      "rank": 14,
+      "name": "Time Warp",
+      "entityId": "time_warp"
+    },
+    {
+      "rank": 15,
+      "name": "Boomtown",
+      "entityId": "boomtown-festival"
+    },
+    {
+      "rank": 16,
+      "name": "AMF",
+      "entityId": "amf"
+    },
+    {
+      "rank": 17,
+      "name": "Dekmantel Festival",
+      "entityId": "dekmantel_festival"
+    },
+    {
+      "rank": 18,
+      "name": "PAROOKAVILLE",
+      "entityId": "parookaville"
+    },
+    {
+      "rank": 19,
+      "name": "Monegros Desert Festival",
+      "entityId": "monegros_desert_festival"
+    },
+    {
+      "rank": 20,
+      "name": "Awakenings",
+      "entityId": "awakenings"
+    },
+    {
+      "rank": 21,
+      "name": "Neversea Festival",
+      "entityId": "neversea_festival"
+    },
+    {
+      "rank": 22,
+      "name": "EDC Orlando",
+      "entityId": "edc_orlando"
+    },
+    {
+      "rank": 23,
+      "name": "Electric Love",
+      "entityId": "electric-love-festival"
+    },
+    {
+      "rank": 24,
+      "name": "Burning Man",
+      "entityId": "burning_man"
+    },
+    {
+      "rank": 25,
+      "name": "Primavera Sound",
+      "entityId": "primavera_sound"
+    },
+    {
+      "rank": 26,
+      "name": "Sónar",
+      "entityId": "s_nar"
+    },
+    {
+      "rank": 27,
+      "name": "Movement Music Festival",
+      "entityId": "movement_music_festival"
+    },
+    {
+      "rank": 28,
+      "name": "EXIT Festival",
+      "entityId": "exit_festival"
+    },
+    {
+      "rank": 29,
+      "name": "808 Festival",
+      "entityId": "808_festival"
+    },
+    {
+      "rank": 30,
+      "name": "Neopop Festival",
+      "entityId": "neopop_festival"
+    },
+    {
+      "rank": 31,
+      "name": "Ultra Europe",
+      "entityId": "ultra_europe"
+    },
+    {
+      "rank": 32,
+      "name": "World DJ Festival",
+      "entityId": "world_dj_festival"
+    },
+    {
+      "rank": 33,
+      "name": "Mysteryland",
+      "entityId": "mysteryland"
+    },
+    {
+      "rank": 34,
+      "name": "Terminal V",
+      "entityId": "terminal_v"
+    },
+    {
+      "rank": 35,
+      "name": "S2O Songkran Music Festival",
+      "entityId": "s2o"
+    },
+    {
+      "rank": 36,
+      "name": "ARC Music Festival",
+      "entityId": "arc_music_festival"
+    },
+    {
+      "rank": 37,
+      "name": "Sonus Festival",
+      "entityId": "sonus_festival"
+    },
+    {
+      "rank": 38,
+      "name": "DGTL",
+      "entityId": "dgtl"
+    },
+    {
+      "rank": 39,
+      "name": "Lollapalooza",
+      "entityId": "lollapalooza"
+    },
+    {
+      "rank": 40,
+      "name": "Untold Dubai Festival",
+      "entityId": "untold_dubai_festival"
+    },
+    {
+      "rank": 41,
+      "name": "CRSSD Festival",
+      "entityId": "crssd_festival"
+    },
+    {
+      "rank": 42,
+      "name": "Primer Music Festival",
+      "entityId": "primer_music_festival"
+    },
+    {
+      "rank": 43,
+      "name": "Panorama Festival",
+      "entityId": "panorama_festival"
+    },
+    {
+      "rank": 44,
+      "name": "Veld Music Festival",
+      "entityId": "veld_music_festival"
+    },
+    {
+      "rank": 45,
+      "name": "Dimensions Festival",
+      "entityId": "dimensions_festival"
+    },
+    {
+      "rank": 46,
+      "name": "Bonnaroo Music & Arts Festival",
+      "entityId": "bonnaroo_music_arts_festival"
+    },
+    {
+      "rank": 47,
+      "name": "Hideout Festival",
+      "entityId": "hideout_festival"
+    },
+    {
+      "rank": 48,
+      "name": "Loveland",
+      "entityId": "loveland"
+    },
+    {
+      "rank": 49,
+      "name": "Lovefest",
+      "entityId": "lovefest"
+    },
+    {
+      "rank": 50,
+      "name": "EDC Mexico",
+      "entityId": "edc_mexico"
+    },
+    {
+      "rank": 51,
+      "name": "Nameless Festival",
+      "entityId": "nameless_festival"
+    },
+    {
+      "rank": 52,
+      "name": "Nibirii Festival",
+      "entityId": "nibirii_festival"
+    },
+    {
+      "rank": 53,
+      "name": "NEON Countdown",
+      "entityId": "neon_countdown"
+    },
+    {
+      "rank": 54,
+      "name": "AVA Festival",
+      "entityId": "ava_festival"
+    },
+    {
+      "rank": 55,
+      "name": "S2O Taiwan",
+      "entityId": "s2o_taiwan"
+    },
+    {
+      "rank": 56,
+      "name": "Snowbombing",
+      "entityId": "snowbombing"
+    },
+    {
+      "rank": 57,
+      "name": "A State Of Trance Festival",
+      "entityId": "a_state_of_trance_festival"
+    },
+    {
+      "rank": 58,
+      "name": "Les Plages Electroniques",
+      "entityId": "les_plages_electroniques"
+    },
+    {
+      "rank": 59,
+      "name": "HARD Summer",
+      "entityId": "hard_summer"
+    },
+    {
+      "rank": 60,
+      "name": "Airbeat One",
+      "entityId": "airbeat_one"
+    },
+    {
+      "rank": 61,
+      "name": "Blacklist Festival",
+      "entityId": "blacklist_festival"
+    },
+    {
+      "rank": 62,
+      "name": "Tomorrowland Winter",
+      "entityId": "tomorrowland_winter"
+    },
+    {
+      "rank": 63,
+      "name": "Sea Star Festival",
+      "entityId": "sea_star_festival"
+    },
+    {
+      "rank": 64,
+      "name": "Ravolution Music Festival",
+      "entityId": "ravolution_music_festival"
+    },
+    {
+      "rank": 65,
+      "name": "POSITIV",
+      "entityId": "positiv"
+    },
+    {
+      "rank": 66,
+      "name": "Ultra Taiwan",
+      "entityId": "ultra_taiwan"
+    },
+    {
+      "rank": 67,
+      "name": "Together Festival",
+      "entityId": "together_festival"
+    },
+    {
+      "rank": 68,
+      "name": "Lost Village",
+      "entityId": "lost_village"
+    },
+    {
+      "rank": 69,
+      "name": "BEONIX Festival",
+      "entityId": "beonix_festival"
+    },
+    {
+      "rank": 70,
+      "name": "Creamfields Chile",
+      "entityId": "creamfields_chile"
+    },
+    {
+      "rank": 71,
+      "name": "SIAM Songkran Music Festival",
+      "entityId": "siam_songkran_music_festival"
+    },
+    {
+      "rank": 72,
+      "name": "Ultra Korea",
+      "entityId": "ultra_korea"
+    },
+    {
+      "rank": 73,
+      "name": "Djakarta Warehouse Project",
+      "entityId": "djakarta_warehouse_project"
+    },
+    {
+      "rank": 74,
+      "name": "Defected Croatia",
+      "entityId": "defected_croatia"
+    },
+    {
+      "rank": 75,
+      "name": "Electric Castle",
+      "entityId": "electric_castle"
+    },
+    {
+      "rank": 76,
+      "name": "Ultra Japan",
+      "entityId": "ultra_japan"
+    },
+    {
+      "rank": 77,
+      "name": "Soundstorm",
+      "entityId": "soundstorm"
+    },
+    {
+      "rank": 78,
+      "name": "S2O Hong Kong",
+      "entityId": "s2o_hong_kong"
+    },
+    {
+      "rank": 79,
+      "name": "SAGA Festival",
+      "entityId": "saga_festival"
+    },
+    {
+      "rank": 80,
+      "name": "EDC China",
+      "entityId": "edc_china"
+    },
+    {
+      "rank": 81,
+      "name": "Groove Cruise",
+      "entityId": "groove_cruise"
+    },
+    {
+      "rank": 82,
+      "name": "Beyond The Valley",
+      "entityId": "beyond_the_valley"
+    },
+    {
+      "rank": 83,
+      "name": "Glitch Festival",
+      "entityId": "glitch_festival"
+    },
+    {
+      "rank": 84,
+      "name": "Baum Festival",
+      "entityId": "baum_festival"
+    },
+    {
+      "rank": 85,
+      "name": "SUNSET By NEON",
+      "entityId": "sunset_by_neon"
+    },
+    {
+      "rank": 86,
+      "name": "Houghton Festival",
+      "entityId": "houghton_festival"
+    },
+    {
+      "rank": 87,
+      "name": "Love International Festival",
+      "entityId": "love_international_festival"
+    },
+    {
+      "rank": 88,
+      "name": "Ultra Australia",
+      "entityId": "ultra_australia"
+    },
+    {
+      "rank": 89,
+      "name": "FLY Open Air Festival",
+      "entityId": "fly_open_air_festival"
+    },
+    {
+      "rank": 90,
+      "name": "EDC Thailand",
+      "entityId": "edc_thailand"
+    },
+    {
+      "rank": 91,
+      "name": "UNSEEN FESTIVAL",
+      "entityId": "unseen_festival"
+    },
+    {
+      "rank": 92,
+      "name": "Defected Malta",
+      "entityId": "defected_malta"
+    },
+    {
+      "rank": 93,
+      "name": "Outlook Origins",
+      "entityId": "outlook_origins"
+    },
+    {
+      "rank": 94,
+      "name": "Vision & Colour Music Festival",
+      "entityId": "vac-music-festival"
+    },
+    {
+      "rank": 95,
+      "name": "Ultra South Africa",
+      "entityId": "ultra_south_africa"
+    },
+    {
+      "rank": 96,
+      "name": "Pitch Music & Arts",
+      "entityId": "pitch_music_arts"
+    },
+    {
+      "rank": 97,
+      "name": "Medusa Sunbeach Festival",
+      "entityId": "medusa_sunbeach_festival"
+    },
+    {
+      "rank": 98,
+      "name": "Lost Lands Festival",
+      "entityId": "lost_lands_festival"
+    },
+    {
+      "rank": 99,
+      "name": "Beats for Love",
+      "entityId": "beats_for_love"
+    },
+    {
+      "rank": 100,
+      "name": "Sónar Lisboa",
+      "entityId": "s_nar_lisboa"
+    }
+  ]
+}

@@ -70,9 +70,9 @@ struct PostCardView: View {
                                 )
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("编辑动态")
+                        .accessibilityLabel(L("编辑动态", "Edit Post"))
                     } else if showsFollowButton, let onFollowTap {
-                        Button(post.author.isFollowing ? "已关注" : "关注", action: onFollowTap)
+                        Button(post.author.isFollowing ? L("已关注", "Following") : L("关注", "Follow"), action: onFollowTap)
                             .font(.caption.bold())
                             .foregroundStyle(post.author.isFollowing ? RaverTheme.secondaryText : Color.white)
                             .padding(.horizontal, 10)
@@ -134,14 +134,14 @@ struct PostCardView: View {
 
                     if post.author.id != currentUserId, let onMessageTap {
                         Button(action: onMessageTap) {
-                            Label("私信", systemImage: "paperplane")
+                            Label(LL("私信"), systemImage: "paperplane")
                         }
                         .foregroundStyle(RaverTheme.secondaryText)
                     }
 
                     if post.squad != nil, let onSquadTap {
                         Button(action: onSquadTap) {
-                            Label("进小队", systemImage: "person.3")
+                            Label(LL("进小队"), systemImage: "person.3")
                         }
                         .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -241,6 +241,26 @@ private struct PostLocationMapView: View {
     @State private var resolvedCoordinate: CLLocationCoordinate2D?
     @State private var isResolving = false
     @State private var resolveFailed = false
+    @State private var availableMapApps: [ExternalMapApp] = []
+    @State private var showMapAppPicker = false
+
+    private enum ExternalMapApp: String, CaseIterable, Identifiable {
+        case apple
+        case amap
+        case baidu
+        case tencent
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .apple: return L("Apple 地图", "Apple Maps")
+            case .amap: return L("高德地图", "Amap")
+            case .baidu: return L("百度地图", "Baidu Maps")
+            case .tencent: return L("腾讯地图", "Tencent Maps")
+            }
+        }
+    }
 
     init(locationText: String) {
         self.locationText = locationText
@@ -267,7 +287,7 @@ private struct PostLocationMapView: View {
                 .ignoresSafeArea(edges: .bottom)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("定位信息")
+                    Text(LL("定位信息"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
                     Text(locationText)
@@ -276,23 +296,28 @@ private struct PostLocationMapView: View {
                         .lineLimit(2)
 
                     if isResolving {
-                        ProgressView("正在解析位置…")
+                        ProgressView(LL("正在解析位置…"))
                             .font(.caption)
                             .tint(RaverTheme.secondaryText)
                     } else if resolveFailed {
-                        Text("未能精确定位，仍可在地图中拖动查看区域。")
+                        Text(LL("未能精确定位，仍可在地图中拖动查看区域。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
 
                     Button {
-                        openInSystemMaps()
+                        refreshAvailableMapApps()
+                        if !availableMapApps.isEmpty {
+                            showMapAppPicker = true
+                        }
                     } label: {
-                        Label("系统地图打开", systemImage: "arrow.up.right.square")
+                        Label(LL("打开地图App"), systemImage: "arrow.up.right.square")
                             .font(.subheadline.weight(.semibold))
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(RaverTheme.accent)
+                    .disabled(availableMapApps.isEmpty)
+                    .opacity(availableMapApps.isEmpty ? 0.65 : 1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
@@ -303,13 +328,22 @@ private struct PostLocationMapView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("返回") { dismiss() }
+                    Button(L("返回", "Back")) { dismiss() }
                         .font(.subheadline.weight(.semibold))
                 }
             }
-            .navigationTitle("位置地图")
+            .navigationTitle(LL("位置地图"))
             .navigationBarTitleDisplayMode(.inline)
+            .confirmationDialog(L("选择地图应用", "Choose Map App"), isPresented: $showMapAppPicker, titleVisibility: .visible) {
+                ForEach(availableMapApps) { app in
+                    Button(app.title) {
+                        openExternalMap(app)
+                    }
+                }
+                Button(L("取消", "Cancel"), role: .cancel) {}
+            }
             .task {
+                refreshAvailableMapApps()
                 await resolveLocation()
             }
         }
@@ -335,26 +369,111 @@ private struct PostLocationMapView: View {
                         span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
                     )
                 )
+                refreshAvailableMapApps()
                 return
             }
             resolveFailed = true
+            refreshAvailableMapApps()
         } catch {
             resolveFailed = true
+            refreshAvailableMapApps()
         }
     }
 
-    private func openInSystemMaps() {
-        if let resolvedCoordinate {
-            let placemark = MKPlacemark(coordinate: resolvedCoordinate)
-            let item = MKMapItem(placemark: placemark)
-            item.name = locationText
-            item.openInMaps()
-            return
+    private func refreshAvailableMapApps() {
+        let app = UIApplication.shared
+        var result: [ExternalMapApp] = [.apple]
+        if app.canOpenURL(URL(string: "iosamap://")!) {
+            result.append(.amap)
         }
+        if app.canOpenURL(URL(string: "baidumap://")!) {
+            result.append(.baidu)
+        }
+        if app.canOpenURL(URL(string: "qqmap://")!) {
+            result.append(.tencent)
+        }
+        availableMapApps = result
+    }
 
-        let encoded = locationText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? locationText
-        if let url = URL(string: "http://maps.apple.com/?q=\(encoded)") {
-            UIApplication.shared.open(url)
+    private func openExternalMap(_ app: ExternalMapApp) {
+        guard let url = externalMapURL(for: app) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private func externalMapURL(for app: ExternalMapApp) -> URL? {
+        let query = locationText.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch app {
+        case .apple:
+            if let resolvedCoordinate {
+                let placemark = MKPlacemark(coordinate: resolvedCoordinate)
+                let item = MKMapItem(placemark: placemark)
+                item.name = locationText
+                return item.url
+            }
+            let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+            return URL(string: "http://maps.apple.com/?q=\(encoded)")
+        case .amap:
+            if let resolvedCoordinate {
+                var components = URLComponents()
+                components.scheme = "iosamap"
+                components.host = "viewMap"
+                components.queryItems = [
+                    URLQueryItem(name: "sourceApplication", value: "RaveHub"),
+                    URLQueryItem(name: "poiname", value: locationText),
+                    URLQueryItem(name: "lat", value: "\(resolvedCoordinate.latitude)"),
+                    URLQueryItem(name: "lon", value: "\(resolvedCoordinate.longitude)"),
+                    URLQueryItem(name: "dev", value: "0"),
+                    URLQueryItem(name: "zoom", value: "17")
+                ]
+                return components.url
+            }
+            guard !query.isEmpty else { return nil }
+            var components = URLComponents()
+            components.scheme = "iosamap"
+            components.host = "poi"
+            components.queryItems = [
+                URLQueryItem(name: "sourceApplication", value: "RaveHub"),
+                URLQueryItem(name: "keywords", value: query)
+            ]
+            return components.url
+        case .baidu:
+            if let resolvedCoordinate {
+                var components = URLComponents()
+                components.scheme = "baidumap"
+                components.host = "map"
+                components.path = "/marker"
+                components.queryItems = [
+                    URLQueryItem(name: "location", value: "\(resolvedCoordinate.latitude),\(resolvedCoordinate.longitude)"),
+                    URLQueryItem(name: "title", value: locationText),
+                    URLQueryItem(name: "content", value: query.isEmpty ? locationText : query),
+                    URLQueryItem(name: "src", value: "RaveHub")
+                ]
+                return components.url
+            }
+            guard !query.isEmpty else { return nil }
+            var components = URLComponents()
+            components.scheme = "baidumap"
+            components.host = "map"
+            components.path = "/search"
+            components.queryItems = [
+                URLQueryItem(name: "query", value: query),
+                URLQueryItem(name: "src", value: "RaveHub")
+            ]
+            return components.url
+        case .tencent:
+            var components = URLComponents()
+            components.scheme = "qqmap"
+            components.host = "map"
+            components.path = "/search"
+            var items: [URLQueryItem] = [
+                URLQueryItem(name: "referer", value: "RaveHub"),
+                URLQueryItem(name: "keyword", value: query.isEmpty ? locationText : query)
+            ]
+            if let resolvedCoordinate {
+                items.append(URLQueryItem(name: "center", value: "\(resolvedCoordinate.latitude),\(resolvedCoordinate.longitude)"))
+            }
+            components.queryItems = items
+            return components.url
         }
     }
 }
@@ -789,6 +908,7 @@ private struct PostMediaVideoPlayer: View {
             }
         }
         .onAppear {
+            AppOrientationLock.shared.allowLandscape()
             if player == nil {
                 player = AVPlayer(url: url)
             }
@@ -797,6 +917,7 @@ private struct PostMediaVideoPlayer: View {
             player?.pause()
             player?.replaceCurrentItem(with: nil)
             player = nil
+            AppOrientationLock.shared.lockPortrait(force: true)
         }
     }
 }
@@ -925,7 +1046,7 @@ private enum PostVideoDurationLoader {
                 )
                 return formatted
             } catch {
-                PostVideoDebugLogger.log("duration load failed. url=\(url.absoluteString), error=\(error.localizedDescription)")
+                PostVideoDebugLogger.log("duration load failed. url=\(url.absoluteString), error=\(error.userFacingMessage ?? "")")
                 return nil
             }
         }.value

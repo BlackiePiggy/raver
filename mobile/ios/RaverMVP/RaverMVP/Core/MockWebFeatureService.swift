@@ -1538,7 +1538,6 @@ actor MockWebFeatureService: WebFeatureService {
         if input.type == "event",
            let eventID = input.eventId,
            let normalizedNote = input.note?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-           normalizedNote != "planned",
            normalizedNote != "marked",
            checkins.contains(where: {
                $0.userId == currentUser.id
@@ -2119,6 +2118,61 @@ actor MockWebFeatureService: WebFeatureService {
             .lowercased()
             .contains(keyword)
         }
+    }
+
+    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> WebLearnFestival {
+        let finalName = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !finalName.isEmpty else {
+            throw ServiceError.message("电音节名称不能为空")
+        }
+
+        let rawBase = finalName
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9\\u4e00-\\u9fa5]+", with: "-", options: .regularExpression)
+            .replacingOccurrences(of: "^-+|-+$", with: "", options: .regularExpression)
+        let baseID = rawBase.isEmpty ? "festival-\(UUID().uuidString.prefix(8))" : rawBase
+
+        var candidateID = baseID
+        var suffix = 1
+        while learnFestivals.contains(where: { $0.id == candidateID }) {
+            suffix += 1
+            candidateID = "\(baseID)-\(suffix)"
+        }
+
+        let aliases = (input.aliases ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let links = (input.links ?? [])
+            .map { LearnFestivalLinkPayload(title: $0.title, icon: $0.icon, url: $0.url) }
+        let now = Date()
+
+        let festival = WebLearnFestival(
+            id: candidateID,
+            name: finalName,
+            aliases: aliases,
+            country: input.country?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            city: input.city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            foundedYear: input.foundedYear?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            frequency: input.frequency?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            tagline: input.tagline?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            introduction: input.introduction?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            avatarUrl: {
+                let trimmed = input.avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return trimmed.isEmpty ? nil : trimmed
+            }(),
+            backgroundUrl: {
+                let trimmed = input.backgroundUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return trimmed.isEmpty ? nil : trimmed
+            }(),
+            links: links,
+            contributors: [currentUser],
+            canEdit: true,
+            createdAt: now,
+            updatedAt: now
+        )
+
+        learnFestivals.insert(festival, at: 0)
+        return festival
     }
 
     func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival {

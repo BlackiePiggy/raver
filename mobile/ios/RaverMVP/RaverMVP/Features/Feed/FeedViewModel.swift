@@ -28,7 +28,7 @@ final class FeedViewModel: ObservableObject {
             hasMore = page.nextCursor != nil
             self.error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -52,7 +52,7 @@ final class FeedViewModel: ObservableObject {
             hasMore = page.nextCursor != nil
             self.error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -61,7 +61,7 @@ final class FeedViewModel: ObservableObject {
             let updated = try await service.toggleLike(postID: post.id, shouldLike: !post.isLiked)
             replace(updated)
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -70,7 +70,7 @@ final class FeedViewModel: ObservableObject {
             let updated = try await service.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
             replace(updated)
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -81,7 +81,7 @@ final class FeedViewModel: ObservableObject {
                 posts[index].author = updatedAuthor
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 

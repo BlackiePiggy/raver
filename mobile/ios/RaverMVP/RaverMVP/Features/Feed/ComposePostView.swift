@@ -1,5 +1,6 @@
 import AVFoundation
 import AVKit
+import CoreLocation
 import MapKit
 import PhotosUI
 import SwiftUI
@@ -101,18 +102,18 @@ struct ComposePostView: View {
     }
 
     private var submitButtonTitle: String {
-        isEditMode ? "重新发布" : "发布动态"
+        isEditMode ? L("重新发布", "Republish") : L("发布动态", "Publish Post")
     }
 
     private var pageTitle: String {
-        isEditMode ? "编辑动态" : "发布动态"
+        isEditMode ? L("编辑动态", "Edit Post") : L("发布动态", "Publish Post")
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 14) {
                 HStack {
-                    Text("正文")
+                    Text(LL("正文"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer()
@@ -133,7 +134,7 @@ struct ComposePostView: View {
                     .padding(.vertical, 4)
 
                     if text.isEmpty {
-                        Text("分享这一刻...")
+                        Text(LL("分享这一刻..."))
                             .font(.body)
                             .foregroundStyle(RaverTheme.secondaryText)
                             .padding(.horizontal, 12)
@@ -149,7 +150,7 @@ struct ComposePostView: View {
                 }
 
                 HStack(spacing: 10) {
-                    Text("媒体")
+                    Text(LL("媒体"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer()
@@ -203,7 +204,7 @@ struct ComposePostView: View {
                                         Image(systemName: "plus")
                                             .font(.system(size: 20, weight: .semibold))
                                             .foregroundStyle(RaverTheme.secondaryText)
-                                        Text("添加")
+                                        Text(LL("添加"))
                                             .font(.caption)
                                             .foregroundStyle(RaverTheme.secondaryText)
                                     }
@@ -243,7 +244,7 @@ struct ComposePostView: View {
                             ProgressView()
                                 .tint(.red)
                         } else {
-                            Text("删除动态")
+                            Text(LL("删除动态"))
                                 .font(.subheadline.weight(.semibold))
                         }
                     }
@@ -265,7 +266,7 @@ struct ComposePostView: View {
                         .foregroundStyle(RaverTheme.primaryText)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("返回") {
+                    Button(L("返回", "Back")) {
                         dismiss()
                     }
                     .font(.subheadline.weight(.semibold))
@@ -277,23 +278,23 @@ struct ComposePostView: View {
                     await uploadSelectedMedia(from: newValue)
                 }
             }
-            .alert("提示", isPresented: Binding(
+            .alert(L("提示", "Notice"), isPresented: Binding(
                 get: { toast != nil },
                 set: { if !$0 { toast = nil } }
             )) {
-                Button("确定", role: .cancel) {}
+                Button(L("确定", "OK"), role: .cancel) {}
             } message: {
                 Text(toast ?? "")
             }
             .confirmationDialog(
-                "确认删除这条动态吗？",
+                L("确认删除这条动态吗？", "Are you sure you want to delete this post?"),
                 isPresented: $isDeleteConfirmationPresented,
                 titleVisibility: .visible
             ) {
-                Button("删除动态", role: .destructive) {
+                Button(LL("删除动态"), role: .destructive) {
                     Task { await deletePost() }
                 }
-                Button("取消", role: .cancel) {}
+                Button(L("取消", "Cancel"), role: .cancel) {}
             }
             .fullScreenCover(item: $selectedPreview) { preview in
                 ComposeMediaBrowserView(
@@ -318,7 +319,7 @@ struct ComposePostView: View {
         defer { isSending = false }
 
         guard !trimmedText.isEmpty || !normalizedMediaURLs.isEmpty else {
-            toast = "请填写正文或添加媒体"
+            toast = L("请填写正文或添加媒体", "Please enter text or add media.")
             return
         }
 
@@ -345,7 +346,7 @@ struct ComposePostView: View {
             }
             dismiss()
         } catch {
-            toast = error.localizedDescription
+            toast = error.userFacingMessage
         }
     }
 
@@ -362,7 +363,7 @@ struct ComposePostView: View {
             onPostDeleted?(editingPost.id)
             dismiss()
         } catch {
-            toast = error.localizedDescription
+            toast = error.userFacingMessage
         }
     }
 
@@ -377,7 +378,7 @@ struct ComposePostView: View {
 
         for item in items {
             if mediaEntries.count >= maxMediaCount {
-                toast = "最多添加 \(maxMediaCount) 个媒体"
+                toast = L("最多添加 \(maxMediaCount) 个媒体", "You can add up to \(maxMediaCount) media items.")
                 break
             }
 
@@ -402,7 +403,7 @@ struct ComposePostView: View {
                     mediaEntries.append(ComposeMediaEntry(url: upload.url))
                 }
             } catch {
-                toast = "媒体上传失败：\(error.localizedDescription)"
+                toast = L("媒体上传失败：\(error.userFacingMessage ?? "")", "Media upload failed: \(error.userFacingMessage ?? "")")
             }
         }
     }
@@ -491,12 +492,12 @@ struct ComposePostView: View {
     private var locationSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text("定位标签")
+                Text(LL("定位标签"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
                 if normalizedLocationTag != nil {
-                    Button("清除") {
+                    Button(L("清除", "Clear")) {
                         locationTag = ""
                     }
                     .font(.caption.weight(.semibold))
@@ -511,7 +512,7 @@ struct ComposePostView: View {
                     Image(systemName: "mappin.and.ellipse")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
-                    Text(normalizedLocationTag ?? "添加定位标签")
+                    Text(normalizedLocationTag ?? L("添加定位标签", "Add Location Tag"))
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(normalizedLocationTag == nil ? RaverTheme.secondaryText : RaverTheme.primaryText)
                         .lineLimit(1)
@@ -664,6 +665,7 @@ private struct ComposeFullscreenVideoPlayer: View {
             }
         }
         .onAppear {
+            AppOrientationLock.shared.allowLandscape()
             if player == nil {
                 player = AVPlayer(url: url)
             }
@@ -672,6 +674,7 @@ private struct ComposeFullscreenVideoPlayer: View {
             player?.pause()
             player?.replaceCurrentItem(with: nil)
             player = nil
+            AppOrientationLock.shared.lockPortrait(force: true)
         }
     }
 }
@@ -950,8 +953,53 @@ private struct PostLocationCandidate: Identifiable, Equatable {
     }
 }
 
+private final class PostPickerCurrentLocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
+    @Published private(set) var coordinate: CLLocationCoordinate2D?
+    @Published private(set) var authorizationStatus: CLAuthorizationStatus
+
+    private let manager = CLLocationManager()
+
+    override init() {
+        authorizationStatus = manager.authorizationStatus
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+    }
+
+    func requestCurrentLocation() {
+        authorizationStatus = manager.authorizationStatus
+        switch authorizationStatus {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation()
+        case .denied, .restricted:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        authorizationStatus = manager.authorizationStatus
+        if authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse {
+            manager.requestLocation()
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        coordinate = locations.last?.coordinate
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("Post picker location error: \(error.userFacingMessage ?? "")")
+    }
+}
+
 private final class PostLocationSearchModel: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
-    @Published private(set) var candidates: [PostLocationCandidate] = []
+    @Published private(set) var queryCandidates: [PostLocationCandidate] = []
+    @Published private(set) var nearbyCandidates: [PostLocationCandidate] = []
+    @Published private(set) var isLoadingNearby = false
     private let completer = MKLocalSearchCompleter()
     private var query: String = ""
 
@@ -965,7 +1013,7 @@ private final class PostLocationSearchModel: NSObject, ObservableObject, MKLocal
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         query = trimmed
         if trimmed.isEmpty {
-            candidates = []
+            queryCandidates = []
             completer.queryFragment = ""
             return
         }
@@ -974,10 +1022,10 @@ private final class PostLocationSearchModel: NSObject, ObservableObject, MKLocal
 
     func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
         guard !query.isEmpty else {
-            candidates = []
+            queryCandidates = []
             return
         }
-        candidates = completer.results.map { item in
+        queryCandidates = completer.results.map { item in
             PostLocationCandidate(
                 id: "\(item.title)|\(item.subtitle)",
                 title: item.title,
@@ -988,14 +1036,74 @@ private final class PostLocationSearchModel: NSObject, ObservableObject, MKLocal
     }
 
     func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
-        print("Post location completer error: \(error.localizedDescription)")
-        candidates = []
+        print("Post location completer error: \(error.userFacingMessage ?? "")")
+        queryCandidates = []
+    }
+
+    @MainActor
+    func searchNearby(around coordinate: CLLocationCoordinate2D) async {
+        isLoadingNearby = true
+        defer { isLoadingNearby = false }
+
+        let request = MKLocalSearch.Request()
+        request.resultTypes = [.pointOfInterest, .address]
+        request.region = MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+        )
+
+        do {
+            let response = try await MKLocalSearch(request: request).start()
+            var dedup = Set<String>()
+            var result: [PostLocationCandidate] = []
+            for item in response.mapItems {
+                let coordinate = item.placemark.coordinate
+                let title = item.name?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    ?? ""
+                let fallbackTitle = item.placemark.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    ?? item.placemark.locality?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    ?? ""
+                let resolvedTitle = title.isEmpty ? fallbackTitle : title
+                let subtitleParts = [
+                    item.placemark.locality,
+                    item.placemark.subLocality,
+                    item.placemark.thoroughfare
+                ]
+                    .compactMap { value in
+                        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        return trimmed.isEmpty ? nil : trimmed
+                    }
+                let subtitle = subtitleParts.joined(separator: " ")
+                let key = "\(resolvedTitle)|\(subtitle)|\(String(format: "%.5f", coordinate.latitude)),\(String(format: "%.5f", coordinate.longitude))"
+                guard !resolvedTitle.isEmpty || !subtitle.isEmpty, !dedup.contains(key) else { continue }
+                dedup.insert(key)
+                result.append(
+                    PostLocationCandidate(
+                        id: key,
+                        title: resolvedTitle.isEmpty ? L("附近地点", "Nearby Place") : resolvedTitle,
+                        subtitle: subtitle,
+                        coordinate: coordinate
+                    )
+                )
+                if result.count >= 20 { break }
+            }
+            nearbyCandidates = result
+        } catch {
+            nearbyCandidates = []
+        }
     }
 }
 
 private struct PostLocationPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var searchModel = PostLocationSearchModel()
+    @StateObject private var locationProvider = PostPickerCurrentLocationProvider()
+
+    private enum CandidateListMode {
+        case nearby
+        case query
+    }
 
     let initialQuery: String
     let onSelect: (String) -> Void
@@ -1003,15 +1111,20 @@ private struct PostLocationPickerSheet: View {
     @State private var query: String
     @State private var mapPosition: MapCameraPosition
     @State private var selectedCandidate: PostLocationCandidate?
-    @State private var selectedCoordinate: CLLocationCoordinate2D?
+    @State private var pinCoordinate: CLLocationCoordinate2D
     @State private var isResolving = false
     @State private var errorMessage: String?
+    @State private var listMode: CandidateListMode = .nearby
+    @State private var nearbySearchTask: Task<Void, Never>?
+    @FocusState private var isSearchFieldFocused: Bool
+    @State private var hasAppliedInitialDeviceLocation = false
 
     init(initialQuery: String, onSelect: @escaping (String) -> Void) {
         self.initialQuery = initialQuery
         self.onSelect = onSelect
         _query = State(initialValue: initialQuery)
         let fallbackCenter = CLLocationCoordinate2D(latitude: 31.2304, longitude: 121.4737)
+        _pinCoordinate = State(initialValue: fallbackCenter)
         _mapPosition = State(
             initialValue: .region(
                 MKCoordinateRegion(
@@ -1030,12 +1143,18 @@ private struct PostLocationPickerSheet: View {
                 locationListArea
             }
             .background(RaverTheme.background)
-            .navigationTitle("选择定位")
+            .navigationTitle(LL("选择定位"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
+                    Button(L("取消", "Cancel")) { dismiss() }
                         .font(.subheadline.weight(.semibold))
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L("确认", "Confirm")) {
+                        Task { await confirmSelection() }
+                    }
+                    .font(.subheadline.weight(.semibold))
                 }
             }
             .safeAreaInset(edge: .top) {
@@ -1043,9 +1162,10 @@ private struct PostLocationPickerSheet: View {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(RaverTheme.secondaryText)
-                        TextField("搜索地点", text: $query)
+                        TextField(LL("搜索地点"), text: $query)
                             .textInputAutocapitalization(.never)
                             .disableAutocorrection(true)
+                            .focused($isSearchFieldFocused)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
@@ -1059,15 +1179,46 @@ private struct PostLocationPickerSheet: View {
             }
             .onAppear {
                 searchModel.updateQuery(query)
+                scheduleNearbySearch(for: pinCoordinate)
+                locationProvider.requestCurrentLocation()
+            }
+            .onReceive(locationProvider.$coordinate) { coordinate in
+                guard let coordinate else { return }
+                guard !hasAppliedInitialDeviceLocation else { return }
+                hasAppliedInitialDeviceLocation = true
+                pinCoordinate = coordinate
+                mapPosition = .region(
+                    MKCoordinateRegion(
+                        center: coordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
+                    )
+                )
+                listMode = .nearby
+                scheduleNearbySearch(for: coordinate)
             }
             .onChange(of: query) { _, newValue in
                 searchModel.updateQuery(newValue)
+                if !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    listMode = .query
+                } else if !isSearchFieldFocused {
+                    listMode = .nearby
+                }
             }
-            .alert("提示", isPresented: Binding(
+            .onChange(of: isSearchFieldFocused) { _, isFocused in
+                if isFocused {
+                    listMode = .query
+                } else if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    listMode = .nearby
+                }
+            }
+            .onDisappear {
+                nearbySearchTask?.cancel()
+            }
+            .alert(L("提示", "Notice"), isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
             )) {
-                Button("确定", role: .cancel) {}
+                Button(L("确定", "OK"), role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
             }
@@ -1076,23 +1227,55 @@ private struct PostLocationPickerSheet: View {
 
     private var mapArea: some View {
         ZStack {
-            Map(position: $mapPosition, interactionModes: .all) {
-                if let selectedCoordinate {
-                    let selectedTitle = selectedCandidate?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    let markerTitle = selectedTitle.isEmpty ? "已选地点" : selectedTitle
-                    Marker(
-                        markerTitle,
-                        coordinate: selectedCoordinate
-                    )
-                }
-            }
+            Map(position: $mapPosition, interactionModes: .all) {}
             .mapStyle(.standard(elevation: .realistic))
             .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 360)
+            .onMapCameraChange(frequency: .onEnd) { context in
+                pinCoordinate = context.region.center
+                listMode = .nearby
+                scheduleNearbySearch(for: context.region.center)
+            }
+
+            VStack(spacing: 0) {
+                Image(systemName: "mappin.circle.fill")
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(RaverTheme.accent)
+                    .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 4)
+                    .offset(y: -17)
+                Circle()
+                    .fill(RaverTheme.accent.opacity(0.9))
+                    .frame(width: 6, height: 6)
+                    .offset(y: -17)
+            }
+            .allowsHitTesting(false)
 
             if isResolving {
                 ProgressView()
                     .padding(10)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        centerOnCurrentLocation(forceRequest: true)
+                    } label: {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 10)
+                    .padding(.trailing, 12)
+                }
+                Spacer()
             }
         }
     }
@@ -1100,15 +1283,32 @@ private struct PostLocationPickerSheet: View {
     private var locationListArea: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if searchModel.candidates.isEmpty {
-                    Text(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "输入关键词搜索地点" : "未找到匹配地点")
+                HStack(spacing: 6) {
+                    Image(systemName: listMode == .query ? "magnifyingglass" : "scope")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    Text(listMode == .query ? L("搜索候选地点", "Search Candidates") : L("附近推荐地点", "Nearby Recommendations"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    Spacer(minLength: 0)
+                    if listMode == .nearby, searchModel.isLoadingNearby {
+                        ProgressView()
+                            .controlSize(.mini)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
+
+                if displayedCandidates.isEmpty {
+                    Text(emptyHintText)
                         .font(.subheadline)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .padding(.horizontal, 16)
-                        .padding(.top, 18)
+                        .padding(.top, 6)
                         .padding(.bottom, 22)
                 } else {
-                    ForEach(searchModel.candidates) { candidate in
+                    ForEach(displayedCandidates) { candidate in
                         Button {
                             Task { await chooseCandidate(candidate) }
                         } label: {
@@ -1130,6 +1330,12 @@ private struct PostLocationPickerSheet: View {
                                     }
                                 }
                                 Spacer()
+                                if selectedCandidate?.id == candidate.id {
+                                    Image(systemName: "scope")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(RaverTheme.accent)
+                                        .padding(.top, 2)
+                                }
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
@@ -1147,6 +1353,19 @@ private struct PostLocationPickerSheet: View {
     @MainActor
     private func chooseCandidate(_ candidate: PostLocationCandidate) async {
         guard !isResolving else { return }
+        selectedCandidate = candidate
+
+        if let coordinate = candidate.coordinate {
+            pinCoordinate = coordinate
+            mapPosition = .region(
+                MKCoordinateRegion(
+                    center: coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
+                )
+            )
+            return
+        }
+
         isResolving = true
         defer { isResolving = false }
 
@@ -1155,10 +1374,8 @@ private struct PostLocationPickerSheet: View {
             request.naturalLanguageQuery = candidate.displayLabel
             request.resultTypes = [.address, .pointOfInterest]
             let response = try await MKLocalSearch(request: request).start()
-            let resolved = response.mapItems.first
-            selectedCandidate = candidate
-            selectedCoordinate = resolved?.placemark.coordinate
-            if let coordinate = selectedCoordinate {
+            if let coordinate = response.mapItems.first?.placemark.coordinate {
+                pinCoordinate = coordinate
                 mapPosition = .region(
                     MKCoordinateRegion(
                         center: coordinate,
@@ -1166,10 +1383,127 @@ private struct PostLocationPickerSheet: View {
                     )
                 )
             }
-            onSelect(candidate.displayLabel)
-            dismiss()
         } catch {
-            errorMessage = "地点解析失败，请重试"
+            errorMessage = L("地点解析失败，请重试", "Failed to resolve place. Please try again.")
+        }
+    }
+
+    @MainActor
+    private func confirmSelection() async {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let reverseLabel = await reverseGeocodeLabel(for: pinCoordinate),
+           !reverseLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            onSelect(reverseLabel)
+            dismiss()
+            return
+        }
+
+        if let selectedCandidate {
+            onSelect(selectedCandidate.displayLabel)
+            dismiss()
+            return
+        }
+
+        if !trimmedQuery.isEmpty {
+            onSelect(trimmedQuery)
+            dismiss()
+            return
+        }
+
+        errorMessage = L("请先搜索地点，或拖动地图后确认", "Please search for a place, or drag the map pin and confirm.")
+    }
+
+    private var displayedCandidates: [PostLocationCandidate] {
+        switch listMode {
+        case .query:
+            return searchModel.queryCandidates
+        case .nearby:
+            return searchModel.nearbyCandidates
+        }
+    }
+
+    private var emptyHintText: String {
+        switch listMode {
+        case .query:
+            return query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? L("输入关键词搜索地点", "Enter keywords to search places")
+                : L("未找到匹配地点", "No matching places found")
+        case .nearby:
+            return L("拖动地图后，将在这里展示 pin 附近地点", "After dragging the map, nearby places around the pin will appear here.")
+        }
+    }
+
+    private func scheduleNearbySearch(for coordinate: CLLocationCoordinate2D) {
+        nearbySearchTask?.cancel()
+        nearbySearchTask = Task {
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            guard !Task.isCancelled else { return }
+            await searchModel.searchNearby(around: coordinate)
+        }
+    }
+
+    private func centerOnCurrentLocation(forceRequest: Bool) {
+        if let coordinate = locationProvider.coordinate {
+            pinCoordinate = coordinate
+            mapPosition = .region(
+                MKCoordinateRegion(
+                    center: coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
+                )
+            )
+            listMode = .nearby
+            scheduleNearbySearch(for: coordinate)
+            return
+        }
+
+        if forceRequest {
+            locationProvider.requestCurrentLocation()
+        }
+
+        switch locationProvider.authorizationStatus {
+        case .denied, .restricted:
+            errorMessage = L("定位权限未开启，请在系统设置中允许定位后重试", "Location permission is disabled. Please enable it in Settings and try again.")
+        default:
+            errorMessage = L("正在获取当前位置，请稍后再试", "Getting current location. Please try again shortly.")
+        }
+    }
+
+    private func reverseGeocodeLabel(for coordinate: CLLocationCoordinate2D) async -> String? {
+        do {
+            let placemark = try await reverseGeocode(coordinate: coordinate)
+            if let name = placemark?.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                return name
+            }
+            let components = [
+                placemark?.country,
+                placemark?.administrativeArea,
+                placemark?.locality,
+                placemark?.subLocality,
+                placemark?.thoroughfare,
+                placemark?.subThoroughfare
+            ]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            let merged = components.joined(separator: " ")
+            return merged.isEmpty ? nil : merged
+        } catch {
+            return nil
+        }
+    }
+
+    private func reverseGeocode(coordinate: CLLocationCoordinate2D) async throws -> CLPlacemark? {
+        try await withCheckedThrowingContinuation { continuation in
+            CLGeocoder().reverseGeocodeLocation(
+                CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude),
+                preferredLocale: Locale(identifier: "zh_CN")
+            ) { placemarks, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: placemarks?.first)
+            }
         }
     }
 }

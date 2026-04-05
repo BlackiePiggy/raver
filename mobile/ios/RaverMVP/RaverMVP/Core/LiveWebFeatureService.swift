@@ -24,27 +24,27 @@ final class LiveWebFeatureService: WebFeatureService {
             queryItems.append(URLQueryItem(name: "status", value: status))
         }
         let response: BFFEnvelope<BFFItems<WebEvent>> = try await request(path: "/v1/events", method: "GET", queryItems: queryItems)
-        return EventListPage(items: response.data.items, pagination: response.pagination)
+        return EventListPage(items: response.data.items.map(localizedEvent), pagination: response.pagination)
     }
 
     func fetchEvent(id: String) async throws -> WebEvent {
         let response: BFFEnvelope<WebEvent> = try await request(path: "/v1/events/\(id)", method: "GET")
-        return response.data
+        return localizedEvent(response.data)
     }
 
     func fetchMyEvents() async throws -> [WebEvent] {
         let response: BFFEnvelope<BFFItems<WebEvent>> = try await request(path: "/v1/events/my", method: "GET")
-        return response.data.items
+        return response.data.items.map(localizedEvent)
     }
 
     func createEvent(input: CreateEventInput) async throws -> WebEvent {
         let response: BFFEnvelope<WebEvent> = try await request(path: "/v1/events", method: "POST", body: input)
-        return response.data
+        return localizedEvent(response.data)
     }
 
     func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent {
         let response: BFFEnvelope<WebEvent> = try await request(path: "/v1/events/\(id)", method: "PATCH", body: input)
-        return response.data
+        return localizedEvent(response.data)
     }
 
     func deleteEvent(id: String) async throws {
@@ -188,12 +188,12 @@ final class LiveWebFeatureService: WebFeatureService {
             queryItems.append(URLQueryItem(name: "search", value: search))
         }
         let response: BFFEnvelope<BFFItems<WebDJ>> = try await request(path: "/v1/djs", method: "GET", queryItems: queryItems)
-        return DJListPage(items: response.data.items, pagination: response.pagination)
+        return DJListPage(items: response.data.items.map(localizedDJ), pagination: response.pagination)
     }
 
     func fetchDJ(id: String) async throws -> WebDJ {
         let response: BFFEnvelope<WebDJ> = try await request(path: "/v1/djs/\(id)", method: "GET")
-        return response.data
+        return localizedDJ(response.data)
     }
 
     func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate] {
@@ -238,7 +238,9 @@ final class LiveWebFeatureService: WebFeatureService {
             method: "POST",
             body: input
         )
-        return response.data
+        var payload = response.data
+        payload.dj = localizedDJ(payload.dj)
+        return payload
     }
 
     func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDiscogsDJResponse {
@@ -247,7 +249,9 @@ final class LiveWebFeatureService: WebFeatureService {
             method: "POST",
             body: input
         )
-        return response.data
+        var payload = response.data
+        payload.dj = localizedDJ(payload.dj)
+        return payload
     }
 
     func importManualDJ(input: ImportManualDJInput) async throws -> ImportManualDJResponse {
@@ -256,7 +260,9 @@ final class LiveWebFeatureService: WebFeatureService {
             method: "POST",
             body: input
         )
-        return response.data
+        var payload = response.data
+        payload.dj = localizedDJ(payload.dj)
+        return payload
     }
 
     func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ {
@@ -265,7 +271,7 @@ final class LiveWebFeatureService: WebFeatureService {
             method: "PATCH",
             body: input
         )
-        return response.data
+        return localizedDJ(response.data)
     }
 
     func uploadDJImage(
@@ -291,12 +297,12 @@ final class LiveWebFeatureService: WebFeatureService {
 
     func fetchDJSets(djID: String) async throws -> [WebDJSet] {
         let response: BFFEnvelope<BFFItems<WebDJSet>> = try await request(path: "/v1/djs/\(djID)/sets", method: "GET")
-        return response.data.items
+        return response.data.items.map(localizedDJSet)
     }
 
     func fetchDJEvents(djID: String) async throws -> [WebEvent] {
         let response: BFFEnvelope<BFFItems<WebEvent>> = try await request(path: "/v1/djs/\(djID)/events", method: "GET")
-        return response.data.items
+        return response.data.items.map(localizedEvent)
     }
 
     func fetchDJFollowStatus(djID: String) async throws -> Bool {
@@ -309,7 +315,7 @@ final class LiveWebFeatureService: WebFeatureService {
             path: "/v1/djs/\(djID)/follow",
             method: shouldFollow ? "POST" : "DELETE"
         )
-        return response.data
+        return localizedDJ(response.data)
     }
 
     func fetchDJSets(page: Int, limit: Int, sortBy: String, djID: String?) async throws -> DJSetListPage {
@@ -322,7 +328,7 @@ final class LiveWebFeatureService: WebFeatureService {
             queryItems.append(URLQueryItem(name: "djId", value: djID))
         }
         let response: BFFEnvelope<BFFItems<WebDJSet>> = try await request(path: "/v1/dj-sets", method: "GET", queryItems: queryItems)
-        return DJSetListPage(items: response.data.items, pagination: response.pagination)
+        return DJSetListPage(items: response.data.items.map(localizedDJSet), pagination: response.pagination)
     }
 
     func fetchEventDJSets(eventName: String) async throws -> [WebDJSet] {
@@ -335,27 +341,27 @@ final class LiveWebFeatureService: WebFeatureService {
             URLQueryItem(name: "eventName", value: normalized),
         ]
         let response: BFFEnvelope<BFFItems<WebDJSet>> = try await request(path: "/v1/dj-sets", method: "GET", queryItems: queryItems)
-        return response.data.items
+        return response.data.items.map(localizedDJSet)
     }
 
     func fetchDJSet(id: String) async throws -> WebDJSet {
         let response: BFFEnvelope<WebDJSet> = try await request(path: "/v1/dj-sets/\(id)", method: "GET")
-        return response.data
+        return localizedDJSet(response.data)
     }
 
     func fetchMyDJSets() async throws -> [WebDJSet] {
         let response: BFFEnvelope<BFFItems<WebDJSet>> = try await request(path: "/v1/dj-sets/mine", method: "GET")
-        return response.data.items
+        return response.data.items.map(localizedDJSet)
     }
 
     func createDJSet(input: CreateDJSetInput) async throws -> WebDJSet {
         let response: BFFEnvelope<WebDJSet> = try await request(path: "/v1/dj-sets", method: "POST", body: input)
-        return response.data
+        return localizedDJSet(response.data)
     }
 
     func updateDJSet(id: String, input: UpdateDJSetInput) async throws -> WebDJSet {
         let response: BFFEnvelope<WebDJSet> = try await request(path: "/v1/dj-sets/\(id)", method: "PATCH", body: input)
-        return response.data
+        return localizedDJSet(response.data)
     }
 
     func deleteDJSet(id: String) async throws {
@@ -368,7 +374,7 @@ final class LiveWebFeatureService: WebFeatureService {
             method: "PUT",
             body: ReplaceTracksInput(tracks: tracks)
         )
-        return response.data
+        return localizedDJSet(response.data)
     }
 
     func fetchTracklists(setID: String) async throws -> [WebTracklistSummary] {
@@ -523,17 +529,18 @@ final class LiveWebFeatureService: WebFeatureService {
             queryItems.append(URLQueryItem(name: "djId", value: djID))
         }
         let response: BFFEnvelope<BFFItems<WebCheckin>> = try await request(path: "/v1/checkins", method: "GET", queryItems: queryItems)
-        return CheckinListPage(items: response.data.items, pagination: response.pagination)
+        let localizedItems = response.data.items.map(localizedCheckin)
+        return CheckinListPage(items: localizedItems, pagination: response.pagination)
     }
 
     func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin {
         let response: BFFEnvelope<WebCheckin> = try await request(path: "/v1/checkins", method: "POST", body: input)
-        return response.data
+        return localizedCheckin(response.data)
     }
 
     func updateCheckin(id: String, input: UpdateCheckinInput) async throws -> WebCheckin {
         let response: BFFEnvelope<WebCheckin> = try await request(path: "/v1/checkins/\(id)", method: "PATCH", body: input)
-        return response.data
+        return localizedCheckin(response.data)
     }
 
     func deleteCheckin(id: String) async throws {
@@ -662,7 +669,16 @@ final class LiveWebFeatureService: WebFeatureService {
             method: "GET",
             queryItems: queryItems
         )
-        return response.data.items
+        return response.data.items.map(localizedLearnFestival)
+    }
+
+    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> WebLearnFestival {
+        let response: BFFEnvelope<WebLearnFestival> = try await request(
+            path: "/v1/learn/festivals",
+            method: "POST",
+            body: input
+        )
+        return localizedLearnFestival(response.data)
     }
 
     func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival {
@@ -671,7 +687,7 @@ final class LiveWebFeatureService: WebFeatureService {
             method: "PATCH",
             body: input
         )
-        return response.data
+        return localizedLearnFestival(response.data)
     }
 
     func fetchRankingBoards() async throws -> [RankingBoard] {
@@ -779,6 +795,132 @@ final class LiveWebFeatureService: WebFeatureService {
             throw ServiceError.invalidResponse
         }
         return url
+    }
+
+    private func localizedEvent(_ event: WebEvent) -> WebEvent {
+        var localized = event
+        let language = AppLanguagePreference.current.effectiveLanguage
+        if let nameI18n = event.nameI18n {
+            let next = nameI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !next.isEmpty { localized.name = next }
+        }
+        if let descriptionI18n = event.descriptionI18n {
+            let next = descriptionI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            localized.description = next.isEmpty ? localized.description : next
+        }
+        if let countryI18n = event.countryI18n {
+            let next = countryI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !next.isEmpty { localized.country = next }
+        }
+        if let locationI18n = event.locationI18n {
+            let next = locationI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !next.isEmpty {
+                localized.city = next
+                // Prefer localized location text as a whole block to avoid mixing untranslated venue text.
+                localized.venueName = nil
+                let normalizedLocation = next.lowercased()
+                if let country = localized.country?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !country.isEmpty,
+                   normalizedLocation.contains(country.lowercased()) {
+                    // Avoid duplicated output like "上海 · 中国 · 中国" when location already contains country.
+                    localized.country = nil
+                }
+            }
+        }
+        return localized
+    }
+
+    private func localizedDJ(_ dj: WebDJ) -> WebDJ {
+        var localized = dj
+        let language = AppLanguagePreference.current.effectiveLanguage
+        if let nameI18n = dj.nameI18n {
+            let next = nameI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !next.isEmpty { localized.name = next }
+        }
+        if let bioI18n = dj.bioI18n {
+            let next = bioI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            localized.bio = next.isEmpty ? localized.bio : next
+        }
+        if let countryI18n = dj.countryI18n {
+            let next = countryI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !next.isEmpty { localized.country = next }
+        }
+        return localized
+    }
+
+    private func localizedDJSet(_ set: WebDJSet) -> WebDJSet {
+        var localized = set
+        if let dj = set.dj {
+            localized.dj = localizedDJ(dj)
+        }
+        localized.lineupDjs = set.lineupDjs.map(localizedDJ)
+        return localized
+    }
+
+    private func localizedLearnFestival(_ festival: WebLearnFestival) -> WebLearnFestival {
+        var localized = festival
+        let language = AppLanguagePreference.current.effectiveLanguage
+        if let nameI18n = festival.nameI18n {
+            let next = nameI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !next.isEmpty { localized.name = next }
+        }
+        if let descriptionI18n = festival.descriptionI18n {
+            let next = descriptionI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !next.isEmpty { localized.introduction = next }
+        }
+        if let countryI18n = festival.countryI18n {
+            let next = countryI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !next.isEmpty { localized.country = next }
+        }
+        if let cityI18n = festival.cityI18n {
+            let next = cityI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !next.isEmpty { localized.city = next }
+        }
+        if let frequencyI18n = festival.frequencyI18n {
+            let next = frequencyI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !next.isEmpty { localized.frequency = next }
+        }
+        return localized
+    }
+
+    private func localizedCheckin(_ checkin: WebCheckin) -> WebCheckin {
+        var localized = checkin
+        let language = AppLanguagePreference.current.effectiveLanguage
+        if var event = checkin.event {
+            if let nameI18n = event.nameI18n {
+                let next = nameI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !next.isEmpty { event.name = next }
+            }
+            if let countryI18n = event.countryI18n {
+                let next = countryI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !next.isEmpty { event.country = next }
+            }
+            if let locationI18n = event.locationI18n {
+                let next = locationI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !next.isEmpty {
+                    event.city = next
+                    let normalizedLocation = next.lowercased()
+                    if let country = event.country?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !country.isEmpty,
+                       normalizedLocation.contains(country.lowercased()) {
+                        event.country = nil
+                    }
+                }
+            }
+            localized.event = event
+        }
+        if var dj = checkin.dj {
+            if let nameI18n = dj.nameI18n {
+                let next = nameI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !next.isEmpty { dj.name = next }
+            }
+            if let countryI18n = dj.countryI18n {
+                let next = countryI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !next.isEmpty { dj.country = next }
+            }
+            localized.dj = dj
+        }
+        return localized
     }
 
     private func decodeResponse<T: Decodable>(data: Data, response: URLResponse) throws -> T {

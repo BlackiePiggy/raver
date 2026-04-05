@@ -1,0 +1,85 @@
+{
+  "startedAt": "2026-03-31T17:20:18.129Z",
+  "finishedAt": "2026-03-31T17:20:41.361Z",
+  "durationMs": 23232,
+  "config": {
+    "before": "2026-03-28T00:00:00+08:00",
+    "beforeEpochMs": 1774627200000,
+    "concurrency": 4,
+    "limit": 5,
+    "soundcloudSearchLimit": 25,
+    "dryRun": true
+  },
+  "totals": {
+    "targetRows": 5,
+    "updated": 0,
+    "skippedNoMatch": 0,
+    "skippedNoFields": 0,
+    "skippedEmptyName": 0,
+    "errored": 5
+  },
+  "errors": [
+    {
+      "djId": "2c20feac-42c6-4b53-831a-4bc4c453cda5",
+      "djName": "David Guetta",
+      "error": "SoundCloudUpstreamError: fetch failed"
+    },
+    {
+      "djId": "a4f3eb91-b58c-41c8-8aaf-79f4e29cefe4",
+      "djName": "Armin van Buuren",
+      "error": "SoundCloudUpstreamError: fetch failed"
+    },
+    {
+      "djId": "76a3e1f3-a398-492d-92e0-8875d5494fce",
+      "djName": "Martin Garrix",
+      "error": "SoundCloudUpstreamError: fetch failed"
+    },
+    {
+      "djId": "782838a6-4b02-4708-8a25-7ed2d6b2578b",
+      "djName": "Tiësto",
+      "error": "SoundCloudUpstreamError: fetch failed"
+    },
+    {
+      "djId": "9a3c1172-44c1-46e7-8e14-2129e1f31d37",
+      "djName": "Marshmello",
+      "error": "SoundCloudUpstreamError: fetch failed"
+    }
+  ],
+  "rows": [
+    {
+      "djId": "2c20feac-42c6-4b53-831a-4bc4c453cda5",
+      "djName": "David Guetta",
+      "createdAt": "2026-03-16T06:01:14.326Z",
+      "status": "error",
+      "reason": "SoundCloudUpstreamError: fetch failed"
+    },
+    {
+      "djId": "a4f3eb91-b58c-41c8-8aaf-79f4e29cefe4",
+      "djName": "Armin van Buuren",
+      "createdAt": "2026-03-16T06:01:14.340Z",
+      "status": "error",
+      "reason": "SoundCloudUpstreamError: fetch failed"
+    },
+    {
+      "djId": "76a3e1f3-a398-492d-92e0-8875d5494fce",
+      "djName": "Martin Garrix",
+      "createdAt": "2026-03-16T06:01:14.310Z",
+      "status": "error",
+      "reason": "SoundCloudUpstreamError: fetch failed"
+    },
+    {
+      "djId": "782838a6-4b02-4708-8a25-7ed2d6b2578b",
+      "djName": "Tiësto",
+      "createdAt": "2026-03-16T06:01:14.355Z",
+      "status": "error",
+      "reason": "SoundCloudUpstreamError: fetch failed"
+    },
+    {
+      "djId": "9a3c1172-44c1-46e7-8e14-2129e1f31d37",
+      "djName": "Marshmello",
+      "createdAt": "2026-03-16T06:01:14.367Z",
+      "status": "error",
+      "reason": "SoundCloudUpstreamError: fetch failed"
+    }
+  ]
+}

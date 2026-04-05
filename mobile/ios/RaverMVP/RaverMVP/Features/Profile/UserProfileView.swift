@@ -16,7 +16,7 @@ struct UserProfileView: View {
         ScrollView {
             VStack(spacing: 14) {
                 if viewModel.isLoading, viewModel.profile == nil {
-                    ProgressView("加载主页中...")
+                    ProgressView(L("加载主页中...", "Loading profile..."))
                         .padding(.top, 80)
                 } else if let profile = viewModel.profile {
                     ProfileHeaderCard(
@@ -25,14 +25,14 @@ struct UserProfileView: View {
                             if profile.canViewFollowersList {
                                 selectedFollowListKind = .followers
                             } else {
-                                viewModel.error = "该用户已关闭粉丝列表展示"
+                                viewModel.error = L("该用户已关闭粉丝列表展示", "This user has hidden the followers list.")
                             }
                         },
                         onFollowingTap: {
                             if profile.canViewFollowingList {
                                 selectedFollowListKind = .following
                             } else {
-                                viewModel.error = "该用户已关闭关注列表展示"
+                                viewModel.error = L("该用户已关闭关注列表展示", "This user has hidden the following list.")
                             }
                         },
                         onFriendsTap: {
@@ -41,7 +41,7 @@ struct UserProfileView: View {
                     ) {
                         if !isCurrentUser(profile) {
                             HStack(spacing: 10) {
-                                Button((profile.isFollowing ?? false) ? "已关注" : "关注") {
+                                Button((profile.isFollowing ?? false) ? L("已关注", "Following") : L("关注", "Follow")) {
                                     Task { await viewModel.toggleFollow() }
                                 }
                                 .buttonStyle(.borderedProminent)
@@ -52,11 +52,11 @@ struct UserProfileView: View {
                                             let conversation = try await appState.service.startDirectConversation(identifier: profile.username)
                                             pushedConversation = conversation
                                         } catch {
-                                            viewModel.error = error.localizedDescription
+                                            viewModel.error = error.userFacingMessage
                                         }
                                     }
                                 } label: {
-                                    Label("私信", systemImage: "paperplane")
+                                    Label(LL("私信"), systemImage: "paperplane")
                                 }
                                 .buttonStyle(.bordered)
                             }
@@ -64,18 +64,18 @@ struct UserProfileView: View {
                     }
 
                     ProfileRecentCheckinsCard(
-                        title: "Ta 的近期打卡",
+                        title: L("Ta 的近期打卡", "Recent Check-ins"),
                         checkins: viewModel.recentCheckins,
-                        emptyText: "Ta 还没有公开的打卡记录。"
+                        emptyText: L("Ta 还没有公开的打卡记录。", "No public check-ins yet.")
                     ) {
                         showAllCheckins = true
                     }
 
                     if viewModel.posts.isEmpty {
                         ContentUnavailableView(
-                            "Ta 还没有发布动态",
+                            L("Ta 还没有发布动态", "No Posts Yet"),
                             systemImage: "text.badge.plus",
-                            description: Text("先去打个招呼吧")
+                            description: Text(LL("先去打个招呼吧"))
                         )
                     } else {
                         ForEach(viewModel.posts) { post in
@@ -107,21 +107,21 @@ struct UserProfileView: View {
                         if viewModel.isLoadingMore {
                             HStack {
                                 Spacer()
-                                ProgressView("加载更多...")
+                                ProgressView(L("加载更多...", "Loading more..."))
                                 Spacer()
                             }
                             .padding(.vertical, 8)
                         }
                     }
                 } else {
-                    ContentUnavailableView("用户不存在", systemImage: "person.slash")
+                    ContentUnavailableView(LL("用户不存在"), systemImage: "person.slash")
                         .padding(.top, 80)
                 }
             }
             .padding(16)
         }
         .background(RaverTheme.background)
-        .navigationTitle("用户主页")
+        .navigationTitle(L("用户主页", "Profile"))
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $pushedConversation) { conversation in
             ChatView(conversation: conversation, service: appState.service)
@@ -133,7 +133,7 @@ struct UserProfileView: View {
             NavigationStack {
                 MyCheckinsView(
                     targetUserID: viewModel.profile?.id,
-                    title: "\(viewModel.profile?.displayName ?? "Ta")的打卡"
+                    title: L("\(viewModel.profile?.displayName ?? "Ta")的打卡", "\(viewModel.profile?.displayName ?? "Ta")'s Check-ins")
                 )
             }
         }
@@ -149,11 +149,11 @@ struct UserProfileView: View {
         .refreshable {
             await viewModel.refresh()
         }
-        .alert("提示", isPresented: Binding(
+        .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.error != nil },
             set: { if !$0 { viewModel.error = nil } }
         )) {
-            Button("确定", role: .cancel) {}
+            Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
         }

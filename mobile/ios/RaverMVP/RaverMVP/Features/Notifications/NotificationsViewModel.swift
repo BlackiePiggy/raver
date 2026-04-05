@@ -24,7 +24,7 @@ final class NotificationsViewModel: ObservableObject {
             unreadCount = inbox.unreadCount
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 }

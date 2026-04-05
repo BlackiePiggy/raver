@@ -11,9 +11,9 @@ private enum MessageAlertCategory: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .like: return "点赞消息"
-        case .comment: return "评论消息"
-        case .follow: return "关注消息"
+        case .like: return L("点赞消息", "Like Notifications")
+        case .comment: return L("评论消息", "Comment Notifications")
+        case .follow: return L("关注消息", "Follow Notifications")
         }
     }
 
@@ -42,15 +42,15 @@ struct CreateSquadView: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .public: return "公开小队"
-            case .private: return "私密小队"
+            case .public: return L("公开小队", "Public Squad")
+            case .private: return L("私密小队", "Private Squad")
             }
         }
 
         var subtitle: String {
             switch self {
-            case .public: return "所有人可发现并申请加入"
-            case .private: return "仅邀请成员可加入"
+            case .public: return L("所有人可发现并申请加入", "Anyone can discover and request to join")
+            case .private: return L("仅邀请成员可加入", "Invite-only members can join")
             }
         }
 
@@ -84,17 +84,21 @@ struct CreateSquadView: View {
                 avatarPicker
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("小队名称（可选）")
+                    Text(LL("小队名称（可选）"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
-                    TextField("不填则使用默认名称", text: $squadName)
+                    TextField(LL("不填则使用默认名称"), text: $squadName)
+                        .submitLabel(.done)
+                        .onSubmit {
+                            dismissKeyboard()
+                        }
                         .padding(12)
                         .background(RaverTheme.card)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("小队简介（可选）")
+                    Text(LL("小队简介（可选）"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                     TextEditor(text: $squadDescription)
@@ -105,7 +109,7 @@ struct CreateSquadView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("小队性质（必选）")
+                    Text(LL("小队性质（必选）"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
 
@@ -142,13 +146,17 @@ struct CreateSquadView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("小队旗帜图（可选，用于小队卡片背景）")
+                    Text(LL("小队旗帜图（可选，用于小队卡片背景）"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
 
-                    TextField("输入旗帜图 URL 或选择本地图片上传", text: $squadFlagURL)
+                    TextField(LL("输入旗帜图 URL 或选择本地图片上传"), text: $squadFlagURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        .onSubmit {
+                            dismissKeyboard()
+                        }
                         .padding(12)
                         .background(RaverTheme.card)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -156,16 +164,16 @@ struct CreateSquadView: View {
                     HStack(spacing: 10) {
                         PhotosPicker(selection: $selectedFlagPhotoItem, matching: .images) {
                             if isUploadingFlag {
-                                Label("上传中...", systemImage: "arrow.trianglehead.2.clockwise")
+                                Label(L("上传中...", "Uploading..."), systemImage: "arrow.trianglehead.2.clockwise")
                             } else {
-                                Label("选择旗帜图", systemImage: "flag.pattern.checkered")
+                                Label(LL("选择旗帜图"), systemImage: "flag.pattern.checkered")
                             }
                         }
                         .buttonStyle(.bordered)
                         .disabled(isUploadingFlag)
 
                         if !squadFlagURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Button("清空") {
+                            Button(L("清空", "Clear")) {
                                 squadFlagURL = ""
                                 selectedFlagPhotoItem = nil
                             }
@@ -201,21 +209,21 @@ struct CreateSquadView: View {
                 GlassCard {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("选择好友")
+                            Text(LL("选择好友"))
                                 .font(.headline)
                             Spacer()
-                            Text("已选 \(selectedFriendIDs.count)")
+                            Text(L("已选 \(selectedFriendIDs.count)", "Selected \(selectedFriendIDs.count)"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
 
                         if isLoadingFriends {
-                            ProgressView("加载好友中...")
+                            ProgressView(L("加载好友中...", "Loading friends..."))
                         } else if friends.isEmpty {
                             ContentUnavailableView(
-                                "暂无好友",
+                                L("暂无好友", "No Friends Yet"),
                                 systemImage: "person.2.slash",
-                                description: Text("双方互相关注后会出现在这里")
+                                description: Text(LL("双方互相关注后会出现在这里"))
                             )
                         } else {
                             ForEach(friends) { friend in
@@ -249,7 +257,7 @@ struct CreateSquadView: View {
                     if isSubmitting {
                         ProgressView().tint(.white)
                     } else {
-                        Text("创建")
+                        Text(LL("创建"))
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
@@ -258,11 +266,18 @@ struct CreateSquadView: View {
             .padding(16)
         }
         .background(RaverTheme.background)
-        .navigationTitle("创建小队")
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle(L("创建小队", "Create Squad"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }
+                Button(L("取消", "Cancel")) { dismiss() }
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(L("收起", "Dismiss")) {
+                    dismissKeyboard()
+                }
             }
         }
         .task {
@@ -283,11 +298,11 @@ struct CreateSquadView: View {
                 await uploadFlagImage(data: data)
             }
         }
-        .alert("操作失败", isPresented: Binding(
+        .alert(L("操作失败", "Operation Failed"), isPresented: Binding(
             get: { error != nil },
             set: { if !$0 { error = nil } }
         )) {
-            Button("确定", role: .cancel) {}
+            Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(error ?? "")
         }
@@ -314,12 +329,12 @@ struct CreateSquadView: View {
             .clipShape(Circle())
 
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                Label(customAvatarData == nil ? "选择小队头像（可选）" : "更换小队头像", systemImage: "photo")
+                Label(customAvatarData == nil ? L("选择小队头像（可选）", "Choose squad avatar (optional)") : L("更换小队头像", "Replace squad avatar"), systemImage: "photo")
             }
             .buttonStyle(.bordered)
 
             if customAvatarData != nil {
-                Button("移除") {
+                Button(L("移除", "Remove")) {
                     customAvatarData = nil
                     selectedPhotoItem = nil
                 }
@@ -388,14 +403,14 @@ struct CreateSquadView: View {
             friends = page.users
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
     @MainActor
     private func createSquad() async {
         guard let squadPrivacy else {
-            error = "请选择小队性质（公开或私密）"
+            error = L("请选择小队性质（公开或私密）", "Please choose a squad type (public or private).")
             return
         }
         isSubmitting = true
@@ -434,7 +449,7 @@ struct CreateSquadView: View {
             onCreated(conversation)
             dismiss()
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -450,7 +465,7 @@ struct CreateSquadView: View {
             )
             squadFlagURL = uploaded.url
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -539,6 +554,15 @@ struct CreateSquadView: View {
         )
         image.draw(in: drawRect)
     }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
+    }
 }
 
 struct MessagesHomeView: View {
@@ -566,14 +590,14 @@ struct MessagesHomeView: View {
 
                 if chatViewModel.isLoading && chatViewModel.conversations.isEmpty {
                     Spacer()
-                    ProgressView("加载消息中...")
+                    ProgressView(L("加载消息中...", "Loading messages..."))
                     Spacer()
                 } else if chatViewModel.conversations.isEmpty {
                     Spacer()
                     ContentUnavailableView(
-                        "暂无会话",
+                        L("暂无会话", "No Conversations Yet"),
                         systemImage: "bubble.left.and.bubble.right",
-                        description: Text("从用户主页发起私信或加入小队后会显示在这里")
+                        description: Text(LL("从用户主页发起私信或加入小队后会显示在这里"))
                     )
                     Spacer()
                 } else {
@@ -621,7 +645,7 @@ struct MessagesHomeView: View {
                     syncTabBadge()
                 }
             }
-            .alert("消息加载失败", isPresented: Binding(
+            .alert(L("消息加载失败", "Failed to Load Messages"), isPresented: Binding(
                 get: { chatViewModel.error != nil || alertViewModel.error != nil },
                 set: { newValue in
                     if !newValue {
@@ -630,10 +654,10 @@ struct MessagesHomeView: View {
                     }
                 }
             )) {
-                Button("重试") {
+                Button(L("重试", "Retry")) {
                     Task { await refreshAll() }
                 }
-                Button("取消", role: .cancel) {}
+                Button(L("取消", "Cancel"), role: .cancel) {}
             } message: {
                 Text(chatViewModel.error ?? alertViewModel.error ?? "")
             }
@@ -690,7 +714,7 @@ struct MessagesHomeView: View {
                             .lineLimit(1)
 
                         if conversation.type == .group {
-                            Text("小队")
+                            Text(LL("小队"))
                                 .font(.caption2.bold())
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -828,7 +852,7 @@ private struct MessageAlertDetailView: View {
             let items = viewModel.items(for: category.type)
             if items.isEmpty {
                 ContentUnavailableView(
-                    "暂无\(category.title)",
+                    L("暂无\(category.title)", "No \(category.title) Yet"),
                     systemImage: category.iconName
                 )
             } else {
@@ -917,7 +941,7 @@ private struct MessageAlertDetailView: View {
                 selectedUser = actor
             }
         case "squad":
-            selectedSquad = PostSquad(id: target.id, name: target.title ?? "小队", avatarURL: nil)
+            selectedSquad = PostSquad(id: target.id, name: target.title ?? L("小队", "Squad"), avatarURL: nil)
         default:
             break
             }

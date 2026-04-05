@@ -44,24 +44,28 @@ struct EditProfileView: View {
                     avatarPreview
 
                     PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                        Label("更换头像", systemImage: "photo")
+                        Label(LL("更换头像"), systemImage: "photo")
                     }
                     .buttonStyle(.bordered)
                 }
                 .frame(maxWidth: .infinity)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("昵称")
+                    Text(LL("昵称"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
-                    TextField("请输入昵称", text: $displayName)
+                    TextField(LL("请输入昵称"), text: $displayName)
+                        .submitLabel(.done)
+                        .onSubmit {
+                            dismissKeyboard()
+                        }
                         .padding(12)
                         .background(RaverTheme.card)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("签名")
+                    Text(LL("签名"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                     TextEditor(text: $bio)
@@ -72,10 +76,14 @@ struct EditProfileView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Tag（逗号分隔）")
+                    Text(LL("Tag（逗号分隔）"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
-                    TextField("如: Techno, House", text: $tagsText)
+                    TextField(LL("如: Techno, House"), text: $tagsText)
+                        .submitLabel(.done)
+                        .onSubmit {
+                            dismissKeyboard()
+                        }
                         .padding(12)
                         .background(RaverTheme.card)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -83,8 +91,8 @@ struct EditProfileView: View {
 
                 GlassCard {
                     VStack(alignment: .leading, spacing: 12) {
-                        Toggle("允许他人查看我的粉丝列表", isOn: $isFollowersListPublic)
-                        Toggle("允许他人查看我的关注列表", isOn: $isFollowingListPublic)
+                        Toggle(LL("允许他人查看我的粉丝列表"), isOn: $isFollowersListPublic)
+                        Toggle(LL("允许他人查看我的关注列表"), isOn: $isFollowingListPublic)
                     }
                 }
 
@@ -94,7 +102,7 @@ struct EditProfileView: View {
                     if isSaving {
                         ProgressView().tint(.white)
                     } else {
-                        Text("保存")
+                        Text(L("保存", "Save"))
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
@@ -103,8 +111,17 @@ struct EditProfileView: View {
             .padding(16)
         }
         .background(RaverTheme.background)
-        .navigationTitle("编辑资料")
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle(L("编辑资料", "Edit Profile"))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(L("收起", "Dismiss")) {
+                    dismissKeyboard()
+                }
+            }
+        }
         .onChange(of: selectedPhotoItem) { _, newItem in
             guard let newItem else { return }
             Task {
@@ -113,14 +130,23 @@ struct EditProfileView: View {
                 }
             }
         }
-        .alert("保存失败", isPresented: Binding(
+        .alert(L("保存失败", "Save Failed"), isPresented: Binding(
             get: { error != nil },
             set: { if !$0 { error = nil } }
         )) {
-            Button("确定", role: .cancel) {}
+            Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(error ?? "")
         }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
     }
 
     @ViewBuilder
@@ -193,7 +219,7 @@ struct EditProfileView: View {
             onSaved(updated)
             dismiss()
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 }

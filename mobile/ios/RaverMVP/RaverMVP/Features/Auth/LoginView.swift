@@ -14,6 +14,14 @@ struct LoginView: View {
     @State private var hasAgreedTerms = false
     @State private var showManualLogin = false
     @StateObject private var videoController = LoginBackgroundVideoController()
+    @FocusState private var focusedField: ManualAuthField?
+
+    private enum ManualAuthField {
+        case username
+        case email
+        case displayName
+        case password
+    }
 
     var body: some View {
         ZStack {
@@ -51,7 +59,7 @@ struct LoginView: View {
                         Button {
                             Task { await submitAuth(oneTap: true) }
                         } label: {
-                            Text("先看看")
+                            Text(LL("先看看"))
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.94))
                         }
@@ -78,7 +86,7 @@ struct LoginView: View {
                                 Image(systemName: hasAgreedTerms ? "checkmark.circle.fill" : "circle")
                                     .font(.system(size: 18, weight: .regular))
                                     .foregroundStyle(hasAgreedTerms ? Color.white.opacity(0.96) : Color.white.opacity(0.56))
-                                Text("我同意《用户服务条款》《用户协议》《隐私政策》")
+                                Text(LL("我同意《用户服务条款》《用户协议》《隐私政策》"))
                                     .font(.system(size: 14, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.84))
                                     .multilineTextAlignment(.leading)
@@ -96,7 +104,7 @@ struct LoginView: View {
                                 if isLoading {
                                     ProgressView().tint(.white)
                                 } else {
-                                    Text("一键登录/注册")
+                                    Text(LL("一键登录/注册"))
                                         .font(.system(size: 17, weight: .semibold))
                                         .foregroundStyle(.white.opacity(0.96))
                                 }
@@ -111,7 +119,7 @@ struct LoginView: View {
                                 showManualLogin.toggle()
                             }
                         } label: {
-                            Text("其他手机号登录")
+                            Text(LL("其他手机号登录"))
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.92))
                         }
@@ -127,7 +135,7 @@ struct LoginView: View {
                     Spacer()
 
                     VStack(spacing: 14) {
-                        Text("— 其他登录方式 —")
+                        Text(LL("— 其他登录方式 —"))
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(.white.opacity(0.82))
 
@@ -155,12 +163,21 @@ struct LoginView: View {
         .onDisappear {
             videoController.pause()
         }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(L("收起", "Collapse")) {
+                    focusedField = nil
+                    dismissKeyboard()
+                }
+            }
+        }
     }
 
     @ViewBuilder
     private var manualLoginPanel: some View {
         VStack(spacing: 10) {
-            Picker("模式", selection: $mode) {
+            Picker(LL("模式"), selection: $mode) {
                 ForEach(AuthMode.allCases, id: \.self) { item in
                     Text(item.title).tag(item)
                 }
@@ -172,25 +189,46 @@ struct LoginView: View {
                     .fill(Color.white.opacity(0.14))
             )
 
-            TextField("用户名", text: $username)
+            TextField(LL("用户名"), text: $username)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .focused($focusedField, equals: .username)
+                .submitLabel(mode == .register ? .next : .go)
+                .onSubmit {
+                    focusedField = mode == .register ? .email : .password
+                }
                 .padding(14)
                 .background(inputFieldBackground)
 
             if mode == .register {
-                TextField("邮箱", text: $email)
+                TextField(LL("邮箱"), text: $email)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .focused($focusedField, equals: .email)
+                    .submitLabel(.next)
+                    .onSubmit {
+                        focusedField = .displayName
+                    }
                     .padding(14)
                     .background(inputFieldBackground)
 
-                TextField("显示名（可选）", text: $displayName)
+                TextField(LL("显示名（可选）"), text: $displayName)
+                    .focused($focusedField, equals: .displayName)
+                    .submitLabel(.next)
+                    .onSubmit {
+                        focusedField = .password
+                    }
                     .padding(14)
                     .background(inputFieldBackground)
             }
 
-            SecureField("密码", text: $password)
+            SecureField(L("密码", "Password"), text: $password)
+                .focused($focusedField, equals: .password)
+                .submitLabel(.done)
+                .onSubmit {
+                    focusedField = nil
+                    dismissKeyboard()
+                }
                 .padding(14)
                 .background(inputFieldBackground)
 
@@ -200,7 +238,7 @@ struct LoginView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Color.white.opacity(0.2))
-                    Text(mode == .login ? "账号登录" : "注册并登录")
+                    Text(mode == .login ? L("账号登录", "Sign In") : L("注册并登录", "Register & Sign In"))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.97))
                 }
@@ -286,7 +324,7 @@ struct LoginView: View {
         style: ThirdPartyButtonStyle
     ) -> some View {
         Button {
-            appState.errorMessage = "第三方登录即将开放，先使用账号登录"
+            appState.errorMessage = L("第三方登录即将开放，先使用账号登录", "Third-party login is coming soon. Please use account login for now.")
             withAnimation(.easeInOut(duration: 0.2)) {
                 showManualLogin = true
             }
@@ -350,10 +388,14 @@ struct LoginView: View {
         max(10, min(20, safeTop - 24))
     }
 
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
     private func submitAuth(oneTap: Bool) async {
         guard !isLoading else { return }
         if !hasAgreedTerms {
-            appState.errorMessage = "请先勾选并同意用户协议"
+            appState.errorMessage = L("请先勾选并同意用户协议", "Please agree to the user terms first.")
             return
         }
 
@@ -397,8 +439,8 @@ private enum AuthMode: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .login: return "登录"
-        case .register: return "注册"
+        case .login: return L("登录", "Login")
+        case .register: return L("注册", "Register")
         }
     }
 }

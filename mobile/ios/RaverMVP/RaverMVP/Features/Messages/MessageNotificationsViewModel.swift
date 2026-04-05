@@ -29,7 +29,7 @@ final class MessageNotificationsViewModel: ObservableObject {
             unreadCounts.total = unreadCounts.follows + unreadCounts.likes + unreadCounts.comments
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 
@@ -46,7 +46,7 @@ final class MessageNotificationsViewModel: ObservableObject {
         } catch {
             notifications[index].isRead = false
             incrementUnread(for: item.type)
-            self.error = error.localizedDescription
+            self.error = error.userFacingMessage
         }
     }
 

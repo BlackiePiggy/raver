@@ -136,6 +136,10 @@ actor MockSocialService: SocialService {
             content: trimmed,
             images: normalizedImages,
             location: normalizedLocation,
+            eventID: nil,
+            boundDjIDs: input.boundDjIDs,
+            boundBrandIDs: input.boundBrandIDs,
+            boundEventIDs: input.boundEventIDs,
             squad: nil,
             createdAt: Date(),
             likeCount: 0,
@@ -175,6 +179,15 @@ actor MockSocialService: SocialService {
         updated.content = trimmed
         updated.images = normalizedImages
         updated.location = normalizedLocation
+        if let next = input.boundDjIDs {
+            updated.boundDjIDs = next
+        }
+        if let next = input.boundBrandIDs {
+            updated.boundBrandIDs = next
+        }
+        if let next = input.boundEventIDs {
+            updated.boundEventIDs = next
+        }
         posts[index] = updated
         return updated
     }

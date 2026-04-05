@@ -8,10 +8,10 @@ interface SpotifyArtist {
   id: string;
   name: string;
   uri: string;
-  popularity: number;
-  genres: string[];
+  popularity?: number;
+  genres?: string[];
   followers?: {
-    total: number;
+    total?: number;
   };
   images?: SpotifyImage[];
   external_urls?: {
@@ -296,6 +296,57 @@ class SpotifyArtistService {
     };
   }
 
+  private hasRichArtistFields(artist: SpotifyArtist): boolean {
+    return (
+      typeof artist.popularity === 'number' &&
+      Array.isArray(artist.genres) &&
+      typeof artist.followers?.total === 'number'
+    );
+  }
+
+  private async hydrateArtistsByIds(artistIds: string[]): Promise<Map<string, SpotifyArtistProfile>> {
+    const uniqueIds = Array.from(
+      new Set(
+        artistIds
+          .map((item) => item.trim())
+          .filter(Boolean)
+      )
+    );
+    const hydrated = new Map<string, SpotifyArtistProfile>();
+    if (uniqueIds.length === 0) {
+      return hydrated;
+    }
+
+    for (const artistId of uniqueIds) {
+      try {
+        const response = await this.fetchSpotifyAuthorized(
+          `https://api.spotify.com/v1/artists/${encodeURIComponent(artistId)}`
+        );
+        if (!response.ok) {
+          this.log('warn', 'search.hydrate.non_ok', {
+            status: response.status,
+            artistId,
+          });
+          continue;
+        }
+
+        const artist = (await response.json()) as SpotifyArtist;
+        if (!artist?.id) continue;
+        const profile = this.normalizeArtist(artist);
+        hydrated.set(artist.id, profile);
+        this.setCache(`id:${artist.id}`, profile);
+      } catch (error) {
+        this.log('warn', 'search.hydrate.exception_id', {
+          artistId,
+          name: (error as Error).name,
+          message: (error as Error).message,
+        });
+      }
+    }
+
+    return hydrated;
+  }
+
   private getCache(cacheKey: string): SpotifyArtistProfile | null | undefined {
     const entry = this.cache.get(cacheKey);
     if (!entry) {
@@ -426,7 +477,32 @@ class SpotifyArtistService {
         return (b.popularity ?? 0) - (a.popularity ?? 0);
       });
 
-      const profiles = sorted.map((item) => this.normalizeArtist(item));
+      const needsHydrationIds = sorted
+        .filter((item) => !this.hasRichArtistFields(item))
+        .map((item) => item.id);
+
+      let hydratedById = new Map<string, SpotifyArtistProfile>();
+      if (needsHydrationIds.length > 0) {
+        this.log('info', 'search.hydrate.start', {
+          query: trimmed,
+          count: needsHydrationIds.length,
+        });
+        try {
+          hydratedById = await this.hydrateArtistsByIds(needsHydrationIds);
+          this.log('info', 'search.hydrate.done', {
+            query: trimmed,
+            hydratedCount: hydratedById.size,
+          });
+        } catch (error) {
+          this.log('warn', 'search.hydrate.exception', {
+            query: trimmed,
+            name: (error as Error).name,
+            message: (error as Error).message,
+          });
+        }
+      }
+
+      const profiles = sorted.map((item) => hydratedById.get(item.id) ?? this.normalizeArtist(item));
       for (const profile of profiles) {
         this.setCache(`id:${profile.id}`, profile);
       }

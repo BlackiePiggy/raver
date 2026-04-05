@@ -32,6 +32,24 @@ struct LearnLabelListPage: Codable {
     var pagination: BFFPagination?
 }
 
+struct WebBiText: Codable, Hashable {
+    var en: String
+    var zh: String
+
+    func text(for language: AppLanguage) -> String {
+        switch language.effectiveLanguage {
+        case .zh:
+            let zhText = zh.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !zhText.isEmpty { return zhText }
+            return en
+        case .en, .system:
+            let enText = en.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !enText.isEmpty { return enText }
+            return zh
+        }
+    }
+}
+
 struct LearnFestivalLinkPayload: Codable, Hashable {
     var title: String
     var icon: String
@@ -41,13 +59,26 @@ struct LearnFestivalLinkPayload: Codable, Hashable {
 struct WebLearnFestival: Codable, Identifiable, Hashable {
     let id: String
     var name: String
+    var nameI18n: WebBiText? = nil
+    var sourceRowId: Int? = nil
+    var abbreviation: String? = nil
     var aliases: [String]
     var country: String
+    var countryI18n: WebBiText? = nil
     var city: String
+    var cityI18n: WebBiText? = nil
     var foundedYear: String
     var frequency: String
+    var frequencyI18n: WebBiText? = nil
     var tagline: String
     var introduction: String
+    var descriptionI18n: WebBiText? = nil
+    var officialWebsite: String? = nil
+    var facebookUrl: String? = nil
+    var instagramUrl: String? = nil
+    var twitterUrl: String? = nil
+    var youtubeUrl: String? = nil
+    var tiktokUrl: String? = nil
     var avatarUrl: String?
     var backgroundUrl: String?
     var links: [LearnFestivalLinkPayload]
@@ -59,13 +90,53 @@ struct WebLearnFestival: Codable, Identifiable, Hashable {
 
 struct UpdateLearnFestivalInput: Codable {
     var name: String?
+    var nameI18n: WebBiText? = nil
+    var sourceRowId: Int? = nil
+    var abbreviation: String? = nil
     var aliases: [String]?
     var country: String?
+    var countryI18n: WebBiText? = nil
     var city: String?
+    var cityI18n: WebBiText? = nil
     var foundedYear: String?
     var frequency: String?
+    var frequencyI18n: WebBiText? = nil
     var tagline: String?
     var introduction: String?
+    var descriptionI18n: WebBiText? = nil
+    var officialWebsite: String? = nil
+    var facebookUrl: String? = nil
+    var instagramUrl: String? = nil
+    var twitterUrl: String? = nil
+    var youtubeUrl: String? = nil
+    var tiktokUrl: String? = nil
+    var avatarUrl: String?
+    var backgroundUrl: String?
+    var links: [LearnFestivalLinkPayload]?
+}
+
+struct CreateLearnFestivalInput: Codable {
+    var name: String
+    var nameI18n: WebBiText? = nil
+    var sourceRowId: Int? = nil
+    var abbreviation: String? = nil
+    var aliases: [String]?
+    var country: String?
+    var countryI18n: WebBiText? = nil
+    var city: String?
+    var cityI18n: WebBiText? = nil
+    var foundedYear: String?
+    var frequency: String?
+    var frequencyI18n: WebBiText? = nil
+    var tagline: String?
+    var introduction: String?
+    var descriptionI18n: WebBiText? = nil
+    var officialWebsite: String? = nil
+    var facebookUrl: String? = nil
+    var instagramUrl: String? = nil
+    var twitterUrl: String? = nil
+    var youtubeUrl: String? = nil
+    var tiktokUrl: String? = nil
     var avatarUrl: String?
     var backgroundUrl: String?
     var links: [LearnFestivalLinkPayload]?
@@ -95,14 +166,21 @@ struct WebEventLineupSlotDJ: Codable, Identifiable, Hashable {
     let id: String
     var name: String
     var avatarUrl: String?
+    var avatarOriginalUrl: String? = nil
+    var avatarMediumUrl: String? = nil
+    var avatarSmallUrl: String? = nil
     var bannerUrl: String?
     var country: String?
+    var followerCount: Int? = nil
+    var soundCloudFollowers: Int? = nil
 }
 
 struct WebEventLineupSlot: Codable, Identifiable, Hashable {
     let id: String
     var eventId: String?
     var djId: String?
+    var djIds: [String]? = nil
+    var festivalDayIndex: Int? = nil
     var djName: String
     var stageName: String?
     var sortOrder: Int
@@ -113,6 +191,7 @@ struct WebEventLineupSlot: Codable, Identifiable, Hashable {
 
 struct EventLineupSlotInput: Codable, Hashable {
     var djId: String?
+    var festivalDayIndex: Int? = nil
     var djName: String
     var stageName: String?
     var sortOrder: Int?
@@ -127,13 +206,46 @@ struct EventTicketTierInput: Codable, Hashable {
     var sortOrder: Int?
 }
 
+struct WebEventImageAsset: Codable, Hashable, Identifiable {
+    var id: String {
+        let typePart = type?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "other"
+        return "\(typePart)|\(url)"
+    }
+
+    var url: String
+    var type: String?
+    var label: String?
+    var sort: Int?
+    var order: Int?
+    var source: String?
+    var fileName: String?
+}
+
+struct WebEventFestivalLite: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var nameI18n: WebBiText? = nil
+    var country: String?
+    var countryI18n: WebBiText? = nil
+    var city: String?
+    var cityI18n: WebBiText? = nil
+    var avatarUrl: String?
+    var backgroundUrl: String?
+}
+
 struct WebEvent: Codable, Identifiable, Hashable {
     let id: String
     var name: String
+    var nameI18n: WebBiText? = nil
+    var wikiFestivalId: String? = nil
     var slug: String
     var description: String?
+    var descriptionI18n: WebBiText? = nil
+    var locationI18n: WebBiText? = nil
+    var countryI18n: WebBiText? = nil
     var coverImageUrl: String?
     var lineupImageUrl: String?
+    var imageAssets: [WebEventImageAsset]? = nil
     var eventType: String?
     var organizerName: String?
     var venueName: String?
@@ -144,6 +256,7 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var longitude: Double?
     var startDate: Date
     var endDate: Date
+    var dayRolloverHour: Int? = nil
     var ticketUrl: String?
     var ticketPriceMin: Double?
     var ticketPriceMax: Double?
@@ -155,6 +268,7 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var createdAt: Date
     var updatedAt: Date
     var organizer: WebUserLite?
+    var wikiFestival: WebEventFestivalLite? = nil
     var ticketTiers: [WebEventTicketTier]
     var lineupSlots: [WebEventLineupSlot]
 
@@ -165,6 +279,7 @@ struct WebEvent: Codable, Identifiable, Hashable {
 
 struct CreateEventInput: Codable {
     var name: String
+    var wikiFestivalId: String? = nil
     var description: String?
     var eventType: String? = nil
     var city: String?
@@ -179,6 +294,7 @@ struct CreateEventInput: Codable {
     var officialWebsite: String? = nil
     var startDate: Date
     var endDate: Date
+    var dayRolloverHour: Int? = nil
     var coverImageUrl: String?
     var lineupImageUrl: String?
     var ticketTiers: [EventTicketTierInput]? = nil
@@ -188,6 +304,7 @@ struct CreateEventInput: Codable {
 
 struct UpdateEventInput: Codable {
     var name: String?
+    var wikiFestivalId: String? = nil
     var description: String?
     var eventType: String? = nil
     var city: String?
@@ -202,6 +319,7 @@ struct UpdateEventInput: Codable {
     var officialWebsite: String? = nil
     var startDate: Date?
     var endDate: Date?
+    var dayRolloverHour: Int? = nil
     var coverImageUrl: String?
     var lineupImageUrl: String?
     var ticketTiers: [EventTicketTierInput]? = nil
@@ -212,13 +330,19 @@ struct UpdateEventInput: Codable {
 struct WebDJ: Codable, Identifiable, Hashable {
     let id: String
     var name: String
+    var nameI18n: WebBiText? = nil
     var aliases: [String]?
     var slug: String?
     var bio: String?
+    var bioI18n: WebBiText? = nil
     var avatarUrl: String?
+    var avatarOriginalUrl: String? = nil
+    var avatarMediumUrl: String? = nil
+    var avatarSmallUrl: String? = nil
     var avatarSourceUrl: String? = nil
     var bannerUrl: String?
     var country: String?
+    var countryI18n: WebBiText? = nil
     var spotifyId: String?
     var appleMusicId: String?
     var soundcloudUrl: String?
@@ -226,6 +350,7 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var twitterUrl: String?
     var isVerified: Bool?
     var followerCount: Int?
+    var soundCloudFollowers: Int? = nil
     var sourceDataSource: String? = nil
     var contributors: [WebUserLite]? = nil
     var contributorUsernames: [String]? = nil
@@ -418,16 +543,12 @@ extension WebCheckin {
         note?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
     }
 
-    var isPlannedCheckin: Bool {
-        normalizedNote == "planned"
-    }
-
     var isMarkedCheckin: Bool {
         normalizedNote == "marked"
     }
 
     var isEventAttendanceCheckin: Bool {
-        type == "event" && !isPlannedCheckin && !isMarkedCheckin
+        type == "event" && !isMarkedCheckin
     }
 
     var eventAttendanceSelections: [EventAttendanceDaySelectionPayload] {
@@ -465,6 +586,9 @@ extension WebCheckin {
 struct CheckinEventLite: Codable, Identifiable, Hashable {
     let id: String
     var name: String
+    var nameI18n: WebBiText? = nil
+    var locationI18n: WebBiText? = nil
+    var countryI18n: WebBiText? = nil
     var coverImageUrl: String?
     var city: String?
     var country: String?
@@ -475,8 +599,12 @@ struct CheckinEventLite: Codable, Identifiable, Hashable {
 struct CheckinDJLite: Codable, Identifiable, Hashable {
     let id: String
     var name: String
+    var nameI18n: WebBiText? = nil
     var avatarUrl: String?
     var country: String?
+    var countryI18n: WebBiText? = nil
+    var followerCount: Int? = nil
+    var soundCloudFollowers: Int? = nil
 }
 
 struct CreateCheckinInput: Codable {
@@ -599,10 +727,21 @@ struct RankingEntry: Codable, Identifiable, Hashable {
     var name: String
     var delta: Int?
     var dj: WebDJ?
+    var festival: RankingFestivalLite? = nil
 
     var id: String {
         "\(rank)-\(name)"
     }
+}
+
+struct RankingFestivalLite: Codable, Identifiable, Hashable {
+    var id: String
+    var name: String
+    var avatarUrl: String?
+    var backgroundUrl: String?
+    var country: String?
+    var city: String?
+    var tagline: String?
 }
 
 struct LearnLabel: Codable, Identifiable, Hashable {
@@ -803,9 +942,12 @@ struct ImportManualDJResponse: Codable, Hashable {
 
 struct UpdateDJInput: Codable, Hashable {
     var name: String?
+    var nameI18n: WebBiText? = nil
     var aliases: [String]?
     var bio: String?
+    var bioI18n: WebBiText? = nil
     var country: String?
+    var countryI18n: WebBiText? = nil
     var spotifyId: String?
     var appleMusicId: String?
     var instagramUrl: String?

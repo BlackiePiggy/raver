@@ -13,12 +13,12 @@ struct NotificationsView: View {
         NavigationStack {
             Group {
                 if viewModel.isLoading && viewModel.notifications.isEmpty {
-                    ProgressView("加载通知中...")
+                    ProgressView(L("加载通知中...", "Loading notifications..."))
                 } else if viewModel.notifications.isEmpty {
                     ContentUnavailableView(
-                        "暂无通知",
+                        L("暂无通知", "No Notifications"),
                         systemImage: "bell.slash",
-                        description: Text("收到新的关注、点赞、评论或小队邀请后会显示在这里")
+                        description: Text(LL("收到新的关注、点赞、评论或小队邀请后会显示在这里"))
                     )
                 } else {
                     List(viewModel.notifications) { item in
@@ -55,10 +55,10 @@ struct NotificationsView: View {
                 }
             }
             .background(RaverTheme.background)
-            .navigationTitle("通知")
+            .navigationTitle(L("通知", "Notifications"))
             .toolbar {
                 if viewModel.unreadCount > 0 {
-                    Text("未读 \(viewModel.unreadCount)")
+                    Text(L("未读", "Unread") + " \(viewModel.unreadCount)")
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
@@ -77,14 +77,14 @@ struct NotificationsView: View {
                     SquadProfileView(squadID: squad.id)
                 }
             }
-            .alert("通知加载失败", isPresented: Binding(
+            .alert(L("通知加载失败", "Failed to Load Notifications"), isPresented: Binding(
                 get: { viewModel.error != nil },
                 set: { if !$0 { viewModel.error = nil } }
             )) {
-                Button("重试") {
+                Button(L("重试", "Retry")) {
                     Task { await viewModel.load() }
                 }
-                Button("取消", role: .cancel) {}
+                Button(L("取消", "Cancel"), role: .cancel) {}
             } message: {
                 Text(viewModel.error ?? "")
             }
@@ -101,7 +101,7 @@ struct NotificationsView: View {
         case "squad":
             selectedSquad = PostSquad(
                 id: target.id,
-                name: target.title ?? "小队",
+                name: target.title ?? L("小队", "Squad"),
                 avatarURL: nil
             )
         default:

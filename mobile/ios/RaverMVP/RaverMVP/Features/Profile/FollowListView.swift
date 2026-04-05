@@ -9,9 +9,9 @@ enum FollowListKind: String, Identifiable {
 
     var title: String {
         switch self {
-        case .followers: return "粉丝"
-        case .following: return "关注"
-        case .friends: return "好友"
+        case .followers: return L("粉丝", "Followers")
+        case .following: return L("关注", "Following")
+        case .friends: return L("好友", "Friends")
         }
     }
 }
@@ -34,13 +34,13 @@ struct FollowListView: View {
             if viewModel.isLoading && viewModel.users.isEmpty {
                 HStack {
                     Spacer()
-                    ProgressView("加载中...")
+                    ProgressView(L("加载中...", "Loading..."))
                     Spacer()
                 }
                 .listRowBackground(RaverTheme.background)
             } else if viewModel.users.isEmpty {
                 ContentUnavailableView(
-                    "暂无\(viewModel.kind.title)",
+                    L("暂无\(viewModel.kind.title)", "No \(viewModel.kind.title) Yet"),
                     systemImage: "person.2"
                 )
                 .listRowBackground(RaverTheme.background)
@@ -75,7 +75,7 @@ struct FollowListView: View {
                                         await viewModel.toggleFollow(user: user)
                                     }
                                 } label: {
-                                    Text(user.isFollowing ? "已关注" : "关注")
+                                    Text(user.isFollowing ? L("已关注", "Following") : L("关注", "Follow"))
                                         .font(.caption.bold())
                                         .foregroundStyle(user.isFollowing ? RaverTheme.secondaryText : Color.white)
                                         .padding(.horizontal, 16)
@@ -98,7 +98,7 @@ struct FollowListView: View {
                 if viewModel.isLoadingMore {
                     HStack {
                         Spacer()
-                        ProgressView("加载更多...")
+                        ProgressView(L("加载更多...", "Loading more..."))
                         Spacer()
                     }
                     .listRowBackground(RaverTheme.background)
@@ -118,11 +118,11 @@ struct FollowListView: View {
         .navigationDestination(item: $selectedUser) { user in
             UserProfileView(userID: user.id)
         }
-        .alert("提示", isPresented: Binding(
+        .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.error != nil },
             set: { if !$0 { viewModel.error = nil } }
         )) {
-            Button("确定", role: .cancel) {}
+            Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
         }
