@@ -13,6 +13,25 @@
 		009C01144F7F4E0A9A7C8E01 /* DiscoverCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01124F7F4E0A9A7C8E01 /* DiscoverCoordinator.swift */; };
 		009C01154F7F4E0A9A7C8E01 /* DiscoverRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01134F7F4E0A9A7C8E01 /* DiscoverRoute.swift */; };
 		009C01184F7F4E0A9A7C8E01 /* DiscoverSearchResultsViewModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01174F7F4E0A9A7C8E01 /* DiscoverSearchResultsViewModels.swift */; };
+		009C011C4F7F4E0A9A7C8E01 /* DiscoverSearchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C011B4F7F4E0A9A7C8E01 /* DiscoverSearchViews.swift */; };
+		009C011F4F7F4E0A9A7C8E01 /* EventsModuleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C011E4F7F4E0A9A7C8E01 /* EventsModuleViewModel.swift */; };
+		009C01214F7F4E0A9A7C8E01 /* EventsModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01204F7F4E0A9A7C8E01 /* EventsModuleView.swift */; };
+		009C01254F7F4E0A9A7C8E01 /* EventPresentationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01244F7F4E0A9A7C8E01 /* EventPresentationSupport.swift */; };
+		009C01274F7F4E0A9A7C8E01 /* RecommendEventsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01264F7F4E0A9A7C8E01 /* RecommendEventsViewModel.swift */; };
+		009C01294F7F4E0A9A7C8E01 /* RecommendEventsModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01284F7F4E0A9A7C8E01 /* RecommendEventsModuleView.swift */; };
+		009C012B4F7F4E0A9A7C8E01 /* EventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C012A4F7F4E0A9A7C8E01 /* EventDetailView.swift */; };
+		009C012D4F7F4E0A9A7C8E01 /* EventLineupSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C012C4F7F4E0A9A7C8E01 /* EventLineupSupport.swift */; };
+		009C012F4F7F4E0A9A7C8E01 /* EventEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C012E4F7F4E0A9A7C8E01 /* EventEditorView.swift */; };
+		009C01314F7F4E0A9A7C8E01 /* EventCalendarSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01304F7F4E0A9A7C8E01 /* EventCalendarSupport.swift */; };
+		009C01324F7F4E0A9A7C8E01 /* NewsModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01334F7F4E0A9A7C8E01 /* NewsModuleView.swift */; };
+		009C01404F7F4E0A9A7C8E01 /* DiscoverNewsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01414F7F4E0A9A7C8E01 /* DiscoverNewsModels.swift */; };
+		009C01424F7F4E0A9A7C8E01 /* DiscoverNewsCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01434F7F4E0A9A7C8E01 /* DiscoverNewsCodec.swift */; };
+		009C01444F7F4E0A9A7C8E01 /* DiscoverNewsDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01454F7F4E0A9A7C8E01 /* DiscoverNewsDetailView.swift */; };
+		009C01464F7F4E0A9A7C8E01 /* DiscoverNewsPublishSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01474F7F4E0A9A7C8E01 /* DiscoverNewsPublishSheet.swift */; };
+		009C01494F7F4E0A9A7C8E01 /* DJsModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C014A4F7F4E0A9A7C8E01 /* DJsModuleView.swift */; };
+		009C014D4F7F4E0A9A7C8E01 /* SetsModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C014E4F7F4E0A9A7C8E01 /* SetsModuleView.swift */; };
+		009C01514F7F4E0A9A7C8E01 /* LearnModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01524F7F4E0A9A7C8E01 /* LearnModuleView.swift */; };
+		009C01564F7F4E0A9A7C8E01 /* MessagesCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C01574F7F4E0A9A7C8E01 /* MessagesCoordinator.swift */; };
 		014FB24EF31F0B9F4A90ED34 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED58E3FD346D1B1DA99D81EE /* FollowListView.swift */; };
 		01A49EA26C62191CB0FB2803 /* RemoteCoverImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A00B6CD83B1FA7380ECC424 /* RemoteCoverImage.swift */; };
 		021324FF19866C1FE91CDC82 /* EventDetailPageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613C62C92237CF2DE5A4FA85 /* EventDetailPageViewController.swift */; };
@@ -79,6 +98,25 @@
 		009C01124F7F4E0A9A7C8E01 /* DiscoverCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverCoordinator.swift; sourceTree = "<group>"; };
 		009C01134F7F4E0A9A7C8E01 /* DiscoverRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverRoute.swift; sourceTree = "<group>"; };
 		009C01174F7F4E0A9A7C8E01 /* DiscoverSearchResultsViewModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverSearchResultsViewModels.swift; sourceTree = "<group>"; };
+		009C011B4F7F4E0A9A7C8E01 /* DiscoverSearchViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverSearchViews.swift; sourceTree = "<group>"; };
+		009C011E4F7F4E0A9A7C8E01 /* EventsModuleViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsModuleViewModel.swift; sourceTree = "<group>"; };
+		009C01204F7F4E0A9A7C8E01 /* EventsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsModuleView.swift; sourceTree = "<group>"; };
+		009C01244F7F4E0A9A7C8E01 /* EventPresentationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventPresentationSupport.swift; sourceTree = "<group>"; };
+		009C01264F7F4E0A9A7C8E01 /* RecommendEventsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendEventsViewModel.swift; sourceTree = "<group>"; };
+		009C01284F7F4E0A9A7C8E01 /* RecommendEventsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendEventsModuleView.swift; sourceTree = "<group>"; };
+		009C012A4F7F4E0A9A7C8E01 /* EventDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailView.swift; sourceTree = "<group>"; };
+		009C012C4F7F4E0A9A7C8E01 /* EventLineupSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLineupSupport.swift; sourceTree = "<group>"; };
+		009C012E4F7F4E0A9A7C8E01 /* EventEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEditorView.swift; sourceTree = "<group>"; };
+		009C01304F7F4E0A9A7C8E01 /* EventCalendarSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCalendarSupport.swift; sourceTree = "<group>"; };
+		009C01334F7F4E0A9A7C8E01 /* NewsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsModuleView.swift; sourceTree = "<group>"; };
+		009C01414F7F4E0A9A7C8E01 /* DiscoverNewsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverNewsModels.swift; sourceTree = "<group>"; };
+		009C01434F7F4E0A9A7C8E01 /* DiscoverNewsCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverNewsCodec.swift; sourceTree = "<group>"; };
+		009C01454F7F4E0A9A7C8E01 /* DiscoverNewsDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverNewsDetailView.swift; sourceTree = "<group>"; };
+		009C01474F7F4E0A9A7C8E01 /* DiscoverNewsPublishSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverNewsPublishSheet.swift; sourceTree = "<group>"; };
+		009C014A4F7F4E0A9A7C8E01 /* DJsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJsModuleView.swift; sourceTree = "<group>"; };
+		009C014E4F7F4E0A9A7C8E01 /* SetsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetsModuleView.swift; sourceTree = "<group>"; };
+		009C01524F7F4E0A9A7C8E01 /* LearnModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearnModuleView.swift; sourceTree = "<group>"; };
+		009C01574F7F4E0A9A7C8E01 /* MessagesCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesCoordinator.swift; sourceTree = "<group>"; };
 		012D6A4BCFC498C0889B7749 /* WebModulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebModulesView.swift; sourceTree = "<group>"; };
 		029F1F7A11F8D9328FC2637E /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		02D93C1E9013AE51657CE508 /* MessagesHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesHomeView.swift; sourceTree = "<group>"; };
@@ -219,12 +257,21 @@
 		45DD7D2B84C7AC1ABB727716 /* Messages */ = {
 			isa = PBXGroup;
 			children = (
+				009C01584F7F4E0A9A7C8E01 /* Coordinator */,
 				37DBB975EC23CE42CD9FE0C7 /* ChatView.swift */,
 				D22F64C28F795AFB1BDDB071 /* MessageNotificationsViewModel.swift */,
 				02D93C1E9013AE51657CE508 /* MessagesHomeView.swift */,
 				E31430D89831B6B1F892096F /* MessagesViewModel.swift */,
 			);
 			path = Messages;
+			sourceTree = "<group>";
+		};
+		009C01584F7F4E0A9A7C8E01 /* Coordinator */ = {
+			isa = PBXGroup;
+			children = (
+				009C01574F7F4E0A9A7C8E01 /* MessagesCoordinator.swift */,
+			);
+			path = Coordinator;
 			sourceTree = "<group>";
 		};
 		5EE0C0C02379C49261662C42 /* Feed */ = {
@@ -258,7 +305,12 @@
 			isa = PBXGroup;
 			children = (
 				009C01114F7F4E0A9A7C8E01 /* Coordinator */,
-				009C01164F7F4E0A9A7C8E01 /* ViewModels */,
+				009C014B4F7F4E0A9A7C8E01 /* DJs */,
+				009C011D4F7F4E0A9A7C8E01 /* Events */,
+				009C01534F7F4E0A9A7C8E01 /* Learn */,
+				009C01344F7F4E0A9A7C8E01 /* News */,
+				009C014F4F7F4E0A9A7C8E01 /* Sets */,
+				009C01194F7F4E0A9A7C8E01 /* Search */,
 				D0B32ABB2F873EE200636BCB /* test.swift */,
 				B8D433A0D9BD7E505C44F531 /* DiscoverHomeView.swift */,
 				012D6A4BCFC498C0889B7749 /* WebModulesView.swift */,
@@ -271,6 +323,54 @@
 			path = Discover;
 			sourceTree = "<group>";
 		};
+		009C01534F7F4E0A9A7C8E01 /* Learn */ = {
+			isa = PBXGroup;
+			children = (
+				009C01544F7F4E0A9A7C8E01 /* Views */,
+			);
+			path = Learn;
+			sourceTree = "<group>";
+		};
+		009C01544F7F4E0A9A7C8E01 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				009C01524F7F4E0A9A7C8E01 /* LearnModuleView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		009C014F4F7F4E0A9A7C8E01 /* Sets */ = {
+			isa = PBXGroup;
+			children = (
+				009C01504F7F4E0A9A7C8E01 /* Views */,
+			);
+			path = Sets;
+			sourceTree = "<group>";
+		};
+		009C01504F7F4E0A9A7C8E01 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				009C014E4F7F4E0A9A7C8E01 /* SetsModuleView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		009C014B4F7F4E0A9A7C8E01 /* DJs */ = {
+			isa = PBXGroup;
+			children = (
+				009C014C4F7F4E0A9A7C8E01 /* Views */,
+			);
+			path = DJs;
+			sourceTree = "<group>";
+		};
+		009C014C4F7F4E0A9A7C8E01 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				009C014A4F7F4E0A9A7C8E01 /* DJsModuleView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
 		009C01114F7F4E0A9A7C8E01 /* Coordinator */ = {
 			isa = PBXGroup;
 			children = (
@@ -280,10 +380,87 @@
 			path = Coordinator;
 			sourceTree = "<group>";
 		};
+		009C01194F7F4E0A9A7C8E01 /* Search */ = {
+			isa = PBXGroup;
+			children = (
+				009C011A4F7F4E0A9A7C8E01 /* Views */,
+				009C01164F7F4E0A9A7C8E01 /* ViewModels */,
+			);
+			path = Search;
+			sourceTree = "<group>";
+		};
+		009C011D4F7F4E0A9A7C8E01 /* Events */ = {
+			isa = PBXGroup;
+			children = (
+				009C01222F7F4E0A9A7C8E01 /* Views */,
+				009C01234F7F4E0A9A7C8E01 /* ViewModels */,
+			);
+			path = Events;
+			sourceTree = "<group>";
+		};
+		009C01344F7F4E0A9A7C8E01 /* News */ = {
+			isa = PBXGroup;
+			children = (
+				009C01484F7F4E0A9A7C8E01 /* Models */,
+				009C01354F7F4E0A9A7C8E01 /* Views */,
+			);
+			path = News;
+			sourceTree = "<group>";
+		};
+		009C01484F7F4E0A9A7C8E01 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				009C01414F7F4E0A9A7C8E01 /* DiscoverNewsModels.swift */,
+				009C01434F7F4E0A9A7C8E01 /* DiscoverNewsCodec.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		009C011A4F7F4E0A9A7C8E01 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				009C011B4F7F4E0A9A7C8E01 /* DiscoverSearchViews.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		009C01354F7F4E0A9A7C8E01 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				009C01454F7F4E0A9A7C8E01 /* DiscoverNewsDetailView.swift */,
+				009C01474F7F4E0A9A7C8E01 /* DiscoverNewsPublishSheet.swift */,
+				009C01334F7F4E0A9A7C8E01 /* NewsModuleView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		009C01222F7F4E0A9A7C8E01 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				009C012A4F7F4E0A9A7C8E01 /* EventDetailView.swift */,
+				009C01304F7F4E0A9A7C8E01 /* EventCalendarSupport.swift */,
+				009C012E4F7F4E0A9A7C8E01 /* EventEditorView.swift */,
+				009C012C4F7F4E0A9A7C8E01 /* EventLineupSupport.swift */,
+				009C01244F7F4E0A9A7C8E01 /* EventPresentationSupport.swift */,
+				009C01204F7F4E0A9A7C8E01 /* EventsModuleView.swift */,
+				009C01284F7F4E0A9A7C8E01 /* RecommendEventsModuleView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
 		009C01164F7F4E0A9A7C8E01 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
 				009C01174F7F4E0A9A7C8E01 /* DiscoverSearchResultsViewModels.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		009C01234F7F4E0A9A7C8E01 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				009C011E4F7F4E0A9A7C8E01 /* EventsModuleViewModel.swift */,
+				009C01264F7F4E0A9A7C8E01 /* RecommendEventsViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -438,6 +615,25 @@
 				009C01144F7F4E0A9A7C8E01 /* DiscoverCoordinator.swift in Sources */,
 				009C01154F7F4E0A9A7C8E01 /* DiscoverRoute.swift in Sources */,
 				009C01184F7F4E0A9A7C8E01 /* DiscoverSearchResultsViewModels.swift in Sources */,
+				009C011C4F7F4E0A9A7C8E01 /* DiscoverSearchViews.swift in Sources */,
+				009C011F4F7F4E0A9A7C8E01 /* EventsModuleViewModel.swift in Sources */,
+				009C01214F7F4E0A9A7C8E01 /* EventsModuleView.swift in Sources */,
+				009C012B4F7F4E0A9A7C8E01 /* EventDetailView.swift in Sources */,
+				009C01314F7F4E0A9A7C8E01 /* EventCalendarSupport.swift in Sources */,
+				009C012F4F7F4E0A9A7C8E01 /* EventEditorView.swift in Sources */,
+				009C01494F7F4E0A9A7C8E01 /* DJsModuleView.swift in Sources */,
+				009C01514F7F4E0A9A7C8E01 /* LearnModuleView.swift in Sources */,
+				009C014D4F7F4E0A9A7C8E01 /* SetsModuleView.swift in Sources */,
+				009C01564F7F4E0A9A7C8E01 /* MessagesCoordinator.swift in Sources */,
+				009C01424F7F4E0A9A7C8E01 /* DiscoverNewsCodec.swift in Sources */,
+				009C01444F7F4E0A9A7C8E01 /* DiscoverNewsDetailView.swift in Sources */,
+				009C01324F7F4E0A9A7C8E01 /* NewsModuleView.swift in Sources */,
+				009C01404F7F4E0A9A7C8E01 /* DiscoverNewsModels.swift in Sources */,
+				009C01464F7F4E0A9A7C8E01 /* DiscoverNewsPublishSheet.swift in Sources */,
+				009C012D4F7F4E0A9A7C8E01 /* EventLineupSupport.swift in Sources */,
+				009C01254F7F4E0A9A7C8E01 /* EventPresentationSupport.swift in Sources */,
+				009C01274F7F4E0A9A7C8E01 /* RecommendEventsViewModel.swift in Sources */,
+				009C01294F7F4E0A9A7C8E01 /* RecommendEventsModuleView.swift in Sources */,
 				430044327A0BB460A375D3DE /* AppConfig.swift in Sources */,
 				1C90A0077163435CBEB4F876 /* AppEnvironment.swift in Sources */,
 				4C3C220B125C49820777E2BB /* AppState.swift in Sources */,

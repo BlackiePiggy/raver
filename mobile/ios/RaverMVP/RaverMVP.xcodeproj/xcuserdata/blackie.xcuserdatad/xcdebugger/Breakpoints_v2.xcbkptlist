@@ -31,9 +31,7 @@
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "2967"
-            endingLineNumber = "2967"
-            landmarkName = "loadPersonalEventCheckins()"
-            landmarkType = "7">
+            endingLineNumber = "2967">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -47,9 +45,7 @@
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "2966"
-            endingLineNumber = "2966"
-            landmarkName = "loadPersonalEventCheckins()"
-            landmarkType = "7">
+            endingLineNumber = "2966">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -63,9 +59,7 @@
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "5062"
-            endingLineNumber = "5062"
-            landmarkName = "body"
-            landmarkType = "24">
+            endingLineNumber = "5062">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -79,9 +73,7 @@
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "4201"
-            endingLineNumber = "4201"
-            landmarkName = "daySelectionCard(_:)"
-            landmarkType = "7">
+            endingLineNumber = "4201">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -95,9 +87,7 @@
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "4219"
-            endingLineNumber = "4219"
-            landmarkName = "daySelectionCard(_:)"
-            landmarkType = "7">
+            endingLineNumber = "4219">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -111,9 +101,7 @@
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "5173"
-            endingLineNumber = "5173"
-            landmarkName = "externalMapURL(for:)"
-            landmarkType = "7">
+            endingLineNumber = "5173">
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

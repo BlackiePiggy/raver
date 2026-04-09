@@ -123,16 +123,29 @@ func makeDiscoverRouteDestination(
             .toolbar(.hidden, for: .tabBar)
 
         case .djs:
-            DJsSearchResultsView(query: query)
+            DJsSearchResultsView(
+                viewModel: DJsSearchResultsViewModel(
+                    query: query,
+                    service: appContainer.webService
+                )
+            )
                 .toolbar(.hidden, for: .tabBar)
 
         case .sets:
-            SetsSearchResultsView(query: query)
+            SetsSearchResultsView(
+                viewModel: SetsSearchResultsViewModel(
+                    query: query,
+                    service: appContainer.webService
+                )
+            )
                 .toolbar(.hidden, for: .tabBar)
 
         case .wiki:
             WikiSearchResultsView(
-                query: query,
+                viewModel: WikiSearchResultsViewModel(
+                    query: query,
+                    service: appContainer.webService
+                ),
                 preferredSection: {
                     guard
                         let raw = preferredWikiSectionRaw,

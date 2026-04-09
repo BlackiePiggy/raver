@@ -579,88 +579,86 @@ struct MessagesHomeView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 12) {
-                HStack(spacing: 16) {
-                    alertsRow
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+        VStack(spacing: 12) {
+            HStack(spacing: 16) {
+                alertsRow
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
 
-                if chatViewModel.isLoading && chatViewModel.conversations.isEmpty {
-                    Spacer()
-                    ProgressView(L("加载消息中...", "Loading messages..."))
-                    Spacer()
-                } else if chatViewModel.conversations.isEmpty {
-                    Spacer()
-                    ContentUnavailableView(
-                        L("暂无会话", "No Conversations Yet"),
-                        systemImage: "bubble.left.and.bubble.right",
-                        description: Text(LL("从用户主页发起私信或加入小队后会显示在这里"))
-                    )
-                    Spacer()
-                } else {
-                    List(chatViewModel.conversations) { conversation in
-                        Button {
-                            pushedConversation = conversation
-                            Task {
-                                await chatViewModel.markConversationRead(conversationID: conversation.id)
-                                syncTabBadge()
-                            }
-                        } label: {
-                            conversationRow(conversation)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
+            if chatViewModel.isLoading && chatViewModel.conversations.isEmpty {
+                Spacer()
+                ProgressView(L("加载消息中...", "Loading messages..."))
+                Spacer()
+            } else if chatViewModel.conversations.isEmpty {
+                Spacer()
+                ContentUnavailableView(
+                    L("暂无会话", "No Conversations Yet"),
+                    systemImage: "bubble.left.and.bubble.right",
+                    description: Text(LL("从用户主页发起私信或加入小队后会显示在这里"))
+                )
+                Spacer()
+            } else {
+                List(chatViewModel.conversations) { conversation in
+                    Button {
+                        pushedConversation = conversation
+                        Task {
+                            await chatViewModel.markConversationRead(conversationID: conversation.id)
+                            syncTabBadge()
                         }
-                        .buttonStyle(.plain)
-                        .listRowBackground(RaverTheme.card)
+                    } label: {
+                        conversationRow(conversation)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
-                    .scrollContentBackground(.hidden)
+                    .buttonStyle(.plain)
+                    .listRowBackground(RaverTheme.card)
                 }
+                .scrollContentBackground(.hidden)
             }
-            .background(RaverTheme.background)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .task {
-                await refreshAll()
-            }
-            .refreshable {
-                await refreshAll()
-            }
-            .onChange(of: chatViewModel.unreadTotal) { _, _ in
+        }
+        .background(RaverTheme.background)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await refreshAll()
+        }
+        .refreshable {
+            await refreshAll()
+        }
+        .onChange(of: chatViewModel.unreadTotal) { _, _ in
+            syncTabBadge()
+        }
+        .onChange(of: alertViewModel.unreadCounts.total) { _, _ in
+            syncTabBadge()
+        }
+        .navigationDestination(item: $pushedConversation) { conversation in
+            ChatView(conversation: conversation, service: appState.service)
+        }
+        .navigationDestination(item: $selectedCategory) { category in
+            MessageAlertDetailView(
+                category: category,
+                viewModel: alertViewModel
+            ) {
                 syncTabBadge()
             }
-            .onChange(of: alertViewModel.unreadCounts.total) { _, _ in
-                syncTabBadge()
-            }
-            .navigationDestination(item: $pushedConversation) { conversation in
-                ChatView(conversation: conversation, service: appState.service)
-            }
-            .navigationDestination(item: $selectedCategory) { category in
-                MessageAlertDetailView(
-                    category: category,
-                    viewModel: alertViewModel
-                ) {
-                    syncTabBadge()
+        }
+        .alert(L("消息加载失败", "Failed to Load Messages"), isPresented: Binding(
+            get: { chatViewModel.error != nil || alertViewModel.error != nil },
+            set: { newValue in
+                if !newValue {
+                    chatViewModel.error = nil
+                    alertViewModel.error = nil
                 }
             }
-            .alert(L("消息加载失败", "Failed to Load Messages"), isPresented: Binding(
-                get: { chatViewModel.error != nil || alertViewModel.error != nil },
-                set: { newValue in
-                    if !newValue {
-                        chatViewModel.error = nil
-                        alertViewModel.error = nil
-                    }
-                }
-            )) {
-                Button(L("重试", "Retry")) {
-                    Task { await refreshAll() }
-                }
-                Button(L("取消", "Cancel"), role: .cancel) {}
-            } message: {
-                Text(chatViewModel.error ?? alertViewModel.error ?? "")
+        )) {
+            Button(L("重试", "Retry")) {
+                Task { await refreshAll() }
             }
+            Button(L("取消", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(chatViewModel.error ?? alertViewModel.error ?? "")
         }
     }
 

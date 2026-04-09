@@ -30,7 +30,9 @@ struct MainTabView: View {
                     Label(L("圈子", "Circle"), systemImage: "person.3.fill")
                 }
 
-            MessagesHomeView()
+            MessagesCoordinatorView {
+                MessagesHomeView()
+            }
                 .tag(MainTab.messages)
                 .tabItem {
                     Label(L("消息", "Messages"), systemImage: "bubble.left.and.bubble.right.fill")

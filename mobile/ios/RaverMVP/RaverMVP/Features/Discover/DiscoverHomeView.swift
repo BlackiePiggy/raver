@@ -144,9 +144,9 @@ struct DiscoverHomeView: View {
     private func pageView(for section: Section) -> some View {
         switch section {
         case .recommend:
-            RecommendEventsModuleView()
+            DiscoverRecommendEventsRootView()
         case .events:
-            EventsModuleView()
+            DiscoverEventsRootView()
         case .news:
             NewsModuleView()
         case .djs:
