@@ -30,6 +30,7 @@ final class EventDetailScrollViewController: UIViewController {
     private var pendingProgress: CGFloat = 0
     private var currentSelectedIndex: Int = 0
     private var isApplyingProgrammaticSelection = false
+    private var didApplyInitialPosition = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -50,7 +51,12 @@ final class EventDetailScrollViewController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         applyPageInsets()
-        updatePinnedHeader(forOffset: pageViewController.currentActiveOffset())
+        if !didApplyInitialPosition {
+            didApplyInitialPosition = true
+            updatePinnedHeader(forOffset: 0)
+        } else {
+            updatePinnedHeader(forOffset: pageViewController.currentActiveOffset())
+        }
     }
 
     override func viewSafeAreaInsetsDidChange() {
@@ -177,7 +183,9 @@ final class EventDetailScrollViewController: UIViewController {
         }
 
         onPageProgressChange?(pendingProgress)
-        updatePinnedHeader(forOffset: pageViewController.currentActiveOffset())
+        if didApplyInitialPosition {
+            updatePinnedHeader(forOffset: pageViewController.currentActiveOffset())
+        }
     }
 
     private func applyPageInsets() {

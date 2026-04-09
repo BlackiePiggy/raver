@@ -6,26 +6,39 @@ import AVKit
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
+    @State private var internalSelectedTab: MainTab = .discover
+
+    private let externalSelectedTab: Binding<MainTab>?
+
+    init(selectedTab: Binding<MainTab>? = nil) {
+        externalSelectedTab = selectedTab
+    }
 
     var body: some View {
-        TabView {
-            DiscoverHomeView()
+        TabView(selection: selectedTab) {
+            DiscoverCoordinatorView {
+                DiscoverHomeView()
+            }
+                .tag(MainTab.discover)
                 .tabItem {
                     Label(L("发现", "Discover"), systemImage: "safari.fill")
                 }
 
             CircleHomeView()
+                .tag(MainTab.circle)
                 .tabItem {
                     Label(L("圈子", "Circle"), systemImage: "person.3.fill")
                 }
 
             MessagesHomeView()
+                .tag(MainTab.messages)
                 .tabItem {
                     Label(L("消息", "Messages"), systemImage: "bubble.left.and.bubble.right.fill")
                 }
                 .badge(appState.unreadMessagesCount > 0 ? Text("\(appState.unreadMessagesCount)") : nil)
 
             ProfileView()
+                .tag(MainTab.profile)
                 .tabItem {
                     Label(L("我的", "Me"), systemImage: "person.crop.circle.fill")
                 }
@@ -38,6 +51,10 @@ struct MainTabView: View {
             guard newValue == .active else { return }
             Task { await appState.refreshUnreadMessages() }
         }
+    }
+
+    private var selectedTab: Binding<MainTab> {
+        externalSelectedTab ?? $internalSelectedTab
     }
 }
 

@@ -9,6 +9,19 @@ import MapKit
 import CoreLocation
 import CoreText
 
+private extension UIView {
+    func findEnclosingScrollView() -> UIScrollView? {
+        var current: UIView? = superview
+        while let view = current {
+            if let sv = view as? UIScrollView, sv !== self {
+                return sv
+            }
+            current = view.superview
+        }
+        return nil
+    }
+}
+
 private enum EventCalendarViewFilter: String, CaseIterable, Hashable, Identifiable {
     case all
     case marked
@@ -32,21 +45,28 @@ private enum EventCalendarViewFilter: String, CaseIterable, Hashable, Identifiab
 
 private struct HorizontalAxisLockedScrollView<Content: View>: UIViewRepresentable {
     let showsIndicators: Bool
+    let contentOffsetX: Binding<CGFloat>?
     let onDraggingChanged: ((Bool) -> Void)?
     let content: Content
 
     init(
         showsIndicators: Bool = false,
+        contentOffsetX: Binding<CGFloat>? = nil,
         onDraggingChanged: ((Bool) -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.showsIndicators = showsIndicators
+        self.contentOffsetX = contentOffsetX
         self.onDraggingChanged = onDraggingChanged
         self.content = content()
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(content: content, onDraggingChanged: onDraggingChanged)
+        Coordinator(
+            content: content,
+            contentOffsetX: contentOffsetX,
+            onDraggingChanged: onDraggingChanged
+        )
     }
 
     func makeUIView(context: Context) -> UIScrollView {
@@ -54,11 +74,20 @@ private struct HorizontalAxisLockedScrollView<Content: View>: UIViewRepresentabl
         scrollView.backgroundColor = .clear
         scrollView.showsHorizontalScrollIndicator = showsIndicators
         scrollView.showsVerticalScrollIndicator = false
+        scrollView.bounces = true
         scrollView.alwaysBounceHorizontal = true
         scrollView.alwaysBounceVertical = false
+        scrollView.delaysContentTouches = true
+        scrollView.canCancelContentTouches = true
         scrollView.isDirectionalLockEnabled = true
         scrollView.clipsToBounds = true
         scrollView.delegate = context.coordinator
+
+        DispatchQueue.main.async {
+            if let parentScrollView = scrollView.findEnclosingScrollView() {
+                parentScrollView.panGestureRecognizer.require(toFail: scrollView.panGestureRecognizer)
+            }
+        }
 
         let hostedView = context.coordinator.hostingController.view
         hostedView?.backgroundColor = .clear
@@ -81,18 +110,45 @@ private struct HorizontalAxisLockedScrollView<Content: View>: UIViewRepresentabl
     func updateUIView(_ uiView: UIScrollView, context: Context) {
         uiView.showsHorizontalScrollIndicator = showsIndicators
         context.coordinator.hostingController.rootView = content
+        context.coordinator.contentOffsetX = contentOffsetX
         context.coordinator.onDraggingChanged = onDraggingChanged
+
+        if let storedOffsetX = contentOffsetX?.wrappedValue,
+           !uiView.isDragging,
+           !uiView.isDecelerating,
+           uiView.bounds.width > 0 {
+            let minOffsetX = -uiView.adjustedContentInset.left
+            let maxOffsetX = max(
+                minOffsetX,
+                uiView.contentSize.width - uiView.bounds.width + uiView.adjustedContentInset.right
+            )
+            let clampedOffsetX = min(max(storedOffsetX, minOffsetX), maxOffsetX)
+
+            if abs(uiView.contentOffset.x - clampedOffsetX) > 0.5 {
+                uiView.setContentOffset(CGPoint(x: clampedOffsetX, y: uiView.contentOffset.y), animated: false)
+            }
+        }
     }
 
     final class Coordinator: NSObject, UIScrollViewDelegate {
         let hostingController: UIHostingController<Content>
+        var contentOffsetX: Binding<CGFloat>?
         var onDraggingChanged: ((Bool) -> Void)?
         private var isDraggingNotified = false
 
-        init(content: Content, onDraggingChanged: ((Bool) -> Void)?) {
+        init(
+            content: Content,
+            contentOffsetX: Binding<CGFloat>?,
+            onDraggingChanged: ((Bool) -> Void)?
+        ) {
             hostingController = UIHostingController(rootView: content)
             hostingController.view.backgroundColor = .clear
+            self.contentOffsetX = contentOffsetX
             self.onDraggingChanged = onDraggingChanged
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            contentOffsetX?.wrappedValue = scrollView.contentOffset.x
         }
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
@@ -113,7 +169,9 @@ private struct HorizontalAxisLockedScrollView<Content: View>: UIViewRepresentabl
         private func finishDragging() {
             guard isDraggingNotified else { return }
             isDraggingNotified = false
-            onDraggingChanged?(false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+                self?.onDraggingChanged?(false)
+            }
         }
     }
 }
@@ -447,7 +505,8 @@ private enum EventTypeOption: String, CaseIterable {
 struct EventsModuleView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.discoverPush) private var discoverPush
-    private let service = AppEnvironment.makeWebService()
+    @StateObject private var viewModel = ViewModel()
+
     private static let predefinedEventTypeKeys = EventTypeOption.allCases.map(\.rawValue)
 
     private enum EventScope: String, CaseIterable, Identifiable {
@@ -455,10 +514,11 @@ struct EventsModuleView: View {
         case mine
 
         var id: String { rawValue }
+
         var title: String {
             switch self {
             case .all: return L("全部活动", "All Events")
-            case .mine: return L("我的收藏", "My Favorites")
+            case .mine: return L("收藏活动", "Favorites")
             }
         }
     }
@@ -468,6 +528,7 @@ struct EventsModuleView: View {
         case foreign
 
         var id: String { rawValue }
+
         var title: String {
             switch self {
             case .domestic: return L("国内", "Domestic")
@@ -484,6 +545,7 @@ struct EventsModuleView: View {
         case africa
 
         var id: String { rawValue }
+
         var title: String {
             switch self {
             case .asia: return L("亚洲", "Asia")
@@ -495,18 +557,222 @@ struct EventsModuleView: View {
         }
     }
 
-    @State private var events: [WebEvent] = []
-    @State private var myPublishedEvents: [WebEvent] = []
-    @State private var markedEvents: [WebEvent] = []
-    @State private var ongoingEvents: [WebEvent] = []
-    @State private var endedEvents: [WebEvent] = []
-    @State private var markedCheckinIDsByEventID: [String: String] = [:]
-    @State private var page = 1
-    @State private var totalPages = 1
-    @State private var isLoading = false
+    @MainActor
+    final class ViewModel: ObservableObject {
+        struct AllQuery: Equatable {
+            let search: String
+            let eventTypeKey: String
+
+            var searchParam: String? {
+                let trimmed = search.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+
+            var eventTypeParam: String? {
+                EventTypeOption.submissionValue(for: eventTypeKey)
+            }
+        }
+
+        @Published private(set) var allEvents: [WebEvent] = []
+        @Published private(set) var markedEvents: [WebEvent] = []
+        @Published private(set) var markedCheckinIDsByEventID: [String: String] = [:]
+        @Published private(set) var isLoadingAll = false
+        @Published private(set) var isLoadingMarked = false
+        @Published private(set) var isLoadingMoreAll = false
+        @Published var errorMessage: String?
+
+        private let service = AppEnvironment.makeWebService()
+        private let pageSize = 10
+
+        private var currentAllQuery = AllQuery(search: "", eventTypeKey: "")
+        private var nextAllPage = 1
+        private var totalAllPages = 1
+        private var allReloadToken = UUID()
+        private var markedReloadToken = UUID()
+        private var hasLoadedMarkedState = false
+
+        var canLoadMoreAll: Bool {
+            nextAllPage <= totalAllPages
+        }
+
+        func reloadAll(query: AllQuery, force: Bool = false) async {
+            guard force || query != currentAllQuery || allEvents.isEmpty else { return }
+
+            let token = UUID()
+            allReloadToken = token
+            currentAllQuery = query
+            isLoadingAll = true
+            errorMessage = nil
+
+            do {
+                let result = try await service.fetchEvents(
+                    page: 1,
+                    limit: pageSize,
+                    search: query.searchParam,
+                    eventType: query.eventTypeParam,
+                    status: "upcoming"
+                )
+
+                guard allReloadToken == token else { return }
+                allEvents = result.items
+                totalAllPages = result.pagination?.totalPages ?? 1
+                nextAllPage = 2
+            } catch {
+                guard allReloadToken == token else { return }
+                errorMessage = error.userFacingMessage
+            }
+
+            if allReloadToken == token {
+                isLoadingAll = false
+            }
+        }
+
+        func loadMoreAllIfNeeded(query: AllQuery) async {
+            guard query == currentAllQuery else { return }
+            guard !isLoadingAll, !isLoadingMoreAll, nextAllPage <= totalAllPages else { return }
+
+            let pageToLoad = nextAllPage
+            isLoadingMoreAll = true
+
+            do {
+                let result = try await service.fetchEvents(
+                    page: pageToLoad,
+                    limit: pageSize,
+                    search: query.searchParam,
+                    eventType: query.eventTypeParam,
+                    status: "upcoming"
+                )
+
+                guard query == currentAllQuery else { return }
+                allEvents = mergeUnique(existing: allEvents, with: result.items)
+                totalAllPages = result.pagination?.totalPages ?? totalAllPages
+                nextAllPage = pageToLoad + 1
+            } catch {
+                if query == currentAllQuery {
+                    errorMessage = error.userFacingMessage
+                }
+            }
+
+            if query == currentAllQuery {
+                isLoadingMoreAll = false
+            }
+        }
+
+        func reloadMarkedState(isLoggedIn: Bool, force: Bool = false) async {
+            guard isLoggedIn else {
+                markedReloadToken = UUID()
+                hasLoadedMarkedState = false
+                markedCheckinIDsByEventID = [:]
+                markedEvents = []
+                isLoadingMarked = false
+                return
+            }
+
+            guard force || !hasLoadedMarkedState else { return }
+
+            let token = UUID()
+            markedReloadToken = token
+            isLoadingMarked = true
+            errorMessage = nil
+
+            do {
+                let page = try await service.fetchMyCheckins(page: 1, limit: 200, type: "event")
+                guard markedReloadToken == token else { return }
+
+                let checkins = page.items.filter { $0.type.lowercased() == "event" && $0.eventId != nil && $0.isMarkedCheckin }
+                var markedMap: [String: String] = [:]
+                for item in checkins {
+                    guard let eventID = item.eventId else { continue }
+                    markedMap[eventID] = item.id
+                }
+
+                markedCheckinIDsByEventID = markedMap
+                let loadedEvents = await fetchEventsByIDs(Array(markedMap.keys))
+                guard markedReloadToken == token else { return }
+
+                markedEvents = loadedEvents.sorted(by: { $0.startDate < $1.startDate })
+                hasLoadedMarkedState = true
+            } catch {
+                guard markedReloadToken == token else { return }
+                errorMessage = error.userFacingMessage
+            }
+
+            if markedReloadToken == token {
+                isLoadingMarked = false
+            }
+        }
+
+        func toggleMarked(event: WebEvent, isLoggedIn: Bool) async {
+            guard isLoggedIn else {
+                errorMessage = L("请先登录再标记活动", "Please log in before marking events.")
+                return
+            }
+
+            markedReloadToken = UUID()
+            isLoadingMarked = false
+
+            do {
+                if let checkinID = markedCheckinIDsByEventID[event.id] {
+                    try await service.deleteCheckin(id: checkinID)
+                    markedCheckinIDsByEventID[event.id] = nil
+                    markedEvents.removeAll { $0.id == event.id }
+                } else {
+                    let created = try await service.createCheckin(
+                        input: CreateCheckinInput(type: "event", eventId: event.id, djId: nil, note: "marked", rating: nil)
+                    )
+                    markedCheckinIDsByEventID[event.id] = created.id
+                    insertMarkedEvent(event)
+                }
+                hasLoadedMarkedState = true
+            } catch {
+                errorMessage = error.userFacingMessage
+            }
+        }
+
+        private func insertMarkedEvent(_ event: WebEvent) {
+            if let index = markedEvents.firstIndex(where: { $0.id == event.id }) {
+                markedEvents[index] = event
+            } else {
+                markedEvents.append(event)
+            }
+            markedEvents.sort(by: { $0.startDate < $1.startDate })
+        }
+
+        private func fetchEventsByIDs(_ ids: [String]) async -> [WebEvent] {
+            guard !ids.isEmpty else { return [] }
+
+            let service = service
+            return await withTaskGroup(of: WebEvent?.self, returning: [WebEvent].self) { group in
+                for id in ids.sorted() {
+                    group.addTask {
+                        try? await service.fetchEvent(id: id)
+                    }
+                }
+
+                var result: [WebEvent] = []
+                for await item in group {
+                    if let item {
+                        result.append(item)
+                    }
+                }
+                return result
+            }
+        }
+
+        private func mergeUnique(existing: [WebEvent], with incoming: [WebEvent]) -> [WebEvent] {
+            var merged = existing
+            var seen = Set(existing.map(\.id))
+            for item in incoming where seen.insert(item.id).inserted {
+                merged.append(item)
+            }
+            return merged
+        }
+    }
+
     @State private var selectedScope: EventScope = .all
     @State private var selectedEventType = ""
-    @State private var searchKeyword = ""
+    @State private var searchText = ""
+    @State private var appliedSearchText = ""
     @State private var showCreate = false
     @State private var showCalendar = false
     @State private var showCountryFilter = false
@@ -515,298 +781,132 @@ struct EventsModuleView: View {
     @State private var selectedAreaBuckets: Set<CountryAreaBucket> = []
     @State private var selectedContinentBuckets: Set<ContinentBucket> = []
     @State private var selectedCountries: Set<String> = []
-    @State private var selectedEventForDetail: WebEvent?
-    @State private var isEventTypeStripDragging = false
-    @State private var errorMessage: String?
+    @State private var searchDebounceTask: Task<Void, Never>?
 
     var body: some View {
         Group {
-                if isLoading && contentIsEmpty {
-                    ProgressView(LL("活动加载中..."))
-                } else if selectedScope == .all {
-                    allEventsContent
-                } else {
-                    myEventsContent
-                }
-            }
-            .background(RaverTheme.background)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .safeAreaInset(edge: .top) {
-                VStack(spacing: 0) {
-                    HStack(spacing: 8) {
-                        HorizontalAxisLockedScrollView(
-                            showsIndicators: false,
-                            onDraggingChanged: { dragging in
-                                if isEventTypeStripDragging != dragging {
-                                    isEventTypeStripDragging = dragging
-                                }
-                            }
-                        ) {
-                            HStack(spacing: 8) {
-                                myEventsScopeChip
-                                eventTypeChip(title: EventTypeOption.allEventsTitle, value: "")
-                                ForEach(eventTypeTabs, id: \.self) { key in
-                                    eventTypeChip(title: EventTypeOption.displayTitle(for: key), value: key)
-                                }
-                            }
-                            .padding(.leading, 4)
-                        }
-                        .allowsHitTesting(!isEventTypeStripDragging)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 34)
-
-                        eventTopIconButton(systemName: "magnifyingglass") {
-                            discoverPush(
-                                .searchInput(
-                                    domain: .events,
-                                    initialQuery: searchKeyword
-                                )
-                            )
-                        }
-
-                        eventTopIconButton(
-                            systemName: isCountryFilterActive
-                                ? "line.3.horizontal.decrease.circle.fill"
-                                : "line.3.horizontal.decrease.circle",
-                            isActive: isCountryFilterActive
-                        ) {
-                            showCountryFilter = true
-                        }
-
-                        eventTopIconButton(systemName: "calendar") {
-                            showCalendar = true
-                        }
-
-                        eventTopIconButton(systemName: "plus") {
-                            showCreate = true
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, 4)
-                }
-                .background(RaverTheme.background)
-            }
-            .onChange(of: selectedScope) { _, _ in
-                Task { await reload() }
-            }
-            .onChange(of: selectedEventType) { _, _ in
-                if selectedScope == .all {
-                    Task { await reload() }
-                }
-            }
-            .sheet(isPresented: $showCreate) {
-                EventEditorView(mode: .create) {
-                    Task { await reload() }
-                }
-            }
-            .sheet(isPresented: $showCalendar) {
-                EventCalendarSheet(
-                    events: calendarSourceEvents,
-                    markedEventIDs: Set(markedCheckinIDsByEventID.keys),
-                    selectedDate: $calendarSelectedDate,
-                    selectedFilters: $calendarFilters,
-                    onEventSelected: { event in
-                        showCalendar = false
-                        selectedEventForDetail = event
-                    }
-                )
-                .presentationDetents([.fraction(0.8), .large])
-            }
-            .sheet(isPresented: $showCountryFilter) {
-                EventCountryFilterSheet(
-                    selectedAreaBuckets: $selectedAreaBuckets,
-                    selectedContinentBuckets: $selectedContinentBuckets,
-                    selectedCountries: $selectedCountries,
-                    availableContinents: availableContinentBuckets,
-                    availableCountries: availableCountryOptions
-                )
-                .presentationDetents([.medium, .large])
-            }
-            .fullScreenCover(item: $selectedEventForDetail, onDismiss: {
-                selectedEventForDetail = nil
-            }) { event in
-                NavigationStack {
-                    EventDetailView(eventID: event.id)
-                }
-            }
-            .task {
-                await reload()
-            }
-            .refreshable {
-                await reload()
-            }
-            .alert(L("提示", "Notice"), isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(L("确定", "OK"), role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
-    }
-
-    private func reload() async {
-        page = 1
-        totalPages = 1
-        events = []
-        ongoingEvents = []
-        endedEvents = []
-        await loadPersonalEventCheckins()
-        await loadStatusBuckets(reset: true)
-    }
-
-    private func loadMore(reset: Bool = false) async {
-        guard selectedScope == .all else { return }
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let result = try await service.fetchEvents(
-                page: page,
-                limit: 10,
-                search: nil,
-                eventType: selectedEventTypeQueryValue,
-                status: eventsStatusFilter
-            )
-            if reset {
-                events = result.items
+            if isShowingFullScreenLoading {
+                loadingStateView
+            } else if visibleEvents.isEmpty {
+                emptyStateView
             } else {
-                events.append(contentsOf: result.items)
+                eventsListView
             }
-            totalPages = result.pagination?.totalPages ?? 1
-            page += 1
-        } catch {
-            errorMessage = error.userFacingMessage
         }
-    }
-
-    private func loadStatusBuckets(reset: Bool = false) async {
-        guard selectedScope == .all else { return }
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            async let upcomingPage = service.fetchEvents(
-                page: 1,
-                limit: 10,
-                search: nil,
-                eventType: selectedEventTypeQueryValue,
-                status: eventsStatusFilter
-            )
-
-            let upcomingResult = try await upcomingPage
-            ongoingEvents = []
-            endedEvents = []
-            events = upcomingResult.items
-            totalPages = upcomingResult.pagination?.totalPages ?? 1
-            page = reset ? 2 : page
-        } catch {
-            errorMessage = error.userFacingMessage
+        .background(RaverTheme.background)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top) {
+            headerView
         }
-    }
-
-    private func loadMine() async {
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            myPublishedEvents = try await service.fetchMyEvents().sorted(by: { $0.createdAt > $1.createdAt })
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    private func loadPersonalEventCheckins() async {
-        guard appState.session != nil else {
-            markedCheckinIDsByEventID = [:]
-            markedEvents = []
-            return
-        }
-
-        do {
-            let page = try await service.fetchMyCheckins(page: 1, limit: 200, type: "event")
-            let checkins = page.items.filter { ($0.type.lowercased() == "event") && $0.eventId != nil }
-            var markedMap: [String: String] = [:]
-            for item in checkins {
-                guard let eventID = item.eventId else { continue }
-                let note = item.note?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-                if note == "marked" { markedMap[eventID] = item.id }
+        .sheet(isPresented: $showCreate) {
+            EventEditorView(mode: .create) {
+                Task { await refreshAfterCreate() }
             }
-
-            markedCheckinIDsByEventID = markedMap
-            markedEvents = await fetchEventsByIDs(Array(markedMap.keys))
-        } catch {
-            errorMessage = error.userFacingMessage
         }
-    }
-
-    @MainActor
-    private func toggleMarked(event: WebEvent) async {
-        guard appState.session != nil else {
-            errorMessage = L("请先登录再标记活动", "Please log in before marking events.")
-            return
-        }
-
-        do {
-            if let checkinID = markedCheckinIDsByEventID[event.id] {
-                try await service.deleteCheckin(id: checkinID)
-                markedCheckinIDsByEventID[event.id] = nil
-                markedEvents.removeAll { $0.id == event.id }
-            } else {
-                let created = try await service.createCheckin(
-                    input: CreateCheckinInput(type: "event", eventId: event.id, djId: nil, note: "marked", rating: nil)
-                )
-                markedCheckinIDsByEventID[event.id] = created.id
-                if !markedEvents.contains(where: { $0.id == event.id }) {
-                    markedEvents.insert(event, at: 0)
+        .sheet(isPresented: $showCalendar) {
+            EventCalendarSheet(
+                events: calendarSourceEvents,
+                markedEventIDs: Set(viewModel.markedCheckinIDsByEventID.keys),
+                selectedDate: $calendarSelectedDate,
+                selectedFilters: $calendarFilters,
+                onEventSelected: { event in
+                    showCalendar = false
+                    discoverPush(.eventDetail(eventID: event.id))
                 }
-            }
-        } catch {
-            errorMessage = error.userFacingMessage
+            )
+            .presentationDetents([.fraction(0.8), .large])
+        }
+        .sheet(isPresented: $showCountryFilter) {
+            EventCountryFilterSheet(
+                selectedAreaBuckets: $selectedAreaBuckets,
+                selectedContinentBuckets: $selectedContinentBuckets,
+                selectedCountries: $selectedCountries,
+                availableContinents: availableContinentBuckets,
+                availableCountries: availableCountryOptions
+            )
+            .presentationDetents([.medium, .large])
+        }
+        .task(id: appState.session != nil) {
+            await viewModel.reloadMarkedState(isLoggedIn: appState.session != nil, force: true)
+        }
+        .task(id: allQueryTaskKey) {
+            guard selectedScope == .all else { return }
+            await viewModel.reloadAll(query: allQuery)
+        }
+        .refreshable {
+            await refreshCurrentScope()
+        }
+        .onChange(of: searchText) { _, newValue in
+            scheduleSearchCommit(for: newValue)
+        }
+        .onDisappear {
+            searchDebounceTask?.cancel()
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(viewModel.errorMessage ?? "")
         }
     }
 
-    private func isMarked(_ eventID: String) -> Bool {
-        markedCheckinIDsByEventID[eventID] != nil
+    private var allQuery: ViewModel.AllQuery {
+        ViewModel.AllQuery(search: appliedSearchText, eventTypeKey: selectedEventType)
     }
 
-    private var contentIsEmpty: Bool {
-        if selectedScope == .all {
-            return filteredUpcomingEvents.isEmpty
-        }
-        return filteredMarkedEvents.isEmpty
+    private var allQueryTaskKey: ViewModel.AllQuery? {
+        selectedScope == .all ? allQuery : nil
     }
 
-    private var filteredMarkedEvents: [WebEvent] {
-        markedEvents
+    private var rawSourceEvents: [WebEvent] {
+        selectedScope == .all ? viewModel.allEvents : viewModel.markedEvents
+    }
+
+    private var sourceEvents: [WebEvent] {
+        rawSourceEvents
+            .filter(eventMatchesSearch)
             .filter(eventMatchesSelectedType)
-            .filter(eventMatchesCountryFilter)
     }
 
-    private var filteredPublishedEvents: [WebEvent] {
-        guard !selectedEventType.isEmpty else { return myPublishedEvents }
-        return myPublishedEvents.filter(eventMatchesSelectedType)
-    }
-
-    private var filteredUpcomingEvents: [WebEvent] {
-        events.filter(eventMatchesCountryFilter)
+    private var visibleEvents: [WebEvent] {
+        sourceEvents.filter(eventMatchesCountryFilter)
     }
 
     private var isCountryFilterActive: Bool {
         !selectedAreaBuckets.isEmpty || !selectedContinentBuckets.isEmpty || !selectedCountries.isEmpty
     }
 
+    private var isLoadingCurrentScope: Bool {
+        selectedScope == .all ? viewModel.isLoadingAll : viewModel.isLoadingMarked
+    }
+
+    private var isShowingFullScreenLoading: Bool {
+        isLoadingCurrentScope && visibleEvents.isEmpty
+    }
+
+    private var calendarSourceEvents: [WebEvent] {
+        visibleEvents.sorted(by: { $0.startDate < $1.startDate })
+    }
+
+    private var eventTypeTabs: [String] {
+        let dynamic = Set((viewModel.allEvents + viewModel.markedEvents).compactMap { event in
+            let key = EventTypeOption.key(for: event.eventType)
+            return key.isEmpty ? nil : key
+        })
+        var ordered = Self.predefinedEventTypeKeys
+        for value in dynamic.sorted() where !ordered.contains(value) {
+            ordered.append(value)
+        }
+        return ordered
+    }
+
     private var availableCountryOptions: [String] {
         Array(
             Set(
-                events
-                    .filter { EventVisualStatus.resolve(event: $0) == .upcoming }
-                    .compactMap { event in
+                sourceEvents.compactMap { event in
                     event.country?
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                         .nilIfEmpty
@@ -823,40 +923,436 @@ struct EventsModuleView: View {
         return ContinentBucket.allCases.filter { buckets.contains($0) }
     }
 
-    private var eventTypeTabs: [String] {
-        let dynamic = Set((events + ongoingEvents + endedEvents + myPublishedEvents + markedEvents).compactMap { event in
-            let key = EventTypeOption.key(for: event.eventType)
-            return key.isEmpty ? nil : key
-        })
-        var ordered = Self.predefinedEventTypeKeys
-        for value in dynamic.sorted() where !ordered.contains(value) {
-            ordered.append(value)
+    private var activeFilterLabels: [String] {
+        var labels = selectedAreaBuckets.map(\.title).sorted()
+        labels.append(contentsOf: selectedContinentBuckets.map(\.title).sorted())
+        labels.append(contentsOf: selectedCountries.sorted())
+        return labels
+    }
+
+    private var filterButtonTitle: String {
+        if activeFilterLabels.isEmpty {
+            return L("筛选", "Filter")
         }
-        return ordered
+        return L("筛选 (\(activeFilterLabels.count))", "Filter (\(activeFilterLabels.count))")
     }
 
-    private var selectedEventTypeQueryValue: String? {
-        EventTypeOption.submissionValue(for: selectedEventType)
+    private var resultCountText: String {
+        L("共 \(visibleEvents.count) 场活动", "\(visibleEvents.count) events")
     }
 
-    private var eventsStatusFilter: String {
-        "upcoming"
+    private var headerView: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 10) {
+                searchField
+                eventTopIconButton(systemName: "plus") {
+                    showCreate = true
+                }
+            }
+
+            Picker("", selection: $selectedScope) {
+                ForEach(EventScope.allCases) { scope in
+                    Text(scope.title)
+                        .tag(scope)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            HStack(spacing: 8) {
+                utilityChipButton(
+                    systemName: isCountryFilterActive
+                        ? "line.3.horizontal.decrease.circle.fill"
+                        : "line.3.horizontal.decrease.circle",
+                    title: filterButtonTitle,
+                    isActive: isCountryFilterActive
+                ) {
+                    showCountryFilter = true
+                }
+
+                utilityChipButton(systemName: "calendar", title: L("日历", "Calendar")) {
+                    showCalendar = true
+                }
+
+                Spacer(minLength: 8)
+
+                Text(resultCountText)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            eventTypeSelector
+
+            if !activeFilterLabels.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(activeFilterLabels, id: \.self) { label in
+                            activeFilterChip(label)
+                        }
+
+                        Button {
+                            clearCountryFilters()
+                        } label: {
+                            Text(L("清空筛选", "Clear Filters"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.accent)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(
+                                    Capsule()
+                                        .fill(RaverTheme.accent.opacity(0.12))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 2)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+//        .background(RaverTheme.background)
+        .background(Color.red)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+
+            TextField(
+                L("搜索活动 / 城市 / 国家", "Search event / city / country"),
+                text: $searchText
+            )
+            .font(.subheadline)
+            .submitLabel(.search)
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            .onSubmit {
+                commitSearchImmediately()
+            }
+
+            if !searchText.isEmpty {
+                Button {
+                    clearSearch()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(RaverTheme.secondaryText.opacity(0.75))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 38)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(RaverTheme.card)
+        )
+    }
+
+    private var eventTypeSelector: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    eventTypeChip(title: EventTypeOption.allEventsTitle, value: "")
+                        .id(typeChipID(for: ""))
+
+                    ForEach(eventTypeTabs, id: \.self) { key in
+                        eventTypeChip(title: EventTypeOption.displayTitle(for: key), value: key)
+                            .id(typeChipID(for: key))
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+            .onAppear {
+                proxy.scrollTo(typeChipID(for: selectedEventType), anchor: .center)
+            }
+            .onChange(of: selectedEventType) { _, newValue in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(typeChipID(for: newValue), anchor: .center)
+                }
+            }
+        }
+        .frame(height: 34)
+    }
+
+    private var loadingStateView: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text(
+                selectedScope == .all
+                    ? L("正在加载活动", "Loading events")
+                    : L("正在加载收藏活动", "Loading favorite events")
+            )
+            .font(.subheadline)
+            .foregroundStyle(RaverTheme.secondaryText)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var emptyStateView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: emptyStateIcon)
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+
+            Text(emptyStateTitle)
+                .font(.headline)
+                .foregroundStyle(RaverTheme.primaryText)
+
+            Text(emptyStateMessage)
+                .font(.subheadline)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var emptyStateTitle: String {
+        if selectedScope == .mine && appState.session == nil {
+            return L("登录后查看收藏活动", "Sign in to view favorite events")
+        }
+        if selectedScope == .mine {
+            return L("暂无收藏活动", "No favorite events yet")
+        }
+        return L("没有匹配的活动", "No matching events")
+    }
+
+    private var emptyStateMessage: String {
+        if selectedScope == .mine && appState.session == nil {
+            return L("你标记过的活动会集中显示在这里。", "Events you mark will appear here.")
+        }
+        if isCountryFilterActive || !selectedEventType.isEmpty || !appliedSearchText.isEmpty {
+            return L("试试清空搜索词或筛选条件。", "Try clearing the search or filters.")
+        }
+        if selectedScope == .mine {
+            return L("在活动列表里点亮星标后，这里就会出现内容。", "Mark events with the star button and they will show up here.")
+        }
+        return L("当前没有可展示的活动。", "There are no events to show right now.")
+    }
+
+    private var emptyStateIcon: String {
+        if selectedScope == .mine && appState.session == nil {
+            return "person.crop.circle.badge.exclamationmark"
+        }
+        return selectedScope == .mine ? "star.circle" : "calendar.badge.plus"
+    }
+
+    private var eventsListView: some View {
+        ScrollView {
+            LazyVStack(spacing: 14) {
+                if isLoadingCurrentScope {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .padding(.vertical, 4)
+                        Spacer()
+                    }
+                }
+
+                ForEach(visibleEvents) { event in
+                    eventListRow(event)
+                }
+
+                if selectedScope == .all && viewModel.canLoadMoreAll {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .padding(.vertical, 10)
+                        Spacer()
+                    }
+                    .onAppear {
+                        Task { await viewModel.loadMoreAllIfNeeded(query: allQuery) }
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
+        }
+    }
+
+    private func eventListRow(_ event: WebEvent) -> some View {
+        ZStack(alignment: .bottomTrailing) {
+            Button {
+                presentEventDetail(event)
+            } label: {
+                EventRow(event: event)
+            }
+            .buttonStyle(.plain)
+
+            eventActionButton(for: event)
+                .padding(.bottom, 10)
+                .padding(.trailing, 10)
+        }
+    }
+
+    private func eventTypeChip(title: String, value: String) -> some View {
+        let isSelected = selectedEventType == value
+        return Button {
+            selectedEventType = value
+        } label: {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(isSelected ? Color.white : RaverTheme.secondaryText)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? RaverTheme.accent : RaverTheme.card)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func utilityChipButton(
+        systemName: String,
+        title: String,
+        isActive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemName)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(title)
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(isActive ? RaverTheme.accent : RaverTheme.primaryText)
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(RaverTheme.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        isActive ? RaverTheme.accent.opacity(0.4) : RaverTheme.secondaryText.opacity(0.12),
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func eventTopIconButton(systemName: String, isActive: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(isActive ? RaverTheme.accent : RaverTheme.primaryText)
+                .frame(width: 38, height: 38)
+                .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(isActive ? RaverTheme.accent.opacity(0.45) : RaverTheme.secondaryText.opacity(0.12), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func activeFilterChip(_ title: String) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(RaverTheme.secondaryText)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                Capsule()
+                    .fill(RaverTheme.card)
+            )
+    }
+
+    @MainActor
+    private func refreshCurrentScope() async {
+        if selectedScope == .all {
+            await viewModel.reloadAll(query: allQuery, force: true)
+        }
+        await viewModel.reloadMarkedState(isLoggedIn: appState.session != nil, force: true)
+    }
+
+    @MainActor
+    private func refreshAfterCreate() async {
+        await viewModel.reloadAll(query: allQuery, force: true)
+        await viewModel.reloadMarkedState(isLoggedIn: appState.session != nil, force: true)
+    }
+
+    private func scheduleSearchCommit(for rawValue: String) {
+        searchDebounceTask?.cancel()
+        let candidate = rawValue
+        searchDebounceTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                appliedSearchText = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+    }
+
+    private func commitSearchImmediately() {
+        searchDebounceTask?.cancel()
+        appliedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func clearSearch() {
+        searchDebounceTask?.cancel()
+        searchText = ""
+        appliedSearchText = ""
+    }
+
+    private func clearCountryFilters() {
+        selectedAreaBuckets.removeAll()
+        selectedContinentBuckets.removeAll()
+        selectedCountries.removeAll()
+    }
+
+    private func typeChipID(for value: String) -> String {
+        value.isEmpty ? "__all__" : value
+    }
+
+    private func eventMatchesSearch(_ event: WebEvent) -> Bool {
+        guard let normalizedQuery = normalizedSearchToken(appliedSearchText) else {
+            return true
+        }
+
+        let searchableValues: [String?] = [
+            event.name,
+            event.nameI18n?.en,
+            event.nameI18n?.zh,
+            event.city,
+            event.country,
+            event.venueName,
+            event.venueAddress,
+            event.organizerName,
+            event.summaryLocation,
+            EventTypeOption.displayText(for: event.eventType)
+        ]
+
+        return searchableValues.contains { value in
+            guard let token = normalizedSearchToken(value) else { return false }
+            return token.contains(normalizedQuery)
+        }
     }
 
     private func eventMatchesSelectedType(_ event: WebEvent) -> Bool {
-        EventTypeOption.matches(rawValue: event.eventType, selectedKey: selectedEventType)
+        guard !selectedEventType.isEmpty else { return true }
+        return EventTypeOption.matches(rawValue: event.eventType, selectedKey: selectedEventType)
     }
 
     private func eventMatchesCountryFilter(_ event: WebEvent) -> Bool {
         guard isCountryFilterActive else { return true }
 
-        let normalizedCountry = normalizedCountryToken(event.country)
+        let normalizedCountry = normalizedSearchToken(event.country)
 
         if !selectedAreaBuckets.isEmpty {
             guard let normalizedCountry else { return false }
             let isDomestic = Self.chinaCountryTokens.contains(normalizedCountry)
             let selectedDomestic = selectedAreaBuckets.contains(.domestic)
             let selectedForeign = selectedAreaBuckets.contains(.foreign)
+
             if !(selectedDomestic && selectedForeign) {
                 if selectedDomestic && !isDomestic {
                     return false
@@ -875,7 +1371,7 @@ struct EventsModuleView: View {
         }
 
         if !selectedCountries.isEmpty {
-            let selectedCountryTokens = Set(selectedCountries.compactMap { normalizedCountryToken($0) })
+            let selectedCountryTokens = Set(selectedCountries.compactMap(normalizedSearchToken))
             guard let normalizedCountry, selectedCountryTokens.contains(normalizedCountry) else {
                 return false
             }
@@ -885,14 +1381,15 @@ struct EventsModuleView: View {
     }
 
     private func continentBucket(for country: String?) -> ContinentBucket? {
-        guard let token = normalizedCountryToken(country) else { return nil }
+        guard let token = normalizedSearchToken(country) else { return nil }
         return Self.continentBucketByCountryToken[token]
     }
 
-    private func normalizedCountryToken(_ raw: String?) -> String? {
+    private func normalizedSearchToken(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
+
         let folded = trimmed.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
         let lowercased = folded.lowercased()
         let normalized = lowercased.replacingOccurrences(
@@ -900,7 +1397,35 @@ struct EventsModuleView: View {
             with: "",
             options: .regularExpression
         )
+
         return normalized.isEmpty ? nil : normalized
+    }
+
+    @MainActor
+    private func presentEventDetail(_ event: WebEvent) {
+        guard !showCreate, !showCalendar, !showCountryFilter else { return }
+        discoverPush(.eventDetail(eventID: event.id))
+    }
+
+    private func eventActionButton(for event: WebEvent) -> some View {
+        let starYellow = Color(red: 0.99, green: 0.82, blue: 0.22)
+        let isMarked = viewModel.markedCheckinIDsByEventID[event.id] != nil
+
+        return Button {
+            Task {
+                await viewModel.toggleMarked(event: event, isLoggedIn: appState.session != nil)
+            }
+        } label: {
+            Image(systemName: isMarked ? "star.fill" : "star")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(isMarked ? .white : RaverTheme.secondaryText)
+                .frame(width: 34, height: 34)
+                .background(
+                    Circle()
+                        .fill(isMarked ? starYellow : RaverTheme.card.opacity(0.92))
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private static let chinaCountryTokens: Set<String> = [
@@ -962,193 +1487,6 @@ struct EventsModuleView: View {
         "肯尼亚": .africa, "kenya": .africa,
         "尼日利亚": .africa, "nigeria": .africa
     ]
-
-    private var calendarSourceEvents: [WebEvent] {
-        var lookup: [String: WebEvent] = [:]
-        for event in events + ongoingEvents + endedEvents + myPublishedEvents + markedEvents {
-            lookup[event.id] = event
-        }
-        return lookup.values.sorted(by: { $0.startDate < $1.startDate })
-    }
-
-    private func mergeUnique(_ source: [WebEvent], excluding other: [WebEvent]) -> [WebEvent] {
-        let excluded = Set(other.map(\.id))
-        return source.filter { !excluded.contains($0.id) }
-    }
-
-    private func fetchEventsByIDs(_ ids: [String]) async -> [WebEvent] {
-        guard !ids.isEmpty else { return [] }
-        let loaded = await withTaskGroup(of: WebEvent?.self, returning: [WebEvent].self) { group in
-            for id in ids.sorted() {
-                group.addTask {
-                    try? await service.fetchEvent(id: id)
-                }
-            }
-            var result: [WebEvent] = []
-            for await item in group {
-                if let item {
-                    result.append(item)
-                }
-            }
-            return result
-        }
-        return loaded.sorted(by: { $0.startDate < $1.startDate })
-    }
-
-    @ViewBuilder
-    private var allEventsContent: some View {
-        if filteredUpcomingEvents.isEmpty {
-            ContentUnavailableView(LL("暂无活动"), systemImage: "calendar.badge.plus")
-        } else {
-            ScrollView {
-                LazyVStack(spacing: 14) {
-                    ForEach(filteredUpcomingEvents) { event in
-                        ZStack(alignment: .bottomTrailing) {
-                            Button {
-                                presentEventDetail(event)
-                            } label: {
-                                EventRow(event: event)
-                            }
-                            .buttonStyle(.plain)
-
-                            eventActionButtons(event)
-                                .padding(.bottom, 10)
-                                .padding(.trailing, 10)
-                        }
-                    }
-
-                    if page <= totalPages && !filteredUpcomingEvents.isEmpty {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .padding(.vertical, 10)
-                            Spacer()
-                        }
-                        .onAppear {
-                            Task { await loadMore() }
-                        }
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.top, 6)
-                .padding(.bottom, 18)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var myEventsContent: some View {
-        if filteredMarkedEvents.isEmpty {
-            ContentUnavailableView(LL("暂无收藏活动"), systemImage: "star.circle")
-        } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(filteredMarkedEvents) { event in
-                        ZStack(alignment: .bottomTrailing) {
-                            Button {
-                                presentEventDetail(event)
-                            } label: {
-                                EventRow(event: event)
-                            }
-                            .buttonStyle(.plain)
-
-                            eventActionButtons(event)
-                                .padding(.bottom, 10)
-                                .padding(.trailing, 10)
-                        }
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.top, 6)
-                .padding(.bottom, 18)
-            }
-        }
-    }
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.headline)
-            .foregroundStyle(RaverTheme.primaryText)
-            .padding(.top, 6)
-            .padding(.bottom, 2)
-    }
-
-    private func eventTypeChip(title: String, value: String) -> some View {
-        let isSelected = selectedEventType == value
-        return Button {
-            selectedEventType = value
-        } label: {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(isSelected ? Color.white : RaverTheme.secondaryText)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(
-                    Capsule()
-                        .fill(isSelected ? RaverTheme.accent : RaverTheme.card)
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func eventTopIconButton(systemName: String, isActive: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(isActive ? RaverTheme.accent : RaverTheme.primaryText)
-                .frame(width: 32, height: 32)
-                .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(isActive ? RaverTheme.accent.opacity(0.45) : RaverTheme.secondaryText.opacity(0.12), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var myEventsScopeChip: some View {
-        let isSelected = selectedScope == .mine
-        return Button {
-            selectedScope = isSelected ? .all : .mine
-        } label: {
-            Image(systemName: isSelected ? "star.fill" : "star")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(isSelected ? Color.white : RaverTheme.secondaryText)
-                .frame(width: 30, height: 30)
-                .background(
-                    Circle()
-                        .fill(isSelected ? RaverTheme.accent : RaverTheme.card)
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
-    @MainActor
-    private func presentEventDetail(_ event: WebEvent) {
-        // Avoid presenting detail while another sheet is in-flight.
-        guard !showCreate, !showCalendar, !showCountryFilter else { return }
-        guard selectedEventForDetail == nil else { return }
-        DispatchQueue.main.async {
-            selectedEventForDetail = event
-        }
-    }
-
-    private func eventActionButtons(_ event: WebEvent) -> some View {
-        let starYellow = Color(red: 0.99, green: 0.82, blue: 0.22)
-        return Button {
-            Task { await toggleMarked(event: event) }
-        } label: {
-            Image(systemName: isMarked(event.id) ? "star.fill" : "star")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(isMarked(event.id) ? .white : RaverTheme.secondaryText)
-                .frame(width: 34, height: 34)
-                .background(
-                    Circle()
-                        .fill(isMarked(event.id) ? starYellow : RaverTheme.card.opacity(0.92))
-                )
-        }
-        .buttonStyle(.plain)
-    }
 }
 
 struct DiscoverFullScreenSearchInputView: View {
@@ -1341,47 +1679,44 @@ private struct DiscoverSearchResultHeader: View {
 }
 
 struct EventsSearchResultsView: View {
-    private let service = AppEnvironment.makeWebService()
-    let query: String
+    @Environment(\.discoverPush) private var discoverPush
+    @StateObject private var viewModel: EventsSearchResultsViewModel
 
-    @State private var events: [WebEvent] = []
-    @State private var page = 1
-    @State private var totalPages = 1
-    @State private var isLoading = false
-    @State private var selectedEventForDetail: WebEvent?
-    @State private var errorMessage: String?
+    init(viewModel: EventsSearchResultsViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
 
     var body: some View {
         VStack(spacing: 10) {
             DiscoverSearchResultHeader(
                 title: L("活动搜索结果", "Event Results"),
-                query: query,
-                resultCount: events.isEmpty ? nil : events.count
+                query: viewModel.query,
+                resultCount: viewModel.events.isEmpty ? nil : viewModel.events.count
             )
 
             Group {
-                if isLoading && events.isEmpty {
+                if viewModel.isLoading && viewModel.events.isEmpty {
                     ProgressView(L("搜索中...", "Searching..."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if events.isEmpty {
+                } else if viewModel.events.isEmpty {
                     ContentUnavailableView(
                         L("未找到活动", "No events found"),
                         systemImage: "magnifyingglass",
-                        description: Text(L("关键词：\(query)", "Keyword: \(query)"))
+                        description: Text(L("关键词：\(viewModel.query)", "Keyword: \(viewModel.query)"))
                     )
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 14) {
-                            ForEach(events) { event in
+                            ForEach(viewModel.events) { event in
                                 Button {
-                                    selectedEventForDetail = event
+                                    discoverPush(.eventDetail(eventID: event.id))
                                 } label: {
                                     EventRow(event: event)
                                 }
                                 .buttonStyle(.plain)
                             }
 
-                            if page <= totalPages {
+                            if viewModel.canLoadMore {
                                 HStack {
                                     Spacer()
                                     ProgressView()
@@ -1389,7 +1724,9 @@ struct EventsSearchResultsView: View {
                                     Spacer()
                                 }
                                 .onAppear {
-                                    Task { await loadMore() }
+                                    Task {
+                                        await viewModel.loadMoreIfNeeded(currentEvent: viewModel.events.last)
+                                    }
                                 }
                             }
                         }
@@ -1407,89 +1744,52 @@ struct EventsSearchResultsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .task {
-            await reload()
+            await viewModel.loadIfNeeded()
         }
         .refreshable {
-            await reload()
-        }
-        .fullScreenCover(item: $selectedEventForDetail, onDismiss: {
-            selectedEventForDetail = nil
-        }) { event in
-            NavigationStack {
-                EventDetailView(eventID: event.id)
-            }
+            await viewModel.refresh()
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
         )) {
             Button(L("确定", "OK"), role: .cancel) {}
         } message: {
-            Text(errorMessage ?? "")
-        }
-    }
-
-    private func reload() async {
-        page = 1
-        totalPages = 1
-        events = []
-        await loadMore()
-    }
-
-    private func loadMore() async {
-        guard !isLoading else { return }
-        guard page <= totalPages else { return }
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let result = try await service.fetchEvents(
-                page: page,
-                limit: 20,
-                search: query,
-                eventType: nil,
-                status: "all"
-            )
-            events.append(contentsOf: result.items)
-            totalPages = result.pagination?.totalPages ?? 1
-            page += 1
-        } catch {
-            errorMessage = error.userFacingMessage
+            Text(viewModel.errorMessage ?? "")
         }
     }
 }
 
 struct NewsSearchResultsView: View {
-    private let socialService = AppEnvironment.makeService()
-    let query: String
-
-    @State private var articles: [DiscoverNewsArticle] = []
-    @State private var isLoading = false
+    @StateObject private var viewModel: NewsSearchResultsViewModel
     @State private var selectedArticleForDetail: DiscoverNewsArticle?
-    @State private var errorMessage: String?
+
+    init(viewModel: NewsSearchResultsViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
 
     var body: some View {
         VStack(spacing: 10) {
             DiscoverSearchResultHeader(
                 title: L("资讯搜索结果", "News Results"),
-                query: query,
-                resultCount: articles.isEmpty ? nil : articles.count
+                query: viewModel.query,
+                resultCount: viewModel.articles.isEmpty ? nil : viewModel.articles.count
             )
 
             Group {
-                if isLoading && articles.isEmpty {
+                if viewModel.isLoading && viewModel.articles.isEmpty {
                     ProgressView(L("搜索中...", "Searching..."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if articles.isEmpty {
+                } else if viewModel.articles.isEmpty {
                     ContentUnavailableView(
                         L("未找到资讯", "No news found"),
                         systemImage: "newspaper",
-                        description: Text(L("关键词：\(query)", "Keyword: \(query)"))
+                        description: Text(L("关键词：\(viewModel.query)", "Keyword: \(viewModel.query)"))
                     )
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
+                            ForEach(Array(viewModel.articles.enumerated()), id: \.element.id) { index, article in
                                 Button {
                                     selectedArticleForDetail = article
                                 } label: {
@@ -1498,7 +1798,7 @@ struct NewsSearchResultsView: View {
                                 .buttonStyle(.plain)
                                 .contentShape(Rectangle())
 
-                                if index < articles.count - 1 {
+                                if index < viewModel.articles.count - 1 {
                                     Divider()
                                         .padding(.leading, 16)
                                 }
@@ -1515,39 +1815,23 @@ struct NewsSearchResultsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .task {
-            await load()
+            await viewModel.loadIfNeeded()
         }
         .refreshable {
-            await load()
+            await viewModel.refresh()
         }
         .fullScreenCover(item: $selectedArticleForDetail) { article in
-            NavigationStack {
+            DiscoverCoordinatorView {
                 DiscoverNewsDetailView(article: article)
             }
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
         )) {
             Button(L("确定", "OK"), role: .cancel) {}
         } message: {
-            Text(errorMessage ?? "")
-        }
-    }
-
-    @MainActor
-    private func load() async {
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let page = try await socialService.searchFeed(query: query)
-            articles = page.posts
-                .compactMap { DiscoverNewsCodec.decode(post: $0) }
-                .sorted(by: { $0.publishedAt > $1.publishedAt })
-        } catch {
-            errorMessage = error.userFacingMessage
+            Text(viewModel.errorMessage ?? "")
         }
     }
 }
@@ -1649,7 +1933,7 @@ struct DJsSearchResultsView: View {
             await load()
         }
         .fullScreenCover(item: $selectedDJForDetail) { dj in
-            NavigationStack {
+            DiscoverCoordinatorView {
                 DJDetailView(djID: dj.id)
             }
         }
@@ -1877,7 +2161,7 @@ struct WikiSearchResultsView: View {
             }
         }
         .fullScreenCover(item: $selectedFestivalForDetail) { festival in
-            NavigationStack {
+            DiscoverCoordinatorView {
                 LearnFestivalDetailView(festival: festival)
             }
         }
@@ -2136,6 +2420,7 @@ private struct EventCountryFilterSheet: View {
 
 struct RecommendEventsModuleView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.discoverPush) private var discoverPush
     private let service = AppEnvironment.makeWebService()
     private let cardCornerRadius: CGFloat = 28
     private static var didRegisterAlteHaasFont = false
@@ -2144,7 +2429,6 @@ struct RecommendEventsModuleView: View {
     @State private var events: [WebEvent] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var selectedEventIDForDetail: String?
     @State private var markedCheckinIDsByEventID: [String: String] = [:]
     @State private var scrollPositionID: String?
     @State private var isLoopJumping = false
@@ -2183,18 +2467,6 @@ struct RecommendEventsModuleView: View {
             }
             .refreshable {
                 await reload()
-            }
-            .fullScreenCover(
-                isPresented: Binding(
-                    get: { selectedEventIDForDetail != nil },
-                    set: { if !$0 { selectedEventIDForDetail = nil } }
-                )
-            ) {
-                if let eventID = selectedEventIDForDetail {
-                    NavigationStack {
-                        EventDetailView(eventID: eventID)
-                    }
-                }
             }
             .alert(L("提示", "Notice"), isPresented: Binding(
                 get: { errorMessage != nil },
@@ -2328,7 +2600,7 @@ struct RecommendEventsModuleView: View {
             let cardShape = RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
 
             Button {
-                selectedEventIDForDetail = event.id
+                discoverPush(.eventDetail(eventID: event.id))
             } label: {
                 ZStack {
                     // 先把图片限制在卡片框中并裁剪，后续文字层再覆盖其上。
@@ -5160,7 +5432,7 @@ struct EventDetailView: View {
             }
         }
         .fullScreenCover(item: $selectedArticleForDetail) { article in
-            NavigationStack {
+            DiscoverCoordinatorView {
                 DiscoverNewsDetailView(article: article)
             }
         }
@@ -11576,7 +11848,7 @@ private struct EventLocationPickerSheet: View {
     }
 }
 
-private enum DiscoverNewsCategory: String, CaseIterable, Identifiable {
+enum DiscoverNewsCategory: String, CaseIterable, Identifiable {
     case all = "all"
     case festival = "festival"
     case scene = "scene"
@@ -11632,7 +11904,7 @@ private enum DiscoverNewsCategory: String, CaseIterable, Identifiable {
     }
 }
 
-private struct DiscoverNewsDraft {
+struct DiscoverNewsDraft {
     var category: DiscoverNewsCategory
     var source: String
     var title: String
@@ -11645,7 +11917,7 @@ private struct DiscoverNewsDraft {
     var boundEventIDs: [String] = []
 }
 
-private struct DiscoverNewsArticle: Identifiable, Hashable {
+struct DiscoverNewsArticle: Identifiable, Hashable {
     let id: String
     let category: DiscoverNewsCategory
     let source: String
@@ -11666,7 +11938,7 @@ private struct DiscoverNewsArticle: Identifiable, Hashable {
     let boundEventIDs: [String]
 }
 
-private enum DiscoverNewsCodec {
+enum DiscoverNewsCodec {
     static let marker = Post.raverNewsMarker
 
     static func encode(_ draft: DiscoverNewsDraft) -> String {
@@ -11941,7 +12213,7 @@ struct NewsModuleView: View {
                 }
             }
             .fullScreenCover(item: $selectedArticleForDetail) { article in
-                NavigationStack {
+                DiscoverCoordinatorView {
                     DiscoverNewsDetailView(article: article)
                 }
             }
@@ -12125,6 +12397,7 @@ private struct DiscoverNewsRow: View {
 
 private struct DiscoverNewsDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.discoverPush) private var discoverPush
     private let webService = AppEnvironment.makeWebService()
     private let socialService = AppEnvironment.makeService()
 
@@ -12140,7 +12413,6 @@ private struct DiscoverNewsDetailView: View {
     @State private var isSendingComment = false
     @State private var commentInput = ""
     @State private var selectedDJIDForDetail: String?
-    @State private var selectedEventIDForDetail: String?
     @State private var selectedBrandForDetail: LearnFestival?
     @State private var errorMessage: String?
 
@@ -12288,25 +12560,13 @@ private struct DiscoverNewsDetailView: View {
             )
         ) {
             if let djID = selectedDJIDForDetail {
-                NavigationStack {
+                DiscoverCoordinatorView {
                     DJDetailView(djID: djID)
                 }
             }
         }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedEventIDForDetail != nil },
-                set: { if !$0 { selectedEventIDForDetail = nil } }
-            )
-        ) {
-            if let eventID = selectedEventIDForDetail {
-                NavigationStack {
-                    EventDetailView(eventID: eventID)
-                }
-            }
-        }
         .fullScreenCover(item: $selectedBrandForDetail) { festival in
-            NavigationStack {
+            DiscoverCoordinatorView {
                 LearnFestivalDetailView(festival: festival)
             }
         }
@@ -12425,7 +12685,7 @@ private struct DiscoverNewsDetailView: View {
 
                     ForEach(relatedEvents) { event in
                         Button {
-                            selectedEventIDForDetail = event.id
+                            discoverPush(.eventDetail(eventID: event.id))
                         } label: {
                             Label(event.name, systemImage: "calendar")
                                 .font(.caption2.weight(.semibold))
@@ -12440,7 +12700,7 @@ private struct DiscoverNewsDetailView: View {
 
                     ForEach(unresolvedBoundEventIDs, id: \.self) { id in
                         Button {
-                            selectedEventIDForDetail = id
+                            discoverPush(.eventDetail(eventID: id))
                         } label: {
                             Label("Event \(shortIDLabel(id))", systemImage: "calendar")
                                 .font(.caption2.weight(.semibold))
@@ -13903,7 +14163,7 @@ struct DJsModuleView: View {
                 await load()
             }
             .fullScreenCover(item: $selectedDJForDetail) { dj in
-                NavigationStack {
+                DiscoverCoordinatorView {
                     DJDetailView(djID: dj.id)
                 }
             }
@@ -15638,6 +15898,7 @@ private final class DJDetailScrollViewController: UIViewController {
 struct DJDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.discoverPush) private var discoverPush
     @EnvironmentObject private var appState: AppState
     private let service = AppEnvironment.makeWebService()
     private let socialService = AppEnvironment.makeService()
@@ -15650,7 +15911,6 @@ struct DJDetailView: View {
     @State private var ratingUnits: [WebRatingUnit] = []
     @State private var watchedSetCount = 0
     @State private var isLoading = false
-    @State private var selectedEventIDForDetail: String?
     @State private var selectedContributorUser: WebUserLite?
     @State private var errorMessage: String?
     @State private var selectedTab: DJDetailTab = .intro
@@ -15758,20 +16018,8 @@ struct DJDetailView: View {
         .overlay(alignment: .top) {
             floatingTopBar
         }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedEventIDForDetail != nil },
-                set: { if !$0 { selectedEventIDForDetail = nil } }
-            )
-        ) {
-            if let eventID = selectedEventIDForDetail {
-                NavigationStack {
-                    EventDetailView(eventID: eventID)
-                }
-            }
-        }
         .fullScreenCover(item: $selectedArticleForDetail) { article in
-            NavigationStack {
+            DiscoverCoordinatorView {
                 DiscoverNewsDetailView(article: article)
             }
         }
@@ -16853,7 +17101,7 @@ struct DJDetailView: View {
         } else {
             ForEach(djEvents) { event in
                 Button {
-                    selectedEventIDForDetail = event.id
+                    discoverPush(.eventDetail(eventID: event.id))
                 } label: {
                     historyEventRow(event)
                 }
@@ -17466,6 +17714,7 @@ struct DJSetDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.discoverPush) private var discoverPush
     @EnvironmentObject private var appState: AppState
     private let service = AppEnvironment.makeWebService()
 
@@ -17514,7 +17763,6 @@ struct DJSetDetailView: View {
     @State private var isTracklistHidden = false
     @State private var isScrubbingProgress = false
     @State private var relatedEvent: WebEvent?
-    @State private var selectedRelatedEventID: String?
     @State private var audioListenSetID: String?
 
     init(setID: String, playbackMode: PlaybackMode = .video) {
@@ -17611,18 +17859,6 @@ struct DJSetDetailView: View {
         }
         .navigationDestination(item: $selectedCommentUser) { user in
             UserProfileView(userID: user.id)
-        }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedRelatedEventID != nil },
-                set: { if !$0 { selectedRelatedEventID = nil } }
-            )
-        ) {
-            if let relatedEventID = selectedRelatedEventID {
-                NavigationStack {
-                    EventDetailView(eventID: relatedEventID)
-                }
-            }
         }
         .fullScreenCover(
             isPresented: Binding(
@@ -17768,7 +18004,7 @@ struct DJSetDetailView: View {
         let linkedEventName = (set.eventName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if let relatedEvent {
             Button {
-                selectedRelatedEventID = relatedEvent.id
+                discoverPush(.eventDetail(eventID: relatedEvent.id))
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "calendar.badge.clock")
@@ -21541,7 +21777,7 @@ struct LearnModuleView: View {
                 }
             }
             .fullScreenCover(item: $selectedFestivalForDetail) { festival in
-                NavigationStack {
+                DiscoverCoordinatorView {
                     LearnFestivalDetailView(festival: festival) { updated in
                         updateFestival(updated)
                     }
@@ -23365,7 +23601,7 @@ private struct LearnFestivalRankingDetailView: View {
             rankingTopBar
         }
         .fullScreenCover(item: $selectedFestivalForDetail) { festival in
-            NavigationStack {
+            DiscoverCoordinatorView {
                 LearnFestivalDetailView(festival: festival) { updated in
                     onFestivalUpdated(updated)
                     if let index = displayedRankedFestivals.firstIndex(where: { $0.festival.id == updated.id }) {
@@ -23605,6 +23841,7 @@ private struct LearnFestivalDetailTabFramePreferenceKey: PreferenceKey {
 
 private struct LearnFestivalDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.discoverPush) private var discoverPush
     @EnvironmentObject private var appState: AppState
     private let service = AppEnvironment.makeWebService()
     private let socialService = AppEnvironment.makeService()
@@ -23623,7 +23860,6 @@ private struct LearnFestivalDetailView: View {
     @State private var relatedEvents: [WebEvent] = []
     @State private var relatedArticles: [DiscoverNewsArticle] = []
     @State private var isLoadingRelatedContent = false
-    @State private var selectedEventIDForDetail: String?
     @State private var selectedArticleForDetail: DiscoverNewsArticle?
     @State private var errorMessage: String?
     @State private var showCreateEventSheet = false
@@ -23706,20 +23942,8 @@ private struct LearnFestivalDetailView: View {
         .fullScreenCover(item: $previewImage) { item in
             LearnLabelImagePreviewView(item: item)
         }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedEventIDForDetail != nil },
-                set: { if !$0 { selectedEventIDForDetail = nil } }
-            )
-        ) {
-            if let eventID = selectedEventIDForDetail {
-                NavigationStack {
-                    EventDetailView(eventID: eventID)
-                }
-            }
-        }
         .fullScreenCover(item: $selectedArticleForDetail) { article in
-            NavigationStack {
+            DiscoverCoordinatorView {
                 DiscoverNewsDetailView(article: article)
             }
         }
@@ -23989,7 +24213,7 @@ private struct LearnFestivalDetailView: View {
                     festivalEventsSectionHeader(L("即将开始", "Upcoming"))
                     ForEach(upcomingRelatedEvents) { event in
                         Button {
-                            selectedEventIDForDetail = event.id
+                            discoverPush(.eventDetail(eventID: event.id))
                         } label: {
                             festivalEventRow(event)
                         }
@@ -24001,7 +24225,7 @@ private struct LearnFestivalDetailView: View {
                     festivalEventsSectionHeader(L("已结束活动", "Ended"))
                     ForEach(endedRelatedEvents) { event in
                         Button {
-                            selectedEventIDForDetail = event.id
+                            discoverPush(.eventDetail(eventID: event.id))
                         } label: {
                             festivalEventRow(event)
                         }
@@ -25132,12 +25356,12 @@ private struct RankingBoardDetailView: View {
             Text(errorMessage ?? "")
         }
         .fullScreenCover(item: $selectedDJForDetail) { dj in
-            NavigationStack {
+            DiscoverCoordinatorView {
                 DJDetailView(djID: dj.id)
             }
         }
         .fullScreenCover(item: $selectedFestivalForDetail) { festival in
-            NavigationStack {
+            DiscoverCoordinatorView {
                 LearnFestivalDetailView(festival: festival)
             }
         }

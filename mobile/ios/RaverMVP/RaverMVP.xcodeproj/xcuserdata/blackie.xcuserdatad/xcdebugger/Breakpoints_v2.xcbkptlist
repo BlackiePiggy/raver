@@ -30,10 +30,10 @@
             filePath = "RaverMVP/Features/Discover/WebModulesView.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "2966"
-            endingLineNumber = "2966"
-            landmarkName = "body"
-            landmarkType = "24">
+            startingLineNumber = "2967"
+            endingLineNumber = "2967"
+            landmarkName = "loadPersonalEventCheckins()"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -46,10 +46,10 @@
             filePath = "RaverMVP/Features/Discover/WebModulesView.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "2965"
-            endingLineNumber = "2965"
-            landmarkName = "body"
-            landmarkType = "24">
+            startingLineNumber = "2966"
+            endingLineNumber = "2966"
+            landmarkName = "loadPersonalEventCheckins()"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -62,8 +62,8 @@
             filePath = "RaverMVP/Features/Discover/WebModulesView.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "5061"
-            endingLineNumber = "5061"
+            startingLineNumber = "5062"
+            endingLineNumber = "5062"
             landmarkName = "body"
             landmarkType = "24">
          </BreakpointContent>
@@ -78,9 +78,9 @@
             filePath = "RaverMVP/Features/Discover/WebModulesView.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "4200"
-            endingLineNumber = "4200"
-            landmarkName = "djAvatar(_:size:)"
+            startingLineNumber = "4201"
+            endingLineNumber = "4201"
+            landmarkName = "daySelectionCard(_:)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -94,10 +94,10 @@
             filePath = "RaverMVP/Features/Discover/WebModulesView.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "4218"
-            endingLineNumber = "4218"
-            landmarkName = "DJCheckinSubmission"
-            landmarkType = "13">
+            startingLineNumber = "4219"
+            endingLineNumber = "4219"
+            landmarkName = "daySelectionCard(_:)"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -110,10 +110,10 @@
             filePath = "RaverMVP/Features/Discover/WebModulesView.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "5172"
-            endingLineNumber = "5172"
-            landmarkName = "body"
-            landmarkType = "24">
+            startingLineNumber = "5173"
+            endingLineNumber = "5173"
+            landmarkName = "externalMapURL(for:)"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

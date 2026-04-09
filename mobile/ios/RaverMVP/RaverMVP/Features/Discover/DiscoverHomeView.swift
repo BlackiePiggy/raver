@@ -1,96 +1,5 @@
 import SwiftUI
 
-enum DiscoverSearchDomain: String, Hashable {
-    case events
-    case news
-    case djs
-    case sets
-    case wiki
-}
-
-enum DiscoverRoute: Hashable {
-    case searchInput(
-        domain: DiscoverSearchDomain,
-        initialQuery: String = "",
-        preferredWikiSectionRaw: String? = nil
-    )
-    case searchResults(
-        domain: DiscoverSearchDomain,
-        query: String,
-        preferredWikiSectionRaw: String? = nil
-    )
-}
-
-struct DiscoverPushKey: EnvironmentKey {
-    static let defaultValue: (DiscoverRoute) -> Void = { _ in }
-}
-
-extension EnvironmentValues {
-    var discoverPush: (DiscoverRoute) -> Void {
-        get { self[DiscoverPushKey.self] }
-        set { self[DiscoverPushKey.self] = newValue }
-    }
-}
-
-extension DiscoverSearchDomain {
-    var searchTitle: String {
-        switch self {
-        case .events:
-            return L("搜索活动", "Search Events")
-        case .news:
-            return L("搜索资讯", "Search News")
-        case .djs:
-            return L("搜索 DJ / 榜单", "Search DJs / Rankings")
-        case .sets:
-            return L("搜索 Sets", "Search Sets")
-        case .wiki:
-            return L("搜索 Wiki", "Search Wiki")
-        }
-    }
-
-    var searchPlaceholder: String {
-        switch self {
-        case .events:
-            return L("输入活动名称 / 城市 / 国家", "Enter event name / city / country")
-        case .news:
-            return L("输入资讯标题 / 来源 / 关键词", "Enter title / source / keyword")
-        case .djs:
-            return L("输入 DJ 名称或榜单关键词", "Enter DJ name or ranking keyword")
-        case .sets:
-            return L("输入 Sets 标题 / DJ 名称", "Enter set title / DJ name")
-        case .wiki:
-            return L("输入厂牌 / 电音节关键词", "Enter label / festival keyword")
-        }
-    }
-
-    @ViewBuilder
-    func resultsView(query: String, preferredWikiSectionRaw: String?) -> some View {
-        switch self {
-        case .events:
-            EventsSearchResultsView(query: query)
-        case .news:
-            NewsSearchResultsView(query: query)
-        case .djs:
-            DJsSearchResultsView(query: query)
-        case .sets:
-            SetsSearchResultsView(query: query)
-        case .wiki:
-            WikiSearchResultsView(
-                query: query,
-                preferredSection: {
-                    guard
-                        let raw = preferredWikiSectionRaw,
-                        let section = LearnModuleSection(rawValue: raw)
-                    else {
-                        return .labels
-                    }
-                    return section
-                }()
-            )
-        }
-    }
-}
-
 struct DiscoverHomeView: View {
     fileprivate enum Section: String, CaseIterable, Identifiable {
         case recommend
@@ -129,56 +38,46 @@ struct DiscoverHomeView: View {
     @State private var pageProgress: CGFloat = 0
     @State private var tabFrames: [Section: CGRect] = [:]
     @State private var pagerWidth: CGFloat = 1
-    @State private var navPath: [DiscoverRoute] = []
 
     var body: some View {
-        NavigationStack(path: $navPath) {
-            VStack(spacing: 0) {
-                topTabs
+        VStack(spacing: 0) {
+            topTabs
 
-                GeometryReader { proxy in
-                    TabView(selection: $section) {
-                        ForEach(Section.allCases) { item in
-                            pageView(for: item)
-                                .tag(item)
-                                .background(
-                                    GeometryReader { geo in
-                                        Color.clear.preference(
-                                            key: DiscoverPageOffsetPreferenceKey.self,
-                                            value: [item: geo.frame(in: .named("DiscoverPager")).minX]
-                                        )
-                                    }
-                                )
-                        }
-                    }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    .coordinateSpace(name: "DiscoverPager")
-                    .onAppear {
-                        pagerWidth = max(1, proxy.size.width)
-                        pageProgress = CGFloat(selectedIndex(for: section))
-                    }
-                    .onChange(of: proxy.size.width) { _, newValue in
-                        pagerWidth = max(1, newValue)
-                    }
-                    .onChange(of: section) { _, newValue in
-                        withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.82)) {
-                            pageProgress = CGFloat(selectedIndex(for: newValue))
-                        }
-                    }
-                    .onPreferenceChange(DiscoverPageOffsetPreferenceKey.self) { values in
-                        updatePageProgress(with: values)
+            GeometryReader { proxy in
+                TabView(selection: $section) {
+                    ForEach(Section.allCases) { item in
+                        pageView(for: item)
+                            .tag(item)
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear.preference(
+                                        key: DiscoverPageOffsetPreferenceKey.self,
+                                        value: [item: geo.frame(in: .named("DiscoverPager")).minX]
+                                    )
+                                }
+                            )
                     }
                 }
-            }
-            .navigationBarHidden(true)
-            .navigationDestination(for: DiscoverRoute.self) { route in
-                routeDestination(route)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .coordinateSpace(name: "DiscoverPager")
+                .onAppear {
+                    pagerWidth = max(1, proxy.size.width)
+                    pageProgress = CGFloat(selectedIndex(for: section))
+                }
+                .onChange(of: proxy.size.width) { _, newValue in
+                    pagerWidth = max(1, newValue)
+                }
+                .onChange(of: section) { _, newValue in
+                    withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.82)) {
+                        pageProgress = CGFloat(selectedIndex(for: newValue))
+                    }
+                }
+                .onPreferenceChange(DiscoverPageOffsetPreferenceKey.self) { values in
+                    updatePageProgress(with: values)
+                }
             }
         }
         .background(RaverTheme.background)
-        .environment(\.discoverPush) { route in
-            navPath.append(route)
-        }
     }
 
     private var topTabs: some View {
@@ -256,31 +155,6 @@ struct DiscoverHomeView: View {
             SetsModuleView()
         case .learn:
             LearnModuleView()
-        }
-    }
-
-    @ViewBuilder
-    private func routeDestination(_ route: DiscoverRoute) -> some View {
-        switch route {
-        case .searchInput(let domain, let initialQuery, let preferredWikiSectionRaw):
-            DiscoverFullScreenSearchInputView(
-                title: domain.searchTitle,
-                placeholder: domain.searchPlaceholder,
-                initialQuery: initialQuery
-            ) { keyword in
-                navPath.append(
-                    .searchResults(
-                        domain: domain,
-                        query: keyword,
-                        preferredWikiSectionRaw: preferredWikiSectionRaw
-                    )
-                )
-            }
-            .toolbar(.hidden, for: .tabBar)
-
-        case .searchResults(let domain, let query, let preferredWikiSectionRaw):
-            domain.resultsView(query: query, preferredWikiSectionRaw: preferredWikiSectionRaw)
-                .toolbar(.hidden, for: .tabBar)
         }
     }
 

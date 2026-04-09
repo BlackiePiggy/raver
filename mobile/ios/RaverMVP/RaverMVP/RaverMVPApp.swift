@@ -4,11 +4,25 @@ import UIKit
 @main
 struct RaverMVPApp: App {
     @UIApplicationDelegateAdaptor(RaverAppDelegate.self) private var appDelegate
-    @StateObject private var appState = AppState(service: AppEnvironment.makeService())
+    @StateObject private var appContainer: AppContainer
+    @StateObject private var appState: AppState
+
+    init() {
+        let socialService = AppEnvironment.makeService()
+        let webService = AppEnvironment.makeWebService()
+        _appContainer = StateObject(
+            wrappedValue: AppContainer(
+                socialService: socialService,
+                webService: webService
+            )
+        )
+        _appState = StateObject(wrappedValue: AppState(service: socialService))
+    }
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            AppCoordinatorView()
+                .environmentObject(appContainer)
                 .environmentObject(appState)
                 .preferredColorScheme(.dark)
         }
@@ -61,33 +75,5 @@ final class AppOrientationLock {
             scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
         }
         UIDevice.current.setValue(UIInterfaceOrientation.portrait.rawValue, forKey: "orientation")
-    }
-}
-
-struct RootView: View {
-    @EnvironmentObject private var appState: AppState
-
-    var body: some View {
-        ZStack {
-            RaverTheme.background.ignoresSafeArea()
-
-            if appState.isLoggedIn {
-                MainTabView()
-                    .id("main-tabs-\(appState.preferredLanguage.rawValue)")
-            } else {
-                LoginView()
-            }
-        }
-        .environment(\.locale, Locale(identifier: appState.preferredLanguage.localeIdentifier))
-        .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { appState.errorMessage != nil },
-            set: { newValue in
-                if !newValue { appState.errorMessage = nil }
-            }
-        )) {
-            Button(LL("知道了"), role: .cancel) {}
-        } message: {
-            Text(appState.errorMessage ?? "")
-        }
     }
 }
