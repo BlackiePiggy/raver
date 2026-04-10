@@ -28,6 +28,7 @@ private struct EventDetailPageOffsetPreferenceKey: PreferenceKey {
 struct EventDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.discoverPush) private var discoverPush
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
 
@@ -47,7 +48,6 @@ struct EventDetailView: View {
 
     @State private var event: WebEvent?
     @State private var isLoading = false
-    @State private var showEdit = false
     @State private var showEventCheckinSheet = false
     @State private var selectedEventCheckinDayIDs: Set<String> = []
     @State private var selectedEventCheckinDJIDsByDayID: [String: Set<String>] = [:]
@@ -65,7 +65,6 @@ struct EventDetailView: View {
     @State private var relatedArticles: [DiscoverNewsArticle] = []
     @State private var isLoadingRelatedArticles = false
     @State private var selectedRatingEventID: String?
-    @State private var selectedArticleForDetail: DiscoverNewsArticle?
     @State private var showExpandedLineupList = false
     @State private var venueMapContext: EventVenueMapContext?
 
@@ -556,11 +555,6 @@ struct EventDetailView: View {
                     }
                 )
                 .ignoresSafeArea(edges: .top)
-                .sheet(isPresented: $showEdit) {
-                    EventEditorView(mode: .edit(event)) {
-                        Task { await load() }
-                    }
-                }
                 .sheet(isPresented: $showEventCheckinSheet) {
                     EventCheckinSelectionSheet(
                         eventName: event.name,
@@ -600,33 +594,31 @@ struct EventDetailView: View {
         .overlay(alignment: .top) {
             floatingTopBar
         }
-        .fullScreenCover(
+        .navigationDestination(
             isPresented: Binding(
                 get: { selectedRatingEventID != nil },
                 set: { if !$0 { selectedRatingEventID = nil } }
             )
         ) {
             if let ratingEventID = selectedRatingEventID {
-                NavigationStack {
-                    CircleRatingEventDetailView(
-                        eventID: ratingEventID,
-                        onClose: {
-                            selectedRatingEventID = nil
-                        },
-                        onUpdated: {
-                            Task { await reloadEventRatings() }
-                        }
-                    )
-                }
-            }
-        }
-        .fullScreenCover(item: $selectedArticleForDetail) { article in
-            DiscoverCoordinatorView {
-                DiscoverNewsDetailView(article: article)
+                CircleRatingEventDetailView(
+                    eventID: ratingEventID,
+                    onClose: {
+                        selectedRatingEventID = nil
+                    },
+                    onUpdated: {
+                        Task { await reloadEventRatings() }
+                    }
+                )
             }
         }
         .task {
             await load()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { notification in
+            let savedEventID = notification.object as? String
+            guard savedEventID == nil || savedEventID == eventID else { return }
+            Task { await load() }
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { errorMessage != nil },
@@ -818,7 +810,7 @@ struct EventDetailView: View {
         } else {
             ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
                 Button {
-                    selectedArticleForDetail = article
+                    discoverPush(.newsDetail(article: article))
                 } label: {
                     DiscoverNewsRow(article: article, showsSummary: false)
                 }
@@ -1585,7 +1577,7 @@ struct EventDetailView: View {
 
             if let event, isMine(event) {
                 floatingCircleButton(systemName: "square.and.pencil") {
-                    showEdit = true
+                    discoverPush(.eventEdit(event: event))
                 }
             }
         }
@@ -3389,7 +3381,7 @@ private struct EventRoutineView: View {
                 selectedDayID = days.first?.id ?? ""
             }
         }
-        .fullScreenCover(isPresented: $showRoutePlanner) {
+        .navigationDestination(isPresented: $showRoutePlanner) {
             EventRoutePlannerView(
                 event: event,
                 days: days,

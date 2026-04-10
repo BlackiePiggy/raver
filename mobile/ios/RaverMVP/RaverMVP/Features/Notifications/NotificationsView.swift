@@ -11,97 +11,82 @@ struct NotificationsView: View {
 }
 
 private struct NotificationsScreen: View {
-    @EnvironmentObject private var appContainer: AppContainer
+    @Environment(\.profilePush) private var profilePush
     @StateObject private var viewModel: NotificationsViewModel
-    @State private var selectedUser: UserSummary?
-    @State private var selectedSquad: PostSquad?
 
     init(viewModel: NotificationsViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if viewModel.isLoading && viewModel.notifications.isEmpty {
-                    ProgressView(L("加载通知中...", "Loading notifications..."))
-                } else if viewModel.notifications.isEmpty {
-                    ContentUnavailableView(
-                        L("暂无通知", "No Notifications"),
-                        systemImage: "bell.slash",
-                        description: Text(LL("收到新的关注、点赞、评论或小队邀请后会显示在这里"))
-                    )
-                } else {
-                    List(viewModel.notifications) { item in
-                        Button {
-                            handleTap(item)
-                        } label: {
-                            HStack(alignment: .top, spacing: 12) {
-                                notificationLeadingAvatar(for: item)
+        Group {
+            if viewModel.isLoading && viewModel.notifications.isEmpty {
+                ProgressView(L("加载通知中...", "Loading notifications..."))
+            } else if viewModel.notifications.isEmpty {
+                ContentUnavailableView(
+                    L("暂无通知", "No Notifications"),
+                    systemImage: "bell.slash",
+                    description: Text(LL("收到新的关注、点赞、评论或小队邀请后会显示在这里"))
+                )
+            } else {
+                List(viewModel.notifications) { item in
+                    Button {
+                        handleTap(item)
+                    } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            notificationLeadingAvatar(for: item)
 
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(item.text)
-                                        .font(.subheadline)
-                                        .foregroundStyle(RaverTheme.primaryText)
-                                        .multilineTextAlignment(.leading)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(item.text)
+                                    .font(.subheadline)
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                    .multilineTextAlignment(.leading)
 
-                                    HStack(spacing: 8) {
-                                        Text(item.type.title)
-                                            .font(.caption)
-                                            .foregroundStyle(RaverTheme.secondaryText)
-                                        Text(item.createdAt.feedTimeText)
-                                            .font(.caption)
-                                            .foregroundStyle(RaverTheme.secondaryText)
-                                    }
+                                HStack(spacing: 8) {
+                                    Text(item.type.title)
+                                        .font(.caption)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                    Text(item.createdAt.feedTimeText)
+                                        .font(.caption)
+                                        .foregroundStyle(RaverTheme.secondaryText)
                                 }
-
-                                Spacer(minLength: 0)
                             }
-                            .padding(.vertical, 4)
+
+                            Spacer(minLength: 0)
                         }
-                        .buttonStyle(.plain)
-                        .listRowBackground(RaverTheme.card)
+                        .padding(.vertical, 4)
                     }
-                    .scrollContentBackground(.hidden)
+                    .buttonStyle(.plain)
+                    .listRowBackground(RaverTheme.card)
                 }
+                .scrollContentBackground(.hidden)
             }
-            .background(RaverTheme.background)
-            .navigationTitle(L("通知", "Notifications"))
-            .toolbar {
-                if viewModel.unreadCount > 0 {
-                    Text(L("未读", "Unread") + " \(viewModel.unreadCount)")
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                }
+        }
+        .background(RaverTheme.background)
+        .navigationTitle(L("通知", "Notifications"))
+        .toolbar {
+            if viewModel.unreadCount > 0 {
+                Text(L("未读", "Unread") + " \(viewModel.unreadCount)")
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
             }
-            .task {
-                await viewModel.load()
+        }
+        .task {
+            await viewModel.load()
+        }
+        .refreshable {
+            await viewModel.load()
+        }
+        .alert(L("通知加载失败", "Failed to Load Notifications"), isPresented: Binding(
+            get: { viewModel.error != nil },
+            set: { if !$0 { viewModel.error = nil } }
+        )) {
+            Button(L("重试", "Retry")) {
+                Task { await viewModel.load() }
             }
-            .refreshable {
-                await viewModel.load()
-            }
-            .navigationDestination(item: $selectedUser) { user in
-                UserProfileView(userID: user.id)
-            }
-            .fullScreenCover(item: $selectedSquad) { squad in
-                NavigationStack {
-                    SquadProfileView(
-                        squadID: squad.id,
-                        service: appContainer.socialService
-                    )
-                }
-            }
-            .alert(L("通知加载失败", "Failed to Load Notifications"), isPresented: Binding(
-                get: { viewModel.error != nil },
-                set: { if !$0 { viewModel.error = nil } }
-            )) {
-                Button(L("重试", "Retry")) {
-                    Task { await viewModel.load() }
-                }
-                Button(L("取消", "Cancel"), role: .cancel) {}
-            } message: {
-                Text(viewModel.error ?? "")
-            }
+            Button(L("取消", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(viewModel.error ?? "")
         }
     }
 
@@ -110,14 +95,10 @@ private struct NotificationsScreen: View {
         switch target.type {
         case "user":
             if let actor = item.actor {
-                selectedUser = actor
+                profilePush(.userProfile(actor.id))
             }
         case "squad":
-            selectedSquad = PostSquad(
-                id: target.id,
-                name: target.title ?? L("小队", "Squad"),
-                avatarURL: nil
-            )
+            profilePush(.squadProfile(target.id))
         default:
             break
         }

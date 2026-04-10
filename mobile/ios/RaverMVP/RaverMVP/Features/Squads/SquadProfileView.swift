@@ -112,9 +112,7 @@ struct SquadProfileView: View {
         .navigationDestination(item: $selectedMember) { member in
             UserProfileView(userID: member.id)
         }
-        .sheet(isPresented: $showManageSheet, onDismiss: {
-            Task { await viewModel.load() }
-        }) {
+        .navigationDestination(isPresented: $showManageSheet) {
             if let profile = viewModel.profile {
                 SquadManageSheet(
                     profile: profile,
@@ -130,6 +128,8 @@ struct SquadProfileView: View {
                         }
                     }
                 }
+            } else {
+                ContentUnavailableView(LL("小队不存在"), systemImage: "person.3.sequence")
             }
         }
         .task {
@@ -142,6 +142,13 @@ struct SquadProfileView: View {
         }
         .onChange(of: viewModel.profile?.updatedAt) { _, _ in
             syncMySettingsFromProfile()
+        }
+        .onChange(of: showManageSheet) { _, isPresented in
+            guard !isPresented else { return }
+            Task {
+                await viewModel.load()
+                syncMySettingsFromProfile()
+            }
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.error != nil },

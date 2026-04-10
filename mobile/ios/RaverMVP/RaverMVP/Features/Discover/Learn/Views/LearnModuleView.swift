@@ -33,8 +33,6 @@ struct LearnModuleView: View {
     @State private var isLoadingGenres = false
     @State private var isLoadingLabels = false
     @State private var isLoadingFestivals = false
-    @State private var selectedLabelForDetail: LearnLabel?
-    @State private var selectedFestivalForDetail: LearnFestival?
     @State private var selectedFestivalRankingBoard: LearnFestivalRankingBoard?
     @State private var showFestivalCreateSheet = false
     @State private var isCreatingFestival = false
@@ -110,19 +108,7 @@ struct LearnModuleView: View {
             .onChange(of: createFestivalBackgroundItem) { _, item in
                 Task { await loadFestivalCreatePhoto(item, target: .background) }
             }
-            .fullScreenCover(item: $selectedLabelForDetail) { label in
-                NavigationStack {
-                    LearnLabelDetailView(label: label)
-                }
-            }
-            .fullScreenCover(item: $selectedFestivalForDetail) { festival in
-                DiscoverCoordinatorView {
-                    LearnFestivalDetailView(festival: festival) { updated in
-                        updateFestival(updated)
-                    }
-                }
-            }
-            .fullScreenCover(item: $selectedFestivalRankingBoard) { board in
+            .navigationDestination(item: $selectedFestivalRankingBoard) { board in
                 LearnFestivalRankingDetailView(
                     board: board,
                     rankedFestivals: festivalRankedEntries(for: board)
@@ -130,8 +116,8 @@ struct LearnModuleView: View {
                     updateFestival(updated)
                 }
             }
-            .sheet(isPresented: $showFestivalCreateSheet) {
-                festivalCreateSheet
+            .onReceive(NotificationCenter.default.publisher(for: .discoverFestivalDidSave)) { _ in
+                Task { await loadFestivals() }
             }
             .alert(L("提示", "Notice"), isPresented: Binding(
                 get: { errorMessage != nil },
@@ -385,7 +371,7 @@ struct LearnModuleView: View {
 
                 Button {
                     prepareFestivalCreateDraft()
-                    showFestivalCreateSheet = true
+                    discoverPush(.learnFestivalCreate)
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.circle.fill")
@@ -445,7 +431,7 @@ struct LearnModuleView: View {
                         LearnLabelCard(label: label)
                             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .onTapGesture {
-                                selectedLabelForDetail = label
+                                discoverPush(.labelDetail(label: label))
                             }
                     }
                 }
@@ -480,7 +466,7 @@ struct LearnModuleView: View {
                                 LearnFestivalCard(festival: festival)
                                     .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                     .onTapGesture {
-                                        selectedFestivalForDetail = festival
+                                        discoverPush(.festivalDetail(festival: festival))
                                     }
                             }
                         }
@@ -1268,12 +1254,12 @@ struct LearnLabelCard: View {
 
 struct LearnLabelDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.discoverPush) private var discoverPush
 
     let label: LearnLabel
 
     @State private var previewImage: LearnLabelPreviewImage?
     @State private var avatarLuminance: CGFloat?
-    @State private var selectedFounderDJ: LearnLabelFounderTarget?
 
     var body: some View {
         ScrollView {
@@ -1370,13 +1356,8 @@ struct LearnLabelDetailView: View {
                 .foregroundStyle(RaverTheme.primaryText)
             }
         }
-        .fullScreenCover(item: $previewImage) { item in
+        .navigationDestination(item: $previewImage) { item in
             LearnLabelImagePreviewView(item: item)
-        }
-        .fullScreenCover(item: $selectedFounderDJ) { dj in
-            NavigationStack {
-                DJDetailView(djID: dj.id)
-            }
         }
         .task(id: label.avatarUrl ?? "") {
             await resolveAvatarLuminance()
@@ -1476,7 +1457,7 @@ struct LearnLabelDetailView: View {
         HStack(alignment: .center, spacing: 10) {
             if let founderDj = label.founderDj {
                 Button {
-                    selectedFounderDJ = LearnLabelFounderTarget(id: founderDj.id)
+                    discoverPush(.djDetail(djID: founderDj.id))
                 } label: {
                     HStack(spacing: 10) {
                         LearnLabelFounderAvatar(urlString: founderDj.avatarUrl)
@@ -1939,7 +1920,7 @@ private struct LearnFestivalRankingDetailView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             rankingTopBar
         }
-        .fullScreenCover(item: $selectedFestivalForDetail) { festival in
+        .navigationDestination(item: $selectedFestivalForDetail) { festival in
             DiscoverCoordinatorView {
                 LearnFestivalDetailView(festival: festival) { updated in
                     onFestivalUpdated(updated)
@@ -2210,7 +2191,6 @@ struct LearnFestivalDetailView: View {
     @State private var relatedEvents: [WebEvent] = []
     @State private var relatedArticles: [DiscoverNewsArticle] = []
     @State private var isLoadingRelatedContent = false
-    @State private var selectedArticleForDetail: DiscoverNewsArticle?
     @State private var errorMessage: String?
     @State private var showCreateEventSheet = false
     @State private var showFestivalEditSheet = false
@@ -2289,13 +2269,8 @@ struct LearnFestivalDetailView: View {
         .overlay(alignment: .top) {
             floatingTopBar
         }
-        .fullScreenCover(item: $previewImage) { item in
+        .navigationDestination(item: $previewImage) { item in
             LearnLabelImagePreviewView(item: item)
-        }
-        .fullScreenCover(item: $selectedArticleForDetail) { article in
-            DiscoverCoordinatorView {
-                DiscoverNewsDetailView(article: article)
-            }
         }
         .task(id: currentFestival.id) {
             prepareFestivalEditDraft()
@@ -2305,16 +2280,16 @@ struct LearnFestivalDetailView: View {
         .task(id: currentFestival.avatarUrl ?? "") {
             await resolveAvatarLuminance()
         }
-        .sheet(isPresented: $showFestivalEditSheet) {
-            festivalEditSheet
-        }
-        .sheet(isPresented: $showCreateEventSheet) {
-            EventEditorView(mode: .create) {
-                Task { await loadRelatedContent() }
-            }
-        }
         .navigationDestination(item: $selectedContributorUser) { user in
             UserProfileView(userID: user.id)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { _ in
+            Task { await loadRelatedContent() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverFestivalDidSave)) { notification in
+            let savedFestivalID = notification.object as? String
+            guard savedFestivalID == nil || savedFestivalID == currentFestival.id else { return }
+            Task { await refreshCurrentFestivalAfterSave() }
         }
         .onChange(of: editAvatarItem) { _, item in
             Task { await loadFestivalEditPhoto(item, target: .avatar) }
@@ -2341,7 +2316,7 @@ struct LearnFestivalDetailView: View {
             if canEditFestival {
                 floatingCircleButton(systemName: "square.and.pencil") {
                     prepareFestivalEditDraft()
-                    showFestivalEditSheet = true
+                    discoverPush(.learnFestivalEdit(festival: currentFestival))
                 }
             }
         }
@@ -2535,7 +2510,7 @@ struct LearnFestivalDetailView: View {
     private var eventsTabContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
-                showCreateEventSheet = true
+                discoverPush(.eventCreate)
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "plus.circle.fill")
@@ -2624,7 +2599,7 @@ struct LearnFestivalDetailView: View {
         } else {
             ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
                 Button {
-                    selectedArticleForDetail = article
+                    discoverPush(.newsDetail(article: article))
                 } label: {
                     DiscoverNewsRow(article: article, showsSummary: false)
                 }
@@ -3378,6 +3353,465 @@ struct LearnFestivalDetailView: View {
         return false
     }
 
+    @MainActor
+    private func refreshCurrentFestivalAfterSave() async {
+        do {
+            let festivals = try await wikiRepository.fetchLearnFestivals(search: nil)
+            if let latest = festivals.first(where: { $0.id == currentFestival.id }) {
+                let hydrated = LearnFestival(web: latest)
+                currentFestival = hydrated
+                onFestivalUpdated?(hydrated)
+            }
+            await loadRelatedContent()
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+}
+
+struct LearnFestivalEditorView: View {
+    enum Mode {
+        case create
+        case edit(LearnFestival)
+
+        var title: String {
+            switch self {
+            case .create:
+                return LL("新增电音节")
+            case .edit:
+                return LL("编辑电音节")
+            }
+        }
+
+        var commitTitle: String {
+            switch self {
+            case .create:
+                return L("创建电音节", "Create Festival")
+            case .edit:
+                return L("保存电音节信息", "Save Festival")
+            }
+        }
+    }
+
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appContainer: AppContainer
+    @EnvironmentObject private var appState: AppState
+
+    let mode: Mode
+    let onSaved: (LearnFestival) -> Void
+
+    @State private var didPrepareDraft = false
+    @State private var isSaving = false
+    @State private var name = ""
+    @State private var aliases = ""
+    @State private var country = ""
+    @State private var city = ""
+    @State private var foundedYear = ""
+    @State private var frequency = ""
+    @State private var tagline = ""
+    @State private var introduction = ""
+    @State private var website = ""
+    @State private var avatarItem: PhotosPickerItem?
+    @State private var backgroundItem: PhotosPickerItem?
+    @State private var avatarData: Data?
+    @State private var backgroundData: Data?
+    @State private var errorMessage: String?
+
+    private var wikiRepository: DiscoverWikiRepository {
+        appContainer.discoverWikiRepository
+    }
+
+    private var editingFestival: LearnFestival? {
+        if case .edit(let festival) = mode {
+            return festival
+        }
+        return nil
+    }
+
+    private var canEditFestival: Bool {
+        guard let festival = editingFestival else { return true }
+        if let canEdit = festival.canEdit {
+            return canEdit
+        }
+        guard let currentUser = currentSessionContributor else { return false }
+        return festival.contributors.contains { contributor in
+            contributor.id == currentUser.id
+                || contributor.username.caseInsensitiveCompare(currentUser.username) == .orderedSame
+        }
+    }
+
+    private var currentSessionContributor: WebUserLite? {
+        guard let user = appState.session?.user else { return nil }
+        return WebUserLite(
+            id: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            avatarUrl: user.avatarURL
+        )
+    }
+
+    var body: some View {
+        Form {
+            Section(LL("基础信息")) {
+                TextField(LL("电音节名称"), text: $name)
+                TextField(LL("别名（英文逗号分隔）"), text: $aliases)
+                TextField(LL("国家"), text: $country)
+                TextField(LL("城市"), text: $city)
+                TextField(LL("首办时间"), text: $foundedYear)
+                TextField(LL("举办频次"), text: $frequency)
+                TextField(LL("定位"), text: $tagline)
+                TextField(LL("简介"), text: $introduction, axis: .vertical)
+                TextField(LL("官网链接"), text: $website)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+            }
+
+            Section(LL("媒体")) {
+                HStack(spacing: 12) {
+                    PhotosPicker(selection: $avatarItem, matching: .images) {
+                        Label(editingFestival == nil ? LL("选择头像") : LL("更换头像"), systemImage: "person.crop.square")
+                    }
+                    .buttonStyle(.bordered)
+
+                    avatarPreview
+                }
+
+                HStack(spacing: 12) {
+                    PhotosPicker(selection: $backgroundItem, matching: .images) {
+                        Label(editingFestival == nil ? LL("选择背景") : LL("更换背景"), systemImage: "photo.rectangle")
+                    }
+                    .buttonStyle(.bordered)
+
+                    backgroundPreview
+                }
+            }
+
+            Section {
+                Button(isSaving ? L("保存中...", "Saving...") : mode.commitTitle) {
+                    Task { await saveFestival() }
+                }
+                .disabled(isSaving || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .navigationTitle(mode.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(L("关闭", "Close")) {
+                    dismiss()
+                }
+                .disabled(isSaving)
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .task {
+            guard !didPrepareDraft else { return }
+            didPrepareDraft = true
+            prepareDraft()
+        }
+        .onChange(of: avatarItem) { _, item in
+            Task { await loadPhoto(item, target: .avatar) }
+        }
+        .onChange(of: backgroundItem) { _, item in
+            Task { await loadPhoto(item, target: .background) }
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private var avatarPreview: some View {
+        if let avatarData, let image = UIImage(data: avatarData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else if let current = editingFestival?.avatarUrl,
+                  let resolved = AppConfig.resolvedURLString(current),
+                  let url = URL(string: resolved) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card)
+                }
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    @ViewBuilder
+    private var backgroundPreview: some View {
+        if let backgroundData, let image = UIImage(data: backgroundData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 88, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else if let current = editingFestival?.backgroundUrl,
+                  let resolved = AppConfig.resolvedURLString(current),
+                  let url = URL(string: resolved) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card)
+                }
+            }
+            .frame(width: 88, height: 44)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private enum PhotoTarget {
+        case avatar
+        case background
+    }
+
+    private func prepareDraft() {
+        switch mode {
+        case .create:
+            name = ""
+            aliases = ""
+            country = ""
+            city = ""
+            foundedYear = ""
+            frequency = ""
+            tagline = ""
+            introduction = ""
+            website = ""
+        case .edit(let festival):
+            name = festival.name
+            aliases = festival.aliases.joined(separator: ", ")
+            country = festival.country
+            city = festival.city
+            foundedYear = festival.foundedYear
+            frequency = festival.frequency
+            tagline = festival.tagline
+            introduction = festival.introduction
+            website = festival.links.first(where: { $0.icon == "globe" })?.url ?? festival.links.first?.url ?? ""
+        }
+
+        avatarItem = nil
+        backgroundItem = nil
+        avatarData = nil
+        backgroundData = nil
+    }
+
+    @MainActor
+    private func loadPhoto(_ item: PhotosPickerItem?, target: PhotoTarget) async {
+        guard let item else {
+            switch target {
+            case .avatar:
+                avatarData = nil
+            case .background:
+                backgroundData = nil
+            }
+            return
+        }
+
+        do {
+            let loaded = try await item.loadTransferable(type: Data.self)
+            switch target {
+            case .avatar:
+                avatarData = loaded
+            case .background:
+                backgroundData = loaded
+            }
+        } catch {
+            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
+        }
+    }
+
+    @MainActor
+    private func saveFestival() async {
+        if editingFestival != nil, !canEditFestival {
+            errorMessage = L("仅贡献者可编辑电音节信息", "Only contributors can edit festival info.")
+            return
+        }
+
+        let finalName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !finalName.isEmpty else {
+            errorMessage = L("电音节名称不能为空", "Festival name cannot be empty.")
+            return
+        }
+
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            if var editing = editingFestival {
+                editing.name = finalName
+                editing.aliases = parseAliasTokens(aliases)
+                editing.country = country.trimmingCharacters(in: .whitespacesAndNewlines)
+                editing.city = city.trimmingCharacters(in: .whitespacesAndNewlines)
+                editing.foundedYear = foundedYear.trimmingCharacters(in: .whitespacesAndNewlines)
+                editing.frequency = frequency.trimmingCharacters(in: .whitespacesAndNewlines)
+                editing.tagline = tagline.trimmingCharacters(in: .whitespacesAndNewlines)
+                editing.introduction = introduction.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if let avatarData {
+                    let uploadedAvatar = try await wikiRepository.uploadWikiBrandImage(
+                        imageData: jpegDataForFestivalImport(from: avatarData),
+                        fileName: "wiki-brand-avatar-\(UUID().uuidString).jpg",
+                        mimeType: "image/jpeg",
+                        brandID: editing.id,
+                        usage: "avatar"
+                    )
+                    editing.avatarUrl = uploadedAvatar.url
+                }
+
+                if let backgroundData {
+                    let uploadedBackground = try await wikiRepository.uploadWikiBrandImage(
+                        imageData: jpegDataForFestivalImport(from: backgroundData),
+                        fileName: "wiki-brand-background-\(UUID().uuidString).jpg",
+                        mimeType: "image/jpeg",
+                        brandID: editing.id,
+                        usage: "background"
+                    )
+                    editing.backgroundUrl = uploadedBackground.url
+                }
+
+                let normalizedWebsite = normalizeURL(website)
+                var preservedLinks = editing.links.filter { $0.icon != "globe" }
+                if let normalizedWebsite {
+                    preservedLinks.insert(
+                        LearnFestivalLink(title: L("官网", "Official"), icon: "globe", url: normalizedWebsite),
+                        at: 0
+                    )
+                }
+                editing.links = preservedLinks
+
+                let payload = UpdateLearnFestivalInput(
+                    name: editing.name,
+                    aliases: editing.aliases,
+                    country: editing.country,
+                    city: editing.city,
+                    foundedYear: editing.foundedYear,
+                    frequency: editing.frequency,
+                    tagline: editing.tagline,
+                    introduction: editing.introduction,
+                    avatarUrl: editing.avatarUrl,
+                    backgroundUrl: editing.backgroundUrl,
+                    links: editing.links.map { link in
+                        LearnFestivalLinkPayload(title: link.title, icon: link.icon, url: link.url)
+                    }
+                )
+
+                let persisted = try await wikiRepository.updateLearnFestival(id: editing.id, input: payload)
+                let hydrated = LearnFestival(web: persisted)
+                onSaved(hydrated)
+                dismiss()
+            } else {
+                let normalizedWebsite = normalizeURL(website)
+                let links: [LearnFestivalLinkPayload] = {
+                    guard let normalizedWebsite else { return [] }
+                    return [LearnFestivalLinkPayload(title: L("官网", "Official"), icon: "globe", url: normalizedWebsite)]
+                }()
+
+                var created = try await wikiRepository.createLearnFestival(
+                    input: CreateLearnFestivalInput(
+                        name: finalName,
+                        aliases: parseAliasTokens(aliases),
+                        country: country.trimmingCharacters(in: .whitespacesAndNewlines),
+                        city: city.trimmingCharacters(in: .whitespacesAndNewlines),
+                        foundedYear: foundedYear.trimmingCharacters(in: .whitespacesAndNewlines),
+                        frequency: frequency.trimmingCharacters(in: .whitespacesAndNewlines),
+                        tagline: tagline.trimmingCharacters(in: .whitespacesAndNewlines),
+                        introduction: introduction.trimmingCharacters(in: .whitespacesAndNewlines),
+                        avatarUrl: nil,
+                        backgroundUrl: nil,
+                        links: links
+                    )
+                )
+
+                var uploadedAvatarURL: String?
+                if let avatarData {
+                    let uploadedAvatar = try await wikiRepository.uploadWikiBrandImage(
+                        imageData: jpegDataForFestivalImport(from: avatarData),
+                        fileName: "wiki-brand-avatar-\(UUID().uuidString).jpg",
+                        mimeType: "image/jpeg",
+                        brandID: created.id,
+                        usage: "avatar"
+                    )
+                    uploadedAvatarURL = uploadedAvatar.url
+                }
+
+                var uploadedBackgroundURL: String?
+                if let backgroundData {
+                    let uploadedBackground = try await wikiRepository.uploadWikiBrandImage(
+                        imageData: jpegDataForFestivalImport(from: backgroundData),
+                        fileName: "wiki-brand-background-\(UUID().uuidString).jpg",
+                        mimeType: "image/jpeg",
+                        brandID: created.id,
+                        usage: "background"
+                    )
+                    uploadedBackgroundURL = uploadedBackground.url
+                }
+
+                if uploadedAvatarURL != nil || uploadedBackgroundURL != nil {
+                    created = try await wikiRepository.updateLearnFestival(
+                        id: created.id,
+                        input: UpdateLearnFestivalInput(
+                            name: nil,
+                            aliases: nil,
+                            country: nil,
+                            city: nil,
+                            foundedYear: nil,
+                            frequency: nil,
+                            tagline: nil,
+                            introduction: nil,
+                            avatarUrl: uploadedAvatarURL,
+                            backgroundUrl: uploadedBackgroundURL,
+                            links: nil
+                        )
+                    )
+                }
+
+                let hydrated = LearnFestival(web: created)
+                onSaved(hydrated)
+                dismiss()
+            }
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    private func parseAliasTokens(_ raw: String) -> [String] {
+        raw
+            .split(whereSeparator: { $0 == "," || $0 == "，" || $0 == "/" || $0 == "、" })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func jpegDataForFestivalImport(from data: Data) -> Data {
+        guard let image = UIImage(data: data),
+              let jpeg = image.jpegData(compressionQuality: 0.9) else {
+            return data
+        }
+        return jpeg
+    }
+
+    private func normalizeURL(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let lower = trimmed.lowercased()
+        if lower.hasPrefix("http://") || lower.hasPrefix("https://") {
+            return trimmed
+        }
+        return "https://\(trimmed)"
+    }
 }
 
 private struct LearnLabelExpandableText: View {
@@ -3570,14 +4004,10 @@ private struct LearnLabelInfoRow: View {
     }
 }
 
-private struct LearnLabelPreviewImage: Identifiable {
+private struct LearnLabelPreviewImage: Identifiable, Hashable {
     let id = UUID().uuidString
     let title: String
     let url: URL
-}
-
-private struct LearnLabelFounderTarget: Identifiable {
-    let id: String
 }
 
 private struct LearnLabelImagePreviewView: View {
@@ -3681,8 +4111,8 @@ struct RankingBoardDetailView: View {
     @State private var detail: RankingBoardDetail?
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var selectedDJForDetail: WebDJ?
-    @State private var selectedFestivalForDetail: LearnFestival?
+    @State private var selectedDJID: String?
+    @State private var selectedFestival: LearnFestival?
 
     init(board: RankingBoard) {
         self.board = board
@@ -3709,12 +4139,12 @@ struct RankingBoardDetailView: View {
         } message: {
             Text(errorMessage ?? "")
         }
-        .fullScreenCover(item: $selectedDJForDetail) { dj in
+        .navigationDestination(item: $selectedDJID) { djID in
             DiscoverCoordinatorView {
-                DJDetailView(djID: dj.id)
+                DJDetailView(djID: djID)
             }
         }
-        .fullScreenCover(item: $selectedFestivalForDetail) { festival in
+        .navigationDestination(item: $selectedFestival) { festival in
             DiscoverCoordinatorView {
                 LearnFestivalDetailView(festival: festival)
             }
@@ -3783,9 +4213,9 @@ struct RankingBoardDetailView: View {
             ForEach(entries) { entry in
                 Button {
                     if let festival = entry.festival {
-                        selectedFestivalForDetail = mapFestivalLiteToLearnFestival(festival)
+                        selectedFestival = mapFestivalLiteToLearnFestival(festival)
                     } else if let dj = entry.dj {
-                        selectedDJForDetail = dj
+                        selectedDJID = dj.id
                     }
                 } label: {
                     RankingEntryCard(entry: entry)

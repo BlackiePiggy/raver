@@ -8,8 +8,6 @@ struct NewsModuleView: View {
     @State private var nextCursor: String?
     @State private var selectedCategory: DiscoverNewsCategory = .all
     @State private var isLoading = false
-    @State private var isPresentingPublish = false
-    @State private var selectedArticleForDetail: DiscoverNewsArticle?
     @State private var searchKeyword = ""
     @State private var errorMessage: String?
 
@@ -37,7 +35,7 @@ struct NewsModuleView: View {
                         LazyVStack(spacing: 0) {
                             ForEach(Array(displayedArticles.enumerated()), id: \.element.id) { index, article in
                                 Button {
-                                    selectedArticleForDetail = article
+                                    discoverPush(.newsDetail(article: article))
                                 } label: {
                                     DiscoverNewsRow(article: article)
                                 }
@@ -118,7 +116,7 @@ struct NewsModuleView: View {
                         .buttonStyle(.plain)
 
                         Button {
-                            isPresentingPublish = true
+                            discoverPush(.newsPublish)
                         } label: {
                             Image(systemName: "square.and.pencil")
                                 .font(.subheadline.weight(.semibold))
@@ -137,21 +135,14 @@ struct NewsModuleView: View {
                 .padding(.bottom, 4)
                 .background(RaverTheme.background)
             }
-            .sheet(isPresented: $isPresentingPublish) {
-                DiscoverNewsPublishSheet { draft in
-                    try await publish(draft)
-                }
-            }
-            .fullScreenCover(item: $selectedArticleForDetail) { article in
-                DiscoverCoordinatorView {
-                    DiscoverNewsDetailView(article: article)
-                }
-            }
             .task {
                 await reload()
             }
             .refreshable {
                 await reload()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .discoverNewsDidPublish)) { _ in
+                Task { await reload() }
             }
             .alert(L("提示", "Notice"), isPresented: Binding(
                 get: { errorMessage != nil },
@@ -206,14 +197,6 @@ struct NewsModuleView: View {
         }
     }
 
-    @MainActor
-    private func publish(_ draft: DiscoverNewsDraft) async throws {
-        if let article = try await repository.publish(draft: draft) {
-            articles.insert(article, at: 0)
-        } else {
-            await reload()
-        }
-    }
 }
 
 struct DiscoverNewsRow: View {

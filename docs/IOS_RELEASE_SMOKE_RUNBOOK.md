@@ -20,6 +20,7 @@ Expected result:
 - `[PASS] Feature layer has no AppEnvironment service factory calls.`
 - `[PASS] No AppState service-locator usage found.`
 - `[PASS] AppEnvironment factory usage is limited to allowed bootstrap files.`
+- `[PASS] Modal allowlist matches current sheet/fullScreenCover usage.`
 - `All coordinator routing regression checks passed.`
 - `All coordinator deep-link regression checks passed.`
 - `All coordinator route snapshot checks passed.`
@@ -118,3 +119,9 @@ scripts/run-coordinator-hardening-preflight.sh
 - Confirm the route case change is intentional.
 - Update fixture values in `scripts/fixtures/coordinator-route-snapshots.sh`.
 - Re-run preflight until all checks pass.
+
+4. If modal allowlist guard fails:
+- Confirm new `sheet/fullScreenCover` usage is product-intentional.
+- Update `scripts/modal-allowlist-signatures.txt` using:
+  `scripts/check-modal-allowlist.sh --write-allowlist`
+- Update `docs/MVVM_COORDINATOR_MIGRATION_PLAN.md` (`P9.4 modal allowlist`) with rationale for the new modal.

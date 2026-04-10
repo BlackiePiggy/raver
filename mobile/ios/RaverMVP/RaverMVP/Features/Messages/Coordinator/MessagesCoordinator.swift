@@ -6,15 +6,8 @@ enum MessagesRoute: Hashable {
     case alertCategory(MessageAlertCategory)
 }
 
-enum MessagesModalRoute: Hashable, Identifiable {
+enum MessagesModalRoute: Hashable {
     case squadProfile(String)
-
-    var id: String {
-        switch self {
-        case let .squadProfile(squadID):
-            return "squad:\(squadID)"
-        }
-    }
 }
 
 private struct MessagesPushKey: EnvironmentKey {
@@ -69,7 +62,7 @@ struct MessagesCoordinatorView: View {
         .environment(\.messagesPresent) { route in
             presentedModal = route
         }
-        .fullScreenCover(item: $presentedModal) { route in
+        .navigationDestination(item: $presentedModal) { route in
             modalDestination(for: route)
         }
         .background(RaverTheme.background)
@@ -96,12 +89,10 @@ struct MessagesCoordinatorView: View {
     private func modalDestination(for route: MessagesModalRoute) -> some View {
         switch route {
         case let .squadProfile(squadID):
-            NavigationStack {
-                SquadProfileView(
-                    squadID: squadID,
-                    service: appContainer.socialService
-                )
-            }
+            SquadProfileView(
+                squadID: squadID,
+                service: appContainer.socialService
+            )
         }
     }
 

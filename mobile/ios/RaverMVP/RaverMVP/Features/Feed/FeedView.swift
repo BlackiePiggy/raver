@@ -13,12 +13,10 @@ struct FeedView: View {
 }
 
 private struct FeedScreen: View {
-    @EnvironmentObject private var appContainer: AppContainer
     @EnvironmentObject private var appState: AppState
     @Environment(\.circlePush) private var circlePush
     @StateObject private var viewModel: FeedViewModel
-    @State private var selectedPostForEdit: Post?
-    @State private var showCompose = false
+    @State private var editTapPostID: String?
 
     init(viewModel: FeedViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -57,13 +55,17 @@ private struct FeedScreen: View {
                                 },
                                 onSquadTap: nil,
                                 onEditTap: post.author.id == appState.session?.user.id
-                                    ? { selectedPostForEdit = post }
+                                    ? {
+                                        editTapPostID = post.id
+                                        circlePush(.postEdit(post))
+                                    }
                                     : nil
                             )
                             .foregroundStyle(RaverTheme.primaryText)
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                if selectedPostForEdit?.id == post.id {
+                                if editTapPostID == post.id {
+                                    editTapPostID = nil
                                     return
                                 }
                                 circlePush(.postDetail(post))
@@ -94,7 +96,7 @@ private struct FeedScreen: View {
         .background(RaverTheme.background)
         .overlay(alignment: .bottomTrailing) {
             Button {
-                showCompose = true
+                circlePush(.postCreate)
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 22, weight: .semibold))
@@ -110,28 +112,17 @@ private struct FeedScreen: View {
             .padding(.trailing, 8)
             .padding(.bottom, 42)
         }
-        .sheet(isPresented: $showCompose) {
-            ComposePostView(
-                service: appContainer.socialService,
-                webService: appContainer.webService,
-                mode: .create,
-                onPostCreated: { created in
-                    viewModel.mergeNewPost(created)
-                }
-            )
+        .onReceive(NotificationCenter.default.publisher(for: .circlePostDidCreate)) { notification in
+            guard let created = notification.object as? Post else { return }
+            viewModel.mergeNewPost(created)
         }
-        .sheet(item: $selectedPostForEdit) { post in
-            ComposePostView(
-                service: appContainer.socialService,
-                webService: appContainer.webService,
-                mode: .edit(post),
-                onPostUpdated: { updated in
-                    viewModel.mergeUpdatedPost(updated)
-                },
-                onPostDeleted: { deletedPostID in
-                    viewModel.removePost(deletedPostID)
-                }
-            )
+        .onReceive(NotificationCenter.default.publisher(for: .circlePostDidUpdate)) { notification in
+            guard let updated = notification.object as? Post else { return }
+            viewModel.mergeUpdatedPost(updated)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .circlePostDidDelete)) { notification in
+            guard let deletedPostID = notification.object as? String else { return }
+            viewModel.removePost(deletedPostID)
         }
         .task {
             await viewModel.load()

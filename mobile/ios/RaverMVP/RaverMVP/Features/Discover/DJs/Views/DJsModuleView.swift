@@ -66,7 +66,6 @@ struct DJsModuleView: View {
     @State private var errorMessage: String?
     @State private var selectedSection: DJsModuleSection = .hot
     @State private var searchKeyword = ""
-    @State private var selectedDJForDetail: WebDJ?
     @State private var selectedBoardForDetail: RankingBoard?
     @State private var showDJImportSheet = false
     @State private var importMode: DJsImportMode = .spotify
@@ -175,7 +174,7 @@ struct DJsModuleView: View {
                         } else {
                             VStack(spacing: 14) {
                                 DJWebMarqueeWall(rows: marqueeRows) { tapped in
-                                    selectedDJForDetail = tapped
+                                    discoverPush(.djDetail(djID: tapped.id))
                                 }
                                 .frame(height: marqueeWallHeight)
                                 .padding(.horizontal, -16)
@@ -241,11 +240,6 @@ struct DJsModuleView: View {
             .refreshable {
                 await load()
             }
-            .fullScreenCover(item: $selectedDJForDetail) { dj in
-                DiscoverCoordinatorView {
-                    DJDetailView(djID: dj.id)
-                }
-            }
             .navigationDestination(item: $selectedBoardForDetail) { board in
                 RankingBoardDetailView(board: board)
             }
@@ -254,7 +248,7 @@ struct DJsModuleView: View {
                     djImportFloatingButton
                 }
             }
-            .sheet(isPresented: $showDJImportSheet) {
+            .navigationDestination(isPresented: $showDJImportSheet) {
                 djImportSheet
             }
             .onChange(of: manualAvatarItem) { _, item in
@@ -372,8 +366,7 @@ struct DJsModuleView: View {
     }
 
     private var djImportSheet: some View {
-        NavigationStack {
-            Form {
+        Form {
                 Section(LL("导入方式")) {
                     Picker(LL("导入方式"), selection: $importMode) {
                         ForEach(DJsImportMode.allCases) { mode in
@@ -641,7 +634,6 @@ struct DJsModuleView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-        }
     }
 
     private var isImportConfirmDisabled: Bool {
@@ -2034,7 +2026,6 @@ struct DJDetailView: View {
     @State private var editBannerData: Data?
     @State private var relatedArticles: [DiscoverNewsArticle] = []
     @State private var isLoadingRelatedArticles = false
-    @State private var selectedArticleForDetail: DiscoverNewsArticle?
 
     fileprivate enum DJDetailTab: String, CaseIterable, Identifiable {
         case intro
@@ -2104,11 +2095,6 @@ struct DJDetailView: View {
         .overlay(alignment: .top) {
             floatingTopBar
         }
-        .fullScreenCover(item: $selectedArticleForDetail) { article in
-            DiscoverCoordinatorView {
-                DiscoverNewsDetailView(article: article)
-            }
-        }
         .task {
             await load()
         }
@@ -2120,10 +2106,10 @@ struct DJDetailView: View {
         } message: {
             Text(errorMessage ?? "")
         }
-        .sheet(isPresented: $showDJEditSheet) {
+        .navigationDestination(isPresented: $showDJEditSheet) {
             djEditSheet
         }
-        .sheet(isPresented: $showSpotifyImportSheet) {
+        .navigationDestination(isPresented: $showSpotifyImportSheet) {
             spotifyImportSheet
         }
         .navigationDestination(item: $selectedContributorUser) { user in
@@ -2604,8 +2590,7 @@ struct DJDetailView: View {
     }
 
     private var djEditSheet: some View {
-        NavigationStack {
-            Form {
+        Form {
                 Section(LL("基础信息")) {
                     TextField(LL("DJ 名称"), text: $editDJName)
                     TextField(LL("别名（英文逗号分隔）"), text: $editDJAliases)
@@ -2708,7 +2693,6 @@ struct DJDetailView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-        }
     }
 
     private var spotifyImportFloatingButton: some View {
@@ -2739,8 +2723,7 @@ struct DJDetailView: View {
     }
 
     private var spotifyImportSheet: some View {
-        NavigationStack {
-            Form {
+        Form {
                 Section(LL("搜索 Spotify DJ")) {
                     HStack(spacing: 8) {
                         TextField(LL("输入 DJ 名称"), text: $spotifySearchKeyword)
@@ -2819,7 +2802,6 @@ struct DJDetailView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-        }
     }
 
     private func heroImageURL(for dj: WebDJ) -> String? {
@@ -3053,7 +3035,7 @@ struct DJDetailView: View {
         } else {
             ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
                 Button {
-                    selectedArticleForDetail = article
+                    discoverPush(.newsDetail(article: article))
                 } label: {
                     DiscoverNewsRow(article: article, showsSummary: false)
                 }

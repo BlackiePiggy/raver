@@ -27,9 +27,7 @@ struct SetsModuleView: View {
     @State private var sortBy = "latest"
     @State private var searchKeyword = ""
     @State private var isLoading = false
-    @State private var showCreate = false
     @State private var errorMessage: String?
-    @State private var selectedSetForPlayback: WebDJSet?
 
     var body: some View {
         Group {
@@ -45,7 +43,7 @@ struct SetsModuleView: View {
                         LazyVGrid(columns: columns, spacing: 14) {
                             ForEach(displayedSets) { set in
                                 Button {
-                                    selectedSetForPlayback = set
+                                    discoverPush(.setDetail(setID: set.id))
                                 } label: {
                                     DJSetGridCard(set: set)
                                 }
@@ -118,7 +116,7 @@ struct SetsModuleView: View {
                     .buttonStyle(.bordered)
 
                     Button {
-                        showCreate = true
+                        discoverPush(.setCreate)
                     } label: {
                         Label(LL("发布"), systemImage: "plus")
                     }
@@ -130,22 +128,14 @@ struct SetsModuleView: View {
                 .padding(.bottom, 4)
                 .background(RaverTheme.background)
             }
-            .sheet(isPresented: $showCreate) {
-                DJSetEditorView(mode: .create) {
-                    Task { await reload() }
-                }
-            }
-            .fullScreenCover(item: $selectedSetForPlayback) { set in
-                NavigationStack {
-                    DJSetDetailView(setID: set.id)
-                }
-                .toolbar(.hidden, for: .tabBar)
-            }
             .task {
                 await reload()
             }
             .refreshable {
                 await reload()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .discoverSetDidSave)) { _ in
+                Task { await reload() }
             }
             .alert(L("提示", "Notice"), isPresented: Binding(
                 get: { errorMessage != nil },
@@ -304,7 +294,6 @@ struct DJSetDetailView: View {
     @State private var comments: [WebSetComment] = []
     @State private var inputComment = ""
     @State private var isLoading = false
-    @State private var showEdit = false
     @State private var showTrackEditor = false
     @State private var errorMessage: String?
     @State private var playbackTime: Double = 0
@@ -365,12 +354,7 @@ struct DJSetDetailView: View {
                         portraitDetailContent(for: set)
                     }
                 }
-                .sheet(isPresented: $showEdit) {
-                    DJSetEditorView(mode: .edit(set)) {
-                        Task { await load() }
-                    }
-                }
-                .sheet(isPresented: $showTrackEditor) {
+                .navigationDestination(isPresented: $showTrackEditor) {
                     TracklistEditorView(
                         set: set,
                         currentTracklist: currentTracklistInfo,
@@ -379,26 +363,22 @@ struct DJSetDetailView: View {
                         Task { await load() }
                     }
                 }
-                .sheet(isPresented: $showTracklistSelector) {
-                    NavigationStack {
-                        TracklistSelectorSheet(
-                            set: set,
-                            tracklists: tracklists,
-                            selectedTracklistID: selectedTracklistID
-                        ) { selectedID in
-                            Task {
-                                await switchTracklist(selectedID)
-                            }
+                .navigationDestination(isPresented: $showTracklistSelector) {
+                    TracklistSelectorSheet(
+                        set: set,
+                        tracklists: tracklists,
+                        selectedTracklistID: selectedTracklistID
+                    ) { selectedID in
+                        Task {
+                            await switchTracklist(selectedID)
                         }
                     }
                 }
-                .sheet(isPresented: $showTracklistUpload) {
-                    NavigationStack {
-                        UploadTracklistSheet(set: set) { uploaded in
-                            Task {
-                                await refreshTracklists()
-                                await switchTracklist(uploaded.id)
-                            }
+                .navigationDestination(isPresented: $showTracklistUpload) {
+                    UploadTracklistSheet(set: set) { uploaded in
+                        Task {
+                            await refreshTracklists()
+                            await switchTracklist(uploaded.id)
                         }
                     }
                 }
@@ -429,9 +409,10 @@ struct DJSetDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
         .navigationDestination(item: $selectedArtistDJ) { dj in
-            DJDetailView(djID: dj.id)
+            DiscoverCoordinatorView {
+                DJDetailView(djID: dj.id)
+            }
         }
         .navigationDestination(item: $selectedContributor) { contributor in
             UserProfileView(userID: contributor.id)
@@ -460,6 +441,11 @@ struct DJSetDetailView: View {
             if !isAudioOnlyMode {
                 AppOrientationLock.shared.lockPortrait(force: true)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverSetDidSave)) { notification in
+            let savedSetID = notification.object as? String
+            guard savedSetID == nil || savedSetID == setID else { return }
+            Task { await load() }
         }
         .task {
             await load()
@@ -631,7 +617,7 @@ struct DJSetDetailView: View {
         if isMine(set) {
             HStack {
                 Button(LL("编辑 Set")) {
-                    showEdit = true
+                    discoverPush(.setEdit(set: set))
                 }
                 .buttonStyle(.bordered)
 
@@ -3464,7 +3450,7 @@ struct DJSetEditorView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
-            .sheet(isPresented: $showEventBindingSheet) {
+            .navigationDestination(isPresented: $showEventBindingSheet) {
                 SetEventBindingSheet(
                     initialEventName: eventName
                 ) { selectedEventName in

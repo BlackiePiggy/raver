@@ -278,7 +278,7 @@ private struct CircleHomeView: View {
     }
 }
 
-private struct CircleIDUserSnapshot: Identifiable, Codable, Hashable {
+struct CircleIDUserSnapshot: Identifiable, Codable, Hashable {
     var id: String
     var username: String
     var displayName: String
@@ -291,7 +291,7 @@ private struct CircleIDUserSnapshot: Identifiable, Codable, Hashable {
     }
 }
 
-private struct CircleIDEventSnapshot: Identifiable, Codable, Hashable {
+struct CircleIDEventSnapshot: Identifiable, Codable, Hashable {
     var id: String
     var name: String
     var startDate: Date
@@ -299,21 +299,21 @@ private struct CircleIDEventSnapshot: Identifiable, Codable, Hashable {
     var coverImageUrl: String?
 }
 
-private struct CircleIDDJSnapshot: Identifiable, Codable, Hashable {
+struct CircleIDDJSnapshot: Identifiable, Codable, Hashable {
     var id: String
     var name: String
     var avatarUrl: String?
     var avatarSmallUrl: String?
 }
 
-private struct CircleIDComment: Identifiable, Codable, Hashable {
+struct CircleIDComment: Identifiable, Codable, Hashable {
     var id: String
     var author: CircleIDUserSnapshot
     var content: String
     var createdAt: Date
 }
 
-private struct CircleIDEntry: Identifiable, Codable, Hashable {
+struct CircleIDEntry: Identifiable, Codable, Hashable {
     var id: String
     var songName: String
     var event: CircleIDEventSnapshot?
@@ -334,7 +334,7 @@ private enum CircleIDReaction {
     case repost
 }
 
-private struct CircleIDDetailRoute: Identifiable {
+private struct CircleIDDetailRoute: Identifiable, Hashable {
     let id: String
 }
 
@@ -344,7 +344,6 @@ private struct CircleIDHubView: View {
 
     @State private var entries: [CircleIDEntry] = []
     @State private var hasLoaded = false
-    @State private var isPresentingComposer = false
     @State private var selectedDetailRoute: CircleIDDetailRoute?
     @State private var errorMessage: String?
 
@@ -364,7 +363,7 @@ private struct CircleIDHubView: View {
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
                 Button {
-                    isPresentingComposer = true
+                    circlePush(.idCreate)
                 } label: {
                     Label(L("发布 ID", "Post ID"), systemImage: "plus.circle.fill")
                         .font(.subheadline.weight(.semibold))
@@ -402,36 +401,32 @@ private struct CircleIDHubView: View {
         .task {
             await loadEntriesIfNeeded()
         }
-        .sheet(isPresented: $isPresentingComposer) {
-            CircleIDComposerSheet { entry in
-                entries.insert(entry, at: 0)
-                persistEntries()
-            }
-            .environmentObject(appState)
+        .onReceive(NotificationCenter.default.publisher(for: .circleIDDidCreate)) { notification in
+            guard let entry = notification.object as? CircleIDEntry else { return }
+            entries.insert(entry, at: 0)
+            persistEntries()
         }
-        .fullScreenCover(item: $selectedDetailRoute) { route in
-            NavigationStack {
-                if let entryBinding = bindingForEntry(id: route.id) {
-                    CircleIDDetailView(
-                        entry: entryBinding,
-                        onPersist: {
-                            persistEntries()
-                        }
-                    )
-                    .environmentObject(appState)
-                } else {
-                    VStack(spacing: 12) {
-                        Text(L("该 ID 已不存在", "This ID no longer exists"))
-                            .font(.headline)
-                            .foregroundStyle(RaverTheme.primaryText)
-                        Button(L("关闭", "Close")) {
-                            selectedDetailRoute = nil
-                        }
-                        .buttonStyle(.borderedProminent)
+        .navigationDestination(item: $selectedDetailRoute) { route in
+            if let entryBinding = bindingForEntry(id: route.id) {
+                CircleIDDetailView(
+                    entry: entryBinding,
+                    onPersist: {
+                        persistEntries()
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
+                )
+                .environmentObject(appState)
+            } else {
+                VStack(spacing: 12) {
+                    Text(L("该 ID 已不存在", "This ID no longer exists"))
+                        .font(.headline)
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Button(L("返回", "Back")) {
+                        selectedDetailRoute = nil
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RaverTheme.background)
             }
         }
         .alert(LL("提示"), isPresented: Binding(
@@ -1286,7 +1281,7 @@ private struct CircleIDCardPlayerView: View {
     }
 }
 
-private struct CircleIDComposerSheet: View {
+struct CircleIDComposerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
 
@@ -1445,12 +1440,12 @@ private struct CircleIDComposerSheet: View {
                     }
                 }
             }
-            .sheet(isPresented: $showEventPicker) {
+            .navigationDestination(isPresented: $showEventPicker) {
                 CircleIDEventPickerSheet { event in
                     selectedEvent = event
                 }
             }
-            .sheet(isPresented: $showDJPicker) {
+            .navigationDestination(isPresented: $showDJPicker) {
                 CircleIDDJPickerSheet(selected: selectedDJs) { picked in
                     selectedDJs = picked
                 }
@@ -1565,8 +1560,7 @@ private struct CircleIDEventPickerSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 10) {
+        VStack(spacing: 10) {
                 TextField(L("搜索活动名/城市/国家", "Search event/city/country"), text: $searchText)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -1627,7 +1621,6 @@ private struct CircleIDEventPickerSheet: View {
             .task {
                 await loadEvents()
             }
-        }
     }
 
     private func circleIDEventDateText(_ event: WebEvent) -> String {
@@ -1696,8 +1689,7 @@ private struct CircleIDDJPickerSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 10) {
+        VStack(spacing: 10) {
                 TextField(L("搜索 DJ 名称或别名", "Search DJ name or alias"), text: $searchText)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -1774,7 +1766,6 @@ private struct CircleIDDJPickerSheet: View {
                 selectedIDs = Set(selected.map(\.id))
                 await loadDJs()
             }
-        }
     }
 
     private func toggleDJSelection(djID: String) {
@@ -2061,15 +2052,13 @@ private struct SquadHallView: View {
         .onAppear {
             Task { await loadSquads() }
         }
-        .sheet(isPresented: $showCreateSquad) {
-            NavigationStack {
-                CreateSquadView(service: appContainer.socialService) { conversation in
-                    showCreateSquad = false
-                    circlePush(.squadProfile(conversation.id))
-                    Task { await loadSquads() }
-                }
-                .environmentObject(appState)
+        .navigationDestination(isPresented: $showCreateSquad) {
+            CreateSquadView(service: appContainer.socialService) { conversation in
+                showCreateSquad = false
+                circlePush(.squadProfile(conversation.id))
+                Task { await loadSquads() }
             }
+            .environmentObject(appState)
         }
         .alert(L("加载失败", "Load Failed"), isPresented: Binding(
             get: { errorMessage != nil },
@@ -2336,8 +2325,6 @@ private struct CircleRatingHubView: View {
     private var service: WebFeatureService { appContainer.webService }
 
     @State private var events: [WebRatingEvent] = []
-    @State private var isPresentingCreateEvent = false
-    @State private var isPresentingImportFromEvent = false
     @State private var isLoading = false
     @State private var errorMessage: String?
 
@@ -2350,7 +2337,7 @@ private struct CircleRatingHubView: View {
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer()
                     Button {
-                        isPresentingImportFromEvent = true
+                        circlePush(.ratingEventImportFromEvent)
                     } label: {
                         Label(L("从活动导入", "Import from Event"), systemImage: "square.and.arrow.down")
                             .font(.caption.weight(.semibold))
@@ -2361,7 +2348,7 @@ private struct CircleRatingHubView: View {
                     }
                     .buttonStyle(.plain)
                     Button {
-                        isPresentingCreateEvent = true
+                        circlePush(.ratingEventCreate)
                     } label: {
                         Label(L("发布事件", "Publish Event"), systemImage: "plus")
                             .font(.caption.weight(.semibold))
@@ -2423,20 +2410,12 @@ private struct CircleRatingHubView: View {
         .refreshable {
             await loadEvents()
         }
-        .sheet(isPresented: $isPresentingCreateEvent) {
-            CreateRatingEventSheet { input in
-                let created = try await service.createRatingEvent(input: input)
-                await MainActor.run {
-                    events.insert(created, at: 0)
-                }
-            }
-        }
-        .sheet(isPresented: $isPresentingImportFromEvent) {
-            CreateRatingEventFromEventSheet { sourceEventID in
-                let created = try await service.createRatingEventFromEvent(eventID: sourceEventID)
-                await MainActor.run {
-                    events.insert(created, at: 0)
-                }
+        .onReceive(NotificationCenter.default.publisher(for: .circleRatingEventDidCreate)) { notification in
+            guard let created = notification.object as? WebRatingEvent else { return }
+            if let index = events.firstIndex(where: { $0.id == created.id }) {
+                events[index] = created
+            } else {
+                events.insert(created, at: 0)
             }
         }
     }
@@ -2528,7 +2507,6 @@ struct CircleRatingEventDetailView: View {
     @State private var event: WebRatingEvent?
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var isPresentingCreateUnit = false
 
     var body: some View {
         ScrollView {
@@ -2597,15 +2575,21 @@ struct CircleRatingEventDetailView: View {
         .onDisappear {
             onUpdated()
         }
-        .sheet(isPresented: $isPresentingCreateUnit) {
-            CreateRatingUnitSheet(eventID: eventID) { input in
-                let created = try await service.createRatingUnit(eventID: eventID, input: input)
-                await MainActor.run {
-                    guard event != nil else { return }
-                    event?.units.append(created)
-                    event?.updatedAt = Date()
-                }
+        .onReceive(NotificationCenter.default.publisher(for: .circleRatingUnitDidCreate)) { notification in
+            guard
+                let created = notification.object as? WebRatingUnit,
+                let createdEventID = notification.userInfo?["eventID"] as? String,
+                createdEventID == eventID
+            else {
+                return
             }
+            guard event != nil else { return }
+            if let index = event?.units.firstIndex(where: { $0.id == created.id }) {
+                event?.units[index] = created
+            } else {
+                event?.units.append(created)
+            }
+            event?.updatedAt = Date()
         }
     }
 
@@ -2716,7 +2700,7 @@ struct CircleRatingEventDetailView: View {
                     Spacer()
 
                     Button {
-                        isPresentingCreateUnit = true
+                        circlePush(.ratingUnitCreate(eventID: eventID))
                     } label: {
                         Image(systemName: "plus")
                             .font(.headline.weight(.semibold))
@@ -3127,7 +3111,7 @@ struct CircleRatingUnitDetailView: View {
     }
 }
 
-private struct CreateRatingEventSheet: View {
+struct CreateRatingEventSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
     private var webService: WebFeatureService { appContainer.webService }
@@ -3255,7 +3239,7 @@ private struct CreateRatingEventSheet: View {
     }
 }
 
-private struct CreateRatingEventFromEventSheet: View {
+struct CreateRatingEventFromEventSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
     private var webService: WebFeatureService { appContainer.webService }
@@ -3398,7 +3382,7 @@ private struct CreateRatingEventFromEventSheet: View {
     }
 }
 
-private struct CreateRatingUnitSheet: View {
+struct CreateRatingUnitSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
     private var webService: WebFeatureService { appContainer.webService }

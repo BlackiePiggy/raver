@@ -3,8 +3,8 @@
 # Snapshot fixture for coordinator route enums.
 # Intentionally update these values only when route-shape changes are expected.
 
-SNAPSHOT_DiscoverRoute="eventDetail searchInput searchResults"
-SNAPSHOT_CircleRoute="djDetail eventDetail postDetail ratingEventDetail squadProfile userProfile"
+SNAPSHOT_DiscoverRoute="djDetail eventCreate eventDetail eventEdit festivalDetail labelDetail learnFestivalCreate learnFestivalEdit newsDetail newsPublish searchInput searchResults setCreate setDetail setEdit"
+SNAPSHOT_CircleRoute="djDetail eventDetail idCreate postCreate postDetail postEdit ratingEventCreate ratingEventDetail ratingEventImportFromEvent ratingUnitCreate squadProfile userProfile"
 SNAPSHOT_MessagesRoute="alertCategory conversation userProfile"
 SNAPSHOT_MessagesModalRoute="squadProfile"
-SNAPSHOT_ProfileRoute="avatarFullscreen conversation djDetail editEvent editProfile editRatingEvent editRatingUnit editSet eventDetail followList myCheckins myPublishes postDetail publishEvent settings uploadSet userProfile"
+SNAPSHOT_ProfileRoute="avatarFullscreen conversation djDetail editEvent editProfile editRatingEvent editRatingUnit editSet eventDetail followList myCheckins myPublishes postDetail publishEvent settings squadProfile uploadSet userProfile"

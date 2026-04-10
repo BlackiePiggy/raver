@@ -1,6 +1,6 @@
 # Raver iOS MVVM + Coordinator Migration Plan
 
-Last Updated: 2026-04-09
+Last Updated: 2026-04-10
 Owner: Codex + project maintainers
 Status: Active
 
@@ -14,6 +14,12 @@ From this point on:
 - Completed items must be marked as completed in this file.
 - New findings, scope changes, and architectural decisions must be appended here instead of living only in chat history.
 - A new agent should be able to continue the work by reading only this file plus the codebase.
+
+## Companion Development Guide
+
+For day-to-day incremental feature implementation after migration stabilization, follow:
+
+- `docs/IOS_INCREMENTAL_FEATURE_DEVELOPMENT_GUIDE.md`
 
 ## Current Assessment
 
@@ -452,6 +458,83 @@ P8.3 scope tracker:
 - Remaining scope:
 - None. Targeted smoke checks for touched social DI-entry paths passed and `P8.3` is closed.
 
+### Phase 9: Navigation Presentation Normalization (Push-First)
+
+Goal:
+
+- Normalize navigation channels to reduce route fragmentation and gesture/state bugs.
+- Move business-flow navigation from local `sheet/fullScreenCover` into coordinator-owned `NavigationStack` push routes.
+- Keep only intentionally modal interactions as a strict allowlist.
+
+Presentation policy:
+
+- Push-first (must prefer coordinator push):
+- Entity detail pages (`Event`, `DJ`, `Festival`, `News`, `Post`, `User`, `Ranking`).
+- Full-screen create/edit workflows (event/set/news/post/festival/rating editors).
+- Cross-feature hops initiated from `Search`, `Notifications`, and tab home surfaces.
+- Modal allowlist (should stay modal unless explicit product change):
+- System share flows (`ActivityShareSheet` and platform share UIs).
+- Short-lived utility pickers/tool panels (country/event/DJ quick pickers, detent-based utility panels).
+- Immersive preview/player surfaces where modal semantics are intentional.
+
+Exit criteria:
+
+- High-frequency business flows in Discover/Circle/Messages/Profile use coordinator-owned push routes.
+- Remaining modal flows are documented and justified by the allowlist.
+- New routing work follows this policy by default.
+
+Status:
+
+- [x] P9.1 Discover push normalization.
+- [x] P9.2 Circle push normalization.
+- [x] P9.3 Shared entry points normalization (`Search`/`Notifications`/cross-tab hops).
+- [x] P9.4 Modal allowlist freeze and regression checks.
+
+P9.2 decision note:
+
+- Additional cross-feature normalization completed in Q122: previously deferred `MainTabView` utility routes (`showEventPicker` / `showDJPicker` / `showCreateSquad`), `MessagesCoordinator` squad profile route, `SquadProfileView` manage panel route, and `CircleIDHubView` ID detail route are now push-based (`navigationDestination` / coordinator push channel).
+
+P9.1 scope tracker:
+
+- Completed scope:
+- `EventsModuleView` create flow is coordinator push (`DiscoverRoute.eventCreate`).
+- `EventDetailView` edit flow is coordinator push (`DiscoverRoute.eventEdit`).
+- `NewsModuleView` publish flow is coordinator push (`DiscoverRoute.newsPublish`).
+- `SetsModuleView` list/detail opening plus create/edit flows are coordinator push (`DiscoverRoute.setDetail`/`setCreate`/`setEdit`).
+- `LearnModuleView` create + `LearnFestivalDetailView` edit flows are coordinator push (`DiscoverRoute.learnFestivalCreate`/`learnFestivalEdit`).
+- Save/publish refresh signals are wired (`discoverEventDidSave`, `discoverNewsDidPublish`, `discoverSetDidSave`).
+- Festival save refresh signal is wired (`discoverFestivalDidSave`).
+- Remaining scope:
+- Discover business-flow modals are removed from this wave; remaining Discover modals are utility/immersive allowlist only (`EventDetailView` check-in/map/share tools, `EventsModuleView` filters, `SetsModuleView` audio-only playback).
+
+P9.1 decision note:
+
+- Deferred Discover overlays were normalized to push in Q122 (`LearnFestivalRankingDetailView` drill-down, Learn image previews, `EventDetailView` rating detail + route planner, `DJsModuleView` import/edit routes, `SetsModuleView` tracklist/event-binding routes, `EventEditorView` lineup/location routes) to reduce presentation-channel fragmentation and edge-gesture conflicts.
+
+P9.4 modal allowlist (frozen):
+
+- Guard source of truth:
+- `scripts/modal-allowlist-signatures.txt` (counted modal signature allowlist).
+- Guard script:
+- `scripts/check-modal-allowlist.sh`.
+- CI + contributor preflight integration:
+- `.github/workflows/mvvm-coordinator-guard.yml` and `scripts/run-coordinator-hardening-preflight.sh`.
+- Allowed modal groups with rationale:
+- `Features/Discover/Events/Views/EventsModuleView.swift`: event calendar/country filter sheets are short-lived utility filters.
+- `Features/Discover/Events/Views/EventDetailView.swift`: check-in selector, venue map, and share sheet are in-context utility/system surfaces.
+- `Features/Discover/Sets/Views/SetsModuleView.swift`: audio-only set playback remains an immersive full-screen surface.
+- `Features/Feed/ComposePostView.swift` + `Shared/PostCardView.swift`: media preview and map preview are immersive preview surfaces; `ComposePostView` location picker full-screen route and `PostCardView` media/location full-screen preview routes remain modal as in-context utility/preview flows.
+
+P9.4 enforcement notes:
+
+- Any new `sheet`/`fullScreenCover` call site must either:
+1. be migrated to coordinator push routing, or
+2. be intentionally added to `scripts/modal-allowlist-signatures.txt` with product rationale documented in this section.
+- Q115 Discover audit result:
+- Current Discover modal call sites are fully accounted for as intentional utility/immersive surfaces (`EventDetailView` check-in/map/share, `EventsModuleView` filters, `SetsModuleView` audio-only playback); no residual Discover entity/detail-hop modal remains outside push routing.
+- Post-Phase-9 cleanup wave status:
+- Reopened by Q122 and re-closed after additional push conversion sweep; remaining modal routes are explicitly documented as intentional allowlist flows.
+
 ## Immediate Work Queue
 
 These are the exact next items to execute unless priorities change.
@@ -548,11 +631,45 @@ These are the exact next items to execute unless priorities change.
 - [x] Q89 Add contributor guide section for updating route fixtures and validating guard scripts before PR submission.
 - [x] Q90 Add helper script to run all coordinator hardening guards in one command for contributor ergonomics.
 - [x] Q91 Add a tiny PR template snippet that reminds contributors to run coordinator hardening preflight when touching route enums.
+- [x] Q92 Start Phase 9.1 by migrating Discover `EventsModuleView` event-creation entry from local `sheet` to coordinator-owned push route (`DiscoverRoute.eventCreate`) with post-save list refresh signal.
+- [x] Q93 Continue Phase 9.1 by migrating `EventDetailView` event-edit entry from local `sheet` to coordinator-owned push route.
+- [x] Q94 Continue Phase 9.1 by migrating `NewsModuleView` publish flow from local `sheet` to coordinator-owned push route.
+- [x] Q95 Continue Phase 9.1 by migrating `SetsModuleView` create/edit flows from local `sheet` to coordinator-owned push routes (keep short utility selectors modal).
+- [x] Q96 Continue Phase 9.1 by migrating `LearnModuleView` create/edit flows from local `sheet` to coordinator-owned push routes.
+- [x] Q97 Continue Phase 9.2 by migrating `FeedView` compose/edit post flows from local `sheet` to coordinator-owned push routes in `CircleCoordinator`.
+- [x] Q98 Continue Phase 9.2 by migrating `MainTabView` long-form create flows (`ID publish`, `rating create`) to coordinator-owned push routes while retaining utility pickers as modal allowlist.
+- [x] Q99 Continue Phase 9.2 by evaluating `SquadProfileView` manage flow against modal allowlist and migrate to push only if product behavior requires.
+- [x] Q100 Continue Phase 9.3 by unifying `SearchView` and `NotificationsView` entity hops onto feature coordinator push routes where applicable.
+- [x] Q101 Continue Phase 9.4 by documenting remaining modal allowlist with per-screen rationale and adding guard checks for newly introduced non-allowlist modals.
+- [x] Q102 Start post-Phase-9 cleanup by converting one approved high-value modal detail flow (from the allowlist) to coordinator push as the next pilot.
+- [x] Q103 Continue post-Phase-9 cleanup by migrating `DiscoverSearchViews` DJ detail opening from local `fullScreenCover` to coordinator-owned push routing.
+- [x] Q104 Continue post-Phase-9 cleanup by migrating `DiscoverSearchViews` set playback detail opening from local `fullScreenCover` to coordinator-owned push routing.
+- [x] Q105 Continue post-Phase-9 cleanup by migrating `DiscoverSearchViews` wiki label/festival detail openings from local `fullScreenCover` to coordinator-owned push routing.
+- [x] Q106 Continue post-Phase-9 cleanup by migrating `DiscoverNewsDetailView` DJ/Festival bound-detail openings from local `fullScreenCover` to coordinator-owned push routing.
+- [x] Q107 Continue post-Phase-9 cleanup by migrating `NewsModuleView` article-detail opening from local `fullScreenCover` to coordinator-owned push routing.
+- [x] Q108 Continue post-Phase-9 cleanup by migrating `DJsModuleView` DJ-detail opening from local `fullScreenCover` to coordinator-owned push routing.
+- [x] Q109 Continue post-Phase-9 cleanup by migrating `DJDetailView` related-news opening from local `fullScreenCover` to coordinator-owned push routing.
+- [x] Q110 Continue post-Phase-9 cleanup by migrating Learn-domain detail hops (`LearnModuleView` label/festival, `LearnLabelDetailView` founder DJ, `LearnFestivalDetailView` related news, `RankingBoardDetailView` DJ/festival) from local `fullScreenCover` to coordinator-owned push routing.
+- [x] Q111 Continue post-Phase-9 cleanup by migrating `EventDetailView` related-news opening from local `fullScreenCover` to coordinator-owned push routing (`DiscoverRoute.newsDetail`), while keeping route planner/rating overlays in modal allowlist.
+- [x] Q112 Continue post-Phase-9 cleanup by evaluating Learn ranking-context festival drill-down (`LearnFestivalRankingDetailView`) and keep modal presentation because coordinator push would break ranking-context return semantics.
+- [x] Q113 Continue post-Phase-9 cleanup by migrating `SetsModuleView` normal set-detail opening (`selectedSetForPlayback`) to coordinator push (`DiscoverRoute.setDetail`) and keeping `audioListenSetID` as intentional immersive modal.
+- [x] Q114 Continue post-Phase-9 cleanup by evaluating `EventDetailView` rating detail overlay (`selectedRatingEventID`) and route planner overlay (`showRoutePlanner`) for final keep-modal vs push decision with explicit rationale.
+- [x] Q115 Close current Discover post-Phase-9 cleanup wave by consolidating residual modal rationale wording in `P9.4` and verifying no additional Discover detail-hops remain outside coordinator push or explicit allowlist.
+- [x] Q116 Start cross-feature post-Phase-9 cleanup by evaluating `MainTabView` `selectedDetailRoute` full-screen channel (ID detail route), and keep modal with explicit rationale.
+- [x] Q117 Continue cross-feature post-Phase-9 cleanup by evaluating `MessagesCoordinator` modal route `MessagesModalRoute.squadProfile` for keep-modal vs push decision with explicit rationale.
+- [x] Q118 Continue cross-feature post-Phase-9 cleanup by evaluating `SquadProfileView` manage panel (`SquadManageSheet`) in relation to the updated modal policy and confirming keep-modal rationale remains valid.
+- [x] Q119 Continue cross-feature post-Phase-9 cleanup by evaluating `ComposePostView` media/location preview `fullScreenCover` routes for keep-modal vs push decision with explicit rationale.
+- [x] Q120 Continue cross-feature post-Phase-9 cleanup by evaluating `Shared/PostCardView` media/location preview `fullScreenCover` routes for keep-modal vs push decision with explicit rationale.
+- [x] Q121 Continue cross-feature post-Phase-9 cleanup by evaluating `MainTabView` utility sheet routes (`showEventPicker` / `showDJPicker` / `showCreateSquad`) and confirming keep-modal rationale remains valid.
+- [x] Q122 Re-open post-wave cleanup and convert previously deferred modal routes to push across Messages/MainTab/Squad/Discover detail workflows; refresh modal allowlist and rebuild.
+- [ ] Q123 Publish a concise migration-complete checklist + residual risk list for handoff/release tracking.
 
 ## Migration Hardening Guard
 
 - Boundary guard script:
 `scripts/check-mvvm-coordinator-boundaries.sh`
+- Modal allowlist guard:
+`scripts/check-modal-allowlist.sh`
 - Coordinator routing regression guard:
 `scripts/check-coordinator-routing-regression.sh`
 - Coordinator deep-link round-trip regression guard:
@@ -576,6 +693,7 @@ Require `Architecture Boundary Guard`; keep `Optional iOS Simulator Build` as ma
 4. High-traffic coordinator route enums keep `Hashable` conformance and case-to-destination mapping parity (`Discover`, `Circle`, `Messages`, `Profile`).
 5. Critical deep-link entry paths (`event detail`, `user profile`, `squad profile`) keep route-case presence and URL/token round-trip integrity.
 6. Coordinator route-case snapshots are fixture-locked (`DiscoverRoute`, `CircleRoute`, `MessagesRoute`, `MessagesModalRoute`, `ProfileRoute`) to detect unreviewed enum churn.
+7. `sheet/fullScreenCover` usage is frozen by `scripts/modal-allowlist-signatures.txt`; any new modal route requires explicit allowlist update plus rationale.
 
 ## Discover Migration Template
 
@@ -928,3 +1046,55 @@ After finishing work:
 - 2026-04-10: Verified Q91 by running `scripts/run-coordinator-hardening-preflight.sh` locally with all checks passing after the PR template addition.
 - 2026-04-10: Completed post-Q91 structure cleanup by moving Discover cross-domain shared UI helpers into `Features/Discover/Shared/DiscoverSharedUI.swift`, and removing legacy shim/leftover files `Features/Discover/WebModulesView.swift`, `Features/Profile/WebProfileModulesView.swift`, and `Features/Discover/test.swift`.
 - 2026-04-10: Verified post-Q91 structure cleanup with successful `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build` and `scripts/run-coordinator-hardening-preflight.sh`.
+- 2026-04-10: Added Phase 9 (`Navigation Presentation Normalization`) with push-first policy, modal allowlist, and execution queue `Q92-Q101` so long-line routing cleanup can be resumed deterministically by any new agent.
+- 2026-04-10: Completed Q92 by adding `DiscoverRoute.eventCreate`, migrating `EventsModuleView` create-entry from local `sheet` to coordinator-owned `discoverPush(.eventCreate)`, and wiring a save-notification refresh signal (`Notification.Name.discoverEventDidSave`) so the events list reload behavior remains intact after returning.
+- 2026-04-10: Completed Q93 by adding `DiscoverRoute.eventEdit(event:)`, migrating `EventDetailView` edit-entry from local `sheet` to coordinator-owned push (`discoverPush(.eventEdit(event:))`), and adding event-save notification handling so detail content reloads after edit-save return.
+- 2026-04-10: Completed Q94 by adding `DiscoverRoute.newsPublish`, migrating `NewsModuleView` publish-entry from local `sheet` to coordinator-owned push (`discoverPush(.newsPublish)`), and wiring publish-complete list refresh through `Notification.Name.discoverNewsDidPublish`.
+- 2026-04-10: Completed Q95 by adding `DiscoverRoute.setCreate` and `DiscoverRoute.setEdit(set:)`, migrating `SetsModuleView` create-entry and `DJSetDetailView` edit-entry from local `sheet` to coordinator-owned push routes, and wiring set-save refresh through `Notification.Name.discoverSetDidSave` (tracklist selector/upload/editor sheets remain modal per allowlist).
+- 2026-04-10: Completed Q96 by adding `DiscoverRoute.learnFestivalCreate` and `DiscoverRoute.learnFestivalEdit(festival:)`, migrating Learn festival create/edit entries to coordinator-owned push routes, and wiring festival-save refresh through `Notification.Name.discoverFestivalDidSave`.
+- 2026-04-10: Verified Q96 with successful simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-10: Completed Q97 by adding `CircleRoute.postCreate` and `CircleRoute.postEdit(Post)` in `CircleCoordinator`, migrating `FeedView` compose/edit entries from local `sheet` to coordinator-owned push routes, and wiring post create/update/delete refresh signals via `Notification.Name.circlePostDidCreate/.circlePostDidUpdate/.circlePostDidDelete`.
+- 2026-04-10: Verified Q97 with successful simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-10: Completed Q98 by adding Circle long-form creation routes (`CircleRoute.idCreate`, `ratingEventCreate`, `ratingEventImportFromEvent`, `ratingUnitCreate(eventID:)`) in `CircleCoordinator`, migrating `MainTabView` ID publish + rating create/create-from-event/create-unit flows from local `sheet` to coordinator-owned push routes, and wiring result notifications (`circleIDDidCreate`, `circleRatingEventDidCreate`, `circleRatingUnitDidCreate`) for local list/detail refresh.
+- 2026-04-10: Verified Q98 with successful simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-10: Completed Q99 by evaluating `SquadProfileView` manage flow and deciding to keep `SquadManageSheet` modal (no push migration), because it is an in-context management panel rather than a cross-feature navigation flow; documented this decision under `P9.2 decision note`.
+- 2026-04-10: Completed Q100 by unifying `SearchView` and `NotificationsView` entity hops (`user`, `squad`, `post`) onto coordinator-owned `profilePush` routes, removing their local `NavigationStack`/modal detail presentation paths, and extending `ProfileRoute` with `squadProfile(String)` to keep squad profile navigation inside coordinator ownership.
+- 2026-04-10: Verified Q100 with successful simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-10: Completed Q101 by freezing the modal allowlist in `scripts/modal-allowlist-signatures.txt`, adding `scripts/check-modal-allowlist.sh`, integrating it into CI (`.github/workflows/mvvm-coordinator-guard.yml`) and preflight (`scripts/run-coordinator-hardening-preflight.sh`), and documenting per-screen allowlist rationale under `P9.4`.
+- 2026-04-10: Verified Q101 by running `scripts/check-modal-allowlist.sh` and `scripts/run-coordinator-hardening-preflight.sh` locally with all checks passing.
+- 2026-04-10: Completed Q102 by adding `DiscoverRoute.newsDetail(article:)` and migrating `NewsSearchResultsView` from local `fullScreenCover` article detail presentation to coordinator-owned push routing (`discoverPush(.newsDetail(article:))`) in `DiscoverSearchViews.swift`.
+- 2026-04-10: Verified Q102 with successful `scripts/run-coordinator-hardening-preflight.sh` and simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-10: Completed Q103 by adding `DiscoverRoute.djDetail(djID:)` and migrating `DJsSearchResultsView` from local `fullScreenCover` DJ detail presentation to coordinator-owned push routing (`discoverPush(.djDetail(djID:))`) in `DiscoverSearchViews.swift`.
+- 2026-04-10: Verified Q103 with successful `scripts/run-coordinator-hardening-preflight.sh` and simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-10: Completed Q104 by adding `DiscoverRoute.setDetail(setID:)` and migrating `SetsSearchResultsView` from local `fullScreenCover` set playback opening to coordinator-owned push routing (`discoverPush(.setDetail(setID:))`) in `DiscoverSearchViews.swift`.
+- 2026-04-10: Verified Q104 with successful `scripts/run-coordinator-hardening-preflight.sh` and simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-10: Completed Q105 by adding `DiscoverRoute.labelDetail(label:)` and `DiscoverRoute.festivalDetail(festival:)`, then migrating `WikiSearchResultsView` label/festival openings from local `fullScreenCover` to coordinator-owned push routing (`discoverPush(.labelDetail)` / `.festivalDetail`) in `DiscoverSearchViews.swift`.
+- 2026-04-10: Verified Q105 with successful `scripts/run-coordinator-hardening-preflight.sh` and simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-10: Completed Q106 by migrating `DiscoverNewsDetailView` related DJ/Festival openings from local `fullScreenCover` state to coordinator-owned push routing (`discoverPush(.djDetail)` / `.festivalDetail`), removing local modal-selection state in `DiscoverNewsDetailView.swift`.
+- 2026-04-10: Verified Q106 with successful `scripts/run-coordinator-hardening-preflight.sh` and simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-10: Completed Q107 by migrating `NewsModuleView` article-detail opening from local `fullScreenCover` to coordinator-owned push routing (`discoverPush(.newsDetail(article:))`) and removing local `selectedArticleForDetail` state in `NewsModuleView.swift`.
+- 2026-04-10: Verified Q107 with successful `scripts/run-coordinator-hardening-preflight.sh` and simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-10: Completed Q108 by migrating `DJsModuleView` hot-list DJ opening from local `fullScreenCover` to coordinator-owned push routing (`discoverPush(.djDetail(djID:))`) and removing local `selectedDJForDetail` state in `DJsModuleView.swift`.
+- 2026-04-10: Verified Q108 with successful `scripts/run-coordinator-hardening-preflight.sh` and simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-10: Completed Q109 by migrating `DJDetailView` related-news opening from local `fullScreenCover` to coordinator-owned push routing (`discoverPush(.newsDetail(article:))`) in `DJsModuleView.swift` and removing local `selectedArticleForDetail` modal state.
+- 2026-04-10: Verified Q109 with successful `scripts/run-coordinator-hardening-preflight.sh` and simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-10: Completed Q110 by migrating Learn-domain detail hops from local modal state to coordinator-owned push routing in `LearnModuleView.swift` (`LearnModuleView` label/festival, `LearnLabelDetailView` founder DJ, `LearnFestivalDetailView` related news, `RankingBoardDetailView` DJ/festival); retained image preview and ranking-context overlays as intentional modal surfaces.
+- 2026-04-10: Verified Q110 by refreshing `scripts/modal-allowlist-signatures.txt` via `scripts/check-modal-allowlist.sh --write-allowlist`, then running `scripts/run-coordinator-hardening-preflight.sh` and simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build` successfully.
+- 2026-04-10: Completed Q111 by migrating `EventDetailView` related-news opening from local `fullScreenCover` state to coordinator-owned push routing (`discoverPush(.newsDetail(article:))`), while keeping rating detail and route planner overlays modal per allowlist.
+- 2026-04-10: Verified Q111 by refreshing `scripts/modal-allowlist-signatures.txt` via `scripts/check-modal-allowlist.sh --write-allowlist`, then running `scripts/run-coordinator-hardening-preflight.sh` and simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build` successfully.
+- 2026-04-10: Completed Q112 by evaluating `LearnFestivalRankingDetailView` drill-down behavior and intentionally keeping its local modal transition (`fullScreenCover`) to preserve ranking-context return semantics; documented this under `P9.1 decision note` and updated the immediate queue to `Q113`.
+- 2026-04-10: Completed Q113 by migrating `SetsModuleView` normal set-detail opening from local `fullScreenCover(item: $selectedSetForPlayback)` to coordinator-owned push routing (`discoverPush(.setDetail(setID:))`), while keeping `audioListenSetID` full-screen presentation as an intentional immersive modal playback surface.
+- 2026-04-10: Verified Q113 by refreshing `scripts/modal-allowlist-signatures.txt` via `scripts/check-modal-allowlist.sh --write-allowlist`, then running `scripts/run-coordinator-hardening-preflight.sh` and simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build` successfully.
+- 2026-04-10: Completed Q114 by evaluating `EventDetailView` rating detail + route planner overlays and intentionally keeping both modal (`fullScreenCover`) as immersive in-context subflows; documented explicit rationale under `P9.1 decision note` and moved queue forward to `Q115`.
+- 2026-04-10: Completed Q115 by consolidating Discover residual modal rationale under `P9.4` and auditing all Discover `fullScreenCover` call sites; confirmed no additional Discover detail-hop modal remains outside coordinator push or explicit allowlist.
+- 2026-04-10: Verified Q115 with a successful `scripts/run-coordinator-hardening-preflight.sh` pass after the Discover modal audit note update.
+- 2026-04-10: Completed Q116 by evaluating `MainTabView` `selectedDetailRoute` (`CircleIDDetailView`) and intentionally keeping its full-screen modal presentation because the flow relies on binding-backed hub-local state mutation (`@Binding entry`) and dismiss-then-push handoff (`pendingRouteAfterDismiss`); documented rationale in `P9.4` and moved queue forward to `Q117`.
+- 2026-04-10: Completed Q117 by evaluating `MessagesModalRoute.squadProfile` and intentionally keeping full-screen modal presentation in `MessagesCoordinator`, because message-context squad inspection should return directly to the same conversation/alert stack without additional push-stack rewiring.
+- 2026-04-10: Completed Q118 by re-evaluating `SquadManageSheet` in `SquadProfileView` and confirming keep-modal policy remains correct: it is an in-context management panel with reload-on-dismiss coupling and does not represent a cross-feature entity navigation flow.
+- 2026-04-10: Completed Q119 by evaluating `ComposePostView` media and location preview full-screen routes and intentionally keeping them modal, because both are compose-context immersive/utility subflows and do not represent cross-feature entity navigation.
+- 2026-04-10: Completed Q120 by evaluating `Shared/PostCardView` media and location full-screen routes (`selectedMedia`, `isShowingLocationMap`) and intentionally keeping them modal, because they are post-context immersive preview flows rather than coordinator-owned entity navigation.
+- 2026-04-10: Completed Q121 by evaluating `MainTabView` utility sheets (`showEventPicker`, `showDJPicker`, `showCreateSquad`) and confirming keep-modal policy remains valid because they are short-lived input/creation tools; marked post-Phase-9 cleanup wave (`Q102`–`Q121`) as closed with allowlist-backed rationale.
+- 2026-04-10: Completed Q122 by re-opening post-wave cleanup and converting previously deferred modal routes to push: `MessagesCoordinator` squad profile route, `MainTabView` (`selectedDetailRoute`, event picker, DJ picker, create squad), `SquadProfileView` manage panel, `EventDetailView` rating detail + route planner, `DJsModuleView` import/edit/spotify routes, `SetsModuleView` tracklist/editor/event-binding routes, `LearnModuleView` ranking/image/full-screen detail routes, and `EventEditorView` lineup/location routes.
+- 2026-04-10: Q122 follow-up guard update: refreshed `scripts/modal-allowlist-signatures.txt` via `scripts/check-modal-allowlist.sh --write-allowlist` after modal-count reduction.
+- 2026-04-10: Q122 verification: simulator build passed (`xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`) and modal allowlist check passed (`scripts/check-modal-allowlist.sh`).
+- 2026-04-10: Added `docs/IOS_INCREMENTAL_FEATURE_DEVELOPMENT_GUIDE.md` as the default playbook for all future incremental feature delivery under MVVM+Coordinator, and linked it from this plan via `Companion Development Guide`.

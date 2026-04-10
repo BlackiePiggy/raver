@@ -1468,12 +1468,10 @@ struct EventEditorView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
-            .sheet(isPresented: $showLineupImportEditor, onDismiss: {
-                resetLineupImportDrafts()
-            }) {
+            .navigationDestination(isPresented: $showLineupImportEditor) {
                 lineupImportEditorSheet()
             }
-            .fullScreenCover(isPresented: $showLocationPicker) {
+            .navigationDestination(isPresented: $showLocationPicker) {
                 EventLocationPickerSheet(
                     initialLatitude: pickedLatitude,
                     initialLongitude: pickedLongitude,
@@ -1497,6 +1495,11 @@ struct EventEditorView: View {
                        !placeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         venueName = placeName
                     }
+                }
+            }
+            .onChange(of: showLineupImportEditor) { _, isPresented in
+                if !isPresented {
+                    resetLineupImportDrafts()
                 }
             }
         }

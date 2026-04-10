@@ -19,7 +19,26 @@ enum DiscoverRoute: Hashable {
         query: String,
         preferredWikiSectionRaw: String? = nil
     )
+    case djDetail(djID: String)
+    case labelDetail(label: LearnLabel)
+    case festivalDetail(festival: LearnFestival)
+    case setDetail(setID: String)
+    case newsDetail(article: DiscoverNewsArticle)
+    case learnFestivalCreate
+    case learnFestivalEdit(festival: LearnFestival)
+    case newsPublish
+    case setCreate
+    case setEdit(set: WebDJSet)
+    case eventCreate
+    case eventEdit(event: WebEvent)
     case eventDetail(eventID: String)
+}
+
+extension Notification.Name {
+    static let discoverEventDidSave = Notification.Name("discoverEventDidSave")
+    static let discoverNewsDidPublish = Notification.Name("discoverNewsDidPublish")
+    static let discoverSetDidSave = Notification.Name("discoverSetDidSave")
+    static let discoverFestivalDidSave = Notification.Name("discoverFestivalDidSave")
 }
 
 struct DiscoverPushKey: EnvironmentKey {
@@ -100,7 +119,6 @@ func makeDiscoverRouteDestination(
                 )
             )
         }
-        .toolbar(.hidden, for: .tabBar)
 
     case .searchResults(let domain, let query, let preferredWikiSectionRaw):
         switch domain {
@@ -111,7 +129,6 @@ func makeDiscoverRouteDestination(
                     repository: appContainer.discoverEventsRepository
                 )
             )
-            .toolbar(.hidden, for: .tabBar)
 
         case .news:
             NewsSearchResultsView(
@@ -120,7 +137,6 @@ func makeDiscoverRouteDestination(
                     repository: appContainer.discoverNewsRepository
                 )
             )
-            .toolbar(.hidden, for: .tabBar)
 
         case .djs:
             DJsSearchResultsView(
@@ -129,7 +145,6 @@ func makeDiscoverRouteDestination(
                     repository: appContainer.discoverDJsRepository
                 )
             )
-                .toolbar(.hidden, for: .tabBar)
 
         case .sets:
             SetsSearchResultsView(
@@ -138,7 +153,6 @@ func makeDiscoverRouteDestination(
                     repository: appContainer.discoverSetsRepository
                 )
             )
-                .toolbar(.hidden, for: .tabBar)
 
         case .wiki:
             WikiSearchResultsView(
@@ -156,11 +170,60 @@ func makeDiscoverRouteDestination(
                     return section
                 }()
             )
-            .toolbar(.hidden, for: .tabBar)
         }
+
+    case .djDetail(let djID):
+        DJDetailView(djID: djID)
+
+    case .labelDetail(let label):
+        LearnLabelDetailView(label: label)
+
+    case .festivalDetail(let festival):
+        LearnFestivalDetailView(festival: festival)
+
+    case .setDetail(let setID):
+        DJSetDetailView(setID: setID)
+
+    case .newsDetail(let article):
+        DiscoverNewsDetailView(article: article)
 
     case .eventDetail(let eventID):
         EventDetailView(eventID: eventID)
-            .toolbar(.hidden, for: .tabBar)
+
+    case .eventCreate:
+        EventEditorView(mode: .create) {
+            NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
+        }
+
+    case .eventEdit(let event):
+        EventEditorView(mode: .edit(event)) {
+            NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
+        }
+
+    case .newsPublish:
+        DiscoverNewsPublishSheet { draft in
+            _ = try await appContainer.discoverNewsRepository.publish(draft: draft)
+            NotificationCenter.default.post(name: .discoverNewsDidPublish, object: nil)
+        }
+
+    case .learnFestivalCreate:
+        LearnFestivalEditorView(mode: .create) { festival in
+            NotificationCenter.default.post(name: .discoverFestivalDidSave, object: festival.id)
+        }
+
+    case .learnFestivalEdit(let festival):
+        LearnFestivalEditorView(mode: .edit(festival)) { updated in
+            NotificationCenter.default.post(name: .discoverFestivalDidSave, object: updated.id)
+        }
+
+    case .setCreate:
+        DJSetEditorView(mode: .create) {
+            NotificationCenter.default.post(name: .discoverSetDidSave, object: nil)
+        }
+
+    case .setEdit(let set):
+        DJSetEditorView(mode: .edit(set)) {
+            NotificationCenter.default.post(name: .discoverSetDidSave, object: set.id)
+        }
     }
 }

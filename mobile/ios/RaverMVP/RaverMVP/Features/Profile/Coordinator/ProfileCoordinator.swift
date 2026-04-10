@@ -3,6 +3,7 @@ import SwiftUI
 enum ProfileRoute: Hashable {
     case followList(userID: String, kind: FollowListKind)
     case userProfile(String)
+    case squadProfile(String)
     case settings
     case myPublishes
     case conversation(Conversation)
@@ -67,6 +68,8 @@ struct ProfileCoordinatorView: View {
             )
         case let .userProfile(userID):
             UserProfileView(userID: userID)
+        case let .squadProfile(squadID):
+            SquadProfileView(squadID: squadID, service: appContainer.socialService)
         case .settings:
             SettingsView()
         case .myPublishes:

@@ -73,7 +73,6 @@ struct EventsModuleView: View {
     @State private var selectedEventType = ""
     @State private var searchText = ""
     @State private var appliedSearchText = ""
-    @State private var showCreate = false
     @State private var showCalendar = false
     @State private var showCountryFilter = false
     @State private var calendarSelectedDate = Date()
@@ -98,11 +97,6 @@ struct EventsModuleView: View {
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top) {
             headerView
-        }
-        .sheet(isPresented: $showCreate) {
-            EventEditorView(mode: .create) {
-                Task { await refreshAfterCreate() }
-            }
         }
         .sheet(isPresented: $showCalendar) {
             EventCalendarSheet(
@@ -139,6 +133,9 @@ struct EventsModuleView: View {
         }
         .onChange(of: searchText) { _, newValue in
             scheduleSearchCommit(for: newValue)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { _ in
+            Task { await refreshAfterCreate() }
         }
         .onDisappear {
             searchDebounceTask?.cancel()
@@ -246,7 +243,7 @@ struct EventsModuleView: View {
             HStack(spacing: 10) {
                 searchField
                 eventTopIconButton(systemName: "plus") {
-                    showCreate = true
+                    discoverPush(.eventCreate)
                 }
             }
 
@@ -703,7 +700,7 @@ struct EventsModuleView: View {
 
     @MainActor
     private func presentEventDetail(_ event: WebEvent) {
-        guard !showCreate, !showCalendar, !showCountryFilter else { return }
+        guard !showCalendar, !showCountryFilter else { return }
         discoverPush(.eventDetail(eventID: event.id))
     }
 

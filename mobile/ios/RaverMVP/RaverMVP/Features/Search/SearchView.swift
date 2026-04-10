@@ -13,94 +13,72 @@ struct SearchView: View {
 
 private struct SearchScreen: View {
     @EnvironmentObject private var appState: AppState
-    @EnvironmentObject private var appContainer: AppContainer
+    @Environment(\.profilePush) private var profilePush
     @StateObject private var viewModel: SearchViewModel
-    @State private var selectedUserForProfile: UserSummary?
-    @State private var selectedSquadForProfile: PostSquad?
-    @State private var selectedPostForDetail: Post?
 
     init(viewModel: SearchViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 12) {
-                HStack(spacing: 8) {
-                    TextField(L("搜索用户或动态", "Search users or posts"), text: $viewModel.query)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .padding(12)
-                        .background(RaverTheme.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .onSubmit {
-                            Task { await performSearch() }
-                        }
-
-                    Button(L("搜索", "Search")) {
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                TextField(L("搜索用户或动态", "Search users or posts"), text: $viewModel.query)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(12)
+                    .background(RaverTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .onSubmit {
                         Task { await performSearch() }
                     }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding(.horizontal, 16)
 
-                Picker(L("范围", "Scope"), selection: $viewModel.scope) {
-                    ForEach(SearchViewModel.Scope.allCases) { scope in
-                        Text(scope.title).tag(scope)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .onChange(of: viewModel.scope) { _, _ in
+                Button(L("搜索", "Search")) {
                     Task { await performSearch() }
                 }
-                .onAppear {
-                    Task { await performSearch() }
-                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(.horizontal, 16)
 
-                if viewModel.isLoading {
-                    Spacer()
-                    ProgressView(L("搜索中...", "Searching..."))
-                    Spacer()
-                } else {
-                    content
+            Picker(L("范围", "Scope"), selection: $viewModel.scope) {
+                ForEach(SearchViewModel.Scope.allCases) { scope in
+                    Text(scope.title).tag(scope)
                 }
             }
-            .background(RaverTheme.background)
-            .navigationTitle(L("发现", "Discover"))
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button(L("收起", "Dismiss")) {
-                        dismissKeyboard()
-                    }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .onChange(of: viewModel.scope) { _, _ in
+                Task { await performSearch() }
+            }
+            .onAppear {
+                Task { await performSearch() }
+            }
+
+            if viewModel.isLoading {
+                Spacer()
+                ProgressView(L("搜索中...", "Searching..."))
+                Spacer()
+            } else {
+                content
+            }
+        }
+        .background(RaverTheme.background)
+        .navigationTitle(L("发现", "Discover"))
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(L("收起", "Dismiss")) {
+                    dismissKeyboard()
                 }
             }
-            .navigationDestination(item: $selectedUserForProfile) { user in
-                UserProfileView(userID: user.id)
-            }
-            .fullScreenCover(item: $selectedSquadForProfile) { squad in
-                NavigationStack {
-                    SquadProfileView(
-                        squadID: squad.id,
-                        service: appContainer.socialService
-                    )
-                }
-            }
-            .fullScreenCover(item: $selectedPostForDetail) { post in
-                NavigationStack {
-                    PostDetailView(post: post, service: appContainer.socialService)
-                        .environmentObject(appState)
-                }
-            }
-            .alert(L("搜索失败", "Search Failed"), isPresented: Binding(
-                get: { viewModel.error != nil },
-                set: { if !$0 { viewModel.error = nil } }
-            )) {
-                Button(L("确定", "OK"), role: .cancel) {}
-            } message: {
-                Text(viewModel.error ?? "")
-            }
+        }
+        .alert(L("搜索失败", "Search Failed"), isPresented: Binding(
+            get: { viewModel.error != nil },
+            set: { if !$0 { viewModel.error = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(viewModel.error ?? "")
         }
     }
 
@@ -146,7 +124,7 @@ private struct SearchScreen: View {
                         }
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            selectedUserForProfile = user
+                            profilePush(.userProfile(user.id))
                         }
                     }
                     .padding(.vertical, 4)
@@ -178,14 +156,14 @@ private struct SearchScreen: View {
                                 onFollowTap: nil,
                                 onMessageTap: nil,
                                 onAuthorTap: {
-                                    selectedUserForProfile = post.author
+                                    profilePush(.userProfile(post.author.id))
                                 },
                                 onSquadTap: nil
                             )
                             .foregroundStyle(RaverTheme.primaryText)
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                selectedPostForDetail = post
+                                profilePush(.postDetail(post))
                             }
                         }
                     }
@@ -220,11 +198,7 @@ private struct SearchScreen: View {
                         }
 
                         Button(squad.isMember ? L("进入小队", "Enter Squad") : L("加入并进入", "Join & Enter")) {
-                            selectedSquadForProfile = PostSquad(
-                                id: squad.id,
-                                name: squad.name,
-                                avatarURL: squad.avatarURL
-                            )
+                            profilePush(.squadProfile(squad.id))
                         }
                         .buttonStyle(.borderedProminent)
                     }

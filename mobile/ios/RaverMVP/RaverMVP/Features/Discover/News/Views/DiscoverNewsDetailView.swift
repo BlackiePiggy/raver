@@ -16,8 +16,6 @@ struct DiscoverNewsDetailView: View {
     @State private var isLoadingComments = false
     @State private var isSendingComment = false
     @State private var commentInput = ""
-    @State private var selectedDJIDForDetail: String?
-    @State private var selectedBrandForDetail: LearnFestival?
     @State private var errorMessage: String?
 
     private var newsRepository: DiscoverNewsRepository {
@@ -161,23 +159,6 @@ struct DiscoverNewsDetailView: View {
             await loadBoundEntities()
             await loadComments(reset: true)
         }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedDJIDForDetail != nil },
-                set: { if !$0 { selectedDJIDForDetail = nil } }
-            )
-        ) {
-            if let djID = selectedDJIDForDetail {
-                DiscoverCoordinatorView {
-                    DJDetailView(djID: djID)
-                }
-            }
-        }
-        .fullScreenCover(item: $selectedBrandForDetail) { festival in
-            DiscoverCoordinatorView {
-                LearnFestivalDetailView(festival: festival)
-            }
-        }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -233,7 +214,7 @@ struct DiscoverNewsDetailView: View {
                 HStack(spacing: 8) {
                     ForEach(relatedDJs) { dj in
                         Button {
-                            selectedDJIDForDetail = dj.id
+                            discoverPush(.djDetail(djID: dj.id))
                         } label: {
                             HStack(spacing: 6) {
                                 relatedDJAvatar(dj)
@@ -253,7 +234,7 @@ struct DiscoverNewsDetailView: View {
 
                     ForEach(unresolvedBoundDjIDs, id: \.self) { id in
                         Button {
-                            selectedDJIDForDetail = id
+                            discoverPush(.djDetail(djID: id))
                         } label: {
                             Label("DJ \(shortIDLabel(id))", systemImage: "person.wave.2")
                                 .font(.caption2.weight(.semibold))
@@ -268,7 +249,7 @@ struct DiscoverNewsDetailView: View {
 
                     ForEach(relatedBrands) { brand in
                         Button {
-                            selectedBrandForDetail = brand
+                            discoverPush(.festivalDetail(festival: brand))
                         } label: {
                             Label(brand.name, systemImage: "music.quarternote.3")
                                 .font(.caption2.weight(.semibold))

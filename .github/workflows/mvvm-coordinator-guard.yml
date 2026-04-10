@@ -25,6 +25,9 @@ jobs:
       - name: Run MVVM+Coordinator boundary guard
         run: scripts/check-mvvm-coordinator-boundaries.sh
 
+      - name: Run modal allowlist guard
+        run: scripts/check-modal-allowlist.sh
+
       - name: Run coordinator routing regression guard
         run: scripts/check-coordinator-routing-regression.sh
 

@@ -116,7 +116,6 @@ struct DiscoverFullScreenSearchInputView: View {
         .padding(.top, 10)
         .background(RaverTheme.background)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button(L("取消", "Cancel")) {
@@ -253,7 +252,6 @@ struct EventsSearchResultsView: View {
         .background(RaverTheme.background)
         .navigationTitle(L("搜索", "Search"))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .task {
             await viewModel.loadIfNeeded()
         }
@@ -272,8 +270,8 @@ struct EventsSearchResultsView: View {
 }
 
 struct NewsSearchResultsView: View {
+    @Environment(\.discoverPush) private var discoverPush
     @StateObject private var viewModel: NewsSearchResultsViewModel
-    @State private var selectedArticleForDetail: DiscoverNewsArticle?
 
     init(viewModel: NewsSearchResultsViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -302,7 +300,7 @@ struct NewsSearchResultsView: View {
                         LazyVStack(spacing: 0) {
                             ForEach(Array(viewModel.articles.enumerated()), id: \.element.id) { index, article in
                                 Button {
-                                    selectedArticleForDetail = article
+                                    discoverPush(.newsDetail(article: article))
                                 } label: {
                                     DiscoverNewsRow(article: article)
                                 }
@@ -324,17 +322,11 @@ struct NewsSearchResultsView: View {
         .background(RaverTheme.background)
         .navigationTitle(L("搜索", "Search"))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .task {
             await viewModel.loadIfNeeded()
         }
         .refreshable {
             await viewModel.refresh()
-        }
-        .fullScreenCover(item: $selectedArticleForDetail) { article in
-            DiscoverCoordinatorView {
-                DiscoverNewsDetailView(article: article)
-            }
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -348,8 +340,8 @@ struct NewsSearchResultsView: View {
 }
 
 struct DJsSearchResultsView: View {
+    @Environment(\.discoverPush) private var discoverPush
     @StateObject private var viewModel: DJsSearchResultsViewModel
-    @State private var selectedDJForDetail: WebDJ?
     @State private var selectedBoardForDetail: RankingBoard?
 
     init(viewModel: DJsSearchResultsViewModel) {
@@ -389,7 +381,7 @@ struct DJsSearchResultsView: View {
                                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                                         ForEach(viewModel.djs) { dj in
                                             Button {
-                                                selectedDJForDetail = dj
+                                                discoverPush(.djDetail(djID: dj.id))
                                             } label: {
                                                 DJSearchResultCard(dj: dj)
                                             }
@@ -434,17 +426,11 @@ struct DJsSearchResultsView: View {
         .background(RaverTheme.background)
         .navigationTitle(L("搜索", "Search"))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .task {
             await viewModel.loadIfNeeded()
         }
         .refreshable {
             await viewModel.refresh()
-        }
-        .fullScreenCover(item: $selectedDJForDetail) { dj in
-            DiscoverCoordinatorView {
-                DJDetailView(djID: dj.id)
-            }
         }
         .navigationDestination(item: $selectedBoardForDetail) { board in
             RankingBoardDetailView(board: board)
@@ -461,13 +447,13 @@ struct DJsSearchResultsView: View {
 }
 
 struct SetsSearchResultsView: View {
+    @Environment(\.discoverPush) private var discoverPush
     private let columns = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12),
     ]
 
     @StateObject private var viewModel: SetsSearchResultsViewModel
-    @State private var selectedSetForPlayback: WebDJSet?
 
     init(viewModel: SetsSearchResultsViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -496,7 +482,7 @@ struct SetsSearchResultsView: View {
                         LazyVGrid(columns: columns, spacing: 14) {
                             ForEach(viewModel.sets) { set in
                                 Button {
-                                    selectedSetForPlayback = set
+                                    discoverPush(.setDetail(setID: set.id))
                                 } label: {
                                     DJSetGridCard(set: set)
                                 }
@@ -515,18 +501,11 @@ struct SetsSearchResultsView: View {
         .background(RaverTheme.background)
         .navigationTitle(L("搜索", "Search"))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .task {
             await viewModel.loadIfNeeded()
         }
         .refreshable {
             await viewModel.refresh()
-        }
-        .fullScreenCover(item: $selectedSetForPlayback) { set in
-            NavigationStack {
-                DJSetDetailView(setID: set.id)
-            }
-            .toolbar(.hidden, for: .tabBar)
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -540,12 +519,11 @@ struct SetsSearchResultsView: View {
 }
 
 struct WikiSearchResultsView: View {
+    @Environment(\.discoverPush) private var discoverPush
     let preferredSection: LearnModuleSection
 
     @StateObject private var viewModel: WikiSearchResultsViewModel
     @State private var selectedTab: Tab
-    @State private var selectedLabelForDetail: LearnLabel?
-    @State private var selectedFestivalForDetail: LearnFestival?
 
     private enum Tab: String, CaseIterable, Identifiable {
         case labels
@@ -602,22 +580,11 @@ struct WikiSearchResultsView: View {
         .background(RaverTheme.background)
         .navigationTitle(L("搜索", "Search"))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .task {
             await viewModel.loadIfNeeded()
         }
         .refreshable {
             await viewModel.refresh()
-        }
-        .fullScreenCover(item: $selectedLabelForDetail) { label in
-            NavigationStack {
-                LearnLabelDetailView(label: label)
-            }
-        }
-        .fullScreenCover(item: $selectedFestivalForDetail) { festival in
-            DiscoverCoordinatorView {
-                LearnFestivalDetailView(festival: festival)
-            }
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -644,7 +611,7 @@ struct WikiSearchResultsView: View {
                         LearnLabelCard(label: label)
                             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .onTapGesture {
-                                selectedLabelForDetail = label
+                                discoverPush(.labelDetail(label: label))
                             }
                     }
                 }
@@ -669,7 +636,7 @@ struct WikiSearchResultsView: View {
                         LearnFestivalCard(festival: festival)
                             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .onTapGesture {
-                                selectedFestivalForDetail = festival
+                                discoverPush(.festivalDetail(festival: festival))
                             }
                     }
                 }

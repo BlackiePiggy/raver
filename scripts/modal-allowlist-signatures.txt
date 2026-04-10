@@ -1,0 +1,10 @@
+1|mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventDetailView.swift|sheet|$showEventCheckinSheet
+1|mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventDetailView.swift|sheet|$showShareSheet
+1|mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventDetailView.swift|sheet|$venueMapContext
+1|mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventsModuleView.swift|sheet|$showCalendar
+1|mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventsModuleView.swift|sheet|$showCountryFilter
+1|mobile/ios/RaverMVP/RaverMVP/Features/Discover/Sets/Views/SetsModuleView.swift|fullScreenCover|audioListenSetID
+1|mobile/ios/RaverMVP/RaverMVP/Features/Feed/ComposePostView.swift|fullScreenCover|$selectedPreview
+1|mobile/ios/RaverMVP/RaverMVP/Features/Feed/ComposePostView.swift|fullScreenCover|$showLocationPicker
+1|mobile/ios/RaverMVP/RaverMVP/Shared/PostCardView.swift|fullScreenCover|$isShowingLocationMap
+1|mobile/ios/RaverMVP/RaverMVP/Shared/PostCardView.swift|fullScreenCover|$selectedMedia
