@@ -1,27 +1,18 @@
 import SwiftUI
-import PhotosUI
-import AVKit
-import AVFoundation
 import UIKit
-import Photos
-import CoreImage.CIFilterBuiltins
-import MapKit
-import CoreLocation
-import CoreText
 
 private extension UIView {
     func findEnclosingScrollView() -> UIScrollView? {
         var current: UIView? = superview
         while let view = current {
-            if let sv = view as? UIScrollView, sv !== self {
-                return sv
+            if let scrollView = view as? UIScrollView, scrollView !== self {
+                return scrollView
             }
             current = view.superview
         }
         return nil
     }
 }
-
 
 struct HorizontalAxisLockedScrollView<Content: View>: UIViewRepresentable {
     let showsIndicators: Bool
@@ -156,47 +147,6 @@ struct HorizontalAxisLockedScrollView<Content: View>: UIViewRepresentable {
     }
 }
 
-private struct JustifiedUILabelText: UIViewRepresentable {
-    let text: String
-    let font: UIFont
-    let color: UIColor
-    let lineSpacing: CGFloat
-
-    func makeUIView(context: Context) -> UILabel {
-        let label = UILabel()
-        label.numberOfLines = 0
-        label.backgroundColor = .clear
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        label.setContentHuggingPriority(.required, for: .vertical)
-        return label
-    }
-
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UILabel, context: Context) -> CGSize? {
-        let targetWidth = proposal.width ?? UIScreen.main.bounds.width
-        let fittingSize = uiView.sizeThatFits(
-            CGSize(width: targetWidth, height: .greatestFiniteMagnitude)
-        )
-        return CGSize(width: targetWidth, height: ceil(fittingSize.height))
-    }
-
-    func updateUIView(_ uiView: UILabel, context: Context) {
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .justified
-        paragraph.baseWritingDirection = .natural
-        paragraph.lineBreakMode = .byWordWrapping
-        paragraph.lineSpacing = lineSpacing
-
-        uiView.attributedText = NSAttributedString(
-            string: text,
-            attributes: [
-                .font: font,
-                .foregroundColor: color,
-                .paragraphStyle: paragraph
-            ]
-        )
-    }
-}
-
 func topSafeAreaInset() -> CGFloat {
     UIApplication.shared.connectedScenes
         .compactMap { $0 as? UIWindowScene }
@@ -204,7 +154,3 @@ func topSafeAreaInset() -> CGFloat {
         .first(where: { $0.isKeyWindow })?
         .safeAreaInsets.top ?? 0
 }
-
-
-
-

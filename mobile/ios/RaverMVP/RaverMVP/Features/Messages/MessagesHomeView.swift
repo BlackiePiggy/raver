@@ -2,7 +2,7 @@ import SwiftUI
 import PhotosUI
 import UIKit
 
-private enum MessageAlertCategory: String, CaseIterable, Identifiable {
+enum MessageAlertCategory: String, CaseIterable, Identifiable, Hashable {
     case like
     case comment
     case follow
@@ -59,6 +59,7 @@ struct CreateSquadView: View {
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
 
     let service: SocialService
     let onCreated: (Conversation) -> Void
@@ -76,7 +77,7 @@ struct CreateSquadView: View {
     @State private var isSubmitting = false
     @State private var isUploadingFlag = false
     @State private var error: String?
-    private let webService = AppEnvironment.makeWebService()
+    private var webService: WebFeatureService { appContainer.webService }
 
     var body: some View {
         ScrollView {
@@ -566,16 +567,19 @@ struct CreateSquadView: View {
 }
 
 struct MessagesHomeView: View {
-    @EnvironmentObject private var appState: AppState
-    @StateObject private var chatViewModel: MessagesViewModel
-    @StateObject private var alertViewModel: MessageNotificationsViewModel
-    @State private var pushedConversation: Conversation?
-    @State private var selectedCategory: MessageAlertCategory?
+    @Environment(\.messagesPush) private var messagesPush
+    @ObservedObject var chatViewModel: MessagesViewModel
+    @ObservedObject var alertViewModel: MessageNotificationsViewModel
+    let onUnreadStateChanged: () -> Void
 
-    init() {
-        let service = AppEnvironment.makeService()
-        _chatViewModel = StateObject(wrappedValue: MessagesViewModel(service: service))
-        _alertViewModel = StateObject(wrappedValue: MessageNotificationsViewModel(service: service))
+    init(
+        chatViewModel: MessagesViewModel,
+        alertViewModel: MessageNotificationsViewModel,
+        onUnreadStateChanged: @escaping () -> Void
+    ) {
+        self.chatViewModel = chatViewModel
+        self.alertViewModel = alertViewModel
+        self.onUnreadStateChanged = onUnreadStateChanged
     }
 
     var body: some View {
@@ -602,10 +606,10 @@ struct MessagesHomeView: View {
             } else {
                 List(chatViewModel.conversations) { conversation in
                     Button {
-                        pushedConversation = conversation
+                        messagesPush(.conversation(conversation))
                         Task {
                             await chatViewModel.markConversationRead(conversationID: conversation.id)
-                            syncTabBadge()
+                            onUnreadStateChanged()
                         }
                     } label: {
                         conversationRow(conversation)
@@ -628,21 +632,10 @@ struct MessagesHomeView: View {
             await refreshAll()
         }
         .onChange(of: chatViewModel.unreadTotal) { _, _ in
-            syncTabBadge()
+            onUnreadStateChanged()
         }
         .onChange(of: alertViewModel.unreadCounts.total) { _, _ in
-            syncTabBadge()
-        }
-        .navigationDestination(item: $pushedConversation) { conversation in
-            ChatView(conversation: conversation, service: appState.service)
-        }
-        .navigationDestination(item: $selectedCategory) { category in
-            MessageAlertDetailView(
-                category: category,
-                viewModel: alertViewModel
-            ) {
-                syncTabBadge()
-            }
+            onUnreadStateChanged()
         }
         .alert(L("消息加载失败", "Failed to Load Messages"), isPresented: Binding(
             get: { chatViewModel.error != nil || alertViewModel.error != nil },
@@ -665,7 +658,7 @@ struct MessagesHomeView: View {
     private var alertsRow: some View {
         ForEach(MessageAlertCategory.allCases) { category in
             Button {
-                selectedCategory = category
+                messagesPush(.alertCategory(category))
             } label: {
                 ZStack(alignment: .topTrailing) {
                     Circle()
@@ -828,22 +821,16 @@ struct MessagesHomeView: View {
             group.addTask { await chatViewModel.load() }
             group.addTask { await alertViewModel.load() }
         }
-        syncTabBadge()
-    }
-
-    private func syncTabBadge() {
-        appState.unreadMessagesCount = chatViewModel.unreadTotal + alertViewModel.unreadCounts.total
+        onUnreadStateChanged()
     }
 }
 
-private struct MessageAlertDetailView: View {
-    @EnvironmentObject private var appState: AppState
+struct MessageAlertDetailView: View {
+    @Environment(\.messagesPush) private var messagesPush
+    @Environment(\.messagesPresent) private var messagesPresent
     let category: MessageAlertCategory
     @ObservedObject var viewModel: MessageNotificationsViewModel
     let onReadChange: () -> Void
-
-    @State private var selectedUser: UserSummary?
-    @State private var selectedSquad: PostSquad?
 
     var body: some View {
         Group {
@@ -888,14 +875,6 @@ private struct MessageAlertDetailView: View {
         .background(RaverTheme.background)
         .navigationTitle(category.title)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(item: $selectedUser) { user in
-            UserProfileView(userID: user.id)
-        }
-        .fullScreenCover(item: $selectedSquad) { squad in
-            NavigationStack {
-                SquadProfileView(squadID: squad.id)
-            }
-        }
     }
 
     @ViewBuilder
@@ -936,10 +915,10 @@ private struct MessageAlertDetailView: View {
         switch target.type {
         case "user":
             if let actor = item.actor {
-                selectedUser = actor
+                messagesPush(.userProfile(actor.id))
             }
         case "squad":
-            selectedSquad = PostSquad(id: target.id, name: target.title ?? L("小队", "Squad"), avatarURL: nil)
+            messagesPresent(.squadProfile(target.id))
         default:
             break
             }

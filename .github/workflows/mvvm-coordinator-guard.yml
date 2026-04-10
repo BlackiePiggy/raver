@@ -1,0 +1,51 @@
+name: MVVM Coordinator Guard
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      run_ios_build:
+        description: "Also run optional iOS simulator build lane"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  architecture-boundary-guard:
+    name: Architecture Boundary Guard
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run MVVM+Coordinator boundary guard
+        run: scripts/check-mvvm-coordinator-boundaries.sh
+
+      - name: Run coordinator routing regression guard
+        run: scripts/check-coordinator-routing-regression.sh
+
+      - name: Run coordinator deep-link round-trip regression guard
+        run: scripts/check-coordinator-deeplink-roundtrip.sh
+
+      - name: Run coordinator route snapshot guard
+        run: scripts/check-coordinator-route-snapshots.sh
+
+  ios-simulator-build:
+    name: Optional iOS Simulator Build
+    runs-on: macos-latest
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_ios_build == true }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build iOS app (generic simulator destination)
+        run: |
+          xcodebuild \
+            -project mobile/ios/RaverMVP/RaverMVP.xcodeproj \
+            -scheme RaverMVP \
+            -destination 'generic/platform=iOS Simulator' \
+            build

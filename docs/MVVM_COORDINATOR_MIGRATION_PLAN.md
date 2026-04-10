@@ -98,29 +98,43 @@ mobile/ios/RaverMVP/RaverMVP/
   Features/
     Discover/
       Coordinator/
-      Domain/
-      ViewModels/
-      Views/
-      Components/
+      Shared/
+      Search/
+        Views/
+        ViewModels/
+      Events/
+        Views/
+        ViewModels/
+      News/
+        Views/
+        Models/
+      DJs/
+        Views/
+      Sets/
+        Views/
+      Learn/
+        Views/
     Circle/
       Coordinator/
-      Domain/
-      ViewModels/
       Views/
+      ViewModels/
       Components/
     Messages/
       Coordinator/
-      Domain/
-      ViewModels/
       Views/
+      ViewModels/
       Components/
     Profile/
       Coordinator/
-      Domain/
-      ViewModels/
       Views/
+      ViewModels/
       Components/
 ```
+
+Notes:
+
+- Discover has already converged to domain-first folders (`Search/Events/News/DJs/Sets/Learn`) and this is the current source-of-truth structure.
+- Circle/Messages/Profile can use the same domain-first pattern when decomposition work starts; the layout above is the minimum expected baseline.
 
 ## Phase Plan
 
@@ -262,9 +276,24 @@ Exit criteria:
 Status:
 
 - [x] P5.1 Add `MessagesCoordinator`.
-- [ ] P5.2 Add `ProfileCoordinator`.
-- [ ] P5.3 Normalize Messages views and ViewModels.
-- [ ] P5.4 Normalize Profile views and ViewModels.
+- [x] P5.2 Add `ProfileCoordinator`.
+- [x] P5.3 Normalize Messages views and ViewModels.
+- [x] P5.4 Normalize Profile views and ViewModels.
+
+P5.4 scope tracker:
+
+- Completed scope:
+- Coordinator owns Profile route stack and push routing (`ProfileRoute`, `profilePush`) with push-only presentation.
+- `ProfileCoordinator` owns shared `ProfileViewModel`.
+- `ProfileView`, `UserProfileView`, and `FollowListView` have migrated high-frequency route hops to coordinator-owned routes.
+- Direct service factory usage (`AppEnvironment.makeService/makeWebService`) has been removed from touched Profile surfaces, including `WebProfileModulesView`.
+- `MyPublishesView` has started MVVM normalization with a dedicated `MyPublishesViewModel`.
+- `MyCheckinsView` has started MVVM normalization with a dedicated `MyCheckinsViewModel` for reload/pagination/hydration flows.
+- `RatingEventEditorSheet` and `RatingUnitEditorSheet` have migrated save/upload/error business logic into dedicated editor ViewModels.
+- Profile split-domain ViewModels now explicitly use `@MainActor` (`MyCheckinsViewModel`, `MyPublishesViewModel`, `RatingEventEditorViewModel`) to prevent background-thread `@Published` updates.
+- `WebProfileModulesView.swift` has been decomposed into Profile domain files (`Views/Checkins/MyCheckinsView.swift`, `Views/Publishes/MyPublishesView.swift`, `Views/RatingEditors/RatingEditors.swift`) and the original file is now a shim.
+- Remaining scope:
+- None. Profile smoke checks have passed and `P5.4` is closed.
 
 ### Phase 6: Circle Migration
 
@@ -279,9 +308,9 @@ Exit criteria:
 
 Status:
 
-- [ ] P6.1 Add `CircleCoordinator`.
-- [ ] P6.2 Migrate Circle root navigation.
-- [ ] P6.3 Migrate nested Circle flows incrementally.
+- [x] P6.1 Add `CircleCoordinator`.
+- [x] P6.2 Migrate Circle root navigation.
+- [x] P6.3 Migrate nested Circle flows incrementally.
 
 ### Phase 7: Domain Layer Consolidation
 
@@ -296,9 +325,73 @@ Exit criteria:
 
 Status:
 
-- [ ] P7.1 Define repository boundaries for Discover.
-- [ ] P7.2 Define repository boundaries for social features.
-- [ ] P7.3 Introduce use cases where workflows span multiple service calls.
+- [x] P7.1 Define repository boundaries for Discover.
+- [x] P7.2 Define repository boundaries for social features.
+- [x] P7.3 Introduce use cases where workflows span multiple service calls.
+
+P7.2 scope tracker:
+
+- Completed scope:
+- Added `MessagesRepository` boundary and migrated `MessagesViewModel` + `MessageNotificationsViewModel`.
+- Added `ProfileSocialRepository` boundary and migrated `ProfileViewModel`, `FollowListViewModel`, and `UserProfileViewModel`.
+- Migrated Profile edit/profile-mutation workflow (`EditProfileView`) to repository-backed ViewModel save/upload path.
+- Added `CircleFeedRepository` boundary and migrated `FeedViewModel` (Circle feed) off direct `SocialService`, with `AppContainer` injection in `FeedView`.
+- Remaining scope:
+- None. Social-feature smoke checks have passed and `P7.2` is closed.
+
+P7.3 scope tracker:
+
+- Completed scope:
+- Added first social use-case pilot `SaveProfileUseCase` and moved the multi-step profile save workflow (`upload avatar` + `update profile`) out of `EditProfileViewModel`.
+- Added second social use-case pilot `LoadMyProfileDashboardUseCase` and moved Profile home multi-call bootstrap workflow out of `ProfileViewModel.load()`.
+- Added third social use-case pilot `LoadSquadHallDataUseCase` and moved Circle squad hall multi-call loading/hydration workflow (`recommended squads` + `my squads` + `squad profile hydration`) out of `SquadHallView.loadSquads()`.
+- Remaining scope:
+- None. Automated compile verification passed and targeted smoke checks passed for all three social use-case pilots (`SaveProfileUseCase`, `LoadMyProfileDashboardUseCase`, `LoadSquadHallDataUseCase`); `P7.3` is closed.
+
+P7.1 scope tracker:
+
+- Completed scope:
+- Added `DiscoverEventsRepository` boundary and `DiscoverEventsRepositoryAdapter` (wrapping `WebFeatureService`) for the Discover Events domain.
+- Extracted first pilot use cases for Discover Events:
+`FetchDiscoverEventsPageUseCase`, `FetchMarkedEventCheckinsUseCase`, `ToggleMarkedEventUseCase`.
+- Migrated first pilot flow to the new boundary:
+`EventsModuleViewModel`, `RecommendEventsViewModel`, and `EventsSearchResultsViewModel` now depend on Discover Events repository/use cases instead of direct `WebFeatureService`.
+- Added coordinator/container injection path:
+`AppContainer.discoverEventsRepository`, wired through `DiscoverEventsRootView`, `DiscoverRecommendEventsRootView`, and `DiscoverRoute` event-search destination.
+- Added Discover News boundary as second pilot:
+`DiscoverNewsRepository` + `SearchDiscoverNewsUseCase`, with `NewsSearchResultsViewModel` migrated off direct `SocialService` usage.
+- Added Discover DJs boundary as third pilot:
+`DiscoverDJsRepository` + `SearchDiscoverDJsUseCase`, with `DJsSearchResultsViewModel` migrated off direct `WebFeatureService` usage.
+- Added Discover Sets boundary as fourth pilot:
+`DiscoverSetsRepository` + `SearchDiscoverSetsUseCase`, with `SetsSearchResultsViewModel` migrated off direct `WebFeatureService` usage.
+- Added Discover Wiki boundary as fifth pilot:
+`DiscoverWikiRepository` + `SearchDiscoverWikiUseCase`, with `WikiSearchResultsViewModel` migrated off direct `WebFeatureService` usage.
+- Expanded Discover News boundary from search into module screen flows:
+`NewsModuleView` feed pagination and publish mutations now use `DiscoverNewsRepository` with `AppContainer` injection (removed local `AppEnvironment.makeService()` coupling).
+- Expanded Discover News boundary into detail interaction flows:
+`DiscoverNewsDetailView` comment read/write now use `DiscoverNewsRepository` with `AppContainer` injection instead of local social service construction.
+- Expanded Discover News boundary into detail bound-entity hydration:
+`DiscoverNewsDetailView` DJ/Event/Festival hydration now uses `DiscoverNewsRepository` methods instead of local `WebFeatureService`.
+- Expanded Discover News boundary into publish-sheet flows:
+`DiscoverNewsPublishSheet` cover upload and DJ/Event/Festival binding search now use `DiscoverNewsRepository` with `AppContainer` injection.
+- Expanded Discover Events boundary into detail workflows:
+`EventDetailView` event loading, check-in create/update/delete, rating/set reload, and event deletion now use `DiscoverEventsRepository` with `AppContainer` injection; related news hydration now uses `DiscoverNewsRepository`.
+- Expanded Discover DJs boundary into module workflows:
+`DJsModuleView` hot/rankings loading, Spotify/Discogs search, import flows, and DJ image uploads now use `DiscoverDJsRepository` with `AppContainer` injection instead of local `AppEnvironment.makeWebService()`.
+- Expanded Discover DJs boundary into detail workflows:
+`DJDetailView` detail loading, follow toggling, rating reload, Spotify import, profile edit/save, and related-news hydration now use `DiscoverDJsRepository` + `DiscoverNewsRepository` with `AppContainer` injection.
+- Expanded Discover Sets boundary into module/detail workflows:
+`SetsModuleView` list loading and `DJSetDetailView` detail/comments/tracklist/event-link/delete flows now use `DiscoverSetsRepository` with `AppContainer` injection instead of local service factories.
+- Expanded Discover Sets boundary into editor/support workflows:
+`DJSetEditorView`, `SetEventBindingSheet`, `UploadTracklistSheet`, and `TracklistEditorView` now use `DiscoverSetsRepository` with `AppContainer` injection instead of local service factories.
+- Expanded Discover Learn boundary into module/detail/ranking web workflows:
+`LearnModuleView`, `LearnFestivalDetailView`, and `RankingBoardDetailView` now use `DiscoverWikiRepository` + `DiscoverEventsRepository` + `DiscoverDJsRepository` with `AppContainer` injection instead of local `AppEnvironment.makeWebService()` factories.
+- Expanded Discover Learn boundary into social workflows:
+`LearnFestivalDetailView` related-post loading and contributor profile/search hydration now use `DiscoverNewsRepository` with `AppContainer` injection instead of local `AppEnvironment.makeService()` factory usage.
+- Expanded Discover Events boundary into editor/check-in workflows:
+`EventEditorView` and `DJCheckinBindingSheet` now use `DiscoverEventsRepository` + `DiscoverDJsRepository` with `AppContainer` injection (event create/update, media upload, lineup import, DJ/event lookup), and no longer construct local `WebFeatureService`.
+- Remaining scope:
+- None. Discover feature folder no longer contains local `AppEnvironment.makeService/makeWebService` factories.
 
 ### Phase 8: AppState Reduction and Cleanup
 
@@ -313,9 +406,51 @@ Exit criteria:
 
 Status:
 
-- [ ] P8.1 Audit `AppState` responsibilities.
-- [ ] P8.2 Move feature-owned state out of `AppState`.
-- [ ] P8.3 Final cleanup of transitional architecture glue.
+- [x] P8.1 Audit `AppState` responsibilities.
+- [x] P8.2 Move feature-owned state out of `AppState`.
+- [x] P8.3 Final cleanup of transitional architecture glue.
+
+P8.1 scope tracker:
+
+- Completed scope:
+- Audited `AppState` surface in `Core/AppState.swift` (`session`, `errorMessage`, `unreadMessagesCount`, `preferredLanguage`, `service`, and auth/badge methods) and mapped concrete usage sites across app/coordinators/features.
+- Confirmed global state that should stay in app-level ownership:
+- `session` / auth flow state (`login/register/logout` entry points).
+- `preferredLanguage` and locale wiring.
+- app-wide alert channel (`errorMessage`) and tab badge source of truth (`unreadMessagesCount`).
+- Identified extraction candidates for Phase 8.2 (responsibility bleed, not new global state):
+- Remove `AppState` service-locator responsibility by migrating remaining `appState.service` callers to injected dependencies (`SearchView`, `ComposePostView`, `MainTabView` squad flows, `SquadProfileView`, `UserProfileView` DM entry).
+- Normalize unread badge write-path to a single owner (currently written from both `MessagesCoordinator` and `MessagesHomeView`).
+- Reduce broad feature coupling to `@EnvironmentObject AppState` where reads are only `currentUserID`/`isLoggedIn`, introducing a narrower session-context dependency over time.
+- Remaining scope:
+- None. `P8.1` audit is complete.
+
+P8.2 scope tracker:
+
+- Completed scope:
+- Removed remaining `appState.service` call sites and switched to injected dependencies (`AppContainer.socialService` or explicit `SocialService` constructor injection) across touched flows:
+- `SearchView` post-detail presentation.
+- `ComposePostView` create/update/delete mutations and `FeedView` compose entry points.
+- `SquadHallView` create-squad sheet + squad-hall load use case wiring.
+- `SquadProfileView` conversation navigation.
+- `UserProfileView` direct-message conversation bootstrap.
+- Remaining scope:
+- None. Unread badge write path is now consolidated under `AppState` ownership (`refreshUnreadMessages` / auth/session handlers), with duplicate feature-side direct assignments removed.
+
+P8.3 scope tracker:
+
+- Completed scope:
+- Audited residual transitional glue after `P8.2` closure and identified low-risk cleanup targets.
+- Removed direct view-level service factory construction from legacy entry views by switching them to `AppContainer`-injected root composition:
+- `SearchView` now composes `SearchViewModel(service: appContainer.socialService)` via a container-backed root/screen split.
+- `NotificationsView` now composes `NotificationsViewModel(service: appContainer.socialService)` via a container-backed root/screen split.
+- Removed remaining feature-level fallback service factory defaults in touched social surfaces and tightened DI-only entry paths:
+- `ComposePostView` now requires injected `SocialService` + `WebFeatureService`; `FeedView` passes both from `AppContainer`.
+- `SquadProfileView` now requires injected `SocialService`; `SearchView` / `NotificationsView` / coordinator call sites now pass `appContainer.socialService`.
+- `SquadManageSheet` now receives injected `SocialService` + `WebFeatureService` from `SquadProfileView` instead of constructing local factories.
+- Residual Circle rating/picker surfaces inside `MainTabView` (`CircleIDEventPickerSheet`, `CircleIDDJPickerSheet`, `CircleRatingHubView`, `CircleRatingEventDetailView`, `CircleRatingUnitDetailView`, `CreateRatingEventSheet`, `CreateRatingEventFromEventSheet`, `CreateRatingUnitSheet`) now source services from `AppContainer` environment injection.
+- Remaining scope:
+- None. Targeted smoke checks for touched social DI-entry paths passed and `P8.3` is closed.
 
 ## Immediate Work Queue
 
@@ -341,6 +476,106 @@ These are the exact next items to execute unless priorities change.
 - [x] Q18 Start Phase 4.4 by extracting Discover Sets list/detail surfaces into a dedicated `Sets` domain folder.
 - [x] Q19 Start Phase 4.5 by extracting Discover Learn list/detail surfaces into a dedicated `Learn` domain folder.
 - [x] Q20 Start Phase 5.1 by adding a `MessagesCoordinator` and moving Messages root `NavigationStack` ownership to the coordinator.
+- [x] Q21 Start Phase 5.2 by adding a `ProfileCoordinator` and moving Profile root `NavigationStack` ownership to the coordinator.
+- [x] Q22 Start Phase 5.3 by injecting `MessagesHomeView` ViewModels from `AppContainer` via a root container view.
+- [x] Q23 Start Phase 5.4 by injecting `ProfileView` ViewModel from `AppContainer` via a root container view.
+- [x] Q24 Continue Phase 5 normalization by removing direct service factory calls from `CreateSquadView`, `FollowListView`, and `EditProfileView`.
+- [x] Q25 Continue Phase 5.4 by removing remaining direct service factory calls from `WebProfileModulesView` and switching those surfaces to `AppContainer` injection.
+- [x] Q26 Continue Phase 5.3 by moving conversation push routing from `MessagesHomeView` into `MessagesCoordinator` via `MessagesRoute`.
+- [x] Q27 Continue Phase 5.3 by moving user-profile and squad-profile routing from `ChatView` and message alert detail into `MessagesCoordinator` (push + modal).
+- [x] Q28 Continue Phase 5.3 by moving alert-category detail routing into `MessagesCoordinator` and centralizing shared `MessagesViewModel`/`MessageNotificationsViewModel` ownership in the coordinator.
+- [x] Q29 Continue Phase 5.4 by introducing `ProfileRoute` push routing in `ProfileCoordinator` and migrating `ProfileView` follow-list, user-profile, and settings pushes to coordinator-owned routing.
+- [x] Q30 Continue Phase 5.4 by extending `ProfileCoordinator` with modal routing (`profilePresent`) and migrating Profile push/modal subflows (`myPublishes`, `myCheckins`, `postDetail`, `avatar fullscreen`, user-profile direct-message conversation) out of local view state.
+- [x] Q31 Continue Phase 5.4 by making `ProfileCoordinator` own shared `ProfileViewModel` and migrating remaining Profile local route bindings (`edit profile`, `publish event`, `upload set`) to coordinator-owned push/sheet channels.
+- [x] Q32 Continue Phase 5.4 by removing Profile sheet/full-screen route channels and unifying migrated Profile flows under `NavigationStack` push routing only.
+- [x] Q33 Continue Phase 5.4 by replacing remaining `WebProfileModulesView` `sheet/fullScreenCover` flows with `navigationDestination` push routing.
+- [x] Q34 Continue Phase 5.4 by moving `WebProfileModulesView` event/DJ detail hops (`MyCheckinsView`, `MyPublishesView`) from local route state to coordinator-owned `profilePush` routes.
+- [x] Q35 Continue Phase 5.4 by extracting `MyPublishesView` network/state mutations into a dedicated `MyPublishesViewModel` and injecting dependencies from `ProfileCoordinator`.
+- [x] Q36 Continue Phase 5.4 by extracting `MyCheckinsView` loading/pagination/hydration flows into `MyCheckinsViewModel` while keeping existing UI behavior.
+- [x] Q37 Continue Phase 5.4 by normalizing remaining Profile editor/detail surfaces in `WebProfileModulesView` to ViewModel-owned business state.
+- [x] Q38 Continue Phase 5.4 by decomposing `WebProfileModulesView.swift` into Profile domain files (`Checkins`, `Publishes`, `RatingEditors`) after Q36-Q37 stabilize behavior.
+- [x] Q39a Fix Profile check-ins detail navigation thread-safety warning by enforcing main-actor ViewModel updates in split Profile domain files.
+- [x] Q39 Close Phase 5.4 by running Profile smoke checks (profile home, follow list, user profile, checkins timeline/gallery, publishes edit/delete, post detail) and marking `P5.4` complete.
+- [x] Q40 Start Phase 6.1 by adding `CircleCoordinator` and moving Circle root `NavigationStack` ownership to coordinator.
+- [x] Q41 Continue Phase 6.2 by migrating Circle root routes into `CircleRoute` + coordinator-owned push channel.
+- [x] Q42 Continue Phase 6.3 by migrating first nested Circle subflow into coordinator-owned routing without behavior regressions.
+- [x] Q43 Continue Phase 6.3 by migrating `CircleIDHubView` detail hops (event/DJ/user) from local full-screen state to coordinator-owned push routes.
+- [x] Q44 Continue Phase 6.3 by migrating `CircleRatingEventDetailView` linked source-event opening from local full-screen presentation to coordinator-owned route handling.
+- [x] Q45 Continue Phase 6.3 by removing redundant local `NavigationStack` wrappers inside Circle root subviews after route ownership stabilizes.
+- [x] Q46 Continue Phase 6.3 by migrating `FeedView` author-profile hop to coordinator-owned `circlePush` and removing its redundant root `NavigationStack`.
+- [x] Q47 Continue Phase 6.3 by migrating `CircleIDDetailView` linked event/DJ/user hops from local full-screen state to coordinator-owned routing with preserved UX semantics.
+- [x] Q48 Close Phase 6.3 by running Circle smoke checks (Feed/Squads/ID/Rating) after residual route cleanup, then marking `P6.3` complete.
+- [x] Q49 Start Phase 7.1 by defining Discover repository boundaries and selecting first pilot flow for use-case extraction.
+- [x] Q50 Continue Phase 7.1 by extending repository boundaries to Discover `News` and migrating `NewsSearchResultsViewModel` as the second pilot.
+- [x] Q51 Continue Phase 7.1 by extending repository boundaries to Discover `DJs` and migrating `DJsSearchResultsViewModel` as the third pilot.
+- [x] Q52 Continue Phase 7.1 by extending repository boundaries to Discover `Sets` and migrating `SetsSearchResultsViewModel` as the fourth pilot.
+- [x] Q53 Continue Phase 7.1 by extending repository boundaries to Discover `Wiki` and migrating `WikiSearchResultsViewModel` as the fifth pilot.
+- [x] Q54 Continue Phase 7.1 by migrating `NewsModuleView` feed/publish loading flows to `DiscoverNewsRepository` boundaries and `AppContainer` injection.
+- [x] Q55 Continue Phase 7.1 by migrating `DiscoverNewsDetailView` comment read/write flows to `DiscoverNewsRepository` boundaries and `AppContainer` injection.
+- [x] Q56 Continue Phase 7.1 by migrating `DiscoverNewsDetailView` bound-entity hydration (`DJ/Event/Festival`) from local `WebFeatureService` access to repository boundaries.
+- [x] Q57 Continue Phase 7.1 by migrating `DiscoverNewsPublishSheet` cover upload and binding-search flows (`DJ/Event/Festival`) from local `WebFeatureService` access to repository boundaries.
+- [x] Q58 Continue Phase 7.1 by migrating `EventDetailView` web workflows (event load/check-in/rating/set/delete + related news hydration) from direct services to repository boundaries.
+- [x] Q59 Continue Phase 7.1 by migrating `DJsModuleView` module workflows (hot/rankings load, Spotify/Discogs search/import, image upload) from direct services to repository boundaries.
+- [x] Q60 Continue Phase 7.1 by migrating `DJDetailView` detail workflows (detail load, follow, ratings/events/sets reload, import/edit mutations) from direct services to repository boundaries.
+- [x] Q61 Continue Phase 7.1 by migrating `SetsModuleView` module/detail workflows from direct services to repository boundaries.
+- [x] Q62 Continue Phase 7.1 by migrating Discover Sets editor/support workflows (`DJSetEditorView`, `SetEventBindingSheet`, `UploadTracklistSheet`, `TracklistEditorView`) from direct services to repository boundaries.
+- [x] Q63 Continue Phase 7.1 by migrating `LearnModuleView` workflows from direct services to repository boundaries.
+- [x] Q64 Continue Phase 7.1 by removing remaining Discover Learn social-service coupling (`LearnFestivalDetailView` related-post/contributor workflows) behind repository boundaries.
+- [x] Q65 Continue Phase 7.1 by migrating Discover `EventEditorView` workflows from direct services to repository boundaries.
+- [x] Q66 Start Phase 7.2 by auditing social-feature direct service coupling (`Messages`, `Profile`, `Circle`) and selecting the first repository boundary pilot.
+- [x] Q67 Continue Phase 7.2 by introducing a `MessagesRepository` boundary and migrating `MessagesViewModel` + `MessageNotificationsViewModel` off direct `SocialService`.
+- [x] Q68 Continue Phase 7.2 by introducing a `ProfileSocialRepository` pilot boundary and migrating `ProfileViewModel` + `FollowListViewModel` off direct services.
+- [x] Q69 Continue Phase 7.2 by extending `ProfileSocialRepository` and migrating `UserProfileViewModel` off direct `SocialService`/`WebFeatureService`.
+- [x] Q70 Continue Phase 7.2 by migrating Profile edit-profile mutation workflows to a repository boundary (`EditProfileView` + save/upload path).
+- [x] Q71 Continue Phase 7.2 by defining a `Circle` social repository pilot and migrating one high-traffic Circle ViewModel off direct service dependencies.
+- [x] Q72 Close Phase 7.2 by running social-feature smoke checks (`Messages`, `Profile`, `Circle`) and marking `P7.2` complete if all pass.
+- [x] Q73 Start Phase 7.3 by extracting the first social multi-call use case (`SaveProfileUseCase`) from `EditProfileViewModel`.
+- [x] Q74 Continue Phase 7.3 by extracting the next high-traffic social multi-call workflow into a dedicated use case (candidate: feed loading/pagination or squad hydration path).
+- [x] Q75 Continue Phase 7.3 by extracting one Circle-side multi-call workflow into a dedicated use case (recommended: squad list/profile hydration path).
+- [x] Q76 Close Phase 7.3 by running targeted smoke checks for migrated social use-case pilots and marking `P7.3` complete if all pass.
+- [x] Q77 Start Phase 8.1 by auditing `AppState` responsibilities and listing feature-owned state candidates for extraction.
+- [x] Q78 Start Phase 8.2 by removing remaining `appState.service` call sites via coordinator/container dependency injection.
+- [x] Q79 Continue Phase 8.2 by consolidating unread badge writes under a single owner and removing duplicate cross-feature writes.
+- [x] Q80 Start Phase 8.3 by auditing/removing residual transitional architecture glue after `P8.2` closure.
+- [x] Q81 Continue Phase 8.3 by removing remaining feature-level fallback service factories and tightening DI-only entry paths in touched social surfaces.
+- [x] Q82 Close Phase 8.3 by running targeted smoke checks for touched social DI-entry paths and marking `P8.3` complete if all pass.
+- [x] Q83 Start migration hardening by defining post-migration regression checklist automation and CI guards for coordinator/DI boundaries (`scripts/check-mvvm-coordinator-boundaries.sh`).
+- [x] Q84 Integrate migration boundary guard script into CI and add a lightweight manual smoke runbook for release checks.
+- [x] Q85 Extend CI hardening with optional simulator build lane and required-check recommendation in branch protection.
+- [x] Q86 Add focused coordinator-routing regression tests (route serialization and destination mapping) for high-traffic features.
+- [x] Q87 Add coordinator deep-link and route round-trip tests for critical entry paths (event detail, user profile, squad profile).
+- [x] Q88 Add route-state snapshot fixture tests for selected coordinator flows to catch enum case churn and destination drift.
+- [x] Q89 Add contributor guide section for updating route fixtures and validating guard scripts before PR submission.
+- [x] Q90 Add helper script to run all coordinator hardening guards in one command for contributor ergonomics.
+- [x] Q91 Add a tiny PR template snippet that reminds contributors to run coordinator hardening preflight when touching route enums.
+
+## Migration Hardening Guard
+
+- Boundary guard script:
+`scripts/check-mvvm-coordinator-boundaries.sh`
+- Coordinator routing regression guard:
+`scripts/check-coordinator-routing-regression.sh`
+- Coordinator deep-link round-trip regression guard:
+`scripts/check-coordinator-deeplink-roundtrip.sh`
+- Coordinator route snapshot guard:
+`scripts/check-coordinator-route-snapshots.sh`
+- One-command contributor preflight:
+`scripts/run-coordinator-hardening-preflight.sh`
+- GitHub Actions workflow:
+`.github/workflows/mvvm-coordinator-guard.yml`
+- Manual release smoke runbook:
+`docs/IOS_RELEASE_SMOKE_RUNBOOK.md`
+- Branch protection recommendation:
+Require `Architecture Boundary Guard`; keep `Optional iOS Simulator Build` as manual/non-required.
+- Contributor preflight guide:
+`docs/IOS_RELEASE_SMOKE_RUNBOOK.md` section `Contributor PR Preflight`
+- Current assertions:
+1. Feature layer cannot call `AppEnvironment.makeService/makeWebService`.
+2. `appState.service` service-locator access is forbidden.
+3. `AppEnvironment.makeService/makeWebService` is only allowed in `RaverMVPApp.swift` and `Application/DI/AppContainer.swift`.
+4. High-traffic coordinator route enums keep `Hashable` conformance and case-to-destination mapping parity (`Discover`, `Circle`, `Messages`, `Profile`).
+5. Critical deep-link entry paths (`event detail`, `user profile`, `squad profile`) keep route-case presence and URL/token round-trip integrity.
+6. Coordinator route-case snapshots are fixture-locked (`DiscoverRoute`, `CircleRoute`, `MessagesRoute`, `MessagesModalRoute`, `ProfileRoute`) to detect unreviewed enum churn.
 
 ## Discover Migration Template
 
@@ -395,6 +630,34 @@ Verification checklist:
 2. Moved screen no longer creates services directly.
 3. Existing navigation and user-facing behavior remain intact.
 4. Update this migration document in the same turn.
+
+## Feature Coordinator Migration Template
+
+Use this template for non-Discover features (Messages/Profile/Circle) when moving from mixed routing to `MVVM + Coordinator`.
+
+Route ownership pattern:
+
+1. Define feature route enum in `Features/<Feature>/Coordinator/`.
+2. Make coordinator own `NavigationStack` path state.
+3. Expose an environment push closure (for example `featurePush`) for child views.
+4. Keep modal channels only when behavior requires them; prefer push routing to reduce presentation-channel fragmentation.
+5. Build all route destinations in the coordinator and inject dependencies there.
+
+Dependency and ViewModel composition pattern:
+
+1. Read shared dependencies from `AppContainer` in coordinator/root container views.
+2. Prefer coordinator-owned shared ViewModels when multiple destinations rely on the same state tree.
+3. Keep View-owned state limited to ephemeral UI state (selection, local toggles, transient text input).
+4. Move networking/pagination/mutation workflows into ViewModels.
+5. Remove `AppEnvironment.makeService/makeWebService` usage from touched feature views.
+
+Incremental rollout checklist:
+
+1. Migrate high-frequency route hops first.
+2. Migrate deep subflows second.
+3. Convert large stateful screens to ViewModel-driven state after route ownership is stable.
+4. Decompose oversized files only after routing/state boundaries are clear.
+5. Compile and smoke test at each step; update this document in the same turn.
 
 ## Definition of Done Per Migration Step
 
@@ -457,6 +720,26 @@ After finishing work:
 - 2026-04-09: Sets extraction can follow the same mechanical-first strategy as DJs, with Xcode project wiring completed in the same step and compile checks used to catch any cross-file helper visibility issues.
 - 2026-04-09: Learn extraction can move as one mechanical block (`LearnModuleView` plus detail/ranking surfaces) and leave `WebModulesView.swift` with only shared infrastructure helpers; shared safe-area helpers should be module-visible when consumed across files.
 - 2026-04-09: Phase 5 starts with a low-risk `MessagesCoordinator` container that owns the root `NavigationStack`, while existing Messages route state remains in `MessagesHomeView` until the later ViewModel normalization step.
+- 2026-04-09: `ProfileCoordinator` follows the same low-risk pattern as Messages: coordinator owns the root `NavigationStack`, while existing Profile route and view-model/service patterns remain unchanged until Phase 5 normalization steps.
+- 2026-04-09: Phase 5.3 normalization for Messages will proceed incrementally, starting with root-screen ViewModel injection from `AppContainer` before touching deeper message creation/editor subflows.
+- 2026-04-09: Phase 5.4 normalization for Profile will mirror Messages by first moving root-screen ViewModel creation to a container view, then iterating through profile subflows that still instantiate services directly.
+- 2026-04-09: For shared screens reused across tabs (e.g., follow list and profile editor), prefer explicit `service` injection from caller context over hidden defaults, to keep flow ownership visible during migration.
+- 2026-04-09: Profile module normalization should remove `AppEnvironment.makeService/makeWebService` usage from large nested module files (`WebProfileModulesView`) by using `AppContainer` environment injection, even for nested editor sheets, to keep dependency sourcing consistent and testable.
+- 2026-04-09: Messages route migration should proceed incrementally; first move conversation push routing into `MessagesCoordinator` using an environment push closure (`messagesPush`) while keeping alert-detail subflows local until a later step.
+- 2026-04-09: Messages coordinator should support both push and full-screen modal route channels (`messagesPush`, `messagesPresent`) so existing squad-detail full-screen behavior can be preserved while route ownership moves out of feature views.
+- 2026-04-09: For Messages normalization, coordinator-level shared ViewModel ownership is preferred once multiple destinations depend on the same unread/notification state, so route migration does not create duplicate view-model state trees.
+- 2026-04-09: Profile route migration should follow the same incremental pattern as Discover/Messages: start with a lightweight `profilePush` channel for high-frequency push targets (follow list, user profile, settings) before moving deeper modal flows.
+- 2026-04-09: Profile route migration now uses dual channels (`profilePush` + `profilePresent`) so deep Profile/Feed overlays (`postDetail`, `checkins`, `avatar fullscreen`) can remain behaviorally full-screen while route ownership moves to the coordinator.
+- 2026-04-09: `ProfileCoordinator` now owns a shared `ProfileViewModel` (similar to Messages), enabling edit/profile-update callbacks and the remaining profile entry routes (`edit`, `publish`, `upload`) to migrate without local view-owned route state.
+- 2026-04-09: For Profile migration, coordinator-driven routes should prefer `NavigationStack` push presentation over `sheet/fullScreenCover` when behavior allows, to reduce presentation-channel fragmentation.
+- 2026-04-09: `WebProfileModulesView` subflows should also follow push-only routing (`navigationDestination`) to keep Profile presentation behavior consistent and avoid mixed modal channels.
+- 2026-04-09: For deep Profile subviews (e.g., `MyCheckinsView` / `MyPublishesView`), detail hops should prefer coordinator-owned `profilePush` routes over local selected-ID route state when destination payloads are simple IDs.
+- 2026-04-09: `P5.4` now uses an explicit scope tracker (`completed scope` + `remaining scope`) and queued closure items (`Q36-Q39`) so future agents can resume Profile normalization without inferring hidden work.
+- 2026-04-09: A generic `Feature Coordinator Migration Template` is now part of this document to reuse Messages/Profile migration patterns when Phase 6 (`Circle`) begins.
+- 2026-04-09: Circle migration starts with the same low-risk pattern used by Messages/Profile: add a root coordinator that owns the tab's `NavigationStack` first, then migrate Circle routes incrementally in subsequent steps.
+- 2026-04-09: Circle route migration now follows a push-first channel (`CircleRoute` + `circlePush`) from coordinator-owned root navigation; start with stable root destinations before migrating deeper modal/detail subflows.
+- 2026-04-09: For Circle nested-flow migration, prioritize moving one subflow at a time to coordinator-owned routes and preserve UI behavior by keeping existing sheet state until each replacement path is verified.
+- 2026-04-09: `P8` should treat AppState cleanup as responsibility isolation first: keep truly global state in `AppState`, but remove its service-locator role (`appState.service` call sites) and duplicate feature-side writes before considering deeper field reshaping.
 
 ## Progress Log
 
@@ -504,3 +787,144 @@ After finishing work:
 - 2026-04-09: Verified Q19/P4.5 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme after promoting `topSafeAreaInset()` to module visibility for cross-file use; `WebModulesView.swift` is now down to 211 lines.
 - 2026-04-09: Completed Q20/P5.1 by adding `Features/Messages/Coordinator/MessagesCoordinator.swift`, wiring it into `project.pbxproj`, updating `MainTabView` to host Messages through the coordinator, and removing root `NavigationStack` ownership from `MessagesHomeView`.
 - 2026-04-09: Verified Q20/P5.1 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q21/P5.2 by adding `Features/Profile/Coordinator/ProfileCoordinator.swift`, wiring it into `project.pbxproj`, updating `MainTabView` to host Profile through the coordinator, and removing root `NavigationStack` ownership from `ProfileView`.
+- 2026-04-09: Verified Q21/P5.2 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q22 (P5.3 partial) by adding `MessagesRootView` in `Features/Messages/Coordinator/MessagesCoordinator.swift`, changing `MessagesHomeView` to accept injected `MessagesViewModel` and `MessageNotificationsViewModel`, and updating `MainTabView` to route Messages through the root container.
+- 2026-04-09: Verified Q22 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q23 (P5.4 partial) by adding `ProfileRootView` in `Features/Profile/Coordinator/ProfileCoordinator.swift`, changing `ProfileView` to accept injected `ProfileViewModel`, and updating `MainTabView` to route Profile through the root container.
+- 2026-04-09: Verified Q23 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q24 (P5.3/P5.4 partial) by switching `CreateSquadView` to use `AppContainer.webService`, changing `FollowListView` and `EditProfileView` to accept injected `SocialService`, updating Profile call sites to pass `appState.service`, and removing the default `AppEnvironment.makeWebService()` from `ProfileViewModel`.
+- 2026-04-09: Verified Q24 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q25 (P5.4 partial) by removing the remaining direct service factories from `Features/Profile/WebProfileModulesView.swift` (`MyCheckinsView`, `MyPublishesView`, `RatingEventEditorSheet`, `RatingUnitEditorSheet`) and switching them to `AppContainer`-injected `socialService`/`webService`.
+- 2026-04-09: Verified Q25 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q26 (P5.3 partial) by adding `MessagesRoute` and `messagesPush` environment routing in `Features/Messages/Coordinator/MessagesCoordinator.swift`, then changing `MessagesHomeView` conversation selection to coordinator-owned push routing.
+- 2026-04-09: Verified Q26 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q27 (P5.3 partial) by extending `MessagesCoordinator` with `userProfile` push routing and coordinator-owned full-screen `squadProfile` modal routing, then migrating `ChatView` and `MessageAlertDetailView` to call coordinator routes instead of local `navigationDestination/fullScreenCover` state.
+- 2026-04-09: Verified Q27 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q28 (P5.3 partial) by refactoring `MessagesCoordinatorView` to own shared `MessagesViewModel` and `MessageNotificationsViewModel`, routing alert-category detail through `MessagesRoute.alertCategory`, and removing local alert-category navigation state from `MessagesHomeView`.
+- 2026-04-09: Verified Q28 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q29 (P5.4 partial) by adding `ProfileRoute` and `profilePush` in `Features/Profile/Coordinator/ProfileCoordinator.swift`, then migrating `ProfileView` follow-list, author-profile, and settings push navigation away from local state bindings to coordinator-owned routes.
+- 2026-04-09: Verified Q29 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q30 (P5.4 partial) by adding `ProfileModalRoute` and `profilePresent` in `Features/Profile/Coordinator/ProfileCoordinator.swift`, then migrating `ProfileView` and `UserProfileView` local route state (`myPublishes`, `myCheckins`, `postDetail`, avatar fullscreen, direct-message conversation) into coordinator-owned routing, and updating `FollowListView` user taps to use `profilePush`.
+- 2026-04-09: Verified Q30 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q31 (P5.4 partial) by refactoring `ProfileCoordinatorView` to own shared `ProfileViewModel`, introducing `ProfileSheetRoute` (`profileSheet`) in addition to `profilePush/profilePresent`, migrating `ProfileView` local edit/publish/upload route state to coordinator channels, and updating `MainTabView` to instantiate the coordinator with `AppContainer` services.
+- 2026-04-09: Verified Q31 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q32 (P5.4 partial) by removing `ProfileModalRoute`/`ProfileSheetRoute` channels, expanding `ProfileRoute` to cover migrated Profile subflows (`myCheckins`, `postDetail`, `avatarFullscreen`, `publishEvent`, `uploadSet`), and routing `ProfileView`/`UserProfileView` exclusively through `profilePush` + `NavigationStack` destinations.
+- 2026-04-09: Verified Q32 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q33 (P5.4 partial) by replacing `MyCheckinsView` and `MyPublishesView` local `sheet/fullScreenCover` routes in `Features/Profile/WebProfileModulesView.swift` with `navigationDestination` push routes (event detail, DJ detail, event/set/rating editors).
+- 2026-04-09: Verified Q33 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q34 (P5.4 partial) by adding `ProfileRoute.eventDetail` / `ProfileRoute.djDetail` and switching `MyCheckinsView` / `MyPublishesView` detail jumps from local `selectedEventIDForDetail`/`selectedDJIDForDetail` state to coordinator-driven `profilePush`.
+- 2026-04-09: Verified Q34 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q35 (P5.4 partial) by introducing `MyPublishesViewModel` inside `Features/Profile/WebProfileModulesView.swift`, migrating `MyPublishesView` data loading/edit fetch/delete mutations out of the view, and updating `ProfileCoordinator` to inject `webService` + `socialService` into `MyPublishesView`.
+- 2026-04-09: Verified Q35 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q36 (P5.4 partial) by introducing `MyCheckinsViewModel` in `Features/Profile/WebProfileModulesView.swift`, migrating check-ins reload/pagination/delete and identity hydration flows out of `MyCheckinsView`, and switching the screen to `StateObject`-driven loading state.
+- 2026-04-09: Verified Q36 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q37 (P5.4 partial) by introducing `RatingEventEditorViewModel` and `RatingUnitEditorViewModel` in `Features/Profile/WebProfileModulesView.swift`, and migrating rating editor save/upload/error business logic out of `RatingEventEditorSheet` / `RatingUnitEditorSheet`.
+- 2026-04-09: Verified Q37 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q38 (P5.4 partial) by decomposing `Features/Profile/WebProfileModulesView.swift` into `Features/Profile/Views/Checkins/MyCheckinsView.swift`, `Features/Profile/Views/Publishes/MyPublishesView.swift`, and `Features/Profile/Views/RatingEditors/RatingEditors.swift`, wiring those files into `project.pbxproj`, and keeping `WebProfileModulesView.swift` as a migration shim.
+- 2026-04-09: Verified Q38 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q39a (P5.4 hardening) by adding `@MainActor` to `MyCheckinsViewModel`, `MyPublishesViewModel`, and `RatingEventEditorViewModel` after reproducing Profile check-ins detail-route warning (`Publishing changes from background threads is not allowed`), and verified with a successful `xcodebuild` Debug simulator build.
+- 2026-04-09: Completed Q39 by running Profile smoke checks (profile home, follow list, user profile, checkins timeline/gallery, publishes edit/delete, post detail) with all checks passing; marked `P5.4` as complete.
+- 2026-04-09: Completed Q40/P6.1 by adding `Features/Circle/Coordinator/CircleCoordinator.swift`, wiring it into `project.pbxproj`, and routing the Circle tab in `MainTabView` through `CircleCoordinatorView` so root `NavigationStack` ownership now lives in the coordinator.
+- 2026-04-09: Verified Q40/P6.1 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q41 (P6.2 partial) by introducing `CircleRoute` + `circlePush` in `Features/Circle/Coordinator/CircleCoordinator.swift`, adding coordinator-owned `navigationDestination` handling, and migrating `SquadHallView` squad openings (card tap + create flow) from local `fullScreenCover` state to coordinator push routing.
+- 2026-04-09: Verified Q41 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q42 (P6.3 partial) by migrating the first nested Circle subflow (`CircleRatingHubView` -> `CircleRatingEventDetailView`) from local `fullScreenCover` state to coordinator-owned `CircleRoute.ratingEventDetail` push routing, and updating detail close behavior to support push-stack dismissal.
+- 2026-04-09: Verified Q42 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q43 (P6.3 partial) by extending `CircleRoute`/`CircleCoordinator` with `eventDetail`, `djDetail`, and `userProfile` destinations, then migrating `CircleIDHubView` event/DJ/contributor detail hops from local `fullScreenCover` state to coordinator-owned `circlePush` routing.
+- 2026-04-09: Verified Q43 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q44 (P6.3 partial) by replacing `CircleRatingEventDetailView` source-event local `selectedSourceEventIDForDetail` + `fullScreenCover` flow with coordinator-owned `circlePush(.eventDetail(...))` routing.
+- 2026-04-09: Verified Q44 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q45 (P6.3 partial) by removing redundant root `NavigationStack` wrappers from `CircleIDHubView` and `SquadHallView` while keeping modal-local stacks (sheet/full-screen) unchanged.
+- 2026-04-09: Verified Q45 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q46 (P6.3 partial) by migrating `FeedView` author-profile navigation from local `navigationDestination` state to coordinator-owned `circlePush(.userProfile(...))`, and removing the now-redundant root `NavigationStack` from `FeedView`.
+- 2026-04-09: Verified Q46 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q47 (P6.3 partial) by removing `CircleIDDetailView` local event/DJ/user `fullScreenCover` state and routing those taps through coordinator-owned `circlePush` via a dismiss-then-push handoff.
+- 2026-04-09: Verified Q47 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed additional P6.3 residual route cleanup by extending `CircleRoute` with `postDetail(Post)` and migrating `FeedView` post-detail opening from local `fullScreenCover` to coordinator-owned push routing.
+- 2026-04-09: Verified the additional P6.3 route cleanup with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q48 and closed `P6.3` after Circle smoke checks passed for Feed, Squads, ID, and Rating routes (user-verified PASS on all checkpoints).
+- 2026-04-09: Clarified migration governance by updating `P5.4` with explicit completed/remaining scope, extending the immediate queue with `Q36-Q45`, aligning `Target Folder Layout` with current domain-first Discover structure, and adding a reusable `Feature Coordinator Migration Template` for Phase 6 onward.
+- 2026-04-09: Completed Q49 (P7.1 partial) by introducing a Discover Events repository boundary (`DiscoverEventsRepository` + adapter), extracting first pilot use cases (`FetchDiscoverEventsPage`, `FetchMarkedEventCheckins`, `ToggleMarkedEvent`), and migrating Discover Events list/recommend/search ViewModels plus coordinator/container injection to the new boundary.
+- 2026-04-09: Verified Q49 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q50 (P7.1 partial) by introducing Discover News repository/use-case boundaries (`DiscoverNewsRepository`, `SearchDiscoverNewsUseCase`), migrating `NewsSearchResultsViewModel` off direct `SocialService`, and wiring `AppContainer` + `DiscoverRoute` to inject the new boundary.
+- 2026-04-09: Verified Q50 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q51 (P7.1 partial) by introducing Discover DJs repository/use-case boundaries (`DiscoverDJsRepository`, `SearchDiscoverDJsUseCase`), migrating `DJsSearchResultsViewModel` off direct `WebFeatureService`, and wiring `AppContainer` + `DiscoverRoute` to inject the new boundary.
+- 2026-04-09: Verified Q51 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q52 (P7.1 partial) by introducing Discover Sets repository/use-case boundaries (`DiscoverSetsRepository`, `SearchDiscoverSetsUseCase`), migrating `SetsSearchResultsViewModel` off direct `WebFeatureService`, and wiring `AppContainer` + `DiscoverRoute` to inject the new boundary.
+- 2026-04-09: Verified Q52 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q53 (P7.1 partial) by introducing Discover Wiki repository/use-case boundaries (`DiscoverWikiRepository`, `SearchDiscoverWikiUseCase`), migrating `WikiSearchResultsViewModel` off direct `WebFeatureService`, and wiring `AppContainer` + `DiscoverRoute` to inject the new boundary.
+- 2026-04-09: Verified Q53 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q54 (P7.1 partial) by extending `DiscoverNewsRepository` with feed-page/publish capabilities and migrating `NewsModuleView` load-more and publish flows from local `AppEnvironment.makeService()` usage to `AppContainer`-injected repository boundaries.
+- 2026-04-09: Verified Q54 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q55 (P7.1 partial) by extending `DiscoverNewsRepository` with comment read/write capabilities and migrating `DiscoverNewsDetailView` comment loading/submission flows from local social-service construction to `AppContainer`-injected repository boundaries.
+- 2026-04-09: Verified Q55 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q56 (P7.1 partial) by extending `DiscoverNewsRepository` with bound-entity hydration methods (`fetchDJ`, `fetchEvent`, `fetchLearnFestivals`) and migrating `DiscoverNewsDetailView` DJ/Event/Festival hydration flows off local `WebFeatureService` usage.
+- 2026-04-09: Verified Q56 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q57 (P7.1 partial) by extending `DiscoverNewsRepository` with publish-sheet helpers (`searchDJs`, `searchEvents`, `uploadNewsCoverImage`) and migrating `DiscoverNewsPublishSheet` cover upload and binding search flows off local `AppEnvironment.makeWebService()` usage.
+- 2026-04-09: Verified Q57 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q58 (P7.1 partial) by expanding `DiscoverEventsRepository` (check-in scoped query/update, rating/set/event deletion methods) and migrating `EventDetailView` service-heavy workflows to `DiscoverEventsRepository` + `DiscoverNewsRepository` boundaries.
+- 2026-04-09: Verified Q58 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q59 (P7.1 partial) by expanding `DiscoverDJsRepository` (Spotify/Discogs search + import and DJ image upload methods) and migrating `DJsModuleView` module-level workflows off local `AppEnvironment.makeWebService()` usage.
+- 2026-04-09: Verified Q59 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q60 (P7.1 partial) by expanding `DiscoverDJsRepository` (detail/follow/edit methods) and migrating `DJDetailView` detail workflows plus DJ-bound news hydration off local `AppEnvironment.makeService/makeWebService()` usage.
+- 2026-04-09: Verified Q60 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q61 (P7.1 partial) by expanding `DiscoverSetsRepository` (set detail/comments/tracklist/detail-event query/delete methods) and migrating `SetsModuleView` + `DJSetDetailView` module/detail workflows off local direct service usage.
+- 2026-04-09: Verified Q61 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q62 (P7.1 partial) by expanding `DiscoverSetsRepository` (create/update set, media upload, tracklist write/auto-link, video preview) and migrating Discover Sets editor/support surfaces (`DJSetEditorView`, `SetEventBindingSheet`, `UploadTracklistSheet`, `TracklistEditorView`) off local direct service usage.
+- 2026-04-09: Verified Q62 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q63 (P7.1 partial) by expanding Discover repository boundaries for Learn workflows (`DiscoverWikiRepository` for genre/label/festival CRUD/media, `DiscoverDJsRepository` for ranking detail) and migrating `LearnModuleView`, `LearnFestivalDetailView`, and `RankingBoardDetailView` off local `AppEnvironment.makeWebService()` usage.
+- 2026-04-09: Verified Q63 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q64 (P7.1 partial) by expanding `DiscoverNewsRepository` (festival-bound article query + contributor user search/profile methods) and migrating `LearnFestivalDetailView` related-post and contributor hydration flows off local `AppEnvironment.makeService()` usage.
+- 2026-04-09: Verified Q64 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q65 (P7.1 closure) by expanding `DiscoverEventsRepository` (event create/update, event image upload, lineup OCR import) and migrating `EventEditorView` + `DJCheckinBindingSheet` event workflows, plus `EventLineupSupport`/`EventEditorView` DJ lookup flows, to `DiscoverEventsRepository` + `DiscoverDJsRepository` via `AppContainer` injection.
+- 2026-04-09: Verified Q65 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q66 (P7.2 partial) by auditing social-feature service coupling in `Messages`, `Profile`, and `Circle`: local service factories are already removed, but ViewModels still depend directly on `SocialService`/`WebFeatureService`; selected `Messages` inbox/notification flows as the first social repository pilot.
+- 2026-04-09: Completed Q67 (P7.2 partial) by introducing `MessagesRepository` + `MessagesRepositoryAdapter`, wiring `AppContainer.messagesRepository`, and migrating `MessagesViewModel` + `MessageNotificationsViewModel` plus `MessagesCoordinatorView`/`MainTabView` injection from direct `SocialService` to repository boundaries.
+- 2026-04-09: Verified Q67 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q68 (P7.2 partial) by introducing `ProfileSocialRepository` + `ProfileSocialRepositoryAdapter`, wiring `AppContainer.profileSocialRepository`, and migrating `ProfileViewModel` + `FollowListViewModel` plus Profile coordinator/root injection off direct service dependencies.
+- 2026-04-09: Completed Q69 (P7.2 partial) by extending `ProfileSocialRepository` with `fetchUserProfile(userID:)` and migrating `UserProfileViewModel` + `UserProfileView` construction off direct `SocialService`/`WebFeatureService` dependencies.
+- 2026-04-09: Verified Q68 and Q69 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q70 (P7.2 partial) by extending `ProfileSocialRepository` with profile-mutation methods (`uploadMyAvatar`, `updateMyProfile`), introducing `EditProfileViewModel`, and migrating `EditProfileView` + `ProfileCoordinator` edit-profile injection to repository-backed save/upload flows.
+- 2026-04-09: Verified Q70 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q71 (P7.2 partial) by introducing `CircleFeedRepository` + `CircleFeedRepositoryAdapter`, wiring `AppContainer.circleFeedRepository`, and migrating Circle high-traffic feed flow (`FeedViewModel` + `FeedView` injection) off direct `SocialService` construction.
+- 2026-04-09: Verified Q71 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q72 and closed `P7.2` after social-feature smoke checks passed for `Messages`, `Profile`, and `Circle` (user-verified PASS on all checkpoints).
+- 2026-04-09: Completed Q73 (P7.3 partial) by introducing `SaveProfileUseCase` and moving the multi-call profile-save workflow (`uploadMyAvatar` + `updateMyProfile`) out of `EditProfileViewModel`.
+- 2026-04-09: Completed Q74 (P7.3 partial) by introducing `LoadMyProfileDashboardUseCase` and moving Profile home multi-call bootstrap workflow (`fetchMyProfile` + posts/likes/reposts/checkins) out of `ProfileViewModel.load()`.
+- 2026-04-09: Verified Q73 and Q74 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q75 (P7.3 partial) by introducing `LoadSquadHallDataUseCase` and moving Circle squad hall multi-call loading/hydration workflow (`fetchRecommendedSquads` + `fetchMySquads` + `fetchSquadProfile`) out of `SquadHallView.loadSquads()`.
+- 2026-04-09: Verified Q75 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Started Q76 (P7.3 closure) by finishing automated validation (successful simulator build) and defining the targeted manual smoke checklist for the three migrated social use-case pilots.
+- 2026-04-09: Completed Q76 and closed `P7.3` after targeted smoke checks passed for all migrated social use-case pilots (`SaveProfileUseCase`, `LoadMyProfileDashboardUseCase`, `LoadSquadHallDataUseCase`) with user-verified PASS.
+- 2026-04-09: Completed Q77 and closed `P8.1` by auditing `AppState` responsibilities/call sites, confirming truly global state to retain (`session`, `preferredLanguage`, app-wide alert, unread badge), and defining `P8.2` extraction targets for remaining `appState.service` call sites plus duplicate unread-badge write paths.
+- 2026-04-09: Completed Q78 (P8.2 partial) by removing all remaining `appState.service` call sites through dependency injection (`AppContainer.socialService` / explicit `SocialService` injection) in Search, Feed compose, Circle squad hall, Squad profile, and User profile DM flows.
+- 2026-04-09: Verified Q78 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q79 and closed `P8.2` by consolidating unread badge updates under `AppState` ownership, removing duplicate `appState.unreadMessagesCount` assignments from Messages feature surfaces (`MessagesHomeView` / `MessagesCoordinator`), and switching those paths to refresh requests.
+- 2026-04-09: Verified Q79 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q80 (P8.3 partial) by auditing residual transitional glue and removing direct service-factory construction from `SearchView` and `NotificationsView` via `AppContainer`-injected root composition.
+- 2026-04-09: Verified Q80 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme.
+- 2026-04-09: Completed Q81 (P8.3 partial) by removing remaining feature-level fallback factory defaults in touched social surfaces (`ComposePostView`, `SquadProfileView` + `SquadManageSheet`, Search/Notifications squad-profile call sites, and residual Circle rating/picker surfaces in `MainTabView`) and tightening those paths to DI-only entry via `AppContainer` or explicit constructor injection.
+- 2026-04-09: Verified Q81 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme (destination `iPhone 17`).
+- 2026-04-09: Completed Q82 and closed `P8.3` after targeted smoke checks for touched social DI-entry paths: constructor/call-site injection integrity checks (`ComposePostView`, `SquadProfileView`), feature-level `AppEnvironment.makeService/makeWebService` scan (none), and Circle rating/picker DI chain validation in `MainTabView`.
+- 2026-04-09: Verified Q82 with a successful `xcodebuild` Debug simulator build for the `RaverMVP` scheme (destination `iPhone 17`).
+- 2026-04-09: Completed Q83 (hardening start) by adding migration boundary guard script `scripts/check-mvvm-coordinator-boundaries.sh` to enforce DI/coordinator architecture invariants (no feature-level service factories, no `appState.service`, and bootstrap-only `AppEnvironment` factory usage).
+- 2026-04-09: Verified Q83 by running `scripts/check-mvvm-coordinator-boundaries.sh` with all checks passing.
+- 2026-04-09: Completed Q84 by integrating the migration boundary guard into CI with GitHub Actions workflow `.github/workflows/mvvm-coordinator-guard.yml` and adding release manual smoke runbook `docs/IOS_RELEASE_SMOKE_RUNBOOK.md`.
+- 2026-04-09: Verified Q84 by running `scripts/check-mvvm-coordinator-boundaries.sh` locally and confirming the workflow/runbook files are wired and discoverable in the migration hardening section.
+- 2026-04-09: Completed Q85 by extending CI hardening with an optional simulator build lane (`workflow_dispatch` input `run_ios_build`) in `.github/workflows/mvvm-coordinator-guard.yml` and documenting branch protection recommendations in `docs/IOS_RELEASE_SMOKE_RUNBOOK.md`.
+- 2026-04-09: Verified Q85 by running `scripts/check-mvvm-coordinator-boundaries.sh` and local simulator build command `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`.
+- 2026-04-09: Completed Q86 by adding focused coordinator-routing regression guard script `scripts/check-coordinator-routing-regression.sh` (Route Hashable conformance + case-to-destination parity checks for Discover/Circle/Messages/Profile) and wiring it into `.github/workflows/mvvm-coordinator-guard.yml`.
+- 2026-04-09: Verified Q86 by running `scripts/check-coordinator-routing-regression.sh` and `scripts/check-mvvm-coordinator-boundaries.sh` locally with all checks passing.
+- 2026-04-09: Completed Q87 by adding coordinator deep-link round-trip regression guard `scripts/check-coordinator-deeplink-roundtrip.sh` for critical entry paths (`event detail`, `user profile`, `squad profile`) and wiring it into `.github/workflows/mvvm-coordinator-guard.yml`.
+- 2026-04-09: Verified Q87 by running `scripts/check-coordinator-deeplink-roundtrip.sh` plus existing coordinator guard scripts locally with all checks passing.
+- 2026-04-09: Completed Q88 by adding route-state snapshot fixture guard (`scripts/fixtures/coordinator-route-snapshots.sh` + `scripts/check-coordinator-route-snapshots.sh`) and wiring it into `.github/workflows/mvvm-coordinator-guard.yml`.
+- 2026-04-09: Verified Q88 by running all coordinator hardening scripts locally (`check-mvvm-coordinator-boundaries`, `check-coordinator-routing-regression`, `check-coordinator-deeplink-roundtrip`, `check-coordinator-route-snapshots`) with all checks passing.
+- 2026-04-09: Completed Q89 by adding contributor-focused PR preflight guidance to `docs/IOS_RELEASE_SMOKE_RUNBOOK.md` (route fixture update policy + full guard command chain for route-related changes).
+- 2026-04-09: Verified Q89 by re-running all hardening guard scripts locally and confirming the runbook + migration plan references are aligned.
+- 2026-04-09: Completed Q90 by adding one-command coordinator hardening preflight helper `scripts/run-coordinator-hardening-preflight.sh` and updating `docs/IOS_RELEASE_SMOKE_RUNBOOK.md` to use that command as the canonical contributor preflight entrypoint.
+- 2026-04-09: Verified Q90 by running `scripts/run-coordinator-hardening-preflight.sh` locally with all underlying guard checks passing.
+- 2026-04-10: Completed Q91 by adding `.github/pull_request_template.md` with a route-change reminder checklist that requires contributors to run `scripts/run-coordinator-hardening-preflight.sh` and update route snapshots when enum cases change.
+- 2026-04-10: Verified Q91 by running `scripts/run-coordinator-hardening-preflight.sh` locally with all checks passing after the PR template addition.
+- 2026-04-10: Completed post-Q91 structure cleanup by moving Discover cross-domain shared UI helpers into `Features/Discover/Shared/DiscoverSharedUI.swift`, and removing legacy shim/leftover files `Features/Discover/WebModulesView.swift`, `Features/Profile/WebProfileModulesView.swift`, and `Features/Discover/test.swift`.
+- 2026-04-10: Verified post-Q91 structure cleanup with successful `xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build` and `scripts/run-coordinator-hardening-preflight.sh`.

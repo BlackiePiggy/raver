@@ -14,8 +14,8 @@ enum ComposePostMode {
 
 struct ComposePostView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var appState: AppState
-    private let webService: WebFeatureService = AppEnvironment.makeWebService()
+    private let service: SocialService
+    private let webService: WebFeatureService
     private let maxContentLength = 500
     private let maxMediaCount = 9
     private let mode: ComposePostMode
@@ -38,11 +38,15 @@ struct ComposePostView: View {
     @State private var showLocationPicker = false
 
     init(
+        service: SocialService,
+        webService: WebFeatureService,
         mode: ComposePostMode = .create,
         onPostCreated: ((Post) -> Void)? = nil,
         onPostUpdated: ((Post) -> Void)? = nil,
         onPostDeleted: ((String) -> Void)? = nil
     ) {
+        self.service = service
+        self.webService = webService
         self.mode = mode
         self.onPostCreated = onPostCreated
         self.onPostUpdated = onPostUpdated
@@ -325,7 +329,7 @@ struct ComposePostView: View {
 
         do {
             if let editingPost {
-                let updated = try await appState.service.updatePost(
+                let updated = try await service.updatePost(
                     postID: editingPost.id,
                     input: UpdatePostInput(
                         content: trimmedText,
@@ -335,7 +339,7 @@ struct ComposePostView: View {
                 )
                 onPostUpdated?(updated)
             } else {
-                let created = try await appState.service.createPost(
+                let created = try await service.createPost(
                     input: CreatePostInput(
                         content: trimmedText,
                         images: normalizedMediaURLs,
@@ -359,7 +363,7 @@ struct ComposePostView: View {
         defer { isDeleting = false }
 
         do {
-            try await appState.service.deletePost(postID: editingPost.id)
+            try await service.deletePost(postID: editingPost.id)
             onPostDeleted?(editingPost.id)
             dismiss()
         } catch {

@@ -4,7 +4,8 @@ import UIKit
 
 struct SquadProfileView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
+    private let service: SocialService
     @StateObject private var viewModel: SquadProfileViewModel
     @State private var pushedConversation: Conversation?
     @State private var showManageSheet = false
@@ -12,7 +13,8 @@ struct SquadProfileView: View {
     @State private var myNotificationsEnabled = true
     @State private var selectedMember: SquadMemberProfile?
 
-    init(squadID: String, service: SocialService = AppEnvironment.makeService()) {
+    init(squadID: String, service: SocialService) {
+        self.service = service
         _viewModel = StateObject(wrappedValue: SquadProfileViewModel(squadID: squadID, service: service))
     }
 
@@ -105,7 +107,7 @@ struct SquadProfileView: View {
             .padding(.bottom, 6)
         }
         .navigationDestination(item: $pushedConversation) { conversation in
-            ChatView(conversation: conversation, service: appState.service)
+            ChatView(conversation: conversation, service: service)
         }
         .navigationDestination(item: $selectedMember) { member in
             UserProfileView(userID: member.id)
@@ -114,7 +116,12 @@ struct SquadProfileView: View {
             Task { await viewModel.load() }
         }) {
             if let profile = viewModel.profile {
-                SquadManageSheet(profile: profile, isSaving: viewModel.isSavingGroupInfo) { input in
+                SquadManageSheet(
+                    profile: profile,
+                    isSaving: viewModel.isSavingGroupInfo,
+                    webService: appContainer.webService,
+                    socialService: service
+                ) { input in
                     Task {
                         let success = await viewModel.saveGroupInfo(input: input)
                         if success {
@@ -557,12 +564,20 @@ private struct SquadManageSheet: View {
     @State private var isUploadingAvatar = false
     @State private var isUploadingFlag = false
     @State private var uploadError: String?
-    private let webService = AppEnvironment.makeWebService()
-    private let socialService = AppEnvironment.makeService()
+    private let webService: WebFeatureService
+    private let socialService: SocialService
 
-    init(profile: SquadProfile, isSaving: Bool, onSave: @escaping (UpdateSquadInfoInput) -> Void) {
+    init(
+        profile: SquadProfile,
+        isSaving: Bool,
+        webService: WebFeatureService,
+        socialService: SocialService,
+        onSave: @escaping (UpdateSquadInfoInput) -> Void
+    ) {
         self.squadID = profile.id
         self.isSaving = isSaving
+        self.webService = webService
+        self.socialService = socialService
         self.onSave = onSave
         _name = State(initialValue: profile.name)
         _descriptionText = State(initialValue: profile.description ?? "")

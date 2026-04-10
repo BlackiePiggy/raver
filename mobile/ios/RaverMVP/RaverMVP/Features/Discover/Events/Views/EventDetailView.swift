@@ -31,8 +31,8 @@ struct EventDetailView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
 
-    private var service: WebFeatureService { appContainer.webService }
-    private var socialService: SocialService { appContainer.socialService }
+    private var eventsRepository: DiscoverEventsRepository { appContainer.discoverEventsRepository }
+    private var newsRepository: DiscoverNewsRepository { appContainer.discoverNewsRepository }
 
     let eventID: String
 
@@ -2077,13 +2077,19 @@ struct EventDetailView: View {
             await MainActor.run {
                 isLoadingRelatedArticles = true
             }
-            async let eventTask = service.fetchEvent(id: eventID)
+            async let eventTask = eventsRepository.fetchEvent(id: eventID)
             async let checkinsTask: [WebCheckin] = {
                 guard hasSession else { return [] }
-                let page = try? await service.fetchMyCheckins(page: 1, limit: 200, type: nil, eventID: eventID, djID: nil)
+                let page = try? await eventsRepository.fetchMyCheckins(
+                    page: 1,
+                    limit: 200,
+                    type: nil,
+                    eventID: eventID,
+                    djID: nil
+                )
                 return page?.items ?? []
             }()
-            async let ratingEventsTask = service.fetchEventRatingEvents(eventID: eventID)
+            async let ratingEventsTask = eventsRepository.fetchEventRatingEvents(eventID: eventID)
             async let relatedArticlesTask = fetchRelatedNewsArticlesForEvent(eventID: eventID)
 
             let loadedEvent = try await eventTask
@@ -2091,7 +2097,7 @@ struct EventDetailView: View {
             showExpandedLineupList = false
             relatedEventCheckins = await checkinsTask
             relatedRatingEvents = (try? await ratingEventsTask) ?? []
-            relatedEventSets = (try? await service.fetchEventDJSets(eventName: loadedEvent.name)) ?? []
+            relatedEventSets = (try? await eventsRepository.fetchEventDJSets(eventName: loadedEvent.name)) ?? []
             relatedArticles = (try? await relatedArticlesTask) ?? []
             isLoadingRelatedArticles = false
         } catch {
@@ -2101,16 +2107,11 @@ struct EventDetailView: View {
     }
 
     private func fetchRelatedNewsArticlesForEvent(eventID: String) async throws -> [DiscoverNewsArticle] {
-        let trimmedEventID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedEventID.isEmpty else { return [] }
-        let allArticles = try await fetchDiscoverNewsArticles(socialService: socialService, maxPages: 8)
-        return allArticles.filter { article in
-            article.boundEventIDs.contains(trimmedEventID)
-        }
+        try await newsRepository.fetchArticlesBoundToEvent(eventID: eventID, maxPages: 8)
     }
 
     private func reloadEventRatings() async {
-        relatedRatingEvents = (try? await service.fetchEventRatingEvents(eventID: eventID)) ?? []
+        relatedRatingEvents = (try? await eventsRepository.fetchEventRatingEvents(eventID: eventID)) ?? []
     }
 
     private func reloadEventSets() async {
@@ -2118,7 +2119,7 @@ struct EventDetailView: View {
             relatedEventSets = []
             return
         }
-        relatedEventSets = (try? await service.fetchEventDJSets(eventName: event.name)) ?? []
+        relatedEventSets = (try? await eventsRepository.fetchEventDJSets(eventName: event.name)) ?? []
     }
 
     @MainActor
@@ -2131,7 +2132,13 @@ struct EventDetailView: View {
         defer { isPreparingEventCheckinSheet = false }
 
         do {
-            let page = try await service.fetchMyCheckins(page: 1, limit: 200, type: nil, eventID: eventID, djID: nil)
+            let page = try await eventsRepository.fetchMyCheckins(
+                page: 1,
+                limit: 200,
+                type: nil,
+                eventID: eventID,
+                djID: nil
+            )
             relatedEventCheckins = page.items
         } catch {
             if relatedEventCheckins.isEmpty {
@@ -2303,7 +2310,7 @@ struct EventDetailView: View {
 
             let primaryCheckin: WebCheckin
             if let activeAttendanceCheckin {
-                primaryCheckin = try await service.updateCheckin(
+                primaryCheckin = try await eventsRepository.updateCheckin(
                     id: activeAttendanceCheckin.id,
                     input: UpdateCheckinInput(
                         eventId: eventID,
@@ -2315,7 +2322,7 @@ struct EventDetailView: View {
                 )
                 errorMessage = L("打卡信息已更新", "Check-in updated.")
             } else {
-                primaryCheckin = try await service.createCheckin(
+                primaryCheckin = try await eventsRepository.createCheckin(
                     input: CreateCheckinInput(
                         type: "event",
                         eventId: eventID,
@@ -2340,7 +2347,7 @@ struct EventDetailView: View {
         guard let activeAttendanceCheckin else { return }
 
         do {
-            try await service.deleteCheckin(id: activeAttendanceCheckin.id)
+            try await eventsRepository.deleteCheckin(id: activeAttendanceCheckin.id)
             await cleanupLegacyEventCheckins(keeping: nil)
             relatedEventCheckins.removeAll { checkin in
                 checkin.id == activeAttendanceCheckin.id || shouldCleanupEventCheckin(checkin, keeping: nil)
@@ -2420,7 +2427,7 @@ struct EventDetailView: View {
     private func cleanupLegacyEventCheckins(keeping keptID: String?) async {
         let cleanupTargets = relatedEventCheckins.filter { shouldCleanupEventCheckin($0, keeping: keptID) }
         for item in cleanupTargets {
-            try? await service.deleteCheckin(id: item.id)
+            try? await eventsRepository.deleteCheckin(id: item.id)
         }
     }
 
@@ -2448,7 +2455,7 @@ struct EventDetailView: View {
 
     private func deleteEvent() async {
         do {
-            try await service.deleteEvent(id: eventID)
+            try await eventsRepository.deleteEvent(id: eventID)
             errorMessage = L("活动已删除，请返回列表刷新", "Event deleted. Please return to the list and refresh.")
         } catch {
             errorMessage = error.userFacingMessage

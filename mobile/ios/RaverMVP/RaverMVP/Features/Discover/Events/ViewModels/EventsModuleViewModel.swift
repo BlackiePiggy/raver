@@ -1,6 +1,191 @@
 import Foundation
 import Combine
 
+struct DiscoverEventsPageRequest: Equatable {
+    let page: Int
+    let limit: Int
+    let search: String?
+    let eventType: String?
+    let status: String?
+}
+
+protocol DiscoverEventsRepository {
+    func fetchEvents(request: DiscoverEventsPageRequest) async throws -> EventListPage
+    func fetchEvent(id: String) async throws -> WebEvent
+    func createEvent(input: CreateEventInput) async throws -> WebEvent
+    func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent
+    func uploadEventImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        eventID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse
+    func importEventLineupFromImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        startDate: Date?,
+        endDate: Date?
+    ) async throws -> EventLineupImageImportResponse
+    func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage
+    func fetchMyCheckins(page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage
+    func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin
+    func updateCheckin(id: String, input: UpdateCheckinInput) async throws -> WebCheckin
+    func deleteCheckin(id: String) async throws
+    func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent]
+    func fetchEventDJSets(eventName: String) async throws -> [WebDJSet]
+    func deleteEvent(id: String) async throws
+}
+
+struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
+    }
+
+    func fetchEvents(request: DiscoverEventsPageRequest) async throws -> EventListPage {
+        try await service.fetchEvents(
+            page: request.page,
+            limit: request.limit,
+            search: request.search,
+            eventType: request.eventType,
+            status: request.status
+        )
+    }
+
+    func fetchEvent(id: String) async throws -> WebEvent {
+        try await service.fetchEvent(id: id)
+    }
+
+    func createEvent(input: CreateEventInput) async throws -> WebEvent {
+        try await service.createEvent(input: input)
+    }
+
+    func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent {
+        try await service.updateEvent(id: id, input: input)
+    }
+
+    func uploadEventImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        eventID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse {
+        try await service.uploadEventImage(
+            imageData: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
+            eventID: eventID,
+            usage: usage
+        )
+    }
+
+    func importEventLineupFromImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        startDate: Date?,
+        endDate: Date?
+    ) async throws -> EventLineupImageImportResponse {
+        try await service.importEventLineupFromImage(
+            imageData: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
+            startDate: startDate,
+            endDate: endDate
+        )
+    }
+
+    func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
+        try await service.fetchMyCheckins(page: page, limit: limit, type: type)
+    }
+
+    func fetchMyCheckins(page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage {
+        try await service.fetchMyCheckins(page: page, limit: limit, type: type, eventID: eventID, djID: djID)
+    }
+
+    func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin {
+        try await service.createCheckin(input: input)
+    }
+
+    func updateCheckin(id: String, input: UpdateCheckinInput) async throws -> WebCheckin {
+        try await service.updateCheckin(id: id, input: input)
+    }
+
+    func deleteCheckin(id: String) async throws {
+        try await service.deleteCheckin(id: id)
+    }
+
+    func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent] {
+        try await service.fetchEventRatingEvents(eventID: eventID)
+    }
+
+    func fetchEventDJSets(eventName: String) async throws -> [WebDJSet] {
+        try await service.fetchEventDJSets(eventName: eventName)
+    }
+
+    func deleteEvent(id: String) async throws {
+        try await service.deleteEvent(id: id)
+    }
+}
+
+struct FetchDiscoverEventsPageUseCase {
+    private let repository: DiscoverEventsRepository
+
+    init(repository: DiscoverEventsRepository) {
+        self.repository = repository
+    }
+
+    func execute(_ request: DiscoverEventsPageRequest) async throws -> EventListPage {
+        try await repository.fetchEvents(request: request)
+    }
+}
+
+struct FetchMarkedEventCheckinsUseCase {
+    private let repository: DiscoverEventsRepository
+
+    init(repository: DiscoverEventsRepository) {
+        self.repository = repository
+    }
+
+    func execute(limit: Int = 200) async throws -> [String: String] {
+        let page = try await repository.fetchMyCheckins(page: 1, limit: limit, type: "event")
+        let checkins = page.items.filter { $0.type.lowercased() == "event" && $0.eventId != nil && $0.isMarkedCheckin }
+        var markedMap: [String: String] = [:]
+        for item in checkins {
+            guard let eventID = item.eventId else { continue }
+            markedMap[eventID] = item.id
+        }
+        return markedMap
+    }
+}
+
+struct ToggleMarkedEventUseCase {
+    private let repository: DiscoverEventsRepository
+
+    init(repository: DiscoverEventsRepository) {
+        self.repository = repository
+    }
+
+    func execute(event: WebEvent, markedCheckinIDsByEventID: [String: String]) async throws -> [String: String] {
+        var next = markedCheckinIDsByEventID
+
+        if let checkinID = next[event.id] {
+            try await repository.deleteCheckin(id: checkinID)
+            next[event.id] = nil
+        } else {
+            let created = try await repository.createCheckin(
+                input: CreateCheckinInput(type: "event", eventId: event.id, djId: nil, note: "marked", rating: nil)
+            )
+            next[event.id] = created.id
+        }
+        return next
+    }
+}
+
 @MainActor
 final class EventsModuleViewModel: ObservableObject {
     struct AllQuery: Equatable {
@@ -25,7 +210,10 @@ final class EventsModuleViewModel: ObservableObject {
     @Published private(set) var isLoadingMoreAll = false
     @Published var errorMessage: String?
 
-    private let service: WebFeatureService
+    private let repository: DiscoverEventsRepository
+    private let fetchEventsPageUseCase: FetchDiscoverEventsPageUseCase
+    private let fetchMarkedEventCheckinsUseCase: FetchMarkedEventCheckinsUseCase
+    private let toggleMarkedEventUseCase: ToggleMarkedEventUseCase
     private let pageSize = 10
 
     private var currentAllQuery = AllQuery(search: "", eventTypeKey: "")
@@ -35,8 +223,11 @@ final class EventsModuleViewModel: ObservableObject {
     private var markedReloadToken = UUID()
     private var hasLoadedMarkedState = false
 
-    init(service: WebFeatureService) {
-        self.service = service
+    init(repository: DiscoverEventsRepository) {
+        self.repository = repository
+        self.fetchEventsPageUseCase = FetchDiscoverEventsPageUseCase(repository: repository)
+        self.fetchMarkedEventCheckinsUseCase = FetchMarkedEventCheckinsUseCase(repository: repository)
+        self.toggleMarkedEventUseCase = ToggleMarkedEventUseCase(repository: repository)
     }
 
     var canLoadMoreAll: Bool {
@@ -53,12 +244,14 @@ final class EventsModuleViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            let result = try await service.fetchEvents(
-                page: 1,
-                limit: pageSize,
-                search: query.searchParam,
-                eventType: query.eventTypeParam,
-                status: "upcoming"
+            let result = try await fetchEventsPageUseCase.execute(
+                DiscoverEventsPageRequest(
+                    page: 1,
+                    limit: pageSize,
+                    search: query.searchParam,
+                    eventType: query.eventTypeParam,
+                    status: "upcoming"
+                )
             )
 
             guard allReloadToken == token else { return }
@@ -83,12 +276,14 @@ final class EventsModuleViewModel: ObservableObject {
         isLoadingMoreAll = true
 
         do {
-            let result = try await service.fetchEvents(
-                page: pageToLoad,
-                limit: pageSize,
-                search: query.searchParam,
-                eventType: query.eventTypeParam,
-                status: "upcoming"
+            let result = try await fetchEventsPageUseCase.execute(
+                DiscoverEventsPageRequest(
+                    page: pageToLoad,
+                    limit: pageSize,
+                    search: query.searchParam,
+                    eventType: query.eventTypeParam,
+                    status: "upcoming"
+                )
             )
 
             guard query == currentAllQuery else { return }
@@ -124,15 +319,8 @@ final class EventsModuleViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            let page = try await service.fetchMyCheckins(page: 1, limit: 200, type: "event")
+            let markedMap = try await fetchMarkedEventCheckinsUseCase.execute()
             guard markedReloadToken == token else { return }
-
-            let checkins = page.items.filter { $0.type.lowercased() == "event" && $0.eventId != nil && $0.isMarkedCheckin }
-            var markedMap: [String: String] = [:]
-            for item in checkins {
-                guard let eventID = item.eventId else { continue }
-                markedMap[eventID] = item.id
-            }
 
             markedCheckinIDsByEventID = markedMap
             let loadedEvents = await fetchEventsByIDs(Array(markedMap.keys))
@@ -160,15 +348,15 @@ final class EventsModuleViewModel: ObservableObject {
         isLoadingMarked = false
 
         do {
-            if let checkinID = markedCheckinIDsByEventID[event.id] {
-                try await service.deleteCheckin(id: checkinID)
-                markedCheckinIDsByEventID[event.id] = nil
+            let wasMarked = markedCheckinIDsByEventID[event.id] != nil
+            markedCheckinIDsByEventID = try await toggleMarkedEventUseCase.execute(
+                event: event,
+                markedCheckinIDsByEventID: markedCheckinIDsByEventID
+            )
+
+            if wasMarked {
                 markedEvents.removeAll { $0.id == event.id }
             } else {
-                let created = try await service.createCheckin(
-                    input: CreateCheckinInput(type: "event", eventId: event.id, djId: nil, note: "marked", rating: nil)
-                )
-                markedCheckinIDsByEventID[event.id] = created.id
                 insertMarkedEvent(event)
             }
             hasLoadedMarkedState = true
@@ -189,11 +377,11 @@ final class EventsModuleViewModel: ObservableObject {
     private func fetchEventsByIDs(_ ids: [String]) async -> [WebEvent] {
         guard !ids.isEmpty else { return [] }
 
-        let service = service
+        let repository = repository
         return await withTaskGroup(of: WebEvent?.self, returning: [WebEvent].self) { group in
             for id in ids.sorted() {
                 group.addTask {
-                    try? await service.fetchEvent(id: id)
+                    try? await repository.fetchEvent(id: id)
                 }
             }
 

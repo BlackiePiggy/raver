@@ -2,171 +2,101 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject private var appState: AppState
-    @StateObject private var viewModel: ProfileViewModel
-    @State private var showEditProfile = false
-    @State private var showPublishEvent = false
-    @State private var showUploadSet = false
-    @State private var showSettings = false
-    @State private var showAvatarFullscreen = false
-    @State private var showMyCheckins = false
-    @State private var selectedProfileDestination: ProfileDestination?
-    @State private var selectedFollowListKind: FollowListKind?
-    @State private var selectedUserForProfile: UserSummary?
-    @State private var selectedPostForDetail: Post?
+    @Environment(\.profilePush) private var profilePush
+    @ObservedObject private var viewModel: ProfileViewModel
 
-    private enum ProfileDestination: Hashable, Identifiable {
-        case myCheckins
-        case myPublishes
-
-        var id: String {
-            switch self {
-            case .myCheckins: return "checkins"
-            case .myPublishes: return "publishes"
-            }
-        }
-    }
-
-    init() {
-        _viewModel = StateObject(wrappedValue: ProfileViewModel(service: AppEnvironment.makeService()))
+    init(viewModel: ProfileViewModel) {
+        _viewModel = ObservedObject(wrappedValue: viewModel)
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if viewModel.isLoading && viewModel.profile == nil {
-                    ProgressView(L("加载中...", "Loading..."))
-                } else if let profile = viewModel.profile {
-                    ScrollView {
-                        VStack(spacing: 14) {
-                            ProfileHeaderCard(
-                                profile: profile,
-                                onAvatarTap: {
-                                    showAvatarFullscreen = true
-                                },
-                                onFollowersTap: {
-                                    selectedFollowListKind = .followers
-                                },
-                                onFollowingTap: {
-                                    selectedFollowListKind = .following
-                                },
-                                onFriendsTap: {
-                                    selectedFollowListKind = .friends
-                                }
-                            )
-
-                            ProfileRecentCheckinsCard(
-                                title: L("我的近期打卡", "My Recent Check-ins"),
-                                checkins: viewModel.recentCheckins,
-                                emptyText: L("去发现页完成活动或 DJ 打卡，记录会显示在这里。", "Complete event or DJ check-ins from Discover. Records will appear here.")
-                            ) {
-                                showMyCheckins = true
+        Group {
+            if viewModel.isLoading && viewModel.profile == nil {
+                ProgressView(L("加载中...", "Loading..."))
+            } else if let profile = viewModel.profile {
+                ScrollView {
+                    VStack(spacing: 14) {
+                        ProfileHeaderCard(
+                            profile: profile,
+                            onAvatarTap: {
+                                profilePush(.avatarFullscreen)
+                            },
+                            onFollowersTap: {
+                                profilePush(.followList(userID: currentUserID, kind: .followers))
+                            },
+                            onFollowingTap: {
+                                profilePush(.followList(userID: currentUserID, kind: .following))
+                            },
+                            onFriendsTap: {
+                                profilePush(.followList(userID: currentUserID, kind: .friends))
                             }
+                        )
 
-                            profileQuickActions
+                        ProfileRecentCheckinsCard(
+                            title: L("我的近期打卡", "My Recent Check-ins"),
+                            checkins: viewModel.recentCheckins,
+                            emptyText: L("去发现页完成活动或 DJ 打卡，记录会显示在这里。", "Complete event or DJ check-ins from Discover. Records will appear here.")
+                        ) {
+                            profilePush(.myCheckins(
+                                targetUserID: nil,
+                                title: L("我的打卡", "My Check-ins")
+                            ))
+                        }
 
-                            Picker(LL("内容"), selection: $viewModel.selectedSection) {
-                                ForEach(ProfileViewModel.Section.allCases) { section in
-                                    Text(section.title).tag(section)
-                                }
+                        profileQuickActions
+
+                        Picker(LL("内容"), selection: $viewModel.selectedSection) {
+                            ForEach(ProfileViewModel.Section.allCases) { section in
+                                Text(section.title).tag(section)
                             }
-                            .pickerStyle(.segmented)
-                            .padding(.horizontal, 2)
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(.horizontal, 2)
 
-                            sectionContent
-                        }
-                        .padding(16)
+                        sectionContent
                     }
-                    .refreshable {
-                        await viewModel.refreshSection()
-                    }
-                } else {
-                    ContentUnavailableView(L("资料加载失败", "Failed to Load Profile"), systemImage: "person.crop.circle.badge.exclam")
+                    .padding(16)
                 }
+                .refreshable {
+                    await viewModel.refreshSection()
+                }
+            } else {
+                ContentUnavailableView(L("资料加载失败", "Failed to Load Profile"), systemImage: "person.crop.circle.badge.exclam")
             }
-            .background(RaverTheme.background)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    if viewModel.profile != nil {
-                        Button {
-                            showEditProfile = true
-                        } label: {
-                            Label(L("编辑", "Edit"), systemImage: "square.and.pencil")
-                        }
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    if viewModel.profile != nil {
-                        Button {
-                            showSettings = true
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                        }
+        }
+        .background(RaverTheme.background)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                if viewModel.profile != nil {
+                    Button {
+                        profilePush(.editProfile)
+                    } label: {
+                        Label(L("编辑", "Edit"), systemImage: "square.and.pencil")
                     }
                 }
             }
-            .task {
-                await viewModel.load()
-            }
-            .navigationDestination(item: $selectedFollowListKind) { kind in
-                FollowListView(userID: appState.session?.user.id ?? "", kind: kind)
-            }
-            .navigationDestination(item: $selectedUserForProfile) { user in
-                UserProfileView(userID: user.id)
-            }
-            .fullScreenCover(item: $selectedPostForDetail) { post in
-                NavigationStack {
-                    PostDetailView(post: post, service: appState.service)
-                        .environmentObject(appState)
-                }
-            }
-            .navigationDestination(item: $selectedProfileDestination) { destination in
-                switch destination {
-                case .myCheckins:
-                    EmptyView()
-                case .myPublishes:
-                    MyPublishesView()
-                }
-            }
-            .fullScreenCover(isPresented: $showMyCheckins) {
-                NavigationStack {
-                    MyCheckinsView()
-                }
-            }
-            .navigationDestination(isPresented: $showEditProfile) {
-                if let profile = viewModel.profile {
-                    EditProfileView(profile: profile) { updated in
-                        viewModel.applyUpdatedProfile(updated)
+            ToolbarItem(placement: .topBarTrailing) {
+                if viewModel.profile != nil {
+                    Button {
+                        profilePush(.settings)
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
                     }
                 }
             }
-            .sheet(isPresented: $showPublishEvent) {
-                EventEditorView(mode: .create) {
-                    Task { await viewModel.load() }
-                }
-            }
-            .sheet(isPresented: $showUploadSet) {
-                DJSetEditorView(mode: .create) {}
-            }
-            .navigationDestination(isPresented: $showSettings) {
-                SettingsView()
-            }
-            .fullScreenCover(isPresented: $showAvatarFullscreen) {
-                if let profile = viewModel.profile {
-                    AvatarFullscreenView(profile: profile) {
-                        showAvatarFullscreen = false
-                    }
-                }
-            }
-            .alert(L("提示", "Notice"), isPresented: Binding(
-                get: { viewModel.error != nil },
-                set: { if !$0 { viewModel.error = nil } }
-            )) {
-                Button(L("确定", "OK"), role: .cancel) {}
-            } message: {
-                Text(viewModel.error ?? "")
-            }
+        }
+        .task {
+            await viewModel.load()
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { viewModel.error != nil },
+            set: { if !$0 { viewModel.error = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(viewModel.error ?? "")
         }
     }
 
@@ -178,21 +108,21 @@ struct ProfileView: View {
                     .foregroundStyle(RaverTheme.primaryText)
 
                 Button {
-                    selectedProfileDestination = .myPublishes
+                    profilePush(.myPublishes)
                 } label: {
                     quickActionRow(title: L("我的发布", "My Posts"), icon: "square.stack.3d.up")
                 }
                 .buttonStyle(.plain)
 
                 Button {
-                    showPublishEvent = true
+                    profilePush(.publishEvent)
                 } label: {
                     quickActionRow(title: L("发布活动", "Publish Event"), icon: "calendar.badge.plus")
                 }
                 .buttonStyle(.plain)
 
                 Button {
-                    showUploadSet = true
+                    profilePush(.uploadSet)
                 } label: {
                     quickActionRow(title: L("上传 Set", "Upload Set"), icon: "square.and.arrow.up")
                 }
@@ -266,7 +196,7 @@ struct ProfileView: View {
                         onMessageTap: nil,
                         onAuthorTap: {
                             if post.author.id != appState.session?.user.id {
-                                selectedUserForProfile = post.author
+                                profilePush(.userProfile(post.author.id))
                             }
                         },
                         onSquadTap: nil
@@ -274,10 +204,14 @@ struct ProfileView: View {
                 }
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    selectedPostForDetail = post
+                    profilePush(.postDetail(post))
                 }
             }
         }
+    }
+
+    private var currentUserID: String {
+        appState.session?.user.id ?? ""
     }
 }
 
@@ -601,9 +535,10 @@ private struct ProfileAvatarImage: View {
     }
 }
 
-private struct AvatarFullscreenView: View {
+struct AvatarFullscreenView: View {
+    @Environment(\.dismiss) private var dismiss
     let profile: UserProfile
-    let onClose: () -> Void
+    var onClose: (() -> Void)? = nil
 
     var body: some View {
         GeometryReader { proxy in
@@ -626,7 +561,11 @@ private struct AvatarFullscreenView: View {
                     HStack {
                         Spacer()
                         Button {
-                            onClose()
+                            if let onClose {
+                                onClose()
+                            } else {
+                                dismiss()
+                            }
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.title2)

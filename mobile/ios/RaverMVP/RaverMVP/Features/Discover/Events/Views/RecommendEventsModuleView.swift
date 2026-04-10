@@ -7,7 +7,7 @@ struct DiscoverRecommendEventsRootView: View {
 
     var body: some View {
         RecommendEventsModuleView(
-            viewModel: RecommendEventsViewModel(service: appContainer.webService)
+            viewModel: RecommendEventsViewModel(repository: appContainer.discoverEventsRepository)
         )
     }
 }

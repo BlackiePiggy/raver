@@ -11,7 +11,11 @@ import CoreText
 
 struct LearnModuleView: View {
     @Environment(\.discoverPush) private var discoverPush
-    private let service = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+
+    private var wikiRepository: DiscoverWikiRepository {
+        appContainer.discoverWikiRepository
+    }
 
     @State private var genres: [LearnGenreNode] = []
     @State private var allLabels: [LearnLabel] = []
@@ -506,7 +510,7 @@ struct LearnModuleView: View {
         isLoadingGenres = true
         defer { isLoadingGenres = false }
         do {
-            genres = try await service.fetchLearnGenres()
+            genres = try await wikiRepository.fetchLearnGenres()
         } catch {
             errorMessage = error.userFacingMessage
         }
@@ -517,7 +521,7 @@ struct LearnModuleView: View {
         defer { isLoadingLabels = false }
 
         do {
-            let page = try await service.fetchLearnLabels(
+            let page = try await wikiRepository.fetchLearnLabels(
                 page: 1,
                 limit: 500,
                 sortBy: selectedSort.apiValue,
@@ -539,7 +543,7 @@ struct LearnModuleView: View {
         defer { isLoadingFestivals = false }
 
         do {
-            let fetched = try await service.fetchLearnFestivals(search: nil)
+            let fetched = try await wikiRepository.fetchLearnFestivals(search: nil)
             allFestivals = fetched.map { LearnFestival(web: $0) }
             applyFestivalFilters()
         } catch {
@@ -812,7 +816,7 @@ struct LearnModuleView: View {
                 return [LearnFestivalLinkPayload(title: L("官网", "Official"), icon: "globe", url: website)]
             }()
 
-            var created = try await service.createLearnFestival(
+            var created = try await wikiRepository.createLearnFestival(
                 input: CreateLearnFestivalInput(
                     name: finalName,
                     aliases: parseFestivalAliasTokens(createFestivalAliases),
@@ -830,7 +834,7 @@ struct LearnModuleView: View {
 
             var uploadedAvatarURL: String?
             if let createFestivalAvatarData {
-                let uploadedAvatar = try await service.uploadWikiBrandImage(
+                let uploadedAvatar = try await wikiRepository.uploadWikiBrandImage(
                     imageData: jpegDataForFestivalImport(from: createFestivalAvatarData),
                     fileName: "wiki-brand-avatar-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -842,7 +846,7 @@ struct LearnModuleView: View {
 
             var uploadedBackgroundURL: String?
             if let createFestivalBackgroundData {
-                let uploadedBackground = try await service.uploadWikiBrandImage(
+                let uploadedBackground = try await wikiRepository.uploadWikiBrandImage(
                     imageData: jpegDataForFestivalImport(from: createFestivalBackgroundData),
                     fileName: "wiki-brand-background-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -853,7 +857,7 @@ struct LearnModuleView: View {
             }
 
             if uploadedAvatarURL != nil || uploadedBackgroundURL != nil {
-                created = try await service.updateLearnFestival(
+                created = try await wikiRepository.updateLearnFestival(
                     id: created.id,
                     input: UpdateLearnFestivalInput(
                         name: nil,
@@ -2178,9 +2182,20 @@ struct LearnFestivalDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
     @EnvironmentObject private var appState: AppState
-    private let service = AppEnvironment.makeWebService()
-    private let socialService = AppEnvironment.makeService()
+    @EnvironmentObject private var appContainer: AppContainer
     let onFestivalUpdated: ((LearnFestival) -> Void)?
+
+    private var wikiRepository: DiscoverWikiRepository {
+        appContainer.discoverWikiRepository
+    }
+
+    private var eventsRepository: DiscoverEventsRepository {
+        appContainer.discoverEventsRepository
+    }
+
+    private var newsRepository: DiscoverNewsRepository {
+        appContainer.discoverNewsRepository
+    }
 
     @State private var currentFestival: LearnFestival
 
@@ -2864,7 +2879,7 @@ struct LearnFestivalDetailView: View {
 
     private func resolveFestivalContributorUser(_ contributor: WebUserLite) async -> WebUserLite? {
         let contributorID = contributor.id.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !contributorID.isEmpty, let profile = try? await socialService.fetchUserProfile(userID: contributorID) {
+        if !contributorID.isEmpty, let profile = try? await newsRepository.fetchUserProfile(userID: contributorID) {
             return WebUserLite(
                 id: profile.id,
                 username: profile.username,
@@ -2900,7 +2915,7 @@ struct LearnFestivalDetailView: View {
         expectedUsername: String,
         expectedDisplayName: String?
     ) async -> UserSummary? {
-        guard let users = try? await socialService.searchUsers(query: query), !users.isEmpty else {
+        guard let users = try? await newsRepository.searchUsers(query: query), !users.isEmpty else {
             return nil
         }
 
@@ -3113,7 +3128,7 @@ struct LearnFestivalDetailView: View {
             updated.introduction = editIntroduction.trimmingCharacters(in: .whitespacesAndNewlines)
 
             if let editAvatarData {
-                let uploadedAvatar = try await service.uploadWikiBrandImage(
+                let uploadedAvatar = try await wikiRepository.uploadWikiBrandImage(
                     imageData: jpegDataForFestivalImport(from: editAvatarData),
                     fileName: "wiki-brand-avatar-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -3124,7 +3139,7 @@ struct LearnFestivalDetailView: View {
             }
 
             if let editBackgroundData {
-                let uploadedBackground = try await service.uploadWikiBrandImage(
+                let uploadedBackground = try await wikiRepository.uploadWikiBrandImage(
                     imageData: jpegDataForFestivalImport(from: editBackgroundData),
                     fileName: "wiki-brand-background-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -3162,7 +3177,7 @@ struct LearnFestivalDetailView: View {
                 }
             )
 
-            let persisted = try await service.updateLearnFestival(id: updated.id, input: payload)
+            let persisted = try await wikiRepository.updateLearnFestival(id: updated.id, input: payload)
             let hydrated = LearnFestival(web: persisted)
             currentFestival = hydrated
             onFestivalUpdated?(hydrated)
@@ -3321,12 +3336,14 @@ struct LearnFestivalDetailView: View {
         var seen = Set<String>()
 
         for query in queries {
-            let page = try await service.fetchEvents(
-                page: 1,
-                limit: 120,
-                search: query,
-                eventType: nil,
-                status: "all"
+            let page = try await eventsRepository.fetchEvents(
+                request: DiscoverEventsPageRequest(
+                    page: 1,
+                    limit: 120,
+                    search: query,
+                    eventType: nil,
+                    status: "all"
+                )
             )
             for item in page.items where eventMatchesFestival(item) {
                 if seen.insert(item.id).inserted {
@@ -3341,9 +3358,7 @@ struct LearnFestivalDetailView: View {
     private func fetchRelatedPosts() async throws -> [DiscoverNewsArticle] {
         let brandID = currentFestival.id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !brandID.isEmpty else { return [] }
-
-        let allArticles = try await fetchDiscoverNewsArticles(socialService: socialService, maxPages: 8)
-        return allArticles.filter { $0.boundBrandIDs.contains(brandID) }
+        return try await newsRepository.fetchArticlesBoundToFestival(festivalID: brandID, maxPages: 8)
     }
 
     private func eventMatchesFestival(_ event: WebEvent) -> Bool {
@@ -3654,7 +3669,11 @@ private struct WrapFlowLayout<Item: Hashable, Content: View>: View {
 }
 
 struct RankingBoardDetailView: View {
-    private let service = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+
+    private var djsRepository: DiscoverDJsRepository {
+        appContainer.discoverDJsRepository
+    }
 
     let board: RankingBoard
 
@@ -3800,7 +3819,7 @@ struct RankingBoardDetailView: View {
         defer { isLoading = false }
 
         do {
-            detail = try await service.fetchRankingBoardDetail(boardID: board.id, year: selectedYear)
+            detail = try await djsRepository.fetchRankingBoardDetail(boardID: board.id, year: selectedYear)
         } catch {
             errorMessage = error.userFacingMessage
         }

@@ -7,10 +7,10 @@ final class MessageNotificationsViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
 
-    private let service: SocialService
+    private let repository: MessagesRepository
 
-    init(service: SocialService) {
-        self.service = service
+    init(repository: MessagesRepository) {
+        self.repository = repository
     }
 
     func load() async {
@@ -19,8 +19,8 @@ final class MessageNotificationsViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            async let inbox = service.fetchNotifications(limit: 50)
-            async let unread = service.fetchNotificationUnreadCount()
+            async let inbox = repository.fetchNotifications(limit: 50)
+            async let unread = repository.fetchNotificationUnreadCount()
             let inboxResult = try await inbox
             let unreadResult = try await unread
 
@@ -41,7 +41,7 @@ final class MessageNotificationsViewModel: ObservableObject {
         decrementUnread(for: item.type)
 
         do {
-            try await service.markNotificationRead(notificationID: item.id)
+            try await repository.markNotificationRead(notificationID: item.id)
             error = nil
         } catch {
             notifications[index].isRead = false

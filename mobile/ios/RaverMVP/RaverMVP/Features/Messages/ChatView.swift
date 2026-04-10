@@ -3,6 +3,8 @@ import UIKit
 
 struct ChatView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.messagesPush) private var messagesPush
+    @Environment(\.messagesPresent) private var messagesPresent
     let conversation: Conversation
     let service: SocialService
 
@@ -10,8 +12,6 @@ struct ChatView: View {
     @State private var input = ""
     @State private var isLoading = false
     @State private var error: String?
-    @State private var selectedUserProfile: UserSummary?
-    @State private var showSquadProfile = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,7 +28,7 @@ struct ChatView: View {
             if conversation.type == .direct, let peer = conversation.peer {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        selectedUserProfile = peer
+                        messagesPush(.userProfile(peer.id))
                     } label: {
                         Image(systemName: "person.crop.circle")
                     }
@@ -38,7 +38,7 @@ struct ChatView: View {
             if conversation.type == .group {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showSquadProfile = true
+                        messagesPresent(.squadProfile(conversation.id))
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -57,15 +57,6 @@ struct ChatView: View {
         }
         .onDisappear {
             Task { await appState.refreshUnreadMessages() }
-        }
-        .navigationDestination(item: $selectedUserProfile) { user in
-            UserProfileView(userID: user.id)
-        }
-        .fullScreenCover(isPresented: $showSquadProfile) {
-            NavigationStack {
-                SquadProfileView(squadID: conversation.id, service: appState.service)
-                    .environmentObject(appState)
-            }
         }
         .overlay {
             if isLoading {
@@ -140,7 +131,7 @@ struct ChatView: View {
 
             if !message.isMine {
                 Button {
-                    selectedUserProfile = message.sender
+                    messagesPush(.userProfile(message.sender.id))
                 } label: {
                     avatarView(for: message.sender)
                 }
@@ -158,7 +149,7 @@ struct ChatView: View {
 
             if message.isMine {
                 Button {
-                    selectedUserProfile = message.sender
+                    messagesPush(.userProfile(message.sender.id))
                 } label: {
                     avatarView(for: message.sender)
                 }
@@ -176,7 +167,7 @@ struct ChatView: View {
 
             if !message.isMine {
                 Button {
-                    selectedUserProfile = message.sender
+                    messagesPush(.userProfile(message.sender.id))
                 } label: {
                     avatarView(for: message.sender)
                 }
@@ -193,7 +184,7 @@ struct ChatView: View {
 
             if message.isMine {
                 Button {
-                    selectedUserProfile = message.sender
+                    messagesPush(.userProfile(message.sender.id))
                 } label: {
                     avatarView(for: message.sender)
                 }

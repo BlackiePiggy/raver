@@ -199,7 +199,7 @@ func normalizedDJLookupKey(_ raw: String) -> String {
 
 func fetchExactDJMatches(
     names: [String],
-    service: any WebFeatureService
+    fetchCandidates: (String) async throws -> [WebDJ]
 ) async -> [String: WebDJ] {
     var resolved: [String: WebDJ] = [:]
     var queue: [String] = []
@@ -215,14 +215,14 @@ func fetchExactDJMatches(
     for name in queue {
         if Task.isCancelled { break }
         do {
-            let page = try await service.fetchDJs(page: 1, limit: 20, search: name, sortBy: "name")
+            let candidates = try await fetchCandidates(name)
             if Task.isCancelled { break }
             let key = normalizedDJLookupKey(name)
-            if let exact = page.items.first(where: { normalizedDJLookupKey($0.name) == key }) {
+            if let exact = candidates.first(where: { normalizedDJLookupKey($0.name) == key }) {
                 resolved[key] = exact
                 continue
             }
-            if let aliasMatched = page.items.first(where: { dj in
+            if let aliasMatched = candidates.first(where: { dj in
                 (dj.aliases ?? []).contains { normalizedDJLookupKey($0) == key }
             }) {
                 resolved[key] = aliasMatched

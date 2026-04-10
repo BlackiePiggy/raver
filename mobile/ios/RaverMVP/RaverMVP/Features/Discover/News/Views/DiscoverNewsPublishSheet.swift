@@ -3,8 +3,8 @@ import PhotosUI
 import UIKit
 
 struct DiscoverNewsPublishSheet: View {
+    @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.dismiss) private var dismiss
-    private let webService = AppEnvironment.makeWebService()
 
     let onSubmit: (DiscoverNewsDraft) async throws -> Void
 
@@ -35,6 +35,10 @@ struct DiscoverNewsPublishSheet: View {
     @State private var isSearchingDJs = false
     @State private var isSearchingBrands = false
     @State private var isSearchingEvents = false
+
+    private var repository: DiscoverNewsRepository {
+        appContainer.discoverNewsRepository
+    }
 
     var body: some View {
         NavigationStack {
@@ -322,12 +326,11 @@ struct DiscoverNewsPublishSheet: View {
             if let selectedCoverData {
                 isUploadingCover = true
                 defer { isUploadingCover = false }
-                let uploaded = try await webService.uploadEventImage(
+                finalCoverURL = try await repository.uploadNewsCoverImage(
                     imageData: jpegData(from: selectedCoverData),
                     fileName: "news-cover-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg"
                 )
-                finalCoverURL = uploaded.url
             }
 
             try await onSubmit(
@@ -410,9 +413,9 @@ struct DiscoverNewsPublishSheet: View {
         isSearchingDJs = true
         defer { isSearchingDJs = false }
         do {
-            let page = try await webService.fetchDJs(page: 1, limit: 20, search: keyword, sortBy: "name")
-            djSearchResults = page.items
-            for item in page.items {
+            let items = try await repository.searchDJs(query: keyword, limit: 20)
+            djSearchResults = items
+            for item in items {
                 boundDjNameByID[item.id] = item.name
             }
         } catch {
@@ -430,7 +433,7 @@ struct DiscoverNewsPublishSheet: View {
         isSearchingBrands = true
         defer { isSearchingBrands = false }
         do {
-            let items = try await webService.fetchLearnFestivals(search: keyword)
+            let items = try await repository.fetchLearnFestivals(search: keyword)
             brandSearchResults = items
             for item in items {
                 boundBrandNameByID[item.id] = item.name
@@ -450,9 +453,9 @@ struct DiscoverNewsPublishSheet: View {
         isSearchingEvents = true
         defer { isSearchingEvents = false }
         do {
-            let page = try await webService.fetchEvents(page: 1, limit: 20, search: keyword, eventType: nil, status: nil)
-            eventSearchResults = page.items
-            for item in page.items {
+            let items = try await repository.searchEvents(query: keyword, limit: 20)
+            eventSearchResults = items
+            for item in items {
                 boundEventNameByID[item.id] = item.name
             }
         } catch {
@@ -460,4 +463,3 @@ struct DiscoverNewsPublishSheet: View {
         }
     }
 }
-

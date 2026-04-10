@@ -5,6 +5,7 @@ import AVKit
 
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.scenePhase) private var scenePhase
     @State private var internalSelectedTab: MainTab = .discover
 
@@ -24,22 +25,24 @@ struct MainTabView: View {
                     Label(L("发现", "Discover"), systemImage: "safari.fill")
                 }
 
-            CircleHomeView()
+            CircleCoordinatorView {
+                CircleHomeView()
+            }
                 .tag(MainTab.circle)
                 .tabItem {
                     Label(L("圈子", "Circle"), systemImage: "person.3.fill")
                 }
 
-            MessagesCoordinatorView {
-                MessagesHomeView()
-            }
+            MessagesCoordinatorView(repository: appContainer.messagesRepository)
                 .tag(MainTab.messages)
                 .tabItem {
                     Label(L("消息", "Messages"), systemImage: "bubble.left.and.bubble.right.fill")
                 }
                 .badge(appState.unreadMessagesCount > 0 ? Text("\(appState.unreadMessagesCount)") : nil)
 
-            ProfileView()
+            ProfileCoordinatorView(
+                repository: appContainer.profileSocialRepository
+            )
                 .tag(MainTab.profile)
                 .tabItem {
                     Label(L("我的", "Me"), systemImage: "person.crop.circle.fill")
@@ -337,14 +340,12 @@ private struct CircleIDDetailRoute: Identifiable {
 
 private struct CircleIDHubView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.circlePush) private var circlePush
 
     @State private var entries: [CircleIDEntry] = []
     @State private var hasLoaded = false
     @State private var isPresentingComposer = false
     @State private var selectedDetailRoute: CircleIDDetailRoute?
-    @State private var selectedEventIDForDetail: String?
-    @State private var selectedDJIDForDetail: String?
-    @State private var selectedContributorUserID: String?
     @State private var errorMessage: String?
 
     private let storageKey = "circle.id.entries.v1"
@@ -356,131 +357,90 @@ private struct CircleIDHubView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 12) {
-                HStack {
-                    Text(L("ID（未发行）", "ID (Unreleased)"))
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(RaverTheme.primaryText)
-                    Spacer()
-                    Button {
-                        isPresentingComposer = true
-                    } label: {
-                        Label(L("发布 ID", "Post ID"), systemImage: "plus.circle.fill")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .background(RaverTheme.card)
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
+        VStack(spacing: 12) {
+            HStack {
+                Text(L("ID（未发行）", "ID (Unreleased)"))
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                Button {
+                    isPresentingComposer = true
+                } label: {
+                    Label(L("发布 ID", "Post ID"), systemImage: "plus.circle.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(RaverTheme.card)
+                        .clipShape(Capsule())
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
 
-                if sortedEntries.isEmpty {
-                    Spacer()
-                    ContentUnavailableView(
-                        L("还没有 ID 讨论", "No ID Discussion Yet"),
-                        systemImage: "music.note.list",
-                        description: Text(L("点击右上角“发布 ID”，记录一首未发行歌曲。", "Tap “Post ID” to record an unreleased track."))
+            if sortedEntries.isEmpty {
+                Spacer()
+                ContentUnavailableView(
+                    L("还没有 ID 讨论", "No ID Discussion Yet"),
+                    systemImage: "music.note.list",
+                    description: Text(L("点击右上角“发布 ID”，记录一首未发行歌曲。", "Tap “Post ID” to record an unreleased track."))
+                )
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(sortedEntries) { entry in
+                            idEntryCard(entry)
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 20)
+                }
+            }
+        }
+        .background(RaverTheme.background)
+        .task {
+            await loadEntriesIfNeeded()
+        }
+        .sheet(isPresented: $isPresentingComposer) {
+            CircleIDComposerSheet { entry in
+                entries.insert(entry, at: 0)
+                persistEntries()
+            }
+            .environmentObject(appState)
+        }
+        .fullScreenCover(item: $selectedDetailRoute) { route in
+            NavigationStack {
+                if let entryBinding = bindingForEntry(id: route.id) {
+                    CircleIDDetailView(
+                        entry: entryBinding,
+                        onPersist: {
+                            persistEntries()
+                        }
                     )
-                    Spacer()
+                    .environmentObject(appState)
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(sortedEntries) { entry in
-                                idEntryCard(entry)
-                            }
+                    VStack(spacing: 12) {
+                        Text(L("该 ID 已不存在", "This ID no longer exists"))
+                            .font(.headline)
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Button(L("关闭", "Close")) {
+                            selectedDetailRoute = nil
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.bottom, 20)
+                        .buttonStyle(.borderedProminent)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
                 }
             }
-            .background(RaverTheme.background)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .task {
-                await loadEntriesIfNeeded()
-            }
-            .sheet(isPresented: $isPresentingComposer) {
-                CircleIDComposerSheet { entry in
-                    entries.insert(entry, at: 0)
-                    persistEntries()
-                }
-                .environmentObject(appState)
-            }
-            .fullScreenCover(item: $selectedDetailRoute) { route in
-                NavigationStack {
-                    if let entryBinding = bindingForEntry(id: route.id) {
-                        CircleIDDetailView(
-                            entry: entryBinding,
-                            onPersist: {
-                                persistEntries()
-                            }
-                        )
-                        .environmentObject(appState)
-                    } else {
-                        VStack(spacing: 12) {
-                            Text(L("该 ID 已不存在", "This ID no longer exists"))
-                                .font(.headline)
-                                .foregroundStyle(RaverTheme.primaryText)
-                            Button(L("关闭", "Close")) {
-                                selectedDetailRoute = nil
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(RaverTheme.background)
-                    }
-                }
-            }
-            .fullScreenCover(
-                isPresented: Binding(
-                    get: { selectedEventIDForDetail != nil },
-                    set: { if !$0 { selectedEventIDForDetail = nil } }
-                )
-            ) {
-                if let eventID = selectedEventIDForDetail {
-                    NavigationStack {
-                        EventDetailView(eventID: eventID)
-                    }
-                }
-            }
-            .fullScreenCover(
-                isPresented: Binding(
-                    get: { selectedDJIDForDetail != nil },
-                    set: { if !$0 { selectedDJIDForDetail = nil } }
-                )
-            ) {
-                if let djID = selectedDJIDForDetail {
-                    NavigationStack {
-                        DJDetailView(djID: djID)
-                    }
-                }
-            }
-            .fullScreenCover(
-                isPresented: Binding(
-                    get: { selectedContributorUserID != nil },
-                    set: { if !$0 { selectedContributorUserID = nil } }
-                )
-            ) {
-                if let userID = selectedContributorUserID {
-                    NavigationStack {
-                        UserProfileView(userID: userID)
-                            .environmentObject(appState)
-                    }
-                }
-            }
-            .alert(LL("提示"), isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(L("确定", "OK"), role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
+        }
+        .alert(LL("提示"), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
         }
     }
 
@@ -494,7 +454,7 @@ private struct CircleIDHubView: View {
 
             if let event = entry.event {
                 Button {
-                    selectedEventIDForDetail = event.id
+                    circlePush(.eventDetail(event.id))
                 } label: {
                     HStack(spacing: 10) {
                         circleIDEventCover(event)
@@ -528,7 +488,7 @@ private struct CircleIDHubView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(entry.djs) { dj in
                         Button {
-                            selectedDJIDForDetail = dj.id
+                            circlePush(.djDetail(dj.id))
                         } label: {
                             HStack(spacing: 8) {
                                 circleIDDJAvatar(dj, size: 24)
@@ -580,7 +540,7 @@ private struct CircleIDHubView: View {
 
             HStack(spacing: 8) {
                 Button {
-                    selectedContributorUserID = entry.contributor.id
+                    circlePush(.userProfile(entry.contributor.id))
                 } label: {
                     HStack(spacing: 8) {
                         circleIDUserAvatar(entry.contributor, size: 28)
@@ -815,15 +775,14 @@ private struct CircleIDHubView: View {
 
 private struct CircleIDDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.circlePush) private var circlePush
     @EnvironmentObject private var appState: AppState
 
     @Binding var entry: CircleIDEntry
     let onPersist: () -> Void
 
     @State private var commentDraft = ""
-    @State private var selectedEventIDForDetail: String?
-    @State private var selectedDJIDForDetail: String?
-    @State private var selectedUserIDForDetail: String?
+    @State private var pendingRouteAfterDismiss: CircleRoute?
 
     var body: some View {
         ScrollView {
@@ -838,7 +797,7 @@ private struct CircleIDDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(entry.djs) { dj in
                             Button {
-                                selectedDJIDForDetail = dj.id
+                                dismissAndPush(.djDetail(dj.id))
                             } label: {
                                 HStack(spacing: 8) {
                                     circleIDDJAvatar(dj, size: 24)
@@ -856,7 +815,7 @@ private struct CircleIDDetailView: View {
 
                 if let event = entry.event {
                     Button {
-                        selectedEventIDForDetail = event.id
+                        dismissAndPush(.eventDetail(event.id))
                     } label: {
                         HStack(spacing: 10) {
                             circleIDEventCover(event)
@@ -920,7 +879,7 @@ private struct CircleIDDetailView: View {
 
                 HStack(spacing: 8) {
                     Button {
-                        selectedUserIDForDetail = entry.contributor.id
+                        dismissAndPush(.userProfile(entry.contributor.id))
                     } label: {
                         HStack(spacing: 8) {
                             circleIDUserAvatar(entry.contributor, size: 28)
@@ -956,7 +915,7 @@ private struct CircleIDDetailView: View {
                     } else {
                         ForEach(entry.comments) { comment in
                             Button {
-                                selectedUserIDForDetail = comment.author.id
+                                dismissAndPush(.userProfile(comment.author.id))
                             } label: {
                                 HStack(alignment: .top, spacing: 10) {
                                     circleIDUserAvatar(comment.author, size: 30)
@@ -1010,42 +969,10 @@ private struct CircleIDDetailView: View {
                 }
             }
         }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedEventIDForDetail != nil },
-                set: { if !$0 { selectedEventIDForDetail = nil } }
-            )
-        ) {
-            if let eventID = selectedEventIDForDetail {
-                NavigationStack {
-                    EventDetailView(eventID: eventID)
-                }
-            }
-        }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedDJIDForDetail != nil },
-                set: { if !$0 { selectedDJIDForDetail = nil } }
-            )
-        ) {
-            if let djID = selectedDJIDForDetail {
-                NavigationStack {
-                    DJDetailView(djID: djID)
-                }
-            }
-        }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedUserIDForDetail != nil },
-                set: { if !$0 { selectedUserIDForDetail = nil } }
-            )
-        ) {
-            if let userID = selectedUserIDForDetail {
-                NavigationStack {
-                    UserProfileView(userID: userID)
-                        .environmentObject(appState)
-                }
-            }
+        .onDisappear {
+            guard let route = pendingRouteAfterDismiss else { return }
+            pendingRouteAfterDismiss = nil
+            circlePush(route)
         }
     }
 
@@ -1103,6 +1030,11 @@ private struct CircleIDDetailView: View {
         entry.comments.append(comment)
         commentDraft = ""
         onPersist()
+    }
+
+    private func dismissAndPush(_ route: CircleRoute) {
+        pendingRouteAfterDismiss = route
+        dismiss()
     }
 
     private func currentUserSnapshot() -> CircleIDUserSnapshot {
@@ -1610,7 +1542,8 @@ private struct CircleIDComposerSheet: View {
 
 private struct CircleIDEventPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
-    private let webService = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+    private var webService: WebFeatureService { appContainer.webService }
 
     let onSelect: (WebEvent) -> Void
 
@@ -1739,7 +1672,8 @@ private struct CircleIDEventPickerSheet: View {
 
 private struct CircleIDDJPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
-    private let webService = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+    private var webService: WebFeatureService { appContainer.webService }
 
     let selected: [CircleIDDJSnapshot]
     let onDone: ([CircleIDDJSnapshot]) -> Void
@@ -1951,6 +1885,58 @@ private struct CircleIDDJPickerSheet: View {
     }
 }
 
+private struct SquadHallSnapshot {
+    let squads: [SquadSummary]
+    let mySquads: [SquadSummary]
+    let squadProfilesByID: [String: SquadProfile]
+}
+
+private struct LoadSquadHallDataUseCase {
+    private let service: SocialService
+
+    init(service: SocialService) {
+        self.service = service
+    }
+
+    func execute(existingProfilesByID: [String: SquadProfile]) async throws -> SquadHallSnapshot {
+        let loadedSquads = try await service.fetchRecommendedSquads()
+            .sorted(by: { lhs, rhs in
+                if lhs.isMember != rhs.isMember {
+                    return lhs.isMember && !rhs.isMember
+                }
+                if lhs.updatedAt != rhs.updatedAt {
+                    return lhs.updatedAt > rhs.updatedAt
+                }
+                return lhs.id < rhs.id
+            })
+        let loadedMySquads = try await service.fetchMySquads()
+            .sorted(by: { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt {
+                    return lhs.updatedAt > rhs.updatedAt
+                }
+                return lhs.id < rhs.id
+            })
+
+        var mergedProfiles = existingProfilesByID
+        let combinedByID = Dictionary(
+            (loadedSquads + loadedMySquads).map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for squad in combinedByID.values {
+            if mergedProfiles[squad.id] != nil { continue }
+            if let profile = try? await service.fetchSquadProfile(squadID: squad.id) {
+                mergedProfiles[squad.id] = profile
+            }
+        }
+
+        return SquadHallSnapshot(
+            squads: loadedSquads,
+            mySquads: loadedMySquads,
+            squadProfilesByID: mergedProfiles
+        )
+    }
+}
+
 private struct SquadHallView: View {
     private enum SquadListMode: String, CaseIterable, Identifiable {
         case plaza
@@ -1967,14 +1953,14 @@ private struct SquadHallView: View {
     }
 
     @EnvironmentObject private var appState: AppState
-    private let service = AppEnvironment.makeService()
+    @EnvironmentObject private var appContainer: AppContainer
+    @Environment(\.circlePush) private var circlePush
 
     @State private var squads: [SquadSummary] = []
     @State private var mySquads: [SquadSummary] = []
     @State private var squadProfilesByID: [String: SquadProfile] = [:]
     @State private var isLoading = false
     @State private var showCreateSquad = false
-    @State private var selectedSquad: PostSquad?
     @State private var selectedMode: SquadListMode = .plaza
     @State private var errorMessage: String?
     private let cardColumns = [
@@ -1983,128 +1969,118 @@ private struct SquadHallView: View {
     ]
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 12) {
-                HStack {
-                    Text(L("小队广场", "Squad Plaza"))
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(RaverTheme.primaryText)
-                    Spacer()
+        VStack(spacing: 12) {
+            HStack {
+                Text(L("小队广场", "Squad Plaza"))
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                Button {
+                    showCreateSquad = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.subheadline.weight(.bold))
+                        Text(L("创建小队", "Create Squad"))
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(RaverTheme.card)
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+
+            HStack(spacing: 8) {
+                ForEach(SquadListMode.allCases) { mode in
                     Button {
-                        showCreateSquad = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.subheadline.weight(.bold))
-                            Text(L("创建小队", "Create Squad"))
-                                .font(.subheadline.weight(.semibold))
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            selectedMode = mode
                         }
-                        .foregroundStyle(RaverTheme.primaryText)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(RaverTheme.card)
-                        .clipShape(Capsule())
+                    } label: {
+                        Text(mode.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(selectedMode == mode ? Color.white : RaverTheme.secondaryText)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                    .fill(selectedMode == mode ? RaverTheme.accent : RaverTheme.card)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                    .stroke(selectedMode == mode ? Color.clear : RaverTheme.cardBorder, lineWidth: 1)
+                            )
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+            }
+            .padding(.horizontal, 16)
 
-                HStack(spacing: 8) {
-                    ForEach(SquadListMode.allCases) { mode in
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.18)) {
-                                selectedMode = mode
+            if isLoading && displayedSquads.isEmpty {
+                Spacer()
+                ProgressView(L("加载小队中...", "Loading squads..."))
+                Spacer()
+            } else if displayedSquads.isEmpty {
+                Spacer()
+                ContentUnavailableView(
+                    selectedMode == .mine ? L("还没有加入小队", "Not Joined Any Squad Yet") : L("暂无小队", "No Squads Yet"),
+                    systemImage: "flag.2.crossed",
+                    description: Text(selectedMode == .mine ? L("去小队广场逛逛，加入你感兴趣的小队。", "Visit the squad square and join squads you like.") : L("创建一个小队，和朋友一起记录活动。", "Create a squad and record events with friends."))
+                )
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: cardColumns, spacing: 14) {
+                        ForEach(displayedSquads) { squad in
+                            Button {
+                                circlePush(.squadProfile(squad.id))
+                            } label: {
+                                squadFlagCard(squad)
                             }
-                        } label: {
-                            Text(mode.title)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(selectedMode == mode ? Color.white : RaverTheme.secondaryText)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                        .fill(selectedMode == mode ? RaverTheme.accent : RaverTheme.card)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                        .stroke(selectedMode == mode ? Color.clear : RaverTheme.cardBorder, lineWidth: 1)
-                                )
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 20)
                 }
-                .padding(.horizontal, 16)
-
-                if isLoading && displayedSquads.isEmpty {
-                    Spacer()
-                    ProgressView(L("加载小队中...", "Loading squads..."))
-                    Spacer()
-                } else if displayedSquads.isEmpty {
-                    Spacer()
-                    ContentUnavailableView(
-                        selectedMode == .mine ? L("还没有加入小队", "Not Joined Any Squad Yet") : L("暂无小队", "No Squads Yet"),
-                        systemImage: "flag.2.crossed",
-                        description: Text(selectedMode == .mine ? L("去小队广场逛逛，加入你感兴趣的小队。", "Visit the squad square and join squads you like.") : L("创建一个小队，和朋友一起记录活动。", "Create a squad and record events with friends."))
-                    )
-                    Spacer()
-                } else {
-                    ScrollView {
-                        LazyVGrid(columns: cardColumns, spacing: 14) {
-                            ForEach(displayedSquads) { squad in
-                                Button {
-                                    selectedSquad = PostSquad(id: squad.id, name: squad.name, avatarURL: squad.avatarURL)
-                                } label: {
-                                    squadFlagCard(squad)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-                        .padding(.bottom, 20)
-                    }
-                    .refreshable {
-                        await loadSquads()
-                    }
+                .refreshable {
+                    await loadSquads()
                 }
             }
-            .background(RaverTheme.background)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .task {
-                await loadSquads()
-            }
-            .onAppear {
-                Task { await loadSquads() }
-            }
-            .sheet(isPresented: $showCreateSquad) {
-                NavigationStack {
-                    CreateSquadView(service: appState.service) { conversation in
-                        showCreateSquad = false
-                        selectedSquad = PostSquad(id: conversation.id, name: conversation.title, avatarURL: conversation.avatarURL)
-                        Task { await loadSquads() }
-                    }
-                    .environmentObject(appState)
-                }
-            }
-            .fullScreenCover(item: $selectedSquad) { squad in
-                NavigationStack {
-                    SquadProfileView(squadID: squad.id, service: appState.service)
-                        .environmentObject(appState)
-                }
-            }
-            .alert(L("加载失败", "Load Failed"), isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(L("重试", "Retry")) {
+        }
+        .background(RaverTheme.background)
+        .task {
+            await loadSquads()
+        }
+        .onAppear {
+            Task { await loadSquads() }
+        }
+        .sheet(isPresented: $showCreateSquad) {
+            NavigationStack {
+                CreateSquadView(service: appContainer.socialService) { conversation in
+                    showCreateSquad = false
+                    circlePush(.squadProfile(conversation.id))
                     Task { await loadSquads() }
                 }
-                Button(L("取消", "Cancel"), role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
+                .environmentObject(appState)
             }
+        }
+        .alert(L("加载失败", "Load Failed"), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(L("重试", "Retry")) {
+                Task { await loadSquads() }
+            }
+            Button(L("取消", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
         }
     }
 
@@ -2299,37 +2275,12 @@ private struct SquadHallView: View {
         defer { isLoading = false }
 
         do {
-            let loadedSquads = try await service.fetchRecommendedSquads()
-                .sorted(by: { lhs, rhs in
-                    if lhs.isMember != rhs.isMember {
-                        return lhs.isMember && !rhs.isMember
-                    }
-                    if lhs.updatedAt != rhs.updatedAt {
-                        return lhs.updatedAt > rhs.updatedAt
-                    }
-                    return lhs.id < rhs.id
-                })
-            let loadedMySquads = try await service.fetchMySquads()
-                .sorted(by: { lhs, rhs in
-                    if lhs.updatedAt != rhs.updatedAt {
-                        return lhs.updatedAt > rhs.updatedAt
-                    }
-                    return lhs.id < rhs.id
-                })
-            squads = loadedSquads
-            mySquads = loadedMySquads
+            let snapshot = try await LoadSquadHallDataUseCase(service: appContainer.socialService)
+                .execute(existingProfilesByID: squadProfilesByID)
 
-            // 补齐小队队长信息用于卡片展示。
-            let combinedByID = Dictionary(
-                (loadedSquads + loadedMySquads).map { ($0.id, $0) },
-                uniquingKeysWith: { first, _ in first }
-            )
-            for squad in combinedByID.values {
-                if squadProfilesByID[squad.id] != nil { continue }
-                if let profile = try? await service.fetchSquadProfile(squadID: squad.id) {
-                    squadProfilesByID[squad.id] = profile
-                }
-            }
+            squads = snapshot.squads
+            mySquads = snapshot.mySquads
+            squadProfilesByID = snapshot.squadProfilesByID
             errorMessage = nil
         } catch {
             errorMessage = error.userFacingMessage
@@ -2380,10 +2331,11 @@ private struct TriangleTailShape: Shape {
 }
 
 private struct CircleRatingHubView: View {
-    private let service = AppEnvironment.makeWebService()
+    @Environment(\.circlePush) private var circlePush
+    @EnvironmentObject private var appContainer: AppContainer
+    private var service: WebFeatureService { appContainer.webService }
 
     @State private var events: [WebRatingEvent] = []
-    @State private var presentedEventRoute: CircleRatingEventRoute?
     @State private var isPresentingCreateEvent = false
     @State private var isPresentingImportFromEvent = false
     @State private var isLoading = false
@@ -2451,7 +2403,7 @@ private struct CircleRatingHubView: View {
                 } else {
                     ForEach(events) { event in
                         Button {
-                            presentedEventRoute = CircleRatingEventRoute(id: event.id)
+                            circlePush(.ratingEventDetail(event.id))
                         } label: {
                             eventCard(event: event)
                         }
@@ -2464,6 +2416,9 @@ private struct CircleRatingHubView: View {
         .background(RaverTheme.background)
         .task {
             await loadEvents()
+        }
+        .onAppear {
+            Task { await loadEvents() }
         }
         .refreshable {
             await loadEvents()
@@ -2482,19 +2437,6 @@ private struct CircleRatingHubView: View {
                 await MainActor.run {
                     events.insert(created, at: 0)
                 }
-            }
-        }
-        .fullScreenCover(item: $presentedEventRoute) { route in
-            NavigationStack {
-                CircleRatingEventDetailView(
-                    eventID: route.id,
-                    onClose: {
-                        presentedEventRoute = nil
-                    },
-                    onUpdated: {
-                        Task { await loadEvents() }
-                    }
-                )
             }
         }
     }
@@ -2574,7 +2516,10 @@ private struct CircleRatingHubView: View {
 }
 
 struct CircleRatingEventDetailView: View {
-    private let service = AppEnvironment.makeWebService()
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.circlePush) private var circlePush
+    @EnvironmentObject private var appContainer: AppContainer
+    private var service: WebFeatureService { appContainer.webService }
 
     let eventID: String
     let onClose: () -> Void
@@ -2584,7 +2529,6 @@ struct CircleRatingEventDetailView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var isPresentingCreateUnit = false
-    @State private var selectedSourceEventIDForDetail: String?
 
     var body: some View {
         ScrollView {
@@ -2663,18 +2607,6 @@ struct CircleRatingEventDetailView: View {
                 }
             }
         }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedSourceEventIDForDetail != nil },
-                set: { if !$0 { selectedSourceEventIDForDetail = nil } }
-            )
-        ) {
-            if let sourceEventID = selectedSourceEventIDForDetail {
-                NavigationStack {
-                    EventDetailView(eventID: sourceEventID)
-                }
-            }
-        }
     }
 
     @ViewBuilder
@@ -2682,7 +2614,7 @@ struct CircleRatingEventDetailView: View {
         let sourceEventID = event.sourceEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !sourceEventID.isEmpty {
             Button {
-                selectedSourceEventIDForDetail = sourceEventID
+                circlePush(.eventDetail(sourceEventID))
             } label: {
                 ratingEventHeaderCardContent(event, isLinkedToEvent: true)
             }
@@ -2770,6 +2702,7 @@ struct CircleRatingEventDetailView: View {
                 HStack {
                     Button {
                         onClose()
+                        dismiss()
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.headline.weight(.semibold))
@@ -2862,8 +2795,9 @@ struct CircleRatingEventDetailView: View {
 
 struct CircleRatingUnitDetailView: View {
     @EnvironmentObject private var appState: AppState
-    private let socialService = AppEnvironment.makeService()
-    private let webService = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+    private var socialService: SocialService { appContainer.socialService }
+    private var webService: WebFeatureService { appContainer.webService }
 
     let unitID: String
     let onSubmitted: () -> Void
@@ -3195,8 +3129,8 @@ struct CircleRatingUnitDetailView: View {
 
 private struct CreateRatingEventSheet: View {
     @Environment(\.dismiss) private var dismiss
-
-    private let webService = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+    private var webService: WebFeatureService { appContainer.webService }
     let onSubmit: (CreateRatingEventInput) async throws -> Void
 
     @State private var name = ""
@@ -3323,8 +3257,8 @@ private struct CreateRatingEventSheet: View {
 
 private struct CreateRatingEventFromEventSheet: View {
     @Environment(\.dismiss) private var dismiss
-
-    private let webService = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+    private var webService: WebFeatureService { appContainer.webService }
     let onSubmit: (String) async throws -> Void
 
     @State private var searchKeyword = ""
@@ -3466,8 +3400,8 @@ private struct CreateRatingEventFromEventSheet: View {
 
 private struct CreateRatingUnitSheet: View {
     @Environment(\.dismiss) private var dismiss
-
-    private let webService = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+    private var webService: WebFeatureService { appContainer.webService }
     let eventID: String?
     let onSubmit: (CreateRatingUnitInput) async throws -> Void
 
@@ -3743,8 +3677,4 @@ private struct RatingSquareImage: View {
                 .foregroundStyle(Color.white.opacity(0.92))
         }
     }
-}
-
-private struct CircleRatingEventRoute: Identifiable {
-    let id: String
 }

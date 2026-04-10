@@ -2,10 +2,88 @@ import SwiftUI
 import PhotosUI
 import UIKit
 
+struct SaveProfileUseCase {
+    private let repository: ProfileSocialRepository
+
+    init(repository: ProfileSocialRepository) {
+        self.repository = repository
+    }
+
+    func execute(
+        displayName: String,
+        bio: String,
+        tagsText: String,
+        isFollowersListPublic: Bool,
+        isFollowingListPublic: Bool,
+        pendingAvatarData: Data?
+    ) async throws -> UserProfile {
+        if let data = pendingAvatarData {
+            _ = try await repository.uploadMyAvatar(
+                imageData: data,
+                fileName: "avatar.jpg",
+                mimeType: "image/jpeg"
+            )
+        }
+
+        let tags = tagsText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return try await repository.updateMyProfile(input: UpdateMyProfileInput(
+            displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+            bio: bio.trimmingCharacters(in: .whitespacesAndNewlines),
+            tags: tags,
+            isFollowersListPublic: isFollowersListPublic,
+            isFollowingListPublic: isFollowingListPublic
+        ))
+    }
+}
+
+@MainActor
+final class EditProfileViewModel: ObservableObject {
+    @Published var isSaving = false
+    @Published var error: String?
+
+    private let saveProfileUseCase: SaveProfileUseCase
+
+    init(repository: ProfileSocialRepository) {
+        self.saveProfileUseCase = SaveProfileUseCase(repository: repository)
+    }
+
+    func saveProfile(
+        displayName: String,
+        bio: String,
+        tagsText: String,
+        isFollowersListPublic: Bool,
+        isFollowingListPublic: Bool,
+        pendingAvatarData: Data?
+    ) async -> UserProfile? {
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            let updated = try await saveProfileUseCase.execute(
+                displayName: displayName,
+                bio: bio,
+                tagsText: tagsText,
+                isFollowersListPublic: isFollowersListPublic,
+                isFollowingListPublic: isFollowingListPublic,
+                pendingAvatarData: pendingAvatarData
+            )
+            error = nil
+            return updated
+        } catch {
+            self.error = error.userFacingMessage
+            return nil
+        }
+    }
+}
+
 struct EditProfileView: View {
     @Environment(\.dismiss) private var dismiss
 
-    private let service: SocialService
+    @StateObject private var viewModel: EditProfileViewModel
     private let onSaved: (UserProfile) -> Void
 
     @State private var displayName: String
@@ -15,14 +93,16 @@ struct EditProfileView: View {
     @State private var isFollowingListPublic: Bool
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingAvatarData: Data?
-    @State private var isSaving = false
-    @State private var error: String?
 
     private let currentAvatarAsset: String
     private let currentAvatarURL: String?
 
-    init(profile: UserProfile, onSaved: @escaping (UserProfile) -> Void) {
-        self.service = AppEnvironment.makeService()
+    init(
+        profile: UserProfile,
+        repository: ProfileSocialRepository,
+        onSaved: @escaping (UserProfile) -> Void
+    ) {
+        _viewModel = StateObject(wrappedValue: EditProfileViewModel(repository: repository))
         self.onSaved = onSaved
         self.currentAvatarAsset = AppConfig.resolvedUserAvatarAssetName(
             userID: profile.id,
@@ -99,14 +179,14 @@ struct EditProfileView: View {
                 Button {
                     Task { await save() }
                 } label: {
-                    if isSaving {
+                    if viewModel.isSaving {
                         ProgressView().tint(.white)
                     } else {
                         Text(L("保存", "Save"))
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
+                .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isSaving)
             }
             .padding(16)
         }
@@ -131,12 +211,12 @@ struct EditProfileView: View {
             }
         }
         .alert(L("保存失败", "Save Failed"), isPresented: Binding(
-            get: { error != nil },
-            set: { if !$0 { error = nil } }
+            get: { viewModel.error != nil },
+            set: { if !$0 { viewModel.error = nil } }
         )) {
             Button(L("确定", "OK"), role: .cancel) {}
         } message: {
-            Text(error ?? "")
+            Text(viewModel.error ?? "")
         }
     }
 
@@ -195,31 +275,16 @@ struct EditProfileView: View {
 
     @MainActor
     private func save() async {
-        isSaving = true
-        defer { isSaving = false }
-
-        do {
-            if let data = pendingAvatarData {
-                _ = try await service.uploadMyAvatar(imageData: data, fileName: "avatar.jpg", mimeType: "image/jpeg")
-            }
-
-            let tags = tagsText
-                .split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-
-            let updated = try await service.updateMyProfile(input: UpdateMyProfileInput(
-                displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
-                bio: bio.trimmingCharacters(in: .whitespacesAndNewlines),
-                tags: tags,
-                isFollowersListPublic: isFollowersListPublic,
-                isFollowingListPublic: isFollowingListPublic
-            ))
-
+        if let updated = await viewModel.saveProfile(
+            displayName: displayName,
+            bio: bio,
+            tagsText: tagsText,
+            isFollowersListPublic: isFollowersListPublic,
+            isFollowingListPublic: isFollowingListPublic,
+            pendingAvatarData: pendingAvatarData
+        ) {
             onSaved(updated)
             dismiss()
-        } catch {
-            self.error = error.userFacingMessage
         }
     }
 }

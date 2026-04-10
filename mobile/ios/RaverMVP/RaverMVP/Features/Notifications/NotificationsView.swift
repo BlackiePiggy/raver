@@ -1,12 +1,23 @@
 import SwiftUI
 
 struct NotificationsView: View {
+    @EnvironmentObject private var appContainer: AppContainer
+
+    var body: some View {
+        NotificationsScreen(
+            viewModel: NotificationsViewModel(service: appContainer.socialService)
+        )
+    }
+}
+
+private struct NotificationsScreen: View {
+    @EnvironmentObject private var appContainer: AppContainer
     @StateObject private var viewModel: NotificationsViewModel
     @State private var selectedUser: UserSummary?
     @State private var selectedSquad: PostSquad?
 
-    init() {
-        _viewModel = StateObject(wrappedValue: NotificationsViewModel(service: AppEnvironment.makeService()))
+    init(viewModel: NotificationsViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -74,7 +85,10 @@ struct NotificationsView: View {
             }
             .fullScreenCover(item: $selectedSquad) { squad in
                 NavigationStack {
-                    SquadProfileView(squadID: squad.id)
+                    SquadProfileView(
+                        squadID: squad.id,
+                        service: appContainer.socialService
+                    )
                 }
             }
             .alert(L("通知加载失败", "Failed to Load Notifications"), isPresented: Binding(

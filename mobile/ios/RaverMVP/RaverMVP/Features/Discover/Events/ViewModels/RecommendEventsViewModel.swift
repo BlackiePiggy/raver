@@ -8,10 +8,14 @@ final class RecommendEventsViewModel: ObservableObject {
     @Published private(set) var markedCheckinIDsByEventID: [String: String] = [:]
     @Published var errorMessage: String?
 
-    private let service: WebFeatureService
+    private let fetchEventsPageUseCase: FetchDiscoverEventsPageUseCase
+    private let fetchMarkedEventCheckinsUseCase: FetchMarkedEventCheckinsUseCase
+    private let toggleMarkedEventUseCase: ToggleMarkedEventUseCase
 
-    init(service: WebFeatureService) {
-        self.service = service
+    init(repository: DiscoverEventsRepository) {
+        self.fetchEventsPageUseCase = FetchDiscoverEventsPageUseCase(repository: repository)
+        self.fetchMarkedEventCheckinsUseCase = FetchMarkedEventCheckinsUseCase(repository: repository)
+        self.toggleMarkedEventUseCase = ToggleMarkedEventUseCase(repository: repository)
     }
 
     func reload(isLoggedIn: Bool) async {
@@ -26,17 +30,7 @@ final class RecommendEventsViewModel: ObservableObject {
         }
 
         do {
-            let page = try await service.fetchMyCheckins(page: 1, limit: 200, type: "event")
-            let checkins = page.items.filter { $0.type.lowercased() == "event" && $0.eventId != nil }
-            var markedMap: [String: String] = [:]
-            for item in checkins {
-                guard let eventID = item.eventId else { continue }
-                let note = item.note?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-                if note == "marked" {
-                    markedMap[eventID] = item.id
-                }
-            }
-            markedCheckinIDsByEventID = markedMap
+            markedCheckinIDsByEventID = try await fetchMarkedEventCheckinsUseCase.execute()
         } catch {
             errorMessage = error.userFacingMessage
         }
@@ -49,15 +43,10 @@ final class RecommendEventsViewModel: ObservableObject {
         }
 
         do {
-            if let checkinID = markedCheckinIDsByEventID[event.id] {
-                try await service.deleteCheckin(id: checkinID)
-                markedCheckinIDsByEventID[event.id] = nil
-            } else {
-                let created = try await service.createCheckin(
-                    input: CreateCheckinInput(type: "event", eventId: event.id, djId: nil, note: "marked", rating: nil)
-                )
-                markedCheckinIDsByEventID[event.id] = created.id
-            }
+            markedCheckinIDsByEventID = try await toggleMarkedEventUseCase.execute(
+                event: event,
+                markedCheckinIDsByEventID: markedCheckinIDsByEventID
+            )
         } catch {
             errorMessage = error.userFacingMessage
         }
@@ -74,12 +63,14 @@ final class RecommendEventsViewModel: ObservableObject {
             var totalPages = 1
 
             repeat {
-                let result = try await service.fetchEvents(
-                    page: page,
-                    limit: 100,
-                    search: nil,
-                    eventType: nil,
-                    status: "all"
+                let result = try await fetchEventsPageUseCase.execute(
+                    DiscoverEventsPageRequest(
+                        page: page,
+                        limit: 100,
+                        search: nil,
+                        eventType: nil,
+                        status: "all"
+                    )
                 )
                 for event in result.items {
                     uniqueByID[event.id] = event

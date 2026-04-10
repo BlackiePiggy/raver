@@ -10,14 +10,14 @@ final class FollowListViewModel: ObservableObject {
     let userID: String
     let kind: FollowListKind
 
-    private let service: SocialService
+    private let repository: ProfileSocialRepository
     private var nextCursor: String?
     private var hasMore = true
 
-    init(userID: String, kind: FollowListKind, service: SocialService) {
+    init(userID: String, kind: FollowListKind, repository: ProfileSocialRepository) {
         self.userID = userID
         self.kind = kind
-        self.service = service
+        self.repository = repository
     }
 
     func load() async {
@@ -63,17 +63,17 @@ final class FollowListViewModel: ObservableObject {
     private func fetchPage(cursor: String?) async throws -> FollowListPage {
         switch kind {
         case .followers:
-            return try await service.fetchFollowers(userID: userID, cursor: cursor)
+            return try await repository.fetchFollowers(userID: userID, cursor: cursor)
         case .following:
-            return try await service.fetchFollowing(userID: userID, cursor: cursor)
+            return try await repository.fetchFollowing(userID: userID, cursor: cursor)
         case .friends:
-            return try await service.fetchFriends(userID: userID, cursor: cursor)
+            return try await repository.fetchFriends(userID: userID, cursor: cursor)
         }
     }
 
     func toggleFollow(user: UserSummary) async {
         do {
-            let updated = try await service.toggleFollow(userID: user.id, shouldFollow: !user.isFollowing)
+            let updated = try await repository.toggleFollow(userID: user.id, shouldFollow: !user.isFollowing)
             if let index = users.firstIndex(where: { $0.id == user.id }) {
                 users[index] = updated
             }

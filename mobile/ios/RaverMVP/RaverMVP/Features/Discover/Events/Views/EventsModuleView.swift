@@ -5,7 +5,7 @@ struct DiscoverEventsRootView: View {
 
     var body: some View {
         EventsModuleView(
-            viewModel: EventsModuleViewModel(service: appContainer.webService)
+            viewModel: EventsModuleViewModel(repository: appContainer.discoverEventsRepository)
         )
     }
 }

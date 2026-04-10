@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct NewsModuleView: View {
+    @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
-    private let socialService = AppEnvironment.makeService()
 
     @State private var articles: [DiscoverNewsArticle] = []
     @State private var nextCursor: String?
@@ -12,6 +12,10 @@ struct NewsModuleView: View {
     @State private var selectedArticleForDetail: DiscoverNewsArticle?
     @State private var searchKeyword = ""
     @State private var errorMessage: String?
+
+    private var repository: DiscoverNewsRepository {
+        appContainer.discoverNewsRepository
+    }
 
     var body: some View {
         Group {
@@ -186,9 +190,9 @@ struct NewsModuleView: View {
             var fetchCount = 0
 
             repeat {
-                let page = try await socialService.fetchFeed(cursor: cursor)
+                let page = try await repository.fetchFeedPage(cursor: cursor)
                 fetchedPageCursor = page.nextCursor
-                parsed.append(contentsOf: page.posts.compactMap { DiscoverNewsCodec.decode(post: $0) })
+                parsed.append(contentsOf: page.items)
                 cursor = fetchedPageCursor
                 fetchCount += 1
             } while parsed.isEmpty && fetchedPageCursor != nil && fetchCount < 3
@@ -204,18 +208,7 @@ struct NewsModuleView: View {
 
     @MainActor
     private func publish(_ draft: DiscoverNewsDraft) async throws {
-        let content = DiscoverNewsCodec.encode(draft)
-        let imageURLs = draft.coverImageURL.flatMap { $0.isEmpty ? nil : [$0] } ?? []
-        let created = try await socialService.createPost(
-            input: CreatePostInput(
-                content: content,
-                images: imageURLs,
-                boundDjIDs: draft.boundDjIDs,
-                boundBrandIDs: draft.boundBrandIDs,
-                boundEventIDs: draft.boundEventIDs
-            )
-        )
-        if let article = DiscoverNewsCodec.decode(post: created) {
+        if let article = try await repository.publish(draft: draft) {
             articles.insert(article, at: 0)
         } else {
             await reload()

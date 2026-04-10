@@ -51,9 +51,13 @@ private struct JustifiedUILabelText: UIViewRepresentable {
 }
 
 struct DJsModuleView: View {
+    @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
-    private let service = AppEnvironment.makeWebService()
     private let hotDJBatchSize = 25
+
+    private var repository: DiscoverDJsRepository {
+        appContainer.discoverDJsRepository
+    }
 
     @State private var djs: [WebDJ] = []
     @State private var rankingBoards: [RankingBoard] = []
@@ -314,8 +318,8 @@ struct DJsModuleView: View {
 
         do {
             errorMessage = nil
-            async let djsTask = service.fetchDJs(page: 1, limit: hotDJBatchSize, search: nil, sortBy: "random")
-            async let boardsTask = service.fetchRankingBoards()
+            async let djsTask = repository.fetchDJs(page: 1, limit: hotDJBatchSize, search: nil, sortBy: "random")
+            async let boardsTask = repository.fetchRankingBoards()
             let hotPage = try await djsTask
             djs = hotPage.items
             rankingBoards = try await boardsTask
@@ -334,7 +338,7 @@ struct DJsModuleView: View {
         defer { isRefreshingHotBatch = false }
 
         do {
-            let page = try await service.fetchDJs(page: 1, limit: hotDJBatchSize, search: nil, sortBy: "random")
+            let page = try await repository.fetchDJs(page: 1, limit: hotDJBatchSize, search: nil, sortBy: "random")
             let nextBatch = page.items
             if !nextBatch.isEmpty {
                 djs = nextBatch
@@ -666,7 +670,7 @@ struct DJsModuleView: View {
         defer { isSearchingSpotify = false }
 
         do {
-            let items = try await service.searchSpotifyDJs(query: keyword, limit: 10)
+            let items = try await repository.searchSpotifyDJs(query: keyword, limit: 10)
             spotifyCandidates = items
             if let first = items.first {
                 applySpotifyCandidate(first)
@@ -691,7 +695,7 @@ struct DJsModuleView: View {
         defer { isSearchingDiscogs = false }
 
         do {
-            let items = try await service.searchDiscogsDJs(query: keyword, limit: 12)
+            let items = try await repository.searchDiscogsDJs(query: keyword, limit: 12)
             discogsCandidates = items
             if let first = items.first {
                 applyDiscogsCandidate(first)
@@ -715,7 +719,7 @@ struct DJsModuleView: View {
         defer { isSearchingDiscogsLinkedSpotify = false }
 
         do {
-            let items = try await service.searchSpotifyDJs(query: keyword, limit: 8)
+            let items = try await repository.searchSpotifyDJs(query: keyword, limit: 8)
             discogsLinkedSpotifyCandidates = items
         } catch {
             errorMessage = L("Spotify 搜索失败：\(error.userFacingMessage ?? "")", "Spotify search failed: \(error.userFacingMessage ?? "")")
@@ -761,7 +765,7 @@ struct DJsModuleView: View {
         defer { isLoadingDiscogsDetail = false }
 
         do {
-            let detail = try await service.fetchDiscogsDJArtist(id: artistId)
+            let detail = try await repository.fetchDiscogsDJArtist(id: artistId)
             if !detail.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 discogsDraftName = detail.name
             }
@@ -923,7 +927,7 @@ struct DJsModuleView: View {
         defer { isImportingDJ = false }
 
         do {
-            let result = try await service.importSpotifyDJ(
+            let result = try await repository.importSpotifyDJ(
                 input: ImportSpotifyDJInput(
                     spotifyId: selected.spotifyId,
                     name: finalName,
@@ -973,7 +977,7 @@ struct DJsModuleView: View {
         defer { isImportingDJ = false }
 
         do {
-            let result = try await service.importDiscogsDJ(
+            let result = try await repository.importDiscogsDJ(
                 input: ImportDiscogsDJInput(
                     discogsArtistId: selected.artistId,
                     name: finalName,
@@ -1019,7 +1023,7 @@ struct DJsModuleView: View {
         defer { isImportingDJ = false }
 
         do {
-            let imported = try await service.importManualDJ(
+            let imported = try await repository.importManualDJ(
                 input: ImportManualDJInput(
                     name: finalName,
                     spotifyId: nil,
@@ -1034,7 +1038,7 @@ struct DJsModuleView: View {
             )
 
             if let manualAvatarData {
-                _ = try await service.uploadDJImage(
+                _ = try await repository.uploadDJImage(
                     imageData: jpegDataForDJImport(from: manualAvatarData),
                     fileName: "dj-avatar-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -1044,7 +1048,7 @@ struct DJsModuleView: View {
             }
 
             if let manualBannerData {
-                _ = try await service.uploadDJImage(
+                _ = try await repository.uploadDJImage(
                     imageData: jpegDataForDJImport(from: manualBannerData),
                     fileName: "dj-banner-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -1975,8 +1979,15 @@ struct DJDetailView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.discoverPush) private var discoverPush
     @EnvironmentObject private var appState: AppState
-    private let service = AppEnvironment.makeWebService()
-    private let socialService = AppEnvironment.makeService()
+    @EnvironmentObject private var appContainer: AppContainer
+
+    private var djsRepository: DiscoverDJsRepository {
+        appContainer.discoverDJsRepository
+    }
+
+    private var newsRepository: DiscoverNewsRepository {
+        appContainer.discoverNewsRepository
+    }
 
     let djID: String
 
@@ -2132,11 +2143,11 @@ struct DJDetailView: View {
 
         do {
             isLoadingRelatedArticles = true
-            async let djTask = service.fetchDJ(id: djID)
-            async let setsTask = service.fetchDJSets(djID: djID)
-            async let eventsTask = service.fetchDJEvents(djID: djID)
-            async let ratingUnitsTask = service.fetchDJRatingUnits(djID: djID)
-            async let watchedCountTask = service.fetchMyDJCheckinCount(djID: djID)
+            async let djTask = djsRepository.fetchDJ(id: djID)
+            async let setsTask = djsRepository.fetchDJSets(djID: djID)
+            async let eventsTask = djsRepository.fetchDJEvents(djID: djID)
+            async let ratingUnitsTask = djsRepository.fetchDJRatingUnits(djID: djID)
+            async let watchedCountTask = djsRepository.fetchMyDJCheckinCount(djID: djID)
             async let relatedArticlesTask = fetchRelatedNewsArticlesForDJ(djID: djID)
             dj = try await djTask
             if let loadedDJ = dj {
@@ -2155,19 +2166,16 @@ struct DJDetailView: View {
     }
 
     private func fetchRelatedNewsArticlesForDJ(djID: String) async throws -> [DiscoverNewsArticle] {
-        let trimmedDJID = djID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedDJID.isEmpty else { return [] }
-        let allArticles = try await fetchDiscoverNewsArticles(socialService: socialService, maxPages: 8)
-        return allArticles.filter { $0.boundDjIDs.contains(trimmedDJID) }
+        try await newsRepository.fetchArticlesBoundToDJ(djID: djID, maxPages: 8)
     }
 
     private func reloadDJRatingUnits() async {
-        ratingUnits = (try? await service.fetchDJRatingUnits(djID: djID)) ?? []
+        ratingUnits = (try? await djsRepository.fetchDJRatingUnits(djID: djID)) ?? []
     }
 
     private func toggleFollow(_ item: WebDJ) async {
         do {
-            dj = try await service.toggleDJFollow(djID: item.id, shouldFollow: !(item.isFollowing ?? false))
+            dj = try await djsRepository.toggleDJFollow(djID: item.id, shouldFollow: !(item.isFollowing ?? false))
             await appState.refreshUnreadMessages()
         } catch {
             errorMessage = error.userFacingMessage
@@ -2187,7 +2195,7 @@ struct DJDetailView: View {
         defer { isSearchingSpotify = false }
 
         do {
-            let items = try await service.searchSpotifyDJs(query: keyword, limit: 10)
+            let items = try await djsRepository.searchSpotifyDJs(query: keyword, limit: 10)
             spotifyCandidates = items
             if let first = items.first {
                 applySpotifyCandidate(first)
@@ -2285,7 +2293,7 @@ struct DJDetailView: View {
         defer { isImportingSpotifyDJ = false }
 
         do {
-            let result = try await service.importSpotifyDJ(
+            let result = try await djsRepository.importSpotifyDJ(
                 input: ImportSpotifyDJInput(
                     spotifyId: selected.spotifyId,
                     name: finalName,
@@ -2346,7 +2354,7 @@ struct DJDetailView: View {
         defer { isSavingDJProfile = false }
 
         do {
-            _ = try await service.updateDJ(
+            _ = try await djsRepository.updateDJ(
                 id: currentDJ.id,
                 input: UpdateDJInput(
                     name: finalName,
@@ -2363,7 +2371,7 @@ struct DJDetailView: View {
             )
 
             if let editAvatarData {
-                _ = try await service.uploadDJImage(
+                _ = try await djsRepository.uploadDJImage(
                     imageData: jpegDataForDJImport(from: editAvatarData),
                     fileName: "dj-avatar-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -2373,7 +2381,7 @@ struct DJDetailView: View {
             }
 
             if let editBannerData {
-                _ = try await service.uploadDJImage(
+                _ = try await djsRepository.uploadDJImage(
                     imageData: jpegDataForDJImport(from: editBannerData),
                     fileName: "dj-banner-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",

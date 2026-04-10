@@ -108,7 +108,7 @@ func makeDiscoverRouteDestination(
             EventsSearchResultsView(
                 viewModel: EventsSearchResultsViewModel(
                     query: query,
-                    service: appContainer.webService
+                    repository: appContainer.discoverEventsRepository
                 )
             )
             .toolbar(.hidden, for: .tabBar)
@@ -117,7 +117,7 @@ func makeDiscoverRouteDestination(
             NewsSearchResultsView(
                 viewModel: NewsSearchResultsViewModel(
                     query: query,
-                    socialService: appContainer.socialService
+                    repository: appContainer.discoverNewsRepository
                 )
             )
             .toolbar(.hidden, for: .tabBar)
@@ -126,7 +126,7 @@ func makeDiscoverRouteDestination(
             DJsSearchResultsView(
                 viewModel: DJsSearchResultsViewModel(
                     query: query,
-                    service: appContainer.webService
+                    repository: appContainer.discoverDJsRepository
                 )
             )
                 .toolbar(.hidden, for: .tabBar)
@@ -135,7 +135,7 @@ func makeDiscoverRouteDestination(
             SetsSearchResultsView(
                 viewModel: SetsSearchResultsViewModel(
                     query: query,
-                    service: appContainer.webService
+                    repository: appContainer.discoverSetsRepository
                 )
             )
                 .toolbar(.hidden, for: .tabBar)
@@ -144,7 +144,7 @@ func makeDiscoverRouteDestination(
             WikiSearchResultsView(
                 viewModel: WikiSearchResultsViewModel(
                     query: query,
-                    service: appContainer.webService
+                    repository: appContainer.discoverWikiRepository
                 ),
                 preferredSection: {
                     guard

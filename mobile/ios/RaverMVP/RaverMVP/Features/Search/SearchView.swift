@@ -2,14 +2,25 @@ import SwiftUI
 import UIKit
 
 struct SearchView: View {
+    @EnvironmentObject private var appContainer: AppContainer
+
+    var body: some View {
+        SearchScreen(
+            viewModel: SearchViewModel(service: appContainer.socialService)
+        )
+    }
+}
+
+private struct SearchScreen: View {
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
     @StateObject private var viewModel: SearchViewModel
     @State private var selectedUserForProfile: UserSummary?
     @State private var selectedSquadForProfile: PostSquad?
     @State private var selectedPostForDetail: Post?
 
-    init() {
-        _viewModel = StateObject(wrappedValue: SearchViewModel(service: AppEnvironment.makeService()))
+    init(viewModel: SearchViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -70,12 +81,15 @@ struct SearchView: View {
             }
             .fullScreenCover(item: $selectedSquadForProfile) { squad in
                 NavigationStack {
-                    SquadProfileView(squadID: squad.id)
+                    SquadProfileView(
+                        squadID: squad.id,
+                        service: appContainer.socialService
+                    )
                 }
             }
             .fullScreenCover(item: $selectedPostForDetail) { post in
                 NavigationStack {
-                    PostDetailView(post: post, service: appState.service)
+                    PostDetailView(post: post, service: appContainer.socialService)
                         .environmentObject(appState)
                 }
             }

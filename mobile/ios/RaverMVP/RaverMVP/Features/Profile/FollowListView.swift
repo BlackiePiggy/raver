@@ -18,14 +18,14 @@ enum FollowListKind: String, Identifiable {
 
 struct FollowListView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.profilePush) private var profilePush
     @StateObject private var viewModel: FollowListViewModel
-    @State private var selectedUser: UserSummary?
 
-    init(userID: String, kind: FollowListKind) {
+    init(userID: String, kind: FollowListKind, repository: ProfileSocialRepository) {
         _viewModel = StateObject(wrappedValue: FollowListViewModel(
             userID: userID,
             kind: kind,
-            service: AppEnvironment.makeService()
+            repository: repository
         ))
     }
 
@@ -47,7 +47,7 @@ struct FollowListView: View {
             } else {
                 ForEach(viewModel.users) { user in
                     Button {
-                        selectedUser = user
+                        profilePush(.userProfile(user.id))
                     } label: {
                         HStack(spacing: 12) {
                             // 头像
@@ -114,9 +114,6 @@ struct FollowListView: View {
         }
         .refreshable {
             await viewModel.refresh()
-        }
-        .navigationDestination(item: $selectedUser) { user in
-            UserProfileView(userID: user.id)
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.error != nil },

@@ -1,15 +1,27 @@
 import SwiftUI
 
 struct UserProfileView: View {
-    @EnvironmentObject private var appState: AppState
-    @StateObject private var viewModel: UserProfileViewModel
-    @State private var pushedConversation: Conversation?
-    @State private var selectedFollowListKind: FollowListKind?
-    @State private var showAllCheckins = false
-    @State private var selectedPostForDetail: Post?
+    @EnvironmentObject private var appContainer: AppContainer
+    let userID: String
 
-    init(userID: String) {
-        _viewModel = StateObject(wrappedValue: UserProfileViewModel(userID: userID, service: AppEnvironment.makeService()))
+    var body: some View {
+        UserProfileScreen(
+            viewModel: UserProfileViewModel(
+                userID: userID,
+                repository: appContainer.profileSocialRepository
+            )
+        )
+    }
+}
+
+private struct UserProfileScreen: View {
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
+    @Environment(\.profilePush) private var profilePush
+    @StateObject private var viewModel: UserProfileViewModel
+
+    init(viewModel: UserProfileViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -23,20 +35,20 @@ struct UserProfileView: View {
                         profile: profile,
                         onFollowersTap: {
                             if profile.canViewFollowersList {
-                                selectedFollowListKind = .followers
+                                profilePush(.followList(userID: profile.id, kind: .followers))
                             } else {
                                 viewModel.error = L("该用户已关闭粉丝列表展示", "This user has hidden the followers list.")
                             }
                         },
                         onFollowingTap: {
                             if profile.canViewFollowingList {
-                                selectedFollowListKind = .following
+                                profilePush(.followList(userID: profile.id, kind: .following))
                             } else {
                                 viewModel.error = L("该用户已关闭关注列表展示", "This user has hidden the following list.")
                             }
                         },
                         onFriendsTap: {
-                            selectedFollowListKind = .friends
+                            profilePush(.followList(userID: profile.id, kind: .friends))
                         }
                     ) {
                         if !isCurrentUser(profile) {
@@ -49,8 +61,8 @@ struct UserProfileView: View {
                                 Button {
                                     Task {
                                         do {
-                                            let conversation = try await appState.service.startDirectConversation(identifier: profile.username)
-                                            pushedConversation = conversation
+                                            let conversation = try await appContainer.socialService.startDirectConversation(identifier: profile.username)
+                                            profilePush(.conversation(conversation))
                                         } catch {
                                             viewModel.error = error.userFacingMessage
                                         }
@@ -68,7 +80,10 @@ struct UserProfileView: View {
                         checkins: viewModel.recentCheckins,
                         emptyText: L("Ta 还没有公开的打卡记录。", "No public check-ins yet.")
                     ) {
-                        showAllCheckins = true
+                        profilePush(.myCheckins(
+                            targetUserID: viewModel.profile?.id,
+                            title: L("\(viewModel.profile?.displayName ?? "Ta")的打卡", "\(viewModel.profile?.displayName ?? "Ta")'s Check-ins")
+                        ))
                     }
 
                     if viewModel.posts.isEmpty {
@@ -97,7 +112,7 @@ struct UserProfileView: View {
                             .foregroundStyle(RaverTheme.primaryText)
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                selectedPostForDetail = post
+                                profilePush(.postDetail(post))
                             }
                             .onAppear {
                                 Task { await viewModel.loadMoreIfNeeded(currentPost: post) }
@@ -123,26 +138,6 @@ struct UserProfileView: View {
         .background(RaverTheme.background)
         .navigationTitle(L("用户主页", "Profile"))
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(item: $pushedConversation) { conversation in
-            ChatView(conversation: conversation, service: appState.service)
-        }
-        .navigationDestination(item: $selectedFollowListKind) { kind in
-            FollowListView(userID: viewModel.profile?.id ?? "", kind: kind)
-        }
-        .fullScreenCover(isPresented: $showAllCheckins) {
-            NavigationStack {
-                MyCheckinsView(
-                    targetUserID: viewModel.profile?.id,
-                    title: L("\(viewModel.profile?.displayName ?? "Ta")的打卡", "\(viewModel.profile?.displayName ?? "Ta")'s Check-ins")
-                )
-            }
-        }
-        .fullScreenCover(item: $selectedPostForDetail) { post in
-            NavigationStack {
-                PostDetailView(post: post, service: appState.service)
-                    .environmentObject(appState)
-            }
-        }
         .task {
             await viewModel.load()
         }

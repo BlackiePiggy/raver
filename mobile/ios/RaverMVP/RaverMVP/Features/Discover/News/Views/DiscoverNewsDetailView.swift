@@ -1,10 +1,9 @@
 import SwiftUI
 
 struct DiscoverNewsDetailView: View {
+    @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
-    private let webService = AppEnvironment.makeWebService()
-    private let socialService = AppEnvironment.makeService()
 
     let article: DiscoverNewsArticle
 
@@ -20,6 +19,10 @@ struct DiscoverNewsDetailView: View {
     @State private var selectedDJIDForDetail: String?
     @State private var selectedBrandForDetail: LearnFestival?
     @State private var errorMessage: String?
+
+    private var newsRepository: DiscoverNewsRepository {
+        appContainer.discoverNewsRepository
+    }
 
     var body: some View {
         ScrollView {
@@ -540,7 +543,7 @@ struct DiscoverNewsDetailView: View {
         isLoadingComments = true
         defer { isLoadingComments = false }
         do {
-            comments = try await socialService.fetchComments(postID: article.id)
+            comments = try await newsRepository.fetchComments(postID: article.id)
             visibleCommentCount = min(max(visibleCommentCount, 20), comments.count)
         } catch {
             errorMessage = error.userFacingMessage
@@ -556,7 +559,7 @@ struct DiscoverNewsDetailView: View {
         defer { isSendingComment = false }
 
         do {
-            let comment = try await socialService.addComment(postID: article.id, content: text)
+            let comment = try await newsRepository.addComment(postID: article.id, content: text)
             comments.append(comment)
             visibleCommentCount = comments.count
             commentInput = ""
@@ -572,7 +575,7 @@ struct DiscoverNewsDetailView: View {
             for id in ids {
                 group.addTask {
                     do {
-                        return (id, try await webService.fetchDJ(id: id))
+                        return (id, try await newsRepository.fetchDJ(id: id))
                     } catch {
                         return (id, nil)
                     }
@@ -594,7 +597,7 @@ struct DiscoverNewsDetailView: View {
             for id in ids {
                 group.addTask {
                     do {
-                        return (id, try await webService.fetchEvent(id: id))
+                        return (id, try await newsRepository.fetchEvent(id: id))
                     } catch {
                         return (id, nil)
                     }
@@ -612,7 +615,7 @@ struct DiscoverNewsDetailView: View {
     private func fetchBoundBrands(ids: [String]) async -> [LearnFestival] {
         guard !ids.isEmpty else { return [] }
         do {
-            let allFestivals = try await webService.fetchLearnFestivals(search: nil as String?)
+            let allFestivals = try await newsRepository.fetchLearnFestivals(search: nil as String?)
             let festivalByID: [String: LearnFestival] = Dictionary(
                 uniqueKeysWithValues: allFestivals.map { ($0.id, LearnFestival(web: $0)) }
             )

@@ -1,6 +1,42 @@
 import Foundation
 import Combine
 
+protocol MessagesRepository {
+    func fetchConversations(type: ConversationType) async throws -> [Conversation]
+    func markConversationRead(conversationID: String) async throws
+    func fetchNotifications(limit: Int) async throws -> NotificationInbox
+    func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
+    func markNotificationRead(notificationID: String) async throws
+}
+
+struct MessagesRepositoryAdapter: MessagesRepository {
+    private let service: SocialService
+
+    init(service: SocialService) {
+        self.service = service
+    }
+
+    func fetchConversations(type: ConversationType) async throws -> [Conversation] {
+        try await service.fetchConversations(type: type)
+    }
+
+    func markConversationRead(conversationID: String) async throws {
+        try await service.markConversationRead(conversationID: conversationID)
+    }
+
+    func fetchNotifications(limit: Int) async throws -> NotificationInbox {
+        try await service.fetchNotifications(limit: limit)
+    }
+
+    func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount {
+        try await service.fetchNotificationUnreadCount()
+    }
+
+    func markNotificationRead(notificationID: String) async throws {
+        try await service.markNotificationRead(notificationID: notificationID)
+    }
+}
+
 @MainActor
 final class MessagesViewModel: ObservableObject {
     @Published var conversations: [Conversation] = []
@@ -8,10 +44,10 @@ final class MessagesViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
 
-    private let service: SocialService
+    private let repository: MessagesRepository
 
-    init(service: SocialService) {
-        self.service = service
+    init(repository: MessagesRepository) {
+        self.repository = repository
     }
 
     func load() async {
@@ -20,8 +56,8 @@ final class MessagesViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            async let directConversations = service.fetchConversations(type: .direct)
-            async let groupConversations = service.fetchConversations(type: .group)
+            async let directConversations = repository.fetchConversations(type: .direct)
+            async let groupConversations = repository.fetchConversations(type: .group)
             let merged = try await directConversations + groupConversations
             conversations = Self.sortConversations(merged)
             unreadTotal = merged.reduce(0) { $0 + max(0, $1.unreadCount) }
@@ -41,7 +77,7 @@ final class MessagesViewModel: ObservableObject {
         unreadTotal = conversations.reduce(0) { $0 + max(0, $1.unreadCount) }
 
         do {
-            try await service.markConversationRead(conversationID: conversationID)
+            try await repository.markConversationRead(conversationID: conversationID)
             error = nil
         } catch {
             if let restoreIndex = conversations.firstIndex(where: { $0.id == conversationID }) {

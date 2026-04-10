@@ -2,8 +2,322 @@ import SwiftUI
 import PhotosUI
 import UIKit
 
+@MainActor
+final class MyCheckinsViewModel: ObservableObject {
+    let targetUserID: String?
+
+    @Published var page = 1
+    @Published var totalPages = 1
+    @Published var items: [WebCheckin] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    @Published var timelineDJIdentityByName: [String: CheckinDJLite] = [:]
+    @Published var timelineDJIdentityByID: [String: CheckinDJLite] = [:]
+    @Published var timelineLocalizedEventByID: [String: WebEvent] = [:]
+
+    init(targetUserID: String? = nil) {
+        self.targetUserID = targetUserID
+    }
+
+    func reload(service: WebFeatureService) async {
+        page = 1
+        totalPages = 1
+        items = []
+        timelineDJIdentityByName = [:]
+        timelineDJIdentityByID = [:]
+        timelineLocalizedEventByID = [:]
+        await loadMore(service: service, reset: true)
+    }
+
+    func loadMore(service: WebFeatureService, reset: Bool = false) async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let result: CheckinListPage
+            if let targetUserID {
+                result = try await service.fetchUserCheckins(userID: targetUserID, page: page, limit: 20, type: nil)
+            } else {
+                result = try await service.fetchMyCheckins(page: page, limit: 20, type: nil)
+            }
+
+            let eventOnlyResult: CheckinListPage?
+            if reset {
+                if let targetUserID {
+                    eventOnlyResult = try? await service.fetchUserCheckins(userID: targetUserID, page: 1, limit: 200, type: "event")
+                } else {
+                    eventOnlyResult = try? await service.fetchMyCheckins(page: 1, limit: 200, type: "event")
+                }
+            } else {
+                eventOnlyResult = nil
+            }
+
+            if reset {
+                items = mergeUniqueCheckins(result.items, with: eventOnlyResult?.items ?? [])
+            } else {
+                items = mergeUniqueCheckins(items + result.items, with: [])
+            }
+            totalPages = result.pagination?.totalPages ?? 1
+            page += 1
+            await hydrateTimelineEventLocalizationMap(from: items, service: service)
+            await hydrateTimelineDJIdentityMap(from: items, service: service)
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    func delete(id: String, service: WebFeatureService) async {
+        do {
+            try await service.deleteCheckin(id: id)
+            items.removeAll { $0.id == id }
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    private func mergeUniqueCheckins(_ base: [WebCheckin], with extras: [WebCheckin]) -> [WebCheckin] {
+        var mergedByID: [String: WebCheckin] = [:]
+        for item in base + extras {
+            if let existing = mergedByID[item.id] {
+                if item.attendedAt > existing.attendedAt {
+                    mergedByID[item.id] = item
+                }
+            } else {
+                mergedByID[item.id] = item
+            }
+        }
+        return mergedByID.values.sorted { lhs, rhs in
+            if lhs.attendedAt == rhs.attendedAt {
+                return lhs.createdAt > rhs.createdAt
+            }
+            return lhs.attendedAt > rhs.attendedAt
+        }
+    }
+
+    private func hydrateTimelineEventLocalizationMap(from checkins: [WebCheckin], service: WebFeatureService) async {
+        let eventIDs = Set(
+            checkins.compactMap { item in
+                if let nestedID = item.event?.id, !nestedID.isEmpty {
+                    return nestedID
+                }
+                let rawID = item.eventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return rawID.isEmpty ? nil : rawID
+            }
+        )
+        guard !eventIDs.isEmpty else { return }
+
+        let unresolvedIDs = eventIDs
+            .filter { timelineLocalizedEventByID[$0] == nil }
+            .sorted()
+        guard !unresolvedIDs.isEmpty else { return }
+
+        var resolved: [String: WebEvent] = [:]
+        for eventID in unresolvedIDs {
+            do {
+                let event = try await service.fetchEvent(id: eventID)
+                resolved[eventID] = event
+            } catch {
+                continue
+            }
+        }
+        guard !resolved.isEmpty else { return }
+
+        for (eventID, event) in resolved where timelineLocalizedEventByID[eventID] == nil {
+            timelineLocalizedEventByID[eventID] = event
+        }
+    }
+
+    private func hydrateTimelineDJIdentityMap(from checkins: [WebCheckin], service: WebFeatureService) async {
+        var resolvedByName: [String: CheckinDJLite] = [:]
+        var resolvedByID: [String: CheckinDJLite] = [:]
+
+        for checkin in checkins {
+            guard let dj = checkin.dj else { continue }
+            let nameKey = normalizedTimelineNameKey(dj.name)
+            if !nameKey.isEmpty {
+                resolvedByName[nameKey] = mergedTimelineDJIdentity(existing: resolvedByName[nameKey], candidate: dj)
+            }
+            resolvedByID[dj.id] = mergedTimelineDJIdentity(existing: resolvedByID[dj.id], candidate: dj)
+        }
+
+        for performerID in unresolvedTimelinePerformerIDs(from: checkins) {
+            guard timelineDJIdentityByID[performerID] == nil, resolvedByID[performerID] == nil else { continue }
+            do {
+                let dj = try await service.fetchDJ(id: performerID)
+                let resolvedDJ = CheckinDJLite(
+                    id: dj.id,
+                    name: dj.name,
+                    avatarUrl: dj.avatarUrl,
+                    country: dj.country,
+                    followerCount: dj.followerCount,
+                    soundCloudFollowers: dj.soundCloudFollowers
+                )
+                let nameKey = normalizedTimelineNameKey(dj.name)
+                if !nameKey.isEmpty {
+                    resolvedByName[nameKey] = mergedTimelineDJIdentity(existing: resolvedByName[nameKey], candidate: resolvedDJ)
+                }
+                resolvedByID[dj.id] = mergedTimelineDJIdentity(existing: resolvedByID[dj.id], candidate: resolvedDJ)
+            } catch {
+                continue
+            }
+        }
+
+        for name in unresolvedTimelinePerformerNames(from: checkins) {
+            let lookupKey = normalizedTimelineNameKey(name)
+            guard !lookupKey.isEmpty,
+                  timelineDJIdentityByName[lookupKey] == nil,
+                  resolvedByName[lookupKey] == nil else { continue }
+            do {
+                let page = try await service.fetchDJs(page: 1, limit: 20, search: name, sortBy: "name")
+                if let match = page.items.first(where: { normalizedTimelineNameKey($0.name) == lookupKey }) {
+                    let resolvedDJ = CheckinDJLite(
+                        id: match.id,
+                        name: match.name,
+                        avatarUrl: match.avatarUrl,
+                        country: match.country,
+                        followerCount: match.followerCount,
+                        soundCloudFollowers: match.soundCloudFollowers
+                    )
+                    resolvedByName[lookupKey] = mergedTimelineDJIdentity(existing: resolvedByName[lookupKey], candidate: resolvedDJ)
+                    resolvedByID[match.id] = mergedTimelineDJIdentity(existing: resolvedByID[match.id], candidate: resolvedDJ)
+                }
+            } catch {
+                continue
+            }
+        }
+
+        guard !resolvedByName.isEmpty || !resolvedByID.isEmpty else { return }
+        for (key, value) in resolvedByName {
+            timelineDJIdentityByName[key] = mergedTimelineDJIdentity(existing: timelineDJIdentityByName[key], candidate: value)
+        }
+        for (key, value) in resolvedByID {
+            timelineDJIdentityByID[key] = mergedTimelineDJIdentity(existing: timelineDJIdentityByID[key], candidate: value)
+        }
+    }
+
+    private func unresolvedTimelinePerformerIDs(from checkins: [WebCheckin]) -> [String] {
+        var ids = Set<String>()
+        for checkin in checkins {
+            for day in checkin.eventAttendanceSelections {
+                for selection in day.djSelections {
+                    if let explicitID = normalizedTimelineDJID(selection.id),
+                       timelineDJIdentityByID[explicitID] == nil {
+                        ids.insert(explicitID)
+                    }
+                }
+            }
+        }
+        return ids.sorted()
+    }
+
+    private func unresolvedTimelinePerformerNames(from checkins: [WebCheckin]) -> [String] {
+        var names = Set<String>()
+        for checkin in checkins {
+            for day in checkin.eventAttendanceSelections {
+                for selection in day.djSelections {
+                    let rawName = selection.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !rawName.isEmpty else { continue }
+
+                    if let split = splitActNames(rawName, keyword: "B3B"), split.count >= 3 {
+                        for name in split.prefix(3) {
+                            let key = normalizedTimelineNameKey(name)
+                            if timelineDJIdentityByName[key] == nil {
+                                names.insert(name)
+                            }
+                        }
+                        continue
+                    }
+
+                    if let split = splitActNames(rawName, keyword: "B2B"), split.count >= 2 {
+                        for name in split.prefix(2) {
+                            let key = normalizedTimelineNameKey(name)
+                            if timelineDJIdentityByName[key] == nil {
+                                names.insert(name)
+                            }
+                        }
+                        continue
+                    }
+
+                    if normalizedTimelineDJID(selection.id) == nil {
+                        let key = normalizedTimelineNameKey(rawName)
+                        if timelineDJIdentityByName[key] == nil {
+                            names.insert(rawName)
+                        }
+                    }
+                }
+            }
+        }
+
+        return names.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private func normalizedTimelineDJID(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let lowered = trimmed.lowercased()
+        if lowered.hasPrefix("act-") || lowered.hasPrefix("solo-") {
+            return nil
+        }
+        return trimmed
+    }
+
+    private func splitActNames(_ raw: String, keyword: String) -> [String]? {
+        guard !raw.isEmpty else { return nil }
+        let token = "__CHECKIN_SPLIT_TOKEN__"
+        let pattern = "(?i)\\s*\(keyword)\\s*"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(raw.startIndex..<raw.endIndex, in: raw)
+        let replaced = regex.stringByReplacingMatches(in: raw, options: [], range: range, withTemplate: token)
+        let parts = replaced
+            .components(separatedBy: token)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts
+    }
+
+    private func normalizedTimelineNameKey(_ name: String) -> String {
+        name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    private func mergedTimelineDJIdentity(existing: CheckinDJLite?, candidate: CheckinDJLite) -> CheckinDJLite {
+        guard var existing else { return candidate }
+
+        if (existing.avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+           !(candidate.avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+            existing.avatarUrl = candidate.avatarUrl
+        }
+
+        if (existing.country?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+           !(candidate.country?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+            existing.country = candidate.country
+        }
+
+        if existing.followerCount == nil {
+            existing.followerCount = candidate.followerCount
+        }
+        if existing.soundCloudFollowers == nil {
+            existing.soundCloudFollowers = candidate.soundCloudFollowers
+        }
+
+        let existingFollowers = existing.soundCloudFollowers ?? Int.min
+        let candidateFollowers = candidate.soundCloudFollowers ?? Int.min
+        if candidateFollowers > existingFollowers {
+            existing.followerCount = candidate.followerCount
+            existing.soundCloudFollowers = candidate.soundCloudFollowers
+        }
+
+        return existing
+    }
+}
+
 struct MyCheckinsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.profilePush) private var profilePush
+    @EnvironmentObject private var appContainer: AppContainer
 
     private struct TimelineDJEntry: Identifiable {
         let id: String
@@ -139,24 +453,16 @@ struct MyCheckinsView: View {
 
     private let targetUserID: String?
     private let navigationTitleText: String
-    private let service = AppEnvironment.makeWebService()
+    private var service: WebFeatureService { appContainer.webService }
 
     @State private var displayMode: DisplayMode = .timeline
     @State private var galleryMode: GalleryMode = .event
-    @State private var page = 1
-    @State private var totalPages = 1
-    @State private var items: [WebCheckin] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
-    @State private var selectedEventIDForDetail: String?
-    @State private var selectedDJIDForDetail: String?
-    @State private var timelineDJIdentityByName: [String: CheckinDJLite] = [:]
-    @State private var timelineDJIdentityByID: [String: CheckinDJLite] = [:]
-    @State private var timelineLocalizedEventByID: [String: WebEvent] = [:]
+    @StateObject private var viewModel: MyCheckinsViewModel
 
     init(targetUserID: String? = nil, title: String = "") {
         self.targetUserID = targetUserID
         self.navigationTitleText = title.isEmpty ? L("我的打卡", "My Check-ins") : title
+        _viewModel = StateObject(wrappedValue: MyCheckinsViewModel(targetUserID: targetUserID))
     }
 
     var body: some View {
@@ -176,7 +482,7 @@ struct MyCheckinsView: View {
                     .pickerStyle(.segmented)
                 }
 
-                if isLoading && isCurrentViewEmpty {
+                if viewModel.isLoading && isCurrentViewEmpty {
                     ProgressView(L("加载打卡记录...", "Loading check-ins..."))
                         .frame(maxWidth: .infinity, minHeight: 220)
                 } else if isCurrentViewEmpty {
@@ -195,9 +501,9 @@ struct MyCheckinsView: View {
                         galleryView
                     }
 
-                    if page < totalPages {
+                    if viewModel.page < viewModel.totalPages {
                         Button(L("加载更多", "Load More")) {
-                            Task { await loadMore() }
+                            Task { await viewModel.loadMore(service: service) }
                         }
                         .buttonStyle(.bordered)
                         .padding(.top, 4)
@@ -254,53 +560,37 @@ struct MyCheckinsView: View {
             }
         }
         .task {
-            await reload()
+            await viewModel.reload(service: service)
         }
         .refreshable {
-            await reload()
-        }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedEventIDForDetail != nil },
-                set: { if !$0 { selectedEventIDForDetail = nil } }
-            )
-        ) {
-            if let eventID = selectedEventIDForDetail {
-                NavigationStack {
-                    EventDetailView(eventID: eventID)
-                }
-            }
-        }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedDJIDForDetail != nil },
-                set: { if !$0 { selectedDJIDForDetail = nil } }
-            )
-        ) {
-            if let djID = selectedDJIDForDetail {
-                NavigationStack {
-                    DJDetailView(djID: djID)
-                }
-            }
+            await viewModel.reload(service: service)
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
         )) {
             Button(L("确定", "OK"), role: .cancel) {}
         } message: {
-            Text(errorMessage ?? "")
+            Text(viewModel.errorMessage ?? "")
         }
     }
 
-    private func reload() async {
-        page = 1
-        totalPages = 1
-        items = []
-        timelineDJIdentityByName = [:]
-        timelineDJIdentityByID = [:]
-        timelineLocalizedEventByID = [:]
-        await loadMore(reset: true)
+    private var items: [WebCheckin] { viewModel.items }
+    private var timelineDJIdentityByName: [String: CheckinDJLite] {
+        get { viewModel.timelineDJIdentityByName }
+        nonmutating set { viewModel.timelineDJIdentityByName = newValue }
+    }
+    private var timelineDJIdentityByID: [String: CheckinDJLite] {
+        get { viewModel.timelineDJIdentityByID }
+        nonmutating set { viewModel.timelineDJIdentityByID = newValue }
+    }
+    private var timelineLocalizedEventByID: [String: WebEvent] {
+        get { viewModel.timelineLocalizedEventByID }
+        nonmutating set { viewModel.timelineLocalizedEventByID = newValue }
+    }
+    private var errorMessage: String? {
+        get { viewModel.errorMessage }
+        nonmutating set { viewModel.errorMessage = newValue }
     }
 
     private var rawVisibleItems: [WebCheckin] {
@@ -444,7 +734,7 @@ struct MyCheckinsView: View {
                 if let event = node.event {
                     VStack(alignment: .leading, spacing: 8) {
                         Button {
-                            selectedEventIDForDetail = event.id
+                            profilePush(.eventDetail(event.id))
                         } label: {
                             eventHero(for: event)
                                 .frame(height: 124)
@@ -481,7 +771,7 @@ struct MyCheckinsView: View {
                         ForEach(section.entries) { rankedEntry in
                             Button {
                                 if let resolvedID = resolvedTimelineDetailDJID(for: rankedEntry.dj) {
-                                    selectedDJIDForDetail = resolvedID
+                                    profilePush(.djDetail(resolvedID))
                                 } else {
                                     errorMessage = L("该 DJ 暂未建立详情档案", "This DJ profile is not available yet.")
                                 }
@@ -552,7 +842,7 @@ struct MyCheckinsView: View {
                     .padding(.bottom, 12)
 
                     Button {
-                        selectedEventIDForDetail = event.id
+                        profilePush(.eventDetail(event.id))
                     } label: {
                         eventHero(for: event)
                             .frame(height: 188)
@@ -697,7 +987,7 @@ struct MyCheckinsView: View {
     private func timelineDJButton(_ entry: TimelineDJEntry) -> some View {
         Button {
             if let resolvedID = resolvedTimelineDetailDJID(for: entry.dj) {
-                selectedDJIDForDetail = resolvedID
+                profilePush(.djDetail(resolvedID))
             } else {
                 errorMessage = L("该 DJ 暂未建立详情档案", "This DJ profile is not available yet.")
             }
@@ -859,7 +1149,7 @@ struct MyCheckinsView: View {
            let djID = performer.djID,
            !djID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             Button {
-                selectedDJIDForDetail = djID
+                profilePush(.djDetail(djID))
             } label: {
                 timelinePerformerAvatar(performer, size: size)
             }
@@ -2144,746 +2434,4 @@ struct MyCheckinsView: View {
             .replacingOccurrences(of: "[^a-z0-9\\u4e00-\\u9fa5-]", with: "", options: .regularExpression)
     }
 
-    private func loadMore(reset: Bool = false) async {
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let result: CheckinListPage
-            if let targetUserID {
-                result = try await service.fetchUserCheckins(userID: targetUserID, page: page, limit: 20, type: nil)
-            } else {
-                result = try await service.fetchMyCheckins(page: page, limit: 20, type: nil)
-            }
-
-            let eventOnlyResult: CheckinListPage?
-            if reset {
-                // Timeline/gallery event nodes should not be buried by numerous DJ checkins.
-                if let targetUserID {
-                    eventOnlyResult = try? await service.fetchUserCheckins(userID: targetUserID, page: 1, limit: 200, type: "event")
-                } else {
-                    eventOnlyResult = try? await service.fetchMyCheckins(page: 1, limit: 200, type: "event")
-                }
-            } else {
-                eventOnlyResult = nil
-            }
-
-            if reset {
-                items = mergeUniqueCheckins(result.items, with: eventOnlyResult?.items ?? [])
-            } else {
-                items = mergeUniqueCheckins(items + result.items, with: [])
-            }
-            totalPages = result.pagination?.totalPages ?? 1
-            page += 1
-            await hydrateTimelineEventLocalizationMap(from: items)
-            await hydrateTimelineDJIdentityMap(from: items)
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    private func mergeUniqueCheckins(_ base: [WebCheckin], with extras: [WebCheckin]) -> [WebCheckin] {
-        var mergedByID: [String: WebCheckin] = [:]
-        for item in base + extras {
-            if let existing = mergedByID[item.id] {
-                if item.attendedAt > existing.attendedAt {
-                    mergedByID[item.id] = item
-                }
-            } else {
-                mergedByID[item.id] = item
-            }
-        }
-        return mergedByID.values.sorted { lhs, rhs in
-            if lhs.attendedAt == rhs.attendedAt {
-                return lhs.createdAt > rhs.createdAt
-            }
-            return lhs.attendedAt > rhs.attendedAt
-        }
-    }
-
-    private func delete(_ id: String) async {
-        do {
-            try await service.deleteCheckin(id: id)
-            items.removeAll { $0.id == id }
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-}
-
-struct MyPublishesView: View {
-    private let service = AppEnvironment.makeWebService()
-    private let socialService = AppEnvironment.makeService()
-
-    @State private var selectedTab = 0
-    @State private var publishes = MyPublishes(djSets: [], events: [], ratingEvents: [], ratingUnits: [])
-    @State private var newsPublishes: [Post] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
-
-    @State private var editingEvent: WebEvent?
-    @State private var editingSet: WebDJSet?
-    @State private var editingRatingEvent: WebRatingEvent?
-    @State private var editingRatingUnit: WebRatingUnit?
-    @State private var selectedEventIDForDetail: String?
-
-    var body: some View {
-        List {
-            Picker(LL("发布类型"), selection: $selectedTab) {
-                Text(L("Sets", "Sets")).tag(0)
-                Text(L("活动", "Events")).tag(1)
-                Text(LL("打分")).tag(2)
-                Text(LL("资讯")).tag(3)
-            }
-            .pickerStyle(.segmented)
-
-            if selectedTab == 0 {
-                if publishes.djSets.isEmpty, !isLoading {
-                    ContentUnavailableView(LL("暂无发布 Set"), systemImage: "waveform")
-                        .listRowBackground(Color.clear)
-                }
-
-                ForEach(publishes.djSets) { set in
-                    NavigationLink {
-                        DJSetDetailView(setID: set.id)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(set.title)
-                                .font(.headline)
-                            Text(L("\(set.trackCount) 首曲目", "\(set.trackCount) tracks"))
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                            Text(set.createdAt.appLocalizedYMDHMText())
-                                .font(.caption2)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                    .swipeActions {
-                        Button {
-                            Task { await prepareEditSet(id: set.id) }
-                        } label: {
-                            Label(LL("编辑"), systemImage: "pencil")
-                        }
-
-                        Button(role: .destructive) {
-                            Task { await deleteSet(id: set.id) }
-                        } label: {
-                            Label(LL("删除"), systemImage: "trash")
-                        }
-                    }
-                }
-            } else if selectedTab == 1 {
-                if publishes.events.isEmpty, !isLoading {
-                    ContentUnavailableView(LL("暂无发布活动"), systemImage: "calendar")
-                        .listRowBackground(Color.clear)
-                }
-
-                ForEach(publishes.events) { event in
-                    Button {
-                        selectedEventIDForDetail = event.id
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(event.name)
-                                .font(.headline)
-                            Text(event.startDate.appLocalizedYMDText())
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                            Text([event.city, event.country].compactMap { $0 }.joined(separator: ", "))
-                                .font(.caption2)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                            Text(event.createdAt.appLocalizedYMDHMText())
-                                .font(.caption2)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                    .swipeActions {
-                        Button {
-                            Task { await prepareEditEvent(id: event.id) }
-                        } label: {
-                            Label(LL("编辑"), systemImage: "pencil")
-                        }
-
-                        Button(role: .destructive) {
-                            Task { await deleteEvent(id: event.id) }
-                        } label: {
-                            Label(LL("删除"), systemImage: "trash")
-                        }
-                    }
-                }
-            } else if selectedTab == 2 {
-                if publishes.ratingEvents.isEmpty, publishes.ratingUnits.isEmpty, !isLoading {
-                    ContentUnavailableView(LL("暂无发布打分"), systemImage: "star.leadinghalf.filled")
-                        .listRowBackground(Color.clear)
-                }
-
-                if !publishes.ratingEvents.isEmpty {
-                    Section(LL("我发布的打分事件")) {
-                        ForEach(publishes.ratingEvents) { event in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(event.name)
-                                    .font(.headline)
-                                Text(L("\(event.unitCount) 个打分单位", "\(event.unitCount) rating units"))
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                                Text(event.createdAt.appLocalizedYMDHMText())
-                                    .font(.caption2)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                            .padding(.vertical, 4)
-                            .swipeActions {
-                                Button {
-                                    Task { await prepareEditRatingEvent(id: event.id) }
-                                } label: {
-                                    Label(LL("编辑"), systemImage: "pencil")
-                                }
-
-                                Button(role: .destructive) {
-                                    Task { await deleteRatingEvent(id: event.id) }
-                                } label: {
-                                    Label(LL("删除"), systemImage: "trash")
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if !publishes.ratingUnits.isEmpty {
-                    Section(LL("我发布的打分单位")) {
-                        ForEach(publishes.ratingUnits) { unit in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(unit.name)
-                                    .font(.headline)
-                                Text(L("所属事件：\(unit.eventName)", "Event: \(unit.eventName)"))
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                                Text(unit.createdAt.appLocalizedYMDHMText())
-                                    .font(.caption2)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                            .padding(.vertical, 4)
-                            .swipeActions {
-                                Button {
-                                    Task { await prepareEditRatingUnit(id: unit.id) }
-                                } label: {
-                                    Label(LL("编辑"), systemImage: "pencil")
-                                }
-
-                                Button(role: .destructive) {
-                                    Task { await deleteRatingUnit(id: unit.id) }
-                                } label: {
-                                    Label(LL("删除"), systemImage: "trash")
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                if newsPublishes.isEmpty, !isLoading {
-                    ContentUnavailableView(LL("暂无发布资讯"), systemImage: "newspaper")
-                        .listRowBackground(Color.clear)
-                }
-
-                ForEach(newsPublishes) { post in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(post.raverNewsTitle)
-                            .font(.headline)
-                            .lineLimit(2)
-                        Text(post.raverNewsSource)
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                        Text(post.createdAt.appLocalizedYMDHMText())
-                            .font(.caption2)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-        }
-        .listStyle(.insetGrouped)
-        .navigationTitle(L("我的发布", "My Posts"))
-        .task {
-            await load()
-        }
-        .refreshable {
-            await load()
-        }
-        .sheet(item: $editingEvent) { event in
-            EventEditorView(mode: .edit(event)) {
-                Task { await load() }
-            }
-        }
-        .sheet(item: $editingSet) { set in
-            DJSetEditorView(mode: .edit(set)) {
-                Task { await load() }
-            }
-        }
-        .sheet(item: $editingRatingEvent) { event in
-            RatingEventEditorSheet(event: event) {
-                Task { await load() }
-            }
-        }
-        .sheet(item: $editingRatingUnit) { unit in
-            RatingUnitEditorSheet(unit: unit) {
-                Task { await load() }
-            }
-        }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedEventIDForDetail != nil },
-                set: { if !$0 { selectedEventIDForDetail = nil } }
-            )
-        ) {
-            if let eventID = selectedEventIDForDetail {
-                NavigationStack {
-                    EventDetailView(eventID: eventID)
-                }
-            }
-        }
-        .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button(L("确定", "OK"), role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
-        }
-    }
-
-    private func load() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            async let publishesTask = service.fetchMyPublishes()
-            async let newsTask = loadMyNewsPublishes()
-            publishes = try await publishesTask
-            newsPublishes = try await newsTask
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    private func loadMyNewsPublishes() async throws -> [Post] {
-        let profile = try await socialService.fetchMyProfile()
-        var cursor: String?
-        var rounds = 0
-        var merged: [Post] = []
-        var seen: Set<String> = []
-
-        repeat {
-            let page = try await socialService.fetchPostsByUser(userID: profile.id, cursor: cursor)
-            for post in page.posts where post.isRaverNews && !seen.contains(post.id) {
-                seen.insert(post.id)
-                merged.append(post)
-            }
-            cursor = page.nextCursor
-            rounds += 1
-        } while cursor != nil && rounds < 6
-
-        return merged.sorted { $0.createdAt > $1.createdAt }
-    }
-
-    private func prepareEditEvent(id: String) async {
-        do {
-            editingEvent = try await service.fetchEvent(id: id)
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    private func prepareEditSet(id: String) async {
-        do {
-            editingSet = try await service.fetchDJSet(id: id)
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    private func prepareEditRatingEvent(id: String) async {
-        do {
-            editingRatingEvent = try await service.fetchRatingEvent(id: id)
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    private func prepareEditRatingUnit(id: String) async {
-        do {
-            editingRatingUnit = try await service.fetchRatingUnit(id: id)
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    private func deleteSet(id: String) async {
-        do {
-            try await service.deleteDJSet(id: id)
-            publishes.djSets.removeAll { $0.id == id }
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    private func deleteEvent(id: String) async {
-        do {
-            try await service.deleteEvent(id: id)
-            publishes.events.removeAll { $0.id == id }
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    private func deleteRatingEvent(id: String) async {
-        do {
-            try await service.deleteRatingEvent(id: id)
-            publishes.ratingEvents.removeAll { $0.id == id }
-            publishes.ratingUnits.removeAll { $0.eventId == id }
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    private func deleteRatingUnit(id: String) async {
-        do {
-            try await service.deleteRatingUnit(id: id)
-            publishes.ratingUnits.removeAll { $0.id == id }
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-}
-
-private struct RatingEventEditorSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    private let service = AppEnvironment.makeWebService()
-
-    let event: WebRatingEvent
-    let onSaved: () -> Void
-
-    @State private var name: String
-    @State private var description: String
-    @State private var imageUrl: String
-    @State private var selectedCoverPhoto: PhotosPickerItem?
-    @State private var selectedCoverData: Data?
-    @State private var isSaving = false
-    @State private var isUploadingCover = false
-    @State private var errorMessage: String?
-
-    init(event: WebRatingEvent, onSaved: @escaping () -> Void) {
-        self.event = event
-        self.onSaved = onSaved
-        _name = State(initialValue: event.name)
-        _description = State(initialValue: event.description ?? "")
-        _imageUrl = State(initialValue: event.imageUrl ?? "")
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section(LL("编辑打分事件")) {
-                    TextField(LL("名称"), text: $name)
-                        .submitLabel(.done)
-                        .onSubmit {
-                            dismissKeyboard()
-                        }
-                    TextField(LL("描述（选填）"), text: $description, axis: .vertical)
-                        .lineLimit(2...4)
-                    TextField(LL("封面 URL（选填）"), text: $imageUrl)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .onSubmit {
-                            dismissKeyboard()
-                        }
-                    PhotosPicker(selection: $selectedCoverPhoto, matching: .images) {
-                        Label(selectedCoverData == nil ? L("从相册上传封面图", "Upload cover from Photos") : L("更换封面图", "Replace cover"), systemImage: "photo")
-                    }
-                    if let selectedCoverData,
-                       let preview = UIImage(data: selectedCoverData) {
-                        Image(uiImage: preview)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(height: 140)
-                            .frame(maxWidth: .infinity)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                    if selectedCoverData != nil {
-                        Text(LL("已选择本地封面图，保存时会自动上传并使用该图片。"))
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    }
-                }
-            }
-            .navigationTitle(LL("编辑打分事件"))
-            .navigationBarTitleDisplayMode(.inline)
-            .scrollDismissesKeyboard(.interactively)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
-                        Task { await save() }
-                    }
-                    .disabled(isSaving || isUploadingCover)
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button(L("收起", "Dismiss")) {
-                        dismissKeyboard()
-                    }
-                }
-            }
-            .onChange(of: selectedCoverPhoto) { _, newValue in
-                Task { await loadSelectedCoverPhoto(newValue) }
-            }
-            .alert(L("提示", "Notice"), isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(L("确定", "OK"), role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
-        }
-    }
-
-    private func dismissKeyboard() {
-        UIApplication.shared.sendAction(
-            #selector(UIResponder.resignFirstResponder),
-            to: nil,
-            from: nil,
-            for: nil
-        )
-    }
-
-    @MainActor
-    private func save() async {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else {
-            errorMessage = L("名称不能为空", "Name cannot be empty.")
-            return
-        }
-        isSaving = true
-        defer { isSaving = false }
-        do {
-            var finalImageURL = imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let selectedCoverData {
-                isUploadingCover = true
-                defer { isUploadingCover = false }
-                let upload = try await service.uploadRatingImage(
-                    imageData: jpegData(from: selectedCoverData),
-                    fileName: "rating-event-edit-\(UUID().uuidString).jpg",
-                    mimeType: "image/jpeg",
-                    ratingEventID: event.id,
-                    ratingUnitID: nil,
-                    usage: "event-cover"
-                )
-                finalImageURL = upload.url
-            }
-            _ = try await service.updateRatingEvent(
-                id: event.id,
-                input: UpdateRatingEventInput(
-                    name: trimmedName,
-                    description: description.trimmingCharacters(in: .whitespacesAndNewlines),
-                    imageUrl: finalImageURL
-                )
-            )
-            onSaved()
-            dismiss()
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    @MainActor
-    private func loadSelectedCoverPhoto(_ item: PhotosPickerItem?) async {
-        guard let item else {
-            selectedCoverData = nil
-            return
-        }
-        do {
-            selectedCoverData = try await item.loadTransferable(type: Data.self)
-        } catch {
-            selectedCoverData = nil
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
-        }
-    }
-
-    private func jpegData(from data: Data) -> Data {
-        guard let image = UIImage(data: data),
-              let jpeg = image.jpegData(compressionQuality: 0.9) else {
-            return data
-        }
-        return jpeg
-    }
-}
-
-private struct RatingUnitEditorSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    private let service = AppEnvironment.makeWebService()
-
-    let unit: WebRatingUnit
-    let onSaved: () -> Void
-
-    @State private var name: String
-    @State private var description: String
-    @State private var imageUrl: String
-    @State private var selectedCoverPhoto: PhotosPickerItem?
-    @State private var selectedCoverData: Data?
-    @State private var isSaving = false
-    @State private var isUploadingCover = false
-    @State private var errorMessage: String?
-
-    init(unit: WebRatingUnit, onSaved: @escaping () -> Void) {
-        self.unit = unit
-        self.onSaved = onSaved
-        _name = State(initialValue: unit.name)
-        _description = State(initialValue: unit.description ?? "")
-        _imageUrl = State(initialValue: unit.imageUrl ?? "")
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section(LL("编辑打分单位")) {
-                    TextField(LL("名称"), text: $name)
-                        .submitLabel(.done)
-                        .onSubmit {
-                            dismissKeyboard()
-                        }
-                    TextField(LL("描述（选填）"), text: $description, axis: .vertical)
-                        .lineLimit(2...4)
-                    TextField(LL("封面 URL（选填）"), text: $imageUrl)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .onSubmit {
-                            dismissKeyboard()
-                        }
-                    PhotosPicker(selection: $selectedCoverPhoto, matching: .images) {
-                        Label(selectedCoverData == nil ? L("从相册上传单位图", "Upload unit image from Photos") : L("更换单位图片", "Replace unit image"), systemImage: "photo")
-                    }
-                    if let selectedCoverData,
-                       let preview = UIImage(data: selectedCoverData) {
-                        Image(uiImage: preview)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(height: 140)
-                            .frame(maxWidth: .infinity)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                    if selectedCoverData != nil {
-                        Text(LL("已选择本地单位图，保存时会自动上传并使用该图片。"))
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    }
-                }
-            }
-            .navigationTitle(LL("编辑打分单位"))
-            .navigationBarTitleDisplayMode(.inline)
-            .scrollDismissesKeyboard(.interactively)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
-                        Task { await save() }
-                    }
-                    .disabled(isSaving || isUploadingCover)
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button(L("收起", "Dismiss")) {
-                        dismissKeyboard()
-                    }
-                }
-            }
-            .onChange(of: selectedCoverPhoto) { _, newValue in
-                Task { await loadSelectedCoverPhoto(newValue) }
-            }
-            .alert(L("提示", "Notice"), isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(L("确定", "OK"), role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
-        }
-    }
-
-    private func dismissKeyboard() {
-        UIApplication.shared.sendAction(
-            #selector(UIResponder.resignFirstResponder),
-            to: nil,
-            from: nil,
-            for: nil
-        )
-    }
-
-    @MainActor
-    private func save() async {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else {
-            errorMessage = L("名称不能为空", "Name cannot be empty.")
-            return
-        }
-        isSaving = true
-        defer { isSaving = false }
-        do {
-            var finalImageURL = imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let selectedCoverData {
-                isUploadingCover = true
-                defer { isUploadingCover = false }
-                let upload = try await service.uploadRatingImage(
-                    imageData: jpegData(from: selectedCoverData),
-                    fileName: "rating-unit-edit-\(UUID().uuidString).jpg",
-                    mimeType: "image/jpeg",
-                    ratingEventID: nil,
-                    ratingUnitID: unit.id,
-                    usage: "unit-cover"
-                )
-                finalImageURL = upload.url
-            }
-            _ = try await service.updateRatingUnit(
-                id: unit.id,
-                input: UpdateRatingUnitInput(
-                    name: trimmedName,
-                    description: description.trimmingCharacters(in: .whitespacesAndNewlines),
-                    imageUrl: finalImageURL
-                )
-            )
-            onSaved()
-            dismiss()
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    @MainActor
-    private func loadSelectedCoverPhoto(_ item: PhotosPickerItem?) async {
-        guard let item else {
-            selectedCoverData = nil
-            return
-        }
-        do {
-            selectedCoverData = try await item.loadTransferable(type: Data.self)
-        } catch {
-            selectedCoverData = nil
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
-        }
-    }
-
-    private func jpegData(from data: Data) -> Data {
-        guard let image = UIImage(data: data),
-              let jpeg = image.jpegData(compressionQuality: 0.9) else {
-            return data
-        }
-        return jpeg
-    }
 }

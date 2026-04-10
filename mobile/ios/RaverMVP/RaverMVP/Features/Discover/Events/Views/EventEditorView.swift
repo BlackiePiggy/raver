@@ -624,7 +624,11 @@ private struct DJCheckinBindingSheet: View {
     }
 
     @Environment(\.dismiss) private var dismiss
-    private let service = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+
+    private var eventsRepository: DiscoverEventsRepository {
+        appContainer.discoverEventsRepository
+    }
 
     let djName: String
     let onConfirm: (DJCheckinSubmission) -> Void
@@ -850,7 +854,7 @@ private struct DJCheckinBindingSheet: View {
         defer { isLoadingHistory = false }
 
         do {
-            let page = try await service.fetchMyCheckins(page: 1, limit: 200, type: nil)
+            let page = try await eventsRepository.fetchMyCheckins(page: 1, limit: 200, type: nil)
             var latestByEventID: [String: DJCheckinEventBindingOption] = [:]
 
             for item in page.items {
@@ -898,12 +902,14 @@ private struct DJCheckinBindingSheet: View {
         defer { isSearchingEvents = false }
 
         do {
-            let page = try await service.fetchEvents(
-                page: 1,
-                limit: 20,
-                search: keyword,
-                eventType: nil,
-                status: "all"
+            let page = try await eventsRepository.fetchEvents(
+                request: DiscoverEventsPageRequest(
+                    page: 1,
+                    limit: 20,
+                    search: keyword,
+                    eventType: nil,
+                    status: "all"
+                )
             )
 
             if Task.isCancelled || keyword != eventSearchKeyword {
@@ -1048,7 +1054,15 @@ struct EventEditorView: View {
     }
 
     @Environment(\.dismiss) private var dismiss
-    private let service = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+
+    private var eventsRepository: DiscoverEventsRepository {
+        appContainer.discoverEventsRepository
+    }
+
+    private var djsRepository: DiscoverDJsRepository {
+        appContainer.discoverDJsRepository
+    }
 
     let mode: Mode
     let onSaved: () -> Void
@@ -2620,7 +2634,15 @@ struct EventEditorView: View {
             .filter { ($0.djId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) }
             .map(\.djName)
 
-        let resolved = await fetchExactDJMatches(names: unresolvedNames, service: service)
+        let resolved = await fetchExactDJMatches(names: unresolvedNames) { keyword in
+            let page = try await djsRepository.fetchDJs(
+                page: 1,
+                limit: 20,
+                search: keyword,
+                sortBy: "name"
+            )
+            return page.items
+        }
         if Task.isCancelled { return }
 
         guard !resolved.isEmpty else { return }
@@ -2679,7 +2701,7 @@ struct EventEditorView: View {
         do {
             switch mode {
             case .create:
-                let created = try await service.createEvent(
+                let created = try await eventsRepository.createEvent(
                     input: CreateEventInput(
                         name: trimmedName,
                         description: encodedDescription,
@@ -2708,7 +2730,7 @@ struct EventEditorView: View {
                 var uploadedLineupURL: String?
 
                 if let selectedCoverData {
-                    let upload = try await service.uploadEventImage(
+                    let upload = try await eventsRepository.uploadEventImage(
                         imageData: jpegData(from: selectedCoverData),
                         fileName: "event-cover-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg",
@@ -2719,7 +2741,7 @@ struct EventEditorView: View {
                 }
 
                 if let selectedLineupData {
-                    let upload = try await service.uploadEventImage(
+                    let upload = try await eventsRepository.uploadEventImage(
                         imageData: jpegData(from: selectedLineupData),
                         fileName: "event-lineup-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg",
@@ -2730,7 +2752,7 @@ struct EventEditorView: View {
                 }
 
                 if uploadedCoverURL != nil || uploadedLineupURL != nil {
-                    _ = try await service.updateEvent(
+                    _ = try await eventsRepository.updateEvent(
                         id: created.id,
                         input: UpdateEventInput(
                             coverImageUrl: uploadedCoverURL,
@@ -2743,7 +2765,7 @@ struct EventEditorView: View {
                 var finalLineup = lineupImageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
 
                 if let selectedCoverData {
-                    let upload = try await service.uploadEventImage(
+                    let upload = try await eventsRepository.uploadEventImage(
                         imageData: jpegData(from: selectedCoverData),
                         fileName: "event-cover-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg",
@@ -2754,7 +2776,7 @@ struct EventEditorView: View {
                 }
 
                 if let selectedLineupData {
-                    let upload = try await service.uploadEventImage(
+                    let upload = try await eventsRepository.uploadEventImage(
                         imageData: jpegData(from: selectedLineupData),
                         fileName: "event-lineup-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg",
@@ -2764,7 +2786,7 @@ struct EventEditorView: View {
                     finalLineup = upload.url
                 }
 
-                _ = try await service.updateEvent(
+                _ = try await eventsRepository.updateEvent(
                     id: event.id,
                     input: UpdateEventInput(
                         name: trimmedName,
@@ -2850,7 +2872,7 @@ struct EventEditorView: View {
                 return
             }
 
-            let preview = try await service.importEventLineupFromImage(
+            let preview = try await eventsRepository.importEventLineupFromImage(
                 imageData: jpegData(from: loaded),
                 fileName: "lineup-import-\(UUID().uuidString).jpg",
                 mimeType: "image/jpeg",
@@ -3128,7 +3150,15 @@ struct EventEditorView: View {
                 .filter { ($0.djId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) }
                 .map(\.djName)
         }
-        let resolved = await fetchExactDJMatches(names: unresolvedNames, service: service)
+        let resolved = await fetchExactDJMatches(names: unresolvedNames) { keyword in
+            let page = try await djsRepository.fetchDJs(
+                page: 1,
+                limit: 20,
+                search: keyword,
+                sortBy: "name"
+            )
+            return page.items
+        }
 
         for slotIndex in importedSlots.indices {
             for performerIndex in importedSlots[slotIndex].performers.indices {
@@ -3234,7 +3264,15 @@ struct EventEditorView: View {
         }
         guard !unresolvedNames.isEmpty else { return matchedSlots }
 
-        let resolved = await fetchExactDJMatches(names: unresolvedNames, service: service)
+        let resolved = await fetchExactDJMatches(names: unresolvedNames) { keyword in
+            let page = try await djsRepository.fetchDJs(
+                page: 1,
+                limit: 20,
+                search: keyword,
+                sortBy: "name"
+            )
+            return page.items
+        }
         guard !resolved.isEmpty else { return matchedSlots }
 
         for slotIndex in matchedSlots.indices {
@@ -3676,7 +3714,12 @@ struct EventEditorView: View {
             do {
                 try await Task.sleep(nanoseconds: 250_000_000)
                 if Task.isCancelled { return }
-                let page = try await service.fetchDJs(page: 1, limit: 20, search: trimmed, sortBy: "name")
+                let page = try await djsRepository.fetchDJs(
+                    page: 1,
+                    limit: 20,
+                    search: trimmed,
+                    sortBy: "name"
+                )
                 if Task.isCancelled { return }
                 let filtered = page.items.filter {
                     $0.name.localizedCaseInsensitiveContains(trimmed)

@@ -10,12 +10,16 @@ import CoreLocation
 import CoreText
 
 struct SetsModuleView: View {
+    @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
-    private let service = AppEnvironment.makeWebService()
     private let columns = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12),
     ]
+
+    private var repository: DiscoverSetsRepository {
+        appContainer.discoverSetsRepository
+    }
 
     @State private var sets: [WebDJSet] = []
     @State private var page = 1
@@ -166,7 +170,7 @@ struct SetsModuleView: View {
         defer { isLoading = false }
 
         do {
-            let result = try await service.fetchDJSets(page: page, limit: 20, sortBy: sortBy, djID: nil)
+            let result = try await repository.fetchDJSets(page: page, limit: 20, sortBy: sortBy, djID: nil)
             if reset {
                 sets = result.items
             } else {
@@ -287,7 +291,11 @@ struct DJSetDetailView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.discoverPush) private var discoverPush
     @EnvironmentObject private var appState: AppState
-    private let service = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+
+    private var repository: DiscoverSetsRepository {
+        appContainer.discoverSetsRepository
+    }
 
     let setID: String
     let playbackMode: PlaybackMode
@@ -1752,9 +1760,9 @@ struct DJSetDetailView: View {
 
         do {
             relatedEvent = nil
-            async let setTask = service.fetchDJSet(id: setID)
-            async let commentsTask = service.fetchSetComments(setID: setID)
-            async let tracklistsTask = service.fetchTracklists(setID: setID)
+            async let setTask = repository.fetchDJSet(id: setID)
+            async let commentsTask = repository.fetchSetComments(setID: setID)
+            async let tracklistsTask = repository.fetchTracklists(setID: setID)
             let loadedSet = try await setTask
             set = loadedSet
             relatedEvent = try? await resolveRelatedEvent(for: loadedSet)
@@ -1788,7 +1796,7 @@ struct DJSetDetailView: View {
         let eventName = (set.eventName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !eventName.isEmpty else { return nil }
 
-        let page = try await service.fetchEvents(
+        let page = try await repository.fetchEvents(
             page: 1,
             limit: 200,
             search: eventName,
@@ -1817,7 +1825,7 @@ struct DJSetDetailView: View {
 
     private func refreshTracklists() async {
         do {
-            tracklists = try await service.fetchTracklists(setID: setID)
+            tracklists = try await repository.fetchTracklists(setID: setID)
             if let selectedTracklistID,
                !tracklists.contains(where: { $0.id == selectedTracklistID }) {
                 await switchTracklist(nil)
@@ -1845,7 +1853,7 @@ struct DJSetDetailView: View {
 
         guard let targetID = tracklistID else { return }
         do {
-            let detail = try await service.fetchTracklistDetail(setID: set.id, tracklistID: targetID)
+            let detail = try await repository.fetchTracklistDetail(setID: set.id, tracklistID: targetID)
             currentTracklistInfo = detail
             selectedTracklistID = targetID
             currentTracks = detail.tracks
@@ -2300,9 +2308,9 @@ struct DJSetDetailView: View {
         guard !content.isEmpty else { return }
 
         do {
-            _ = try await service.addSetComment(setID: setID, input: CreateSetCommentInput(content: content, parentId: nil))
+            _ = try await repository.addSetComment(setID: setID, input: CreateSetCommentInput(content: content, parentId: nil))
             inputComment = ""
-            comments = try await service.fetchSetComments(setID: setID)
+            comments = try await repository.fetchSetComments(setID: setID)
         } catch {
             errorMessage = error.userFacingMessage
         }
@@ -2310,7 +2318,7 @@ struct DJSetDetailView: View {
 
     private func deleteSet() async {
         do {
-            try await service.deleteDJSet(id: setID)
+            try await repository.deleteDJSet(id: setID)
             errorMessage = L("Set 已删除，请返回列表刷新", "Set deleted. Please return to the list and refresh.")
         } catch {
             errorMessage = error.userFacingMessage
@@ -3087,7 +3095,11 @@ private struct UploadTracklistSheet: View {
     }
 
     @Environment(\.dismiss) private var dismiss
-    private let service = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+
+    private var repository: DiscoverSetsRepository {
+        appContainer.discoverSetsRepository
+    }
 
     let set: WebDJSet
     let onUploaded: (WebTracklistDetail) -> Void
@@ -3256,7 +3268,7 @@ private struct UploadTracklistSheet: View {
         isSaving = true
         defer { isSaving = false }
         do {
-            let uploaded = try await service.createTracklist(
+            let uploaded = try await repository.createTracklist(
                 setID: set.id,
                 input: CreateTracklistInput(title: title.nilIfEmpty, tracks: tracks)
             )
@@ -3326,7 +3338,11 @@ struct DJSetEditorView: View {
     }
 
     @Environment(\.dismiss) private var dismiss
-    private let service = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+
+    private var repository: DiscoverSetsRepository {
+        appContainer.discoverSetsRepository
+    }
 
     let mode: Mode
     let onSaved: () -> Void
@@ -3478,7 +3494,7 @@ struct DJSetEditorView: View {
             return
         }
         do {
-            let data = try await service.previewVideo(videoURL: url)
+            let data = try await repository.previewVideo(videoURL: url)
             let title = data["title"] ?? ""
             let platform = data["platform"] ?? ""
             previewText = "\(platform) \(title)"
@@ -3509,7 +3525,7 @@ struct DJSetEditorView: View {
         do {
             if let selectedPhoto,
                let data = try await selectedPhoto.loadTransferable(type: Data.self) {
-                let upload = try await service.uploadSetThumbnail(
+                let upload = try await repository.uploadSetThumbnail(
                     imageData: data,
                     fileName: "set-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg"
@@ -3523,7 +3539,7 @@ struct DJSetEditorView: View {
                 guard let videoData = try await selectedVideo.loadTransferable(type: Data.self) else {
                     throw ServiceError.message(L("读取视频文件失败，请重新选择", "Failed to read video file. Please reselect."))
                 }
-                let upload = try await service.uploadSetVideo(
+                let upload = try await repository.uploadSetVideo(
                     videoData: videoData,
                     fileName: "set-video-\(UUID().uuidString).mp4",
                     mimeType: "video/mp4"
@@ -3537,7 +3553,7 @@ struct DJSetEditorView: View {
 
             switch mode {
             case .create:
-                _ = try await service.createDJSet(
+                _ = try await repository.createDJSet(
                     input: CreateDJSetInput(
                         djId: trimmedDJID,
                         title: trimmedTitle,
@@ -3550,7 +3566,7 @@ struct DJSetEditorView: View {
                     )
                 )
             case .edit(let set):
-                _ = try await service.updateDJSet(
+                _ = try await repository.updateDJSet(
                     id: set.id,
                     input: UpdateDJSetInput(
                         djId: trimmedDJID,
@@ -3574,7 +3590,11 @@ struct DJSetEditorView: View {
 
 private struct SetEventBindingSheet: View {
     @Environment(\.dismiss) private var dismiss
-    private let service = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+
+    private var repository: DiscoverSetsRepository {
+        appContainer.discoverSetsRepository
+    }
 
     let initialEventName: String
     let onSelected: (String) -> Void
@@ -3688,7 +3708,7 @@ private struct SetEventBindingSheet: View {
         defer { isLoading = false }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            let page = try await service.fetchEvents(
+            let page = try await repository.fetchEvents(
                 page: 1,
                 limit: 100,
                 search: trimmed.isEmpty ? nil : trimmed,
@@ -3711,7 +3731,11 @@ private struct TracklistEditorView: View {
     }
 
     @Environment(\.dismiss) private var dismiss
-    private let service = AppEnvironment.makeWebService()
+    @EnvironmentObject private var appContainer: AppContainer
+
+    private var repository: DiscoverSetsRepository {
+        appContainer.discoverSetsRepository
+    }
 
     let set: WebDJSet
     let currentTracklist: WebTracklistDetail?
@@ -3934,7 +3958,7 @@ private struct TracklistEditorView: View {
         defer { isSaving = false }
 
         do {
-            _ = try await service.replaceTracks(setID: set.id, tracks: tracks)
+            _ = try await repository.replaceTracks(setID: set.id, tracks: tracks)
             onSaved()
             dismiss()
         } catch {
@@ -3944,7 +3968,7 @@ private struct TracklistEditorView: View {
 
     private func autoLink() async {
         do {
-            try await service.autoLinkTracks(setID: set.id)
+            try await repository.autoLinkTracks(setID: set.id)
             errorMessage = L("已触发自动链接", "Auto-link triggered.")
         } catch {
             errorMessage = error.userFacingMessage
@@ -4244,4 +4268,3 @@ private enum TracklistDraftCodec {
         return "released"
     }
 }
-

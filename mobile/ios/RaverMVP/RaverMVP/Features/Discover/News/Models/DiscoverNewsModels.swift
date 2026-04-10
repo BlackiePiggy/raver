@@ -89,3 +89,177 @@ struct DiscoverNewsArticle: Identifiable, Hashable {
     let boundBrandIDs: [String]
     let boundEventIDs: [String]
 }
+
+struct DiscoverNewsPage {
+    let items: [DiscoverNewsArticle]
+    let nextCursor: String?
+}
+
+protocol DiscoverNewsRepository {
+    func searchArticles(query: String) async throws -> [DiscoverNewsArticle]
+    func fetchFeedPage(cursor: String?) async throws -> DiscoverNewsPage
+    func publish(draft: DiscoverNewsDraft) async throws -> DiscoverNewsArticle?
+    func fetchComments(postID: String) async throws -> [Comment]
+    func addComment(postID: String, content: String) async throws -> Comment
+    func fetchDJ(id: String) async throws -> WebDJ
+    func fetchEvent(id: String) async throws -> WebEvent
+    func fetchLearnFestivals(search: String?) async throws -> [WebLearnFestival]
+    func searchDJs(query: String, limit: Int) async throws -> [WebDJ]
+    func searchEvents(query: String, limit: Int) async throws -> [WebEvent]
+    func uploadNewsCoverImage(imageData: Data, fileName: String, mimeType: String) async throws -> String
+    func fetchArticlesBoundToEvent(eventID: String, maxPages: Int) async throws -> [DiscoverNewsArticle]
+    func fetchArticlesBoundToDJ(djID: String, maxPages: Int) async throws -> [DiscoverNewsArticle]
+    func fetchArticlesBoundToFestival(festivalID: String, maxPages: Int) async throws -> [DiscoverNewsArticle]
+    func searchUsers(query: String) async throws -> [UserSummary]
+    func fetchUserProfile(userID: String) async throws -> UserProfile
+}
+
+struct DiscoverNewsRepositoryAdapter: DiscoverNewsRepository {
+    private let socialService: SocialService
+    private let webService: WebFeatureService
+
+    init(
+        socialService: SocialService,
+        webService: WebFeatureService
+    ) {
+        self.socialService = socialService
+        self.webService = webService
+    }
+
+    func searchArticles(query: String) async throws -> [DiscoverNewsArticle] {
+        let page = try await socialService.searchFeed(query: query)
+        return page.posts
+            .compactMap { DiscoverNewsCodec.decode(post: $0) }
+            .sorted(by: { $0.publishedAt > $1.publishedAt })
+    }
+
+    func fetchFeedPage(cursor: String?) async throws -> DiscoverNewsPage {
+        let page = try await socialService.fetchFeed(cursor: cursor)
+        let items = page.posts.compactMap { DiscoverNewsCodec.decode(post: $0) }
+        return DiscoverNewsPage(items: items, nextCursor: page.nextCursor)
+    }
+
+    func publish(draft: DiscoverNewsDraft) async throws -> DiscoverNewsArticle? {
+        let content = DiscoverNewsCodec.encode(draft)
+        let imageURLs = draft.coverImageURL.flatMap { $0.isEmpty ? nil : [$0] } ?? []
+        let created = try await socialService.createPost(
+            input: CreatePostInput(
+                content: content,
+                images: imageURLs,
+                boundDjIDs: draft.boundDjIDs,
+                boundBrandIDs: draft.boundBrandIDs,
+                boundEventIDs: draft.boundEventIDs
+            )
+        )
+        return DiscoverNewsCodec.decode(post: created)
+    }
+
+    func fetchComments(postID: String) async throws -> [Comment] {
+        try await socialService.fetchComments(postID: postID)
+    }
+
+    func addComment(postID: String, content: String) async throws -> Comment {
+        try await socialService.addComment(postID: postID, content: content)
+    }
+
+    func fetchDJ(id: String) async throws -> WebDJ {
+        try await webService.fetchDJ(id: id)
+    }
+
+    func fetchEvent(id: String) async throws -> WebEvent {
+        try await webService.fetchEvent(id: id)
+    }
+
+    func fetchLearnFestivals(search: String?) async throws -> [WebLearnFestival] {
+        try await webService.fetchLearnFestivals(search: search)
+    }
+
+    func searchDJs(query: String, limit: Int) async throws -> [WebDJ] {
+        let page = try await webService.fetchDJs(
+            page: 1,
+            limit: limit,
+            search: query,
+            sortBy: "name"
+        )
+        return page.items
+    }
+
+    func searchEvents(query: String, limit: Int) async throws -> [WebEvent] {
+        let page = try await webService.fetchEvents(
+            page: 1,
+            limit: limit,
+            search: query,
+            eventType: nil,
+            status: nil
+        )
+        return page.items
+    }
+
+    func uploadNewsCoverImage(imageData: Data, fileName: String, mimeType: String) async throws -> String {
+        let upload = try await webService.uploadEventImage(
+            imageData: imageData,
+            fileName: fileName,
+            mimeType: mimeType
+        )
+        return upload.url
+    }
+
+    func fetchArticlesBoundToEvent(eventID: String, maxPages: Int = 8) async throws -> [DiscoverNewsArticle] {
+        let trimmedEventID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedEventID.isEmpty else { return [] }
+
+        let allArticles = try await fetchDiscoverNewsArticles(
+            socialService: socialService,
+            maxPages: maxPages
+        )
+        return allArticles.filter { article in
+            article.boundEventIDs.contains(trimmedEventID)
+        }
+    }
+
+    func fetchArticlesBoundToDJ(djID: String, maxPages: Int = 8) async throws -> [DiscoverNewsArticle] {
+        let trimmedDJID = djID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedDJID.isEmpty else { return [] }
+
+        let allArticles = try await fetchDiscoverNewsArticles(
+            socialService: socialService,
+            maxPages: maxPages
+        )
+        return allArticles.filter { article in
+            article.boundDjIDs.contains(trimmedDJID)
+        }
+    }
+
+    func fetchArticlesBoundToFestival(festivalID: String, maxPages: Int = 8) async throws -> [DiscoverNewsArticle] {
+        let trimmedFestivalID = festivalID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedFestivalID.isEmpty else { return [] }
+
+        let allArticles = try await fetchDiscoverNewsArticles(
+            socialService: socialService,
+            maxPages: maxPages
+        )
+        return allArticles.filter { article in
+            article.boundBrandIDs.contains(trimmedFestivalID)
+        }
+    }
+
+    func searchUsers(query: String) async throws -> [UserSummary] {
+        try await socialService.searchUsers(query: query)
+    }
+
+    func fetchUserProfile(userID: String) async throws -> UserProfile {
+        try await socialService.fetchUserProfile(userID: userID)
+    }
+}
+
+struct SearchDiscoverNewsUseCase {
+    private let repository: DiscoverNewsRepository
+
+    init(repository: DiscoverNewsRepository) {
+        self.repository = repository
+    }
+
+    func execute(query: String) async throws -> [DiscoverNewsArticle] {
+        try await repository.searchArticles(query: query)
+    }
+}
