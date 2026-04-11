@@ -513,51 +513,8 @@ struct MyCheckinsView: View {
         }
         .background(RaverTheme.background)
         .scrollIndicators(.hidden)
-        .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            VStack(spacing: 0) {
-                HStack {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 34, height: 34)
-                            .background(Color.black.opacity(0.36))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    Text(navigationTitleText)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(RaverTheme.primaryText)
-
-                    Spacer()
-
-                    Color.clear
-                        .frame(width: 34, height: 34)
-                }
-                .padding(.horizontal, 14)
-                .padding(.top, 4)
-                .padding(.bottom, 6)
-                .background(RaverTheme.background.opacity(0.98))
-
-                LinearGradient(
-                    colors: [
-                        RaverTheme.background.opacity(0.96),
-                        RaverTheme.background.opacity(0.72),
-                        RaverTheme.background.opacity(0.34),
-                        .clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 28)
-                .allowsHitTesting(false)
-            }
+        .raverGradientNavigationChrome(title: navigationTitleText) {
+            dismiss()
         }
         .task {
             await viewModel.reload(service: service)

@@ -1872,9 +1872,8 @@ private struct LearnFestivalRankingDetailView: View {
             .padding(.bottom, 14)
         }
         .background(RaverTheme.background)
-        .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            rankingTopBar
+        .raverGradientNavigationChrome(title: board.title) {
+            dismiss()
         }
         .navigationDestination(item: $selectedFestivalForDetail) { festival in
             DiscoverCoordinatorView(push: discoverPush) {
@@ -1888,57 +1887,6 @@ private struct LearnFestivalRankingDetailView: View {
         }
     }
 
-    private var rankingTopBar: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(Color.black.opacity(0.36))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                Text(board.title)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-
-                Spacer()
-
-                Color.clear
-                    .frame(width: 34, height: 34)
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 4)
-            .padding(.bottom, 6)
-            .frame(height: 46)
-
-            LinearGradient(
-                colors: [Color.black.opacity(0.70), .clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 24)
-            .allowsHitTesting(false)
-        }
-        .background(alignment: .top) {
-            LinearGradient(
-                colors: [Color.black.opacity(0.92), Color.black.opacity(0.70)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: topSafeAreaInset() + 46)
-            .ignoresSafeArea(edges: .top)
-            .allowsHitTesting(false)
-        }
-    }
 }
 
 struct LearnFestivalCard: View {

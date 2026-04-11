@@ -100,61 +100,8 @@ struct DiscoverNewsDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(RaverTheme.background)
-        .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            VStack(spacing: 0) {
-                HStack {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 34, height: 34)
-                            .background(Color.black.opacity(0.36))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    Text(LL("资讯详情"))
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(RaverTheme.primaryText)
-
-                    Spacer()
-
-                    Color.clear
-                        .frame(width: 34, height: 34)
-                }
-                .padding(.horizontal, 14)
-                .padding(.top, 4)
-                .padding(.bottom, 6)
-                .background(Color.black.opacity(0.68))
-
-                LinearGradient(
-                    colors: [
-                        Color.black.opacity(0.76),
-                        Color.black.opacity(0.46),
-                        Color.black.opacity(0.18),
-                        .clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 28)
-                .allowsHitTesting(false)
-            }
-            .background(alignment: .top) {
-                LinearGradient(
-                    colors: [Color.black.opacity(0.94), Color.black.opacity(0.78)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 96)
-                .ignoresSafeArea(edges: .top)
-                .allowsHitTesting(false)
-            }
+        .raverGradientNavigationChrome(title: LL("资讯详情")) {
+            dismiss()
         }
         .task(id: article.id) {
             await loadBoundEntities()

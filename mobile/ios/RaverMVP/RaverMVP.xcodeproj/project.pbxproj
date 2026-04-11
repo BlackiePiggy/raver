@@ -68,6 +68,7 @@
 		62B16A77B9B42A4668E95E96 /* SquadProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B72680D6A119DEDC285359 /* SquadProfileView.swift */; };
 		707ABC7178B5D8882FA6FB94 /* MessageNotificationsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D22F64C28F795AFB1BDDB071 /* MessageNotificationsViewModel.swift */; };
 		7726ACDE260957D0F261A36F /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18E7E6E5FDF4D8F8F0287B02 /* UserProfileView.swift */; };
+		7A1B2C3D4E5F60718293A4B5 /* RaverNavigationChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B2C3D4E5F60718293A4B4 /* RaverNavigationChrome.swift */; };
 		79A9B616CA5AF6E1927D71EB /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1667E1FD75B9F985BA3968E4 /* ProfileView.swift */; };
 		88343C9F0FC355C1FC2848EC /* DiscoverHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D433A0D9BD7E505C44F531 /* DiscoverHomeView.swift */; };
 		9197161544529AE82E33B872 /* FollowListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16E5645F1BBC6C366601B5F /* FollowListViewModel.swift */; };
@@ -84,7 +85,6 @@
 		CC2689B8A804F6DE74B0E365 /* EventDetailTabBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22EDFA6B837C5ED5F49B7AF0 /* EventDetailTabBarView.swift */; };
 		CF9E654D840B750EB13AB543 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D5E320CA7039B631B9D218 /* ProfileViewModel.swift */; };
 		D05277EFA4D6EF0211E0EA3E /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39F865C2316916ABFA624E46 /* Models.swift */; };
-		D0B32AC02F87445B00636BCB /* ImageLoadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0B32ABF2F87445B00636BCB /* ImageLoadView.swift */; };
 		D0CB63C0A1B757B00E758079 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0B45B928FAA36BEC68A7B7E /* GlassCard.swift */; };
 		D7893B4976E30A9D600D7790 /* SessionTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4124234484FD0581DCF7236C /* SessionTokenStore.swift */; };
 		D9CB12B0793646E6C13E2912 /* LiveWebFeatureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AAC35F9B28761A61B44E06D /* LiveWebFeatureService.swift */; };
@@ -166,6 +166,7 @@
 		73CE306523273347EB5B9FFB /* EditProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
 		76E16068958F9015F96D65E5 /* LiveSocialService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSocialService.swift; sourceTree = "<group>"; };
 		79F9A8E6AD43EB97C419616F /* EventDetailRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailRepresentable.swift; sourceTree = "<group>"; };
+		7A1B2C3D4E5F60718293A4B4 /* RaverNavigationChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverNavigationChrome.swift; sourceTree = "<group>"; };
 		7E4F2AC1B8668DEFA7B9B609 /* EventDetailScrollViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailScrollViewController.swift; sourceTree = "<group>"; };
 		81818C9CF7B8E9DCD756E5F0 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		93D5E00041C5689BD07853B7 /* PrimaryButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryButtonStyle.swift; sourceTree = "<group>"; };
@@ -177,7 +178,6 @@
 		C0B72680D6A119DEDC285359 /* SquadProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SquadProfileView.swift; sourceTree = "<group>"; };
 		C0F3A5B6202D4C52A746C915 /* altehaasgroteskbold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Resources/Fonts/altehaasgroteskbold.ttf; sourceTree = "<group>"; };
 		C313C382D0F686C910F91FAE /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
-		D0B32ABF2F87445B00636BCB /* ImageLoadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageLoadView.swift; sourceTree = "<group>"; };
 		D0B45B928FAA36BEC68A7B7E /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		D22F64C28F795AFB1BDDB071 /* MessageNotificationsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageNotificationsViewModel.swift; sourceTree = "<group>"; };
 		D7E353A02AA123867DBF8214 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
@@ -618,8 +618,8 @@
 				4A10D4C2B18B58489A03E3FD /* PostCardView.swift */,
 				93D5E00041C5689BD07853B7 /* PrimaryButtonStyle.swift */,
 				2A00B6CD83B1FA7380ECC424 /* RemoteCoverImage.swift */,
-				D0B32ABF2F87445B00636BCB /* ImageLoadView.swift */,
 				1938A20922A5C5120F8C6A94 /* ImageLoaderView.swift */,
+				7A1B2C3D4E5F60718293A4B4 /* RaverNavigationChrome.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -756,7 +756,6 @@
 				3892F13EB0982506C95ACE3F /* NotificationsViewModel.swift in Sources */,
 				921DA79B7E9158F25B8C25EE /* PostCardView.swift in Sources */,
 				0891E480ACD029C80916089F /* PostDetailView.swift in Sources */,
-				D0B32AC02F87445B00636BCB /* ImageLoadView.swift in Sources */,
 				484571D1CEA1F887D558A195 /* PrimaryButtonStyle.swift in Sources */,
 				79A9B616CA5AF6E1927D71EB /* ProfileView.swift in Sources */,
 				CF9E654D840B750EB13AB543 /* ProfileViewModel.swift in Sources */,
@@ -779,6 +778,7 @@
 				009C01654F7F4E0A9A7C8E01 /* RatingEditors.swift in Sources */,
 				30653139356633322D343965 /* SettingsView.swift in Sources */,
 				9BF69BD3FAC1E79D0ECA0C2A /* ImageLoaderView.swift in Sources */,
+				7A1B2C3D4E5F60718293A4B5 /* RaverNavigationChrome.swift in Sources */,
 				E473F007EE293D5489F97B7D /* ImageCacheBootstrap.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

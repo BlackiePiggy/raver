@@ -16,7 +16,6 @@ struct RecommendEventsModuleView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
-    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: RecommendEventsViewModel
 
     private let cardCornerRadius: CGFloat = 28
@@ -94,9 +93,6 @@ struct RecommendEventsModuleView: View {
         .scrollIndicators(.hidden)
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $scrollPositionID)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear.frame(height: max(0, tabBarReservedHeight))
-        }
         .overlay(alignment: .trailing) {
             pageIndicator
                 .padding(.trailing, 10)

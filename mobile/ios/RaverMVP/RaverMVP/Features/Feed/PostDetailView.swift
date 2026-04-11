@@ -127,7 +127,6 @@ struct PostDetailView: View {
             .background(RaverTheme.background)
         }
         .background(RaverTheme.background)
-        .toolbar(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -136,34 +135,8 @@ struct PostDetailView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .top) {
-            HStack {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(Color.black.opacity(0.36))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                Text(LL("动态详情"))
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-
-                Spacer()
-
-                Color.clear
-                    .frame(width: 34, height: 34)
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 4)
-            .padding(.bottom, 6)
+        .raverGradientNavigationChrome(title: LL("动态详情")) {
+            dismiss()
         }
         .task {
             await loadComments()
@@ -197,8 +170,8 @@ struct PostDetailView: View {
            resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
             ImageLoaderView(urlString: resolved)
                 .background(commentAvatarFallback(user))
-            .frame(width: 30, height: 30)
-            .clipShape(Circle())
+                .frame(width: 30, height: 30)
+                .clipShape(Circle())
         } else {
             commentAvatarFallback(user)
         }

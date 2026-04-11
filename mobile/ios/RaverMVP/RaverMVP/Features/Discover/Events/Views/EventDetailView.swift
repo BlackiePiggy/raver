@@ -68,6 +68,8 @@ struct EventDetailView: View {
     @State private var selectedRatingEventID: String?
     @State private var showExpandedLineupList = false
     @State private var venueMapContext: EventVenueMapContext?
+    @State private var lineupImageAspectRatioByURL: [String: CGFloat] = [:]
+    @State private var selectedLineupMedia: FullscreenMediaSelection?
 
     fileprivate enum EventDetailTab: String, CaseIterable, Identifiable {
         case info
@@ -977,6 +979,9 @@ struct EventDetailView: View {
         let lineupImageURLs = event.lineupAssetURLs
         let timetableImageURLs = event.timetableAssetURLs
         let allLineupMediaURLs = lineupImageURLs + timetableImageURLs
+        let lineupPreviewItems: [FullscreenMediaItem] = allLineupMediaURLs.enumerated().map { index, raw in
+            FullscreenMediaItem(rawURL: raw.trimmingCharacters(in: .whitespacesAndNewlines), index: index)
+        }
         let hasLineupDJs = !lineupDJEntries(for: event).isEmpty
 
         lineupDJsStrip(for: event)
@@ -1000,9 +1005,25 @@ struct EventDetailView: View {
                     }
 
                     if let resolved = AppConfig.resolvedURLString(rawURL) {
-                        ImageLoaderView(urlString: resolved, resizingMode: .fit)
+                        Button {
+                            selectedLineupMedia = FullscreenMediaSelection(id: index)
+                        } label: {
+                            ImageLoaderView(
+                                urlString: resolved,
+                                resizingMode: .fit,
+                                onImageLoaded: { imageSize in
+                                    guard imageSize.width > 0, imageSize.height > 0 else { return }
+                                    let ratio = imageSize.width / imageSize.height
+                                    let old = lineupImageAspectRatioByURL[resolved]
+                                    if old == nil || abs((old ?? ratio) - ratio) > 0.001 {
+                                        lineupImageAspectRatioByURL[resolved] = ratio
+                                    }
+                                }
+                            )
                             .frame(width: cardWidth)
-                            .frame(minHeight: 180)
+                            .frame(
+                                height: cardWidth / max(lineupImageAspectRatioByURL[resolved] ?? 1, 0.0001)
+                            )
                             .background(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                                     .fill(RaverTheme.card)
@@ -1012,6 +1033,8 @@ struct EventDetailView: View {
                                     )
                             )
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
                     } else {
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(RaverTheme.card)
@@ -1021,6 +1044,9 @@ struct EventDetailView: View {
                 }
             }
             .frame(width: cardWidth, alignment: .leading)
+            .fullScreenCover(item: $selectedLineupMedia) { selection in
+                FullscreenMediaViewer(items: lineupPreviewItems, initialIndex: selection.id)
+            }
         }
 
         if allLineupMediaURLs.isEmpty && !hasLineupDJs {

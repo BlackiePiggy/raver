@@ -67,7 +67,6 @@ struct SquadProfileView: View {
         }
         .background(RaverTheme.background)
         .scrollDismissesKeyboard(.interactively)
-        .toolbar(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -76,34 +75,8 @@ struct SquadProfileView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .top) {
-            HStack {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(Color.black.opacity(0.36))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                Text(LL("小队"))
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-
-                Spacer()
-
-                Color.clear
-                    .frame(width: 34, height: 34)
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 4)
-            .padding(.bottom, 6)
+        .raverGradientNavigationChrome(title: LL("小队")) {
+            dismiss()
         }
         .navigationDestination(isPresented: $showManageSheet) {
             if let profile = viewModel.profile {

@@ -78,6 +78,7 @@ struct DiscoverHomeView: View {
             }
         }
         .background(RaverTheme.background)
+        .ignoresSafeArea(edges: .bottom)
     }
 
     private var topTabs: some View {

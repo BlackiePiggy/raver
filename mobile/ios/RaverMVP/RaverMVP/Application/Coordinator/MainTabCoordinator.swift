@@ -228,7 +228,6 @@ struct MainTabCoordinatorView: View {
                 },
                 appContainer: appContainer
             )
-                .navigationBarHidden(true)
                 .environment(\.discoverPush) { nextRoute in
                     pushDiscoverRoute(nextRoute)
                 }

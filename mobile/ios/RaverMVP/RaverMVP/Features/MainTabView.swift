@@ -20,13 +20,13 @@ struct MainTabView: View {
     @EnvironmentObject private var router: AppRouter
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.scenePhase) private var scenePhase
+    @Namespace private var tabBarIndicatorNamespace
     private let tabs: [MainTab] = [.discover, .circle, .messages, .profile]
+    @State private var loadedTabs: Set<MainTab> = [.discover]
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            tabContent(for: currentTab)
-                .environment(\.raverTabBarReservedHeight, tabBarReservedHeight)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            tabContentContainer
                 .zIndex(1)
 
             if !isTabBarHidden {
@@ -42,6 +42,12 @@ struct MainTabView: View {
         .onChange(of: scenePhase) { _, newValue in
             guard newValue == .active else { return }
             Task { await appState.refreshUnreadMessages() }
+        }
+        .onAppear {
+            loadedTabs.insert(currentTab)
+        }
+        .onChange(of: currentTab) { _, newTab in
+            loadedTabs.insert(newTab)
         }
     }
 
@@ -66,8 +72,26 @@ struct MainTabView: View {
     private var tabBarReservedHeight: CGFloat {
         guard !isTabBarHidden else { return 0 }
         let barVisualHeight: CGFloat = 66
-        let legacyBottomPadding: CGFloat = bottomSafeAreaInset == 0 ? 20 : 0
+        let legacyBottomPadding: CGFloat = bottomSafeAreaInset == 0 ? 4 : 0
         return barVisualHeight + legacyBottomPadding
+    }
+
+    private var tabContentContainer: some View {
+        ZStack {
+            ForEach(tabs, id: \.self) { tab in
+                if loadedTabs.contains(tab) {
+                    tabContent(for: tab)
+                        .opacity(currentTab == tab ? 1 : 0)
+                        .allowsHitTesting(currentTab == tab)
+                        .zIndex(currentTab == tab ? 1 : 0)
+                }
+            }
+        }
+        .environment(\.raverTabBarReservedHeight, tabBarReservedHeight)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: max(0, tabBarReservedHeight))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -120,6 +144,10 @@ struct MainTabView: View {
                                     Capsule(style: .continuous)
                                         .stroke(Color.white.opacity(0.18), lineWidth: 1)
                                 )
+                                .matchedGeometryEffect(
+                                    id: "main-tab-indicator",
+                                    in: tabBarIndicatorNamespace
+                                )
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 2)
                         }
@@ -128,6 +156,7 @@ struct MainTabView: View {
                 .buttonStyle(.plain)
             }
         }
+        .animation(.interactiveSpring(response: 0.26, dampingFraction: 0.86), value: currentTab)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(.ultraThinMaterial, in: Capsule())
@@ -136,8 +165,8 @@ struct MainTabView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.10, green: 0.08, blue: 0.16).opacity(0.94),
-                            Color(red: 0.15, green: 0.10, blue: 0.25).opacity(0.90)
+                            Color(red: 0.10, green: 0.08, blue: 0.16).opacity(0.20),
+                            Color(red: 0.15, green: 0.10, blue: 0.25).opacity(0.20)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -161,7 +190,7 @@ struct MainTabView: View {
         .shadow(color: Color.black.opacity(0.46), radius: 18, x: 0, y: 10)
         .shadow(color: Color(red: 0.43, green: 0.30, blue: 0.92).opacity(0.24), radius: 12, x: 0, y: 2)
         .padding(.horizontal)
-        .padding(.bottom, bottomSafeAreaInset == 0 ? 20 : 0)
+        .padding(.bottom, bottomSafeAreaInset == 0 ? 4 : -14)
     }
 
 }
@@ -266,6 +295,7 @@ private struct CircleHomeView: View {
             }
         }
         .background(RaverTheme.background)
+        .ignoresSafeArea(edges: .bottom)
     }
 
     private var topTabs: some View {
@@ -2662,16 +2692,26 @@ struct CircleRatingEventDetailView: View {
             .padding(.top, 12)
             .padding(.bottom, 20)
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            Color.clear.frame(height: 60)
-        }
-        .overlay(alignment: .top) {
-            ratingEventTopBar
-        }
         .background(RaverTheme.background)
-        .navigationBarBackButtonHidden(true)
-        .navigationBarHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
+        .raverGradientNavigationChrome(
+            title: LL("打分事件详情"),
+            trailing: Button {
+                circlePush(.ratingUnitCreate(eventID: eventID))
+            } label: {
+                Image(systemName: "plus")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.black.opacity(0.36))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .eraseToAnyView(),
+            onBack: {
+                onClose()
+                dismiss()
+            }
+        )
         .task {
             await loadEvent()
         }
@@ -2765,70 +2805,6 @@ struct CircleRatingEventDetailView: View {
         .padding(12)
         .background(RaverTheme.card)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private var topSafeAreaInset: CGFloat {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let keyWindow = scenes.flatMap(\.windows).first(where: \.isKeyWindow)
-        return keyWindow?.safeAreaInsets.top ?? 0
-    }
-
-    private var ratingEventTopBar: some View {
-        let safeTop = topSafeAreaInset
-        return ZStack(alignment: .top) {
-            LinearGradient(
-                colors: [
-                    Color.black.opacity(0.95),
-                    Color.black.opacity(0.88),
-                    Color.black.opacity(0.58),
-                    Color.black.opacity(0.0),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .allowsHitTesting(false)
-
-            ZStack {
-                Text(LL("打分事件详情"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-
-                HStack {
-                    Button {
-                        onClose()
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 34, height: 34)
-                            .background(Color.black.opacity(0.36))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    Button {
-                        circlePush(.ratingUnitCreate(eventID: eventID))
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 34, height: 34)
-                            .background(Color.black.opacity(0.36))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, safeTop + 4)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: safeTop + 70, alignment: .top)
-        .ignoresSafeArea(edges: .top)
     }
 
     private func ratingUnitRow(unit: WebRatingUnit) -> some View {
