@@ -184,23 +184,17 @@ struct CreateSquadView: View {
                     }
 
                     if let flagURL = AppConfig.resolvedURLString(squadFlagURL),
-                       let url = URL(string: flagURL),
-                       (flagURL.hasPrefix("http://") || flagURL.hasPrefix("https://")) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            default:
+                       (flagURL.hasPrefix("http://") || flagURL.hasPrefix("https://")),
+                       URL(string: flagURL) != nil {
+                        ImageLoaderView(urlString: flagURL)
+                            .background(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .fill(RaverTheme.card)
                                     .overlay(
                                         Image(systemName: "flag.pattern.checkered")
                                             .foregroundStyle(RaverTheme.secondaryText)
                                     )
-                            }
-                        }
+                            )
                         .frame(maxWidth: .infinity)
                         .frame(height: 88)
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -356,22 +350,10 @@ struct CreateSquadView: View {
     @ViewBuilder
     private func avatar(for user: UserSummary) -> some View {
         if let resolved = AppConfig.resolvedURLString(user.avatarURL),
-           let remoteURL = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    avatarFallback(for: user)
-                @unknown default:
-                    avatarFallback(for: user)
-                }
-            }
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(avatarFallback(for: user))
             .frame(width: 34, height: 34)
             .clipShape(Circle())
         } else {
@@ -567,6 +549,7 @@ struct CreateSquadView: View {
 }
 
 struct MessagesHomeView: View {
+    @Environment(\.appPush) private var appPush
     @Environment(\.messagesPush) private var messagesPush
     @ObservedObject var chatViewModel: MessagesViewModel
     @ObservedObject var alertViewModel: MessageNotificationsViewModel
@@ -606,7 +589,7 @@ struct MessagesHomeView: View {
             } else {
                 List(chatViewModel.conversations) { conversation in
                     Button {
-                        messagesPush(.conversation(conversation))
+                        appPush(.conversation(conversationID: conversation.id))
                         Task {
                             await chatViewModel.markConversationRead(conversationID: conversation.id)
                             onUnreadStateChanged()
@@ -751,44 +734,16 @@ struct MessagesHomeView: View {
     private func conversationAvatar(_ conversation: Conversation) -> some View {
         if conversation.type == .group,
            let resolved = AppConfig.resolvedURLString(conversation.avatarURL),
-           let remoteURL = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    Image(
-                        AppConfig.resolvedGroupAvatarAssetName(
-                            groupID: conversation.id,
-                            groupName: conversation.title,
-                            avatarURL: conversation.avatarURL
-                        )
-                    )
-                    .resizable()
-                    .scaledToFill()
-                @unknown default:
-                    Circle().fill(RaverTheme.card)
-                }
-            }
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(fallbackConversationAvatar(conversation))
         } else if conversation.type == .direct,
                   let resolved = AppConfig.resolvedURLString(conversation.peer?.avatarURL ?? conversation.avatarURL),
-                  let remoteURL = URL(string: resolved),
-                  resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    fallbackConversationAvatar(conversation)
-                @unknown default:
-                    Circle().fill(RaverTheme.card)
-                }
-            }
+                  resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+                  URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(fallbackConversationAvatar(conversation))
         } else {
             fallbackConversationAvatar(conversation)
         }
@@ -826,6 +781,7 @@ struct MessagesHomeView: View {
 }
 
 struct MessageAlertDetailView: View {
+    @Environment(\.appPush) private var appPush
     @Environment(\.messagesPush) private var messagesPush
     @Environment(\.messagesPresent) private var messagesPresent
     let category: MessageAlertCategory
@@ -881,20 +837,10 @@ struct MessageAlertDetailView: View {
     private func alertLeadingAvatar(for item: AppNotification) -> some View {
         if let actor = item.actor {
             if let resolved = AppConfig.resolvedURLString(actor.avatarURL),
-               let remoteURL = URL(string: resolved),
-               resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-                AsyncImage(url: remoteURL) { phase in
-                    switch phase {
-                    case .empty:
-                        Circle().fill(RaverTheme.cardBorder)
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .failure:
-                        alertLeadingAvatarFallback(actor)
-                    @unknown default:
-                        Circle().fill(RaverTheme.cardBorder)
-                    }
-                }
+               resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+               URL(string: resolved) != nil {
+                ImageLoaderView(urlString: resolved)
+                    .background(alertLeadingAvatarFallback(actor))
                 .frame(width: 30, height: 30)
                 .clipShape(Circle())
             } else {
@@ -915,7 +861,7 @@ struct MessageAlertDetailView: View {
         switch target.type {
         case "user":
             if let actor = item.actor {
-                messagesPush(.userProfile(actor.id))
+                appPush(.userProfile(userID: actor.id))
             }
         case "squad":
             messagesPresent(.squadProfile(target.id))

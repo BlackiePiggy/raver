@@ -114,206 +114,204 @@ struct ComposePostView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 14) {
-                HStack {
-                    Text(LL("正文"))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(RaverTheme.primaryText)
-                    Spacer()
-                    Text("\(text.count)/\(maxContentLength)")
-                        .font(.caption)
-                        .foregroundStyle(text.count >= maxContentLength ? Color.orange : RaverTheme.secondaryText)
-                }
+        VStack(spacing: 14) {
+            HStack {
+                Text(LL("正文"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                Text("\(text.count)/\(maxContentLength)")
+                    .font(.caption)
+                    .foregroundStyle(text.count >= maxContentLength ? Color.orange : RaverTheme.secondaryText)
+            }
 
-                ZStack(alignment: .topLeading) {
-                    AutoGrowingTextView(
-                        text: $text,
-                        calculatedHeight: $contentEditorHeight,
-                        minHeight: 96,
-                        maxHeight: 220
-                    )
-                    .frame(height: contentEditorHeight)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
+            ZStack(alignment: .topLeading) {
+                AutoGrowingTextView(
+                    text: $text,
+                    calculatedHeight: $contentEditorHeight,
+                    minHeight: 96,
+                    maxHeight: 220
+                )
+                .frame(height: contentEditorHeight)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
 
-                    if text.isEmpty {
-                        Text(LL("分享这一刻..."))
-                            .font(.body)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 14)
-                            .allowsHitTesting(false)
-                    }
-                }
-                .background(RaverTheme.card)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .onChange(of: text) { _, newValue in
-                    guard newValue.count > maxContentLength else { return }
-                    text = String(newValue.prefix(maxContentLength))
-                }
-
-                HStack(spacing: 10) {
-                    Text(LL("媒体"))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(RaverTheme.primaryText)
-                    Spacer()
-                    Text("\(mediaEntries.count)/\(maxMediaCount)")
-                        .font(.caption)
+                if text.isEmpty {
+                    Text(LL("分享这一刻..."))
+                        .font(.body)
                         .foregroundStyle(RaverTheme.secondaryText)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 14)
+                        .allowsHitTesting(false)
+                }
+            }
+            .background(RaverTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .onChange(of: text) { _, newValue in
+                guard newValue.count > maxContentLength else { return }
+                text = String(newValue.prefix(maxContentLength))
+            }
+
+            HStack(spacing: 10) {
+                Text(LL("媒体"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                Text("\(mediaEntries.count)/\(maxMediaCount)")
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3),
+                spacing: 6
+            ) {
+                ForEach(mediaEntries) { entry in
+                    composeMediaTile(entry)
+                        .onTapGesture {
+                            guard let index = mediaEntries.firstIndex(of: entry) else { return }
+                            selectedPreview = ComposeMediaPreviewSelection(index: index)
+                        }
+                        .contentShape(Rectangle())
+                        .zIndex(draggingMedia?.id == entry.id ? 1 : 0)
+                        .scaleEffect(draggingMedia?.id == entry.id ? 0.96 : 1)
+                        .opacity(draggingMedia?.id == entry.id ? 0.82 : 1)
+                        .onDrag {
+                            draggingMedia = entry
+                            return NSItemProvider(object: entry.id.uuidString as NSString)
+                        }
+                        .onDrop(
+                            of: [UTType.plainText],
+                            delegate: ComposeMediaDropDelegate(
+                                destinationItem: entry,
+                                items: $mediaEntries,
+                                draggingItem: $draggingMedia
+                            )
+                        )
                 }
 
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3),
-                    spacing: 6
-                ) {
-                    ForEach(mediaEntries) { entry in
-                        composeMediaTile(entry)
-                            .onTapGesture {
-                                guard let index = mediaEntries.firstIndex(of: entry) else { return }
-                                selectedPreview = ComposeMediaPreviewSelection(index: index)
-                            }
-                            .contentShape(Rectangle())
-                            .zIndex(draggingMedia?.id == entry.id ? 1 : 0)
-                            .scaleEffect(draggingMedia?.id == entry.id ? 0.96 : 1)
-                            .opacity(draggingMedia?.id == entry.id ? 0.82 : 1)
-                            .onDrag {
-                                draggingMedia = entry
-                                return NSItemProvider(object: entry.id.uuidString as NSString)
-                            }
-                            .onDrop(
-                                of: [UTType.plainText],
-                                delegate: ComposeMediaDropDelegate(
-                                    destinationItem: entry,
-                                    items: $mediaEntries,
-                                    draggingItem: $draggingMedia
-                                )
-                            )
-                    }
+                if mediaEntries.count < maxMediaCount {
+                    PhotosPicker(
+                        selection: $selectedMediaItems,
+                        maxSelectionCount: max(0, maxMediaCount - mediaEntries.count),
+                        matching: .any(of: [.images, .videos])
+                    ) {
+                        ZStack {
+                            RaverTheme.card
 
-                    if mediaEntries.count < maxMediaCount {
-                        PhotosPicker(
-                            selection: $selectedMediaItems,
-                            maxSelectionCount: max(0, maxMediaCount - mediaEntries.count),
-                            matching: .any(of: [.images, .videos])
-                        ) {
-                            ZStack {
-                                RaverTheme.card
-
-                                if isUploadingMedia {
-                                    ProgressView()
-                                        .tint(RaverTheme.primaryText)
-                                } else {
-                                    VStack(spacing: 6) {
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 20, weight: .semibold))
-                                            .foregroundStyle(RaverTheme.secondaryText)
-                                        Text(LL("添加"))
-                                            .font(.caption)
-                                            .foregroundStyle(RaverTheme.secondaryText)
-                                    }
+                            if isUploadingMedia {
+                                ProgressView()
+                                    .tint(RaverTheme.primaryText)
+                            } else {
+                                VStack(spacing: 6) {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 20, weight: .semibold))
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                    Text(LL("添加"))
+                                        .font(.caption)
+                                        .foregroundStyle(RaverTheme.secondaryText)
                                 }
                             }
-                            .aspectRatio(1, contentMode: .fit)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(isUploadingMedia)
+                        .aspectRatio(1, contentMode: .fit)
                     }
+                    .buttonStyle(.plain)
+                    .disabled(isUploadingMedia)
                 }
-                .animation(.spring(response: 0.26, dampingFraction: 0.84), value: mediaEntries)
-                .onDrop(
-                    of: [UTType.plainText],
-                    delegate: ComposeMediaDropOutsideDelegate(draggingItem: $draggingMedia)
-                )
+            }
+            .animation(.spring(response: 0.26, dampingFraction: 0.84), value: mediaEntries)
+            .onDrop(
+                of: [UTType.plainText],
+                delegate: ComposeMediaDropOutsideDelegate(draggingItem: $draggingMedia)
+            )
 
-                locationSection
+            locationSection
 
-                Button {
-                    Task { await submitPost() }
+            Button {
+                Task { await submitPost() }
+            } label: {
+                if isSending {
+                    ProgressView().tint(.white)
+                } else {
+                    Text(submitButtonTitle)
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(!canSend)
+
+            if isEditMode {
+                Button(role: .destructive) {
+                    isDeleteConfirmationPresented = true
                 } label: {
-                    if isSending {
-                        ProgressView().tint(.white)
+                    if isDeleting {
+                        ProgressView()
+                            .tint(.red)
                     } else {
-                        Text(submitButtonTitle)
+                        Text(LL("删除动态"))
+                            .font(.subheadline.weight(.semibold))
                     }
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(!canSend)
+                .buttonStyle(.bordered)
+                .disabled(isDeleting || isSending || isUploadingMedia)
+            }
 
-                if isEditMode {
-                    Button(role: .destructive) {
-                        isDeleteConfirmationPresented = true
-                    } label: {
-                        if isDeleting {
-                            ProgressView()
-                                .tint(.red)
-                        } else {
-                            Text(LL("删除动态"))
-                                .font(.subheadline.weight(.semibold))
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isDeleting || isSending || isUploadingMedia)
+            Spacer()
+        }
+        .padding(16)
+        .foregroundStyle(RaverTheme.primaryText)
+        .background(RaverTheme.background)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(pageTitle)
+                    .font(.headline)
+                    .foregroundStyle(RaverTheme.primaryText)
+            }
+            ToolbarItem(placement: .topBarLeading) {
+                Button(L("返回", "Back")) {
+                    dismiss()
                 }
-
-                Spacer()
+                .font(.subheadline.weight(.semibold))
             }
-            .padding(16)
-            .foregroundStyle(RaverTheme.primaryText)
-            .background(RaverTheme.background)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text(pageTitle)
-                        .font(.headline)
-                        .foregroundStyle(RaverTheme.primaryText)
+        }
+        .onChange(of: selectedMediaItems) { _, newValue in
+            guard !newValue.isEmpty else { return }
+            Task {
+                await uploadSelectedMedia(from: newValue)
+            }
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { toast != nil },
+            set: { if !$0 { toast = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(toast ?? "")
+        }
+        .confirmationDialog(
+            L("确认删除这条动态吗？", "Are you sure you want to delete this post?"),
+            isPresented: $isDeleteConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button(LL("删除动态"), role: .destructive) {
+                Task { await deletePost() }
+            }
+            Button(L("取消", "Cancel"), role: .cancel) {}
+        }
+        .fullScreenCover(item: $selectedPreview) { preview in
+            ComposeMediaBrowserView(
+                entries: mediaEntries,
+                initialIndex: preview.index
+            )
+        }
+        .fullScreenCover(isPresented: $showLocationPicker) {
+            PostLocationPickerSheet(
+                initialQuery: normalizedLocationTag ?? "",
+                onSelect: { selected in
+                    locationTag = selected
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(L("返回", "Back")) {
-                        dismiss()
-                    }
-                    .font(.subheadline.weight(.semibold))
-                }
-            }
-            .onChange(of: selectedMediaItems) { _, newValue in
-                guard !newValue.isEmpty else { return }
-                Task {
-                    await uploadSelectedMedia(from: newValue)
-                }
-            }
-            .alert(L("提示", "Notice"), isPresented: Binding(
-                get: { toast != nil },
-                set: { if !$0 { toast = nil } }
-            )) {
-                Button(L("确定", "OK"), role: .cancel) {}
-            } message: {
-                Text(toast ?? "")
-            }
-            .confirmationDialog(
-                L("确认删除这条动态吗？", "Are you sure you want to delete this post?"),
-                isPresented: $isDeleteConfirmationPresented,
-                titleVisibility: .visible
-            ) {
-                Button(LL("删除动态"), role: .destructive) {
-                    Task { await deletePost() }
-                }
-                Button(L("取消", "Cancel"), role: .cancel) {}
-            }
-            .fullScreenCover(item: $selectedPreview) { preview in
-                ComposeMediaBrowserView(
-                    entries: mediaEntries,
-                    initialIndex: preview.index
-                )
-            }
-            .fullScreenCover(isPresented: $showLocationPicker) {
-                PostLocationPickerSheet(
-                    initialQuery: normalizedLocationTag ?? "",
-                    onSelect: { selected in
-                        locationTag = selected
-                    }
-                )
-            }
+            )
         }
     }
 
@@ -450,20 +448,8 @@ struct ComposePostView: View {
                                 mediaPlaceholder
                             }
                         } else if let remoteURL {
-                            AsyncImage(url: remoteURL) { phase in
-                                switch phase {
-                                case .empty:
-                                    mediaPlaceholder
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                case .failure:
-                                    mediaPlaceholder
-                                @unknown default:
-                                    mediaPlaceholder
-                                }
-                            }
+                            ImageLoaderView(urlString: remoteURL.absoluteString)
+                                .background(mediaPlaceholder)
                         } else {
                             mediaPlaceholder
                         }
@@ -615,7 +601,7 @@ private struct ComposeMediaBrowserView: View {
                         if isVideo, let mediaURL {
                             ComposeFullscreenVideoPlayer(url: mediaURL)
                         } else if let mediaURL {
-                            ComposeZoomableAsyncImage(url: mediaURL)
+                            ComposeZoomableRemoteImage(url: mediaURL)
                         } else {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 28, weight: .semibold))
@@ -683,7 +669,7 @@ private struct ComposeFullscreenVideoPlayer: View {
     }
 }
 
-private struct ComposeZoomableAsyncImage: View {
+private struct ComposeZoomableRemoteImage: View {
     let url: URL
     private let minimumScale: CGFloat = 1
     private let maximumScale: CGFloat = 4
@@ -696,49 +682,36 @@ private struct ComposeZoomableAsyncImage: View {
 
     var body: some View {
         GeometryReader { proxy in
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    ProgressView().tint(.white)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .scaleEffect(displayScale)
-                        .offset(currentOffset)
-                        .contentShape(Rectangle())
-                        .gesture(
-                            SimultaneousGesture(
-                                magnificationGesture(in: proxy.size),
-                                dragGesture(in: proxy.size)
-                            )
-                        )
-                        .simultaneousGesture(
-                            TapGesture(count: 2).onEnded {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    if displayScale > minimumScale + 0.01 {
-                                        resetZoom()
-                                    } else {
-                                        baseScale = quickZoomScale
-                                        gestureScale = 1
-                                        currentOffset = .zero
-                                        accumulatedOffset = .zero
-                                    }
-                                }
-                            }
-                        )
-                case .failure:
+            ImageLoaderView(urlString: url.absoluteString, resizingMode: .fit)
+                .background(
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 28, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.85))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                @unknown default:
-                    EmptyView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
+                )
+                .scaleEffect(displayScale)
+                .offset(currentOffset)
+                .contentShape(Rectangle())
+                .gesture(
+                    SimultaneousGesture(
+                        magnificationGesture(in: proxy.size),
+                        dragGesture(in: proxy.size)
+                    )
+                )
+                .simultaneousGesture(
+                    TapGesture(count: 2).onEnded {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            if displayScale > minimumScale + 0.01 {
+                                resetZoom()
+                            } else {
+                                baseScale = quickZoomScale
+                                gestureScale = 1
+                                currentOffset = .zero
+                                accumulatedOffset = .zero
+                            }
+                        }
+                    }
+                )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black)
         }

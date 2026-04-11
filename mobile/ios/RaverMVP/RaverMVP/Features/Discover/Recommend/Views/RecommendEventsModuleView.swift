@@ -15,6 +15,8 @@ struct DiscoverRecommendEventsRootView: View {
 struct RecommendEventsModuleView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
+    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: RecommendEventsViewModel
 
     private let cardCornerRadius: CGFloat = 28
@@ -22,17 +24,6 @@ struct RecommendEventsModuleView: View {
     private static var didLogRecommendFontDiagnostics = false
 
     @State private var scrollPositionID: String?
-    @State private var isLoopJumping = false
-
-    private struct RecommendationLoopItem: Identifiable {
-        let id: String
-        let event: WebEvent
-        let eventIndex: Int
-        let replicaIndex: Int
-    }
-
-    private let loopReplicaCount = 31
-    private var loopCenterReplica: Int { loopReplicaCount / 2 }
 
     init(viewModel: RecommendEventsViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -79,18 +70,19 @@ struct RecommendEventsModuleView: View {
     private var recommendationPager: some View {
         ScrollView(.vertical) {
             LazyVStack(spacing: 0) {
-                ForEach(loopItems) { item in
-                    recommendationCard(item.event)
-                        .id(item.id)
+                ForEach(viewModel.events) { event in
+                    recommendationCard(event)
+                        .id(event.id)
                         .containerRelativeFrame(.vertical)
                         .scrollTransition(axis: .vertical) { content, phase in
                             content
-                                .scaleEffect(phase.isIdentity ? 1 : 0.93)
+                                .scaleEffect(phase.isIdentity ? 1 : 0.93, anchor: .top)
                                 .opacity(phase.isIdentity ? 1 : 0.66)
                                 .blur(radius: phase.isIdentity ? 0 : 2.4)
                                 .rotation3DEffect(
                                     .degrees(phase.isIdentity ? 0 : 5.5),
                                     axis: (x: 1, y: 0, z: 0),
+                                    anchor: .top,
                                     perspective: 0.72
                                 )
                                 .saturation(phase.isIdentity ? 1.05 : 0.86)
@@ -102,29 +94,24 @@ struct RecommendEventsModuleView: View {
         .scrollIndicators(.hidden)
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $scrollPositionID)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: max(0, tabBarReservedHeight))
+        }
         .overlay(alignment: .trailing) {
             pageIndicator
                 .padding(.trailing, 10)
         }
         .onAppear {
             if scrollPositionID == nil {
-                scrollPositionID = centerPageID(for: 0)
+                scrollPositionID = viewModel.events.first?.id
             }
         }
         .onChange(of: viewModel.events) { _, _ in
-            let validIDs = Set(loopItems.map(\.id))
+            let validIDs = Set(viewModel.events.map(\.id))
             if let current = scrollPositionID, validIDs.contains(current) {
                 return
             }
-            scrollPositionID = centerPageID(for: 0)
-        }
-        .onChange(of: scrollPositionID) { _, newValue in
-            guard viewModel.events.count > 1, let newValue, !isLoopJumping,
-                  let item = loopItemByID[newValue] else { return }
-            let distanceToCenter = abs(item.replicaIndex - loopCenterReplica)
-            if distanceToCenter >= 3 {
-                jumpToLoopTarget(centerPageID(for: item.eventIndex))
-            }
+            scrollPositionID = viewModel.events.first?.id
         }
     }
 
@@ -141,63 +128,19 @@ struct RecommendEventsModuleView: View {
 
     private var currentIndex: Int {
         guard let id = scrollPositionID else { return 0 }
-        return loopItemByID[id]?.eventIndex ?? 0
-    }
-
-    private var loopItems: [RecommendationLoopItem] {
-        guard !viewModel.events.isEmpty else { return [] }
-        var items: [RecommendationLoopItem] = []
-        for replica in 0..<loopReplicaCount {
-            for (index, event) in viewModel.events.enumerated() {
-                items.append(
-                    RecommendationLoopItem(
-                        id: loopID(replica: replica, event: event, eventIndex: index),
-                        event: event,
-                        eventIndex: index,
-                        replicaIndex: replica
-                    )
-                )
-            }
-        }
-        return items
-    }
-
-    private var loopItemByID: [String: RecommendationLoopItem] {
-        Dictionary(uniqueKeysWithValues: loopItems.map { ($0.id, $0) })
-    }
-
-    private func loopID(replica: Int, event: WebEvent, eventIndex: Int) -> String {
-        "loop-\(replica)-\(eventIndex)-\(event.id)"
-    }
-
-    private func centerPageID(for eventIndex: Int) -> String? {
-        guard viewModel.events.indices.contains(eventIndex) else { return nil }
-        return loopID(replica: loopCenterReplica, event: viewModel.events[eventIndex], eventIndex: eventIndex)
-    }
-
-    private func jumpToLoopTarget(_ target: String?) {
-        guard let target else { return }
-        isLoopJumping = true
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 140_000_000)
-            var tx = Transaction()
-            tx.disablesAnimations = true
-            withTransaction(tx) {
-                scrollPositionID = target
-            }
-            try? await Task.sleep(nanoseconds: 80_000_000)
-            isLoopJumping = false
-        }
+        return viewModel.events.firstIndex(where: { $0.id == id }) ?? 0
     }
 
     private func recommendationCard(_ event: WebEvent) -> some View {
         GeometryReader { proxy in
+            let topInset: CGFloat = 10
+            let horizontalInset: CGFloat = 10
             let cardWidth = max(0, proxy.size.width - 20)
-            let cardHeight = max(0, proxy.size.height - 20)
+            let cardHeight = max(0, proxy.size.height - topInset)
             let cardShape = RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
 
             Button {
-                discoverPush(.eventDetail(eventID: event.id))
+                appPush(.eventDetail(eventID: event.id))
             } label: {
                 ZStack {
                     recommendationCover(for: event)
@@ -262,35 +205,18 @@ struct RecommendEventsModuleView: View {
                 .shadow(color: Color.black.opacity(0.40), radius: 20, x: 0, y: 10)
             }
             .buttonStyle(.plain)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .padding(.top, topInset)
+            .padding(.horizontal, horizontalInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
     }
 
     @ViewBuilder
     private func recommendationCover(for event: WebEvent) -> some View {
-        if let cover = AppConfig.resolvedURLString(event.coverAssetURL),
-           let url = URL(string: cover) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    Color.black.opacity(0.72)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                case .failure:
-                    recommendationFallbackCover
-                @unknown default:
-                    recommendationFallbackCover
-                }
-            }
+        ImageLoaderView(urlString: event.coverAssetURL, resizingMode: .fill)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(recommendationFallbackCover)
             .clipped()
-        } else {
-            recommendationFallbackCover
-        }
     }
 
     private var recommendationFallbackCover: some View {

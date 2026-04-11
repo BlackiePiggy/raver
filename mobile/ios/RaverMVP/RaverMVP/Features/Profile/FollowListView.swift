@@ -18,7 +18,7 @@ enum FollowListKind: String, Identifiable {
 
 struct FollowListView: View {
     @EnvironmentObject private var appState: AppState
-    @Environment(\.profilePush) private var profilePush
+    @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: FollowListViewModel
 
     init(userID: String, kind: FollowListKind, repository: ProfileSocialRepository) {
@@ -47,7 +47,7 @@ struct FollowListView: View {
             } else {
                 ForEach(viewModel.users) { user in
                     Button {
-                        profilePush(.userProfile(user.id))
+                        appPush(.userProfile(userID: user.id))
                     } label: {
                         HStack(spacing: 12) {
                             // 头像
@@ -128,22 +128,10 @@ struct FollowListView: View {
     @ViewBuilder
     private func userAvatar(_ user: UserSummary) -> some View {
         if let resolved = AppConfig.resolvedURLString(user.avatarURL),
-           let remoteURL = URL(string: resolved),
+           URL(string: resolved) != nil,
            resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    userAvatarFallback(user)
-                @unknown default:
-                    userAvatarFallback(user)
-                }
-            }
+            ImageLoaderView(urlString: resolved)
+                .background(userAvatarFallback(user))
             .frame(width: 48, height: 48)
             .clipShape(Circle())
         } else {

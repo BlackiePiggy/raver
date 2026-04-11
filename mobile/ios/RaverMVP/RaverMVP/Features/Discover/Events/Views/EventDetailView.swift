@@ -29,6 +29,7 @@ struct EventDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
 
@@ -810,7 +811,7 @@ struct EventDetailView: View {
         } else {
             ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
                 Button {
-                    discoverPush(.newsDetail(article: article))
+                    discoverPush(.newsDetail(articleID: article.id))
                 } label: {
                     DiscoverNewsRow(article: article, showsSummary: false)
                 }
@@ -927,31 +928,14 @@ struct EventDetailView: View {
 
         if let organizer = event.organizer {
             GlassCard {
-                NavigationLink {
-                    UserProfileView(userID: organizer.id)
+                Button {
+                    appPush(.userProfile(userID: organizer.id))
                 } label: {
                     HStack(spacing: 10) {
-                        if let avatar = AppConfig.resolvedURLString(organizer.avatarUrl),
-                           let url = URL(string: avatar),
-                           avatar.hasPrefix("http://") || avatar.hasPrefix("https://") {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .empty:
-                                    Circle().fill(RaverTheme.card)
-                                case .success(let image):
-                                    image.resizable().scaledToFill()
-                                case .failure:
-                                    organizerAvatarFallback(organizer)
-                                @unknown default:
-                                    organizerAvatarFallback(organizer)
-                                }
-                            }
+                        ImageLoaderView(urlString: organizer.avatarUrl, resizingMode: .fill)
+                            .background(organizerAvatarFallback(organizer))
                             .frame(width: 38, height: 38)
                             .clipShape(Circle())
-                        } else {
-                            organizerAvatarFallback(organizer)
-                                .frame(width: 38, height: 38)
-                        }
                         VStack(alignment: .leading, spacing: 3) {
                             Text(LL("发布方"))
                                 .font(.caption)
@@ -1015,35 +999,19 @@ struct EventDetailView: View {
                         }
                     }
 
-                    if let resolved = AppConfig.resolvedURLString(rawURL),
-                       let mediaURL = URL(string: resolved) {
-                        AsyncImage(url: mediaURL) { phase in
-                            switch phase {
-                            case .empty:
-                                ProgressView()
-                                    .frame(width: cardWidth)
-                                    .frame(minHeight: 180)
-                                    .background(RaverTheme.card)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: cardWidth, alignment: .center)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            case .failure:
+                    if let resolved = AppConfig.resolvedURLString(rawURL) {
+                        ImageLoaderView(urlString: resolved, resizingMode: .fit)
+                            .frame(width: cardWidth)
+                            .frame(minHeight: 180)
+                            .background(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                                     .fill(RaverTheme.card)
-                                    .frame(width: cardWidth)
-                                    .frame(minHeight: 180)
                                     .overlay(
                                         Image(systemName: "photo")
                                             .foregroundStyle(RaverTheme.secondaryText)
                                     )
-                            @unknown default:
-                                EmptyView()
-                            }
-                        }
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     } else {
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(RaverTheme.card)
@@ -1134,8 +1102,8 @@ struct EventDetailView: View {
                 .padding(.vertical, 8)
         } else {
             ForEach(relatedEventSets) { set in
-                NavigationLink {
-                    DJSetDetailView(setID: set.id)
+                Button {
+                    discoverPush(.setDetail(setID: set.id))
                 } label: {
                     HStack(spacing: 10) {
                         eventRatingThumb(urlString: set.thumbnailUrl, size: 52)
@@ -1175,35 +1143,18 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private func eventRatingThumb(urlString: String?, size: CGFloat) -> some View {
-        if let resolved = AppConfig.resolvedURLString(urlString),
-           let url = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(RaverTheme.card)
-                        .overlay(
-                            Image(systemName: "star.leadinghalf.filled")
-                                .font(.system(size: size * 0.32, weight: .semibold))
-                                .foregroundStyle(Color.white.opacity(0.9))
-                        )
-                }
-            }
+        ImageLoaderView(urlString: urlString, resizingMode: .fill)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(RaverTheme.card)
+                    .overlay(
+                        Image(systemName: "star.leadinghalf.filled")
+                            .font(.system(size: size * 0.32, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.9))
+                    )
+            )
             .frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        } else {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(RaverTheme.card)
-                .frame(width: size, height: size)
-                .overlay(
-                    Image(systemName: "star.leadinghalf.filled")
-                        .font(.system(size: size * 0.32, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.9))
-                )
-        }
     }
 
     private func eventSchedulePreviewRow(_ slot: WebEventLineupSlot) -> some View {
@@ -1323,22 +1274,10 @@ struct EventDetailView: View {
             GeometryReader { geo in
                 ZStack {
                     RaverTheme.card
-                    if let cover = AppConfig.resolvedURLString(event.coverAssetURL), let url = URL(string: cover) {
-                        AsyncImage(url: url, transaction: Transaction(animation: .none)) { phase in
-                            switch phase {
-                            case .empty:
-                                RaverTheme.card
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
-                            case .failure:
-                                RaverTheme.card
-                            @unknown default:
-                                RaverTheme.card
-                            }
-                        }
+                    if let cover = AppConfig.resolvedURLString(event.coverAssetURL) {
+                        ImageLoaderView(urlString: cover)
+                            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                            .background(RaverTheme.card)
                     } else {
                         LinearGradient(
                             colors: [RaverTheme.accent.opacity(0.35), RaverTheme.card],
@@ -1577,12 +1516,12 @@ struct EventDetailView: View {
 
             if let event, isMine(event) {
                 floatingCircleButton(systemName: "square.and.pencil") {
-                    discoverPush(.eventEdit(event: event))
+                    discoverPush(.eventEdit(eventID: event.id))
                 }
             }
         }
         .padding(.horizontal, 12)
-        .padding(.top, 0)
+        .padding(.top, topSafeAreaInset() + 6)
         .zIndex(10)
     }
 
@@ -1688,8 +1627,8 @@ struct EventDetailView: View {
         if dj.act.type == .solo,
            let primaryPerformer = dj.act.performers.first,
            let djID = resolvedPerformerDJID(primaryPerformer) {
-            NavigationLink {
-                DJDetailView(djID: djID)
+            Button {
+                appPush(.djDetail(djID: djID))
             } label: {
                 content
             }
@@ -1748,8 +1687,8 @@ struct EventDetailView: View {
     @ViewBuilder
     private func lineupPerformerAvatarLink(_ performer: EventLineupPerformer, size: CGFloat) -> some View {
         if let djID = resolvedPerformerDJID(performer) {
-            NavigationLink {
-                DJDetailView(djID: djID)
+            Button {
+                appPush(.djDetail(djID: djID))
             } label: {
                 lineupPerformerAvatar(performer, size: size)
             }
@@ -1926,32 +1865,21 @@ struct EventDetailView: View {
     @ViewBuilder
     private func lineupPerformerAvatar(_ performer: EventLineupPerformer?, size: CGFloat) -> some View {
         let performerName = performer?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if let avatar = AppConfig.resolvedDJAvatarURLString(performer?.avatarUrl, size: .small),
-           let url = URL(string: avatar) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    Circle().fill(RaverTheme.card)
-                @unknown default:
-                    Circle().fill(RaverTheme.card)
-                }
-            }
-            .frame(width: size, height: size)
-            .clipShape(Circle())
-        } else {
+        ImageLoaderView(
+            urlString: AppConfig.resolvedDJAvatarURLString(performer?.avatarUrl, size: .small),
+            resizingMode: .fill
+        )
+        .background(
             Circle()
                 .fill(RaverTheme.card)
-                .frame(width: size, height: size)
                 .overlay(
                     Text(String((performerName.isEmpty ? "?" : performerName).prefix(1)).uppercased())
                         .font(.system(size: max(10, size * 0.3), weight: .bold))
                         .foregroundStyle(RaverTheme.secondaryText)
                 )
-        }
+        )
+        .frame(width: size, height: size)
+        .clipShape(Circle())
     }
 
     private func eventStatusPill(_ text: String, color: Color) -> some View {

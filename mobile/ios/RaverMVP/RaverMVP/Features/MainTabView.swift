@@ -3,52 +3,39 @@ import PhotosUI
 import UIKit
 import AVKit
 
+private struct RaverTabBarReservedHeightKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    var raverTabBarReservedHeight: CGFloat {
+        get { self[RaverTabBarReservedHeightKey.self] }
+        set { self[RaverTabBarReservedHeightKey.self] = newValue }
+    }
+}
+
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
+    @EnvironmentObject private var router: AppRouter
+    @Environment(\.discoverPush) private var discoverPush
     @Environment(\.scenePhase) private var scenePhase
-    @State private var internalSelectedTab: MainTab = .discover
-
-    private let externalSelectedTab: Binding<MainTab>?
-
-    init(selectedTab: Binding<MainTab>? = nil) {
-        externalSelectedTab = selectedTab
-    }
+    private let tabs: [MainTab] = [.discover, .circle, .messages, .profile]
 
     var body: some View {
-        TabView(selection: selectedTab) {
-            DiscoverCoordinatorView {
-                DiscoverHomeView()
+        ZStack(alignment: .bottom) {
+            tabContent(for: currentTab)
+                .environment(\.raverTabBarReservedHeight, tabBarReservedHeight)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .zIndex(1)
+
+            if !isTabBarHidden {
+                customTabBar
+                    .zIndex(2)
             }
-                .tag(MainTab.discover)
-                .tabItem {
-                    Label(L("发现", "Discover"), systemImage: "safari.fill")
-                }
-
-            CircleCoordinatorView {
-                CircleHomeView()
-            }
-                .tag(MainTab.circle)
-                .tabItem {
-                    Label(L("圈子", "Circle"), systemImage: "person.3.fill")
-                }
-
-            MessagesCoordinatorView(repository: appContainer.messagesRepository)
-                .tag(MainTab.messages)
-                .tabItem {
-                    Label(L("消息", "Messages"), systemImage: "bubble.left.and.bubble.right.fill")
-                }
-                .badge(appState.unreadMessagesCount > 0 ? Text("\(appState.unreadMessagesCount)") : nil)
-
-            ProfileCoordinatorView(
-                repository: appContainer.profileSocialRepository
-            )
-                .tag(MainTab.profile)
-                .tabItem {
-                    Label(L("我的", "Me"), systemImage: "person.crop.circle.fill")
-                }
         }
-        .tint(RaverTheme.accent)
+        .background(Color.black.opacity(0.05).ignoresSafeArea(.all))
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .task {
             await appState.refreshUnreadMessages()
         }
@@ -58,8 +45,153 @@ struct MainTabView: View {
         }
     }
 
-    private var selectedTab: Binding<MainTab> {
-        externalSelectedTab ?? $internalSelectedTab
+    private var currentTab: MainTab {
+        router.selectedTab
+    }
+
+    private var isTabBarHidden: Bool {
+        guard currentTab != .discover else { return false }
+        guard let topRoute = router.path.last else { return false }
+        return topRoute.hidesTabBar
+    }
+
+    private var bottomSafeAreaInset: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first(where: { $0.isKeyWindow })?
+            .safeAreaInsets.bottom ?? 0
+    }
+
+    private var tabBarReservedHeight: CGFloat {
+        guard !isTabBarHidden else { return 0 }
+        let barVisualHeight: CGFloat = 66
+        let legacyBottomPadding: CGFloat = bottomSafeAreaInset == 0 ? 20 : 0
+        return barVisualHeight + legacyBottomPadding
+    }
+
+    @ViewBuilder
+    private func tabContent(for tab: MainTab) -> some View {
+        switch tab {
+        case .discover:
+            DiscoverCoordinatorView(push: discoverPush) {
+                DiscoverHomeView()
+            }
+        case .circle:
+            CircleHomeView()
+        case .messages:
+            MessagesCoordinatorView(repository: appContainer.messagesRepository)
+        case .profile:
+            ProfileCoordinatorView(repository: appContainer.profileSocialRepository)
+        }
+    }
+
+    private var customTabBar: some View {
+        HStack(spacing: 6) {
+            ForEach(tabs, id: \.self) { tab in
+                Button {
+                    router.switchTab(tab)
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: currentTab == tab ? tab.selectedIcon : tab.icon)
+                            .renderingMode(.template)
+                            .font(.system(size: 16, weight: .semibold))
+                        Text(tab.title)
+                            .font(.system(size: 11, weight: currentTab == tab ? .semibold : .medium))
+                            .lineLimit(1)
+                    }
+                    .foregroundColor(currentTab == tab ? .white : .white.opacity(0.62))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background {
+                        if currentTab == tab {
+                            Capsule(style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(red: 0.52, green: 0.40, blue: 0.98).opacity(0.62),
+                                            Color(red: 0.42, green: 0.29, blue: 0.90).opacity(0.56)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .overlay(
+                                    Capsule(style: .continuous)
+                                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                                )
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(.ultraThinMaterial, in: Capsule())
+        .background(
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.10, green: 0.08, blue: 0.16).opacity(0.94),
+                            Color(red: 0.15, green: 0.10, blue: 0.25).opacity(0.90)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            Capsule()
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.24),
+                            Color(red: 0.72, green: 0.62, blue: 1.0).opacity(0.28)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: Color.black.opacity(0.46), radius: 18, x: 0, y: 10)
+        .shadow(color: Color(red: 0.43, green: 0.30, blue: 0.92).opacity(0.24), radius: 12, x: 0, y: 2)
+        .padding(.horizontal)
+        .padding(.bottom, bottomSafeAreaInset == 0 ? 20 : 0)
+    }
+
+}
+
+private extension MainTab {
+    var title: String {
+        switch self {
+        case .discover: return L("发现", "Discover")
+        case .circle: return L("圈子", "Circle")
+        case .messages: return L("消息", "Messages")
+        case .profile: return L("我的", "Me")
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .discover: return "safari"
+        case .circle: return "person.3"
+        case .messages: return "bubble.left.and.bubble.right"
+        case .profile: return "person.crop.circle"
+        }
+    }
+
+    var selectedIcon: String {
+        switch self {
+        case .discover: return "safari.fill"
+        case .circle: return "person.3.fill"
+        case .messages: return "bubble.left.and.bubble.right.fill"
+        case .profile: return "person.crop.circle.fill"
+        }
     }
 }
 
@@ -284,6 +416,38 @@ struct CircleIDUserSnapshot: Identifiable, Codable, Hashable {
     var displayName: String
     var avatarURL: String?
 
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case username
+        case displayName
+        case avatarURL
+        case avatarUrl
+    }
+
+    init(id: String, username: String, displayName: String, avatarURL: String?) {
+        self.id = id
+        self.username = username
+        self.displayName = displayName
+        self.avatarURL = avatarURL
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        username = try container.decode(String.self, forKey: .username)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        avatarURL = try container.decodeIfPresent(String.self, forKey: .avatarURL)
+            ?? container.decodeIfPresent(String.self, forKey: .avatarUrl)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(username, forKey: .username)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encodeIfPresent(avatarURL, forKey: .avatarURL)
+    }
+
     var shownName: String {
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return trimmed }
@@ -340,6 +504,7 @@ private struct CircleIDDetailRoute: Identifiable, Hashable {
 
 private struct CircleIDHubView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.appPush) private var appPush
     @Environment(\.circlePush) private var circlePush
 
     @State private var entries: [CircleIDEntry] = []
@@ -449,7 +614,7 @@ private struct CircleIDHubView: View {
 
             if let event = entry.event {
                 Button {
-                    circlePush(.eventDetail(event.id))
+                    appPush(.eventDetail(eventID: event.id))
                 } label: {
                     HStack(spacing: 10) {
                         circleIDEventCover(event)
@@ -483,7 +648,7 @@ private struct CircleIDHubView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(entry.djs) { dj in
                         Button {
-                            circlePush(.djDetail(dj.id))
+                            appPush(.djDetail(djID: dj.id))
                         } label: {
                             HStack(spacing: 8) {
                                 circleIDDJAvatar(dj, size: 24)
@@ -535,7 +700,7 @@ private struct CircleIDHubView: View {
 
             HStack(spacing: 8) {
                 Button {
-                    circlePush(.userProfile(entry.contributor.id))
+                    appPush(.userProfile(userID: entry.contributor.id))
                 } label: {
                     HStack(spacing: 8) {
                         circleIDUserAvatar(entry.contributor, size: 28)
@@ -592,21 +757,11 @@ private struct CircleIDHubView: View {
 
     @ViewBuilder
     private func circleIDUserAvatar(_ user: CircleIDUserSnapshot, size: CGFloat) -> some View {
-        if let resolved = AppConfig.resolvedURLString(user.avatarURL),
-           let remoteURL = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.cardBorder)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    circleIDUserAvatarFallback(user: user, size: size)
-                @unknown default:
-                    circleIDUserAvatarFallback(user: user, size: size)
-                }
-            }
+        if let resolved = AppConfig.resolvedURLString(resolvedCircleIDAvatarURL(for: user)),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(circleIDUserAvatarFallback(user: user, size: size))
             .frame(width: size, height: size)
             .clipShape(Circle())
         } else {
@@ -619,7 +774,7 @@ private struct CircleIDHubView: View {
             AppConfig.resolvedUserAvatarAssetName(
                 userID: user.id,
                 username: user.username,
-                avatarURL: user.avatarURL
+                avatarURL: resolvedCircleIDAvatarURL(for: user)
             )
         )
         .resizable()
@@ -629,23 +784,25 @@ private struct CircleIDHubView: View {
         .clipShape(Circle())
     }
 
+    private func resolvedCircleIDAvatarURL(for user: CircleIDUserSnapshot) -> String? {
+        let snapshotAvatar = user.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !snapshotAvatar.isEmpty {
+            return snapshotAvatar
+        }
+        guard let sessionUser = appState.session?.user, sessionUser.id == user.id else {
+            return nil
+        }
+        let sessionAvatar = sessionUser.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return sessionAvatar.isEmpty ? nil : sessionAvatar
+    }
+
     @ViewBuilder
     private func circleIDDJAvatar(_ dj: CircleIDDJSnapshot, size: CGFloat) -> some View {
         if let resolved = AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarUrl, size: .small),
-           let remoteURL = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.cardBorder)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    circleIDDJAvatarFallback(dj: dj, size: size)
-                @unknown default:
-                    circleIDDJAvatarFallback(dj: dj, size: size)
-                }
-            }
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(circleIDDJAvatarFallback(dj: dj, size: size))
             .frame(width: size, height: size)
             .clipShape(Circle())
         } else {
@@ -667,20 +824,10 @@ private struct CircleIDHubView: View {
     @ViewBuilder
     private func circleIDEventCover(_ event: CircleIDEventSnapshot) -> some View {
         if let resolved = AppConfig.resolvedURLString(event.coverImageUrl),
-           let remoteURL = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
-                @unknown default:
-                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
-                }
-            }
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder))
         } else {
             RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
         }
@@ -728,7 +875,12 @@ private struct CircleIDHubView: View {
             return
         }
         do {
-            entries = try JSONDecoder.raver.decode([CircleIDEntry].self, from: data)
+            let decoded = try JSONDecoder.raver.decode([CircleIDEntry].self, from: data)
+            let hydrated = hydrateEntriesForCurrentUser(decoded)
+            entries = hydrated
+            if hydrated != decoded {
+                persistEntries()
+            }
         } catch {
             entries = []
             errorMessage = error.userFacingMessage
@@ -762,6 +914,30 @@ private struct CircleIDHubView: View {
         )
     }
 
+    private func hydrateEntriesForCurrentUser(_ source: [CircleIDEntry]) -> [CircleIDEntry] {
+        guard let sessionUser = appState.session?.user else { return source }
+        let latest = CircleIDUserSnapshot(
+            id: sessionUser.id,
+            username: sessionUser.username,
+            displayName: sessionUser.displayName,
+            avatarURL: sessionUser.avatarURL
+        )
+
+        return source.map { entry in
+            var copy = entry
+            if copy.contributor.id == latest.id {
+                copy.contributor = latest
+            }
+            copy.comments = copy.comments.map { comment in
+                guard comment.author.id == latest.id else { return comment }
+                var updated = comment
+                updated.author = latest
+                return updated
+            }
+            return copy
+        }
+    }
+
     private func bindingForEntry(id: String) -> Binding<CircleIDEntry>? {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return nil }
         return $entries[index]
@@ -770,14 +946,13 @@ private struct CircleIDHubView: View {
 
 private struct CircleIDDetailView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.circlePush) private var circlePush
+    @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appState: AppState
 
     @Binding var entry: CircleIDEntry
     let onPersist: () -> Void
 
     @State private var commentDraft = ""
-    @State private var pendingRouteAfterDismiss: CircleRoute?
 
     var body: some View {
         ScrollView {
@@ -792,7 +967,7 @@ private struct CircleIDDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(entry.djs) { dj in
                             Button {
-                                dismissAndPush(.djDetail(dj.id))
+                                dismissAndPush(.djDetail(djID: dj.id))
                             } label: {
                                 HStack(spacing: 8) {
                                     circleIDDJAvatar(dj, size: 24)
@@ -810,7 +985,7 @@ private struct CircleIDDetailView: View {
 
                 if let event = entry.event {
                     Button {
-                        dismissAndPush(.eventDetail(event.id))
+                        dismissAndPush(.eventDetail(eventID: event.id))
                     } label: {
                         HStack(spacing: 10) {
                             circleIDEventCover(event)
@@ -874,7 +1049,7 @@ private struct CircleIDDetailView: View {
 
                 HStack(spacing: 8) {
                     Button {
-                        dismissAndPush(.userProfile(entry.contributor.id))
+                        dismissAndPush(.userProfile(userID: entry.contributor.id))
                     } label: {
                         HStack(spacing: 8) {
                             circleIDUserAvatar(entry.contributor, size: 28)
@@ -910,7 +1085,7 @@ private struct CircleIDDetailView: View {
                     } else {
                         ForEach(entry.comments) { comment in
                             Button {
-                                dismissAndPush(.userProfile(comment.author.id))
+                                dismissAndPush(.userProfile(userID: comment.author.id))
                             } label: {
                                 HStack(alignment: .top, spacing: 10) {
                                     circleIDUserAvatar(comment.author, size: 30)
@@ -963,11 +1138,6 @@ private struct CircleIDDetailView: View {
                     dismiss()
                 }
             }
-        }
-        .onDisappear {
-            guard let route = pendingRouteAfterDismiss else { return }
-            pendingRouteAfterDismiss = nil
-            circlePush(route)
         }
     }
 
@@ -1027,9 +1197,11 @@ private struct CircleIDDetailView: View {
         onPersist()
     }
 
-    private func dismissAndPush(_ route: CircleRoute) {
-        pendingRouteAfterDismiss = route
+    private func dismissAndPush(_ route: AppRoute) {
         dismiss()
+        DispatchQueue.main.async {
+            appPush(route)
+        }
     }
 
     private func currentUserSnapshot() -> CircleIDUserSnapshot {
@@ -1057,20 +1229,10 @@ private struct CircleIDDetailView: View {
     @ViewBuilder
     private func circleIDEventCover(_ event: CircleIDEventSnapshot) -> some View {
         if let resolved = AppConfig.resolvedURLString(event.coverImageUrl),
-           let remoteURL = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
-                @unknown default:
-                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
-                }
-            }
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder))
         } else {
             RoundedRectangle(cornerRadius: 10, style: .continuous).fill(RaverTheme.cardBorder)
         }
@@ -1079,20 +1241,10 @@ private struct CircleIDDetailView: View {
     @ViewBuilder
     private func circleIDDJAvatar(_ dj: CircleIDDJSnapshot, size: CGFloat) -> some View {
         if let resolved = AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarUrl, size: .small),
-           let remoteURL = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.cardBorder)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    circleIDDJAvatarFallback(dj: dj, size: size)
-                @unknown default:
-                    circleIDDJAvatarFallback(dj: dj, size: size)
-                }
-            }
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(circleIDDJAvatarFallback(dj: dj, size: size))
             .frame(width: size, height: size)
             .clipShape(Circle())
         } else {
@@ -1113,21 +1265,11 @@ private struct CircleIDDetailView: View {
 
     @ViewBuilder
     private func circleIDUserAvatar(_ user: CircleIDUserSnapshot, size: CGFloat) -> some View {
-        if let resolved = AppConfig.resolvedURLString(user.avatarURL),
-           let remoteURL = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.cardBorder)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    circleIDUserAvatarFallback(user: user, size: size)
-                @unknown default:
-                    circleIDUserAvatarFallback(user: user, size: size)
-                }
-            }
+        if let resolved = AppConfig.resolvedURLString(resolvedCircleIDAvatarURL(for: user)),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(circleIDUserAvatarFallback(user: user, size: size))
             .frame(width: size, height: size)
             .clipShape(Circle())
         } else {
@@ -1140,7 +1282,7 @@ private struct CircleIDDetailView: View {
             AppConfig.resolvedUserAvatarAssetName(
                 userID: user.id,
                 username: user.username,
-                avatarURL: user.avatarURL
+                avatarURL: resolvedCircleIDAvatarURL(for: user)
             )
         )
         .resizable()
@@ -1148,6 +1290,18 @@ private struct CircleIDDetailView: View {
         .frame(width: size, height: size)
         .background(RaverTheme.cardBorder)
         .clipShape(Circle())
+    }
+
+    private func resolvedCircleIDAvatarURL(for user: CircleIDUserSnapshot) -> String? {
+        let snapshotAvatar = user.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !snapshotAvatar.isEmpty {
+            return snapshotAvatar
+        }
+        guard let sessionUser = appState.session?.user, sessionUser.id == user.id else {
+            return nil
+        }
+        let sessionAvatar = sessionUser.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return sessionAvatar.isEmpty ? nil : sessionAvatar
     }
 }
 
@@ -1801,15 +1955,10 @@ private struct CircleIDDJPickerSheet: View {
     @ViewBuilder
     private func circleIDDJAvatar(dj: WebDJ, size: CGFloat) -> some View {
         if let resolved = AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarUrl, size: .small),
-           let remoteURL = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.cardBorder)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(
                     Circle()
                         .fill(RaverTheme.cardBorder)
                         .overlay(
@@ -1817,16 +1966,7 @@ private struct CircleIDDJPickerSheet: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(RaverTheme.secondaryText)
                         )
-                @unknown default:
-                    Circle()
-                        .fill(RaverTheme.cardBorder)
-                        .overlay(
-                            Text(String(dj.name.prefix(1)).uppercased())
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        )
-                }
-            }
+                )
             .frame(width: size, height: size)
             .clipShape(Circle())
         } else {
@@ -1945,7 +2085,7 @@ private struct SquadHallView: View {
 
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
-    @Environment(\.circlePush) private var circlePush
+    @Environment(\.appPush) private var appPush
 
     @State private var squads: [SquadSummary] = []
     @State private var mySquads: [SquadSummary] = []
@@ -2029,7 +2169,7 @@ private struct SquadHallView: View {
                     LazyVGrid(columns: cardColumns, spacing: 14) {
                         ForEach(displayedSquads) { squad in
                             Button {
-                                circlePush(.squadProfile(squad.id))
+                                appPush(.squadProfile(squadID: squad.id))
                             } label: {
                                 squadFlagCard(squad)
                             }
@@ -2055,7 +2195,7 @@ private struct SquadHallView: View {
         .navigationDestination(isPresented: $showCreateSquad) {
             CreateSquadView(service: appContainer.socialService) { conversation in
                 showCreateSquad = false
-                circlePush(.squadProfile(conversation.id))
+                appPush(.squadProfile(squadID: conversation.id))
                 Task { await loadSquads() }
             }
             .environmentObject(appState)
@@ -2086,34 +2226,16 @@ private struct SquadHallView: View {
     private func squadBackgroundImage(_ squad: SquadSummary) -> some View {
         let bannerURL = AppConfig.resolvedURLString(squad.bannerURL)
         if let bannerURL,
-           let url = URL(string: bannerURL),
-           bannerURL.hasPrefix("http://") || bannerURL.hasPrefix("https://") {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
+           bannerURL.hasPrefix("http://") || bannerURL.hasPrefix("https://"),
+           URL(string: bannerURL) != nil {
+            ImageLoaderView(urlString: bannerURL)
+                .background(
                     LinearGradient(
                         colors: [Color(red: 0.98, green: 0.63, blue: 0.32), Color(red: 0.87, green: 0.34, blue: 0.29)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    LinearGradient(
-                        colors: [Color(red: 0.98, green: 0.63, blue: 0.32), Color(red: 0.87, green: 0.34, blue: 0.29)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                @unknown default:
-                    LinearGradient(
-                        colors: [Color(red: 0.98, green: 0.63, blue: 0.32), Color(red: 0.87, green: 0.34, blue: 0.29)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                }
-            }
+                )
         } else {
             LinearGradient(
                 colors: [Color(red: 0.98, green: 0.63, blue: 0.32), Color(red: 0.87, green: 0.34, blue: 0.29)],
@@ -2131,22 +2253,10 @@ private struct SquadHallView: View {
     private func leaderAvatar(_ squad: SquadSummary) -> some View {
         if let leader = leaderUserSummary(for: squad) {
             if let resolved = AppConfig.resolvedURLString(leader.avatarURL),
-               let remoteURL = URL(string: resolved),
-               resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-                AsyncImage(url: remoteURL) { phase in
-                    switch phase {
-                    case .empty:
-                        Circle().fill(Color.white.opacity(0.22))
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        leaderAvatarFallback(leader)
-                    @unknown default:
-                        leaderAvatarFallback(leader)
-                    }
-                }
+               resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+               URL(string: resolved) != nil {
+                ImageLoaderView(urlString: resolved)
+                    .background(leaderAvatarFallback(leader))
                 .clipShape(Circle())
             } else {
                 leaderAvatarFallback(leader)
@@ -2496,6 +2606,7 @@ private struct CircleRatingHubView: View {
 
 struct CircleRatingEventDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appPush) private var appPush
     @Environment(\.circlePush) private var circlePush
     @EnvironmentObject private var appContainer: AppContainer
     private var service: WebFeatureService { appContainer.webService }
@@ -2528,16 +2639,8 @@ struct CircleRatingEventDetailView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     } else {
                         ForEach(event.units) { unit in
-                            NavigationLink {
-                                CircleRatingUnitDetailView(
-                                    unitID: unit.id,
-                                    onSubmitted: {
-                                        Task {
-                                            await loadEvent()
-                                            onUpdated()
-                                        }
-                                    }
-                                )
+                            Button {
+                                appPush(.ratingUnitDetail(unitID: unit.id))
                             } label: {
                                 ratingUnitRow(unit: unit)
                             }
@@ -2591,6 +2694,14 @@ struct CircleRatingEventDetailView: View {
             }
             event?.updatedAt = Date()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverRatingUnitDidUpdate)) { notification in
+            guard let updatedUnitID = notification.object as? String else { return }
+            guard event?.units.contains(where: { $0.id == updatedUnitID }) == true else { return }
+            Task {
+                await loadEvent()
+                onUpdated()
+            }
+        }
     }
 
     @ViewBuilder
@@ -2598,7 +2709,7 @@ struct CircleRatingEventDetailView: View {
         let sourceEventID = event.sourceEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !sourceEventID.isEmpty {
             Button {
-                circlePush(.eventDetail(sourceEventID))
+                appPush(.eventDetail(eventID: sourceEventID))
             } label: {
                 ratingEventHeaderCardContent(event, isLinkedToEvent: true)
             }
@@ -2778,6 +2889,7 @@ struct CircleRatingEventDetailView: View {
 }
 
 struct CircleRatingUnitDetailView: View {
+    @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
     private var socialService: SocialService { appContainer.socialService }
@@ -2828,22 +2940,16 @@ struct CircleRatingUnitDetailView: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 12) {
                                         ForEach(linkedDJs) { dj in
-                                            NavigationLink {
-                                                DJDetailView(djID: dj.id)
+                                            Button {
+                                                appPush(.djDetail(djID: dj.id))
                                             } label: {
                                                 VStack(spacing: 4) {
                                                     Group {
                                                         if let imageURL = AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarUrl, size: .small),
-                                                           let url = URL(string: imageURL),
-                                                           imageURL.hasPrefix("http://") || imageURL.hasPrefix("https://") {
-                                                            AsyncImage(url: url) { phase in
-                                                                switch phase {
-                                                                case .success(let image):
-                                                                    image.resizable().scaledToFill()
-                                                                default:
-                                                                    Circle().fill(RaverTheme.cardBorder)
-                                                                }
-                                                            }
+                                                           imageURL.hasPrefix("http://") || imageURL.hasPrefix("https://"),
+                                                           URL(string: imageURL) != nil {
+                                                            ImageLoaderView(urlString: imageURL)
+                                                                .background(Circle().fill(RaverTheme.cardBorder))
                                                         } else {
                                                             Circle().fill(RaverTheme.cardBorder)
                                                                 .overlay(
@@ -2906,8 +3012,8 @@ struct CircleRatingUnitDetailView: View {
                             ForEach(unit.comments) { comment in
                                 let author = resolvedAuthor(comment: comment)
                                 HStack(alignment: .top, spacing: 10) {
-                                    NavigationLink {
-                                        UserProfileView(userID: author.userID)
+                                    Button {
+                                        appPush(.userProfile(userID: author.userID))
                                     } label: {
                                         ratingCommentAvatar(
                                             userID: author.userID,
@@ -3024,20 +3130,10 @@ struct CircleRatingUnitDetailView: View {
     @ViewBuilder
     private func ratingCommentAvatar(userID: String, username: String, avatarURL: String?) -> some View {
         if let resolved = AppConfig.resolvedURLString(avatarURL),
-           let remoteURL = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.cardBorder)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    ratingCommentAvatarFallback(userID: userID, username: username, avatarURL: avatarURL)
-                @unknown default:
-                    ratingCommentAvatarFallback(userID: userID, username: username, avatarURL: avatarURL)
-                }
-            }
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(ratingCommentAvatarFallback(userID: userID, username: username, avatarURL: avatarURL))
             .frame(width: 34, height: 34)
             .clipShape(Circle())
         } else {
@@ -3625,22 +3721,10 @@ private struct RatingSquareImage: View {
     var body: some View {
         Group {
             if let imageURL = AppConfig.resolvedURLString(imageURL),
-               let remoteURL = URL(string: imageURL),
-               imageURL.hasPrefix("http://") || imageURL.hasPrefix("https://") {
-                AsyncImage(url: remoteURL) { phase in
-                    switch phase {
-                    case .empty:
-                        placeholder
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        placeholder
-                    @unknown default:
-                        placeholder
-                    }
-                }
+               imageURL.hasPrefix("http://") || imageURL.hasPrefix("https://"),
+               URL(string: imageURL) != nil {
+                ImageLoaderView(urlString: imageURL)
+                    .background(placeholder)
             } else {
                 placeholder
             }

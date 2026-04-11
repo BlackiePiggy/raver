@@ -4,6 +4,7 @@ struct DiscoverNewsDetailView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
 
     let article: DiscoverNewsArticle
 
@@ -214,7 +215,7 @@ struct DiscoverNewsDetailView: View {
                 HStack(spacing: 8) {
                     ForEach(relatedDJs) { dj in
                         Button {
-                            discoverPush(.djDetail(djID: dj.id))
+                            appPush(.djDetail(djID: dj.id))
                         } label: {
                             HStack(spacing: 6) {
                                 relatedDJAvatar(dj)
@@ -234,7 +235,7 @@ struct DiscoverNewsDetailView: View {
 
                     ForEach(unresolvedBoundDjIDs, id: \.self) { id in
                         Button {
-                            discoverPush(.djDetail(djID: id))
+                            appPush(.djDetail(djID: id))
                         } label: {
                             Label("DJ \(shortIDLabel(id))", systemImage: "person.wave.2")
                                 .font(.caption2.weight(.semibold))
@@ -249,7 +250,7 @@ struct DiscoverNewsDetailView: View {
 
                     ForEach(relatedBrands) { brand in
                         Button {
-                            discoverPush(.festivalDetail(festival: brand))
+                            discoverPush(.festivalDetail(festivalID: brand.id))
                         } label: {
                             Label(brand.name, systemImage: "music.quarternote.3")
                                 .font(.caption2.weight(.semibold))
@@ -274,7 +275,7 @@ struct DiscoverNewsDetailView: View {
 
                     ForEach(relatedEvents) { event in
                         Button {
-                            discoverPush(.eventDetail(eventID: event.id))
+                            appPush(.eventDetail(eventID: event.id))
                         } label: {
                             Label(event.name, systemImage: "calendar")
                                 .font(.caption2.weight(.semibold))
@@ -289,7 +290,7 @@ struct DiscoverNewsDetailView: View {
 
                     ForEach(unresolvedBoundEventIDs, id: \.self) { id in
                         Button {
-                            discoverPush(.eventDetail(eventID: id))
+                            appPush(.eventDetail(eventID: id))
                         } label: {
                             Label("Event \(shortIDLabel(id))", systemImage: "calendar")
                                 .font(.caption2.weight(.semibold))
@@ -311,8 +312,8 @@ struct DiscoverNewsDetailView: View {
 
     @ViewBuilder
     private var authorSection: some View {
-        NavigationLink {
-            UserProfileView(userID: article.authorID)
+        Button {
+            appPush(.userProfile(userID: article.authorID))
         } label: {
             HStack(spacing: 10) {
                 authorAvatar
@@ -357,8 +358,8 @@ struct DiscoverNewsDetailView: View {
             } else {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(Array(visibleComments.enumerated()), id: \.element.id) { index, comment in
-                        NavigationLink {
-                            UserProfileView(userID: comment.author.id)
+                        Button {
+                            appPush(.userProfile(userID: comment.author.id))
                         } label: {
                             HStack(alignment: .top, spacing: 10) {
                                 commentAvatar(comment.author)
@@ -430,23 +431,11 @@ struct DiscoverNewsDetailView: View {
 
     @ViewBuilder
     private func relatedDJAvatar(_ dj: WebDJ) -> some View {
-        if let avatar = AppConfig.resolvedDJAvatarURLString(dj.avatarOriginalUrl ?? dj.avatarUrl, size: .small),
-           let url = URL(string: avatar) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    avatarInitialFallback(dj.name)
-                @unknown default:
-                    avatarInitialFallback(dj.name)
-                }
-            }
-        } else {
-            avatarInitialFallback(dj.name)
-        }
+        ImageLoaderView(
+            urlString: AppConfig.resolvedDJAvatarURLString(dj.avatarOriginalUrl ?? dj.avatarUrl, size: .small),
+            resizingMode: .fill
+        )
+        .background(avatarInitialFallback(dj.name))
     }
 
     private func avatarInitialFallback(_ name: String) -> some View {
@@ -461,26 +450,8 @@ struct DiscoverNewsDetailView: View {
 
     @ViewBuilder
     private func commentAvatar(_ user: UserSummary) -> some View {
-        if let resolved = AppConfig.resolvedURLString(user.avatarURL),
-           let remoteURL = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    commentAvatarFallback(user)
-                @unknown default:
-                    commentAvatarFallback(user)
-                }
-            }
-        } else {
-            commentAvatarFallback(user)
-        }
+        ImageLoaderView(urlString: user.avatarURL, resizingMode: .fill)
+            .background(commentAvatarFallback(user))
     }
 
     private func commentAvatarFallback(_ user: UserSummary) -> some View {
@@ -608,22 +579,8 @@ struct DiscoverNewsDetailView: View {
 
     @ViewBuilder
     private var newsCover: some View {
-        if let resolved = AppConfig.resolvedURLString(article.coverImageURL),
-           let url = URL(string: resolved) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    RaverTheme.card
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    fallbackCover
-                @unknown default:
-                    fallbackCover
-                }
-            }
+        ImageLoaderView(urlString: article.coverImageURL, resizingMode: .fill)
+            .background(fallbackCover)
             .overlay(alignment: .top) {
                 LinearGradient(
                     colors: [
@@ -636,9 +593,6 @@ struct DiscoverNewsDetailView: View {
                 )
                 .frame(height: 104)
             }
-        } else {
-            fallbackCover
-        }
     }
 
     private var fallbackCover: some View {
@@ -656,23 +610,8 @@ struct DiscoverNewsDetailView: View {
 
     @ViewBuilder
     private var authorAvatar: some View {
-        if let resolved = AppConfig.resolvedURLString(article.authorAvatarURL),
-           let url = URL(string: resolved) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    avatarFallback
-                @unknown default:
-                    avatarFallback
-                }
-            }
-        } else {
-            avatarFallback
-        }
+        ImageLoaderView(urlString: article.authorAvatarURL, resizingMode: .fill)
+            .background(avatarFallback)
     }
 
     private var avatarFallback: some View {
@@ -1006,43 +945,22 @@ private struct DiscoverNewsMarkdownView: View {
 
     @ViewBuilder
     private func markdownImageBlock(_ urlString: String) -> some View {
-        if let resolved = AppConfig.resolvedURLString(urlString),
-           let url = URL(string: resolved) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(RaverTheme.card)
-                        ProgressView()
-                    }
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                case .failure:
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(RaverTheme.card)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .font(.title3)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        )
-                @unknown default:
-                    EmptyView()
-                }
-            }
+        ImageLoaderView(urlString: urlString, resizingMode: .fit)
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color.black.opacity(0.18))
+                    .overlay(
+                        Image(systemName: "photo")
+                            .font(.title3)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
     }
 
     private func parseMarkdownImageURL(from line: String) -> String? {

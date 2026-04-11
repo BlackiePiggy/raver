@@ -1,5 +1,27 @@
 import SwiftUI
 
+private struct DiscoverSearchBackRow: View {
+    let onBack: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        Circle()
+                            .fill(RaverTheme.card)
+                    )
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+        }
+    }
+}
+
 struct DiscoverFullScreenSearchInputView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -26,6 +48,10 @@ struct DiscoverFullScreenSearchInputView: View {
 
     var body: some View {
         VStack(spacing: 18) {
+            DiscoverSearchBackRow {
+                dismiss()
+            }
+
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles")
@@ -117,11 +143,6 @@ struct DiscoverFullScreenSearchInputView: View {
         .background(RaverTheme.background)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(L("取消", "Cancel")) {
-                    dismiss()
-                }
-            }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button(L("收起", "Dismiss")) {
@@ -189,7 +210,9 @@ struct DiscoverSearchResultHeader: View {
 }
 
 struct EventsSearchResultsView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: EventsSearchResultsViewModel
 
     init(viewModel: EventsSearchResultsViewModel) {
@@ -198,6 +221,10 @@ struct EventsSearchResultsView: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            DiscoverSearchBackRow {
+                dismiss()
+            }
+
             DiscoverSearchResultHeader(
                 title: L("活动搜索结果", "Event Results"),
                 query: viewModel.query,
@@ -219,7 +246,7 @@ struct EventsSearchResultsView: View {
                         LazyVStack(spacing: 14) {
                             ForEach(viewModel.events) { event in
                                 Button {
-                                    discoverPush(.eventDetail(eventID: event.id))
+                                    appPush(.eventDetail(eventID: event.id))
                                 } label: {
                                     EventRow(event: event)
                                 }
@@ -270,7 +297,9 @@ struct EventsSearchResultsView: View {
 }
 
 struct NewsSearchResultsView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: NewsSearchResultsViewModel
 
     init(viewModel: NewsSearchResultsViewModel) {
@@ -279,6 +308,10 @@ struct NewsSearchResultsView: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            DiscoverSearchBackRow {
+                dismiss()
+            }
+
             DiscoverSearchResultHeader(
                 title: L("资讯搜索结果", "News Results"),
                 query: viewModel.query,
@@ -300,7 +333,7 @@ struct NewsSearchResultsView: View {
                         LazyVStack(spacing: 0) {
                             ForEach(Array(viewModel.articles.enumerated()), id: \.element.id) { index, article in
                                 Button {
-                                    discoverPush(.newsDetail(article: article))
+                                    discoverPush(.newsDetail(articleID: article.id))
                                 } label: {
                                     DiscoverNewsRow(article: article)
                                 }
@@ -340,7 +373,9 @@ struct NewsSearchResultsView: View {
 }
 
 struct DJsSearchResultsView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: DJsSearchResultsViewModel
     @State private var selectedBoardForDetail: RankingBoard?
 
@@ -350,6 +385,10 @@ struct DJsSearchResultsView: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            DiscoverSearchBackRow {
+                dismiss()
+            }
+
             DiscoverSearchResultHeader(
                 title: L("DJ / 榜单结果", "DJ / Ranking Results"),
                 query: viewModel.query,
@@ -381,7 +420,7 @@ struct DJsSearchResultsView: View {
                                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                                         ForEach(viewModel.djs) { dj in
                                             Button {
-                                                discoverPush(.djDetail(djID: dj.id))
+                                                appPush(.djDetail(djID: dj.id))
                                             } label: {
                                                 DJSearchResultCard(dj: dj)
                                             }
@@ -447,7 +486,9 @@ struct DJsSearchResultsView: View {
 }
 
 struct SetsSearchResultsView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
     private let columns = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12),
@@ -461,6 +502,10 @@ struct SetsSearchResultsView: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            DiscoverSearchBackRow {
+                dismiss()
+            }
+
             DiscoverSearchResultHeader(
                 title: L("Sets 搜索结果", "Sets Search Results"),
                 query: viewModel.query,
@@ -519,7 +564,9 @@ struct SetsSearchResultsView: View {
 }
 
 struct WikiSearchResultsView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
     let preferredSection: LearnModuleSection
 
     @StateObject private var viewModel: WikiSearchResultsViewModel
@@ -546,6 +593,10 @@ struct WikiSearchResultsView: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            DiscoverSearchBackRow {
+                dismiss()
+            }
+
             DiscoverSearchResultHeader(
                 title: L("Wiki 搜索结果", "Wiki Search Results"),
                 query: viewModel.query,
@@ -611,7 +662,7 @@ struct WikiSearchResultsView: View {
                         LearnLabelCard(label: label)
                             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .onTapGesture {
-                                discoverPush(.labelDetail(label: label))
+                                discoverPush(.labelDetail(labelID: label.id))
                             }
                     }
                 }
@@ -636,7 +687,7 @@ struct WikiSearchResultsView: View {
                         LearnFestivalCard(festival: festival)
                             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .onTapGesture {
-                                discoverPush(.festivalDetail(festival: festival))
+                                discoverPush(.festivalDetail(festivalID: festival.id))
                             }
                     }
                 }

@@ -195,20 +195,10 @@ struct PostCardView: View {
     @ViewBuilder
     private var authorAvatar: some View {
         if let resolved = AppConfig.resolvedURLString(post.author.avatarURL),
-           let remoteURL = URL(string: resolved),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    authorAvatarFallback
-                @unknown default:
-                    authorAvatarFallback
-                }
-            }
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(authorAvatarFallback)
             .frame(width: 34, height: 34)
             .clipShape(Circle())
         } else {
@@ -558,30 +548,14 @@ struct PostMediaGridView: View {
                         .frame(height: 230)
                 }
             } else {
-                AsyncImage(url: item.url) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView()
-                            .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 320)
-                            .background(RaverTheme.card)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: .infinity, maxHeight: 320)
-                            .background(Color.black.opacity(0.06))
-                    case .failure:
-                        mediaPlaceholder
-                            .frame(height: 200)
-                    @unknown default:
-                        mediaPlaceholder
-                            .frame(height: 200)
-                    }
-                }
+                ImageLoaderView(urlString: item.url?.absoluteString, resizingMode: .fit)
+                    .background(mediaPlaceholder.frame(height: 200))
+                    .frame(maxWidth: .infinity, maxHeight: 320)
+                    .background(Color.black.opacity(0.06))
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        //.contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private func mediaThumbnail(_ item: PostMediaItem) -> some View {
@@ -611,24 +585,13 @@ struct PostMediaGridView: View {
                             mediaPlaceholder
                         }
                     } else {
-                        AsyncImage(url: item.url) { phase in
-                            switch phase {
-                            case .empty:
-                                mediaPlaceholder
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            case .failure:
-                                mediaPlaceholder
-                            @unknown default:
-                                mediaPlaceholder
-                            }
-                        }
+                        ImageLoaderView(urlString: item.url?.absoluteString)
+                            .background(mediaPlaceholder)
                     }
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var mediaPlaceholder: some View {
@@ -662,7 +625,7 @@ private struct PostMediaBrowserView: View {
                         if item.isVideo, let url = item.url {
                             PostMediaVideoPlayer(url: url)
                         } else if let url = item.url {
-                            ZoomableAsyncImage(
+                            ZoomableRemoteImage(
                                 url: url,
                                 isActive: currentIndex == index,
                                 canGoPrevious: index > 0,
@@ -716,7 +679,7 @@ private struct PostMediaBrowserView: View {
     }
 }
 
-private struct ZoomableAsyncImage: View {
+private struct ZoomableRemoteImage: View {
     let url: URL
     let isActive: Bool
     let canGoPrevious: Bool
@@ -737,51 +700,38 @@ private struct ZoomableAsyncImage: View {
 
     var body: some View {
         GeometryReader { proxy in
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    ProgressView().tint(.white)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .success(let image):
-                    let isZoomed = displayScale > minimumScale + 0.01
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .scaleEffect(displayScale)
-                        .offset(currentOffset)
-                        .contentShape(Rectangle())
-                        .simultaneousGesture(
-                            magnificationGesture(in: proxy.size)
-                        )
-                        .highPriorityGesture(
-                            dragGesture(in: proxy.size),
-                            including: isZoomed ? .all : .subviews
-                        )
-                        .simultaneousGesture(
-                            TapGesture(count: 2).onEnded {
-                                withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.86)) {
-                                    if displayScale > minimumScale + 0.01 {
-                                        resetZoom()
-                                    } else {
-                                        baseScale = quickZoomScale
-                                        gestureScale = 1
-                                        currentOffset = .zero
-                                        accumulatedOffset = .zero
-                                    }
-                                }
-                            }
-                        )
-                case .failure:
+            let isZoomed = displayScale > minimumScale + 0.01
+            ImageLoaderView(urlString: url.absoluteString, resizingMode: .fit)
+                .background(
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 28, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.85))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                @unknown default:
-                    EmptyView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
+                )
+                .scaleEffect(displayScale)
+                .offset(currentOffset)
+                .contentShape(Rectangle())
+                .simultaneousGesture(
+                    magnificationGesture(in: proxy.size)
+                )
+                .highPriorityGesture(
+                    dragGesture(in: proxy.size),
+                    including: isZoomed ? .all : .subviews
+                )
+                .simultaneousGesture(
+                    TapGesture(count: 2).onEnded {
+                        withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.86)) {
+                            if displayScale > minimumScale + 0.01 {
+                                resetZoom()
+                            } else {
+                                baseScale = quickZoomScale
+                                gestureScale = 1
+                                currentOffset = .zero
+                                accumulatedOffset = .zero
+                            }
+                        }
+                    }
+                )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black)
             .onAppear {

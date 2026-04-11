@@ -529,20 +529,9 @@ struct EventCheckinSelectionSheet: View {
     private func performerAvatar(_ performer: EventLineupPerformer?, fallbackName: String, size: CGFloat) -> some View {
         let performerName = performer?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? fallbackName
         return Group {
-            if let avatar = AppConfig.resolvedDJAvatarURLString(performer?.avatarUrl, size: .small),
-               let url = URL(string: avatar) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        Circle().fill(RaverTheme.card)
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .failure:
-                        Circle().fill(RaverTheme.card)
-                    @unknown default:
-                        Circle().fill(RaverTheme.card)
-                    }
-                }
+            if let avatar = AppConfig.resolvedDJAvatarURLString(performer?.avatarUrl, size: .small) {
+                ImageLoaderView(urlString: avatar)
+                    .background(Circle().fill(RaverTheme.card))
             } else {
                 Circle()
                     .fill(RaverTheme.card)
@@ -3631,27 +3620,12 @@ struct EventEditorView: View {
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         } else if let resolved = AppConfig.resolvedURLString(remoteURL),
-                  let url = URL(string: resolved) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(RaverTheme.card)
-                        ProgressView()
-                    }
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
+                  URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(RaverTheme.card)
-                @unknown default:
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(RaverTheme.card)
-                }
-            }
+                )
             .frame(height: 150)
             .frame(maxWidth: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -3763,12 +3737,9 @@ struct EventEditorView: View {
     @ViewBuilder
     private func djCandidateAvatar(_ dj: WebDJ) -> some View {
         if let urlString = AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarUrl, size: .small),
-           let url = URL(string: urlString) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
+           URL(string: urlString) != nil {
+            ImageLoaderView(urlString: urlString)
+                .background(
                     Circle()
                         .fill(RaverTheme.card)
                         .overlay(
@@ -3776,8 +3747,7 @@ struct EventEditorView: View {
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(RaverTheme.secondaryText)
                         )
-                }
-            }
+                )
             .frame(width: 22, height: 22)
             .clipShape(Circle())
         } else {

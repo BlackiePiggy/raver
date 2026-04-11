@@ -3,6 +3,7 @@ import UIKit
 
 struct PostDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appState: AppState
     @State private var post: Post
     private let service: SocialService
@@ -11,7 +12,6 @@ struct PostDetailView: View {
     @State private var commentInput = ""
     @State private var isLoading = false
     @State private var error: String?
-    @State private var selectedUserForProfile: UserSummary?
 
     init(post: Post, service: SocialService) {
         self._post = State(initialValue: post)
@@ -56,7 +56,7 @@ struct PostDetailView: View {
                         },
                         onMessageTap: nil,
                         onAuthorTap: {
-                            selectedUserForProfile = post.author
+                            appPush(.userProfile(userID: post.author.id))
                         },
                         onSquadTap: nil,
                         onEditTap: nil
@@ -76,7 +76,7 @@ struct PostDetailView: View {
                             } else {
                                 ForEach(comments) { comment in
                                     Button {
-                                        selectedUserForProfile = comment.author
+                                        appPush(.userProfile(userID: comment.author.id))
                                     } label: {
                                         HStack(alignment: .top, spacing: 10) {
                                             commentAvatar(comment.author)
@@ -165,9 +165,6 @@ struct PostDetailView: View {
             .padding(.top, 4)
             .padding(.bottom, 6)
         }
-        .navigationDestination(item: $selectedUserForProfile) { user in
-            UserProfileView(userID: user.id)
-        }
         .task {
             await loadComments()
         }
@@ -196,22 +193,10 @@ struct PostDetailView: View {
     @ViewBuilder
     private func commentAvatar(_ user: UserSummary) -> some View {
         if let resolved = AppConfig.resolvedURLString(user.avatarURL),
-           let remoteURL = URL(string: resolved),
+           URL(string: resolved) != nil,
            resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    commentAvatarFallback(user)
-                @unknown default:
-                    commentAvatarFallback(user)
-                }
-            }
+            ImageLoaderView(urlString: resolved)
+                .background(commentAvatarFallback(user))
             .frame(width: 30, height: 30)
             .clipShape(Circle())
         } else {

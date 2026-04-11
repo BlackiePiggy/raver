@@ -63,6 +63,7 @@ open /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcodeproj
 
 - `POST /v1/auth/login`
 - `GET /v1/feed`
+- `GET /v1/feed/posts/:id`
 - `POST /v1/feed/posts`
 - `POST|DELETE /v1/feed/posts/:id/like`
 - `GET|POST /v1/feed/posts/:id/comments`

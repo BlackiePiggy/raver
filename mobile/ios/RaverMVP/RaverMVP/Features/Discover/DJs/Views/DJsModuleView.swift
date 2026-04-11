@@ -53,6 +53,7 @@ private struct JustifiedUILabelText: UIViewRepresentable {
 struct DJsModuleView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
     private let hotDJBatchSize = 25
 
     private var repository: DiscoverDJsRepository {
@@ -174,7 +175,7 @@ struct DJsModuleView: View {
                         } else {
                             VStack(spacing: 14) {
                                 DJWebMarqueeWall(rows: marqueeRows) { tapped in
-                                    discoverPush(.djDetail(djID: tapped.id))
+                                    appPush(.djDetail(djID: tapped.id))
                                 }
                                 .frame(height: marqueeWallHeight)
                                 .padding(.horizontal, -16)
@@ -778,15 +779,9 @@ struct DJsModuleView: View {
     private func spotifyCandidateRow(_ candidate: SpotifyDJCandidate, selectedSpotifyId: String?) -> some View {
         HStack(spacing: 10) {
             Group {
-                if let imageURL = AppConfig.resolvedURLString(candidate.imageUrl), let url = URL(string: imageURL) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        default:
-                            Circle().fill(RaverTheme.card)
-                        }
-                    }
+                if let imageURL = AppConfig.resolvedURLString(candidate.imageUrl) {
+                    ImageLoaderView(urlString: imageURL)
+                        .background(Circle().fill(RaverTheme.card))
                 } else {
                     Circle().fill(RaverTheme.card)
                 }
@@ -829,26 +824,12 @@ struct DJsModuleView: View {
     private func discogsCandidateRow(_ candidate: DiscogsDJCandidate) -> some View {
         HStack(spacing: 10) {
             Group {
-                if let thumb = AppConfig.resolvedURLString(candidate.thumbUrl),
-                   let url = URL(string: thumb) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        default:
-                            Circle().fill(RaverTheme.card)
-                        }
-                    }
-                } else if let cover = AppConfig.resolvedURLString(candidate.coverImageUrl),
-                          let url = URL(string: cover) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        default:
-                            Circle().fill(RaverTheme.card)
-                        }
-                    }
+                if let thumb = AppConfig.resolvedURLString(candidate.thumbUrl) {
+                    ImageLoaderView(urlString: thumb)
+                        .background(Circle().fill(RaverTheme.card))
+                } else if let cover = AppConfig.resolvedURLString(candidate.coverImageUrl) {
+                    ImageLoaderView(urlString: cover)
+                        .background(Circle().fill(RaverTheme.card))
                 } else {
                     Circle().fill(RaverTheme.card)
                 }
@@ -1216,21 +1197,9 @@ struct RankingBoardCoverCard: View {
 
     @ViewBuilder
     private var boardCoverLayer: some View {
-        if let coverImageUrl = board.coverImageUrl, let url = URL(string: coverImageUrl) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    boardFallbackCover
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    boardFallbackCover
-                @unknown default:
-                    boardFallbackCover
-                }
-            }
+        if let coverImageUrl = board.coverImageUrl {
+            ImageLoaderView(urlString: coverImageUrl)
+                .background(boardFallbackCover)
         } else {
             boardFallbackCover
         }
@@ -1438,18 +1407,9 @@ private struct DJWebAvatar: View {
     var body: some View {
         VStack(spacing: 6) {
             Group {
-                if let avatar = AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarUrl, size: .small),
-                   let url = URL(string: lowResAvatarURL(avatar)) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        default:
-                            fallback
-                        }
-                    }
+                if let avatar = AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarUrl, size: .small) {
+                    ImageLoaderView(urlString: lowResAvatarURL(avatar))
+                        .background(fallback)
                 } else {
                     fallback
                 }
@@ -1556,18 +1516,9 @@ private struct DJWebCard: View {
 
     private var cover: some View {
         Group {
-            if let avatar = AppConfig.resolvedDJAvatarURLString(dj.avatarOriginalUrl ?? dj.avatarUrl, size: .original),
-               let url = URL(string: highResAvatarURL(avatar)) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        fallbackCover
-                    }
-                }
+            if let avatar = AppConfig.resolvedDJAvatarURLString(dj.avatarOriginalUrl ?? dj.avatarUrl, size: .original) {
+                ImageLoaderView(urlString: highResAvatarURL(avatar))
+                    .background(fallbackCover)
             } else {
                 fallbackCover
             }
@@ -1970,6 +1921,7 @@ struct DJDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
 
@@ -1989,7 +1941,6 @@ struct DJDetailView: View {
     @State private var ratingUnits: [WebRatingUnit] = []
     @State private var watchedSetCount = 0
     @State private var isLoading = false
-    @State private var selectedContributorUser: WebUserLite?
     @State private var errorMessage: String?
     @State private var selectedTab: DJDetailTab = .intro
     @State private var pageProgress: CGFloat = 0
@@ -2112,14 +2063,14 @@ struct DJDetailView: View {
         .navigationDestination(isPresented: $showSpotifyImportSheet) {
             spotifyImportSheet
         }
-        .navigationDestination(item: $selectedContributorUser) { user in
-            UserProfileView(userID: user.id)
-        }
         .onChange(of: editAvatarItem) { _, item in
             Task { await loadDJEditPhoto(item, target: .avatar) }
         }
         .onChange(of: editBannerItem) { _, item in
             Task { await loadDJEditPhoto(item, target: .banner) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverRatingUnitDidUpdate)) { _ in
+            Task { await reloadDJRatingUnits() }
         }
     }
 
@@ -2209,15 +2160,9 @@ struct DJDetailView: View {
     private func spotifyCandidateRow(_ candidate: SpotifyDJCandidate) -> some View {
         HStack(spacing: 10) {
             Group {
-                if let imageURL = AppConfig.resolvedURLString(candidate.imageUrl), let url = URL(string: imageURL) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        default:
-                            Circle().fill(RaverTheme.card)
-                        }
-                    }
+                if let imageURL = AppConfig.resolvedURLString(candidate.imageUrl) {
+                    ImageLoaderView(urlString: imageURL)
+                        .background(Circle().fill(RaverTheme.card))
                 } else {
                     Circle().fill(RaverTheme.card)
                 }
@@ -2432,25 +2377,10 @@ struct DJDetailView: View {
             GeometryReader { geo in
                 ZStack {
                     RaverTheme.card
-                    if let imageURL = heroImageURL(for: dj), let url = URL(string: imageURL) {
-                        AsyncImage(
-                            url: url,
-                            transaction: Transaction(animation: .none)
-                        ) { phase in
-                            switch phase {
-                            case .empty:
-                                RaverTheme.card
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
-                            case .failure:
-                                RaverTheme.card
-                            @unknown default:
-                                RaverTheme.card
-                            }
-                        }
+                    if let imageURL = heroImageURL(for: dj) {
+                        ImageLoaderView(urlString: imageURL)
+                            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                            .background(RaverTheme.card)
                     } else {
                         LinearGradient(
                             colors: [Color(red: 0.42, green: 0.22, blue: 0.78), Color(red: 0.15, green: 0.45, blue: 1.0)],
@@ -2570,7 +2500,7 @@ struct DJDetailView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.top, 0)
+        .padding(.top, topSafeAreaInset() + 6)
         .zIndex(10)
     }
 
@@ -2631,16 +2561,9 @@ struct DJDetailView: View {
                                 .frame(width: 44, height: 44)
                                 .clipShape(Circle())
                         } else if let current = dj?.avatarUrl,
-                                  let resolved = AppConfig.resolvedURLString(current),
-                                  let url = URL(string: resolved) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image.resizable().scaledToFill()
-                                default:
-                                    Circle().fill(RaverTheme.card)
-                                }
-                            }
+                                  let resolved = AppConfig.resolvedURLString(current) {
+                            ImageLoaderView(urlString: resolved)
+                                .background(Circle().fill(RaverTheme.card))
                             .frame(width: 44, height: 44)
                             .clipShape(Circle())
                         }
@@ -2659,16 +2582,9 @@ struct DJDetailView: View {
                                 .frame(width: 88, height: 44)
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         } else if let current = dj?.bannerUrl,
-                                  let resolved = AppConfig.resolvedURLString(current),
-                                  let url = URL(string: resolved) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image.resizable().scaledToFill()
-                                default:
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card)
-                                }
-                            }
+                                  let resolved = AppConfig.resolvedURLString(current) {
+                            ImageLoaderView(urlString: resolved)
+                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card))
                             .frame(width: 88, height: 44)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
@@ -3035,7 +2951,7 @@ struct DJDetailView: View {
         } else {
             ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
                 Button {
-                    discoverPush(.newsDetail(article: article))
+                    discoverPush(.newsDetail(articleID: article.id))
                 } label: {
                     DiscoverNewsRow(article: article, showsSummary: false)
                 }
@@ -3085,7 +3001,7 @@ struct DJDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(contributorUsers) { user in
                         Button {
-                            selectedContributorUser = user
+                            appPush(.userProfile(userID: user.id))
                         } label: {
                             HStack(spacing: 10) {
                                 contributorUserAvatar(user, size: 28)
@@ -3116,15 +3032,9 @@ struct DJDetailView: View {
 
     @ViewBuilder
     private func contributorUserAvatar(_ user: WebUserLite, size: CGFloat) -> some View {
-        if let avatar = AppConfig.resolvedURLString(user.avatarUrl), let url = URL(string: avatar) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    Circle().fill(RaverTheme.card)
-                }
-            }
+        if let avatar = AppConfig.resolvedURLString(user.avatarUrl) {
+            ImageLoaderView(urlString: avatar)
+                .background(Circle().fill(RaverTheme.card))
             .frame(width: size, height: size)
             .clipShape(Circle())
         } else {
@@ -3147,8 +3057,8 @@ struct DJDetailView: View {
                 .padding(.vertical, 6)
         } else {
             ForEach(sets) { set in
-                NavigationLink {
-                    DJSetDetailView(setID: set.id)
+                Button {
+                    discoverPush(.setDetail(setID: set.id))
                 } label: {
                     setRow(set)
                 }
@@ -3166,7 +3076,7 @@ struct DJDetailView: View {
         } else {
             ForEach(djEvents) { event in
                 Button {
-                    discoverPush(.eventDetail(eventID: event.id))
+                    appPush(.eventDetail(eventID: event.id))
                 } label: {
                     historyEventRow(event)
                 }
@@ -3183,15 +3093,8 @@ struct DJDetailView: View {
                 .padding(.vertical, 6)
         } else {
             ForEach(ratingUnits) { unit in
-                NavigationLink {
-                    CircleRatingUnitDetailView(
-                        unitID: unit.id,
-                        onSubmitted: {
-                            Task {
-                                await reloadDJRatingUnits()
-                            }
-                        }
-                    )
+                Button {
+                    appPush(.ratingUnitDetail(unitID: unit.id))
                 } label: {
                     djRatingUnitRow(unit)
                 }
@@ -3437,13 +3340,9 @@ struct DJDetailView: View {
     @ViewBuilder
     private func djRatingThumb(urlString: String?, size: CGFloat) -> some View {
         if let resolved = AppConfig.resolvedURLString(urlString),
-           let url = URL(string: resolved),
            resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
+            ImageLoaderView(urlString: resolved)
+                .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(RaverTheme.card)
                         .overlay(
@@ -3451,8 +3350,7 @@ struct DJDetailView: View {
                                 .font(.system(size: size * 0.32, weight: .semibold))
                                 .foregroundStyle(Color.white.opacity(0.9))
                         )
-                }
-            }
+                )
             .frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else {
@@ -3473,21 +3371,9 @@ struct DJDetailView: View {
 
     @ViewBuilder
     private func setCover(_ set: WebDJSet) -> some View {
-        if let thumbnail = AppConfig.resolvedURLString(set.thumbnailUrl), let url = URL(string: thumbnail) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    RaverTheme.card
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    RaverTheme.card
-                @unknown default:
-                    RaverTheme.card
-                }
-            }
+        if let thumbnail = AppConfig.resolvedURLString(set.thumbnailUrl) {
+            ImageLoaderView(urlString: thumbnail)
+                .background(RaverTheme.card)
         } else {
             LinearGradient(
                 colors: [Color(red: 0.16, green: 0.16, blue: 0.19), Color(red: 0.12, green: 0.12, blue: 0.14)],

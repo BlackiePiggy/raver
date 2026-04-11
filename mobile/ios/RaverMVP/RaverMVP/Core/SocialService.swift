@@ -7,6 +7,7 @@ protocol SocialService {
 
     func fetchFeed(cursor: String?) async throws -> FeedPage
     func searchFeed(query: String) async throws -> FeedPage
+    func fetchPost(postID: String) async throws -> Post
     func createPost(input: CreatePostInput) async throws -> Post
     func updatePost(postID: String, input: UpdatePostInput) async throws -> Post
     func deletePost(postID: String) async throws

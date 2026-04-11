@@ -1,14 +1,9 @@
 import SwiftUI
 
 enum CircleRoute: Hashable {
-    case squadProfile(String)
     case ratingEventDetail(String)
-    case eventDetail(String)
-    case djDetail(String)
-    case userProfile(String)
-    case postDetail(Post)
     case postCreate
-    case postEdit(Post)
+    case postEdit(postID: String)
     case idCreate
     case ratingEventCreate
     case ratingEventImportFromEvent
@@ -38,10 +33,15 @@ extension Notification.Name {
 struct CircleCoordinatorView<Content: View>: View {
     @EnvironmentObject private var appContainer: AppContainer
     @EnvironmentObject private var appState: AppState
-    @State private var navPath: [CircleRoute] = []
+    @State private var navPath = NavigationPath()
     private let content: Content
+    private let onNavigationDepthChange: ((Int) -> Void)?
 
-    init(@ViewBuilder content: () -> Content) {
+    init(
+        onNavigationDepthChange: ((Int) -> Void)? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.onNavigationDepthChange = onNavigationDepthChange
         self.content = content()
     }
 
@@ -49,6 +49,9 @@ struct CircleCoordinatorView<Content: View>: View {
         NavigationStack(path: $navPath) {
             content
                 .navigationBarHidden(true)
+                .onAppear {
+                    onNavigationDepthChange?(navPath.count)
+                }
                 .navigationDestination(for: CircleRoute.self) { route in
                     routeDestination(for: route)
                 }
@@ -57,30 +60,23 @@ struct CircleCoordinatorView<Content: View>: View {
         .environment(\.circlePush) { route in
             navPath.append(route)
         }
+        .onAppear {
+            onNavigationDepthChange?(navPath.count)
+        }
+        .onChange(of: navPath.count) { _, newValue in
+            onNavigationDepthChange?(newValue)
+        }
     }
 
     @ViewBuilder
     private func routeDestination(for route: CircleRoute) -> some View {
         switch route {
-        case let .squadProfile(squadID):
-            SquadProfileView(squadID: squadID, service: appContainer.socialService)
-                .environmentObject(appState)
         case let .ratingEventDetail(eventID):
             CircleRatingEventDetailView(
                 eventID: eventID,
                 onClose: {},
                 onUpdated: {}
             )
-        case let .eventDetail(eventID):
-            EventDetailView(eventID: eventID)
-        case let .djDetail(djID):
-            DJDetailView(djID: djID)
-        case let .userProfile(userID):
-            UserProfileView(userID: userID)
-                .environmentObject(appState)
-        case let .postDetail(post):
-            PostDetailView(post: post, service: appContainer.socialService)
-                .environmentObject(appState)
         case .postCreate:
             ComposePostView(
                 service: appContainer.socialService,
@@ -90,17 +86,11 @@ struct CircleCoordinatorView<Content: View>: View {
                     NotificationCenter.default.post(name: .circlePostDidCreate, object: created)
                 }
             )
-        case let .postEdit(post):
-            ComposePostView(
+        case let .postEdit(postID):
+            CirclePostEditorLoaderView(
+                postID: postID,
                 service: appContainer.socialService,
-                webService: appContainer.webService,
-                mode: .edit(post),
-                onPostUpdated: { updated in
-                    NotificationCenter.default.post(name: .circlePostDidUpdate, object: updated)
-                },
-                onPostDeleted: { deletedPostID in
-                    NotificationCenter.default.post(name: .circlePostDidDelete, object: deletedPostID)
-                }
+                webService: appContainer.webService
             )
         case .idCreate:
             CircleIDComposerSheet { entry in
@@ -126,6 +116,70 @@ struct CircleCoordinatorView<Content: View>: View {
                     userInfo: ["eventID": eventID]
                 )
             }
+        }
+    }
+}
+
+private struct CirclePostEditorLoaderView: View {
+    let postID: String
+    let service: SocialService
+    let webService: WebFeatureService
+
+    @State private var post: Post?
+    @State private var errorMessage: String?
+    @State private var isLoading = false
+
+    var body: some View {
+        Group {
+            if let post {
+                ComposePostView(
+                    service: service,
+                    webService: webService,
+                    mode: .edit(post),
+                    onPostUpdated: { updated in
+                        NotificationCenter.default.post(name: .circlePostDidUpdate, object: updated)
+                    },
+                    onPostDeleted: { deletedPostID in
+                        NotificationCenter.default.post(name: .circlePostDidDelete, object: deletedPostID)
+                    }
+                )
+            } else if isLoading {
+                ProgressView(L("加载动态中...", "Loading post..."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+            } else if let errorMessage {
+                VStack(spacing: 10) {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red.opacity(0.92))
+                    Button(L("重试", "Retry")) {
+                        Task { await loadPost(force: true) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RaverTheme.background)
+            } else {
+                ProgressView(L("加载动态中...", "Loading post..."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+            }
+        }
+        .task {
+            await loadPost(force: false)
+        }
+    }
+
+    @MainActor
+    private func loadPost(force: Bool) async {
+        if post != nil && !force { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            post = try await service.fetchPost(postID: postID)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.userFacingMessage
         }
     }
 }

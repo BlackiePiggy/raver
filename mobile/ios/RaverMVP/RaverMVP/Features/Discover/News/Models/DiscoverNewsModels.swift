@@ -98,6 +98,7 @@ struct DiscoverNewsPage {
 protocol DiscoverNewsRepository {
     func searchArticles(query: String) async throws -> [DiscoverNewsArticle]
     func fetchFeedPage(cursor: String?) async throws -> DiscoverNewsPage
+    func fetchArticle(id: String) async throws -> DiscoverNewsArticle
     func publish(draft: DiscoverNewsDraft) async throws -> DiscoverNewsArticle?
     func fetchComments(postID: String) async throws -> [Comment]
     func addComment(postID: String, content: String) async throws -> Comment
@@ -137,6 +138,14 @@ struct DiscoverNewsRepositoryAdapter: DiscoverNewsRepository {
         let page = try await socialService.fetchFeed(cursor: cursor)
         let items = page.posts.compactMap { DiscoverNewsCodec.decode(post: $0) }
         return DiscoverNewsPage(items: items, nextCursor: page.nextCursor)
+    }
+
+    func fetchArticle(id: String) async throws -> DiscoverNewsArticle {
+        let post = try await socialService.fetchPost(postID: id)
+        guard let article = DiscoverNewsCodec.decode(post: post) else {
+            throw ServiceError.invalidResponse
+        }
+        return article
     }
 
     func publish(draft: DiscoverNewsDraft) async throws -> DiscoverNewsArticle? {

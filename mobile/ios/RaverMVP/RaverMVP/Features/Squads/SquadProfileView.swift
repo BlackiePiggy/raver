@@ -4,14 +4,13 @@ import UIKit
 
 struct SquadProfileView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appContainer: AppContainer
     private let service: SocialService
     @StateObject private var viewModel: SquadProfileViewModel
-    @State private var pushedConversation: Conversation?
     @State private var showManageSheet = false
     @State private var myNicknameDraft = ""
     @State private var myNotificationsEnabled = true
-    @State private var selectedMember: SquadMemberProfile?
 
     init(squadID: String, service: SocialService) {
         self.service = service
@@ -48,7 +47,7 @@ struct SquadProfileView: View {
                     Button {
                         Task {
                             if await viewModel.joinIfNeeded(), let conversation = viewModel.buildConversation() {
-                                pushedConversation = conversation
+                                appPush(.conversation(conversationID: conversation.id))
                             }
                         }
                     } label: {
@@ -105,12 +104,6 @@ struct SquadProfileView: View {
             .padding(.horizontal, 14)
             .padding(.top, 4)
             .padding(.bottom, 6)
-        }
-        .navigationDestination(item: $pushedConversation) { conversation in
-            ChatView(conversation: conversation, service: service)
-        }
-        .navigationDestination(item: $selectedMember) { member in
-            UserProfileView(userID: member.id)
         }
         .navigationDestination(isPresented: $showManageSheet) {
             if let profile = viewModel.profile {
@@ -199,7 +192,7 @@ struct SquadProfileView: View {
                     HStack(spacing: 12) {
                         ForEach(profile.members) { member in
                             Button {
-                                selectedMember = member
+                                appPush(.userProfile(userID: member.id))
                             } label: {
                                 VStack(spacing: 6) {
                                     avatarWithRoleBadge(member: member, size: 46)
@@ -376,22 +369,10 @@ struct SquadProfileView: View {
     @ViewBuilder
     private func squadAvatar(squadID: String, urlString: String?) -> some View {
         if let resolved = AppConfig.resolvedURLString(urlString),
-           let remoteURL = URL(string: resolved),
+           URL(string: resolved) != nil,
            resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    squadAvatarFallback(squadID: squadID, urlString: urlString)
-                @unknown default:
-                    squadAvatarFallback(squadID: squadID, urlString: urlString)
-                }
-            }
+            ImageLoaderView(urlString: resolved)
+                .background(squadAvatarFallback(squadID: squadID, urlString: urlString))
             .frame(width: 56, height: 56)
             .clipShape(Circle())
         } else {
@@ -417,22 +398,10 @@ struct SquadProfileView: View {
     @ViewBuilder
     private func avatar(userID: String, username: String, urlString: String?, size: CGFloat) -> some View {
         if let resolved = AppConfig.resolvedURLString(urlString),
-           let remoteURL = URL(string: resolved),
+           URL(string: resolved) != nil,
            resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    avatarFallback(userID: userID, username: username, urlString: urlString, size: size)
-                @unknown default:
-                    avatarFallback(userID: userID, username: username, urlString: urlString, size: size)
-                }
-            }
+            ImageLoaderView(urlString: resolved)
+                .background(avatarFallback(userID: userID, username: username, urlString: urlString, size: size))
             .frame(width: size, height: size)
             .clipShape(Circle())
         } else {
@@ -457,17 +426,9 @@ struct SquadProfileView: View {
     private func groupQRCode(urlString: String?) -> some View {
         let resolved = AppConfig.resolvedURLString(urlString)
         return Group {
-            if let resolved, !resolved.isEmpty {
-                AsyncImage(url: URL(string: resolved)) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                    default:
-                        qrPlaceholder
-                    }
-                }
+            if let resolved, !resolved.isEmpty, URL(string: resolved) != nil {
+                ImageLoaderView(urlString: resolved, resizingMode: .fit)
+                    .background(qrPlaceholder)
             } else {
                 qrPlaceholder
             }

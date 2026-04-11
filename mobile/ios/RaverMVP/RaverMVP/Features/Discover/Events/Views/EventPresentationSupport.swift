@@ -265,40 +265,22 @@ struct EventRow: View {
 
     @ViewBuilder
     private var eventCoverLayer: some View {
-        if let cover = AppConfig.resolvedURLString(event.cardImageURL),
-           let url = URL(string: cover) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(RaverTheme.card)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(RaverTheme.card)
-                @unknown default:
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(RaverTheme.card)
-                }
-            }
-        } else {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [RaverTheme.accent.opacity(0.35), RaverTheme.card],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+        ImageLoaderView(urlString: event.cardImageURL, resizingMode: .fill)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [RaverTheme.accent.opacity(0.35), RaverTheme.card],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                )
-                .overlay(
-                    Image(systemName: "ticket.fill")
-                        .font(.title3)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                )
-        }
+                    .overlay(
+                        Image(systemName: "ticket.fill")
+                            .font(.title3)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    )
+            )
     }
 
     private var eventDateBadge: some View {

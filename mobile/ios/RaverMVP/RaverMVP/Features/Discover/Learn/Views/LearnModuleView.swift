@@ -11,6 +11,7 @@ import CoreText
 
 struct LearnModuleView: View {
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appContainer: AppContainer
 
     private var wikiRepository: DiscoverWikiRepository {
@@ -431,7 +432,7 @@ struct LearnModuleView: View {
                         LearnLabelCard(label: label)
                             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .onTapGesture {
-                                discoverPush(.labelDetail(label: label))
+                                discoverPush(.labelDetail(labelID: label.id))
                             }
                     }
                 }
@@ -466,7 +467,7 @@ struct LearnModuleView: View {
                                 LearnFestivalCard(festival: festival)
                                     .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                     .onTapGesture {
-                                        discoverPush(.festivalDetail(festival: festival))
+                                        discoverPush(.festivalDetail(festivalID: festival.id))
                                     }
                             }
                         }
@@ -1153,20 +1154,8 @@ struct LearnLabelCard: View {
         if let url = destinationURL(label.backgroundUrl) {
             fallbackBanner
                 .overlay {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            Color.clear
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure:
-                            Color.clear
-                        @unknown default:
-                            Color.clear
-                        }
-                    }
+                    ImageLoaderView(urlString: url.absoluteString)
+                        .background(Color.clear)
                 }
         } else {
             fallbackBanner
@@ -1178,20 +1167,8 @@ struct LearnLabelCard: View {
         if let url = destinationURL(label.avatarUrl) {
             fallbackAvatar
                 .overlay {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            Color.clear
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure:
-                            Color.clear
-                        @unknown default:
-                            Color.clear
-                        }
-                    }
+                    ImageLoaderView(urlString: url.absoluteString)
+                        .background(Color.clear)
                 }
         } else {
             fallbackAvatar
@@ -1255,6 +1232,7 @@ struct LearnLabelCard: View {
 struct LearnLabelDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
 
     let label: LearnLabel
 
@@ -1369,20 +1347,8 @@ struct LearnLabelDetailView: View {
         if let url = destinationURL(label.backgroundUrl) {
             fallbackBanner
                 .overlay {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            Color.clear
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure:
-                            Color.clear
-                        @unknown default:
-                            Color.clear
-                        }
-                    }
+                    ImageLoaderView(urlString: url.absoluteString)
+                        .background(Color.clear)
                 }
                 .overlay {
                     bannerEdgeGradient
@@ -1400,20 +1366,8 @@ struct LearnLabelDetailView: View {
         if let url = destinationURL(label.avatarUrl) {
             fallbackAvatar
                 .overlay {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            Color.clear
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure:
-                            Color.clear
-                        @unknown default:
-                            Color.clear
-                        }
-                    }
+                    ImageLoaderView(urlString: url.absoluteString)
+                        .background(Color.clear)
                 }
         } else {
             fallbackAvatar
@@ -1457,7 +1411,7 @@ struct LearnLabelDetailView: View {
         HStack(alignment: .center, spacing: 10) {
             if let founderDj = label.founderDj {
                 Button {
-                    discoverPush(.djDetail(djID: founderDj.id))
+                    appPush(.djDetail(djID: founderDj.id))
                 } label: {
                     HStack(spacing: 10) {
                         LearnLabelFounderAvatar(urlString: founderDj.avatarUrl)
@@ -1868,6 +1822,8 @@ private struct LearnFestivalRankingBoardCard: View {
 
 private struct LearnFestivalRankingDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
 
     let board: LearnFestivalRankingBoard
     let onFestivalUpdated: (LearnFestival) -> Void
@@ -1921,7 +1877,7 @@ private struct LearnFestivalRankingDetailView: View {
             rankingTopBar
         }
         .navigationDestination(item: $selectedFestivalForDetail) { festival in
-            DiscoverCoordinatorView {
+            DiscoverCoordinatorView(push: discoverPush) {
                 LearnFestivalDetailView(festival: festival) { updated in
                     onFestivalUpdated(updated)
                     if let index = displayedRankedFestivals.firstIndex(where: { $0.festival.id == updated.id }) {
@@ -2065,18 +2021,8 @@ struct LearnFestivalCard: View {
         if let url = destinationURL(festival.backgroundUrl) {
             fallbackBanner
                 .overlay {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            Color.clear
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        case .failure:
-                            Color.clear
-                        @unknown default:
-                            Color.clear
-                        }
-                    }
+                    ImageLoaderView(urlString: url.absoluteString)
+                        .background(Color.clear)
                 }
         } else {
             fallbackBanner
@@ -2088,18 +2034,8 @@ struct LearnFestivalCard: View {
         if let url = destinationURL(festival.avatarUrl) {
             fallbackAvatar
                 .overlay {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            Color.clear
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        case .failure:
-                            Color.clear
-                        @unknown default:
-                            Color.clear
-                        }
-                    }
+                    ImageLoaderView(urlString: url.absoluteString)
+                        .background(Color.clear)
                 }
         } else {
             fallbackAvatar
@@ -2162,6 +2098,7 @@ private struct LearnFestivalDetailTabFramePreferenceKey: PreferenceKey {
 struct LearnFestivalDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
     let onFestivalUpdated: ((LearnFestival) -> Void)?
@@ -2182,7 +2119,6 @@ struct LearnFestivalDetailView: View {
 
     @State private var previewImage: LearnLabelPreviewImage?
     @State private var avatarLuminance: CGFloat?
-    @State private var selectedContributorUser: WebUserLite?
     @State private var selectedTab: LearnFestivalDetailTab = .basic
     @State private var tabFrames: [LearnFestivalDetailTab: CGRect] = [:]
     @State private var pageProgress: CGFloat = 0
@@ -2280,9 +2216,6 @@ struct LearnFestivalDetailView: View {
         .task(id: currentFestival.avatarUrl ?? "") {
             await resolveAvatarLuminance()
         }
-        .navigationDestination(item: $selectedContributorUser) { user in
-            UserProfileView(userID: user.id)
-        }
         .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { _ in
             Task { await loadRelatedContent() }
         }
@@ -2316,12 +2249,12 @@ struct LearnFestivalDetailView: View {
             if canEditFestival {
                 floatingCircleButton(systemName: "square.and.pencil") {
                     prepareFestivalEditDraft()
-                    discoverPush(.learnFestivalEdit(festival: currentFestival))
+                    discoverPush(.learnFestivalEdit(festivalID: currentFestival.id))
                 }
             }
         }
         .padding(.horizontal, 12)
-        .padding(.top, 0)
+        .padding(.top, topSafeAreaInset() + 6)
         .zIndex(10)
     }
 
@@ -2400,20 +2333,8 @@ struct LearnFestivalDetailView: View {
         ZStack(alignment: .top) {
             GeometryReader { geo in
                 if let url = destinationURL(currentFestival.backgroundUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            fallbackBanner
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure:
-                            fallbackBanner
-                        @unknown default:
-                            fallbackBanner
-                        }
-                    }
+                    ImageLoaderView(urlString: url.absoluteString)
+                        .background(fallbackBanner)
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
                     .clipped()
                 } else {
@@ -2538,7 +2459,7 @@ struct LearnFestivalDetailView: View {
                     festivalEventsSectionHeader(L("即将开始", "Upcoming"))
                     ForEach(upcomingRelatedEvents) { event in
                         Button {
-                            discoverPush(.eventDetail(eventID: event.id))
+                            appPush(.eventDetail(eventID: event.id))
                         } label: {
                             festivalEventRow(event)
                         }
@@ -2550,7 +2471,7 @@ struct LearnFestivalDetailView: View {
                     festivalEventsSectionHeader(L("已结束活动", "Ended"))
                     ForEach(endedRelatedEvents) { event in
                         Button {
-                            discoverPush(.eventDetail(eventID: event.id))
+                            appPush(.eventDetail(eventID: event.id))
                         } label: {
                             festivalEventRow(event)
                         }
@@ -2599,7 +2520,7 @@ struct LearnFestivalDetailView: View {
         } else {
             ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
                 Button {
-                    discoverPush(.newsDetail(article: article))
+                    discoverPush(.newsDetail(articleID: article.id))
                 } label: {
                     DiscoverNewsRow(article: article, showsSummary: false)
                 }
@@ -2654,19 +2575,12 @@ struct LearnFestivalDetailView: View {
 
     @ViewBuilder
     private func festivalEventCoverImage(_ event: WebEvent) -> some View {
-        if let cover = AppConfig.resolvedURLString(event.cardImageURL),
-           let url = URL(string: cover) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                default:
+        if let cover = AppConfig.resolvedURLString(event.cardImageURL) {
+            ImageLoaderView(urlString: cover)
+                .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(RaverTheme.card)
-                }
-            }
+                )
         } else {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(
@@ -2701,18 +2615,8 @@ struct LearnFestivalDetailView: View {
         if let url = destinationURL(currentFestival.avatarUrl) {
             fallbackAvatar
                 .overlay {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            Color.clear
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        case .failure:
-                            Color.clear
-                        @unknown default:
-                            Color.clear
-                        }
-                    }
+                    ImageLoaderView(urlString: url.absoluteString)
+                        .background(Color.clear)
                 }
         } else {
             fallbackAvatar
@@ -2768,15 +2672,9 @@ struct LearnFestivalDetailView: View {
 
     @ViewBuilder
     private func contributorUserAvatar(_ user: WebUserLite, size: CGFloat) -> some View {
-        if let avatar = AppConfig.resolvedURLString(user.avatarUrl), let url = URL(string: avatar) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    Circle().fill(RaverTheme.card)
-                }
-            }
+        if let avatar = AppConfig.resolvedURLString(user.avatarUrl) {
+            ImageLoaderView(urlString: avatar)
+                .background(Circle().fill(RaverTheme.card))
             .frame(width: size, height: size)
             .clipShape(Circle())
         } else {
@@ -2805,7 +2703,7 @@ struct LearnFestivalDetailView: View {
                 currentFestival.contributors[index] = resolved
                 onFestivalUpdated?(currentFestival)
             }
-            selectedContributorUser = resolved
+            appPush(.userProfile(userID: resolved.id))
             return
         }
         errorMessage = L("未找到对应用户主页", "Matched user profile not found.")
@@ -2964,16 +2862,9 @@ struct LearnFestivalDetailView: View {
                                 .frame(width: 44, height: 44)
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         } else if let current = currentFestival.avatarUrl,
-                                  let resolved = AppConfig.resolvedURLString(current),
-                                  let url = URL(string: resolved) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image.resizable().scaledToFill()
-                                default:
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card)
-                                }
-                            }
+                                  let resolved = AppConfig.resolvedURLString(current) {
+                            ImageLoaderView(urlString: resolved)
+                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card))
                             .frame(width: 44, height: 44)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
@@ -2992,16 +2883,9 @@ struct LearnFestivalDetailView: View {
                                 .frame(width: 88, height: 44)
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         } else if let current = currentFestival.backgroundUrl,
-                                  let resolved = AppConfig.resolvedURLString(current),
-                                  let url = URL(string: resolved) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image.resizable().scaledToFill()
-                                default:
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card)
-                                }
-                            }
+                                  let resolved = AppConfig.resolvedURLString(current) {
+                            ImageLoaderView(urlString: resolved)
+                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card))
                             .frame(width: 88, height: 44)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
@@ -3535,16 +3419,9 @@ struct LearnFestivalEditorView: View {
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         } else if let current = editingFestival?.avatarUrl,
-                  let resolved = AppConfig.resolvedURLString(current),
-                  let url = URL(string: resolved) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card)
-                }
-            }
+                  let resolved = AppConfig.resolvedURLString(current) {
+            ImageLoaderView(urlString: resolved)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card))
             .frame(width: 44, height: 44)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
@@ -3559,16 +3436,9 @@ struct LearnFestivalEditorView: View {
                 .frame(width: 88, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         } else if let current = editingFestival?.backgroundUrl,
-                  let resolved = AppConfig.resolvedURLString(current),
-                  let url = URL(string: resolved) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card)
-                }
-            }
+                  let resolved = AppConfig.resolvedURLString(current) {
+            ImageLoaderView(urlString: resolved)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card))
             .frame(width: 88, height: 44)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
@@ -3854,20 +3724,8 @@ private struct LearnLabelFounderAvatar: View {
             .frame(width: 42)
             .overlay {
                 if let url = destinationURL(urlString) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            placeholder
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure:
-                            placeholder
-                        @unknown default:
-                            placeholder
-                        }
-                    }
+                    ImageLoaderView(urlString: url.absoluteString)
+                        .background(placeholder)
                 } else {
                     placeholder
                 }
@@ -4019,23 +3877,12 @@ private struct LearnLabelImagePreviewView: View {
         ZStack(alignment: .topTrailing) {
             Color.black.ignoresSafeArea()
 
-            AsyncImage(url: item.url) { phase in
-                switch phase {
-                case .empty:
-                    ProgressView(L("加载中...", "Loading..."))
-                        .tint(.white)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .failure:
+            ImageLoaderView(urlString: item.url.absoluteString, resizingMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(
                     Text(LL("图片加载失败"))
                         .foregroundStyle(Color.white.opacity(0.85))
-                @unknown default:
-                    EmptyView()
-                }
-            }
+                )
             .padding(.horizontal, 12)
             .padding(.vertical, 44)
 
@@ -4100,6 +3947,8 @@ private struct WrapFlowLayout<Item: Hashable, Content: View>: View {
 
 struct RankingBoardDetailView: View {
     @EnvironmentObject private var appContainer: AppContainer
+    @Environment(\.appPush) private var appPush
+    @Environment(\.dismiss) private var dismiss
 
     private var djsRepository: DiscoverDJsRepository {
         appContainer.discoverDJsRepository
@@ -4111,8 +3960,6 @@ struct RankingBoardDetailView: View {
     @State private var detail: RankingBoardDetail?
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var selectedDJID: String?
-    @State private var selectedFestival: LearnFestival?
 
     init(board: RankingBoard) {
         self.board = board
@@ -4121,7 +3968,31 @@ struct RankingBoardDetailView: View {
     }
 
     var body: some View {
-        ScrollView { contentBody }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .frame(width: 34, height: 34)
+                            .background(
+                                Circle()
+                                    .fill(RaverTheme.card)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+
+                contentBody
+            }
+        }
         .background(RaverTheme.background)
         .navigationTitle(board.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -4138,16 +4009,6 @@ struct RankingBoardDetailView: View {
             Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
-        }
-        .navigationDestination(item: $selectedDJID) { djID in
-            DiscoverCoordinatorView {
-                DJDetailView(djID: djID)
-            }
-        }
-        .navigationDestination(item: $selectedFestival) { festival in
-            DiscoverCoordinatorView {
-                LearnFestivalDetailView(festival: festival)
-            }
         }
     }
 
@@ -4213,9 +4074,9 @@ struct RankingBoardDetailView: View {
             ForEach(entries) { entry in
                 Button {
                     if let festival = entry.festival {
-                        selectedFestival = mapFestivalLiteToLearnFestival(festival)
+                        appPush(.discover(.festivalDetail(festivalID: festival.id)))
                     } else if let dj = entry.dj {
-                        selectedDJID = dj.id
+                        appPush(.djDetail(djID: dj.id))
                     }
                 } label: {
                     RankingEntryCard(entry: entry)
@@ -4334,53 +4195,17 @@ private struct RankingEntryCard: View {
     @ViewBuilder
     private var entryImage: some View {
         if let festivalBackground = AppConfig.resolvedURLString(entry.festival?.backgroundUrl),
-           let url = URL(string: festivalBackground) {
-            AsyncImage(url: url, transaction: Transaction(animation: .none)) { phase in
-                switch phase {
-                case .empty:
-                    fallbackImage
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    fallbackImage
-                @unknown default:
-                    fallbackImage
-                }
-            }
+           URL(string: festivalBackground) != nil {
+            ImageLoaderView(urlString: festivalBackground)
+                .background(fallbackImage)
         } else if let festivalAvatar = AppConfig.resolvedURLString(entry.festival?.avatarUrl),
-                  let url = URL(string: festivalAvatar) {
-            AsyncImage(url: url, transaction: Transaction(animation: .none)) { phase in
-                switch phase {
-                case .empty:
-                    fallbackImage
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    fallbackImage
-                @unknown default:
-                    fallbackImage
-                }
-            }
+                  URL(string: festivalAvatar) != nil {
+            ImageLoaderView(urlString: festivalAvatar)
+                .background(fallbackImage)
         } else if let avatar = AppConfig.resolvedDJAvatarURLString(entry.dj?.avatarMediumUrl ?? entry.dj?.avatarUrl, size: .medium),
-           let url = URL(string: highResAvatarURL(avatar)) {
-            AsyncImage(url: url, transaction: Transaction(animation: .none)) { phase in
-                switch phase {
-                case .empty:
-                    fallbackImage
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    fallbackImage
-                @unknown default:
-                    fallbackImage
-                }
-            }
+           URL(string: highResAvatarURL(avatar)) != nil {
+            ImageLoaderView(urlString: highResAvatarURL(avatar))
+                .background(fallbackImage)
         } else {
             fallbackImage
         }
@@ -4459,21 +4284,9 @@ struct DJSearchResultCard: View {
     @ViewBuilder
     private var djImage: some View {
         if let avatar = AppConfig.resolvedDJAvatarURLString(dj.avatarOriginalUrl ?? dj.avatarUrl, size: .original),
-           let url = URL(string: highResAvatarURL(avatar)) {
-            AsyncImage(url: url, transaction: Transaction(animation: .none)) { phase in
-                switch phase {
-                case .empty:
-                    fallbackImage
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    fallbackImage
-                @unknown default:
-                    fallbackImage
-                }
-            }
+           URL(string: highResAvatarURL(avatar)) != nil {
+            ImageLoaderView(urlString: highResAvatarURL(avatar))
+                .background(fallbackImage)
         } else {
             fallbackImage
         }

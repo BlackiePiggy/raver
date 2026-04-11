@@ -119,6 +119,13 @@ actor MockSocialService: SocialService {
         return FeedPage(posts: filtered.sorted(by: { $0.createdAt > $1.createdAt }), nextCursor: nil)
     }
 
+    func fetchPost(postID: String) async throws -> Post {
+        guard let post = posts.first(where: { $0.id == postID }) else {
+            throw ServiceError.message("动态不存在")
+        }
+        return post
+    }
+
     func createPost(input: CreatePostInput) async throws -> Post {
         let trimmed = input.content.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedImages = input.images.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }

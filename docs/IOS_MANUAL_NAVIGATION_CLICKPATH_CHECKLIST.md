@@ -1,6 +1,6 @@
 # iOS 手工回归点击路径清单（全量跳转 + Sheet/Modal）
 
-更新时间：2026-04-10
+更新时间：2026-04-11
 适用工程：`mobile/ios/RaverMVP/RaverMVP`
 
 ## 0. 说明
@@ -15,6 +15,27 @@
 - `SHEET`：底部弹层（可下滑关闭）
 - `FULL`：全屏覆盖层
 
+### 0.1 核心链路预期返回与 TabBar 行为（S0-T03）
+
+| 编号 | 入口链路 | 预期返回页 | TabBar 预期 |
+|---|---|---|---|
+| R-01 | Discover 推荐 -> EventDetail | 返回 Discover 推荐列表（保持滚动位置） | 显示 |
+| R-02 | Discover 活动列表 -> EventDetail -> DJDetail | 返回 EventDetail，再返回活动列表 | 显示 |
+| R-03 | Discover 新闻列表 -> NewsDetail -> UserProfile | 返回 NewsDetail，再返回新闻列表 | 显示 |
+| R-04 | Discover 搜索输入 -> 搜索结果 -> EventDetail | 返回搜索结果，再返回搜索输入 | 显示 |
+| R-05 | Circle Feed -> PostDetail | 返回 Feed 列表 | 隐藏（详情时） |
+| R-06 | Circle Feed -> UserProfile | 返回 Feed 列表 | 隐藏（详情时） |
+| R-07 | Messages 会话列表 -> ChatView -> UserProfile | 返回 ChatView，再返回会话列表 | 隐藏（详情时） |
+| R-08 | Messages 通知分类 -> 通知详情 | 返回消息主页 | 隐藏（详情时） |
+| R-09 | Profile 首页 -> FollowList -> UserProfile | 返回 FollowList，再返回 Profile 首页 | 隐藏（详情时） |
+| R-10 | Profile 首页 -> MyCheckins -> EventDetail | 返回 MyCheckins，再返回 Profile 首页 | 隐藏（详情时） |
+| R-11 | Search（跨入口）-> PostDetail | 返回 Search 结果页 | 隐藏（详情时） |
+| R-12 | Notifications -> SquadProfile | 返回 Notifications | 隐藏（详情时） |
+
+说明：
+- 当前改造基线下，`Discover` tab 的 push 期间仍保持 TabBar 显示；`Circle/Messages/Profile` 在 push 到非根页面时隐藏 TabBar。
+- 所有公共详情页应优先经过根路由（`AppRoute`）承接，避免局部栈返回行为漂移。
+
 ---
 
 ## 1. 顶层容器与主导航骨架
@@ -23,11 +44,12 @@
 - [ ] `AppCoordinatorView`：未登录进入 `LoginView`。
 - [ ] 登录后进入 `MainTabCoordinatorView -> MainTabView`。
 
-### 1.2 四个主 Tab（各自独立 NavigationStack）
-- [ ] `DiscoverCoordinatorView { DiscoverHomeView() }`
-- [ ] `CircleCoordinatorView { CircleHomeView() }`
-- [ ] `MessagesCoordinatorView(repository:)`
-- [ ] `ProfileCoordinatorView(repository:)`
+### 1.2 四个主 Tab（单根 NavigationStack + Tab 根页承载）
+- [ ] 根容器仅有一个 `NavigationStack(path: $router.path)`。
+- [ ] Discover 根页：`DiscoverCoordinatorView(push:) { DiscoverHomeView() }`（仅注入 push，不持有本地栈）。
+- [ ] Circle 根页：`CircleHomeView()`（不持有本地栈）。
+- [ ] Messages 根页：`MessagesCoordinatorView(repository:)`（状态容器，不持有本地栈）。
+- [ ] Profile 根页：`ProfileCoordinatorView(repository:)`（状态容器，不持有本地栈）。
 
 ---
 

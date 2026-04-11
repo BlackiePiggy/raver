@@ -13,7 +13,7 @@ struct SearchView: View {
 
 private struct SearchScreen: View {
     @EnvironmentObject private var appState: AppState
-    @Environment(\.profilePush) private var profilePush
+    @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: SearchViewModel
 
     init(viewModel: SearchViewModel) {
@@ -124,7 +124,7 @@ private struct SearchScreen: View {
                         }
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            profilePush(.userProfile(user.id))
+                            appPush(.userProfile(userID: user.id))
                         }
                     }
                     .padding(.vertical, 4)
@@ -156,14 +156,14 @@ private struct SearchScreen: View {
                                 onFollowTap: nil,
                                 onMessageTap: nil,
                                 onAuthorTap: {
-                                    profilePush(.userProfile(post.author.id))
+                                    appPush(.userProfile(userID: post.author.id))
                                 },
                                 onSquadTap: nil
                             )
                             .foregroundStyle(RaverTheme.primaryText)
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                profilePush(.postDetail(post))
+                                appPush(.postDetail(postID: post.id))
                             }
                         }
                     }
@@ -198,7 +198,7 @@ private struct SearchScreen: View {
                         }
 
                         Button(squad.isMember ? L("进入小队", "Enter Squad") : L("加入并进入", "Join & Enter")) {
-                            profilePush(.squadProfile(squad.id))
+                            appPush(.squadProfile(squadID: squad.id))
                         }
                         .buttonStyle(.borderedProminent)
                     }

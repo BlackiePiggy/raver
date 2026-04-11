@@ -316,7 +316,7 @@ final class MyCheckinsViewModel: ObservableObject {
 
 struct MyCheckinsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.profilePush) private var profilePush
+    @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appContainer: AppContainer
 
     private struct TimelineDJEntry: Identifiable {
@@ -734,7 +734,7 @@ struct MyCheckinsView: View {
                 if let event = node.event {
                     VStack(alignment: .leading, spacing: 8) {
                         Button {
-                            profilePush(.eventDetail(event.id))
+                            appPush(.eventDetail(eventID: event.id))
                         } label: {
                             eventHero(for: event)
                                 .frame(height: 124)
@@ -771,7 +771,7 @@ struct MyCheckinsView: View {
                         ForEach(section.entries) { rankedEntry in
                             Button {
                                 if let resolvedID = resolvedTimelineDetailDJID(for: rankedEntry.dj) {
-                                    profilePush(.djDetail(resolvedID))
+                                    appPush(.djDetail(djID: resolvedID))
                                 } else {
                                     errorMessage = L("该 DJ 暂未建立详情档案", "This DJ profile is not available yet.")
                                 }
@@ -842,7 +842,7 @@ struct MyCheckinsView: View {
                     .padding(.bottom, 12)
 
                     Button {
-                        profilePush(.eventDetail(event.id))
+                        appPush(.eventDetail(eventID: event.id))
                     } label: {
                         eventHero(for: event)
                             .frame(height: 188)
@@ -926,23 +926,8 @@ struct MyCheckinsView: View {
     @ViewBuilder
     private func eventHero(for event: CheckinEventLite) -> some View {
         if let cover = AppConfig.resolvedURLString(event.coverImageUrl), let url = URL(string: cover) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    ZStack {
-                        Color(red: 0.99, green: 0.94, blue: 0.90)
-                        ProgressView()
-                    }
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    eventTimelineFallback
-                @unknown default:
-                    eventTimelineFallback
-                }
-            }
+            ImageLoaderView(urlString: url.absoluteString)
+                .background(eventTimelineFallback)
         } else {
             eventTimelineFallback
         }
@@ -987,7 +972,7 @@ struct MyCheckinsView: View {
     private func timelineDJButton(_ entry: TimelineDJEntry) -> some View {
         Button {
             if let resolvedID = resolvedTimelineDetailDJID(for: entry.dj) {
-                profilePush(.djDetail(resolvedID))
+                appPush(.djDetail(djID: resolvedID))
             } else {
                 errorMessage = L("该 DJ 暂未建立详情档案", "This DJ profile is not available yet.")
             }
@@ -1149,7 +1134,7 @@ struct MyCheckinsView: View {
            let djID = performer.djID,
            !djID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             Button {
-                profilePush(.djDetail(djID))
+                appPush(.djDetail(djID: djID))
             } label: {
                 timelinePerformerAvatar(performer, size: size)
             }
@@ -1163,18 +1148,8 @@ struct MyCheckinsView: View {
         Group {
             if let avatar = AppConfig.resolvedDJAvatarURLString(performer?.avatarUrl, size: .small),
                let url = URL(string: avatar) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        Circle().fill(RaverTheme.card)
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .failure:
-                        timelinePerformerFallback(performer)
-                    @unknown default:
-                        timelinePerformerFallback(performer)
-                    }
-                }
+                ImageLoaderView(urlString: url.absoluteString)
+                    .background(timelinePerformerFallback(performer))
             } else {
                 timelinePerformerFallback(performer)
             }
@@ -1214,18 +1189,8 @@ struct MyCheckinsView: View {
     private func djAvatar(for dj: CheckinDJLite) -> some View {
         if let avatar = AppConfig.resolvedDJAvatarURLString(dj.avatarUrl, size: .small),
            let url = URL(string: avatar) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    djAvatarFallback(for: dj)
-                @unknown default:
-                    djAvatarFallback(for: dj)
-                }
-            }
+            ImageLoaderView(urlString: url.absoluteString)
+                .background(djAvatarFallback(for: dj))
             .clipShape(Circle())
         } else {
             djAvatarFallback(for: dj)

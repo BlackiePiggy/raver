@@ -11,7 +11,7 @@ struct NotificationsView: View {
 }
 
 private struct NotificationsScreen: View {
-    @Environment(\.profilePush) private var profilePush
+    @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: NotificationsViewModel
 
     init(viewModel: NotificationsViewModel) {
@@ -95,10 +95,10 @@ private struct NotificationsScreen: View {
         switch target.type {
         case "user":
             if let actor = item.actor {
-                profilePush(.userProfile(actor.id))
+                appPush(.userProfile(userID: actor.id))
             }
         case "squad":
-            profilePush(.squadProfile(target.id))
+            appPush(.squadProfile(squadID: target.id))
         default:
             break
         }
@@ -108,20 +108,10 @@ private struct NotificationsScreen: View {
     private func notificationLeadingAvatar(for item: AppNotification) -> some View {
         if let actor = item.actor {
             if let resolved = AppConfig.resolvedURLString(actor.avatarURL),
-               let remoteURL = URL(string: resolved),
+               URL(string: resolved) != nil,
                resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-                AsyncImage(url: remoteURL) { phase in
-                    switch phase {
-                    case .empty:
-                        Circle().fill(RaverTheme.cardBorder)
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .failure:
-                        notificationLeadingAvatarFallback(actor)
-                    @unknown default:
-                        Circle().fill(RaverTheme.cardBorder)
-                    }
-                }
+                ImageLoaderView(urlString: resolved)
+                    .background(notificationLeadingAvatarFallback(actor))
                 .frame(width: 30, height: 30)
                 .clipShape(Circle())
             } else {

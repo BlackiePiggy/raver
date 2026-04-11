@@ -13,6 +13,7 @@ struct DiscoverEventsRootView: View {
 struct EventsModuleView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: EventsModuleViewModel
 
     private static let predefinedEventTypeKeys = EventTypeOption.allCases.map(\.rawValue)
@@ -106,7 +107,7 @@ struct EventsModuleView: View {
                 selectedFilters: $calendarFilters,
                 onEventSelected: { event in
                     showCalendar = false
-                    discoverPush(.eventDetail(eventID: event.id))
+                    appPush(.eventDetail(eventID: event.id))
                 }
             )
             .presentationDetents([.fraction(0.8), .large])
@@ -701,7 +702,7 @@ struct EventsModuleView: View {
     @MainActor
     private func presentEventDetail(_ event: WebEvent) {
         guard !showCalendar, !showCountryFilter else { return }
-        discoverPush(.eventDetail(eventID: event.id))
+        appPush(.eventDetail(eventID: event.id))
     }
 
     private func eventActionButton(for event: WebEvent) -> some View {

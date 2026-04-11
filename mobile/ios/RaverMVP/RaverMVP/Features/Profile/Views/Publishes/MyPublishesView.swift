@@ -31,42 +31,6 @@ final class MyPublishesViewModel: ObservableObject {
         }
     }
 
-    func fetchEditableEvent(id: String) async -> WebEvent? {
-        do {
-            return try await service.fetchEvent(id: id)
-        } catch {
-            errorMessage = error.userFacingMessage
-            return nil
-        }
-    }
-
-    func fetchEditableSet(id: String) async -> WebDJSet? {
-        do {
-            return try await service.fetchDJSet(id: id)
-        } catch {
-            errorMessage = error.userFacingMessage
-            return nil
-        }
-    }
-
-    func fetchEditableRatingEvent(id: String) async -> WebRatingEvent? {
-        do {
-            return try await service.fetchRatingEvent(id: id)
-        } catch {
-            errorMessage = error.userFacingMessage
-            return nil
-        }
-    }
-
-    func fetchEditableRatingUnit(id: String) async -> WebRatingUnit? {
-        do {
-            return try await service.fetchRatingUnit(id: id)
-        } catch {
-            errorMessage = error.userFacingMessage
-            return nil
-        }
-    }
-
     func deleteSet(id: String) async {
         do {
             try await service.deleteDJSet(id: id)
@@ -126,6 +90,7 @@ final class MyPublishesViewModel: ObservableObject {
 }
 
 struct MyPublishesView: View {
+    @Environment(\.appPush) private var appPush
     @Environment(\.profilePush) private var profilePush
     @StateObject private var viewModel: MyPublishesViewModel
     @State private var selectedTab = 0
@@ -156,8 +121,8 @@ struct MyPublishesView: View {
                 }
 
                 ForEach(viewModel.publishes.djSets) { set in
-                    NavigationLink {
-                        DJSetDetailView(setID: set.id)
+                    Button {
+                        appPush(.discover(.setDetail(setID: set.id)))
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(set.title)
@@ -171,13 +136,10 @@ struct MyPublishesView: View {
                         }
                         .padding(.vertical, 4)
                     }
+                    .buttonStyle(.plain)
                     .swipeActions {
                         Button {
-                            Task {
-                                if let editableSet = await viewModel.fetchEditableSet(id: set.id) {
-                                    profilePush(.editSet(editableSet))
-                                }
-                            }
+                            profilePush(.editSet(setID: set.id))
                         } label: {
                             Label(LL("编辑"), systemImage: "pencil")
                         }
@@ -197,7 +159,7 @@ struct MyPublishesView: View {
 
                 ForEach(viewModel.publishes.events) { event in
                     Button {
-                        profilePush(.eventDetail(event.id))
+                        appPush(.eventDetail(eventID: event.id))
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(event.name)
@@ -216,11 +178,7 @@ struct MyPublishesView: View {
                     }
                     .swipeActions {
                         Button {
-                            Task {
-                                if let editableEvent = await viewModel.fetchEditableEvent(id: event.id) {
-                                    profilePush(.editEvent(editableEvent))
-                                }
-                            }
+                            profilePush(.editEvent(eventID: event.id))
                         } label: {
                             Label(LL("编辑"), systemImage: "pencil")
                         }
@@ -254,11 +212,7 @@ struct MyPublishesView: View {
                             .padding(.vertical, 4)
                             .swipeActions {
                                 Button {
-                                    Task {
-                                        if let editableEvent = await viewModel.fetchEditableRatingEvent(id: event.id) {
-                                            profilePush(.editRatingEvent(editableEvent))
-                                        }
-                                    }
+                                    profilePush(.editRatingEvent(eventID: event.id))
                                 } label: {
                                     Label(LL("编辑"), systemImage: "pencil")
                                 }
@@ -289,11 +243,7 @@ struct MyPublishesView: View {
                             .padding(.vertical, 4)
                             .swipeActions {
                                 Button {
-                                    Task {
-                                        if let editableUnit = await viewModel.fetchEditableRatingUnit(id: unit.id) {
-                                            profilePush(.editRatingUnit(editableUnit))
-                                        }
-                                    }
+                                    profilePush(.editRatingUnit(unitID: unit.id))
                                 } label: {
                                     Label(LL("编辑"), systemImage: "pencil")
                                 }

@@ -8,6 +8,8 @@ struct RaverMVPApp: App {
     @StateObject private var appState: AppState
 
     init() {
+        ImageCacheBootstrap.configureIfNeeded()
+
         let socialService = AppEnvironment.makeService()
         let webService = AppEnvironment.makeWebService()
         _appContainer = StateObject(

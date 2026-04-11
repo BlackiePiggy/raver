@@ -62,6 +62,10 @@ Response
 
 Response: same as `GET /v1/feed`
 
+### GET /v1/feed/posts/:id
+
+Response: `Post`
+
 ### POST /v1/feed/posts
 
 Request

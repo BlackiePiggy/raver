@@ -239,28 +239,15 @@ struct EditProfileView: View {
                 .frame(width: 88, height: 88)
                 .clipShape(Circle())
         } else if let resolved = AppConfig.resolvedURLString(currentAvatarURL),
-                  let remoteURL = URL(string: resolved),
+                  URL(string: resolved) != nil,
                   resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
+            ImageLoaderView(urlString: resolved)
+                .background(
                     Image(currentAvatarAsset)
                         .resizable()
                         .scaledToFill()
                         .background(RaverTheme.card)
-                @unknown default:
-                    Image(currentAvatarAsset)
-                        .resizable()
-                        .scaledToFill()
-                        .background(RaverTheme.card)
-                }
-            }
+                )
             .frame(width: 88, height: 88)
             .clipShape(Circle())
         } else {

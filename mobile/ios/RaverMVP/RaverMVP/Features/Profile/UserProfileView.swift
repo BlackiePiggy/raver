@@ -17,6 +17,7 @@ struct UserProfileView: View {
 private struct UserProfileScreen: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
+    @Environment(\.appPush) private var appPush
     @Environment(\.profilePush) private var profilePush
     @StateObject private var viewModel: UserProfileViewModel
 
@@ -62,7 +63,7 @@ private struct UserProfileScreen: View {
                                     Task {
                                         do {
                                             let conversation = try await appContainer.socialService.startDirectConversation(identifier: profile.username)
-                                            profilePush(.conversation(conversation))
+                                            appPush(.conversation(conversationID: conversation.id))
                                         } catch {
                                             viewModel.error = error.userFacingMessage
                                         }
@@ -112,7 +113,7 @@ private struct UserProfileScreen: View {
                             .foregroundStyle(RaverTheme.primaryText)
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                profilePush(.postDetail(post))
+                                appPush(.postDetail(postID: post.id))
                             }
                             .onAppear {
                                 Task { await viewModel.loadMoreIfNeeded(currentPost: post) }

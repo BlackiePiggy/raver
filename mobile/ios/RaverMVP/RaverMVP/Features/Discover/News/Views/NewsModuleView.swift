@@ -35,7 +35,7 @@ struct NewsModuleView: View {
                         LazyVStack(spacing: 0) {
                             ForEach(Array(displayedArticles.enumerated()), id: \.element.id) { index, article in
                                 Button {
-                                    discoverPush(.newsDetail(article: article))
+                                    discoverPush(.newsDetail(articleID: article.id))
                                 } label: {
                                     DiscoverNewsRow(article: article)
                                 }
@@ -262,25 +262,8 @@ struct DiscoverNewsRow: View {
 
     @ViewBuilder
     private var newsCover: some View {
-        if let resolved = AppConfig.resolvedURLString(article.coverImageURL),
-           let url = URL(string: resolved) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    RaverTheme.card
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    fallbackCover
-                @unknown default:
-                    fallbackCover
-                }
-            }
-        } else {
-            fallbackCover
-        }
+        ImageLoaderView(urlString: article.coverImageURL, resizingMode: .fill)
+            .background(fallbackCover)
     }
 
     private var fallbackCover: some View {

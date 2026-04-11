@@ -603,6 +603,7 @@ router.get('/', (_req: Request, res: Response) => {
       authRegister: 'POST /v1/auth/register',
       feed: 'GET /v1/feed',
       feedSearch: 'GET /v1/feed/search',
+      feedPostDetail: 'GET /v1/feed/posts/:id',
       createPost: 'POST /v1/feed/posts',
       updatePost: 'PATCH /v1/feed/posts/:id',
       deletePost: 'DELETE /v1/feed/posts/:id',
@@ -908,6 +909,60 @@ router.get('/feed/search', optionalAuth, async (req: Request, res: Response): Pr
     });
   } catch (error) {
     console.error('BFF feed search error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/feed/posts/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const viewerId = authReq.user?.userId;
+    const postID = String(req.params.id || '').trim();
+
+    if (!postID) {
+      res.status(400).json({ error: 'Post id is required' });
+      return;
+    }
+
+    const post = await prisma.post.findFirst({
+      where: {
+        id: postID,
+        visibility: 'public',
+        squadId: null,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+        squad: {
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    if (!post) {
+      res.status(404).json({ error: 'Post not found' });
+      return;
+    }
+
+    const [followingSet, likedPostIds, repostedPostIds] = await Promise.all([
+      buildFollowingMap(viewerId, [post.user.id]),
+      buildLikedPostMap(viewerId, [post.id]),
+      buildRepostedPostMap(viewerId, [post.id]),
+    ]);
+
+    res.json(mapPost(post, followingSet, likedPostIds, repostedPostIds));
+  } catch (error) {
+    console.error('BFF post detail error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

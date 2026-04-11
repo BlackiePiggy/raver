@@ -14,6 +14,7 @@ struct FeedView: View {
 
 private struct FeedScreen: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.appPush) private var appPush
     @Environment(\.circlePush) private var circlePush
     @StateObject private var viewModel: FeedViewModel
     @State private var editTapPostID: String?
@@ -51,13 +52,13 @@ private struct FeedScreen: View {
                                 onFollowTap: nil,
                                 onMessageTap: nil,
                                 onAuthorTap: {
-                                    circlePush(.userProfile(post.author.id))
+                                    appPush(.userProfile(userID: post.author.id))
                                 },
                                 onSquadTap: nil,
                                 onEditTap: post.author.id == appState.session?.user.id
                                     ? {
                                         editTapPostID = post.id
-                                        circlePush(.postEdit(post))
+                                        circlePush(.postEdit(postID: post.id))
                                     }
                                     : nil
                             )
@@ -68,7 +69,7 @@ private struct FeedScreen: View {
                                     editTapPostID = nil
                                     return
                                 }
-                                circlePush(.postDetail(post))
+                                appPush(.postDetail(postID: post.id))
                             }
                             .onAppear {
                                 Task { await viewModel.loadMoreIfNeeded(currentPost: post) }

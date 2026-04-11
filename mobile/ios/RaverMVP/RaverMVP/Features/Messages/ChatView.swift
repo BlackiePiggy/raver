@@ -3,8 +3,7 @@ import UIKit
 
 struct ChatView: View {
     @EnvironmentObject private var appState: AppState
-    @Environment(\.messagesPush) private var messagesPush
-    @Environment(\.messagesPresent) private var messagesPresent
+    @Environment(\.appPush) private var appPush
     let conversation: Conversation
     let service: SocialService
 
@@ -28,7 +27,7 @@ struct ChatView: View {
             if conversation.type == .direct, let peer = conversation.peer {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        messagesPush(.userProfile(peer.id))
+                        appPush(.userProfile(userID: peer.id))
                     } label: {
                         Image(systemName: "person.crop.circle")
                     }
@@ -38,7 +37,7 @@ struct ChatView: View {
             if conversation.type == .group {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        messagesPresent(.squadProfile(conversation.id))
+                        appPush(.squadProfile(squadID: conversation.id))
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -131,7 +130,7 @@ struct ChatView: View {
 
             if !message.isMine {
                 Button {
-                    messagesPush(.userProfile(message.sender.id))
+                    appPush(.userProfile(userID: message.sender.id))
                 } label: {
                     avatarView(for: message.sender)
                 }
@@ -149,7 +148,7 @@ struct ChatView: View {
 
             if message.isMine {
                 Button {
-                    messagesPush(.userProfile(message.sender.id))
+                    appPush(.userProfile(userID: message.sender.id))
                 } label: {
                     avatarView(for: message.sender)
                 }
@@ -167,7 +166,7 @@ struct ChatView: View {
 
             if !message.isMine {
                 Button {
-                    messagesPush(.userProfile(message.sender.id))
+                    appPush(.userProfile(userID: message.sender.id))
                 } label: {
                     avatarView(for: message.sender)
                 }
@@ -184,7 +183,7 @@ struct ChatView: View {
 
             if message.isMine {
                 Button {
-                    messagesPush(.userProfile(message.sender.id))
+                    appPush(.userProfile(userID: message.sender.id))
                 } label: {
                     avatarView(for: message.sender)
                 }
@@ -224,22 +223,10 @@ struct ChatView: View {
     @ViewBuilder
     private func avatarView(for user: UserSummary) -> some View {
         if let resolved = AppConfig.resolvedURLString(user.avatarURL),
-           let remoteURL = URL(string: resolved),
+           URL(string: resolved) != nil,
            resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .empty:
-                    Circle().fill(RaverTheme.card)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    avatarViewFallback(for: user)
-                @unknown default:
-                    avatarViewFallback(for: user)
-                }
-            }
+            ImageLoaderView(urlString: resolved)
+                .background(avatarViewFallback(for: user))
             .frame(width: 34, height: 34)
             .clipShape(Circle())
         } else {

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.appPush) private var appPush
     @Environment(\.profilePush) private var profilePush
     @ObservedObject private var viewModel: ProfileViewModel
 
@@ -196,7 +197,7 @@ struct ProfileView: View {
                         onMessageTap: nil,
                         onAuthorTap: {
                             if post.author.id != appState.session?.user.id {
-                                profilePush(.userProfile(post.author.id))
+                                appPush(.userProfile(userID: post.author.id))
                             }
                         },
                         onSquadTap: nil
@@ -204,7 +205,7 @@ struct ProfileView: View {
                 }
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    profilePush(.postDetail(post))
+                    appPush(.postDetail(postID: post.id))
                 }
             }
         }
@@ -500,20 +501,10 @@ private struct ProfileAvatarImage: View {
     var body: some View {
         Group {
             if let resolved = AppConfig.resolvedURLString(profile.avatarURL),
-               let url = URL(string: resolved),
+               URL(string: resolved) != nil,
                resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        Circle().fill(RaverTheme.card)
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .failure:
-                        fallbackAvatar
-                    @unknown default:
-                        fallbackAvatar
-                    }
-                }
+                ImageLoaderView(urlString: resolved)
+                    .background(fallbackAvatar)
             } else {
                 fallbackAvatar
             }
@@ -589,23 +580,10 @@ private struct ProfileAvatarSquareImage: View {
     var body: some View {
         Group {
             if let resolved = AppConfig.resolvedURLString(profile.avatarURL),
-               let url = URL(string: resolved),
+               URL(string: resolved) != nil,
                resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(RaverTheme.card)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        fallbackAvatar
-                    @unknown default:
-                        fallbackAvatar
-                    }
-                }
+                ImageLoaderView(urlString: resolved)
+                    .background(fallbackAvatar)
             } else {
                 fallbackAvatar
             }

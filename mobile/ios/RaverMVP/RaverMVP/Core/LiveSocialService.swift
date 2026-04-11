@@ -51,6 +51,10 @@ final class LiveSocialService: SocialService {
         return try await request(path: "/v1/feed/search?q=\(encoded)", method: "GET")
     }
 
+    func fetchPost(postID: String) async throws -> Post {
+        try await request(path: "/v1/feed/posts/\(postID)", method: "GET")
+    }
+
     func createPost(input: CreatePostInput) async throws -> Post {
         try await request(path: "/v1/feed/posts", method: "POST", body: input)
     }

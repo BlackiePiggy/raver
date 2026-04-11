@@ -448,24 +448,8 @@ struct EventCalendarSheet: View {
 
     @ViewBuilder
     private func eventCoverImage(_ event: WebEvent) -> some View {
-        if let cover = AppConfig.resolvedURLString(event.cardImageURL), let url = URL(string: cover) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    eventFallbackCover
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    eventFallbackCover
-                @unknown default:
-                    eventFallbackCover
-                }
-            }
-        } else {
-            eventFallbackCover
-        }
+        ImageLoaderView(urlString: event.cardImageURL, resizingMode: .fill)
+            .background(eventFallbackCover)
     }
 
     private var eventFallbackCover: some View {
