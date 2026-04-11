@@ -18,6 +18,7 @@ struct DiscoverNewsDetailView: View {
     @State private var isSendingComment = false
     @State private var commentInput = ""
     @State private var errorMessage: String?
+    @State private var coverImageSize: CGSize = .zero
 
     private var newsRepository: DiscoverNewsRepository {
         appContainer.discoverNewsRepository
@@ -26,11 +27,6 @@ struct DiscoverNewsDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                newsCover
-                    .frame(height: 210)
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
                 Text(article.title)
                     .font(.title3.weight(.bold))
                     .foregroundStyle(RaverTheme.primaryText)
@@ -65,6 +61,11 @@ struct DiscoverNewsDetailView: View {
                         .font(.caption2)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
+
+                newsCover
+                    .aspectRatio(coverAspectRatio, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 Divider()
 
@@ -119,6 +120,13 @@ struct DiscoverNewsDetailView: View {
 
     private var hasAnyBoundEntity: Bool {
         !article.boundDjIDs.isEmpty || !article.boundBrandIDs.isEmpty || !article.boundEventIDs.isEmpty
+    }
+
+    private var coverAspectRatio: CGFloat {
+        guard coverImageSize.width > 1, coverImageSize.height > 1 else {
+            return 16.0 / 9.0
+        }
+        return coverImageSize.width / coverImageSize.height
     }
 
     private var unresolvedBoundDjIDs: [String] {
@@ -526,7 +534,18 @@ struct DiscoverNewsDetailView: View {
 
     @ViewBuilder
     private var newsCover: some View {
-        ImageLoaderView(urlString: article.coverImageURL, resizingMode: .fill)
+        ImageLoaderView(
+            urlString: article.coverImageURL,
+            resizingMode: .fit,
+            onImageLoaded: { imageSize in
+                guard imageSize.width > 1, imageSize.height > 1 else { return }
+                Task { @MainActor in
+                    if coverImageSize != imageSize {
+                        coverImageSize = imageSize
+                    }
+                }
+            }
+        )
             .background(fallbackCover)
             .overlay(alignment: .top) {
                 LinearGradient(
@@ -557,23 +576,43 @@ struct DiscoverNewsDetailView: View {
 
     @ViewBuilder
     private var authorAvatar: some View {
-        ImageLoaderView(urlString: article.authorAvatarURL, resizingMode: .fill)
-            .background(avatarFallback)
+        if let resolved = AppConfig.resolvedURLString(article.authorAvatarURL),
+           let remoteURL = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    avatarFallback
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    avatarFallback
+                @unknown default:
+                    avatarFallback
+                }
+            }
+        } else {
+            avatarFallback
+        }
     }
 
     private var avatarFallback: some View {
-        Circle()
-            .fill(RaverTheme.card)
-            .overlay(
-                Text(String(article.authorName.prefix(1)).uppercased())
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.secondaryText)
+        Image(
+            AppConfig.resolvedUserAvatarAssetName(
+                userID: article.authorID,
+                username: article.authorUsername,
+                avatarURL: article.authorAvatarURL
             )
+        )
+        .resizable()
+        .scaledToFill()
+        .background(RaverTheme.cardBorder)
     }
 }
 
 private struct DiscoverNewsMarkdownView: View {
     let markdown: String
+    @State private var imageSizeByURL: [String: CGSize] = [:]
 
     private enum ListKind {
         case unordered
@@ -892,7 +931,19 @@ private struct DiscoverNewsMarkdownView: View {
 
     @ViewBuilder
     private func markdownImageBlock(_ urlString: String) -> some View {
-        ImageLoaderView(urlString: urlString, resizingMode: .fit)
+        ImageLoaderView(
+            urlString: urlString,
+            resizingMode: .fit,
+            onImageLoaded: { imageSize in
+                guard imageSize.width > 1, imageSize.height > 1 else { return }
+                Task { @MainActor in
+                    if imageSizeByURL[urlString] != imageSize {
+                        imageSizeByURL[urlString] = imageSize
+                    }
+                }
+            }
+        )
+            .aspectRatio(markdownImageAspectRatio(for: urlString), contentMode: .fit)
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -908,6 +959,13 @@ private struct DiscoverNewsMarkdownView: View {
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func markdownImageAspectRatio(for urlString: String) -> CGFloat {
+        guard let size = imageSizeByURL[urlString], size.width > 1, size.height > 1 else {
+            return 16.0 / 9.0
+        }
+        return size.width / size.height
     }
 
     private func parseMarkdownImageURL(from line: String) -> String? {

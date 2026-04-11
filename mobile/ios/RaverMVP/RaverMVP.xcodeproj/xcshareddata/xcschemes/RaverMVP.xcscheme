@@ -72,7 +72,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "RAVER_BFF_BASE_URL"
-            value = "http://192.168.110.124:3001"
+            value = "http://192.168.110.129:3001"
             isEnabled = "NO">
          </EnvironmentVariable>
       </EnvironmentVariables>
