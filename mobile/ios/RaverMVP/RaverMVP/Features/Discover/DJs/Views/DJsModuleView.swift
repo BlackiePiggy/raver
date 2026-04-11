@@ -624,16 +624,7 @@ struct DJsModuleView: View {
                     .disabled(isImportingDJ || isImportConfirmDisabled)
                 }
             }
-            .navigationTitle(LL("导入 DJ"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("关闭", "Close")) {
-                        showDJImportSheet = false
-                    }
-                    .disabled(isImportingDJ)
-                }
-            }
+            .raverSystemNavigation(title: LL("导入 DJ"))
             .scrollDismissesKeyboard(.interactively)
     }
 
@@ -2039,12 +2030,10 @@ struct DJDetailView: View {
         }
         .ignoresSafeArea(edges: .top)
         .background(RaverTheme.background)
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
-        .overlay(alignment: .top) {
-            floatingTopBar
+        .raverImmersiveFloatingNavigationChrome(
+            trailing: immersiveTrailingAction
+        ) {
+            dismiss()
         }
         .task {
             await load()
@@ -2483,40 +2472,18 @@ struct DJDetailView: View {
         .zIndex(1)
     }
 
-    private var floatingTopBar: some View {
-        HStack {
-            floatingCircleButton(systemName: "chevron.left") {
-                dismiss()
+    private var immersiveTrailingAction: AnyView? {
+        guard dj?.canEdit == true else { return nil }
+        return AnyView(
+            RaverNavigationCircleIconButton(
+                systemName: "square.and.pencil",
+                style: .glass
+            ) {
+                guard let currentDJ = dj else { return }
+                prepareDJEditDraft(from: currentDJ)
+                showDJEditSheet = true
             }
-
-            Spacer()
-
-            if dj?.canEdit == true {
-                floatingCircleButton(systemName: "square.and.pencil") {
-                    guard let currentDJ = dj else { return }
-                    prepareDJEditDraft(from: currentDJ)
-                    showDJEditSheet = true
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, topSafeAreaInset() + 6)
-        .zIndex(10)
-    }
-
-    private func floatingCircleButton(systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color.white)
-                .frame(width: 38, height: 38)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
-                )
-        }
-        .buttonStyle(.plain)
+        )
     }
 
     private var djEditSheet: some View {
@@ -2598,16 +2565,7 @@ struct DJDetailView: View {
                     .disabled(isSavingDJProfile || editDJName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .navigationTitle(LL("编辑 DJ"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("关闭", "Close")) {
-                        showDJEditSheet = false
-                    }
-                    .disabled(isSavingDJProfile)
-                }
-            }
+            .raverSystemNavigation(title: LL("编辑 DJ"))
             .scrollDismissesKeyboard(.interactively)
     }
 
@@ -2707,16 +2665,7 @@ struct DJDetailView: View {
                     }
                 }
             }
-            .navigationTitle(LL("Spotify 导入"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("关闭", "Close")) {
-                        showSpotifyImportSheet = false
-                    }
-                    .disabled(isImportingSpotifyDJ)
-                }
-            }
+            .raverSystemNavigation(title: LL("Spotify 导入"))
             .scrollDismissesKeyboard(.interactively)
     }
 

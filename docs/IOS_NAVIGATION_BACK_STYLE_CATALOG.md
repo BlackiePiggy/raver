@@ -54,29 +54,6 @@
 - 这是后续普通列表详情页、搜索结果页、标准设置页的首选方案
 - 原第 5 类“内容区单独返回行”已决定不再新增，应改为这一类
 
-### `BS-02` 系统导航栏 + 左上角文字操作
-
-用途：
-
-- 表单页
-- 创建页
-- 编辑页
-- modal / sheet 风格页面
-- 左上角需要 `取消`、`关闭`、`返回` 这种文字操作
-
-包装入口：
-
-- `raverSystemTextActionNavigation(title:leadingTitle:leadingRole:trailing:displayMode:onLeadingTap:)`
-
-代码位置：
-
-- `RaverNavigationChrome.swift:140`
-
-说明：
-
-- 适合“编辑器 / 创建器 / 导入流程 / 选择器”
-- 这是当前项目里最常见的表单型返回方案
-
 ### `BS-03` 沉浸式浮动毛玻璃圆形返回
 
 用途：
@@ -165,7 +142,6 @@
 为便于后续归类，本文件统一使用以下编码：
 
 - `BS-01` 系统导航栏默认返回
-- `BS-02` 系统导航栏 + 左上文字操作
 - `BS-03` 沉浸式浮动毛玻璃圆形返回
 - `BS-04` 顶栏 + 向下渐变遮罩
 - `BS-X` 特殊关闭型页面
@@ -181,190 +157,175 @@
 
 ## 页面清单
 
-> 说明：本清单按“返回样式类型”分组整理。后续你可以直接在每个类型下面增删页面，或者把页面从一个类型移动到另一个类型。
+> 说明：已按你的要求完成“类型2并入类型1”。当前文档中不再保留返回样式类型2，原类型2页面全部按类型1管理。
 
 ### 返回样式类型 1：`BS-01` 系统导航栏默认返回
 
-- `DiscoverFullScreenSearchInputView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Search/Views/DiscoverSearchViews.swift`
-  - 已接入公共包装：`Yes`
-  - 备注：已删除旧的内容区返回行，改为 `raverSystemNavigation(...)`
-- `EventsSearchResultsView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Search/Views/DiscoverSearchViews.swift`
-  - 已接入公共包装：`No`
-- `NewsSearchResultsView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Search/Views/DiscoverSearchViews.swift`
-  - 已接入公共包装：`No`
-- `DJsSearchResultsView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Search/Views/DiscoverSearchViews.swift`
-  - 已接入公共包装：`No`
-- `SetsSearchResultsView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Search/Views/DiscoverSearchViews.swift`
-  - 已接入公共包装：`No`
-- `WikiSearchResultsView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Search/Views/DiscoverSearchViews.swift`
-  - 已接入公共包装：`No`
-- `EventRoutineView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventDetailView.swift`
-  - 已接入公共包装：`No`
-- `EventCheckinSelectionSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift`
-  - 已接入公共包装：`No`
-- `DJCheckinBindingSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift`
-  - 已接入公共包装：`No`
-- `TracklistSelectorSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Sets/Views/SetsModuleView.swift`
-  - 已接入公共包装：`No`
-- `RankingBoardDetailView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Learn/Views/LearnModuleView.swift`
-  - 已接入公共包装：`No`
-- `ChatView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Messages/ChatView.swift`
-  - 已接入公共包装：`No`
-- `CreateSquadView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Messages/MessagesHomeView.swift`
-  - 已接入公共包装：`No`
-  - 备注：当前依赖系统默认返回
-- `MessageAlertDetailView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Messages/MessagesHomeView.swift`
-  - 已接入公共包装：`No`
-- `MyPublishesView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/Views/Publishes/MyPublishesView.swift`
-  - 已接入公共包装：`No`
-- `FollowListView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/FollowListView.swift`
-  - 已接入公共包装：`No`
-- `UserProfileView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/UserProfileView.swift`
-  - 已接入公共包装：`No`
-- `EditProfileView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/EditProfileView.swift`
-  - 已接入公共包装：`No`
-- `SettingsView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/SettingsView.swift`
-  - 已接入公共包装：`No`
-- `LanguageSettingsView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/SettingsView.swift`
-  - 已接入公共包装：`No`
-- `CircleRatingUnitDetailView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`
-  - 已接入公共包装：`No`
-- `RatingCommentsListView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`
-  - 已接入公共包装：`No`
-  - 备注：评论列表
-
-### 返回样式类型 2：`BS-02` 系统导航栏 + 左上角文字操作
-
-- `DiscoverNewsPublishSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/News/Views/DiscoverNewsPublishSheet.swift`
-  - 已接入公共包装：`No`
-- `PostLocationMapView`（活动场地地图）
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventDetailView.swift`
-  - 已接入公共包装：`No`
-  - 备注：左上 `关闭`
-- `EventRoutePlannerView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventDetailView.swift`
-  - 已接入公共包装：`No`
-- `EventEditorView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift`
-  - 已接入公共包装：`No`
-- `LineupImport`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift`
-  - 已接入公共包装：`No`
-  - 备注：阵容导入页
-- `EventLocationPickerSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift`
-  - 已接入公共包装：`No`
-- `DJImport`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/DJs/Views/DJsModuleView.swift`
-  - 已接入公共包装：`No`
-- `DJEditor`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/DJs/Views/DJsModuleView.swift`
-  - 已接入公共包装：`No`
-- `SpotifyImport`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/DJs/Views/DJsModuleView.swift`
-  - 已接入公共包装：`No`
-- `UploadTracklistSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Sets/Views/SetsModuleView.swift`
-  - 已接入公共包装：`No`
-- `DJSetEditorView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Sets/Views/SetsModuleView.swift`
-  - 已接入公共包装：`No`
-- `SetEventBindingSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Sets/Views/SetsModuleView.swift`
-  - 已接入公共包装：`No`
-- `TracklistEditorView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Sets/Views/SetsModuleView.swift`
-  - 已接入公共包装：`No`
-- `LearnLabelDetailView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Learn/Views/LearnModuleView.swift`
-  - 已接入公共包装：`No`
-  - 备注：当前是系统导航栏 + 左上 `关闭`
-- `LearnFestivalEditorView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Learn/Views/LearnModuleView.swift`
-  - 已接入公共包装：`No`
-- `RankingBoardEditor`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Learn/Views/LearnModuleView.swift`
-  - 已接入公共包装：`No`
-  - 备注：榜单创建/编辑页
-- `ComposePostView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Feed/ComposePostView.swift`
-  - 已接入公共包装：`No`
-- `PostLocationPickerSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Feed/ComposePostView.swift`
-  - 已接入公共包装：`No`
-- `PostLocationMapView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Shared/PostCardView.swift`
-  - 已接入公共包装：`No`
-  - 备注：位置地图页
-- `SquadManageSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Squads/SquadProfileView.swift`
-  - 已接入公共包装：`No`
-- `RatingEventEditorSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/Views/RatingEditors/RatingEditors.swift`
-  - 已接入公共包装：`No`
-- `RatingUnitEditorSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/Views/RatingEditors/RatingEditors.swift`
-  - 已接入公共包装：`No`
-- `CircleIDDetailView`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`
-  - 已接入公共包装：`No`
-- `CircleIDComposerSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`
-  - 已接入公共包装：`No`
-- `CircleIDEventPickerSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`
-  - 已接入公共包装：`No`
-- `CircleIDDJPickerSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`
-  - 已接入公共包装：`No`
-- `CreateRatingEventSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`
-  - 已接入公共包装：`No`
-- `CreateRatingEventFromEventSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`
-  - 已接入公共包装：`No`
-- `CreateRatingUnitSheet`
-  - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`
-  - 已接入公共包装：`No`
+- `DiscoverFullScreenSearchInputView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Search/Views/DiscoverSearchViews.swift`  
+  已接入公共包装：`Yes`
+- `EventsSearchResultsView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Search/Views/DiscoverSearchViews.swift`  
+  已接入公共包装：`Yes`
+- `NewsSearchResultsView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Search/Views/DiscoverSearchViews.swift`  
+  已接入公共包装：`Yes`
+- `DJsSearchResultsView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Search/Views/DiscoverSearchViews.swift`  
+  已接入公共包装：`Yes`
+- `SetsSearchResultsView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Search/Views/DiscoverSearchViews.swift`  
+  已接入公共包装：`Yes`
+- `WikiSearchResultsView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Search/Views/DiscoverSearchViews.swift`  
+  已接入公共包装：`Yes`
+- `DiscoverNewsPublishSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/News/Views/DiscoverNewsPublishSheet.swift`  
+  已接入公共包装：`Yes`
+- `PostLocationMapView`（活动场地地图）  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventDetailView.swift`  
+  已接入公共包装：`Yes`
+- `EventRoutePlannerView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventDetailView.swift`  
+  已接入公共包装：`Yes`
+- `EventRoutineView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventDetailView.swift`  
+  已接入公共包装：`Yes`
+- `EventCheckinSelectionSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift`  
+  已接入公共包装：`Yes`
+- `DJCheckinBindingSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift`  
+  已接入公共包装：`Yes`
+- `EventEditorView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift`  
+  已接入公共包装：`Yes`
+- `LineupImport`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift`  
+  已接入公共包装：`Yes`
+- `EventLocationPickerSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift`  
+  已接入公共包装：`Yes`
+- `DJImport`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/DJs/Views/DJsModuleView.swift`  
+  已接入公共包装：`Yes`
+- `DJEditor`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/DJs/Views/DJsModuleView.swift`  
+  已接入公共包装：`Yes`
+- `SpotifyImport`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/DJs/Views/DJsModuleView.swift`  
+  已接入公共包装：`Yes`
+- `TracklistSelectorSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Sets/Views/SetsModuleView.swift`  
+  已接入公共包装：`Yes`
+- `UploadTracklistSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Sets/Views/SetsModuleView.swift`  
+  已接入公共包装：`Yes`
+- `DJSetEditorView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Sets/Views/SetsModuleView.swift`  
+  已接入公共包装：`Yes`
+- `SetEventBindingSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Sets/Views/SetsModuleView.swift`  
+  已接入公共包装：`Yes`
+- `TracklistEditorView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Sets/Views/SetsModuleView.swift`  
+  已接入公共包装：`Yes`
+- `LearnLabelDetailView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Learn/Views/LearnModuleView.swift`  
+  已接入公共包装：`Yes`
+- `LearnFestivalEditorView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Learn/Views/LearnModuleView.swift`  
+  已接入公共包装：`Yes`
+- `RankingBoardDetailView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Learn/Views/LearnModuleView.swift`  
+  已接入公共包装：`Yes`
+- `RankingBoardEditor`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Learn/Views/LearnModuleView.swift`  
+  已接入公共包装：`Yes`
+- `ComposePostView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Feed/ComposePostView.swift`  
+  已接入公共包装：`Yes`
+- `PostLocationPickerSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Feed/ComposePostView.swift`  
+  已接入公共包装：`Yes`
+- `PostLocationMapView`（动态卡片）  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Shared/PostCardView.swift`  
+  已接入公共包装：`Yes`
+- `SquadManageSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Squads/SquadProfileView.swift`  
+  已接入公共包装：`Yes`
+- `ChatView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Messages/ChatView.swift`  
+  已接入公共包装：`Yes`
+- `CreateSquadView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Messages/MessagesHomeView.swift`  
+  已接入公共包装：`Yes`
+- `MessageAlertDetailView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Messages/MessagesHomeView.swift`  
+  已接入公共包装：`Yes`
+- `MyPublishesView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/Views/Publishes/MyPublishesView.swift`  
+  已接入公共包装：`Yes`
+- `FollowListView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/FollowListView.swift`  
+  已接入公共包装：`Yes`
+- `UserProfileView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/UserProfileView.swift`  
+  已接入公共包装：`Yes`
+- `EditProfileView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/EditProfileView.swift`  
+  已接入公共包装：`Yes`
+- `SettingsView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/SettingsView.swift`  
+  已接入公共包装：`Yes`
+- `LanguageSettingsView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/SettingsView.swift`  
+  已接入公共包装：`Yes`
+- `RatingEventEditorSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/Views/RatingEditors/RatingEditors.swift`  
+  已接入公共包装：`Yes`
+- `RatingUnitEditorSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/Profile/Views/RatingEditors/RatingEditors.swift`  
+  已接入公共包装：`Yes`
+- `CircleIDDetailView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`  
+  已接入公共包装：`Yes`
+- `CircleIDComposerSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`  
+  已接入公共包装：`Yes`
+- `CircleIDEventPickerSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`  
+  已接入公共包装：`Yes`
+- `CircleIDDJPickerSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`  
+  已接入公共包装：`Yes`
+- `CircleRatingUnitDetailView`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`  
+  已接入公共包装：`Yes`
+- `CreateRatingEventSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`  
+  已接入公共包装：`Yes`
+- `CreateRatingEventFromEventSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`  
+  已接入公共包装：`Yes`
+- `CreateRatingUnitSheet`  
+  文件：`mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`  
+  已接入公共包装：`Yes`
 
 ### 返回样式类型 3：`BS-03` 沉浸式浮动毛玻璃圆形返回
 
 - `EventDetailView`
   - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventDetailView.swift`
-  - 已接入公共包装：`No`
-  - 备注：沉浸式详情页，当前仍保留页面内自定义实现
+  - 已接入公共包装：`Yes`
 - `DJDetailView`
   - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/DJs/Views/DJsModuleView.swift`
-  - 已接入公共包装：`No`
+  - 已接入公共包装：`Yes`
 - `DJSetDetailView`
   - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Sets/Views/SetsModuleView.swift`
-  - 已接入公共包装：`No`
+  - 已接入公共包装：`Yes`
 - `LearnFestivalDetailView`
   - 文件：`mobile/ios/RaverMVP/RaverMVP/Features/Discover/Learn/Views/LearnModuleView.swift`
-  - 已接入公共包装：`No`
+  - 已接入公共包装：`Yes`
 
 ### 返回样式类型 4：`BS-04` 顶栏 + 向下渐变遮罩
 
@@ -401,6 +362,55 @@
 ### 已接入 `BS-01`
 
 - `DiscoverFullScreenSearchInputView`
+- `EventsSearchResultsView`
+- `NewsSearchResultsView`
+- `DJsSearchResultsView`
+- `SetsSearchResultsView`
+- `WikiSearchResultsView`
+- `DiscoverNewsPublishSheet`
+- `EventRoutineView`
+- `EventCheckinSelectionSheet`
+- `DJCheckinBindingSheet`
+- `EventEditorView`
+- `LineupImport`
+- `EventLocationPickerSheet`
+- `PostLocationMapView`（活动场地地图）
+- `EventRoutePlannerView`
+- `DJImport`
+- `DJEditor`
+- `SpotifyImport`
+- `TracklistSelectorSheet`
+- `UploadTracklistSheet`
+- `DJSetEditorView`
+- `SetEventBindingSheet`
+- `TracklistEditorView`
+- `LearnLabelDetailView`
+- `LearnFestivalEditorView`
+- `RankingBoardDetailView`
+- `RankingBoardEditor`
+- `ComposePostView`
+- `PostLocationPickerSheet`
+- `PostLocationMapView`（动态卡片）
+- `SquadManageSheet`
+- `ChatView`
+- `CreateSquadView`
+- `MessageAlertDetailView`
+- `MyPublishesView`
+- `FollowListView`
+- `UserProfileView`
+- `EditProfileView`
+- `SettingsView`
+- `LanguageSettingsView`
+- `RatingEventEditorSheet`
+- `RatingUnitEditorSheet`
+- `CircleIDDetailView`
+- `CircleIDComposerSheet`
+- `CircleIDEventPickerSheet`
+- `CircleIDDJPickerSheet`
+- `CircleRatingUnitDetailView`
+- `CreateRatingEventSheet`
+- `CreateRatingEventFromEventSheet`
+- `CreateRatingUnitSheet`
 
 ### 已接入 `BS-04`
 
@@ -411,10 +421,12 @@
 - `LearnFestivalRankingDetailView`
 - `CircleRatingEventDetailView`
 
-### 已有包装但尚未大规模接入
+### 已接入 `BS-03`
 
-- `BS-02` 已有公共包装接口，但多数页面仍未迁移
-- `BS-03` 已有公共包装接口，但沉浸式详情页仍大多保留原页面内实现
+- `EventDetailView`
+- `DJDetailView`
+- `DJSetDetailView`
+- `LearnFestivalDetailView`
 
 ---
 
@@ -426,13 +438,9 @@
 
 ### 第二优先级
 
-- 所有表单/编辑/导入流程，统一到 `BS-02`
-
-### 第三优先级
-
 - 所有沉浸式详情页，统一到 `BS-03`
 
-### 第四优先级
+### 第三优先级
 
 - 所有仍然只是“系统导航标题但未接入包装”的页面，可逐步接入 `BS-01`
 
@@ -445,16 +453,13 @@
 1. 是否是普通 push 详情页
    - 是：优先 `BS-01`
 
-2. 是否是表单 / 编辑 / 创建 / 导入 / 选择流程
-   - 是：优先 `BS-02`
-
-3. 是否是沉浸式大图详情页
+2. 是否是沉浸式大图详情页
    - 是：优先 `BS-03`
 
-4. 是否需要统一的顶部标题条 + 渐变遮罩
+3. 是否需要统一的顶部标题条 + 渐变遮罩
    - 是：优先 `BS-04`
 
-5. 是否属于全屏预览 / 浏览器 / 查看器
+4. 是否属于全屏预览 / 浏览器 / 查看器
    - 是：可考虑 `BS-X`
 
 如果不符合以上任一类，不建议先写新的返回方案，应该先回到本文件补充规则。
@@ -467,9 +472,9 @@
 
 - [ ] 继续补齐尚未归档的返回页面
 - [ ] 给每个页面补充“目标样式”
-- [ ] 将 `BS-02` 页面逐步迁移到公共包装
 - [ ] 将 `BS-03` 页面逐步迁移到公共包装
-- [ ] 将 `BS-01` 的普通系统页逐步接入统一包装
+- [x] 已将原 `BS-02` 页面并入 `BS-01`
+- [x] 已将 `BS-01` 清单页面全部接入统一包装
 
 ### 本次整理结果
 

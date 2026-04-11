@@ -14,8 +14,8 @@ struct DiscoverRecommendEventsRootView: View {
 
 struct RecommendEventsModuleView: View {
     @EnvironmentObject private var appState: AppState
-    @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
+    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: RecommendEventsViewModel
 
     private let cardCornerRadius: CGFloat = 28
@@ -68,31 +68,30 @@ struct RecommendEventsModuleView: View {
 
     private var recommendationPager: some View {
         ScrollView(.vertical) {
-            LazyVStack(spacing: 0) {
+            LazyVStack(spacing: 10) {
                 ForEach(viewModel.events) { event in
                     recommendationCard(event)
                         .id(event.id)
-                        .containerRelativeFrame(.vertical)
                         .scrollTransition(axis: .vertical) { content, phase in
                             content
-                                .scaleEffect(phase.isIdentity ? 1 : 0.93, anchor: .top)
-                                .opacity(phase.isIdentity ? 1 : 0.66)
-                                .blur(radius: phase.isIdentity ? 0 : 2.4)
+                                .scaleEffect(phase.isIdentity ? 1 : 0.95, anchor: .top)
+                                .opacity(phase.isIdentity ? 1 : 0.82)
                                 .rotation3DEffect(
-                                    .degrees(phase.isIdentity ? 0 : 5.5),
+                                    .degrees(phase.isIdentity ? 0 : 1.8),
                                     axis: (x: 1, y: 0, z: 0),
                                     anchor: .top,
-                                    perspective: 0.72
+                                    perspective: 0.9
                                 )
-                                .saturation(phase.isIdentity ? 1.05 : 0.86)
                         }
                 }
             }
             .scrollTargetLayout()
         }
         .scrollIndicators(.hidden)
-        .scrollTargetBehavior(.paging)
+        .scrollTargetBehavior(.viewAligned)
         .scrollPosition(id: $scrollPositionID)
+        .contentMargins(.top, 10, for: .scrollContent)
+        .contentMargins(.bottom, tabBarReservedHeight + 10, for: .scrollContent)
         .overlay(alignment: .trailing) {
             pageIndicator
                 .padding(.trailing, 10)
@@ -128,83 +127,76 @@ struct RecommendEventsModuleView: View {
     }
 
     private func recommendationCard(_ event: WebEvent) -> some View {
-        GeometryReader { proxy in
-            let topInset: CGFloat = 10
-            let horizontalInset: CGFloat = 10
-            let cardWidth = max(0, proxy.size.width - 20)
-            let cardHeight = max(0, proxy.size.height - topInset)
-            let cardShape = RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+        let cardShape = RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
 
-            Button {
-                appPush(.eventDetail(eventID: event.id))
-            } label: {
-                ZStack {
-                    recommendationCover(for: event)
-                        .overlay(recommendationAtmosphereOverlay)
-                        .frame(width: cardWidth, height: cardHeight)
-                        .clipShape(cardShape)
+        return Button {
+            appPush(.eventDetail(eventID: event.id))
+        } label: {
+            ZStack {
+                recommendationCover(for: event)
+                    .overlay(recommendationAtmosphereOverlay)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipShape(cardShape)
 
-                    VStack(alignment: .leading, spacing: 0) {
-                        Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 0) {
+                    Spacer(minLength: 0)
 
-                        VStack(alignment: .leading, spacing: 1) {
-                            HStack(spacing: 8) {
-                                recommendationPill(
-                                    title: EventTypeOption.displayText(for: event.eventType),
-                                    background: Color.white.opacity(0.15)
-                                )
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 8) {
+                            recommendationPill(
+                                title: EventTypeOption.displayText(for: event.eventType),
+                                background: Color.white.opacity(0.15)
+                            )
 
-                                let visualStatus = EventVisualStatus.resolve(event: event)
-                                recommendationPill(
-                                    title: visualStatus.title,
-                                    background: visualStatus.badgeBackground
-                                )
-                            }
-
-                            HStack(spacing: 6) {
-                                Image(systemName: "mappin.and.ellipse")
-                                    .font(.system(size: 13, weight: .medium))
-                                Text(recommendationLocationText(for: event))
-                                    .lineLimit(2)
-                                    .minimumScaleFactor(0.62)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .font(recommendMetaFont(size: 15))
-                            .foregroundStyle(Color.white.opacity(0.88))
-                            .padding(.bottom, 0)
-
-                            HStack(spacing: 6) {
-                                Image(systemName: "calendar")
-                                    .font(.system(size: 12, weight: .medium))
-                                Text(recommendationDateText(for: event))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.72)
-                            }
-                            .font(recommendMetaFont(size: 14))
-                            .foregroundStyle(Color.white.opacity(0.86))
-                            .padding(.bottom, 1)
-
-                            recommendationHeadline(event.name)
+                            let visualStatus = EventVisualStatus.resolve(event: event)
+                            recommendationPill(
+                                title: visualStatus.title,
+                                background: visualStatus.badgeBackground
+                            )
                         }
-                        .layoutPriority(2)
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 28)
+
+                        HStack(spacing: 6) {
+                            Image(systemName: "mappin.and.ellipse")
+                                .font(.system(size: 13, weight: .medium))
+                            Text(recommendationLocationText(for: event))
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.62)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .font(recommendMetaFont(size: 15))
+                        .foregroundStyle(Color.white.opacity(0.88))
+                        .padding(.bottom, 0)
+
+                        HStack(spacing: 6) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 12, weight: .medium))
+                            Text(recommendationDateText(for: event))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.72)
+                        }
+                        .font(recommendMetaFont(size: 14))
+                        .foregroundStyle(Color.white.opacity(0.86))
+                        .padding(.bottom, 1)
+
+                        recommendationHeadline(event.name)
                     }
-                    .frame(width: cardWidth, height: cardHeight, alignment: .topLeading)
+                    .layoutPriority(2)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 28)
                 }
-                .frame(width: cardWidth, height: cardHeight, alignment: .center)
-                .contentShape(cardShape)
-                .overlay(
-                    cardShape
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.40), radius: 20, x: 0, y: 10)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .buttonStyle(.plain)
-            .padding(.top, topInset)
-            .padding(.horizontal, horizontalInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(cardShape)
+            .overlay(
+                cardShape
+                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.30), radius: 13, x: 0, y: 6)
         }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 10)
+        .containerRelativeFrame(.vertical)
     }
 
     @ViewBuilder

@@ -137,8 +137,7 @@ private struct UserProfileScreen: View {
             .padding(16)
         }
         .background(RaverTheme.background)
-        .navigationTitle(L("用户主页", "Profile"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: L("用户主页", "Profile"))
         .task {
             await viewModel.load()
         }

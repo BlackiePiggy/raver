@@ -259,12 +259,8 @@ struct EventCheckinSelectionSheet: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
             }
-            .navigationTitle(L("活动打卡", "Event Check-in"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: L("活动打卡", "Event Check-in"))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
                 if let destructiveButtonTitle, let onDelete {
                     ToolbarItem(placement: .bottomBar) {
                         Button(destructiveButtonTitle, role: .destructive) {
@@ -705,8 +701,7 @@ private struct DJCheckinBindingSheet: View {
                     }
                 }
             }
-            .navigationTitle(L("\(djName) 打卡", "\(djName) Check-in"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: L("\(djName) 打卡", "\(djName) Check-in"))
             .task {
                 await loadHistory()
             }
@@ -720,9 +715,6 @@ private struct DJCheckinBindingSheet: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L("确认打卡", "Confirm Check-in")) {
                         switch mode {
@@ -1404,11 +1396,8 @@ struct EventEditorView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle(mode.title)
+            .raverSystemNavigation(title: mode.title)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
                         Task { await save() }
@@ -3358,15 +3347,8 @@ struct EventEditorView: View {
                     .disabled(isParsingLineupImportJSON)
                 }
             }
-            .navigationTitle(LL("阵容导入"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: LL("阵容导入"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) {
-                        showLineupImportEditor = false
-                    }
-                    .disabled(isApplyingLineupImport || isParsingLineupImportJSON)
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(isApplyingLineupImport ? L("导入中...", "Importing...") : L("一键导入", "Import All")) {
                         Task { await commitLineupImportDrafts() }
@@ -4117,15 +4099,8 @@ private struct EventLocationPickerSheet: View {
                 locationListArea
             }
             .background(RaverTheme.background)
-            .navigationTitle(LL("选择活动定位"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: LL("选择活动定位"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) {
-                        dismiss()
-                    }
-                    .disabled(isResolving)
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(L("确认", "Confirm")) {
                         Task { await confirmCurrentLocation() }

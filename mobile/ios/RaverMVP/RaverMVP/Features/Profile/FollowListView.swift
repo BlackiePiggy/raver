@@ -107,8 +107,7 @@ struct FollowListView: View {
         }
         .scrollContentBackground(.hidden)
         .background(RaverTheme.background)
-        .navigationTitle(viewModel.kind.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: viewModel.kind.title)
         .task {
             await viewModel.load()
         }

@@ -183,11 +183,15 @@ struct EventDetailView: View {
                     .padding(.top, 12)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 }
-                .navigationTitle(L("活动场地", "Event Venue"))
-                .navigationBarTitleDisplayMode(.inline)
+                .raverSystemNavigation(title: L("活动场地", "Event Venue"))
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button(L("关闭", "Close")) { dismiss() }
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
@@ -590,12 +594,10 @@ struct EventDetailView: View {
         }
         .ignoresSafeArea(edges: .top)
         .background(RaverTheme.background)
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
-        .overlay(alignment: .top) {
-            floatingTopBar
+        .raverImmersiveFloatingNavigationChrome(
+            trailing: immersiveTrailingAction
+        ) {
+            dismiss()
         }
         .navigationDestination(
             isPresented: Binding(
@@ -1532,38 +1534,16 @@ struct EventDetailView: View {
         return formatter
     }()
 
-    private var floatingTopBar: some View {
-        HStack {
-            floatingCircleButton(systemName: "chevron.left") {
-                dismiss()
+    private var immersiveTrailingAction: AnyView? {
+        guard let event, isMine(event) else { return nil }
+        return AnyView(
+            RaverNavigationCircleIconButton(
+                systemName: "square.and.pencil",
+                style: .glass
+            ) {
+                discoverPush(.eventEdit(eventID: event.id))
             }
-
-            Spacer()
-
-            if let event, isMine(event) {
-                floatingCircleButton(systemName: "square.and.pencil") {
-                    discoverPush(.eventEdit(eventID: event.id))
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, topSafeAreaInset() + 6)
-        .zIndex(10)
-    }
-
-    private func floatingCircleButton(systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color.white)
-                .frame(width: 38, height: 38)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
-                )
-        }
-        .buttonStyle(.plain)
+        )
     }
 
     @ViewBuilder
@@ -3129,17 +3109,8 @@ private struct EventRoutePlannerView: View {
                     .padding(.bottom, 24)
                 }
             }
-            .navigationTitle(LL("定制路线"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: LL("定制路线"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 14, weight: .semibold))
-                    }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task { await exportSharePoster() }
@@ -3386,8 +3357,7 @@ private struct EventRoutineView: View {
                 endPoint: .bottom
             )
         )
-        .navigationTitle(L("活动日程", "Event Schedule"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: L("活动日程", "Event Schedule"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(L("定制路线", "Custom Route")) {

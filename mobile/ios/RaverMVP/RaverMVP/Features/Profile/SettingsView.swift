@@ -129,8 +129,7 @@ struct SettingsView: View {
             }
             .scrollContentBackground(.hidden)
             .background(RaverTheme.background)
-            .navigationTitle(L("设置", "Settings"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: L("设置", "Settings"))
     }
 }
 
@@ -159,7 +158,6 @@ private struct LanguageSettingsView: View {
         }
         .scrollContentBackground(.hidden)
         .background(RaverTheme.background)
-        .navigationTitle(L("语言设置", "Language"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: L("语言设置", "Language"))
     }
 }

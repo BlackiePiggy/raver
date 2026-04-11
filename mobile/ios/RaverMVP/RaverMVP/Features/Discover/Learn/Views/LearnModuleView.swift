@@ -730,16 +730,7 @@ struct LearnModuleView: View {
                     .disabled(isCreatingFestival || createFestivalName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .navigationTitle(LL("新增电音节"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("关闭", "Close")) {
-                        showFestivalCreateSheet = false
-                    }
-                    .disabled(isCreatingFestival)
-                }
-            }
+            .raverSystemNavigation(title: LL("新增电音节"))
             .scrollDismissesKeyboard(.interactively)
         }
     }
@@ -1324,16 +1315,7 @@ struct LearnLabelDetailView: View {
             }
         }
         .background(RaverTheme.background)
-        .navigationTitle(LL("厂牌详情"))
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(L("关闭", "Close")) {
-                    dismiss()
-                }
-                .foregroundStyle(RaverTheme.primaryText)
-            }
-        }
+        .raverSystemNavigation(title: LL("厂牌详情"))
         .navigationDestination(item: $previewImage) { item in
             LearnLabelImagePreviewView(item: item)
         }
@@ -2146,12 +2128,10 @@ struct LearnFestivalDetailView: View {
         )
         .ignoresSafeArea(edges: .top)
         .background(RaverTheme.background)
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
-        .overlay(alignment: .top) {
-            floatingTopBar
+        .raverImmersiveFloatingNavigationChrome(
+            trailing: immersiveTrailingAction
+        ) {
+            dismiss()
         }
         .navigationDestination(item: $previewImage) { item in
             LearnLabelImagePreviewView(item: item)
@@ -2188,37 +2168,17 @@ struct LearnFestivalDetailView: View {
         }
     }
 
-    private var floatingTopBar: some View {
-        HStack {
-            floatingCircleButton(systemName: "chevron.left") {
-                dismiss()
+    private var immersiveTrailingAction: AnyView? {
+        guard canEditFestival else { return nil }
+        return AnyView(
+            RaverNavigationCircleIconButton(
+                systemName: "square.and.pencil",
+                style: .glass
+            ) {
+                prepareFestivalEditDraft()
+                discoverPush(.learnFestivalEdit(festivalID: currentFestival.id))
             }
-            Spacer()
-            if canEditFestival {
-                floatingCircleButton(systemName: "square.and.pencil") {
-                    prepareFestivalEditDraft()
-                    discoverPush(.learnFestivalEdit(festivalID: currentFestival.id))
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, topSafeAreaInset() + 6)
-        .zIndex(10)
-    }
-
-    private func floatingCircleButton(systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color.white)
-                .frame(width: 38, height: 38)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
-                )
-        }
-        .buttonStyle(.plain)
+        )
     }
 
     @ViewBuilder
@@ -2847,16 +2807,7 @@ struct LearnFestivalDetailView: View {
                     .disabled(isSavingFestival || editName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .navigationTitle(LL("编辑电音节"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("关闭", "Close")) {
-                        showFestivalEditSheet = false
-                    }
-                    .disabled(isSavingFestival)
-                }
-            }
+            .raverSystemNavigation(title: LL("编辑电音节"))
             .scrollDismissesKeyboard(.interactively)
         }
     }
@@ -3326,16 +3277,7 @@ struct LearnFestivalEditorView: View {
                 .disabled(isSaving || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .navigationTitle(mode.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(L("关闭", "Close")) {
-                    dismiss()
-                }
-                .disabled(isSaving)
-            }
-        }
+        .raverSystemNavigation(title: mode.title)
         .scrollDismissesKeyboard(.interactively)
         .task {
             guard !didPrepareDraft else { return }
@@ -3896,7 +3838,6 @@ private struct WrapFlowLayout<Item: Hashable, Content: View>: View {
 struct RankingBoardDetailView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.appPush) private var appPush
-    @Environment(\.dismiss) private var dismiss
 
     private var djsRepository: DiscoverDJsRepository {
         appContainer.discoverDJsRepository
@@ -3918,32 +3859,11 @@ struct RankingBoardDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(RaverTheme.primaryText)
-                            .frame(width: 34, height: 34)
-                            .background(
-                                Circle()
-                                    .fill(RaverTheme.card)
-                            )
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-
                 contentBody
             }
         }
         .background(RaverTheme.background)
-        .navigationTitle(board.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: board.title)
         .task {
             await load()
         }

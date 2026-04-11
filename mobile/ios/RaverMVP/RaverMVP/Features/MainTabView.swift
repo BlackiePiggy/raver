@@ -1160,15 +1160,7 @@ private struct CircleIDDetailView: View {
             .padding(.bottom, 20)
         }
         .background(RaverTheme.background)
-        .navigationTitle(L("ID详情", "ID Detail"))
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(L("关闭", "Close")) {
-                    dismiss()
-                }
-            }
-        }
+        .raverSystemNavigation(title: L("ID详情", "ID Detail"))
     }
 
     private func reactionButton(icon: String, count: Int, isActive: Bool, action: @escaping () -> Void) -> some View {
@@ -1610,14 +1602,8 @@ struct CircleIDComposerSheet: View {
                 .padding(16)
             }
             .background(RaverTheme.background)
-            .navigationTitle(L("发布 ID", "Post ID"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: L("发布 ID", "Post ID"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) {
-                        dismiss()
-                    }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(L("发布", "Post")) {
                         createEntry()
@@ -1793,15 +1779,7 @@ private struct CircleIDEventPickerSheet: View {
                 }
             }
             .background(RaverTheme.background)
-            .navigationTitle(L("选择活动", "Select Event"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) {
-                        dismiss()
-                    }
-                }
-            }
+            .raverSystemNavigation(title: L("选择活动", "Select Event"))
             .task {
                 await loadEvents()
             }
@@ -1932,14 +1910,8 @@ private struct CircleIDDJPickerSheet: View {
                 }
             }
             .background(RaverTheme.background)
-            .navigationTitle(L("选择 DJ", "Select DJs"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: L("选择 DJ", "Select DJs"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) {
-                        dismiss()
-                    }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(L("完成", "Done")) {
                         finishSelection()
@@ -3063,8 +3035,7 @@ struct CircleRatingUnitDetailView: View {
             .padding(.bottom, 20)
         }
         .background(RaverTheme.background)
-        .navigationTitle(LL("评论列表"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: LL("评论列表"))
         .toolbar(.visible, for: .navigationBar)
         .task {
             await loadUnit()
@@ -3234,12 +3205,8 @@ struct CreateRatingEventSheet: View {
                     }
                 }
             }
-            .navigationTitle(L("发布打分事件", "Publish Rating Event"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: L("发布打分事件", "Publish Rating Event"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(L("发布", "Publish")) {
                         Task { await submit() }
@@ -3398,12 +3365,8 @@ struct CreateRatingEventFromEventSheet: View {
             .onSubmit(of: .search) {
                 Task { await loadEvents() }
             }
-            .navigationTitle(L("从活动导入打分", "Import Ratings from Event"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: L("从活动导入打分", "Import Ratings from Event"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(isSubmitting ? L("导入中...", "Importing...") : L("导入", "Import")) {
                         Task { await submit() }
@@ -3506,12 +3469,8 @@ struct CreateRatingUnitSheet: View {
                     }
                 }
             }
-            .navigationTitle(L("发布打分单位", "Publish Rating Unit"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: L("发布打分单位", "Publish Rating Unit"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(L("发布", "Publish")) {
                         Task { await submit() }

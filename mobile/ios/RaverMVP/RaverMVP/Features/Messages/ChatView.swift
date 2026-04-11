@@ -21,15 +21,14 @@ struct ChatView: View {
             composerBar
         }
         .background(RaverTheme.background)
-        .navigationTitle(conversation.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: conversation.title)
         .toolbar {
             if conversation.type == .direct, let peer = conversation.peer {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         appPush(.userProfile(userID: peer.id))
                     } label: {
-                        Image(systemName: "person.crop.circle")
+                        Image(systemName: "ellipsis.circle")
                     }
                     .accessibilityLabel(L("查看用户主页", "View User Profile"))
                 }

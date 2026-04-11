@@ -217,13 +217,9 @@ struct RatingEventEditorSheet: View {
                     }
                 }
             }
-            .navigationTitle(LL("编辑打分事件"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: LL("编辑打分事件"))
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(viewModel.isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
                         Task {
@@ -322,13 +318,9 @@ struct RatingUnitEditorSheet: View {
                     }
                 }
             }
-            .navigationTitle(LL("编辑打分单位"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: LL("编辑打分单位"))
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(viewModel.isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
                         Task {

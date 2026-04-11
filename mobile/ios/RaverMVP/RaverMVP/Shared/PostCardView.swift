@@ -316,14 +316,17 @@ private struct PostLocationMapView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 12)
             }
+            .raverSystemNavigation(title: LL("位置地图"))
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(L("返回", "Back")) { dismiss() }
-                        .font(.subheadline.weight(.semibold))
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
                 }
             }
-            .navigationTitle(LL("位置地图"))
-            .navigationBarTitleDisplayMode(.inline)
             .confirmationDialog(L("选择地图应用", "Choose Map App"), isPresented: $showMapAppPicker, titleVisibility: .visible) {
                 ForEach(availableMapApps) { app in
                     Button(app.title) {

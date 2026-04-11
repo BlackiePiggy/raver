@@ -280,7 +280,7 @@ struct MyPublishesView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(L("我的发布", "My Posts"))
+        .raverSystemNavigation(title: L("我的发布", "My Posts"))
         .task {
             await viewModel.load()
         }

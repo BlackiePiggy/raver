@@ -244,8 +244,7 @@ struct EventsSearchResultsView: View {
         .padding(.horizontal, 14)
         .padding(.top, 8)
         .background(RaverTheme.background)
-        .navigationTitle(L("搜索", "Search"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: L("搜索", "Search"))
         .task {
             await viewModel.loadIfNeeded()
         }
@@ -315,8 +314,7 @@ struct NewsSearchResultsView: View {
         .padding(.horizontal, 14)
         .padding(.top, 8)
         .background(RaverTheme.background)
-        .navigationTitle(L("搜索", "Search"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: L("搜索", "Search"))
         .task {
             await viewModel.loadIfNeeded()
         }
@@ -420,8 +418,7 @@ struct DJsSearchResultsView: View {
         .padding(.horizontal, 14)
         .padding(.top, 8)
         .background(RaverTheme.background)
-        .navigationTitle(L("搜索", "Search"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: L("搜索", "Search"))
         .task {
             await viewModel.loadIfNeeded()
         }
@@ -496,8 +493,7 @@ struct SetsSearchResultsView: View {
         .padding(.horizontal, 14)
         .padding(.top, 8)
         .background(RaverTheme.background)
-        .navigationTitle(L("搜索", "Search"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: L("搜索", "Search"))
         .task {
             await viewModel.loadIfNeeded()
         }
@@ -576,8 +572,7 @@ struct WikiSearchResultsView: View {
         .padding(.horizontal, 14)
         .padding(.top, 8)
         .background(RaverTheme.background)
-        .navigationTitle(L("搜索", "Search"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: L("搜索", "Search"))
         .task {
             await viewModel.loadIfNeeded()
         }

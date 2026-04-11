@@ -285,12 +285,8 @@ struct DiscoverNewsPublishSheet: View {
                     }
                 }
             }
-            .navigationTitle(LL("发布资讯"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: LL("发布资讯"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(isSubmitting ? L("发布中...", "Publishing...") : L("发布", "Publish")) {
                         Task { await submit() }

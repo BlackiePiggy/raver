@@ -60,7 +60,7 @@ struct RaverImmersiveFloatingTopBar: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.top, topSafeAreaInset() + 6)
+//        .padding(.top, topSafeAreaInset())
         .zIndex(10)
     }
 }
@@ -76,9 +76,9 @@ struct RaverGradientMaskedTopBar: View {
         ZStack(alignment: .top) {
             LinearGradient(
                 colors: [
+                    Color.black.opacity(1),
                     Color.black.opacity(0.95),
-                    Color.black.opacity(0.88),
-                    Color.black.opacity(0.58),
+                    Color.black.opacity(0.85),
                     Color.black.opacity(0.0)
                 ],
                 startPoint: .top,
@@ -120,7 +120,7 @@ struct RaverGradientMaskedTopBar: View {
     }
 
     static var contentTopSpacing: CGFloat {
-        70
+        50
     }
 }
 
@@ -133,26 +133,6 @@ extension View {
             RaverSystemNavigationModifier(
                 title: title,
                 displayMode: displayMode
-            )
-        )
-    }
-
-    func raverSystemTextActionNavigation(
-        title: String,
-        leadingTitle: String,
-        leadingRole: ButtonRole? = nil,
-        trailing: AnyView? = nil,
-        displayMode: NavigationBarItem.TitleDisplayMode = .inline,
-        onLeadingTap: @escaping () -> Void
-    ) -> some View {
-        modifier(
-            RaverSystemTextActionNavigationModifier(
-                title: title,
-                leadingTitle: leadingTitle,
-                leadingRole: leadingRole,
-                trailing: trailing,
-                displayMode: displayMode,
-                onLeadingTap: onLeadingTap
             )
         )
     }
@@ -200,33 +180,6 @@ private struct RaverSystemNavigationModifier: ViewModifier {
         content
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(displayMode)
-    }
-}
-
-private struct RaverSystemTextActionNavigationModifier: ViewModifier {
-    let title: String
-    let leadingTitle: String
-    let leadingRole: ButtonRole?
-    let trailing: AnyView?
-    let displayMode: NavigationBarItem.TitleDisplayMode
-    let onLeadingTap: () -> Void
-
-    func body(content: Content) -> some View {
-        content
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(displayMode)
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(leadingTitle, role: leadingRole, action: onLeadingTap)
-                }
-
-                if let trailing {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        trailing
-                    }
-                }
-            }
     }
 }
 

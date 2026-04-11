@@ -262,12 +262,8 @@ struct CreateSquadView: View {
         }
         .background(RaverTheme.background)
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle(L("创建小队", "Create Squad"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: L("创建小队", "Create Squad"))
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(L("取消", "Cancel")) { dismiss() }
-            }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button(L("收起", "Dismiss")) {
@@ -829,8 +825,7 @@ struct MessageAlertDetailView: View {
             }
         }
         .background(RaverTheme.background)
-        .navigationTitle(category.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: category.title)
     }
 
     @ViewBuilder

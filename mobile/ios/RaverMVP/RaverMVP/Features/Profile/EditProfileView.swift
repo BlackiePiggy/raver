@@ -192,8 +192,7 @@ struct EditProfileView: View {
         }
         .background(RaverTheme.background)
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle(L("编辑资料", "Edit Profile"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: L("编辑资料", "Edit Profile"))
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()

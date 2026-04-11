@@ -593,13 +593,9 @@ private struct SquadManageSheet: View {
                         .lineLimit(2...4)
                 }
             }
-            .navigationTitle(LL("编辑小队信息"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: LL("编辑小队信息"))
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
                         onSave(

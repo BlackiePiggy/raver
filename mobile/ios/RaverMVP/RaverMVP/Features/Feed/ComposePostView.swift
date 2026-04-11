@@ -260,20 +260,8 @@ struct ComposePostView: View {
         .padding(16)
         .foregroundStyle(RaverTheme.primaryText)
         .background(RaverTheme.background)
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: pageTitle)
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text(pageTitle)
-                    .font(.headline)
-                    .foregroundStyle(RaverTheme.primaryText)
-            }
-            ToolbarItem(placement: .topBarLeading) {
-                Button(L("返回", "Back")) {
-                    dismiss()
-                }
-                .font(.subheadline.weight(.semibold))
-            }
         }
         .onChange(of: selectedMediaItems) { _, newValue in
             guard !newValue.isEmpty else { return }
@@ -1120,12 +1108,15 @@ private struct PostLocationPickerSheet: View {
                 locationListArea
             }
             .background(RaverTheme.background)
-            .navigationTitle(LL("选择定位"))
-            .navigationBarTitleDisplayMode(.inline)
+            .raverSystemNavigation(title: LL("选择定位"))
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                        .font(.subheadline.weight(.semibold))
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(L("确认", "Confirm")) {

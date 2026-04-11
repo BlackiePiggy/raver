@@ -321,6 +321,21 @@ struct DJSetDetailView: View {
         playbackMode == .audioOnly
     }
 
+    private var immersiveTrailingAction: AnyView? {
+        guard !isAudioOnlyMode, let set else { return nil }
+        return AnyView(
+            RaverNavigationCircleIconButton(
+                systemName: "headphones",
+                style: .glass
+            ) {
+                nativePlayerSession.pause()
+                isPlaybackPaused = true
+                audioListenSetID = set.id
+                showControlsTemporarily()
+            }
+        )
+    }
+
     var body: some View {
         Group {
             if isLoading, set == nil {
@@ -384,10 +399,11 @@ struct DJSetDetailView: View {
             }
         }
         .background(RaverTheme.background)
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
+        .raverImmersiveFloatingNavigationChrome(
+            trailing: immersiveTrailingAction
+        ) {
+            handleImmersiveBack()
+        }
         .fullScreenCover(
             isPresented: Binding(
                 get: { audioListenSetID != nil },
@@ -854,55 +870,6 @@ struct DJSetDetailView: View {
         let controlHitSize: CGFloat = 46
         ZStack {
             VStack {
-                HStack {
-                    Button {
-                        if isFullscreen, !isAudioOnlyMode {
-                            forcePortraitOrientation()
-                        } else {
-                            if !isAudioOnlyMode {
-                                forcePortraitOrientation()
-                            }
-                            dismiss()
-                        }
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(Color.white)
-                            .frame(width: 36, height: 36)
-                            .background(Color.black.opacity(0.36))
-                            .clipShape(Circle())
-                    }
-                    .frame(width: controlHitSize, height: controlHitSize)
-                    .contentShape(Circle())
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    if !isAudioOnlyMode {
-                        Button {
-                            nativePlayerSession.pause()
-                            isPlaybackPaused = true
-                            audioListenSetID = set.id
-                            showControlsTemporarily()
-                        } label: {
-                            Image(systemName: "headphones")
-                                .font(.headline.weight(.semibold))
-                                .foregroundStyle(Color.white)
-                                .frame(width: 36, height: 36)
-                                .background(Color.black.opacity(0.36))
-                                .clipShape(Circle())
-                        }
-                        .frame(width: controlHitSize, height: controlHitSize)
-                        .contentShape(Circle())
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.top, 12)
-                .padding(.horizontal, 12)
-                Spacer()
-            }
-
-            VStack {
                 Spacer()
                 VStack(spacing: 1) {
                     HStack(alignment: .center, spacing: 8) {
@@ -1260,6 +1227,26 @@ struct DJSetDetailView: View {
             scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
         }
         UIDevice.current.setValue(UIInterfaceOrientation.portrait.rawValue, forKey: "orientation")
+    }
+
+    private func isLandscapeInterface() -> Bool {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive })?
+            .interfaceOrientation
+            .isLandscape ?? false
+    }
+
+    private func handleImmersiveBack() {
+        if !isAudioOnlyMode, isLandscapeInterface() {
+            forcePortraitOrientation()
+            showControlsTemporarily()
+            return
+        }
+        if !isAudioOnlyMode {
+            forcePortraitOrientation()
+        }
+        dismiss()
     }
 
     @ViewBuilder
@@ -1899,15 +1886,6 @@ struct DJSetDetailView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.caption.weight(.semibold))
-                            .frame(width: 28, height: 28)
-                    }
-                    .buttonStyle(.bordered)
-
                     Text(tracklistDisplayName)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(RaverTheme.primaryText)
@@ -2961,8 +2939,7 @@ private struct TracklistSelectorSheet: View {
         }
         .listStyle(.insetGrouped)
         .searchable(text: $query, prompt: L("搜索 Tracklist / 用户 / ID", "Search Tracklist / User / ID"))
-        .navigationTitle(LL("选择 Tracklist"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: LL("选择 Tracklist"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(L("关闭", "Close")) {
@@ -3103,12 +3080,8 @@ private struct UploadTracklistSheet: View {
                 }
             }
         }
-        .navigationTitle(LL("上传我的 Tracklist"))
-        .navigationBarTitleDisplayMode(.inline)
+        .raverSystemNavigation(title: LL("上传我的 Tracklist"))
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(L("取消", "Cancel")) { dismiss() }
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(isSaving ? L("上传中...", "Uploading...") : L("上传", "Upload")) {
                     Task { await upload() }
@@ -3316,11 +3289,8 @@ struct DJSetEditorView: View {
                     }
                 }
             }
-            .navigationTitle(mode.title)
+            .raverSystemNavigation(title: mode.title)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
                         Task { await save() }
@@ -3543,11 +3513,8 @@ private struct SetEventBindingSheet: View {
                     .disabled(manualEventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .navigationTitle(LL("绑定活动"))
+            .raverSystemNavigation(title: LL("绑定活动"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
             }
             .task {
                 manualEventName = initialEventName
@@ -3721,11 +3688,8 @@ private struct TracklistEditorView: View {
                     }
                 }
             }
-            .navigationTitle(LL("编辑 Tracklist"))
+            .raverSystemNavigation(title: LL("编辑 Tracklist"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) { dismiss() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
                         Task { await save() }
