@@ -180,8 +180,7 @@ struct RatingEventEditorSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
+        Form {
                 Section(LL("编辑打分事件")) {
                     TextField(LL("名称"), text: $viewModel.name)
                         .submitLabel(.done)
@@ -249,7 +248,6 @@ struct RatingEventEditorSheet: View {
             } message: {
                 Text(viewModel.errorMessage ?? "")
             }
-        }
     }
 
     private func dismissKeyboard() {
@@ -281,8 +279,7 @@ struct RatingUnitEditorSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
+        Form {
                 Section(LL("编辑打分单位")) {
                     TextField(LL("名称"), text: $viewModel.name)
                         .submitLabel(.done)
@@ -350,7 +347,6 @@ struct RatingUnitEditorSheet: View {
             } message: {
                 Text(viewModel.errorMessage ?? "")
             }
-        }
     }
 
     private func dismissKeyboard() {

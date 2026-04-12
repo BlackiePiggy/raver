@@ -16,6 +16,7 @@ enum AppRoute: Hashable {
     case postDetail(postID: String)
     case eventDetail(eventID: String)
     case djDetail(djID: String)
+    case rankingBoardDetail(board: RankingBoard)
     case userProfile(userID: String)
     case squadProfile(squadID: String)
     case ratingUnitDetail(unitID: String)
@@ -33,6 +34,7 @@ extension AppRoute {
              .postDetail,
              .eventDetail,
              .djDetail,
+             .rankingBoardDetail,
              .userProfile,
              .squadProfile,
              .ratingUnitDetail:
@@ -58,6 +60,8 @@ extension AppRoute {
             return "event.detail"
         case .djDetail:
             return "dj.detail"
+        case .rankingBoardDetail:
+            return "ranking.board.detail"
         case .userProfile:
             return "user.profile"
         case .squadProfile:
@@ -81,7 +85,7 @@ extension AppRoute {
             return .messages
         case .postDetail, .squadProfile, .ratingUnitDetail:
             return .circle
-        case .eventDetail, .djDetail:
+        case .eventDetail, .djDetail, .rankingBoardDetail:
             return .discover
         case .userProfile:
             return .profile
@@ -185,7 +189,10 @@ struct MainTabCoordinatorView: View {
     var body: some View {
         NavigationStack(path: $router.path) {
             MainTabView()
-                .navigationBarHidden(true)
+                .toolbar(
+                    router.selectedTab == .profile ? .visible : .hidden,
+                    for: .navigationBar
+                )
                 .navigationDestination(for: AppRoute.self) { route in
                     routeDestination(for: route)
                 }
@@ -362,6 +369,9 @@ struct MainTabCoordinatorView: View {
 
         case .djDetail(let djID):
             DJDetailView(djID: djID)
+
+        case .rankingBoardDetail(let board):
+            RankingBoardDetailView(board: board)
 
         case .userProfile(let userID):
             UserProfileView(userID: userID)

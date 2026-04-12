@@ -3213,8 +3213,7 @@ struct DJSetEditorView: View {
     private let demoVideoURL = "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
 
     var body: some View {
-        NavigationStack {
-            Form {
+        Form {
                 Section(LL("基础")) {
                     TextField(L("DJ ID", "DJ ID"), text: $djId)
                     TextField(LL("标题"), text: $title)
@@ -3316,7 +3315,6 @@ struct DJSetEditorView: View {
                     eventName = selectedEventName
                 }
             }
-        }
     }
 
     private func prefillIfNeeded() {

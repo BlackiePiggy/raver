@@ -434,6 +434,12 @@ final class EventsSearchResultsViewModel: ObservableObject {
                 )
             )
             events.append(contentsOf: result.items)
+            events.sort { lhs, rhs in
+                if lhs.startDate == rhs.startDate {
+                    return lhs.endDate > rhs.endDate
+                }
+                return lhs.startDate > rhs.startDate
+            }
             totalPages = result.pagination?.totalPages ?? 1
             page += 1
             errorMessage = nil

@@ -336,7 +336,6 @@ struct DJsSearchResultsView: View {
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: DJsSearchResultsViewModel
-    @State private var selectedBoardForDetail: RankingBoard?
 
     init(viewModel: DJsSearchResultsViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -394,7 +393,7 @@ struct DJsSearchResultsView: View {
                                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                                         ForEach(viewModel.rankingBoards) { board in
                                             Button {
-                                                selectedBoardForDetail = board
+                                                appPush(.rankingBoardDetail(board: board))
                                             } label: {
                                                 RankingBoardCoverCard(board: board)
                                             }
@@ -424,9 +423,6 @@ struct DJsSearchResultsView: View {
         }
         .refreshable {
             await viewModel.refresh()
-        }
-        .navigationDestination(item: $selectedBoardForDetail) { board in
-            RankingBoardDetailView(board: board)
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.errorMessage != nil },

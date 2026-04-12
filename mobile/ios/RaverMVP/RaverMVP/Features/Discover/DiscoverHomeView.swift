@@ -13,7 +13,7 @@ struct DiscoverHomeView: View {
 
         var title: String {
             switch self {
-            case .recommend: return L("推荐", "Recommend")
+            case .recommend: return L("推荐", "Picks")
             case .events: return L("活动", "Events")
             case .news: return L("资讯", "News")
             case .djs: return L("DJ", "DJ")
@@ -57,7 +57,7 @@ struct DiscoverHomeView: View {
         .background(RaverTheme.background)
         .ignoresSafeArea(edges: .bottom)
         .onChange(of: section) { _, newValue in
-            if newValue != .news, newValue != .events, isChildHorizontalDragging {
+            if newValue != .news, newValue != .events, newValue != .recommend, isChildHorizontalDragging {
                 isChildHorizontalDragging = false
             }
         }
@@ -73,7 +73,12 @@ struct DiscoverHomeView: View {
     private func pageView(for section: Section) -> some View {
         switch section {
         case .recommend:
-            DiscoverRecommendEventsRootView()
+            DiscoverRecommendEventsRootView(
+                onHorizontalDragStateChanged: { isDragging in
+                    guard isChildHorizontalDragging != isDragging else { return }
+                    isChildHorizontalDragging = isDragging
+                }
+            )
         case .events:
             DiscoverEventsRootView(
                 onHorizontalDragStateChanged: { isDragging in

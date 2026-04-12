@@ -2255,19 +2255,19 @@ struct LearnFestivalDetailView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(currentFestival.name)
                             .font(.headline.weight(.black))
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(Color.black.opacity(0.88))
                             .lineLimit(2)
 
                         if !currentFestival.aliases.isEmpty {
                             Text(currentFestival.aliases.joined(separator: " / "))
                                 .font(.caption)
-                                .foregroundStyle(Color.white.opacity(0.9))
+                                .foregroundStyle(Color.black.opacity(0.78))
                                 .lineLimit(2)
                         }
 
                     Text(L("\(currentFestival.country) \(currentFestival.city) · Since \(currentFestival.foundedYear)", "\(currentFestival.country) \(currentFestival.city) · Since \(currentFestival.foundedYear)"))
                             .font(.caption)
-                            .foregroundStyle(Color.white.opacity(0.88))
+                            .foregroundStyle(Color.black.opacity(0.76))
                             .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

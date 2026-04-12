@@ -6,6 +6,8 @@ enum RaverNavigationCircleButtonStyle {
 }
 
 struct RaverNavigationCircleIconButton: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let systemName: String
     let style: RaverNavigationCircleButtonStyle
     let action: () -> Void
@@ -17,11 +19,20 @@ struct RaverNavigationCircleIconButton: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(font)
-                .foregroundStyle(Color.white)
+                .foregroundStyle(foregroundColor)
                 .frame(width: frameSize, height: frameSize)
                 .background(backgroundView)
         }
         .buttonStyle(.plain)
+    }
+
+    private var foregroundColor: Color {
+        switch style {
+        case .glass:
+            return .white
+        case .dimmed:
+            return colorScheme == .dark ? .white : Color.black.opacity(0.84)
+        }
     }
 
     @ViewBuilder
@@ -36,7 +47,17 @@ struct RaverNavigationCircleIconButton: View {
                 )
         case .dimmed:
             Circle()
-                .fill(Color.black.opacity(0.36))
+                .fill(
+                    colorScheme == .dark
+                        ? Color.black.opacity(0.36)
+                        : Color.white.opacity(0.88)
+                )
+                .overlay {
+                    if colorScheme != .dark {
+                        Circle()
+                            .stroke(Color.black.opacity(0.08), lineWidth: 0.5)
+                    }
+                }
         }
     }
 }
@@ -66,6 +87,8 @@ struct RaverImmersiveFloatingTopBar: View {
 }
 
 struct RaverGradientMaskedTopBar: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let title: String
     let onBack: () -> Void
     var trailing: AnyView? = nil
@@ -75,12 +98,7 @@ struct RaverGradientMaskedTopBar: View {
 
         ZStack(alignment: .top) {
             LinearGradient(
-                colors: [
-                    Color.black.opacity(1),
-                    Color.black.opacity(0.95),
-                    Color.black.opacity(0.85),
-                    Color.black.opacity(0.0)
-                ],
+                colors: gradientColors,
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -89,7 +107,7 @@ struct RaverGradientMaskedTopBar: View {
             ZStack {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(titleColor)
                     .lineLimit(1)
 
                 HStack {
@@ -117,6 +135,27 @@ struct RaverGradientMaskedTopBar: View {
         .frame(maxWidth: .infinity)
         .frame(height: safeTop + 70, alignment: .top)
         .ignoresSafeArea(edges: .top)
+    }
+
+    private var gradientColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                Color.black.opacity(1),
+                Color.black.opacity(0.95),
+                Color.black.opacity(0.85),
+                Color.black.opacity(0.0)
+            ]
+        }
+        return [
+            Color.white.opacity(0.98),
+            Color.white.opacity(0.94),
+            Color.white.opacity(0.82),
+            Color.white.opacity(0.0)
+        ]
+    }
+
+    private var titleColor: Color {
+        colorScheme == .dark ? .white : Color.black.opacity(0.88)
     }
 
     static var contentTopSpacing: CGFloat {
@@ -178,8 +217,10 @@ private struct RaverSystemNavigationModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .toolbar(.visible, for: .navigationBar)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(displayMode)
+            .tint(RaverTheme.primaryText)
     }
 }
 

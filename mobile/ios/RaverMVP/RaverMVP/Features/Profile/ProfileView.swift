@@ -68,6 +68,8 @@ struct ProfileView: View {
         .background(RaverTheme.background)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .tint(RaverTheme.primaryText)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 if viewModel.profile != nil {

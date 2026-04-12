@@ -67,7 +67,6 @@ struct DJsModuleView: View {
     @State private var errorMessage: String?
     @State private var selectedSection: DJsModuleSection = .rankings
     @State private var searchKeyword = ""
-    @State private var selectedBoardForDetail: RankingBoard?
     @State private var showDJImportSheet = false
     @State private var importMode: DJsImportMode = .spotify
     @State private var spotifySearchKeyword = ""
@@ -215,7 +214,7 @@ struct DJsModuleView: View {
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                                 ForEach(filteredRankingBoards) { board in
                                     Button {
-                                        selectedBoardForDetail = board
+                                        appPush(.rankingBoardDetail(board: board))
                                     } label: {
                                         RankingBoardCoverCard(board: board)
                                     }
@@ -240,9 +239,6 @@ struct DJsModuleView: View {
             }
             .refreshable {
                 await load()
-            }
-            .navigationDestination(item: $selectedBoardForDetail) { board in
-                RankingBoardDetailView(board: board)
             }
             .overlay(alignment: .bottomTrailing) {
                 if selectedSection == .hot {
@@ -2393,7 +2389,12 @@ struct DJDetailView: View {
             }
 
             LinearGradient(
-                colors: [.clear, Color.black.opacity(0.40), RaverTheme.background.opacity(0.80)],
+                colors: [
+                    .clear,
+                    Color.black.opacity(0.40),
+                    Color.black.opacity(0.76),
+                    Color.black.opacity(0.94)
+                ],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -2426,7 +2427,7 @@ struct DJDetailView: View {
                             )
                             .buttonStyle(.plain)
 
-                            Button(LL("去活动打卡")) {
+                            Button(L("去活动打卡", "Check")) {
                                 selectDJDetailTab(.events)
                                 errorMessage = djEvents.isEmpty
                                     ? L("请在对应活动详情页完成打卡；当前暂未找到这位 DJ 的活动记录。", "Please check in from the related event detail page; no event record is currently found for this DJ.")

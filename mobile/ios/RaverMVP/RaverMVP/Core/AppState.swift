@@ -47,6 +47,25 @@ enum AppLanguage: String, CaseIterable, Codable, Hashable, Identifiable {
     }
 }
 
+enum AppAppearance: String, CaseIterable, Codable, Hashable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system:
+            return L("跟随系统", "System")
+        case .light:
+            return L("浅色", "Light")
+        case .dark:
+            return L("深色", "Dark")
+        }
+    }
+}
+
 @inline(__always)
 func L(_ zh: String, _ en: String) -> String {
     AppLanguagePreference.current.effectiveLanguage == .en ? en : zh
@@ -503,12 +522,30 @@ enum AppLanguagePreference {
     }
 }
 
+enum AppAppearancePreference {
+    private static let key = "raver.app.appearance"
+
+    static var current: AppAppearance {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: key),
+                  let value = AppAppearance(rawValue: raw) else {
+                return .dark
+            }
+            return value
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: key)
+        }
+    }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var session: Session?
     @Published var errorMessage: String?
     @Published var unreadMessagesCount: Int = 0
     @Published var preferredLanguage: AppLanguage = AppLanguagePreference.current
+    @Published var preferredAppearance: AppAppearance = AppAppearancePreference.current
 
     let service: SocialService
     private var cancellables: Set<AnyCancellable> = []
@@ -567,6 +604,12 @@ final class AppState: ObservableObject {
         guard preferredLanguage != language else { return }
         preferredLanguage = language
         AppLanguagePreference.current = language
+    }
+
+    func setPreferredAppearance(_ appearance: AppAppearance) {
+        guard preferredAppearance != appearance else { return }
+        preferredAppearance = appearance
+        AppAppearancePreference.current = appearance
     }
 
     func refreshUnreadMessages() async {

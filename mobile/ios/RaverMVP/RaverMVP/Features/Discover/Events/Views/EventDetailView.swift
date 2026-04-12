@@ -1309,7 +1309,12 @@ struct EventDetailView: View {
             }
 
             LinearGradient(
-                colors: [.clear, Color.black.opacity(0.42), RaverTheme.background.opacity(0.82)],
+                colors: [
+                    .clear,
+                    Color.black.opacity(0.42),
+                    Color.black.opacity(0.78),
+                    Color.black.opacity(0.94)
+                ],
                 startPoint: .top,
                 endPoint: .bottom
             )

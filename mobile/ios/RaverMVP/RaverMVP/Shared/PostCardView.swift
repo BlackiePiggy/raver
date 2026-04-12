@@ -5,6 +5,8 @@ import SwiftUI
 import UIKit
 
 struct PostCardView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let post: Post
     let currentUserId: String?
     let showsFollowButton: Bool
@@ -102,14 +104,14 @@ struct PostCardView: View {
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
-                        .foregroundStyle(Color.white.opacity(0.94))
+                        .foregroundStyle(locationLabelTextColor)
                         .frame(maxWidth: locationLabelMaxWidth, alignment: .leading)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(Color.black.opacity(0.36))
+                        .background(locationLabelBackgroundColor)
                         .overlay(
                             Capsule()
-                                .stroke(Color.white.opacity(0.14), lineWidth: 0.8)
+                                .stroke(locationLabelStrokeColor, lineWidth: 0.8)
                         )
                         .clipShape(Capsule())
                     }
@@ -175,6 +177,24 @@ struct PostCardView: View {
 
     private var locationLabelMaxWidth: CGFloat {
         max(150, min(UIScreen.main.bounds.width * 0.48, 210))
+    }
+
+    private var locationLabelBackgroundColor: Color {
+        colorScheme == .dark
+            ? Color.black.opacity(0.36)
+            : Color(red: 0.90, green: 0.94, blue: 0.98)
+    }
+
+    private var locationLabelTextColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.94)
+            : Color.black.opacity(0.78)
+    }
+
+    private var locationLabelStrokeColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.14)
+            : Color.black.opacity(0.08)
     }
 
     private var authorMeta: some View {

@@ -26,7 +26,20 @@ struct RaverMVPApp: App {
             AppCoordinatorView()
                 .environmentObject(appContainer)
                 .environmentObject(appState)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(appState.preferredAppearance.preferredColorScheme)
+        }
+    }
+}
+
+private extension AppAppearance {
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .system:
+            return nil
+        case .light:
+            return .light
+        case .dark:
+            return .dark
         }
     }
 }

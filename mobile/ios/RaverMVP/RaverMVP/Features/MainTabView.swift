@@ -34,7 +34,7 @@ struct MainTabView: View {
                     .zIndex(2)
             }
         }
-        .background(Color.black.opacity(0.05).ignoresSafeArea(.all))
+        .background(RaverTheme.background.ignoresSafeArea(.all))
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .task {
             await appState.refreshUnreadMessages()
@@ -124,7 +124,7 @@ struct MainTabView: View {
                             .font(.system(size: 11, weight: currentTab == tab ? .semibold : .medium))
                             .lineLimit(1)
                     }
-                    .foregroundColor(currentTab == tab ? .white : .white.opacity(0.62))
+                    .foregroundColor(currentTab == tab ? .white : RaverTheme.secondaryText)
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
                     .background {
@@ -133,8 +133,8 @@ struct MainTabView: View {
                                 .fill(
                                     LinearGradient(
                                         colors: [
-                                            Color(red: 0.52, green: 0.40, blue: 0.98).opacity(0.62),
-                                            Color(red: 0.42, green: 0.29, blue: 0.90).opacity(0.56)
+                                            RaverTheme.tabBarSelectionStart,
+                                            RaverTheme.tabBarSelectionEnd
                                         ],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
@@ -142,7 +142,7 @@ struct MainTabView: View {
                                 )
                                 .overlay(
                                     Capsule(style: .continuous)
-                                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                                        .stroke(RaverTheme.tabBarSelectionStroke, lineWidth: 1)
                                 )
                                 .matchedGeometryEffect(
                                     id: "main-tab-indicator",
@@ -165,8 +165,8 @@ struct MainTabView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.10, green: 0.08, blue: 0.16).opacity(0.20),
-                            Color(red: 0.15, green: 0.10, blue: 0.25).opacity(0.20)
+                            RaverTheme.tabBarChromeStart,
+                            RaverTheme.tabBarChromeEnd
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -178,8 +178,8 @@ struct MainTabView: View {
                 .stroke(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.24),
-                            Color(red: 0.72, green: 0.62, blue: 1.0).opacity(0.28)
+                            RaverTheme.tabBarStrokeLeading,
+                            RaverTheme.tabBarStrokeTrailing
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -187,8 +187,8 @@ struct MainTabView: View {
                     lineWidth: 1
                 )
         )
-        .shadow(color: Color.black.opacity(0.46), radius: 18, x: 0, y: 10)
-        .shadow(color: Color(red: 0.43, green: 0.30, blue: 0.92).opacity(0.24), radius: 12, x: 0, y: 2)
+        .shadow(color: RaverTheme.tabBarShadowPrimary, radius: 18, x: 0, y: 10)
+        .shadow(color: RaverTheme.tabBarShadowAccent, radius: 12, x: 0, y: 2)
         .padding(.horizontal)
         .padding(.bottom, bottomSafeAreaInset == 0 ? 4 : -14)
     }
@@ -1326,8 +1326,7 @@ struct CircleIDComposerSheet: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(L("歌曲名", "Song Name"))
@@ -1481,7 +1480,6 @@ struct CircleIDComposerSheet: View {
             } message: {
                 Text(errorMessage ?? "")
             }
-        }
     }
 
     private func createEntry() {
@@ -2520,17 +2518,15 @@ struct CircleRatingEventDetailView: View {
         .background(RaverTheme.background)
         .raverGradientNavigationChrome(
             title: LL("打分事件详情"),
-            trailing: Button {
-                circlePush(.ratingUnitCreate(eventID: eventID))
-            } label: {
-                Image(systemName: "plus")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(Color.black.opacity(0.36))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
+            trailing: RaverNavigationCircleIconButton(
+                systemName: "plus",
+                style: .dimmed,
+                action: {
+                    circlePush(.ratingUnitCreate(eventID: eventID))
+                },
+                frameSize: 34,
+                font: .headline.weight(.semibold)
+            )
             .eraseToAnyView(),
             onBack: {
                 onClose()
@@ -3023,8 +3019,7 @@ struct CreateRatingEventSheet: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        NavigationStack {
-            Form {
+        Form {
                 Section(LL("基础信息")) {
                     TextField(LL("事件名称"), text: $name)
                     TextField(LL("事件描述（选填）"), text: $description, axis: .vertical)
@@ -3070,7 +3065,6 @@ struct CreateRatingEventSheet: View {
             .onChange(of: selectedCoverPhoto) { _, newValue in
                 Task { await loadSelectedCoverPhoto(newValue) }
             }
-        }
     }
 
     @MainActor
@@ -3145,8 +3139,7 @@ struct CreateRatingEventFromEventSheet: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        NavigationStack {
-            List {
+        List {
                 if isLoading {
                     HStack {
                         Spacer()
@@ -3230,7 +3223,6 @@ struct CreateRatingEventFromEventSheet: View {
             .task {
                 await loadEvents()
             }
-        }
     }
 
     @MainActor
@@ -3287,8 +3279,7 @@ struct CreateRatingUnitSheet: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        NavigationStack {
-            Form {
+        Form {
                 Section(LL("单位信息")) {
                     TextField(LL("单位名称"), text: $name)
                     TextField(LL("单位描述（选填）"), text: $description, axis: .vertical)
@@ -3334,7 +3325,6 @@ struct CreateRatingUnitSheet: View {
             .onChange(of: selectedCoverPhoto) { _, newValue in
                 Task { await loadSelectedCoverPhoto(newValue) }
             }
-        }
     }
 
     @MainActor

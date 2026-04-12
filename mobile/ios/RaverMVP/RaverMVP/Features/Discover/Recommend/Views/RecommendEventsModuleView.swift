@@ -2,10 +2,12 @@ import SwiftUI
 
 struct DiscoverRecommendEventsRootView: View {
     @EnvironmentObject private var appContainer: AppContainer
+    var onHorizontalDragStateChanged: ((Bool) -> Void)? = nil
 
     var body: some View {
         RecommendEventsModuleView(
-            viewModel: RecommendEventsViewModel(repository: appContainer.discoverEventsRepository)
+            viewModel: RecommendEventsViewModel(repository: appContainer.discoverEventsRepository),
+            onHorizontalDragStateChanged: onHorizontalDragStateChanged
         )
     }
 }
@@ -16,12 +18,18 @@ struct RecommendEventsModuleView: View {
     @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: RecommendEventsViewModel
 
+    private let onHorizontalDragStateChanged: ((Bool) -> Void)?
     private let cardCornerRadius: CGFloat = 28
 
+    @State private var isHorizontalDragging = false
     @State private var scrollPositionID: String?
 
-    init(viewModel: RecommendEventsViewModel) {
+    init(
+        viewModel: RecommendEventsViewModel,
+        onHorizontalDragStateChanged: ((Bool) -> Void)? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
     }
 
     var body: some View {
@@ -44,11 +52,11 @@ struct RecommendEventsModuleView: View {
         .task {
             await viewModel.reload(isLoggedIn: appState.session != nil)
         }
-        .refreshable {
-            await viewModel.reload(isLoggedIn: appState.session != nil)
-        }
         .task(id: appState.session != nil) {
             await viewModel.reloadMarkedState(isLoggedIn: appState.session != nil)
+        }
+        .onDisappear {
+            notifyHorizontalDragging(false)
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -61,144 +69,156 @@ struct RecommendEventsModuleView: View {
     }
 
     private var recommendationPager: some View {
-        ScrollView(.vertical) {
-            LazyVStack(spacing: 10) {
-                ForEach(viewModel.events) { event in
-                    recommendationCard(event)
-                        .id(event.id)
-                        .scrollTransition(axis: .vertical) { content, phase in
-                            content
-                                .scaleEffect(phase.isIdentity ? 1 : 0.95, anchor: .top)
-                                .opacity(phase.isIdentity ? 1 : 0.82)
-                                .rotation3DEffect(
-                                    .degrees(phase.isIdentity ? 0 : 1.8),
-                                    axis: (x: 1, y: 0, z: 0),
-                                    anchor: .top,
-                                    perspective: 0.9
+        GeometryReader { geometry in
+            let size = geometry.size
+            let horizontalInset: CGFloat = 16  // 从 44 改为 16，卡片更宽
+            let cardSpacing: CGFloat = 10
+            let cardWidth = size.width - horizontalInset * 2
+            let cardHeight = size.height          // 直接用全部高度，padding 移到外层处理
+
+            ScrollView(.horizontal) {
+                HStack(spacing: cardSpacing) {
+                    ForEach(viewModel.events) { event in
+                        GeometryReader { proxy in
+                                // 直接在这里计算视差偏移，不 clamp，和原例子保持一致
+                                let minX = min(
+                                    proxy.frame(in: .scrollView(axis: .horizontal)).minX * 1.4,
+                                    proxy.size.width * 1.4
                                 )
-                        }
+                                let parallaxOffset = -minX + 20
+
+                                recommendationCard(event, parallaxOffset: parallaxOffset)
+                                    .frame(width: proxy.size.width, height: proxy.size.height)
+                            }
+                            .frame(width: cardWidth, height: cardHeight)
+                            .scrollTransition(.interactive, axis: .horizontal) { content, phase in
+                                content.scaleEffect(phase.isIdentity ? 1 : 0.95)
+                            }
+                    }
+                }
+                .padding(.horizontal, horizontalInset)
+                .scrollTargetLayout()
+                .frame(height: size.height, alignment: .top)
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollIndicators(.hidden)
+            .scrollPosition(id: $scrollPositionID)
+            .onAppear {
+                if scrollPositionID == nil {
+                    scrollPositionID = viewModel.events.first?.id
                 }
             }
-            .scrollTargetLayout()
-        }
-        .scrollIndicators(.hidden)
-        .scrollTargetBehavior(.viewAligned)
-        .scrollPosition(id: $scrollPositionID)
-        .contentMargins(.top, 10, for: .scrollContent)
-        .contentMargins(.bottom, tabBarReservedHeight + 10, for: .scrollContent)
-        .overlay(alignment: .trailing) {
-            pageIndicator
-                .padding(.trailing, 10)
-        }
-        .onAppear {
-            if scrollPositionID == nil {
+            .onChange(of: viewModel.events) { _, _ in
                 scrollPositionID = viewModel.events.first?.id
             }
-        }
-        .onChange(of: viewModel.events) { _, _ in
-            let validIDs = Set(viewModel.events.map(\.id))
-            if let current = scrollPositionID, validIDs.contains(current) {
-                return
-            }
-            scrollPositionID = viewModel.events.first?.id
-        }
-    }
-
-    private var pageIndicator: some View {
-        let current = currentIndex
-        return VStack(spacing: 6) {
-            ForEach(viewModel.events.indices, id: \.self) { idx in
-                Capsule()
-                    .fill(idx == current ? Color.white.opacity(0.92) : Color.white.opacity(0.28))
-                    .frame(width: idx == current ? 4 : 3, height: idx == current ? 22 : 10)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { value in
+                        let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
+                        if isHorizontal { notifyHorizontalDragging(true) }
+                    }
+                    .onEnded { _ in notifyHorizontalDragging(false) }
+            )
+            .overlay(alignment: .bottom) {
+                pageIndicator
+//                    .padding(.bottom, tabBarReservedHeight - 14)
+                    .padding(.bottom, 10)
             }
         }
+        // ✅ padding 放在 GeometryReader 外面，不影响 size 计算
+        .padding(.top, 10)
+        .padding(.bottom, tabBarReservedHeight + 30)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var currentIndex: Int {
-        guard let id = scrollPositionID else { return 0 }
-        return viewModel.events.firstIndex(where: { $0.id == id }) ?? 0
-    }
-
-    private func recommendationCard(_ event: WebEvent) -> some View {
+    private func recommendationCard(_ event: WebEvent, parallaxOffset: CGFloat = 0) -> some View {
         let cardShape = RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+        // 视差图片的额外出血宽度，决定了最大视差量
+//        let horizontalBleed: CGFloat = 120
+//        let clampedOffset = min(max(parallaxOffset, -horizontalBleed), horizontalBleed)
 
         return Button {
             appPush(.eventDetail(eventID: event.id))
         } label: {
-            ZStack {
-                recommendationCover(for: event)
-                    .overlay(recommendationAtmosphereOverlay)
+            ZStack(alignment: .bottomLeading) {
+                // 1. 背景兜底色
+                recommendationFallbackCover
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipShape(cardShape)
 
-                VStack(alignment: .leading, spacing: 0) {
-                    Spacer(minLength: 0)
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        HStack(spacing: 8) {
-                            recommendationPill(
-                                title: EventTypeOption.displayText(for: event.eventType),
-                                background: Color.white.opacity(0.15)
-                            )
-
-                            let visualStatus = EventVisualStatus.resolve(event: event)
-                            recommendationPill(
-                                title: visualStatus.title,
-                                background: visualStatus.badgeBackground
-                            )
+                // 2. 视差封面图：用 GeometryReader 撑满卡片再做偏移
+                GeometryReader { proxy in
+                    AsyncImage(url: URL(string: event.coverAssetURL ?? "")) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(height: proxy.size.height)  // 只锁高度，宽度自由伸展
+                                .offset(x: parallaxOffset)          // 直接偏移，不需要减 horizontalBleed
+                        case .empty, .failure:
+                            Color.clear
+                        @unknown default:
+                            Color.clear
                         }
-
-                        HStack(spacing: 6) {
-                            Image(systemName: "mappin.and.ellipse")
-                                .font(.system(size: 13, weight: .medium))
-                            Text(recommendationLocationText(for: event))
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.62)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.88))
-                        .padding(.bottom, 0)
-
-                        HStack(spacing: 6) {
-                            Image(systemName: "calendar")
-                                .font(.system(size: 12, weight: .medium))
-                            Text(recommendationDateText(for: event))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.72)
-                        }
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.86))
-                        .padding(.bottom, 1)
-
-                        recommendationHeadline(event.name)
                     }
-                    .layoutPriority(2)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 28)
+                    .frame(width: proxy.size.width, height: proxy.size.height)  // 父容器锁定可见区域
+                    .clipped()                                                    // 裁掉超出部分
+                    .allowsHitTesting(false)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+                // 3. 氛围遮罩：铺满，不受视差偏移影响
+                recommendationAtmosphereOverlay
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                // 4. 文字内容：固定在底部，宽度由卡片决定
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 8) {
+                        recommendationPill(
+                            title: EventTypeOption.displayText(for: event.eventType),
+                            background: Color.white.opacity(0.15)
+                        )
+                        let visualStatus = EventVisualStatus.resolve(event: event)
+                        recommendationPill(
+                            title: visualStatus.title,
+                            background: visualStatus.badgeBackground
+                        )
+                    }
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.system(size: 13, weight: .medium))
+                        Text(recommendationLocationText(for: event))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.62)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.88))
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 12, weight: .medium))
+                        Text(recommendationDateText(for: event))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.86))
+                    .padding(.bottom, 1)
+
+                    recommendationHeadline(event.name)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 15)
+                // ✅ 不设 maxWidth: .infinity，让 ZStack 的 alignment: .bottomLeading 控制对齐
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipShape(cardShape)           // clipShape 在最外层，视差出血被裁掉
+            .overlay(cardShape.stroke(Color.white.opacity(0.10), lineWidth: 1))
+            .shadow(color: Color.black.opacity(0.10), radius: 13, x: 0, y: 6)
             .contentShape(cardShape)
-            .overlay(
-                cardShape
-                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.30), radius: 13, x: 0, y: 6)
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 10)
-        .containerRelativeFrame(.vertical)
-    }
-
-    @ViewBuilder
-    private func recommendationCover(for event: WebEvent) -> some View {
-        ImageLoaderView(urlString: event.coverAssetURL, resizingMode: .fill)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(recommendationFallbackCover)
-            .clipped()
     }
 
     private var recommendationFallbackCover: some View {
@@ -214,28 +234,54 @@ struct RecommendEventsModuleView: View {
     }
 
     private var recommendationAtmosphereOverlay: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color.black.opacity(0.0),
-                    Color.black.opacity(0.15),
-                    Color.black.opacity(0.65),
-                    Color.black.opacity(0.88)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+        LinearGradient(
+            stops: [
+                .init(color: Color.black.opacity(0.0), location: 0.0),
+                .init(color: Color.black.opacity(0.0), location: 0.6),
+                .init(color: Color.black.opacity(0.65), location: 0.8),
+                .init(color: Color.black.opacity(0.88), location: 1.0)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
 
-            RadialGradient(
-                colors: [
-                    Color(red: 0.16, green: 0.95, blue: 0.92).opacity(0.28),
-                    .clear
-                ],
-                center: .topLeading,
-                startRadius: 10,
-                endRadius: 280
-            )
-            .blendMode(.screen)
+    private var currentIndex: Int {
+        guard let id = scrollPositionID else { return 0 }
+        return viewModel.events.firstIndex(where: { $0.id == id }) ?? 0
+    }
+
+    private var pageIndicator: some View {
+        let total = viewModel.events.count
+        let current = currentIndex
+
+        return HStack(spacing: 4) {
+            ForEach(0..<total, id: \.self) { idx in
+                Capsule()
+                    .fill(
+                        idx == current
+                            ? Color(red: 0.16, green: 0.95, blue: 0.92)
+                            : Color.white.opacity(0.30)
+                    )
+                    .frame(width: idx == current ? 28 : 5, height: 3)
+                    .shadow(
+                        color: idx == current
+                            ? Color(red: 0.16, green: 0.95, blue: 0.92).opacity(0.9)
+                            : .clear,
+                        radius: 6,
+                        x: 0,
+                        y: 0
+                    )
+                    .shadow(
+                        color: idx == current
+                            ? Color(red: 0.16, green: 0.95, blue: 0.92).opacity(0.5)
+                            : .clear,
+                        radius: 12,
+                        x: 0,
+                        y: 0
+                    )
+                    .animation(.spring(response: 0.32, dampingFraction: 0.68), value: current)
+            }
         }
     }
 
@@ -301,5 +347,35 @@ struct RecommendEventsModuleView: View {
 
     private func recommendationDateText(for event: WebEvent) -> String {
         event.startDate.appLocalizedDateRangeText(to: event.endDate)
+    }
+
+    private func notifyHorizontalDragging(_ isDragging: Bool) {
+        guard isHorizontalDragging != isDragging else { return }
+        isHorizontalDragging = isDragging
+        onHorizontalDragStateChanged?(isDragging)
+    }
+}
+
+#Preview {
+    RecommendEventsPreviewHost()
+}
+
+@MainActor
+private struct RecommendEventsPreviewHost: View {
+    @StateObject private var appContainer = AppContainer()
+    @StateObject private var appState: AppState
+
+    init() {
+        let container = AppContainer()
+        _appContainer = StateObject(wrappedValue: container)
+        _appState = StateObject(wrappedValue: AppState(service: container.socialService))
+    }
+
+    var body: some View {
+        DiscoverRecommendEventsRootView()
+            .environmentObject(appContainer)
+            .environmentObject(appState)
+            .environment(\.raverTabBarReservedHeight, 88)
+            .background(RaverTheme.background)
     }
 }

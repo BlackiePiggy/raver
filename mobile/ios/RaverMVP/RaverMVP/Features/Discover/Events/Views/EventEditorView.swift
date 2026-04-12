@@ -1095,8 +1095,7 @@ struct EventEditorView: View {
     @State private var importSuccessMessage: String?
 
     var body: some View {
-        NavigationStack {
-            Form {
+        Form {
                 Section(LL("基础信息")) {
                     TextField(LL("活动名称"), text: $name)
                     TextField(LL("简介"), text: $description, axis: .vertical)
@@ -1480,7 +1479,6 @@ struct EventEditorView: View {
                     resetLineupImportDrafts()
                 }
             }
-        }
     }
 
     private var normalizedStageEntries: [String] {

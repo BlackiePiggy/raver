@@ -44,6 +44,17 @@ struct SettingsView: View {
                 // 内容偏好
                 Section(L("内容偏好", "Content Preferences")) {
                     NavigationLink {
+                        ThemeSettingsView()
+                    } label: {
+                        HStack {
+                            Label(L("主题设置", "Appearance"), systemImage: "circle.lefthalf.filled")
+                            Spacer()
+                            Text(appState.preferredAppearance.title)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                    }
+
+                    NavigationLink {
                         Text(L("兴趣标签", "Interest Tags"))
                     } label: {
                         Label(L("兴趣标签", "Interest Tags"), systemImage: "tag")
@@ -159,5 +170,34 @@ private struct LanguageSettingsView: View {
         .scrollContentBackground(.hidden)
         .background(RaverTheme.background)
         .raverSystemNavigation(title: L("语言设置", "Language"))
+    }
+}
+
+private struct ThemeSettingsView: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        List {
+            Section(L("显示主题", "Appearance")) {
+                ForEach(AppAppearance.allCases) { appearance in
+                    Button {
+                        appState.setPreferredAppearance(appearance)
+                    } label: {
+                        HStack {
+                            Text(appearance.title)
+                            Spacer()
+                            if appState.preferredAppearance == appearance {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(RaverTheme.accent)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: L("主题设置", "Appearance"))
     }
 }
