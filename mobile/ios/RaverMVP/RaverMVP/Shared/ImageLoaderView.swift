@@ -8,6 +8,9 @@ import AVKit
 struct ImageLoaderView: View {
     var urlString: String?
     var resizingMode: ContentMode = .fill
+    var showsIndicator: Bool = true
+    var showsFallback: Bool = true
+    var contentOffset: CGSize = .zero
     var onImageLoaded: ((CGSize) -> Void)? = nil
 
     var body: some View {
@@ -22,16 +25,33 @@ struct ImageLoaderView: View {
         if let resolved = AppConfig.resolvedURLString(urlString),
            let remoteURL = URL(string: resolved),
            resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            WebImage(url: remoteURL)
-                .onSuccess { image, _, _ in
-                    onImageLoaded?(image.size)
+            Group {
+                if showsIndicator {
+                    WebImage(url: remoteURL)
+                        .onSuccess { image, _, _ in
+                            onImageLoaded?(image.size)
+                        }
+                        .resizable()
+                        .indicator(.activity)
+                } else {
+                    WebImage(url: remoteURL)
+                        .onSuccess { image, _, _ in
+                            onImageLoaded?(image.size)
+                        }
+                        .resizable()
                 }
-                .resizable()
-                .indicator(.activity)
-                .aspectRatio(contentMode: resizingMode)
-                .allowsHitTesting(false)
+            }
+            .aspectRatio(contentMode: resizingMode)
+            .offset(contentOffset)
+            .allowsHitTesting(false)
         } else {
-            fallback
+            Group {
+                if showsFallback {
+                    fallback
+                } else {
+                    Color.clear
+                }
+            }
                 .allowsHitTesting(false)
         }
     }

@@ -147,20 +147,13 @@ struct RecommendEventsModuleView: View {
 
                 // 2. 视差封面图：用 GeometryReader 撑满卡片再做偏移
                 GeometryReader { proxy in
-                    AsyncImage(url: URL(string: event.coverAssetURL ?? "")) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(height: proxy.size.height)  // 只锁高度，宽度自由伸展
-                                .offset(x: parallaxOffset)          // 直接偏移，不需要减 horizontalBleed
-                        case .empty, .failure:
-                            Color.clear
-                        @unknown default:
-                            Color.clear
-                        }
-                    }
+                    ImageLoaderView(
+                        urlString: event.coverAssetURL,
+                        resizingMode: .fill,
+                        showsIndicator: false,
+                        showsFallback: false,
+                        contentOffset: CGSize(width: parallaxOffset, height: 0)
+                    )
                     .frame(width: proxy.size.width, height: proxy.size.height)  // 父容器锁定可见区域
                     .clipped()                                                    // 裁掉超出部分
                     .allowsHitTesting(false)
