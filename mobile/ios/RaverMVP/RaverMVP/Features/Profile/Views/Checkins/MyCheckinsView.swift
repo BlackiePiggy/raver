@@ -703,7 +703,9 @@ struct MyCheckinsView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
                             .lineLimit(2)
+                            .frame(maxWidth: .infinity, minHeight: 32, alignment: .topLeading)
                     }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
             }
         }

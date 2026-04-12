@@ -1,16 +1,21 @@
 import SwiftUI
 import UIKit
 
-private extension UIView {
-    func findEnclosingScrollView() -> UIScrollView? {
-        var current: UIView? = superview
-        while let view = current {
-            if let scrollView = view as? UIScrollView, scrollView !== self {
-                return scrollView
-            }
-            current = view.superview
+private final class HorizontalAxisLockedUIScrollView: UIScrollView {
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard
+            gestureRecognizer === panGestureRecognizer,
+            let pan = gestureRecognizer as? UIPanGestureRecognizer
+        else {
+            return super.gestureRecognizerShouldBegin(gestureRecognizer)
         }
-        return nil
+
+        let velocity = pan.velocity(in: self)
+        if abs(velocity.y) > abs(velocity.x) {
+            return false
+        }
+
+        return super.gestureRecognizerShouldBegin(gestureRecognizer)
     }
 }
 
@@ -41,7 +46,7 @@ struct HorizontalAxisLockedScrollView<Content: View>: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> UIScrollView {
-        let scrollView = UIScrollView()
+        let scrollView = HorizontalAxisLockedUIScrollView()
         scrollView.backgroundColor = .clear
         scrollView.showsHorizontalScrollIndicator = showsIndicators
         scrollView.showsVerticalScrollIndicator = false
@@ -53,12 +58,6 @@ struct HorizontalAxisLockedScrollView<Content: View>: UIViewRepresentable {
         scrollView.isDirectionalLockEnabled = true
         scrollView.clipsToBounds = true
         scrollView.delegate = context.coordinator
-
-        DispatchQueue.main.async {
-            if let parentScrollView = scrollView.findEnclosingScrollView() {
-                parentScrollView.panGestureRecognizer.require(toFail: scrollView.panGestureRecognizer)
-            }
-        }
 
         let hostedView = context.coordinator.hostingController.view
         hostedView?.backgroundColor = .clear
@@ -140,9 +139,7 @@ struct HorizontalAxisLockedScrollView<Content: View>: UIViewRepresentable {
         private func finishDragging() {
             guard isDraggingNotified else { return }
             isDraggingNotified = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
-                self?.onDraggingChanged?(false)
-            }
+            onDraggingChanged?(false)
         }
     }
 }

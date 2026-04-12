@@ -65,7 +65,7 @@ struct DJsModuleView: View {
     @State private var isLoading = false
     @State private var isRefreshingHotBatch = false
     @State private var errorMessage: String?
-    @State private var selectedSection: DJsModuleSection = .hot
+    @State private var selectedSection: DJsModuleSection = .rankings
     @State private var searchKeyword = ""
     @State private var selectedBoardForDetail: RankingBoard?
     @State private var showDJImportSheet = false
@@ -1987,6 +1987,16 @@ struct DJDetailView: View {
             case .ratings: return L("打分", "Ratings")
             }
         }
+
+        var themeColor: Color {
+            switch self {
+            case .intro: return Color(red: 0.27, green: 0.85, blue: 0.82)
+            case .posts: return Color(red: 0.95, green: 0.30, blue: 0.38)
+            case .sets: return Color(red: 0.30, green: 0.67, blue: 0.97)
+            case .events: return Color(red: 0.98, green: 0.71, blue: 0.22)
+            case .ratings: return Color(red: 0.58, green: 0.43, blue: 0.95)
+            }
+        }
     }
 
     var body: some View {
@@ -2728,57 +2738,34 @@ struct DJDetailView: View {
 
     @ViewBuilder
     private var tabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 24) {
-                ForEach(DJDetailTab.allCases) { tab in
-                    Button {
-                        selectDJDetailTab(tab)
-                    } label: {
-                        Text(tab.title)
-                            .font(.system(size: 17, weight: tabVisualState(for: tab) ? .semibold : .medium))
-                            .foregroundStyle(tabVisualState(for: tab) ? RaverTheme.accent : Color.white.opacity(0.92))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(Rectangle())
-                    .highPriorityGesture(
-                        TapGesture().onEnded {
-                            selectDJDetailTab(tab)
-                        }
-                    )
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: DJDetailTabFramePreferenceKey.self,
-                                value: [tab: geo.frame(in: .named("DJDetailTabs"))]
-                            )
-                        }
-                    )
-                }
-            }
-            .padding(.horizontal, 16)
-        }
-        .coordinateSpace(name: "DJDetailTabs")
-        .overlay(alignment: .bottomLeading) {
-            if let indicator = indicatorRect {
-                Capsule()
-                    .fill(RaverTheme.accent)
-                    .frame(width: indicator.width, height: 3)
-                    .offset(x: indicator.minX, y: 0)
-                    .animation(.interactiveSpring(response: 0.26, dampingFraction: 0.75), value: indicator.minX)
-                    .animation(.interactiveSpring(response: 0.24, dampingFraction: 0.72), value: indicator.width)
-                    .allowsHitTesting(false)
-            }
-        }
-        .onPreferenceChange(DJDetailTabFramePreferenceKey.self) { value in
-            tabFrames = value
-        }
+        RaverScrollableTabBar(
+            items: djDetailTabItems,
+            selection: $selectedTab,
+            progress: pageProgress,
+            onSelect: { tab in
+                selectDJDetailTab(tab)
+            },
+            tabSpacing: 24,
+            tabHorizontalPadding: 16,
+            dividerColor: .gray.opacity(0.26),
+            indicatorColorProvider: { $0.themeColor },
+            activeTextColor: RaverTheme.primaryText,
+            inactiveTextColor: RaverTheme.secondaryText,
+            showsDivider: false,
+            indicatorHeight: 2.6,
+            tabFont: .system(size: 17, weight: .regular)
+        )
         .frame(maxWidth: .infinity)
         .frame(height: 40)
         .padding(.top, 8)
         .padding(.bottom, 4)
         .background(RaverTheme.background)
+    }
+
+    private var djDetailTabItems: [RaverScrollableTabItem<DJDetailTab>] {
+        DJDetailTab.allCases.map { tab in
+            RaverScrollableTabItem(id: tab, title: tab.title)
+        }
     }
 
     @ViewBuilder

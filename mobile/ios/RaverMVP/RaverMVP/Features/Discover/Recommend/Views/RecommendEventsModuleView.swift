@@ -1,6 +1,4 @@
 import SwiftUI
-import UIKit
-import CoreText
 
 struct DiscoverRecommendEventsRootView: View {
     @EnvironmentObject private var appContainer: AppContainer
@@ -19,8 +17,6 @@ struct RecommendEventsModuleView: View {
     @StateObject private var viewModel: RecommendEventsViewModel
 
     private let cardCornerRadius: CGFloat = 28
-    private static var didRegisterAlteHaasFont = false
-    private static var didLogRecommendFontDiagnostics = false
 
     @State private var scrollPositionID: String?
 
@@ -46,8 +42,6 @@ struct RecommendEventsModuleView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            ensureRecommendFontRegistered()
-            logRecommendFontDiagnosticsIfNeeded()
             await viewModel.reload(isLoggedIn: appState.session != nil)
         }
         .refreshable {
@@ -163,7 +157,7 @@ struct RecommendEventsModuleView: View {
                                 .minimumScaleFactor(0.62)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        .font(recommendMetaFont(size: 15))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.88))
                         .padding(.bottom, 0)
 
@@ -174,7 +168,7 @@ struct RecommendEventsModuleView: View {
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.72)
                         }
-                        .font(recommendMetaFont(size: 14))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.86))
                         .padding(.bottom, 1)
 
@@ -263,7 +257,7 @@ struct RecommendEventsModuleView: View {
 
     private func recommendationHeadlineText(_ text: String, size: CGFloat, tracking: CGFloat) -> some View {
         Text(text)
-            .font(recommendHeadlineFont(size: size).leading(.tight))
+            .font(.system(size: size, weight: .bold).leading(.tight))
             .lineLimit(3)
             .minimumScaleFactor(0.34)
             .allowsTightening(true)
@@ -283,76 +277,9 @@ struct RecommendEventsModuleView: View {
         }
     }
 
-    private func recommendHeadlineFont(size: CGFloat) -> Font {
-        ensureRecommendFontRegistered()
-        if UIFont(name: "AlteHaasGrotesk_Bold", size: size) != nil {
-            return .custom("AlteHaasGrotesk_Bold", size: size)
-        }
-        return .custom(
-            preferredFontName(
-                candidates: ["Alte Haas Grotesk Bold", "Alte Haas Grotesk", "HelveticaNeue-Bold", "Arial-BoldMT", "AvenirNext-Bold"],
-                fallback: "HelveticaNeue-Bold"
-            ),
-            size: size
-        )
-    }
-
-    private func recommendMetaFont(size: CGFloat) -> Font {
-        ensureRecommendFontRegistered()
-        if UIFont(name: "AlteHaasGrotesk_Bold", size: size) != nil {
-            return .custom("AlteHaasGrotesk_Bold", size: size)
-        }
-        return .custom(
-            preferredFontName(
-                candidates: ["Alte Haas Grotesk Bold", "Alte Haas Grotesk", "HelveticaNeue-Bold", "Arial-BoldMT", "AvenirNext-Bold"],
-                fallback: "HelveticaNeue-Bold"
-            ),
-            size: size
-        )
-    }
-
-    private func preferredFontName(candidates: [String], fallback: String) -> String {
-        for candidate in candidates where UIFont(name: candidate, size: 15) != nil {
-            return candidate
-        }
-        return fallback
-    }
-
-    private func ensureRecommendFontRegistered() {
-        guard !Self.didRegisterAlteHaasFont else { return }
-        guard let fontURL = Bundle.main.url(forResource: "altehaasgroteskbold", withExtension: "ttf") else { return }
-        CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
-        Self.didRegisterAlteHaasFont = true
-    }
-
-    private func logRecommendFontDiagnosticsIfNeeded() {
-        guard !Self.didLogRecommendFontDiagnostics else { return }
-        Self.didLogRecommendFontDiagnostics = true
-
-        let englishHeadlineCandidates = ["AlteHaasGrotesk_Bold", "Alte Haas Grotesk Bold", "Alte Haas Grotesk", "HelveticaNeue-Bold", "Arial-BoldMT", "AvenirNext-Bold"]
-        let englishMetaCandidates = ["AlteHaasGrotesk_Bold", "Alte Haas Grotesk Bold", "Alte Haas Grotesk", "HelveticaNeue-Bold", "Arial-BoldMT", "AvenirNext-Bold"]
-        let chineseHeadlineCandidates = ["PingFangSC-Heavy", "STHeitiSC-Medium", "HiraginoSansGB-W6"]
-        let chineseMetaCandidates = ["PingFangSC-Regular", "STHeitiSC-Light"]
-
-        let resolvedEnglishHeadline = preferredFontName(candidates: englishHeadlineCandidates, fallback: "HelveticaNeue-Bold")
-        let resolvedEnglishMeta = preferredFontName(candidates: englishMetaCandidates, fallback: "HelveticaNeue-Bold")
-        let resolvedChineseHeadline = preferredFontName(candidates: chineseHeadlineCandidates, fallback: "PingFangSC-Heavy")
-        let resolvedChineseMeta = preferredFontName(candidates: chineseMetaCandidates, fallback: "PingFangSC-Regular")
-
-        let matchedAlteFonts = UIFont.familyNames
-            .flatMap { family in UIFont.fontNames(forFamilyName: family) }
-            .filter { $0.lowercased().contains("alte") }
-
-        print("[RecommendFont] isChineseUI=\(isChineseUI) effectiveLanguage=\(AppLanguagePreference.current.effectiveLanguage.rawValue)")
-        print("[RecommendFont] AlteHaasGrotesk_Bold available=\(UIFont(name: "AlteHaasGrotesk_Bold", size: 16) != nil)")
-        print("[RecommendFont] resolvedEnglishHeadline=\(resolvedEnglishHeadline) resolvedEnglishMeta=\(resolvedEnglishMeta)")
-        print("[RecommendFont] resolvedChineseHeadline=\(resolvedChineseHeadline) resolvedChineseMeta=\(resolvedChineseMeta)")
-        print("[RecommendFont] loadedAlteFonts=\(matchedAlteFonts)")
-    }
-
     private func recommendationPill(title: String, background: Color) -> some View {
         Text(title)
-            .font(recommendMetaFont(size: 12))
+            .font(.system(size: 12, weight: .semibold))
             .lineLimit(1)
             .minimumScaleFactor(0.75)
             .fixedSize(horizontal: true, vertical: false)

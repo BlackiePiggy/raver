@@ -91,6 +91,17 @@ struct EventDetailView: View {
             case .sets: return "Sets"
             }
         }
+
+        var themeColor: Color {
+            switch self {
+            case .info: return Color(red: 0.27, green: 0.85, blue: 0.82)
+            case .posts: return Color(red: 0.95, green: 0.30, blue: 0.38)
+            case .lineup: return Color(red: 0.30, green: 0.67, blue: 0.97)
+            case .schedule: return Color(red: 0.56, green: 0.78, blue: 0.30)
+            case .ratings: return Color(red: 0.98, green: 0.71, blue: 0.22)
+            case .sets: return Color(red: 0.58, green: 0.43, blue: 0.95)
+            }
+        }
     }
 
     private struct EventVenueMapContext: Identifiable {
@@ -618,7 +629,9 @@ struct EventDetailView: View {
             }
         }
         .task {
-            await load()
+            if event == nil {
+                await load()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { notification in
             let savedEventID = notification.object as? String
@@ -641,57 +654,34 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private var tabBar: some View {
-        HorizontalAxisLockedScrollView(showsIndicators: false) {
-            HStack(spacing: 24) {
-                ForEach(EventDetailTab.allCases) { tab in
-                    Button {
-                        selectEventDetailTab(tab)
-                    } label: {
-                        Text(tab.title)
-                            .font(.system(size: 17, weight: tabVisualState(for: tab) ? .semibold : .medium))
-                            .foregroundStyle(tabVisualState(for: tab) ? RaverTheme.accent : Color.white.opacity(0.92))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(Rectangle())
-                    .highPriorityGesture(
-                        TapGesture().onEnded {
-                            selectEventDetailTab(tab)
-                        }
-                    )
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: EventDetailTabFramePreferenceKey.self,
-                                value: [tab: geo.frame(in: .named("EventDetailTabs"))]
-                            )
-                        }
-                    )
-                }
-            }
-            .padding(.horizontal, 16)
-        }
-        .coordinateSpace(name: "EventDetailTabs")
-        .overlay(alignment: .bottomLeading) {
-            if let indicator = indicatorRect {
-                Capsule()
-                    .fill(RaverTheme.accent)
-                    .frame(width: indicator.width, height: 3)
-                    .offset(x: indicator.minX, y: 0)
-                    .animation(.interactiveSpring(response: 0.26, dampingFraction: 0.75), value: indicator.minX)
-                    .animation(.interactiveSpring(response: 0.24, dampingFraction: 0.72), value: indicator.width)
-                    .allowsHitTesting(false)
-            }
-        }
-        .onPreferenceChange(EventDetailTabFramePreferenceKey.self) { value in
-            tabFrames = value
-        }
+        RaverScrollableTabBar(
+            items: eventDetailTabItems,
+            selection: $selectedTab,
+            progress: pageProgress,
+            onSelect: { tab in
+                selectEventDetailTab(tab)
+            },
+            tabSpacing: 24,
+            tabHorizontalPadding: 16,
+            dividerColor: .gray.opacity(0.26),
+            indicatorColorProvider: { $0.themeColor },
+            activeTextColor: RaverTheme.primaryText,
+            inactiveTextColor: RaverTheme.secondaryText,
+            showsDivider: false,
+            indicatorHeight: 2.6,
+            tabFont: .system(size: 17, weight: .regular)
+        )
         .frame(maxWidth: .infinity)
         .frame(height: 40)
         .padding(.top, 8)
         .padding(.bottom, 4)
         .background(RaverTheme.background)
+    }
+
+    private var eventDetailTabItems: [RaverScrollableTabItem<EventDetailTab>] {
+        EventDetailTab.allCases.map { tab in
+            RaverScrollableTabItem(id: tab, title: tab.title)
+        }
     }
 
     @ViewBuilder
@@ -1608,9 +1598,15 @@ struct EventDetailView: View {
                             .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
                     )
                     .padding(.top, 4)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+                        )
+                    )
                 }
             }
+            .animation(.spring(response: 0.34, dampingFraction: 0.86), value: showExpandedLineupList)
         }
     }
 
@@ -2020,7 +2016,6 @@ struct EventDetailView: View {
 
             let loadedEvent = try await eventTask
             event = loadedEvent
-            showExpandedLineupList = false
             relatedEventCheckins = await checkinsTask
             relatedRatingEvents = (try? await ratingEventsTask) ?? []
             relatedEventSets = (try? await eventsRepository.fetchEventDJSets(eventName: loadedEvent.name)) ?? []

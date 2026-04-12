@@ -2017,14 +2017,6 @@ struct LearnFestivalCard: View {
     }
 }
 
-private struct LearnFestivalDetailTabFramePreferenceKey: PreferenceKey {
-    static var defaultValue: [LearnFestivalDetailView.LearnFestivalDetailTab: CGRect] = [:]
-
-    static func reduce(value: inout [LearnFestivalDetailView.LearnFestivalDetailTab: CGRect], nextValue: () -> [LearnFestivalDetailView.LearnFestivalDetailTab: CGRect]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
 struct LearnFestivalDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
@@ -2050,7 +2042,6 @@ struct LearnFestivalDetailView: View {
     @State private var previewImage: LearnLabelPreviewImage?
     @State private var avatarLuminance: CGFloat?
     @State private var selectedTab: LearnFestivalDetailTab = .basic
-    @State private var tabFrames: [LearnFestivalDetailTab: CGRect] = [:]
     @State private var pageProgress: CGFloat = 0
     @State private var isTabSwitchingByTap = false
     @State private var tabSwitchUnlockWorkItem: DispatchWorkItem?
@@ -2092,6 +2083,14 @@ struct LearnFestivalDetailView: View {
             case .basic: return L("信息", "Info")
             case .events: return L("活动", "Events")
             case .posts: return L("动态", "Posts")
+            }
+        }
+
+        var themeColor: Color {
+            switch self {
+            case .basic: return Color(red: 0.27, green: 0.85, blue: 0.82)
+            case .events: return Color(red: 0.98, green: 0.71, blue: 0.22)
+            case .posts: return Color(red: 0.95, green: 0.30, blue: 0.38)
             }
         }
     }
@@ -2183,57 +2182,34 @@ struct LearnFestivalDetailView: View {
 
     @ViewBuilder
     private var tabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 24) {
-                ForEach(LearnFestivalDetailTab.allCases) { tab in
-                    Button {
-                        selectFestivalDetailTab(tab)
-                    } label: {
-                        Text(tab.title)
-                            .font(.system(size: 17, weight: tabVisualState(for: tab) ? .semibold : .medium))
-                            .foregroundStyle(tabVisualState(for: tab) ? RaverTheme.accent : Color.white.opacity(0.92))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(Rectangle())
-                    .highPriorityGesture(
-                        TapGesture().onEnded {
-                            selectFestivalDetailTab(tab)
-                        }
-                    )
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: LearnFestivalDetailTabFramePreferenceKey.self,
-                                value: [tab: geo.frame(in: .named("LearnFestivalDetailTabs"))]
-                            )
-                        }
-                    )
-                }
-            }
-            .padding(.horizontal, 16)
-        }
-        .coordinateSpace(name: "LearnFestivalDetailTabs")
-        .overlay(alignment: .bottomLeading) {
-            if let indicator = indicatorRect {
-                Capsule()
-                    .fill(RaverTheme.accent)
-                    .frame(width: indicator.width, height: 3)
-                    .offset(x: indicator.minX, y: 0)
-                    .animation(.interactiveSpring(response: 0.26, dampingFraction: 0.75), value: indicator.minX)
-                    .animation(.interactiveSpring(response: 0.24, dampingFraction: 0.72), value: indicator.width)
-                    .allowsHitTesting(false)
-            }
-        }
-        .onPreferenceChange(LearnFestivalDetailTabFramePreferenceKey.self) { value in
-            tabFrames = value
-        }
+        RaverScrollableTabBar(
+            items: festivalDetailTabItems,
+            selection: $selectedTab,
+            progress: pageProgress,
+            onSelect: { tab in
+                selectFestivalDetailTab(tab)
+            },
+            tabSpacing: 24,
+            tabHorizontalPadding: 16,
+            dividerColor: .gray.opacity(0.26),
+            indicatorColorProvider: { $0.themeColor },
+            activeTextColor: RaverTheme.primaryText,
+            inactiveTextColor: RaverTheme.secondaryText,
+            showsDivider: false,
+            indicatorHeight: 2.6,
+            tabFont: .system(size: 17, weight: .regular)
+        )
         .frame(maxWidth: .infinity)
         .frame(height: 40)
         .padding(.top, 8)
         .padding(.bottom, 4)
         .background(RaverTheme.background)
+    }
+
+    private var festivalDetailTabItems: [RaverScrollableTabItem<LearnFestivalDetailTab>] {
+        LearnFestivalDetailTab.allCases.map { tab in
+            RaverScrollableTabItem(id: tab, title: tab.title)
+        }
     }
 
     @ViewBuilder
@@ -3011,41 +2987,8 @@ struct LearnFestivalDetailView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: unlockWorkItem)
     }
 
-    private var indicatorRect: CGRect? {
-        let count = LearnFestivalDetailTab.allCases.count
-        guard count > 0 else { return nil }
-
-        let maxIndex = max(0, count - 1)
-        let clampedProgress = min(max(pageProgress, 0), CGFloat(maxIndex))
-        let leftIndex = Int(floor(clampedProgress))
-        let rightIndex = min(leftIndex + 1, maxIndex)
-        let t = clampedProgress - CGFloat(leftIndex)
-
-        let leftTab = LearnFestivalDetailTab.allCases[leftIndex]
-        let rightTab = LearnFestivalDetailTab.allCases[rightIndex]
-
-        guard let leftFrame = tabFrames[leftTab] else { return nil }
-        let rightFrame = tabFrames[rightTab] ?? leftFrame
-
-        let interpolatedX = leftFrame.minX + (rightFrame.minX - leftFrame.minX) * t
-        let interpolatedWidth = leftFrame.width + (rightFrame.width - leftFrame.width) * t
-        let elastic = (1 - abs(0.5 - t) * 2) * 16
-
-        return CGRect(
-            x: interpolatedX - elastic * 0.2,
-            y: 0,
-            width: max(0, interpolatedWidth + elastic),
-            height: 3
-        )
-    }
-
     private func selectedIndex(for tab: LearnFestivalDetailTab) -> Int {
         LearnFestivalDetailTab.allCases.firstIndex(of: tab) ?? 0
-    }
-
-    private func tabVisualState(for tab: LearnFestivalDetailTab) -> Bool {
-        let index = CGFloat(selectedIndex(for: tab))
-        return abs(pageProgress - index) < 0.5
     }
 
     private func destinationURL(_ raw: String?) -> URL? {

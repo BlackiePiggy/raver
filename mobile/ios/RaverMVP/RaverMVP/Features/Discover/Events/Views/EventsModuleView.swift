@@ -2,10 +2,16 @@ import SwiftUI
 
 struct DiscoverEventsRootView: View {
     @EnvironmentObject private var appContainer: AppContainer
+    private let onHorizontalDragStateChanged: ((Bool) -> Void)?
+
+    init(onHorizontalDragStateChanged: ((Bool) -> Void)? = nil) {
+        self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
+    }
 
     var body: some View {
         EventsModuleView(
-            viewModel: EventsModuleViewModel(repository: appContainer.discoverEventsRepository)
+            viewModel: EventsModuleViewModel(repository: appContainer.discoverEventsRepository),
+            onHorizontalDragStateChanged: onHorizontalDragStateChanged
         )
     }
 }
@@ -15,6 +21,8 @@ struct EventsModuleView: View {
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: EventsModuleViewModel
+
+    private let onHorizontalDragStateChanged: ((Bool) -> Void)?
 
     private static let predefinedEventTypeKeys = EventTypeOption.allCases.map(\.rawValue)
 
@@ -72,8 +80,6 @@ struct EventsModuleView: View {
 
     @State private var selectedScope: EventScope = .all
     @State private var selectedEventType = ""
-    @State private var searchText = ""
-    @State private var appliedSearchText = ""
     @State private var showCalendar = false
     @State private var showCountryFilter = false
     @State private var calendarSelectedDate = Date()
@@ -81,24 +87,33 @@ struct EventsModuleView: View {
     @State private var selectedAreaBuckets: Set<CountryAreaBucket> = []
     @State private var selectedContinentBuckets: Set<ContinentBucket> = []
     @State private var selectedCountries: Set<String> = []
-    @State private var searchDebounceTask: Task<Void, Never>?
+    @State private var isSelectorDragging = false
+
+    init(
+        viewModel: EventsModuleViewModel,
+        onHorizontalDragStateChanged: ((Bool) -> Void)? = nil
+    ) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+        self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
+    }
 
     var body: some View {
-        Group {
-            if isShowingFullScreenLoading {
-                loadingStateView
-            } else if visibleEvents.isEmpty {
-                emptyStateView
-            } else {
-                eventsListView
+        VStack(spacing: 0) {
+            headerView
+
+            Group {
+                if isShowingFullScreenLoading {
+                    loadingStateView
+                } else if visibleEvents.isEmpty {
+                    emptyStateView
+                } else {
+                    eventsListView
+                }
             }
         }
         .background(RaverTheme.background)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .top) {
-            headerView
-        }
         .sheet(isPresented: $showCalendar) {
             EventCalendarSheet(
                 events: calendarSourceEvents,
@@ -129,17 +144,11 @@ struct EventsModuleView: View {
             guard selectedScope == .all else { return }
             await viewModel.reloadAll(query: allQuery)
         }
-        .refreshable {
-            await refreshCurrentScope()
-        }
-        .onChange(of: searchText) { _, newValue in
-            scheduleSearchCommit(for: newValue)
-        }
         .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { _ in
             Task { await refreshAfterCreate() }
         }
         .onDisappear {
-            searchDebounceTask?.cancel()
+            notifySelectorDragging(false)
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -152,7 +161,7 @@ struct EventsModuleView: View {
     }
 
     private var allQuery: EventsModuleViewModel.AllQuery {
-        EventsModuleViewModel.AllQuery(search: appliedSearchText, eventTypeKey: selectedEventType)
+        EventsModuleViewModel.AllQuery(search: "", eventTypeKey: selectedEventType)
     }
 
     private var allQueryTaskKey: EventsModuleViewModel.AllQuery? {
@@ -165,7 +174,6 @@ struct EventsModuleView: View {
 
     private var sourceEvents: [WebEvent] {
         rawSourceEvents
-            .filter(eventMatchesSearch)
             .filter(eventMatchesSelectedType)
     }
 
@@ -235,28 +243,21 @@ struct EventsModuleView: View {
         return L("筛选 (\(activeFilterLabels.count))", "Filter (\(activeFilterLabels.count))")
     }
 
-    private var resultCountText: String {
-        L("共 \(visibleEvents.count) 场活动", "\(visibleEvents.count) events")
-    }
-
     private var headerView: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 10) {
-                searchField
-                eventTopIconButton(systemName: "plus") {
-                    discoverPush(.eventCreate)
-                }
-            }
-
-            Picker("", selection: $selectedScope) {
-                ForEach(EventScope.allCases) { scope in
-                    Text(scope.title)
-                        .tag(scope)
-                }
-            }
-            .pickerStyle(.segmented)
+        VStack(spacing: 10) {
+            eventTypeSelectorRow
 
             HStack(spacing: 8) {
+                utilityChipButton(
+                    systemName: selectedScope == .mine ? "star.fill" : "star",
+                    title: selectedScope == .mine ? L("仅收藏", "Favorites") : L("全部", "All"),
+                    isActive: selectedScope == .mine
+                ) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedScope = selectedScope == .mine ? .all : .mine
+                    }
+                }
+
                 utilityChipButton(
                     systemName: isCountryFilterActive
                         ? "line.3.horizontal.decrease.circle.fill"
@@ -271,14 +272,11 @@ struct EventsModuleView: View {
                     showCalendar = true
                 }
 
-                Spacer(minLength: 8)
-
-                Text(resultCountText)
-                    .font(.caption)
-                    .foregroundStyle(RaverTheme.secondaryText)
+                utilityChipButton(systemName: "magnifyingglass", title: L("搜索", "Search")) {
+                    discoverPush(.searchInput(domain: .events, initialQuery: ""))
+                }
             }
-
-            eventTypeSelector
+            .padding(.horizontal, 2)
 
             if !activeFilterLabels.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -309,71 +307,85 @@ struct EventsModuleView: View {
         .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 8)
-//        .background(RaverTheme.background)
-        .background(Color.red)
+        .background(RaverTheme.background)
     }
 
-    private var searchField: some View {
+    private var eventTypeSelectorRow: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(RaverTheme.secondaryText)
-
-            TextField(
-                L("搜索活动 / 城市 / 国家", "Search event / city / country"),
-                text: $searchText
-            )
-            .font(.subheadline)
-            .submitLabel(.search)
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
-            .onSubmit {
-                commitSearchImmediately()
-            }
-
-            if !searchText.isEmpty {
-                Button {
-                    clearSearch()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(RaverTheme.secondaryText.opacity(0.75))
+            HorizontalAxisLockedScrollView(
+                showsIndicators: false,
+                onDraggingChanged: { isDragging in
+                    notifySelectorDragging(isDragging)
                 }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 38)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(RaverTheme.card)
-        )
-    }
-
-    private var eventTypeSelector: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
+            ) {
                 HStack(spacing: 8) {
-                    eventTypeChip(title: EventTypeOption.allEventsTitle, value: "")
-                        .id(typeChipID(for: ""))
+                    eventTypeSelectorChip(title: EventTypeOption.allEventsTitle, value: "")
 
                     ForEach(eventTypeTabs, id: \.self) { key in
-                        eventTypeChip(title: EventTypeOption.displayTitle(for: key), value: key)
-                            .id(typeChipID(for: key))
+                        eventTypeSelectorChip(title: EventTypeOption.displayTitle(for: key), value: key)
                     }
                 }
-                .padding(.horizontal, 2)
+                .padding(.leading, 16)
             }
-            .onAppear {
-                proxy.scrollTo(typeChipID(for: selectedEventType), anchor: .center)
+            .frame(height: 34)
+
+            Button {
+                discoverPush(.eventCreate)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color(red: 0.96, green: 0.51, blue: 0.18))
+                    )
             }
-            .onChange(of: selectedEventType) { _, newValue in
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    proxy.scrollTo(typeChipID(for: newValue), anchor: .center)
-                }
-            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 16)
         }
-        .frame(height: 34)
+    }
+
+    private func eventTypeSelectorChip(title: String, value: String) -> some View {
+        let isSelected = selectedEventType == value
+        let selectedColor = eventTypeChipColor(for: value)
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedEventType = value
+            }
+        } label: {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(isSelected ? .white : RaverTheme.primaryText)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(isSelected ? selectedColor : RaverTheme.card)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func eventTypeChipColor(for value: String) -> Color {
+        switch value {
+        case "festival":
+            return Color(red: 0.96, green: 0.52, blue: 0.20)
+        case "bar_event":
+            return Color(red: 0.31, green: 0.69, blue: 0.97)
+        case "outdoor_event":
+            return Color(red: 0.27, green: 0.79, blue: 0.43)
+        case "club_party":
+            return Color(red: 0.79, green: 0.36, blue: 0.93)
+        case "warehouse_party":
+            return Color(red: 0.85, green: 0.30, blue: 0.48)
+        case "tour_special":
+            return Color(red: 0.98, green: 0.70, blue: 0.24)
+        case "other":
+            return Color(red: 0.57, green: 0.61, blue: 0.70)
+        default:
+            return RaverTheme.accent
+        }
     }
 
     private var loadingStateView: some View {
@@ -423,8 +435,8 @@ struct EventsModuleView: View {
         if selectedScope == .mine && appState.session == nil {
             return L("你标记过的活动会集中显示在这里。", "Events you mark will appear here.")
         }
-        if isCountryFilterActive || !selectedEventType.isEmpty || !appliedSearchText.isEmpty {
-            return L("试试清空搜索词或筛选条件。", "Try clearing the search or filters.")
+        if isCountryFilterActive || !selectedEventType.isEmpty {
+            return L("试试清空筛选条件。", "Try clearing filters.")
         }
         if selectedScope == .mine {
             return L("在活动列表里点亮星标后，这里就会出现内容。", "Mark events with the star button and they will show up here.")
@@ -471,6 +483,9 @@ struct EventsModuleView: View {
             .padding(.top, 8)
             .padding(.bottom, 24)
         }
+        .refreshable {
+            await refreshCurrentScope()
+        }
     }
 
     private func eventListRow(_ event: WebEvent) -> some View {
@@ -486,24 +501,6 @@ struct EventsModuleView: View {
                 .padding(.bottom, 10)
                 .padding(.trailing, 10)
         }
-    }
-
-    private func eventTypeChip(title: String, value: String) -> some View {
-        let isSelected = selectedEventType == value
-        return Button {
-            selectedEventType = value
-        } label: {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(isSelected ? Color.white : RaverTheme.secondaryText)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(
-                    Capsule()
-                        .fill(isSelected ? RaverTheme.accent : RaverTheme.card)
-                )
-        }
-        .buttonStyle(.plain)
     }
 
     private func utilityChipButton(
@@ -537,21 +534,6 @@ struct EventsModuleView: View {
         .buttonStyle(.plain)
     }
 
-    private func eventTopIconButton(systemName: String, isActive: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(isActive ? RaverTheme.accent : RaverTheme.primaryText)
-                .frame(width: 38, height: 38)
-                .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(isActive ? RaverTheme.accent.opacity(0.45) : RaverTheme.secondaryText.opacity(0.12), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
     private func activeFilterChip(_ title: String) -> some View {
         Text(title)
             .font(.caption.weight(.semibold))
@@ -578,61 +560,10 @@ struct EventsModuleView: View {
         await viewModel.reloadMarkedState(isLoggedIn: appState.session != nil, force: true)
     }
 
-    private func scheduleSearchCommit(for rawValue: String) {
-        searchDebounceTask?.cancel()
-        let candidate = rawValue
-        searchDebounceTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                appliedSearchText = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
-    }
-
-    private func commitSearchImmediately() {
-        searchDebounceTask?.cancel()
-        appliedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func clearSearch() {
-        searchDebounceTask?.cancel()
-        searchText = ""
-        appliedSearchText = ""
-    }
-
     private func clearCountryFilters() {
         selectedAreaBuckets.removeAll()
         selectedContinentBuckets.removeAll()
         selectedCountries.removeAll()
-    }
-
-    private func typeChipID(for value: String) -> String {
-        value.isEmpty ? "__all__" : value
-    }
-
-    private func eventMatchesSearch(_ event: WebEvent) -> Bool {
-        guard let normalizedQuery = normalizedSearchToken(appliedSearchText) else {
-            return true
-        }
-
-        let searchableValues: [String?] = [
-            event.name,
-            event.nameI18n?.en,
-            event.nameI18n?.zh,
-            event.city,
-            event.country,
-            event.venueName,
-            event.venueAddress,
-            event.organizerName,
-            event.summaryLocation,
-            EventTypeOption.displayText(for: event.eventType)
-        ]
-
-        return searchableValues.contains { value in
-            guard let token = normalizedSearchToken(value) else { return false }
-            return token.contains(normalizedQuery)
-        }
     }
 
     private func eventMatchesSelectedType(_ event: WebEvent) -> Bool {
@@ -697,6 +628,12 @@ struct EventsModuleView: View {
         )
 
         return normalized.isEmpty ? nil : normalized
+    }
+
+    private func notifySelectorDragging(_ isDragging: Bool) {
+        guard isSelectorDragging != isDragging else { return }
+        isSelectorDragging = isDragging
+        onHorizontalDragStateChanged?(isDragging)
     }
 
     @MainActor

@@ -4,154 +4,175 @@ struct NewsModuleView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
 
+    private let onHorizontalDragStateChanged: ((Bool) -> Void)?
+
     @State private var articles: [DiscoverNewsArticle] = []
     @State private var nextCursor: String?
     @State private var selectedCategory: DiscoverNewsCategory = .all
     @State private var isLoading = false
     @State private var searchKeyword = ""
     @State private var errorMessage: String?
+    @State private var isSelectorDragging = false
+
+    init(onHorizontalDragStateChanged: ((Bool) -> Void)? = nil) {
+        self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
+    }
 
     private var repository: DiscoverNewsRepository {
         appContainer.discoverNewsRepository
     }
 
     var body: some View {
-        Group {
-                if isLoading && articles.isEmpty {
-                    ProgressView(LL("资讯加载中..."))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if displayedArticles.isEmpty {
-                    VStack(spacing: 12) {
-                        ContentUnavailableView(LL("暂无资讯"), systemImage: "newspaper")
-                        Text(LL("点击右上角“发布资讯”发布图文内容后会显示在这里。"))
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                    .padding(.horizontal, 24)
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(Array(displayedArticles.enumerated()), id: \.element.id) { index, article in
-                                Button {
-                                    discoverPush(.newsDetail(articleID: article.id))
-                                } label: {
-                                    DiscoverNewsRow(article: article)
-                                }
-                                .buttonStyle(.plain)
-                                .contentShape(Rectangle())
+        VStack(spacing: 0) {
+            newsSelectorRow
+            newsContentScrollView
+        }
+        .background(RaverTheme.background)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await reload()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverNewsDidPublish)) { _ in
+            Task { await reload() }
+        }
+        .onDisappear {
+            notifySelectorDragging(false)
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
 
-                                if index < displayedArticles.count - 1 {
-                                    Divider()
-                                        .padding(.leading, 16)
-                                }
-                            }
-
-                            if nextCursor != nil {
-                                Button(LL("加载更多资讯")) {
-                                    Task { await loadMore() }
-                                }
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(RaverTheme.secondaryText)
-                                .padding(.vertical, 14)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                            }
-                        }
-                    }
+    private var newsSelectorRow: some View {
+        HStack(spacing: 8) {
+            HorizontalAxisLockedScrollView(
+                showsIndicators: false,
+                onDraggingChanged: { isDragging in
+                    notifySelectorDragging(isDragging)
                 }
-            }
-            .background(RaverTheme.background)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .safeAreaInset(edge: .top) {
-                VStack(spacing: 8) {
-                    HStack(spacing: 8) {
-                        HorizontalAxisLockedScrollView(showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(DiscoverNewsCategory.allCases) { category in
-                                    Button {
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            selectedCategory = category
-                                        }
-                                    } label: {
-                                        Text(category.rawValue)
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(selectedCategory == category ? .white : RaverTheme.primaryText)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                                    .fill(selectedCategory == category ? category.badgeColor : RaverTheme.card)
-                                            )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.leading, 16)
-                        }
-                        .frame(height: 34)
-
+            ) {
+                HStack(spacing: 8) {
+                    ForEach(DiscoverNewsCategory.allCases) { category in
                         Button {
-                            discoverPush(
-                                .searchInput(
-                                    domain: .news,
-                                    initialQuery: searchKeyword
-                                )
-                            )
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedCategory = category
+                            }
                         } label: {
-                            Image(systemName: "magnifyingglass")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(RaverTheme.primaryText)
-                                .frame(width: 32, height: 32)
+                            Text(category.rawValue)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(selectedCategory == category ? .white : RaverTheme.primaryText)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(RaverTheme.card)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .strokeBorder(RaverTheme.secondaryText.opacity(0.12), lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                        .fill(selectedCategory == category ? category.badgeColor : RaverTheme.card)
                                 )
                         }
                         .buttonStyle(.plain)
-
-                        Button {
-                            discoverPush(.newsPublish)
-                        } label: {
-                            Image(systemName: "square.and.pencil")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: 32, height: 32)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(Color(red: 0.96, green: 0.51, blue: 0.18))
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.trailing, 16)
                     }
                 }
-                .padding(.top, 8)
-                .padding(.bottom, 4)
-                .background(RaverTheme.background)
+                .padding(.leading, 16)
             }
-            .task {
-                await reload()
+            .frame(height: 34)
+
+            Button {
+                discoverPush(
+                    .searchInput(
+                        domain: .news,
+                        initialQuery: searchKeyword
+                    )
+                )
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(RaverTheme.card)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(RaverTheme.secondaryText.opacity(0.12), lineWidth: 1)
+                    )
             }
-            .refreshable {
-                await reload()
+            .buttonStyle(.plain)
+
+            Button {
+                discoverPush(.newsPublish)
+            } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color(red: 0.96, green: 0.51, blue: 0.18))
+                    )
             }
-            .onReceive(NotificationCenter.default.publisher(for: .discoverNewsDidPublish)) { _ in
-                Task { await reload() }
+            .buttonStyle(.plain)
+            .padding(.trailing, 16)
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+        .background(RaverTheme.background)
+    }
+
+    private var newsContentScrollView: some View {
+        ScrollView {
+            if isLoading && articles.isEmpty {
+                ProgressView(LL("资讯加载中..."))
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 32)
+            } else if displayedArticles.isEmpty {
+                VStack(spacing: 12) {
+                    ContentUnavailableView(LL("暂无资讯"), systemImage: "newspaper")
+                    Text(LL("点击右上角“发布资讯”发布图文内容后会显示在这里。"))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 24)
+                .padding(.top, 32)
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(displayedArticles.enumerated()), id: \.element.id) { index, article in
+                        Button {
+                            discoverPush(.newsDetail(articleID: article.id))
+                        } label: {
+                            DiscoverNewsRow(article: article)
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
+
+                        if index < displayedArticles.count - 1 {
+                            Divider()
+                                .padding(.leading, 16)
+                        }
+                    }
+
+                    if nextCursor != nil {
+                        Button(LL("加载更多资讯")) {
+                            Task { await loadMore() }
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .padding(.vertical, 14)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                }
             }
-            .alert(L("提示", "Notice"), isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(L("确定", "OK"), role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
+        }
+        .refreshable {
+            await reload()
+        }
     }
 
     private var displayedArticles: [DiscoverNewsArticle] {
@@ -163,9 +184,32 @@ struct NewsModuleView: View {
 
     @MainActor
     private func reload() async {
-        articles = []
-        nextCursor = nil
-        await loadMore()
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let targetCount = max(articles.count, 1)
+            var cursor: String?
+            var parsed: [DiscoverNewsArticle] = []
+            var fetchedPageCursor: String?
+            var fetchCount = 0
+
+            repeat {
+                let page = try await repository.fetchFeedPage(cursor: cursor)
+                fetchedPageCursor = page.nextCursor
+                parsed.append(contentsOf: page.items)
+                cursor = fetchedPageCursor
+                fetchCount += 1
+            } while parsed.count < targetCount && fetchedPageCursor != nil && fetchCount < 20
+
+            let deduped = deduplicatedArticles(parsed)
+            articles = deduped
+            nextCursor = fetchedPageCursor
+            errorMessage = nil
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
     }
 
     @MainActor
@@ -195,6 +239,23 @@ struct NewsModuleView: View {
         } catch {
             errorMessage = error.userFacingMessage
         }
+    }
+
+    private func notifySelectorDragging(_ isDragging: Bool) {
+        guard isSelectorDragging != isDragging else { return }
+        isSelectorDragging = isDragging
+        onHorizontalDragStateChanged?(isDragging)
+    }
+
+    private func deduplicatedArticles(_ items: [DiscoverNewsArticle]) -> [DiscoverNewsArticle] {
+        var seen = Set<String>()
+        var result: [DiscoverNewsArticle] = []
+        result.reserveCapacity(items.count)
+
+        for item in items where seen.insert(item.id).inserted {
+            result.append(item)
+        }
+        return result
     }
 
 }

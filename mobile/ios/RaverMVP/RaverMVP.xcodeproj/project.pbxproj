@@ -76,6 +76,7 @@
 		9A1419C5872D0F2A4C9230FA /* LiveSocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76E16068958F9015F96D65E5 /* LiveSocialService.swift */; };
 		9BDD2694CE732F5654A39747 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58DA7470156F9993DC0CFC4A /* LoginView.swift */; };
 		9BF69BD3FAC1E79D0ECA0C2A /* ImageLoaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1938A20922A5C5120F8C6A94 /* ImageLoaderView.swift */; };
+		A9C45D3E7F1A4B2C9D0E6F12 /* RaverScrollableTabPager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C45D3E7F1A4B2C9D0E6F11 /* RaverScrollableTabPager.swift */; };
 		A1D4C3B2E5F60718293A4B5C /* login-background-placeholder.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = A1D4C3B2E5F60718293A4B5D /* login-background-placeholder.mp4 */; };
 		A72178B4233E07DF79606733 /* EventDetailScrollViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E4F2AC1B8668DEFA7B9B609 /* EventDetailScrollViewController.swift */; };
 		B4D8B916EDF6870E705F2BF2 /* WebFeatureModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D57C925824CC1F13459321 /* WebFeatureModels.swift */; };
@@ -169,6 +170,7 @@
 		7A1B2C3D4E5F60718293A4B4 /* RaverNavigationChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverNavigationChrome.swift; sourceTree = "<group>"; };
 		7E4F2AC1B8668DEFA7B9B609 /* EventDetailScrollViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailScrollViewController.swift; sourceTree = "<group>"; };
 		81818C9CF7B8E9DCD756E5F0 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		A9C45D3E7F1A4B2C9D0E6F11 /* RaverScrollableTabPager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverScrollableTabPager.swift; sourceTree = "<group>"; };
 		93D5E00041C5689BD07853B7 /* PrimaryButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryButtonStyle.swift; sourceTree = "<group>"; };
 		93F03BC5D8661326C73E0C34 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A1D4C3B2E5F60718293A4B5D /* login-background-placeholder.mp4 */ = {isa = PBXFileReference; lastKnownFileType = video.mp4; path = "login-background-placeholder.mp4"; sourceTree = "<group>"; };
@@ -620,6 +622,7 @@
 				2A00B6CD83B1FA7380ECC424 /* RemoteCoverImage.swift */,
 				1938A20922A5C5120F8C6A94 /* ImageLoaderView.swift */,
 				7A1B2C3D4E5F60718293A4B4 /* RaverNavigationChrome.swift */,
+				A9C45D3E7F1A4B2C9D0E6F11 /* RaverScrollableTabPager.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -779,6 +782,7 @@
 				30653139356633322D343965 /* SettingsView.swift in Sources */,
 				9BF69BD3FAC1E79D0ECA0C2A /* ImageLoaderView.swift in Sources */,
 				7A1B2C3D4E5F60718293A4B5 /* RaverNavigationChrome.swift in Sources */,
+				A9C45D3E7F1A4B2C9D0E6F12 /* RaverScrollableTabPager.swift in Sources */,
 				E473F007EE293D5489F97B7D /* ImageCacheBootstrap.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
