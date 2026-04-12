@@ -57,7 +57,7 @@ struct DiscoverHomeView: View {
         .background(RaverTheme.background)
         .ignoresSafeArea(edges: .bottom)
         .onChange(of: section) { _, newValue in
-            if newValue != .news, isChildHorizontalDragging {
+            if newValue != .news, newValue != .events, isChildHorizontalDragging {
                 isChildHorizontalDragging = false
             }
         }
@@ -75,7 +75,12 @@ struct DiscoverHomeView: View {
         case .recommend:
             DiscoverRecommendEventsRootView()
         case .events:
-            DiscoverEventsRootView()
+            DiscoverEventsRootView(
+                onHorizontalDragStateChanged: { isDragging in
+                    guard isChildHorizontalDragging != isDragging else { return }
+                    isChildHorizontalDragging = isDragging
+                }
+            )
         case .news:
             NewsModuleView(
                 onHorizontalDragStateChanged: { isDragging in

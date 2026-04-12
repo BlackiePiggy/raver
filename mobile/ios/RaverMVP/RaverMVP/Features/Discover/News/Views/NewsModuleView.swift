@@ -70,7 +70,7 @@ struct NewsModuleView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                                         .fill(selectedCategory == category ? category.badgeColor : RaverTheme.card)
                                 )
                         }
@@ -94,11 +94,11 @@ struct NewsModuleView: View {
                     .foregroundStyle(RaverTheme.primaryText)
                     .frame(width: 32, height: 32)
                     .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(RaverTheme.card)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .strokeBorder(RaverTheme.secondaryText.opacity(0.12), lineWidth: 1)
                     )
             }
@@ -112,7 +112,7 @@ struct NewsModuleView: View {
                     .foregroundStyle(.white)
                     .frame(width: 32, height: 32)
                     .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(Color(red: 0.96, green: 0.51, blue: 0.18))
                     )
             }

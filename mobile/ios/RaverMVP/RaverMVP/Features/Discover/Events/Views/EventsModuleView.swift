@@ -21,7 +21,6 @@ struct EventsModuleView: View {
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: EventsModuleViewModel
-
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
 
     private static let predefinedEventTypeKeys = EventTypeOption.allCases.map(\.rawValue)
@@ -72,10 +71,6 @@ struct EventsModuleView: View {
             case .africa: return L("非洲", "Africa")
             }
         }
-    }
-
-    init(viewModel: EventsModuleViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel)
     }
 
     @State private var selectedScope: EventScope = .all
@@ -337,7 +332,7 @@ struct EventsModuleView: View {
                     .foregroundStyle(.white)
                     .frame(width: 32, height: 32)
                     .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(Color(red: 0.96, green: 0.51, blue: 0.18))
                     )
             }
@@ -360,7 +355,7 @@ struct EventsModuleView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(isSelected ? selectedColor : RaverTheme.card)
                 )
         }
