@@ -3,6 +3,7 @@ import SwiftUI
 struct NewsModuleView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
 
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
 
@@ -126,49 +127,61 @@ struct NewsModuleView: View {
 
     private var newsContentScrollView: some View {
         ScrollView {
-            if isLoading && articles.isEmpty {
-                ProgressView(LL("资讯加载中..."))
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 32)
-            } else if displayedArticles.isEmpty {
-                VStack(spacing: 12) {
-                    ContentUnavailableView(LL("暂无资讯"), systemImage: "newspaper")
-                    Text(LL("点击右上角“发布资讯”发布图文内容后会显示在这里。"))
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.horizontal, 24)
-                .padding(.top, 32)
-            } else {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(displayedArticles.enumerated()), id: \.element.id) { index, article in
-                        Button {
-                            discoverPush(.newsDetail(articleID: article.id))
-                        } label: {
-                            DiscoverNewsRow(article: article)
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(Rectangle())
-
-                        if index < displayedArticles.count - 1 {
-                            Divider()
-                                .padding(.leading, 16)
-                        }
+            VStack(spacing: 0) {
+                if isLoading && articles.isEmpty {
+                    ProgressView(LL("资讯加载中..."))
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 32)
+                } else if displayedArticles.isEmpty {
+                    VStack(spacing: 12) {
+                        ContentUnavailableView(LL("暂无资讯"), systemImage: "newspaper")
+                        Text(LL("点击右上角“发布资讯”发布图文内容后会显示在这里。"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .multilineTextAlignment(.center)
                     }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 32)
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(displayedArticles.enumerated()), id: \.element.id) { index, article in
+                            Button {
+                                discoverPush(.newsDetail(articleID: article.id))
+                            } label: {
+                                DiscoverNewsRow(article: article)
+                            }
+                            .buttonStyle(.plain)
+                            .contentShape(Rectangle())
 
-                    if nextCursor != nil {
-                        Button(LL("加载更多资讯")) {
-                            Task { await loadMore() }
+                            if index < displayedArticles.count - 1 {
+                                Divider()
+                                    .padding(.leading, 16)
+                            }
                         }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(RaverTheme.secondaryText)
-                        .padding(.vertical, 14)
-                        .frame(maxWidth: .infinity, alignment: .center)
+
+                        if nextCursor != nil {
+                            Group {
+                                if isLoading {
+                                    HStack {
+                                        Spacer()
+                                        ProgressView()
+                                            .padding(.vertical, 14)
+                                        Spacer()
+                                    }
+                                } else {
+                                    Color.clear
+                                        .frame(height: 1)
+                                }
+                            }
+                            .onAppear {
+                                Task { await loadMore() }
+                            }
+                        }
                     }
                 }
             }
+            .padding(.bottom, max(0, tabBarReservedHeight) + 16)
         }
         .refreshable {
             await reload()

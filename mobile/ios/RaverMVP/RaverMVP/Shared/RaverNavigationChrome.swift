@@ -3,6 +3,7 @@ import SwiftUI
 enum RaverNavigationCircleButtonStyle {
     case glass
     case dimmed
+    case immersiveAdaptive
 }
 
 struct RaverNavigationCircleIconButton: View {
@@ -32,6 +33,8 @@ struct RaverNavigationCircleIconButton: View {
             return .white
         case .dimmed:
             return colorScheme == .dark ? .white : Color.black.opacity(0.84)
+        case .immersiveAdaptive:
+            return colorScheme == .dark ? .white : Color.black.opacity(0.84)
         }
     }
 
@@ -58,19 +61,36 @@ struct RaverNavigationCircleIconButton: View {
                             .stroke(Color.black.opacity(0.08), lineWidth: 0.5)
                     }
                 }
+        case .immersiveAdaptive:
+            if colorScheme == .dark {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+                    )
+            } else {
+                Circle()
+                    .fill(Color.white.opacity(0.92))
+                    .overlay(
+                        Circle()
+                            .stroke(Color.black.opacity(0.08), lineWidth: 0.5)
+                    )
+            }
         }
     }
 }
 
 struct RaverImmersiveFloatingTopBar: View {
     let onBack: () -> Void
+    var buttonStyle: RaverNavigationCircleButtonStyle = .immersiveAdaptive
     var trailing: AnyView? = nil
 
     var body: some View {
         HStack {
             RaverNavigationCircleIconButton(
                 systemName: "chevron.left",
-                style: .glass,
+                style: buttonStyle,
                 action: onBack
             )
 
@@ -177,6 +197,7 @@ extension View {
     }
 
     func raverImmersiveFloatingNavigationChrome(
+        buttonStyle: RaverNavigationCircleButtonStyle = .immersiveAdaptive,
         trailing: AnyView? = nil,
         onBack: @escaping () -> Void
     ) -> some View {
@@ -185,6 +206,7 @@ extension View {
                 overlay: AnyView(
                     RaverImmersiveFloatingTopBar(
                         onBack: onBack,
+                        buttonStyle: buttonStyle,
                         trailing: trailing
                     )
                 )

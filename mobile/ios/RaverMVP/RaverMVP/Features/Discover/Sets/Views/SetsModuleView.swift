@@ -13,6 +13,7 @@ struct SetsModuleView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
+    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     private let columns = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12),
@@ -63,7 +64,7 @@ struct SetsModuleView: View {
                         }
                         .padding(.horizontal, 12)
                         .padding(.top, 8)
-                        .padding(.bottom, 16)
+                        .padding(.bottom, max(0, tabBarReservedHeight) + 16)
                     }
                 }
             }
@@ -259,6 +260,7 @@ struct DJSetDetailView: View {
     }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
@@ -326,7 +328,7 @@ struct DJSetDetailView: View {
         return AnyView(
             RaverNavigationCircleIconButton(
                 systemName: "headphones",
-                style: .glass
+                style: .immersiveAdaptive
             ) {
                 nativePlayerSession.pause()
                 isPlaybackPaused = true
@@ -346,34 +348,6 @@ struct DJSetDetailView: View {
                         landscapePlayerContent(for: set, in: proxy.size)
                     } else {
                         portraitDetailContent(for: set)
-                    }
-                }
-                .navigationDestination(isPresented: $showTrackEditor) {
-                    TracklistEditorView(
-                        set: set,
-                        currentTracklist: currentTracklistInfo,
-                        selectedTracklistID: selectedTracklistID
-                    ) {
-                        Task { await load() }
-                    }
-                }
-                .navigationDestination(isPresented: $showTracklistSelector) {
-                    TracklistSelectorSheet(
-                        set: set,
-                        tracklists: tracklists,
-                        selectedTracklistID: selectedTracklistID
-                    ) { selectedID in
-                        Task {
-                            await switchTracklist(selectedID)
-                        }
-                    }
-                }
-                .navigationDestination(isPresented: $showTracklistUpload) {
-                    UploadTracklistSheet(set: set) { uploaded in
-                        Task {
-                            await refreshTracklists()
-                            await switchTracklist(uploaded.id)
-                        }
                     }
                 }
                 .onChange(of: playbackTime) { _, newTime in
@@ -399,10 +373,73 @@ struct DJSetDetailView: View {
             }
         }
         .background(RaverTheme.background)
-        .raverImmersiveFloatingNavigationChrome(
-            trailing: immersiveTrailingAction
-        ) {
-            handleImmersiveBack()
+        .overlay(alignment: .top) {
+            if !isAudioOnlyMode {
+                Color.black
+                    .frame(height: topSafeAreaInset() + 8)
+                    .ignoresSafeArea(edges: .top)
+                    .allowsHitTesting(false)
+            }
+        }
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .overlay(alignment: .top) {
+            if isAudioOnlyMode {
+                RaverImmersiveFloatingTopBar(
+                    onBack: handleImmersiveBack,
+                    buttonStyle: .glass,
+                    trailing: nil
+                )
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { set != nil && showTrackEditor },
+            set: { if !$0 { showTrackEditor = false } }
+        )) {
+            if let set {
+                NavigationStack {
+                    TracklistEditorView(
+                        set: set,
+                        currentTracklist: currentTracklistInfo,
+                        selectedTracklistID: selectedTracklistID
+                    ) {
+                        Task { await load() }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { set != nil && showTracklistSelector },
+            set: { if !$0 { showTracklistSelector = false } }
+        )) {
+            if let set {
+                NavigationStack {
+                    TracklistSelectorSheet(
+                        set: set,
+                        tracklists: tracklists,
+                        selectedTracklistID: selectedTracklistID
+                    ) { selectedID in
+                        Task {
+                            await switchTracklist(selectedID)
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { set != nil && showTracklistUpload },
+            set: { if !$0 { showTracklistUpload = false } }
+        )) {
+            if let set {
+                NavigationStack {
+                    UploadTracklistSheet(set: set) { uploaded in
+                        Task {
+                            await refreshTracklists()
+                            await switchTracklist(uploaded.id)
+                        }
+                    }
+                }
+            }
         }
         .fullScreenCover(
             isPresented: Binding(
@@ -868,8 +905,29 @@ struct DJSetDetailView: View {
     @ViewBuilder
     private func playerControlsOverlay(for set: WebDJSet, isFullscreen: Bool, interactiveWidth: CGFloat) -> some View {
         let controlHitSize: CGFloat = 46
+        let topHorizontalPadding: CGFloat = isFullscreen ? 100 : 12
+        let topPadding: CGFloat = isFullscreen
+            ? 10
+            : 10
         ZStack {
             VStack {
+                HStack {
+                    setsPlayerOverlayIconButton(systemName: "chevron.left") {
+                        handleImmersiveBack()
+                    }
+
+                    Spacer()
+
+                    setsPlayerOverlayIconButton(systemName: "headphones") {
+                        nativePlayerSession.pause()
+                        isPlaybackPaused = true
+                        audioListenSetID = set.id
+                        showControlsTemporarily()
+                    }
+                }
+                .padding(.horizontal, topHorizontalPadding)
+                .padding(.top, topPadding)
+
                 Spacer()
                 VStack(spacing: 1) {
                     HStack(alignment: .center, spacing: 8) {
@@ -1170,6 +1228,19 @@ struct DJSetDetailView: View {
         }
     }
 
+    private func setsPlayerOverlayIconButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .frame(width: 38, height: 38)
+                .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: 3)
+        }
+        .frame(width: 44, height: 44)
+        .contentShape(Circle())
+        .buttonStyle(.plain)
+    }
+
     private func emitSelectionHaptic() {
         let feedback = UISelectionFeedbackGenerator()
         feedback.selectionChanged()
@@ -1468,7 +1539,7 @@ struct DJSetDetailView: View {
                     .truncationMode(.tail)
                     .multilineTextAlignment(.trailing)
                 if isActive {
-                    AnimatedEqualizerIcon(color: RaverTheme.accent)
+                    AnimatedEqualizerIcon(color: activeTrackAccentColor)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -1979,7 +2050,7 @@ struct DJSetDetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(track.title)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(isActive ? Color.white : RaverTheme.primaryText)
+                        .foregroundStyle(isActive ? activeTrackTitleColor : RaverTheme.primaryText)
                         .lineLimit(1)
 
                     if let artistMatchedDJ {
@@ -2038,11 +2109,11 @@ struct DJSetDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isActive ? Color.black.opacity(0.92) : RaverTheme.card)
+                .fill(isActive ? activeTrackBackgroundColor : RaverTheme.card)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(isActive ? RaverTheme.accent.opacity(0.65) : Color.clear, lineWidth: 1)
+                .stroke(isActive ? activeTrackAccentColor.opacity(0.65) : Color.clear, lineWidth: 1)
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -2093,7 +2164,7 @@ struct DJSetDetailView: View {
     @ViewBuilder
     private func playbackStateIcon(for track: WebDJSetTrack, at index: Int, in set: WebDJSet) -> some View {
         if activeTrackID == track.id {
-            AnimatedEqualizerIcon(color: RaverTheme.accent)
+            AnimatedEqualizerIcon(color: activeTrackAccentColor)
         } else {
             Image(systemName: checklistSymbol(for: track, at: index, in: set))
                 .foregroundStyle(checklistColor(for: track, at: index, in: set))
@@ -2304,13 +2375,31 @@ struct DJSetDetailView: View {
 
     private func checklistColor(for track: WebDJSetTrack, at index: Int, in set: WebDJSet) -> Color {
         if activeTrackID == track.id {
-            return RaverTheme.accent
+            return activeTrackAccentColor
         }
         let end = resolvedTrackEndTime(for: track, at: index, in: set) ?? Double.greatestFiniteMagnitude
         if playbackTime >= end {
             return .green
         }
         return RaverTheme.secondaryText
+    }
+
+    private var activeTrackBackgroundColor: Color {
+        colorScheme == .dark
+            ? Color.black.opacity(0.92)
+            : Color(red: 0.93, green: 0.90, blue: 0.98)
+    }
+
+    private var activeTrackAccentColor: Color {
+        colorScheme == .dark
+            ? RaverTheme.accent
+            : Color(red: 0.61, green: 0.47, blue: 0.90)
+    }
+
+    private var activeTrackTitleColor: Color {
+        colorScheme == .dark
+            ? .white
+            : Color(red: 0.29, green: 0.19, blue: 0.46)
     }
 
     private func resolvedPlayableVideoURL(for set: WebDJSet) -> URL? {
@@ -2549,6 +2638,9 @@ private struct EmbeddedNativeVideoPlayer: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = AVPlayerViewController()
         controller.showsPlaybackControls = false
+        if #available(iOS 16.0, *) {
+            controller.allowsVideoFrameAnalysis = false
+        }
         controller.player = session.player
         session.loadIfNeeded(url: videoURL, audioOnly: false)
         context.coordinator.attachPlayer(session.player)
@@ -3589,128 +3681,126 @@ private struct TracklistEditorView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section(LL("当前 Tracklist 信息")) {
-                    LabeledContent(L("名称", "Name"), value: resolvedTracklistTitle)
-                    LabeledContent(L("Tracklist ID", "Tracklist ID"), value: selectedTracklistID ?? "default")
-                    LabeledContent(L("歌曲数量", "Track Count"), value: "\(rows.count)")
-                    LabeledContent(L("贡献者", "Contributor"), value: resolvedTracklistContributor)
-                }
+        Form {
+            Section(LL("当前 Tracklist 信息")) {
+                LabeledContent(L("名称", "Name"), value: resolvedTracklistTitle)
+                LabeledContent(L("Tracklist ID", "Tracklist ID"), value: selectedTracklistID ?? "default")
+                LabeledContent(L("歌曲数量", "Track Count"), value: "\(rows.count)")
+                LabeledContent(L("贡献者", "Contributor"), value: resolvedTracklistContributor)
+            }
 
-                Section(LL("当前歌单文本（已填充）")) {
-                    Text(LL("每行格式：`0:00~3:30 - 艺术家 - 歌曲名 | Spotify链接(可选) | 网易云链接(可选)`"))
+            Section(LL("当前歌单文本（已填充）")) {
+                Text(LL("每行格式：`0:00~3:30 - 艺术家 - 歌曲名 | Spotify链接(可选) | 网易云链接(可选)`"))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                TextEditor(text: $bulkText)
+                    .frame(minHeight: 200)
+                    .font(.system(.footnote, design: .monospaced))
+
+                HStack {
+                    Button(LL("解析并替换")) {
+                        parseBulkTracklist(.replace)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(LL("解析并追加")) {
+                        parseBulkTracklist(.append)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Spacer()
+
+                    Button(LL("从可视化生成文本")) {
+                        bulkText = TracklistDraftCodec.makeBulkText(from: rows)
+                        bulkParseMessage = L("已用当前可视化内容刷新文本", "Refreshed text from current visual editor")
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                }
+            }
+
+            if !bulkParseMessage.isEmpty {
+                Section {
+                    Text(bulkParseMessage)
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
-                    TextEditor(text: $bulkText)
-                        .frame(minHeight: 200)
-                        .font(.system(.footnote, design: .monospaced))
+                }
+            }
 
-                    HStack {
-                        Button(LL("解析并替换")) {
-                            parseBulkTracklist(.replace)
+            Section(L("可视化编辑（\(rows.count)）", "Visual Editor (\(rows.count))")) {
+                ForEach($rows) { $row in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("#\(row.position)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            Spacer()
+                            Text(row.status.uppercased())
+                                .font(.caption2)
+                                .foregroundStyle(RaverTheme.secondaryText)
                         }
-                        .buttonStyle(.bordered)
-
-                        Button(LL("解析并追加")) {
-                            parseBulkTracklist(.append)
+                        TextField(LL("歌曲名"), text: $row.title)
+                        TextField(LL("歌手"), text: $row.artist)
+                        HStack {
+                            TextField(LL("开始时间（如 0:00）"), text: $row.startText)
+                            TextField(LL("结束时间（可选）"), text: $row.endText)
                         }
-                        .buttonStyle(.bordered)
-
-                        Spacer()
-
-                        Button(LL("从可视化生成文本")) {
-                            bulkText = TracklistDraftCodec.makeBulkText(from: rows)
-                            bulkParseMessage = L("已用当前可视化内容刷新文本", "Refreshed text from current visual editor")
-                        }
-                        .buttonStyle(.plain)
-                        .font(.caption)
+                        TextField(LL("Spotify 链接（可选）"), text: $row.spotifyUrl)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        TextField(LL("网易云链接（可选）"), text: $row.neteaseUrl)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
                     }
+                    .padding(.vertical, 4)
+                }
+                .onDelete { indexSet in
+                    rows.remove(atOffsets: indexSet)
+                    rows = TracklistDraftCodec.reindex(rows)
                 }
 
-                if !bulkParseMessage.isEmpty {
-                    Section {
-                        Text(bulkParseMessage)
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    }
-                }
-
-                Section(L("可视化编辑（\(rows.count)）", "Visual Editor (\(rows.count))")) {
-                    ForEach($rows) { $row in
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("#\(row.position)")
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                                Spacer()
-                                Text(row.status.uppercased())
-                                    .font(.caption2)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                            TextField(LL("歌曲名"), text: $row.title)
-                            TextField(LL("歌手"), text: $row.artist)
-                            HStack {
-                                TextField(LL("开始时间（如 0:00）"), text: $row.startText)
-                                TextField(LL("结束时间（可选）"), text: $row.endText)
-                            }
-                            TextField(LL("Spotify 链接（可选）"), text: $row.spotifyUrl)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                            TextField(LL("网易云链接（可选）"), text: $row.neteaseUrl)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                        }
-                        .padding(.vertical, 4)
-                    }
-                    .onDelete { indexSet in
-                        rows.remove(atOffsets: indexSet)
-                        rows = TracklistDraftCodec.reindex(rows)
-                    }
-
-                    Button {
-                        rows.append(
-                            TrackDraftRow(
-                                position: rows.count + 1,
-                                title: "",
-                                artist: "",
-                                startText: "0:00",
-                                endText: "",
-                                status: "released",
-                                spotifyUrl: "",
-                                neteaseUrl: ""
-                            )
+                Button {
+                    rows.append(
+                        TrackDraftRow(
+                            position: rows.count + 1,
+                            title: "",
+                            artist: "",
+                            startText: "0:00",
+                            endText: "",
+                            status: "released",
+                            spotifyUrl: "",
+                            neteaseUrl: ""
                         )
-                    } label: {
-                        Label(LL("新增 Track"), systemImage: "plus")
-                    }
+                    )
+                } label: {
+                    Label(LL("新增 Track"), systemImage: "plus")
                 }
             }
-            .raverSystemNavigation(title: LL("编辑 Tracklist"))
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
-                        Task { await save() }
-                    }
-                    .disabled(isSaving || rows.isEmpty)
+        }
+        .raverSystemNavigation(title: LL("编辑 Tracklist"))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
+                    Task { await save() }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(LL("自动链接")) {
-                        Task { await autoLink() }
-                    }
+                .disabled(isSaving || rows.isEmpty)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(LL("自动链接")) {
+                    Task { await autoLink() }
                 }
             }
-            .onAppear {
-                initializeRowsIfNeeded()
-            }
-            .alert(L("提示", "Notice"), isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(L("确定", "OK"), role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
+        }
+        .onAppear {
+            initializeRowsIfNeeded()
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
         }
     }
 

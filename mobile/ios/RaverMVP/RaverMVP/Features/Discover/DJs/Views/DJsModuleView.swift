@@ -54,6 +54,7 @@ struct DJsModuleView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
+    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     private let hotDJBatchSize = 25
 
     private var repository: DiscoverDJsRepository {
@@ -230,7 +231,7 @@ struct DJsModuleView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, topContentInset)
-                .padding(.bottom, 16)
+                .padding(.bottom, max(0, tabBarReservedHeight) + 16)
             }
             .scrollDisabled(selectedSection == .hot)
             .background(RaverTheme.background)
@@ -359,7 +360,7 @@ struct DJsModuleView: View {
         }
         .buttonStyle(.plain)
         .padding(.trailing, 16)
-        .padding(.bottom, 24)
+        .padding(.bottom, max(0, tabBarReservedHeight) + 24)
     }
 
     private var djImportSheet: some View {
@@ -1712,6 +1713,7 @@ private final class DJDetailScrollViewController: UIViewController {
         }
         wireCallbacks()
         applyPendingState(animatedSelection: false)
+        applyTopOverlayAppearance()
     }
 
     override func viewDidLayoutSubviews() {
@@ -1724,6 +1726,11 @@ private final class DJDetailScrollViewController: UIViewController {
         super.viewSafeAreaInsetsDidChange()
         applyPageInsets()
         updatePinnedHeader(forOffset: pageViewController.currentActiveOffset())
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        applyTopOverlayAppearance()
     }
 
     func update(
@@ -1874,7 +1881,6 @@ private final class DJDetailScrollViewController: UIViewController {
 
     private func setupTopOverlay() {
         topOverlayView.translatesAutoresizingMaskIntoConstraints = false
-        topOverlayView.backgroundColor = UIColor.black
         topOverlayView.alpha = 0
         topOverlayView.isUserInteractionEnabled = false
         view.addSubview(topOverlayView)
@@ -1888,7 +1894,6 @@ private final class DJDetailScrollViewController: UIViewController {
         ])
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.textColor = .white
         titleLabel.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
         titleLabel.textAlignment = .center
         titleLabel.numberOfLines = 1
@@ -1901,6 +1906,16 @@ private final class DJDetailScrollViewController: UIViewController {
             titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
             titleLabel.widthAnchor.constraint(equalToConstant: 176),
         ])
+    }
+
+    private func applyTopOverlayAppearance() {
+        let isDark = traitCollection.userInterfaceStyle != .light
+        topOverlayView.backgroundColor = isDark
+            ? .black
+            : UIColor(RaverTheme.background)
+        titleLabel.textColor = isDark
+            ? .white
+            : UIColor.black.withAlphaComponent(0.88)
     }
 }
 
@@ -2488,7 +2503,7 @@ struct DJDetailView: View {
         return AnyView(
             RaverNavigationCircleIconButton(
                 systemName: "square.and.pencil",
-                style: .glass
+                style: .immersiveAdaptive
             ) {
                 guard let currentDJ = dj else { return }
                 prepareDJEditDraft(from: currentDJ)
@@ -3011,13 +3026,20 @@ struct DJDetailView: View {
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 6)
         } else {
-            ForEach(djEvents) { event in
+            ForEach(Array(djEvents.enumerated()), id: \.element.id) { index, event in
                 Button {
                     appPush(.eventDetail(eventID: event.id))
                 } label: {
                     historyEventRow(event)
                 }
                 .buttonStyle(.plain)
+
+                if index < djEvents.count - 1 {
+                    Rectangle()
+                        .fill(RaverTheme.secondaryText.opacity(0.16))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 1)
+                }
             }
         }
     }
@@ -3225,9 +3247,6 @@ struct DJDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 8)
-        .overlay(alignment: .bottom) {
-            Divider().opacity(0.45)
-        }
     }
 
     private func djRatingUnitRow(_ unit: WebRatingUnit) -> some View {

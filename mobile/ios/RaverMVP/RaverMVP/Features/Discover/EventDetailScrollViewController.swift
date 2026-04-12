@@ -46,6 +46,7 @@ final class EventDetailScrollViewController: UIViewController {
         }
         wireCallbacks()
         applyPendingState(animatedSelection: false)
+        applyTopOverlayAppearance()
     }
 
     override func viewDidLayoutSubviews() {
@@ -63,6 +64,11 @@ final class EventDetailScrollViewController: UIViewController {
         super.viewSafeAreaInsetsDidChange()
         applyPageInsets()
         updatePinnedHeader(forOffset: pageViewController.currentActiveOffset())
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        applyTopOverlayAppearance()
     }
 
     func update(
@@ -215,7 +221,6 @@ final class EventDetailScrollViewController: UIViewController {
 
     private func setupTopOverlay() {
         topOverlayView.translatesAutoresizingMaskIntoConstraints = false
-        topOverlayView.backgroundColor = UIColor.black
         topOverlayView.alpha = 0
         topOverlayView.isUserInteractionEnabled = false
         view.addSubview(topOverlayView)
@@ -229,7 +234,6 @@ final class EventDetailScrollViewController: UIViewController {
         ])
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.textColor = .white
         titleLabel.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
         titleLabel.textAlignment = .center
         titleLabel.numberOfLines = 1
@@ -242,5 +246,15 @@ final class EventDetailScrollViewController: UIViewController {
             titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
             titleLabel.widthAnchor.constraint(equalToConstant: 176),
         ])
+    }
+
+    private func applyTopOverlayAppearance() {
+        let isDark = traitCollection.userInterfaceStyle != .light
+        topOverlayView.backgroundColor = isDark
+            ? .black
+            : UIColor(RaverTheme.background)
+        titleLabel.textColor = isDark
+            ? .white
+            : UIColor.black.withAlphaComponent(0.88)
     }
 }

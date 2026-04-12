@@ -12,6 +12,7 @@ import CoreText
 struct LearnModuleView: View {
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
+    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @EnvironmentObject private var appContainer: AppContainer
 
     private var wikiRepository: DiscoverWikiRepository {
@@ -414,7 +415,8 @@ struct LearnModuleView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+                .padding(.top, 14)
+                .padding(.bottom, max(0, tabBarReservedHeight) + 14)
             }
         }
     }
@@ -437,7 +439,8 @@ struct LearnModuleView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.top, 12)
+                .padding(.bottom, max(0, tabBarReservedHeight) + 12)
             }
             .simultaneousGesture(
                 TapGesture().onEnded {
@@ -474,7 +477,8 @@ struct LearnModuleView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.top, 12)
+                .padding(.bottom, max(0, tabBarReservedHeight) + 12)
             }
         }
     }
@@ -2172,7 +2176,7 @@ struct LearnFestivalDetailView: View {
         return AnyView(
             RaverNavigationCircleIconButton(
                 systemName: "square.and.pencil",
-                style: .glass
+                style: .immersiveAdaptive
             ) {
                 prepareFestivalEditDraft()
                 discoverPush(.learnFestivalEdit(festivalID: currentFestival.id))

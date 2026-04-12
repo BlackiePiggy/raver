@@ -1534,7 +1534,7 @@ struct EventDetailView: View {
         return AnyView(
             RaverNavigationCircleIconButton(
                 systemName: "square.and.pencil",
-                style: .glass
+                style: .immersiveAdaptive
             ) {
                 discoverPush(.eventEdit(eventID: event.id))
             }

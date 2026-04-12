@@ -20,6 +20,7 @@ struct EventsModuleView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
+    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: EventsModuleViewModel
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
 
@@ -476,7 +477,7 @@ struct EventsModuleView: View {
             }
             .padding(.horizontal, 14)
             .padding(.top, 8)
-            .padding(.bottom, 24)
+            .padding(.bottom, max(0, tabBarReservedHeight) + 24)
         }
         .refreshable {
             await refreshCurrentScope()
