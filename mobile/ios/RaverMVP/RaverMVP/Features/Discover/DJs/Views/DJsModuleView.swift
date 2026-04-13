@@ -1575,14 +1575,6 @@ private struct DJDetailTabFramePreferenceKey: PreferenceKey {
     }
 }
 
-private struct DJDetailPageOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: [DJDetailView.DJDetailTab: CGFloat] = [:]
-
-    static func reduce(value: inout [DJDetailView.DJDetailTab: CGFloat], nextValue: () -> [DJDetailView.DJDetailTab: CGFloat]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
 private struct DJDetailRepresentable: UIViewControllerRepresentable {
     let heroView: AnyView
     let djTitle: String
@@ -2015,35 +2007,23 @@ struct DJDetailView: View {
             if isLoading, dj == nil {
                 ProgressView(L("加载 DJ 详情...", "Loading DJ details..."))
             } else if let dj {
-                DJDetailRepresentable(
-                    heroView: AnyView(heroSection(dj)),
-                    djTitle: dj.name,
-                    tabTitles: DJDetailTab.allCases.map(\.title),
-                    tabBarView: AnyView(tabBar),
-                    tabPageViews: DJDetailTab.allCases.map { tab in
-                        AnyView(
-                            VStack(alignment: .leading, spacing: 14) {
-                                tabContent(dj, tab: tab)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 12)
-                            .padding(.bottom, 20)
-                        )
-                    },
-                    selectedIndex: selectedIndex(for: selectedTab),
-                    pageProgress: pageProgress,
-                    onTabChange: { index in
-                        guard !isTabSwitchingByTap else { return }
-                        guard DJDetailTab.allCases.indices.contains(index) else { return }
-                        selectDJDetailTab(DJDetailTab.allCases[index])
-                    },
-                    onPageProgress: { progress in
-                        guard !isTabSwitchingByTap else { return }
-                        let maxProgress = CGFloat(max(0, DJDetailTab.allCases.count - 1))
-                        pageProgress = min(max(progress, 0), maxProgress)
+                GeometryReader { proxy in
+                    let cardWidth = max(proxy.size.width - 32, 0)
+                    RaverImmersiveDetailPagerChrome(
+                        title: dj.name,
+                        tabs: DJDetailTab.allCases,
+                        selectedTab: selectedTab,
+                        pageProgress: $pageProgress,
+                        namespace: "dj-detail",
+                        configuration: detailChromeConfiguration
+                    ) {
+                        heroSection(dj)
+                    } tabBar: {
+                        tabBar
+                    } content: { chrome in
+                        tabPager(dj, cardWidth: cardWidth, chrome: chrome)
                     }
-                )
+                }
                 .ignoresSafeArea(edges: .top)
             } else {
                 ContentUnavailableView(LL("DJ 不存在"), systemImage: "person.crop.circle.badge.exclamationmark")
@@ -2759,7 +2739,9 @@ struct DJDetailView: View {
             selection: $selectedTab,
             progress: pageProgress,
             onSelect: { tab in
-                selectDJDetailTab(tab)
+                withAnimation(.snappy(duration: 0.28, extraBounce: 0.06)) {
+                    selectedTab = tab
+                }
             },
             tabSpacing: 24,
             tabHorizontalPadding: 16,
@@ -2785,93 +2767,68 @@ struct DJDetailView: View {
     }
 
     @ViewBuilder
-    private func tabPager(_ dj: WebDJ, cardWidth: CGFloat) -> some View {
-        GeometryReader { proxy in
-            TabView(selection: $selectedTab) {
-                djTabPage(dj, cardWidth: cardWidth, tab: .intro)
-                    .tag(DJDetailTab.intro)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: DJDetailPageOffsetPreferenceKey.self,
-                                value: [.intro: geo.frame(in: .named("DJDetailPager")).minX]
-                            )
-                        }
-                    )
-                djTabPage(dj, cardWidth: cardWidth, tab: .posts)
-                    .tag(DJDetailTab.posts)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: DJDetailPageOffsetPreferenceKey.self,
-                                value: [.posts: geo.frame(in: .named("DJDetailPager")).minX]
-                            )
-                        }
-                    )
-                djTabPage(dj, cardWidth: cardWidth, tab: .sets)
-                    .tag(DJDetailTab.sets)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: DJDetailPageOffsetPreferenceKey.self,
-                                value: [.sets: geo.frame(in: .named("DJDetailPager")).minX]
-                            )
-                        }
-                    )
-                djTabPage(dj, cardWidth: cardWidth, tab: .events)
-                    .tag(DJDetailTab.events)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: DJDetailPageOffsetPreferenceKey.self,
-                                value: [.events: geo.frame(in: .named("DJDetailPager")).minX]
-                            )
-                        }
-                    )
-                djTabPage(dj, cardWidth: cardWidth, tab: .ratings)
-                    .tag(DJDetailTab.ratings)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: DJDetailPageOffsetPreferenceKey.self,
-                                value: [.ratings: geo.frame(in: .named("DJDetailPager")).minX]
-                            )
-                        }
-                    )
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .coordinateSpace(name: "DJDetailPager")
-            .onAppear {
-                pagerWidth = max(1, proxy.size.width)
-                pageProgress = CGFloat(selectedIndex(for: selectedTab))
-            }
-            .onChange(of: proxy.size.width) { _, newValue in
-                pagerWidth = max(1, newValue)
-            }
-            .onChange(of: selectedTab) { _, newValue in
-                withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.82)) {
-                    pageProgress = CGFloat(selectedIndex(for: newValue))
-                }
-            }
-            .onPreferenceChange(DJDetailPageOffsetPreferenceKey.self) { values in
-                updatePageProgress(with: values)
-            }
+    private func tabPager(
+        _ dj: WebDJ,
+        cardWidth: CGFloat,
+        chrome: RaverImmersiveDetailPagerContext<DJDetailTab>
+    ) -> some View {
+        RaverScrollableTabPager(
+            items: djDetailTabItems,
+            selection: $selectedTab,
+            tabSpacing: 24,
+            tabHorizontalPadding: 16,
+            dividerColor: .gray.opacity(0.26),
+            indicatorColorProvider: { $0.themeColor },
+            showsTabBar: false,
+            showsDivider: false,
+            indicatorHeight: 2.6,
+            tabFont: .system(size: 17, weight: .regular),
+            progress: $pageProgress
+        ) { tab in
+            djTabPage(dj, cardWidth: cardWidth, tab: tab, chrome: chrome)
+                .background(RaverTheme.background)
         }
     }
 
     @ViewBuilder
-    private func djTabPage(_ dj: WebDJ, cardWidth: CGFloat, tab: DJDetailTab) -> some View {
+    private func djTabPage(
+        _ dj: WebDJ,
+        cardWidth: CGFloat,
+        tab: DJDetailTab,
+        chrome: RaverImmersiveDetailPagerContext<DJDetailTab>
+    ) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                tabContent(dj, tab: tab)
+            VStack(spacing: 0) {
+                RaverImmersiveDetailOffsetMarker(
+                    tabID: tab,
+                    coordinateSpaceName: chrome.coordinateSpaceName(tab)
+                )
+                Color.clear
+                    .frame(height: chrome.detailTopInset)
+
+                VStack(alignment: .leading, spacing: 14) {
+                    tabContent(dj, tab: tab)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 20)
         }
+        .coordinateSpace(name: chrome.coordinateSpaceName(tab))
         .scrollBounceBehavior(.always)
         .contentShape(Rectangle())
+    }
+
+    private var detailChromeConfiguration: RaverImmersiveDetailPagerConfiguration {
+        RaverImmersiveDetailPagerConfiguration(
+            heroHeight: 360,
+            tabBarOverlayHeight: 52,
+            pinnedTopBarHeight: 44,
+            titleRevealLead: 8,
+            titleRevealDistance: 20,
+            backgroundColor: RaverTheme.background
+        )
     }
 
     @ViewBuilder

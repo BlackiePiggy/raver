@@ -181,6 +181,7 @@ struct RaverScrollableTabPager<ID: Hashable, Page: View>: View {
     private let indicatorColor: Color
     private let indicatorColorProvider: ((ID) -> Color)?
     private let isPageSwipeDisabled: Bool
+    private let showsTabBar: Bool
     private let showsDivider: Bool
     private let indicatorHeight: CGFloat
     private let tabFont: Font
@@ -188,8 +189,9 @@ struct RaverScrollableTabPager<ID: Hashable, Page: View>: View {
 
     @State private var tabBarScrollState: ID?
     @State private var mainViewScrollState: ID?
-    @State private var progress: CGFloat = 0
+    @State private var internalProgress: CGFloat = 0
     @State private var tabLayouts: [ID: TabLayout] = [:]
+    private let externalProgress: Binding<CGFloat>?
 
     init(
         items: [RaverScrollableTabItem<ID>],
@@ -200,9 +202,11 @@ struct RaverScrollableTabPager<ID: Hashable, Page: View>: View {
         indicatorColor: Color = .primary,
         indicatorColorProvider: ((ID) -> Color)? = nil,
         isPageSwipeDisabled: Bool = false,
+        showsTabBar: Bool = true,
         showsDivider: Bool = true,
         indicatorHeight: CGFloat = 1.8,
         tabFont: Font = .system(size: 18, weight: .regular),
+        progress: Binding<CGFloat>? = nil,
         @ViewBuilder page: @escaping (ID) -> Page
     ) {
         self.items = items
@@ -213,15 +217,19 @@ struct RaverScrollableTabPager<ID: Hashable, Page: View>: View {
         self.indicatorColor = indicatorColor
         self.indicatorColorProvider = indicatorColorProvider
         self.isPageSwipeDisabled = isPageSwipeDisabled
+        self.showsTabBar = showsTabBar
         self.showsDivider = showsDivider
         self.indicatorHeight = indicatorHeight
         self.tabFont = tabFont
+        self.externalProgress = progress
         self.page = page
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            tabBar
+            if showsTabBar {
+                tabBar
+            }
             pager
         }
         .onAppear {
@@ -304,8 +312,8 @@ struct RaverScrollableTabPager<ID: Hashable, Page: View>: View {
                     guard size.width > 1 else { return }
                     let raw = -rect.minX / size.width
                     let clamped = min(max(raw, 0), CGFloat(max(0, items.count - 1)))
-                    if abs(progress - clamped) > 0.0001 {
-                        progress = clamped
+                    if abs(progressValue - clamped) > 0.0001 {
+                        progressValue = clamped
                     }
                 }
             }
@@ -326,20 +334,20 @@ struct RaverScrollableTabPager<ID: Hashable, Page: View>: View {
     private var indicatorWidth: CGFloat {
         let inputRange = items.indices.map { CGFloat($0) }
         let outputRange = items.map { tabLayouts[$0.id]?.size.width ?? 0 }
-        return progress.interpolate(inputRange: inputRange, outputRange: outputRange)
+        return progressValue.interpolate(inputRange: inputRange, outputRange: outputRange)
     }
 
     private var indicatorX: CGFloat {
         let inputRange = items.indices.map { CGFloat($0) }
         let outputRange = items.map { tabLayouts[$0.id]?.minX ?? 0 }
-        return progress.interpolate(inputRange: inputRange, outputRange: outputRange)
+        return progressValue.interpolate(inputRange: inputRange, outputRange: outputRange)
     }
 
     private var currentIndicatorColor: Color {
         guard let indicatorColorProvider, !items.isEmpty else {
             return indicatorColor
         }
-        let idx = max(0, min(items.count - 1, Int(round(progress))))
+        let idx = max(0, min(items.count - 1, Int(round(progressValue))))
         return indicatorColorProvider(items[idx].id)
     }
 
@@ -348,7 +356,7 @@ struct RaverScrollableTabPager<ID: Hashable, Page: View>: View {
             tabBarScrollState = selection
             mainViewScrollState = selection
             if let idx = items.firstIndex(where: { $0.id == selection }) {
-                progress = CGFloat(idx)
+                progressValue = CGFloat(idx)
             }
         }
         if animated {
@@ -357,6 +365,17 @@ struct RaverScrollableTabPager<ID: Hashable, Page: View>: View {
             }
         } else {
             apply()
+        }
+    }
+
+    private var progressValue: CGFloat {
+        get { externalProgress?.wrappedValue ?? internalProgress }
+        nonmutating set {
+            if let externalProgress {
+                externalProgress.wrappedValue = newValue
+            } else {
+                internalProgress = newValue
+            }
         }
     }
 }

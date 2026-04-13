@@ -183,6 +183,206 @@ struct RaverGradientMaskedTopBar: View {
     }
 }
 
+struct RaverPinnedTitleOverlay: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let title: String
+    let opacity: CGFloat
+
+    var body: some View {
+        let safeTop = topSafeAreaInset()
+
+        ZStack(alignment: .top) {
+            Rectangle()
+                .fill(backgroundColor)
+                .overlay(alignment: .bottom) {
+                    LinearGradient(
+                        colors: [
+                            backgroundColor,
+                            backgroundColor.opacity(0.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 20)
+                    .offset(y: 20)
+                }
+
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(titleColor)
+                .lineLimit(1)
+                .frame(width: 176)
+                .padding(.top, safeTop + 12)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: safeTop + 44, alignment: .top)
+        .ignoresSafeArea(edges: .top)
+        .opacity(opacity)
+        .allowsHitTesting(false)
+    }
+
+    private var backgroundColor: Color {
+        colorScheme == .dark ? .black : RaverTheme.background
+    }
+
+    private var titleColor: Color {
+        colorScheme == .dark ? .white : Color.black.opacity(0.88)
+    }
+}
+
+struct RaverImmersiveDetailPagerConfiguration {
+    var heroHeight: CGFloat = 360
+    var tabBarOverlayHeight: CGFloat = 52
+    var pinnedTopBarHeight: CGFloat = 44
+    var titleRevealLead: CGFloat = 8
+    var titleRevealDistance: CGFloat = 20
+    var backgroundColor: Color = RaverTheme.background
+}
+
+struct RaverImmersiveDetailPagerContext<TabID: Hashable> {
+    let detailTopInset: CGFloat
+    let coordinateSpaceName: (TabID) -> String
+}
+
+struct RaverImmersiveDetailOffsetMarker<TabID: Hashable>: View {
+    let tabID: TabID
+    let coordinateSpaceName: String
+
+    var body: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .preference(
+                    key: RaverImmersiveDetailVerticalOffsetPreferenceKey.self,
+                    value: [AnyHashable(tabID): max(0, -proxy.frame(in: .named(coordinateSpaceName)).minY)]
+                )
+        }
+        .frame(height: 0)
+    }
+}
+
+struct RaverImmersiveDetailPagerChrome<TabID: Hashable, Hero: View, TabBar: View, Content: View>: View {
+    let title: String
+    let tabs: [TabID]
+    let selectedTab: TabID
+    @Binding var pageProgress: CGFloat
+    let namespace: String
+    let configuration: RaverImmersiveDetailPagerConfiguration
+
+    private let hero: Hero
+    private let tabBar: TabBar
+    private let contentBuilder: (RaverImmersiveDetailPagerContext<TabID>) -> Content
+
+    @State private var pageVerticalOffsets: [AnyHashable: CGFloat] = [:]
+
+    init(
+        title: String,
+        tabs: [TabID],
+        selectedTab: TabID,
+        pageProgress: Binding<CGFloat>,
+        namespace: String,
+        configuration: RaverImmersiveDetailPagerConfiguration = .init(),
+        @ViewBuilder hero: () -> Hero,
+        @ViewBuilder tabBar: () -> TabBar,
+        @ViewBuilder content: @escaping (RaverImmersiveDetailPagerContext<TabID>) -> Content
+    ) {
+        self.title = title
+        self.tabs = tabs
+        self.selectedTab = selectedTab
+        self._pageProgress = pageProgress
+        self.namespace = namespace
+        self.configuration = configuration
+        self.hero = hero()
+        self.tabBar = tabBar()
+        self.contentBuilder = content
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            contentBuilder(context)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            hero
+                .offset(y: -clampedHeroOffset)
+                .zIndex(1)
+
+            tabBar
+                .offset(y: tabBarTopOffset)
+                .zIndex(2)
+
+            RaverPinnedTitleOverlay(
+                title: title,
+                opacity: topOverlayOpacity
+            )
+            .zIndex(3)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(edges: .top)
+        .background(configuration.backgroundColor)
+        .onPreferenceChange(RaverImmersiveDetailVerticalOffsetPreferenceKey.self) { values in
+            pageVerticalOffsets.merge(values, uniquingKeysWith: { _, new in new })
+        }
+    }
+
+    private var context: RaverImmersiveDetailPagerContext<TabID> {
+        RaverImmersiveDetailPagerContext(
+            detailTopInset: configuration.heroHeight + configuration.tabBarOverlayHeight,
+            coordinateSpaceName: coordinateSpaceName(for:)
+        )
+    }
+
+    private var activeVerticalOffset: CGFloat {
+        guard !tabs.isEmpty else { return 0 }
+        let clampedProgress = min(max(pageProgress, 0), CGFloat(max(0, tabs.count - 1)))
+        let lowerIndex = Int(floor(clampedProgress))
+        let upperIndex = Int(ceil(clampedProgress))
+        let lowerOffset = pageVerticalOffsets[AnyHashable(tabs[lowerIndex])] ?? 0
+        let upperOffset = pageVerticalOffsets[AnyHashable(tabs[upperIndex])] ?? lowerOffset
+
+        guard lowerIndex != upperIndex else { return lowerOffset }
+        let fraction = clampedProgress - CGFloat(lowerIndex)
+        return lowerOffset + (upperOffset - lowerOffset) * fraction
+    }
+
+    private var clampedHeroOffset: CGFloat {
+        min(max(activeVerticalOffset, 0), configuration.heroHeight)
+    }
+
+    private var tabBarTopOffset: CGFloat {
+        max(pinnedTabTopLimit, configuration.heroHeight - clampedHeroOffset)
+    }
+
+    private var pinnedTabTopLimit: CGFloat {
+        topSafeAreaInset() + configuration.pinnedTopBarHeight
+    }
+
+    private var topOverlayOpacity: CGFloat {
+        let pinStart = max(0, configuration.heroHeight - pinnedTabTopLimit)
+        return min(
+            max(
+                (activeVerticalOffset - pinStart + configuration.titleRevealLead) / configuration.titleRevealDistance,
+                0
+            ),
+            1
+        )
+    }
+
+    private func coordinateSpaceName(for tab: TabID) -> String {
+        guard let index = tabs.firstIndex(where: { AnyHashable($0) == AnyHashable(tab) }) else {
+            return "\(namespace)-unknown"
+        }
+        return "\(namespace)-\(index)"
+    }
+}
+
+private struct RaverImmersiveDetailVerticalOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: [AnyHashable: CGFloat] = [:]
+
+    static func reduce(value: inout [AnyHashable: CGFloat], nextValue: () -> [AnyHashable: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
 extension View {
     func raverSystemNavigation(
         title: String,

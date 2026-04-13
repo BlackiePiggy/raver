@@ -2100,37 +2100,20 @@ struct LearnFestivalDetailView: View {
     }
 
     var body: some View {
-        EventDetailRepresentable(
-            heroView: AnyView(heroSection),
-            eventTitle: currentFestival.name,
-            tabTitles: LearnFestivalDetailTab.allCases.map(\.title),
-            tabBarView: AnyView(tabBar),
-            tabPageViews: LearnFestivalDetailTab.allCases.map { tab in
-                AnyView(
-                    VStack(alignment: .leading, spacing: 14) {
-                        tabContent(tab)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 20)
-                )
-            },
-            selectedIndex: selectedIndex(for: selectedTab),
-            pageProgress: pageProgress,
-            onTabChange: { index in
-                guard !isTabSwitchingByTap else { return }
-                guard LearnFestivalDetailTab.allCases.indices.contains(index) else { return }
-                selectFestivalDetailTab(LearnFestivalDetailTab.allCases[index])
-            },
-            onPageProgress: { progress in
-                guard !isTabSwitchingByTap else { return }
-                let maxProgress = CGFloat(max(0, LearnFestivalDetailTab.allCases.count - 1))
-                pageProgress = min(max(progress, 0), maxProgress)
-            }
-        )
-        .ignoresSafeArea(edges: .top)
-        .background(RaverTheme.background)
+        RaverImmersiveDetailPagerChrome(
+            title: currentFestival.name,
+            tabs: LearnFestivalDetailTab.allCases,
+            selectedTab: selectedTab,
+            pageProgress: $pageProgress,
+            namespace: "festival-detail",
+            configuration: detailChromeConfiguration
+        ) {
+            heroSection
+        } tabBar: {
+            tabBar
+        } content: { chrome in
+            tabPager(chrome: chrome)
+        }
         .raverImmersiveFloatingNavigationChrome(
             trailing: immersiveTrailingAction
         ) {
@@ -2191,7 +2174,9 @@ struct LearnFestivalDetailView: View {
             selection: $selectedTab,
             progress: pageProgress,
             onSelect: { tab in
-                selectFestivalDetailTab(tab)
+                withAnimation(.snappy(duration: 0.28, extraBounce: 0.06)) {
+                    selectedTab = tab
+                }
             },
             tabSpacing: 24,
             tabHorizontalPadding: 16,
@@ -2214,6 +2199,59 @@ struct LearnFestivalDetailView: View {
         LearnFestivalDetailTab.allCases.map { tab in
             RaverScrollableTabItem(id: tab, title: tab.title)
         }
+    }
+
+    @ViewBuilder
+    private func tabPager(
+        chrome: RaverImmersiveDetailPagerContext<LearnFestivalDetailTab>
+    ) -> some View {
+        RaverScrollableTabPager(
+            items: festivalDetailTabItems,
+            selection: $selectedTab,
+            tabSpacing: 24,
+            tabHorizontalPadding: 16,
+            dividerColor: .gray.opacity(0.26),
+            indicatorColorProvider: { $0.themeColor },
+            showsTabBar: false,
+            showsDivider: false,
+            indicatorHeight: 2.6,
+            tabFont: .system(size: 17, weight: .regular),
+            progress: $pageProgress
+        ) { tab in
+            ScrollView {
+                VStack(spacing: 0) {
+                    RaverImmersiveDetailOffsetMarker(
+                        tabID: tab,
+                        coordinateSpaceName: chrome.coordinateSpaceName(tab)
+                    )
+                    Color.clear
+                        .frame(height: chrome.detailTopInset)
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        tabContent(tab)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 20)
+                }
+            }
+            .coordinateSpace(name: chrome.coordinateSpaceName(tab))
+            .scrollBounceBehavior(.always)
+            .contentShape(Rectangle())
+            .background(RaverTheme.background)
+        }
+    }
+
+    private var detailChromeConfiguration: RaverImmersiveDetailPagerConfiguration {
+        RaverImmersiveDetailPagerConfiguration(
+            heroHeight: 360,
+            tabBarOverlayHeight: 52,
+            pinnedTopBarHeight: 44,
+            titleRevealLead: 8,
+            titleRevealDistance: 20,
+            backgroundColor: RaverTheme.background
+        )
     }
 
     @ViewBuilder

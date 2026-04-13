@@ -8,19 +8,12 @@ import CoreImage.CIFilterBuiltins
 import MapKit
 import CoreLocation
 import CoreText
+import SDWebImageSwiftUI
 
 private struct EventDetailTabFramePreferenceKey: PreferenceKey {
     static var defaultValue: [EventDetailView.EventDetailTab: CGRect] = [:]
 
     static func reduce(value: inout [EventDetailView.EventDetailTab: CGRect], nextValue: () -> [EventDetailView.EventDetailTab: CGRect]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
-private struct EventDetailPageOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: [EventDetailView.EventDetailTab: CGFloat] = [:]
-
-    static func reduce(value: inout [EventDetailView.EventDetailTab: CGFloat], nextValue: () -> [EventDetailView.EventDetailTab: CGFloat]) {
         value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }
@@ -68,7 +61,6 @@ struct EventDetailView: View {
     @State private var selectedRatingEventID: String?
     @State private var showExpandedLineupList = false
     @State private var venueMapContext: EventVenueMapContext?
-    @State private var lineupImageAspectRatioByURL: [String: CGFloat] = [:]
     @State private var selectedLineupMedia: FullscreenMediaSelection?
 
     fileprivate enum EventDetailTab: String, CaseIterable, Identifiable {
@@ -539,39 +531,23 @@ struct EventDetailView: View {
             if isLoading, event == nil {
                 ProgressView(L("加载活动详情...", "Loading event details..."))
             } else if let event {
-                EventDetailRepresentable(
-                    heroView: AnyView(heroSection(event)),
-                    eventTitle: event.name,
-                    tabTitles: EventDetailTab.allCases.map(\.title),
-                    tabBarView: AnyView(tabBar),
-                    tabPageViews: EventDetailTab.allCases.map { tab in
-                        AnyView(
-                            VStack(alignment: .leading, spacing: 14) {
-                                eventTabContent(
-                                    event,
-                                    cardWidth: max(UIScreen.main.bounds.width - 32, 0),
-                                    tab: tab
-                                )
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 12)
-                            .padding(.bottom, 20)
-                        )
-                    },
-                    selectedIndex: selectedIndex(for: selectedTab),
-                    pageProgress: pageProgress,
-                    onTabChange: { index in
-                        guard !isTabSwitchingByTap else { return }
-                        guard EventDetailTab.allCases.indices.contains(index) else { return }
-                        selectEventDetailTab(EventDetailTab.allCases[index])
-                    },
-                    onPageProgress: { progress in
-                        guard !isTabSwitchingByTap else { return }
-                        let maxProgress = CGFloat(max(0, EventDetailTab.allCases.count - 1))
-                        pageProgress = min(max(progress, 0), maxProgress)
+                GeometryReader { proxy in
+                    let cardWidth = max(proxy.size.width - 32, 0)
+                    RaverImmersiveDetailPagerChrome(
+                        title: event.name,
+                        tabs: EventDetailTab.allCases,
+                        selectedTab: selectedTab,
+                        pageProgress: $pageProgress,
+                        namespace: "event-detail",
+                        configuration: detailChromeConfiguration
+                    ) {
+                        heroSection(event)
+                    } tabBar: {
+                        tabBar
+                    } content: { chrome in
+                        tabPager(event: event, cardWidth: cardWidth, chrome: chrome)
                     }
-                )
+                }
                 .ignoresSafeArea(edges: .top)
                 .sheet(isPresented: $showEventCheckinSheet) {
                     EventCheckinSelectionSheet(
@@ -659,7 +635,9 @@ struct EventDetailView: View {
             selection: $selectedTab,
             progress: pageProgress,
             onSelect: { tab in
-                selectEventDetailTab(tab)
+                withAnimation(.snappy(duration: 0.28, extraBounce: 0.06)) {
+                    selectedTab = tab
+                }
             },
             tabSpacing: 24,
             tabHorizontalPadding: 16,
@@ -685,93 +663,68 @@ struct EventDetailView: View {
     }
 
     @ViewBuilder
-    private func tabPager(event: WebEvent, cardWidth: CGFloat) -> some View {
-        GeometryReader { proxy in
-            TabView(selection: $selectedTab) {
-                eventTabPage(event, cardWidth: cardWidth, tab: .info)
-                    .tag(EventDetailTab.info)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: EventDetailPageOffsetPreferenceKey.self,
-                                value: [.info: geo.frame(in: .named("EventDetailPager")).minX]
-                            )
-                        }
-                    )
-                eventTabPage(event, cardWidth: cardWidth, tab: .posts)
-                    .tag(EventDetailTab.posts)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: EventDetailPageOffsetPreferenceKey.self,
-                                value: [.posts: geo.frame(in: .named("EventDetailPager")).minX]
-                            )
-                        }
-                    )
-                eventTabPage(event, cardWidth: cardWidth, tab: .lineup)
-                    .tag(EventDetailTab.lineup)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: EventDetailPageOffsetPreferenceKey.self,
-                                value: [.lineup: geo.frame(in: .named("EventDetailPager")).minX]
-                            )
-                        }
-                    )
-                eventTabPage(event, cardWidth: cardWidth, tab: .schedule)
-                    .tag(EventDetailTab.schedule)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: EventDetailPageOffsetPreferenceKey.self,
-                                value: [.schedule: geo.frame(in: .named("EventDetailPager")).minX]
-                            )
-                        }
-                    )
-                eventTabPage(event, cardWidth: cardWidth, tab: .ratings)
-                    .tag(EventDetailTab.ratings)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: EventDetailPageOffsetPreferenceKey.self,
-                                value: [.ratings: geo.frame(in: .named("EventDetailPager")).minX]
-                            )
-                        }
-                    )
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .coordinateSpace(name: "EventDetailPager")
-            .onAppear {
-                pagerWidth = max(1, proxy.size.width)
-                pageProgress = CGFloat(selectedIndex(for: selectedTab))
-            }
-            .onChange(of: proxy.size.width) { _, newValue in
-                pagerWidth = max(1, newValue)
-            }
-            .onChange(of: selectedTab) { _, newValue in
-                withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.82)) {
-                    pageProgress = CGFloat(selectedIndex(for: newValue))
-                }
-            }
-            .onPreferenceChange(EventDetailPageOffsetPreferenceKey.self) { values in
-                updatePageProgress(with: values)
-            }
+    private func tabPager(
+        event: WebEvent,
+        cardWidth: CGFloat,
+        chrome: RaverImmersiveDetailPagerContext<EventDetailTab>
+    ) -> some View {
+        RaverScrollableTabPager(
+            items: eventDetailTabItems,
+            selection: $selectedTab,
+            tabSpacing: 24,
+            tabHorizontalPadding: 16,
+            dividerColor: .gray.opacity(0.26),
+            indicatorColorProvider: { $0.themeColor },
+            showsTabBar: false,
+            showsDivider: false,
+            indicatorHeight: 2.6,
+            tabFont: .system(size: 17, weight: .regular),
+            progress: $pageProgress
+        ) { tab in
+            eventTabPage(event, cardWidth: cardWidth, tab: tab, chrome: chrome)
+                .background(RaverTheme.background)
         }
     }
 
     @ViewBuilder
-    private func eventTabPage(_ event: WebEvent, cardWidth: CGFloat, tab: EventDetailTab) -> some View {
+    private func eventTabPage(
+        _ event: WebEvent,
+        cardWidth: CGFloat,
+        tab: EventDetailTab,
+        chrome: RaverImmersiveDetailPagerContext<EventDetailTab>
+    ) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                eventTabContent(event, cardWidth: cardWidth, tab: tab)
+            VStack(spacing: 0) {
+                RaverImmersiveDetailOffsetMarker(
+                    tabID: tab,
+                    coordinateSpaceName: chrome.coordinateSpaceName(tab)
+                )
+                Color.clear
+                    .frame(height: chrome.detailTopInset)
+
+                VStack(alignment: .leading, spacing: 14) {
+                    eventTabContent(event, cardWidth: cardWidth, tab: tab)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 20)
         }
+        .coordinateSpace(name: chrome.coordinateSpaceName(tab))
         .scrollBounceBehavior(.always)
         .contentShape(Rectangle())
+    }
+
+    private var detailChromeConfiguration: RaverImmersiveDetailPagerConfiguration {
+        RaverImmersiveDetailPagerConfiguration(
+            heroHeight: 360,
+            tabBarOverlayHeight: 52,
+            pinnedTopBarHeight: 44,
+            titleRevealLead: 8,
+            titleRevealDistance: 20,
+            backgroundColor: RaverTheme.background
+        )
     }
 
     @ViewBuilder
@@ -971,6 +924,8 @@ struct EventDetailView: View {
         let lineupImageURLs = event.lineupAssetURLs
         let timetableImageURLs = event.timetableAssetURLs
         let allLineupMediaURLs = lineupImageURLs + timetableImageURLs
+        let lineupImageWidth = cardWidth + 2
+        let lineupImageCornerRadius: CGFloat = 8
         let lineupPreviewItems: [FullscreenMediaItem] = allLineupMediaURLs.enumerated().map { index, raw in
             FullscreenMediaItem(rawURL: raw.trimmingCharacters(in: .whitespacesAndNewlines), index: index)
         }
@@ -996,46 +951,40 @@ struct EventDetailView: View {
                         }
                     }
 
-                    if let resolved = AppConfig.resolvedURLString(rawURL) {
+                    if let resolved = AppConfig.resolvedURLString(rawURL),
+                       let url = URL(string: resolved) {
                         Button {
                             selectedLineupMedia = FullscreenMediaSelection(id: index)
                         } label: {
-                            ImageLoaderView(
-                                urlString: resolved,
-                                resizingMode: .fit,
-                                onImageLoaded: { imageSize in
-                                    guard imageSize.width > 0, imageSize.height > 0 else { return }
-                                    let ratio = imageSize.width / imageSize.height
-                                    let old = lineupImageAspectRatioByURL[resolved]
-                                    if old == nil || abs((old ?? ratio) - ratio) > 0.001 {
-                                        lineupImageAspectRatioByURL[resolved] = ratio
-                                    }
-                                }
-                            )
-                            .frame(width: cardWidth)
-                            .frame(
-                                height: cardWidth / max(lineupImageAspectRatioByURL[resolved] ?? 1, 0.0001)
-                            )
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            WebImage(url: url) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: lineupImageWidth)
+                            } placeholder: {
+                                RoundedRectangle(cornerRadius: lineupImageCornerRadius, style: .continuous)
                                     .fill(RaverTheme.card)
-                                    .overlay(
-                                        Image(systemName: "photo")
-                                            .foregroundStyle(RaverTheme.secondaryText)
-                                    )
+                                    .frame(width: lineupImageWidth, height: lineupImageWidth * 0.75)
+                                    .overlay {
+                                        ProgressView()
+                                    }
+                            }
+                            .clipShape(
+                                RoundedRectangle(cornerRadius: lineupImageCornerRadius, style: .continuous)
                             )
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
                         .buttonStyle(.plain)
+                        .padding(.horizontal, -1)
                     } else {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: lineupImageCornerRadius, style: .continuous)
                             .fill(RaverTheme.card)
-                            .frame(width: cardWidth)
+                            .frame(width: lineupImageWidth)
                             .frame(minHeight: 180)
+                            .padding(.horizontal, -1)
                     }
                 }
             }
-            .frame(width: cardWidth, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $selectedLineupMedia) { selection in
                 FullscreenMediaViewer(items: lineupPreviewItems, initialIndex: selection.id)
             }
@@ -1473,23 +1422,17 @@ struct EventDetailView: View {
                     venueDisplayText: eventVenueDisplayText(event)
                 )
 
-                LinearGradient(
-                    colors: [Color.clear, Color.black.opacity(0.58)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
                 HStack(spacing: 6) {
                     Image(systemName: "location.viewfinder")
                     Text(LL("查看地图"))
                 }
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(RaverTheme.primaryText)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .background(
                     Capsule()
-                        .fill(Color.black.opacity(0.38))
+                        .fill(.ultraThinMaterial)
                 )
                 .padding(10)
             }

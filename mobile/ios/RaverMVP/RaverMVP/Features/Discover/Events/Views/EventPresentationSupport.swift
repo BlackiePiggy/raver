@@ -190,6 +190,8 @@ extension WebEvent {
 }
 
 struct EventRow: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let event: WebEvent
     private let coverWidth: CGFloat = 144
     private let coverHeight: CGFloat = 172
@@ -287,14 +289,18 @@ struct EventRow: View {
         VStack(spacing: 0) {
             Text(event.startDate.appLocalizedMonthBadgeText())
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(RaverTheme.primaryText)
+                .foregroundStyle(eventDateBadgeTextColor)
             Text("\(Calendar.current.component(.day, from: event.startDate))")
                 .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(RaverTheme.primaryText)
+                .foregroundStyle(eventDateBadgeTextColor)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+
+    private var eventDateBadgeTextColor: Color {
+        colorScheme == .light ? Color.white.opacity(0.96) : RaverTheme.primaryText
     }
 
     private var eventDateRangeText: String {
