@@ -2,15 +2,24 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
 
     var body: some View {
         List {
                 // 账号设置
                 Section(L("账号", "Account")) {
                     NavigationLink {
-                        Text(L("编辑资料", "Edit Profile"))
+                        SettingsCurrentUserProfileLoaderView(repository: appContainer.profileSocialRepository) { profile in
+                            EditProfileView(profile: profile, repository: appContainer.profileSocialRepository) { updated in
+                                NotificationCenter.default.post(name: .profileDidUpdate, object: updated)
+                            }
+                        }
                     } label: {
-                        Label(L("编辑资料", "Edit Profile"), systemImage: "person.circle")
+                        HStack {
+                            Label(L("编辑资料", "Edit Profile"), systemImage: "person.circle")
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
 
                     NavigationLink {
@@ -52,6 +61,8 @@ struct SettingsView: View {
                             Text(appState.preferredAppearance.title)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
 
                     NavigationLink {
@@ -191,6 +202,8 @@ private struct ThemeSettingsView: View {
                                     .foregroundStyle(RaverTheme.accent)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -199,5 +212,59 @@ private struct ThemeSettingsView: View {
         .scrollContentBackground(.hidden)
         .background(RaverTheme.background)
         .raverSystemNavigation(title: L("主题设置", "Appearance"))
+    }
+}
+
+private struct SettingsCurrentUserProfileLoaderView<Content: View>: View {
+    let repository: ProfileSocialRepository
+    let content: (UserProfile) -> Content
+
+    @State private var profile: UserProfile?
+    @State private var errorMessage: String?
+
+    init(
+        repository: ProfileSocialRepository,
+        @ViewBuilder content: @escaping (UserProfile) -> Content
+    ) {
+        self.repository = repository
+        self.content = content
+    }
+
+    var body: some View {
+        Group {
+            if let profile {
+                content(profile)
+            } else if let errorMessage {
+                VStack(spacing: 10) {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red.opacity(0.92))
+                    Button(L("重试", "Retry")) {
+                        Task { await loadProfile(force: true) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RaverTheme.background)
+            } else {
+                ProgressView(L("加载中...", "Loading..."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+            }
+        }
+        .task {
+            await loadProfile(force: false)
+        }
+    }
+
+    @MainActor
+    private func loadProfile(force: Bool) async {
+        if profile != nil && !force { return }
+        do {
+            profile = try await repository.fetchMyProfile()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
     }
 }

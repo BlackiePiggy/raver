@@ -3400,12 +3400,13 @@ struct DJSetEditorView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
-            .navigationDestination(isPresented: $showEventBindingSheet) {
+            .sheet(isPresented: $showEventBindingSheet) {
                 SetEventBindingSheet(
                     initialEventName: eventName
                 ) { selectedEventName in
                     eventName = selectedEventName
                 }
+                .environmentObject(appContainer)
             }
     }
 

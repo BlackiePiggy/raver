@@ -16,6 +16,7 @@ private struct FeedScreen: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.appPush) private var appPush
     @Environment(\.circlePush) private var circlePush
+    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: FeedViewModel
     @State private var editTapPostID: String?
 
@@ -111,7 +112,7 @@ private struct FeedScreen: View {
             }
             .accessibilityLabel(L("发布动态", "Publish Post"))
             .padding(.trailing, 8)
-            .padding(.bottom, 42)
+            .padding(.bottom, max(tabBarReservedHeight + 50, 100))
         }
         .onReceive(NotificationCenter.default.publisher(for: .circlePostDidCreate)) { notification in
             guard let created = notification.object as? Post else { return }
