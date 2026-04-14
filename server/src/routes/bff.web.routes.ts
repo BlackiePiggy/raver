@@ -798,6 +798,19 @@ const emptyDJContributorInfo: DJContributorInfo = {
 const contributorInfoFromRow = (row: any): DJContributorInfo =>
   (row?.__contributorInfo as DJContributorInfo | undefined) ?? emptyDJContributorInfo;
 
+type DJStatsInfo = {
+  eventCount: number;
+  setCount: number;
+};
+
+const emptyDJStatsInfo: DJStatsInfo = {
+  eventCount: 0,
+  setCount: 0,
+};
+
+const statsInfoFromRow = (row: any): DJStatsInfo =>
+  (row?.__statsInfo as DJStatsInfo | undefined) ?? emptyDJStatsInfo;
+
 const fetchDJContributorInfoMap = async (djIds: string[]): Promise<Map<string, DJContributorInfo>> => {
   const validIds = Array.from(new Set(djIds.map((id) => id.trim()).filter(Boolean)));
   if (validIds.length === 0) {
@@ -857,21 +870,75 @@ const fetchDJContributorInfoMap = async (djIds: string[]): Promise<Map<string, D
   return map;
 };
 
+const fetchDJStatsInfoMap = async (djIds: string[]): Promise<Map<string, DJStatsInfo>> => {
+  const validIds = Array.from(new Set(djIds.map((id) => id.trim()).filter(Boolean)));
+  if (validIds.length === 0) {
+    return new Map();
+  }
+
+  const [eventRows, setRows] = await Promise.all([
+    prisma.$queryRaw<Array<{ djId: string; eventCount: number }>>(Prisma.sql`
+      SELECT
+        "s"."dj_id" AS "djId",
+        COUNT(DISTINCT "s"."event_id")::int AS "eventCount"
+      FROM "event_lineup_slots" AS "s"
+      WHERE "s"."dj_id" IN (${Prisma.join(validIds)})
+      GROUP BY "s"."dj_id"
+    `),
+    prisma.$queryRaw<Array<{ djId: string; setCount: number }>>(Prisma.sql`
+      SELECT
+        "s"."dj_id" AS "djId",
+        COUNT(*)::int AS "setCount"
+      FROM "dj_sets" AS "s"
+      WHERE "s"."dj_id" IN (${Prisma.join(validIds)})
+      GROUP BY "s"."dj_id"
+    `),
+  ]);
+
+  const map = new Map<string, DJStatsInfo>();
+  for (const id of validIds) {
+    map.set(id, { ...emptyDJStatsInfo });
+  }
+
+  for (const row of eventRows) {
+    const current = map.get(row.djId) ?? { ...emptyDJStatsInfo };
+    current.eventCount = Number(row.eventCount || 0);
+    map.set(row.djId, current);
+  }
+
+  for (const row of setRows) {
+    const current = map.get(row.djId) ?? { ...emptyDJStatsInfo };
+    current.setCount = Number(row.setCount || 0);
+    map.set(row.djId, current);
+  }
+
+  return map;
+};
+
 const attachDJContributorInfo = async (row: any): Promise<any> => {
   if (!row?.id) return row;
-  const map = await fetchDJContributorInfoMap([String(row.id)]);
+  const [contributorMap, statsMap] = await Promise.all([
+    fetchDJContributorInfoMap([String(row.id)]),
+    fetchDJStatsInfoMap([String(row.id)]),
+  ]);
   return {
     ...row,
-    __contributorInfo: map.get(String(row.id)) ?? emptyDJContributorInfo,
+    __contributorInfo: contributorMap.get(String(row.id)) ?? emptyDJContributorInfo,
+    __statsInfo: statsMap.get(String(row.id)) ?? emptyDJStatsInfo,
   };
 };
 
 const attachDJContributorInfoList = async (rows: any[]): Promise<any[]> => {
   if (rows.length === 0) return rows;
-  const map = await fetchDJContributorInfoMap(rows.map((row) => String(row.id)));
+  const ids = rows.map((row) => String(row.id));
+  const [contributorMap, statsMap] = await Promise.all([
+    fetchDJContributorInfoMap(ids),
+    fetchDJStatsInfoMap(ids),
+  ]);
   return rows.map((row) => ({
     ...row,
-    __contributorInfo: map.get(String(row.id)) ?? emptyDJContributorInfo,
+    __contributorInfo: contributorMap.get(String(row.id)) ?? emptyDJContributorInfo,
+    __statsInfo: statsMap.get(String(row.id)) ?? emptyDJStatsInfo,
   }));
 };
 
@@ -2065,11 +2132,26 @@ const mapDJ = (
     ? resolveBiTextWithFallback(row.countryI18n ?? null, row.country ?? '')
     : (row.countryI18n ? resolveBiTextWithFallback(row.countryI18n, '') : null);
   const contributorInfo = contributorInfoFromRow(row);
+  const statsInfo = statsInfoFromRow(row);
   const contributorUsernames = contributorInfo.usernames;
   const contributors = contributorInfo.users.map((user) => mapUserLite(user));
   const uploadedByUsername = contributorInfo.uploadedByUsername;
   const isContributor = isDJContributorByRow(row, viewerId);
   const canEdit = viewerRole === 'admin' || isContributor;
+  const eventCount = Math.max(
+    Number(row.eventCount ?? 0),
+    Number(row.eventsCount ?? 0),
+    Number(row.upcomingShows ?? 0),
+    Number(row.sourceLineupEventCount ?? 0),
+    Number(row.sourceUpcomingShows ?? 0),
+    Number(statsInfo.eventCount ?? 0)
+  );
+  const setCount = Math.max(
+    Number(row.setCount ?? 0),
+    Number(row.setsCount ?? 0),
+    Number(row.djSetCount ?? 0),
+    Number(statsInfo.setCount ?? 0)
+  );
 
   return {
     id: row.id,
@@ -2105,6 +2187,12 @@ const mapDJ = (
     youtubeUrl: row.youtubeUrl ?? null,
     isVerified: row.isVerified,
     followerCount: row.followerCount,
+    eventCount,
+    eventsCount: eventCount,
+    upcomingShows: eventCount,
+    setCount,
+    setsCount: setCount,
+    djSetCount: setCount,
     sourceDataSource: row.sourceDataSource ?? null,
     contributors,
     contributorUsernames,

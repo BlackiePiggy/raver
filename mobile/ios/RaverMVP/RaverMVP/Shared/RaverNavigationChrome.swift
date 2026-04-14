@@ -450,12 +450,16 @@ private struct RaverHiddenNavigationOverlayModifier: ViewModifier {
     let overlay: AnyView
 
     func body(content: Content) -> some View {
-        content
-            .navigationBarBackButtonHidden(true)
-            .toolbar(.hidden, for: .navigationBar)
-            .overlay(alignment: .top) {
-                overlay
-            }
+        ZStack(alignment: .top) {
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            overlay
+                .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 

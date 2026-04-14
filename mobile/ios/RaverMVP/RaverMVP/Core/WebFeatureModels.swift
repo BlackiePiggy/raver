@@ -351,6 +351,12 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var isVerified: Bool?
     var followerCount: Int?
     var soundCloudFollowers: Int? = nil
+    var eventCount: Int? = nil
+    var eventsCount: Int? = nil
+    var upcomingShows: Int? = nil
+    var setCount: Int? = nil
+    var setsCount: Int? = nil
+    var djSetCount: Int? = nil
     var sourceDataSource: String? = nil
     var contributors: [WebUserLite]? = nil
     var contributorUsernames: [String]? = nil

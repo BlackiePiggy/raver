@@ -19,19 +19,25 @@ struct LearnModuleView: View {
         appContainer.discoverWikiRepository
     }
 
+    private var djsRepository: DiscoverDJsRepository {
+        appContainer.discoverDJsRepository
+    }
+
     @State private var genres: [LearnGenreNode] = []
     @State private var allLabels: [LearnLabel] = []
     @State private var labels: [LearnLabel] = []
     @State private var allFestivals: [LearnFestival] = []
     @State private var festivals: [LearnFestival] = []
+    @State private var rankingBoards: [RankingBoard] = []
     @State private var labelsPagination: BFFPagination?
-    @State private var selectedSection: LearnModuleSection = .festivals
+    @State private var selectedSection: LearnModuleSection = .rankings
     @State private var selectedSort: LearnLabelSortOption = .soundcloudFollowers
     @State private var sortOrder: LearnLabelSortOrder = .desc
     @State private var searchKeyword = ""
     @State private var selectedGenreFilters: Set<String> = []
     @State private var selectedNationFilters: Set<String> = []
     @State private var activeFilterPanel: LearnLabelFilterPanelType?
+    @State private var isLoadingRankings = false
     @State private var isLoadingGenres = false
     @State private var isLoadingLabels = false
     @State private var isLoadingFestivals = false
@@ -72,6 +78,8 @@ struct LearnModuleView: View {
 
                 Group {
                     switch selectedSection {
+                    case .rankings:
+                        rankingsContent
                     case .genres:
                         genresContent
                     case .labels:
@@ -141,6 +149,8 @@ struct LearnModuleView: View {
                     }
                 }
                 .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(selectedSection == item ? RaverTheme.accent : RaverTheme.card)
@@ -150,13 +160,23 @@ struct LearnModuleView: View {
             Spacer(minLength: 0)
 
             Button {
-                discoverPush(
-                    .searchInput(
-                        domain: .wiki,
-                        initialQuery: searchKeyword,
-                        preferredWikiSectionRaw: selectedSection.rawValue
+                switch selectedSection {
+                case .rankings:
+                    discoverPush(
+                        .searchInput(
+                            domain: .djs,
+                            initialQuery: searchKeyword
+                        )
                     )
-                )
+                case .genres, .labels, .festivals:
+                    discoverPush(
+                        .searchInput(
+                            domain: .wiki,
+                            initialQuery: searchKeyword,
+                            preferredWikiSectionRaw: selectedSection.rawValue
+                        )
+                    )
+                }
             } label: {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 14, weight: .semibold))
@@ -393,6 +413,37 @@ struct LearnModuleView: View {
     }
 
     @ViewBuilder
+    private var rankingsContent: some View {
+        if isLoadingRankings && rankingBoards.isEmpty {
+            ProgressView(L("加载榜单中...", "Loading rankings..."))
+                .frame(maxWidth: .infinity, minHeight: 220)
+        } else if rankingBoards.isEmpty {
+            ContentUnavailableView(LL("暂无榜单"), systemImage: "list.number")
+                .frame(maxWidth: .infinity, minHeight: 220)
+        } else {
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    ForEach(rankingBoards) { board in
+                        Button {
+                            appPush(.rankingBoardDetail(board: board))
+                        } label: {
+                            RankingBoardCoverCard(board: board)
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 254)
+                        .clipped()
+                        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, max(0, tabBarReservedHeight) + 12)
+            }
+        }
+    }
+
+    @ViewBuilder
     private var genresContent: some View {
         if isLoadingGenres && genres.isEmpty {
             ProgressView(LL("学习内容加载中..."))
@@ -484,17 +535,30 @@ struct LearnModuleView: View {
     }
 
     private func loadInitial() async {
+        async let rankingsTask: Void = loadRankingBoards()
         async let genresTask: Void = loadGenres()
         async let labelsTask: Void = loadLabels()
         async let festivalsTask: Void = loadFestivals()
-        _ = await (genresTask, labelsTask, festivalsTask)
+        _ = await (rankingsTask, genresTask, labelsTask, festivalsTask)
     }
 
     private func refreshAll() async {
+        async let rankingsTask: Void = loadRankingBoards()
         async let genresTask: Void = loadGenres()
         async let labelsTask: Void = loadLabels()
         async let festivalsTask: Void = loadFestivals()
-        _ = await (genresTask, labelsTask, festivalsTask)
+        _ = await (rankingsTask, genresTask, labelsTask, festivalsTask)
+    }
+
+    private func loadRankingBoards() async {
+        isLoadingRankings = true
+        defer { isLoadingRankings = false }
+
+        do {
+            rankingBoards = try await djsRepository.fetchRankingBoards()
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
     }
 
     private func loadGenres() async {
@@ -922,6 +986,7 @@ private struct GenreNodeView: View {
 }
 
 enum LearnModuleSection: String, CaseIterable, Identifiable, Hashable {
+    case rankings
     case festivals
     case labels
     case genres
@@ -930,6 +995,7 @@ enum LearnModuleSection: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
+        case .rankings: return L("DJ 榜单", "DJ Rankings")
         case .festivals: return L("电音节", "Festivals")
         case .labels: return L("厂牌", "Labels")
         case .genres: return L("流派树", "Genre Tree")

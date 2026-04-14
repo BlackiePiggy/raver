@@ -339,59 +339,63 @@ struct DJSetDetailView: View {
     }
 
     var body: some View {
-        Group {
-            if isLoading, set == nil {
-                ProgressView(L("加载 Set 详情...", "Loading set details..."))
-            } else if let set {
-                GeometryReader { proxy in
-                    if !isAudioOnlyMode, proxy.size.width > proxy.size.height {
-                        landscapePlayerContent(for: set, in: proxy.size)
-                    } else {
-                        portraitDetailContent(for: set)
+        ZStack(alignment: .top) {
+            Group {
+                if isLoading, set == nil {
+                    ProgressView(L("加载 Set 详情...", "Loading set details..."))
+                } else if let set {
+                    GeometryReader { proxy in
+                        if !isAudioOnlyMode, proxy.size.width > proxy.size.height {
+                            landscapePlayerContent(for: set, in: proxy.size)
+                        } else {
+                            portraitDetailContent(for: set)
+                        }
                     }
-                }
-                .onChange(of: playbackTime) { _, newTime in
-                    syncActiveTrack(for: set, at: newTime)
-                }
-                .onDisappear {
-                    hideSeekIndicatorTask?.cancel()
-                    hideSeekIndicatorTask = nil
-                    hideVolumeIndicatorTask?.cancel()
-                    hideVolumeIndicatorTask = nil
-                    wheelAutoRecenterTask?.cancel()
-                    wheelAutoRecenterTask = nil
-                    controlsAutoHideTask?.cancel()
-                    controlsAutoHideTask = nil
-                    nativePlayerSession.pause()
-                    nativePlayerSession.reset()
-                    if !isAudioOnlyMode {
-                        forcePortraitOrientation()
+                    .onChange(of: playbackTime) { _, newTime in
+                        syncActiveTrack(for: set, at: newTime)
                     }
+                    .onDisappear {
+                        hideSeekIndicatorTask?.cancel()
+                        hideSeekIndicatorTask = nil
+                        hideVolumeIndicatorTask?.cancel()
+                        hideVolumeIndicatorTask = nil
+                        wheelAutoRecenterTask?.cancel()
+                        wheelAutoRecenterTask = nil
+                        controlsAutoHideTask?.cancel()
+                        controlsAutoHideTask = nil
+                        nativePlayerSession.pause()
+                        nativePlayerSession.reset()
+                        if !isAudioOnlyMode {
+                            forcePortraitOrientation()
+                        }
+                    }
+                } else {
+                    ContentUnavailableView(LL("Set 不存在"), systemImage: "waveform.badge.exclamationmark")
                 }
-            } else {
-                ContentUnavailableView(LL("Set 不存在"), systemImage: "waveform.badge.exclamationmark")
             }
-        }
-        .background(RaverTheme.background)
-        .overlay(alignment: .top) {
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+
             if !isAudioOnlyMode {
                 Color.black
+                    .frame(maxWidth: .infinity)
                     .frame(height: topSafeAreaInset() + 8)
                     .ignoresSafeArea(edges: .top)
                     .allowsHitTesting(false)
             }
-        }
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
-        .overlay(alignment: .top) {
+
             if isAudioOnlyMode {
                 RaverImmersiveFloatingTopBar(
                     onBack: handleImmersiveBack,
                     buttonStyle: .glass,
                     trailing: nil
                 )
+                .frame(maxWidth: .infinity, alignment: .top)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(RaverTheme.background)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: Binding(
             get: { set != nil && showTrackEditor },
             set: { if !$0 { showTrackEditor = false } }

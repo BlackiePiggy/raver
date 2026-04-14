@@ -94,7 +94,12 @@ struct DiscoverHomeView: View {
                 }
             )
         case .djs:
-            DJsModuleView()
+            DiscoverDJsRootView(
+                onHorizontalDragStateChanged: { isDragging in
+                    guard isChildHorizontalDragging != isDragging else { return }
+                    isChildHorizontalDragging = isDragging
+                }
+            )
         case .sets:
             SetsModuleView()
         case .learn:

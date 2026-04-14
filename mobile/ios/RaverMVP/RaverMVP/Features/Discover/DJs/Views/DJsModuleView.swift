@@ -9,6 +9,22 @@ import MapKit
 import CoreLocation
 import CoreText
 
+struct DiscoverDJsRootView: View {
+    @EnvironmentObject private var appContainer: AppContainer
+    private let onHorizontalDragStateChanged: ((Bool) -> Void)?
+
+    init(onHorizontalDragStateChanged: ((Bool) -> Void)? = nil) {
+        self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
+    }
+
+    var body: some View {
+        DJsModuleView(
+            viewModel: DJsModuleViewModel(repository: appContainer.discoverDJsRepository),
+            onHorizontalDragStateChanged: onHorizontalDragStateChanged
+        )
+    }
+}
+
 private struct JustifiedUILabelText: UIViewRepresentable {
     let text: String
     let font: UIFont
@@ -51,22 +67,37 @@ private struct JustifiedUILabelText: UIViewRepresentable {
 }
 
 struct DJsModuleView: View {
+    private enum DJsModuleSection: String, CaseIterable, Identifiable {
+        case hot
+        case spotlight
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .hot:
+                return L("热度 DJ", "Hot DJs")
+            case .spotlight:
+                return L("精选", "Spotlight")
+            }
+        }
+    }
+
     @EnvironmentObject private var appContainer: AppContainer
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
     @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     private let hotDJBatchSize = 25
+    private let onHorizontalDragStateChanged: ((Bool) -> Void)?
+    @StateObject private var viewModel: DJsModuleViewModel
 
     private var repository: DiscoverDJsRepository {
         appContainer.discoverDJsRepository
     }
 
-    @State private var djs: [WebDJ] = []
-    @State private var rankingBoards: [RankingBoard] = []
-    @State private var isLoading = false
-    @State private var isRefreshingHotBatch = false
+    @State private var selectedSection: DJsModuleSection = .spotlight
     @State private var errorMessage: String?
-    @State private var selectedSection: DJsModuleSection = .rankings
     @State private var searchKeyword = ""
     @State private var showDJImportSheet = false
     @State private var importMode: DJsImportMode = .spotify
@@ -108,173 +139,108 @@ struct DJsModuleView: View {
     @State private var manualBannerData: Data?
     @State private var isImportingDJ = false
 
+    init(
+        viewModel: DJsModuleViewModel,
+        onHorizontalDragStateChanged: ((Bool) -> Void)? = nil
+    ) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+        self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
+    }
+
     var body: some View {
-        ScrollView(showsIndicators: selectedSection == .rankings) {
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack(alignment: .center, spacing: 10) {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(DJsModuleSection.allCases, id: \.self) { item in
-                                    Button(item.title) {
-                                        withAnimation(.interactiveSpring(response: 0.26, dampingFraction: 0.84)) {
-                                            selectedSection = item
-                                        }
-                                    }
-                                    .font(.subheadline.weight(.semibold))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(selectedSection == item ? RaverTheme.accent : RaverTheme.card)
-                                    .foregroundStyle(selectedSection == item ? Color.white : RaverTheme.primaryText)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                }
-                            }
-                        }
+        ZStack(alignment: .top) {
+            if viewModel.isLoading && filteredDJs.isEmpty && spotlightCarouselDJs.isEmpty {
+                ProgressView(L("加载中...", "Loading..."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                sectionContent
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                spotlightSearchRow
+
+                if let activeErrorMessage {
+                    Text(activeErrorMessage)
+                        .font(.subheadline)
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .scrollClipDisabled()
-                        .defaultScrollAnchor(.leading)
-
-                        Button {
-                            discoverPush(
-                                .searchInput(
-                                    domain: .djs,
-                                    initialQuery: searchKeyword
-                                )
-                            )
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(RaverTheme.primaryText)
-                                .frame(width: 32, height: 32)
-                                .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .strokeBorder(RaverTheme.secondaryText.opacity(0.12), lineWidth: 1)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.subheadline)
-                            .foregroundStyle(.red)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.red.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
-
-                    if selectedSection == .hot {
-                        if isLoading && filteredDJs.isEmpty {
-                            ProgressView(L("加载中...", "Loading..."))
-                                .frame(maxWidth: .infinity, minHeight: 220)
-                        } else if filteredDJs.isEmpty {
-                            ContentUnavailableView(LL("暂无 DJ"), systemImage: "music.mic")
-                                .frame(maxWidth: .infinity, minHeight: 220)
-                        } else {
-                            VStack(spacing: 14) {
-                                DJWebMarqueeWall(rows: marqueeRows) { tapped in
-                                    appPush(.djDetail(djID: tapped.id))
-                                }
-                                .frame(height: marqueeWallHeight)
-                                .padding(.horizontal, -16)
-
-                                Button {
-                                    Task { await refreshRandomHotBatch() }
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        if isRefreshingHotBatch {
-                                            ProgressView()
-                                                .controlSize(.small)
-                                        } else {
-                                            Image(systemName: "shuffle")
-                                                .font(.subheadline.weight(.semibold))
-                                        }
-                                        Text(isRefreshingHotBatch ? L("换一批中...", "Refreshing...") : L("换一批 DJ", "Refresh DJs"))
-                                            .font(.subheadline.weight(.semibold))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 11)
-                                    .background(RaverTheme.card)
-                                    .foregroundStyle(RaverTheme.primaryText)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                }
-                                .buttonStyle(.plain)
-                                .disabled(isRefreshingHotBatch)
-                            }
-                        }
-                    } else {
-                        if isLoading && filteredRankingBoards.isEmpty {
-                            ProgressView(L("加载榜单中...", "Loading rankings..."))
-                                .frame(maxWidth: .infinity, minHeight: 220)
-                        } else if filteredRankingBoards.isEmpty {
-                            ContentUnavailableView(LL("暂无榜单"), systemImage: "list.number")
-                                .frame(maxWidth: .infinity, minHeight: 220)
-                        } else {
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                                ForEach(filteredRankingBoards) { board in
-                                    Button {
-                                        appPush(.rankingBoardDetail(board: board))
-                                    } label: {
-                                        RankingBoardCoverCard(board: board)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 254)
-                                    .clipped()
-                                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, topContentInset)
-                .padding(.bottom, max(0, tabBarReservedHeight) + 16)
-            }
-            .scrollDisabled(selectedSection == .hot)
-            .background(RaverTheme.background)
-            .task {
-                await load()
-            }
-            .refreshable {
-                await load()
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if selectedSection == .hot {
-                    djImportFloatingButton
+                        .background(Color.red.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
-            .navigationDestination(isPresented: $showDJImportSheet) {
-                djImportSheet
+            .padding(.horizontal, 16)
+            .padding(.top, topContentInset)
+        }
+        .background(RaverTheme.background)
+        .task {
+            await viewModel.loadIfNeeded()
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if selectedSection == .hot {
+                djImportFloatingButton
             }
-            .onChange(of: manualAvatarItem) { _, item in
-                Task { await loadManualPhoto(item, target: .avatar) }
+        }
+        .navigationDestination(isPresented: $showDJImportSheet) {
+            djImportSheet
+        }
+        .onDisappear {
+            onHorizontalDragStateChanged?(false)
+        }
+        .onChange(of: manualAvatarItem) { _, item in
+            Task { await loadManualPhoto(item, target: .avatar) }
+        }
+        .onChange(of: manualBannerItem) { _, item in
+            Task { await loadManualPhoto(item, target: .banner) }
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { activeErrorMessage != nil },
+            set: {
+                if !$0 {
+                    errorMessage = nil
+                    viewModel.errorMessage = nil
+                }
             }
-            .onChange(of: manualBannerItem) { _, item in
-                Task { await loadManualPhoto(item, target: .banner) }
-            }
-            .alert(L("提示", "Notice"), isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(L("确定", "OK"), role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(activeErrorMessage ?? "")
+        }
+    }
+
+    private var activeErrorMessage: String? {
+        errorMessage ?? viewModel.errorMessage
     }
 
     private var filteredDJs: [WebDJ] {
-        djs
+        viewModel.filteredDJs
     }
 
-    private var filteredRankingBoards: [RankingBoard] {
-        rankingBoards
+    private var spotlightCarouselDJs: [WebDJ] {
+        viewModel.spotlightCarouselDJs
+    }
+
+    @ViewBuilder
+    private var sectionContent: some View {
+        if spotlightCarouselDJs.isEmpty {
+            ContentUnavailableView(LL("暂无 DJ"), systemImage: "music.mic")
+                .frame(maxWidth: .infinity, minHeight: 220)
+        } else {
+            DJSpotlightCarouselSection(
+                djs: spotlightCarouselDJs,
+                onSelect: { tapped in
+                    appPush(.djDetail(djID: tapped.id))
+                },
+                onHorizontalDragStateChanged: onHorizontalDragStateChanged
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(edges: .bottom)
+        }
     }
 
     private var marqueeRows: [[WebDJ]] {
-        let pool = Array(djs.prefix(hotDJBatchSize))
+        let pool = Array(viewModel.djs.prefix(hotDJBatchSize))
         guard !pool.isEmpty else { return [] }
 
         return (0..<4).map { mod in
@@ -286,7 +252,65 @@ struct DJsModuleView: View {
     }
 
     private var topContentInset: CGFloat {
-        selectedSection == .hot ? 14 : 8
+        14
+    }
+
+    private var spotlightSearchRow: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Spacer(minLength: 0)
+            Button {
+                discoverPush(
+                    .searchInput(
+                        domain: .djs,
+                        initialQuery: searchKeyword
+                    )
+                )
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(searchFieldIconColor)
+                    Text(L("探索1w+ DJ", "Explore 10k+ DJs"))
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .foregroundStyle(searchFieldPlaceholderColor)
+                }
+                .padding(.horizontal, 12)
+                .frame(width: spotlightSearchFieldWidth, height: 34, alignment: .leading)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                        .strokeBorder(searchFieldBorderColor, lineWidth: 0.8)
+                )
+                .shadow(color: searchFieldShadowColor, radius: 8, x: 0, y: 4)
+            }
+            .buttonStyle(.plain)
+            Spacer(minLength: 0)
+        }
+        .frame(height: 40, alignment: .center)
+    }
+
+    private var spotlightSearchFieldWidth: CGFloat {
+        min(max(UIScreen.main.bounds.width * 0.34, 132), 168)
+    }
+
+    private var searchFieldIconColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.84) : Color.black.opacity(0.68)
+    }
+
+    private var searchFieldPlaceholderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.56) : Color.black.opacity(0.44)
+    }
+
+    private var searchFieldBorderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.20) : Color.white.opacity(0.42)
+    }
+
+    private var searchFieldShadowColor: Color {
+        colorScheme == .dark
+            ? Color.black.opacity(0.18)
+            : Color.white.opacity(0.36)
     }
 
     private var marqueeWallHeight: CGFloat {
@@ -300,43 +324,6 @@ struct DJsModuleView: View {
             return 520
         default:
             return 560
-        }
-    }
-
-    private func load() async {
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            errorMessage = nil
-            async let djsTask = repository.fetchDJs(page: 1, limit: hotDJBatchSize, search: nil, sortBy: "random")
-            async let boardsTask = repository.fetchRankingBoards()
-            let hotPage = try await djsTask
-            djs = hotPage.items
-            rankingBoards = try await boardsTask
-            if djs.isEmpty {
-                await refreshRandomHotBatch()
-            }
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    @MainActor
-    private func refreshRandomHotBatch() async {
-        guard !isRefreshingHotBatch else { return }
-        isRefreshingHotBatch = true
-        defer { isRefreshingHotBatch = false }
-
-        do {
-            let page = try await repository.fetchDJs(page: 1, limit: hotDJBatchSize, search: nil, sortBy: "random")
-            let nextBatch = page.items
-            if !nextBatch.isEmpty {
-                djs = nextBatch
-            }
-        } catch {
-            errorMessage = error.userFacingMessage
         }
     }
 
@@ -902,7 +889,7 @@ struct DJsModuleView: View {
                 )
             )
             showDJImportSheet = false
-            await load()
+            await viewModel.reload()
             errorMessage = result.action == "created"
                 ? L("已导入 DJ：\(result.dj.name)", "DJ imported: \(result.dj.name)")
                 : L("已更新 DJ：\(result.dj.name)", "DJ updated: \(result.dj.name)")
@@ -953,7 +940,7 @@ struct DJsModuleView: View {
                 )
             )
             showDJImportSheet = false
-            await load()
+            await viewModel.reload()
             errorMessage = result.action == "created"
                 ? L("已导入 DJ：\(result.dj.name)", "DJ imported: \(result.dj.name)")
                 : L("已更新 DJ：\(result.dj.name)", "DJ updated: \(result.dj.name)")
@@ -1019,7 +1006,7 @@ struct DJsModuleView: View {
             }
 
             showDJImportSheet = false
-            await load()
+            await viewModel.reload()
             errorMessage = imported.action == "created"
                 ? L("已手动导入 DJ：\(imported.dj.name)", "DJ imported manually: \(imported.dj.name)")
                 : L("已更新 DJ：\(imported.dj.name)", "DJ updated: \(imported.dj.name)")
@@ -1105,18 +1092,6 @@ struct DJsModuleView: View {
             return data
         }
         return jpeg
-    }
-}
-
-private enum DJsModuleSection: CaseIterable {
-    case hot
-    case rankings
-
-    var title: String {
-        switch self {
-        case .hot: return L("热度 DJ", "Hot DJs")
-        case .rankings: return L("榜单", "Rankings")
-        }
     }
 }
 
@@ -1234,6 +1209,478 @@ struct RankingBoardCoverCard: View {
             )
         }
     }
+}
+
+private struct DJSpotlightCarouselSection: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let djs: [WebDJ]
+    let onSelect: (WebDJ) -> Void
+    let onHorizontalDragStateChanged: ((Bool) -> Void)?
+
+    @State private var currentIndex: Int = 0
+    @State private var carouselSelection: Int
+    @State private var backgroundCurrentIndex: Int = 0
+    @State private var backgroundOutgoingIndex: Int?
+    @State private var backgroundSlideProgress: CGFloat = 0
+    @State private var backgroundDirection: CGFloat = 1
+    @State private var lastCarouselSelection: Int
+    @State private var backgroundTransitionToken: Int = 0
+
+    private let carouselLiftHeadroom: CGFloat = 60
+
+    init(
+        djs: [WebDJ],
+        onSelect: @escaping (WebDJ) -> Void,
+        onHorizontalDragStateChanged: ((Bool) -> Void)? = nil
+    ) {
+        self.djs = djs
+        self.onSelect = onSelect
+        self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
+
+        let initialSelection = djs.count >= 3 ? 2 : (djs.count > 1 ? 1 : 0)
+        _carouselSelection = State(initialValue: initialSelection)
+        _lastCarouselSelection = State(initialValue: initialSelection)
+    }
+
+    var body: some View {
+        GeometryReader { rootProxy in
+            let size = rootProxy.size
+
+            ZStack(alignment: .top) {
+                GeometryReader { proxy in
+                    ZStack {
+                        if let outgoingIndex = backgroundOutgoingIndex, djs.indices.contains(outgoingIndex) {
+                            backgroundImage(for: djs[outgoingIndex], in: proxy.size)
+                                .offset(x: -backgroundDirection * (1 - backgroundSlideProgress) * proxy.size.width)
+                        }
+
+                        if djs.indices.contains(backgroundCurrentIndex) {
+                            backgroundImage(for: djs[backgroundCurrentIndex], in: proxy.size)
+                                .offset(x: backgroundDirection * backgroundSlideProgress * proxy.size.width)
+                        }
+                    }
+                    .clipped()
+                }
+                .overlay(
+                    LinearGradient(
+                        colors: bottomFadeColors,
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay {
+                    DJSpotlightBackgroundOverlay()
+                }
+                .onAppear {
+                    backgroundCurrentIndex = currentIndex
+                    lastCarouselSelection = carouselSelection
+                }
+                .onChange(of: carouselSelection) { _, newValue in
+                    let previousSelection = lastCarouselSelection
+                    lastCarouselSelection = newValue
+
+                    let mappedIndex = realIndex(for: newValue)
+                    let direction: CGFloat = newValue >= previousSelection ? 1 : -1
+
+                    if mappedIndex != backgroundCurrentIndex {
+                        startBackgroundTransition(to: mappedIndex, direction: direction)
+                    }
+                }
+
+                RaverSnapCarousel(
+                    spacing: 15,
+                    trailingSpace: carouselTrailingSpace(for: size),
+                    topInset: carouselLiftHeadroom,
+                    selection: $carouselSelection,
+                    index: $currentIndex,
+                    items: djs,
+                    onHorizontalDragStateChanged: onHorizontalDragStateChanged
+                ) { dj, phase in
+                    spotlightCard(for: dj, containerSize: size, phase: phase)
+                }
+                .frame(height: cardHeight(for: size) + carouselLiftHeadroom)
+                .offset(y: carouselVerticalOffset(for: size))
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var bottomFadeColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                Color.clear,
+                RaverTheme.background.opacity(0.18),
+                RaverTheme.background.opacity(0.46),
+                RaverTheme.background.opacity(0.90),
+                RaverTheme.background
+            ]
+        }
+
+        return [
+            Color.clear,
+            Color.white.opacity(0.16),
+            Color.white.opacity(0.40),
+            Color(red: 0.985, green: 0.985, blue: 0.995).opacity(0.88),
+            Color(red: 0.97, green: 0.97, blue: 0.985)
+        ]
+    }
+
+    private var spotlightPrimaryTextColor: Color {
+        colorScheme == .dark ? .white : Color.black.opacity(0.90)
+    }
+
+    private var spotlightSecondaryTextColor: Color {
+        colorScheme == .dark ? .white : Color.black.opacity(0.72)
+    }
+
+    private var spotlightSectionHeight: CGFloat {
+        let screenHeight = UIScreen.main.bounds.height
+        switch screenHeight {
+        case ..<700:
+            return 500
+        case ..<800:
+            return 560
+        case ..<900:
+            return 620
+        default:
+            return 680
+        }
+    }
+
+    private func carouselTrailingSpace(for size: CGSize) -> CGFloat {
+        size.height < 750 ? 108 : 148
+    }
+
+    private func cardHeight(for size: CGSize) -> CGFloat {
+        min(size.height * 0.72, 560)
+    }
+
+    private func imageSide(for size: CGSize) -> CGFloat {
+        let cardWidth = size.width - carouselTrailingSpace(for: size)
+        return max(cardWidth - 30, 0)
+    }
+
+    private func carouselVerticalOffset(for size: CGSize) -> CGFloat {
+        let imageTopPadding: CGFloat = 15
+        let imageCenterInCard = imageTopPadding + (imageSide(for: size) / 2)
+        let activeCardLift: CGFloat = 60
+        let visualCenterAdjustment: CGFloat = -18
+        return (cardHeight(for: size) / 2) - imageCenterInCard + activeCardLift + visualCenterAdjustment
+    }
+
+    private func realIndex(for selection: Int) -> Int {
+        guard !djs.isEmpty else { return 0 }
+
+        let mappedIndices: [Int]
+        if djs.count >= 3 {
+            mappedIndices = [djs.count - 2, djs.count - 1] + Array(djs.indices) + [0, 1]
+        } else if djs.count > 1 {
+            mappedIndices = [djs.count - 1] + Array(djs.indices) + [0]
+        } else {
+            mappedIndices = Array(djs.indices)
+        }
+
+        guard mappedIndices.indices.contains(selection) else {
+            return max(0, min(currentIndex, djs.count - 1))
+        }
+
+        return mappedIndices[selection]
+    }
+
+    private func startBackgroundTransition(to newIndex: Int, direction: CGFloat) {
+        guard backgroundCurrentIndex != newIndex else { return }
+
+        backgroundTransitionToken += 1
+        let token = backgroundTransitionToken
+
+        backgroundOutgoingIndex = backgroundCurrentIndex
+        backgroundCurrentIndex = newIndex
+        backgroundDirection = direction
+        backgroundSlideProgress = 1
+
+        withAnimation(.easeInOut(duration: 0.42)) {
+            backgroundSlideProgress = 0
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+//        DispatchQueue.main.asyncAfter(deadline: .now() + ) {
+            guard token == backgroundTransitionToken else { return }
+            backgroundOutgoingIndex = nil
+        }
+    }
+
+    @ViewBuilder
+    private func backgroundImage(for dj: WebDJ, in size: CGSize) -> some View {
+        Group {
+            if let urlString = djSpotlightBackgroundURL(for: dj) {
+                ImageLoaderView(
+                    urlString: urlString,
+                    resizingMode: .fill,
+                    showsIndicator: false
+                )
+            } else {
+                spotlightFallbackBackground(for: dj)
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .scaleEffect(1.08)
+        .saturation(1.24)
+        .contrast(1.06)
+        .blur(radius: 18)
+        .offset(y: -96)
+    }
+
+    @ViewBuilder
+    private func spotlightCard(for dj: WebDJ, containerSize: CGSize, phase: RaverCarouselItemPhase) -> some View {
+        GeometryReader { cardProxy in
+            let imageSide = max(cardProxy.size.width - 30, 0)
+            let textReveal = phase.revealProgress
+            let textOffset = (1 - textReveal) * 26
+            let textBlur = (1 - textReveal) * 10
+            let textScale = 0.94 + (textReveal * 0.06)
+
+            Button {
+                onSelect(dj)
+            } label: {
+                VStack(spacing: 10) {
+                    spotlightArtwork(for: dj)
+                        .frame(width: imageSide, height: imageSide)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.24), radius: 34, x: 0, y: 22)
+                        .shadow(color: Color.black.opacity(0.12), radius: 14, x: 0, y: 6)
+                        .shadow(color: Color.white.opacity(0.08), radius: 2, x: 0, y: 1)
+                        .padding(.bottom, 15)
+
+                    VStack(spacing: 10) {
+                        HStack(spacing: 6) {
+                            Text(dj.name)
+                                .font(.title3.bold())
+                            if dj.isVerified == true {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(Color(red: 0.30, green: 0.93, blue: 0.82))
+                            }
+                        }
+                        .multilineTextAlignment(.center)
+
+                        HStack(spacing: 14) {
+                            Label(spotlightEventCountText(for: dj), systemImage: "calendar")
+                            Label(spotlightSetCountText(for: dj), systemImage: "play.rectangle.fill")
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(spotlightSecondaryTextColor)
+
+                        Text(spotlightSummary(for: dj))
+                            .font(.callout)
+                            .lineLimit(containerSize.height < 750 ? 2 : 3)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 8)
+                            .padding(.horizontal)
+                    }
+                    .foregroundColor(spotlightPrimaryTextColor)
+                    .opacity(textReveal)
+                    .offset(y: textOffset)
+                    .scaleEffect(textScale, anchor: .top)
+                    .blur(radius: textBlur)
+                    .transaction { transaction in
+                        if phase.suppressRevealAnimation {
+                            transaction.animation = nil
+                        }
+                    }
+                    .animation(.interactiveSpring(response: 0.34, dampingFraction: 0.86), value: textReveal)
+
+                    Spacer(minLength: 0)
+                }
+                .frame(width: cardProxy.size.width, height: cardProxy.size.height, alignment: .top)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(height: cardHeight(for: containerSize))
+    }
+
+    @ViewBuilder
+    private func spotlightArtwork(for dj: WebDJ) -> some View {
+        Group {
+            if let urlString = djSpotlightArtworkURL(for: dj) {
+                ImageLoaderView(
+                    urlString: urlString,
+                    resizingMode: .fill,
+                    showsIndicator: false
+                )
+                .background(spotlightFallbackBackground(for: dj))
+            } else {
+                spotlightFallbackBackground(for: dj)
+            }
+        }
+    }
+
+    private func spotlightFallbackBackground(for dj: WebDJ) -> some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.09, green: 0.21, blue: 0.46),
+                Color(red: 0.16, green: 0.62, blue: 0.78),
+                Color(red: 0.06, green: 0.11, blue: 0.26)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay {
+            Text(initials(of: dj.name))
+                .font(.system(size: 54, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.92))
+        }
+    }
+
+    private func spotlightEventCountText(for dj: WebDJ) -> String {
+        let eventCount = max(dj.eventCount ?? 0, dj.eventsCount ?? 0, dj.upcomingShows ?? 0)
+        return L("\(eventCount) 场活动", "\(eventCount) events")
+    }
+
+    private func spotlightSetCountText(for dj: WebDJ) -> String {
+        let setCount = max(dj.setCount ?? 0, dj.setsCount ?? 0, dj.djSetCount ?? 0)
+        return L("\(setCount) 个 Sets", "\(setCount) sets")
+    }
+
+    private func spotlightSummary(for dj: WebDJ) -> String {
+        if let bio = dj.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty {
+            return bio
+        }
+        if let country = dj.country, !country.isEmpty {
+            return L("\(country) DJ，持续活跃在当下电子音乐现场。", "\(country)-based electronic artist with a strong current presence.")
+        }
+        return L("持续活跃在当下电子音乐现场，值得继续深入探索。", "A standout electronic artist worth diving into.")
+    }
+}
+
+private struct DJSpotlightBackgroundOverlay: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: primaryAtmosphereColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: verticalDepthColors,
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: accentGlowColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var primaryAtmosphereColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                Color.black.opacity(0.20),
+                Color(red: 0.01, green: 0.05, blue: 0.10).opacity(0.34),
+                Color(red: 0.01, green: 0.03, blue: 0.08).opacity(0.58)
+            ]
+        }
+
+        return [
+            Color.white.opacity(0.06),
+            Color(red: 0.88, green: 0.94, blue: 1.00).opacity(0.22),
+            Color(red: 0.82, green: 0.89, blue: 0.98).opacity(0.34)
+        ]
+    }
+
+    private var verticalDepthColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                Color.clear,
+                Color.black.opacity(0.12),
+                Color.black.opacity(0.26)
+            ]
+        }
+
+        return [
+            Color.white.opacity(0.02),
+            Color.white.opacity(0.08),
+            Color(red: 0.92, green: 0.95, blue: 0.99).opacity(0.22)
+        ]
+    }
+
+    private var accentGlowColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                Color(red: 0.08, green: 0.82, blue: 0.92).opacity(0.10),
+                Color.clear,
+                Color(red: 0.10, green: 0.22, blue: 0.76).opacity(0.16)
+            ]
+        }
+
+        return [
+            Color(red: 0.52, green: 0.86, blue: 0.98).opacity(0.12),
+            Color.clear,
+            Color(red: 0.56, green: 0.68, blue: 0.98).opacity(0.12)
+        ]
+    }
+}
+
+private func djSpotlightArtworkURL(for dj: WebDJ) -> String? {
+    if let avatar = AppConfig.resolvedDJAvatarURLString(dj.avatarOriginalUrl ?? dj.avatarUrl, size: .original),
+       !avatar.isEmpty {
+        return highResAvatarURL(avatar)
+    }
+    if let banner = AppConfig.resolvedURLString(dj.bannerUrl), !banner.isEmpty {
+        return highResAvatarURL(banner)
+    }
+    return nil
+}
+
+private func djSpotlightBackgroundURL(for dj: WebDJ) -> String? {
+    if let banner = AppConfig.resolvedURLString(dj.bannerUrl), !banner.isEmpty {
+        return highResAvatarURL(banner)
+    }
+    if let avatar = AppConfig.resolvedDJAvatarURLString(dj.avatarOriginalUrl ?? dj.avatarUrl, size: .original),
+       !avatar.isEmpty {
+        return highResAvatarURL(avatar)
+    }
+    return nil
+}
+
+private func compactDJCount(_ value: Int) -> String {
+    let absolute = abs(Double(value))
+    let sign = value < 0 ? "-" : ""
+
+    switch absolute {
+    case 1_000_000...:
+        return "\(sign)\(trimTrailingZero((absolute / 1_000_000).formatted(.number.precision(.fractionLength(0...1)))))M"
+    case 1_000...:
+        return "\(sign)\(trimTrailingZero((absolute / 1_000).formatted(.number.precision(.fractionLength(0...1)))))K"
+    default:
+        return "\(value)"
+    }
+}
+
+private func trimTrailingZero(_ value: String) -> String {
+    if value.hasSuffix(".0") {
+        return String(value.dropLast(2))
+    }
+    return value
 }
 
 private struct DJWebMarqueeWall: View {
