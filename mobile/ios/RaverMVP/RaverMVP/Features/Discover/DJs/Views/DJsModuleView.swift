@@ -292,7 +292,7 @@ struct DJsModuleView: View {
     }
 
     private var spotlightSearchFieldWidth: CGFloat {
-        min(max(UIScreen.main.bounds.width * 0.34, 132), 168)
+        min(max(UIScreen.main.bounds.width * 0.34, 132), 168) + 20
     }
 
     private var searchFieldIconColor: Color {
