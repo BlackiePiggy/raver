@@ -217,7 +217,7 @@ struct NewsModuleView: View {
             } while parsed.count < targetCount && fetchedPageCursor != nil && fetchCount < 20
 
             let deduped = deduplicatedArticles(parsed)
-            articles = deduped
+            articles = sortedArticles(deduped)
             nextCursor = fetchedPageCursor
             errorMessage = nil
         } catch {
@@ -248,6 +248,7 @@ struct NewsModuleView: View {
             let existingIDs = Set(articles.map(\.id))
             let merged = parsed.filter { !existingIDs.contains($0.id) }
             articles.append(contentsOf: merged)
+            articles = sortedArticles(deduplicatedArticles(articles))
             nextCursor = fetchedPageCursor
         } catch {
             errorMessage = error.userFacingMessage
@@ -269,6 +270,15 @@ struct NewsModuleView: View {
             result.append(item)
         }
         return result
+    }
+
+    private func sortedArticles(_ items: [DiscoverNewsArticle]) -> [DiscoverNewsArticle] {
+        items.sorted { lhs, rhs in
+            if lhs.publishedAt != rhs.publishedAt {
+                return lhs.publishedAt > rhs.publishedAt
+            }
+            return lhs.id > rhs.id
+        }
     }
 
 }

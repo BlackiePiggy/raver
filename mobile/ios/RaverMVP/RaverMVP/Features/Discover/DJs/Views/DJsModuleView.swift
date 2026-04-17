@@ -3626,12 +3626,7 @@ struct DJDetailView: View {
     }
 
     private func historyEventRow(_ event: WebEvent) -> some View {
-        let locationText = [event.city, event.country, event.venueName]
-            .compactMap { value in
-                guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-                return value
-            }
-            .joined(separator: " · ")
+        let locationText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return VStack(alignment: .leading, spacing: 4) {
             Text(event.name)

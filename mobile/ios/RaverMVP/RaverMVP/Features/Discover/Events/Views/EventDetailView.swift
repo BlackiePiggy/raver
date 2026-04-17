@@ -777,12 +777,7 @@ struct EventDetailView: View {
     private func eventInfoTabContent(_ event: WebEvent, cardWidth: CGFloat) -> some View {
         let status = EventVisualStatus.resolve(event: event)
         let eventType = EventTypeOption.displayText(for: event.eventType, fallbackWhenEmpty: false)
-        let cityText = event.city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let countryText = event.country?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let cityCountryText = [cityText, countryText]
-            .filter { !$0.isEmpty }
-            .joined(separator: " · ")
-        let cityCountryDisplay = cityCountryText.isEmpty ? event.summaryLocation : cityCountryText
+        let unifiedAddress = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
 
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
@@ -803,8 +798,8 @@ struct EventDetailView: View {
                     title: L("结束时间", "End Time"),
                     value: eventInfoDateText(event.endDate)
                 )
-                if !cityCountryDisplay.isEmpty {
-                    eventInfoRow(icon: "mappin.and.ellipse", title: L("城市 / 国家", "City / Country"), value: cityCountryDisplay)
+                if !unifiedAddress.isEmpty {
+                    eventInfoRow(icon: "mappin.and.ellipse", title: L("活动地址", "Address"), value: unifiedAddress)
                 }
                 if hasEventVenueContent(event) {
                     eventVenueActionRow(event)
@@ -1324,41 +1319,58 @@ struct EventDetailView: View {
             )
     }
 
+    private func eventBoundLocationPoint(_ event: WebEvent) -> WebEventLocationPoint? {
+        guard let point = event.locationPoint,
+              let location = point.location,
+              location.lat.isFinite,
+              location.lng.isFinite else {
+            return nil
+        }
+        return point
+    }
+
+    private func localizedPointText(_ value: WebBiText?) -> String {
+        let language = AppLanguagePreference.current.effectiveLanguage
+        let localized = value?.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !localized.isEmpty { return localized }
+        let zh = value?.zh.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !zh.isEmpty { return zh }
+        let en = value?.en.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return en
+    }
+
     private func hasEventVenueContent(_ event: WebEvent) -> Bool {
-        let venue = event.venueName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let address = event.venueAddress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let summary = event.summaryLocation.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !venue.isEmpty || !address.isEmpty || !summary.isEmpty || event.latitude != nil || event.longitude != nil
+        return eventBoundLocationPoint(event) != nil
     }
 
     private func eventVenueDisplayText(_ event: WebEvent) -> String {
-        let venue = event.venueName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let address = event.venueAddress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let manual = [venue, address].filter { !$0.isEmpty }.joined(separator: " · ")
-        if !manual.isEmpty { return manual }
-        if !event.summaryLocation.isEmpty { return event.summaryLocation }
+        guard let point = eventBoundLocationPoint(event) else {
+            return L("未填写场地信息", "Venue not provided")
+        }
+        let formatted = localizedPointText(point.formattedAddressI18n).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !formatted.isEmpty { return formatted }
+        let unified = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !unified.isEmpty { return unified }
         return L("未填写场地信息", "Venue not provided")
     }
 
     private func eventMapURL(for event: WebEvent) -> URL? {
+        guard let coordinate = eventVenueCoordinate(event) else { return nil }
         let queryText = eventVenueDisplayText(event)
-        if let latitude = event.latitude, let longitude = event.longitude {
-            var components = URLComponents(string: "http://maps.apple.com/")
-            components?.queryItems = [
-                URLQueryItem(name: "ll", value: "\(latitude),\(longitude)"),
-                URLQueryItem(name: "q", value: queryText)
-            ]
-            return components?.url
-        }
-
         var components = URLComponents(string: "http://maps.apple.com/")
-        components?.queryItems = [URLQueryItem(name: "q", value: queryText)]
+        components?.queryItems = [
+            URLQueryItem(name: "ll", value: "\(coordinate.latitude),\(coordinate.longitude)"),
+            URLQueryItem(name: "q", value: queryText)
+        ]
         return components?.url
     }
 
     private func eventVenueCoordinate(_ event: WebEvent) -> CLLocationCoordinate2D? {
-        guard let latitude = event.latitude, let longitude = event.longitude else { return nil }
-        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard let point = eventBoundLocationPoint(event),
+              let location = point.location else {
+            return nil
+        }
+        return CLLocationCoordinate2D(latitude: location.lat, longitude: location.lng)
     }
 
     private func copyEventVenueText(_ event: WebEvent) {
@@ -1368,7 +1380,6 @@ struct EventDetailView: View {
 
     private func openEventVenueInMap(_ event: WebEvent) {
         let venueText = eventVenueDisplayText(event)
-        let summary = event.summaryLocation.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallbackQuery = eventVenueFallbackQuery(event)
         let coordinate = eventVenueCoordinate(event)
         guard coordinate != nil || !fallbackQuery.isEmpty else {
@@ -1379,7 +1390,7 @@ struct EventDetailView: View {
         venueMapContext = EventVenueMapContext(
             eventName: event.name,
             venueDisplayText: venueText,
-            summaryLocation: summary,
+            summaryLocation: venueText,
             coordinate: coordinate,
             queryText: fallbackQuery,
             mapURL: eventMapURL(for: event)
@@ -1449,10 +1460,18 @@ struct EventDetailView: View {
     }
 
     private func eventVenueFallbackQuery(_ event: WebEvent) -> String {
-        let venueText = eventVenueDisplayText(event)
-        let summary = event.summaryLocation.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (venueText == L("未填写场地信息", "Venue not provided") ? summary : venueText)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = eventVenueDisplayText(event).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty { return text }
+        guard let point = eventBoundLocationPoint(event) else { return "" }
+        let fallback = [
+            localizedPointText(point.nameI18n),
+            localizedPointText(point.addressI18n),
+            (point.city ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+        ]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+        return fallback
     }
 
     private func normalizedEventURL(_ raw: String) -> URL? {

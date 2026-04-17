@@ -332,9 +332,6 @@ struct RecommendEventsModuleView: View {
         if !event.summaryLocation.isEmpty {
             return event.summaryLocation
         }
-        if let venue = event.venueName, !venue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return venue
-        }
         return L("地点待定", "Location TBA")
     }
 

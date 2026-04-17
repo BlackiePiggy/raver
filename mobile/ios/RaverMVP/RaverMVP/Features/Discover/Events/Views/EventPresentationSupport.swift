@@ -235,17 +235,9 @@ struct EventRow: View {
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
 
-                    if let venue = event.venueName, !venue.isEmpty {
-                        Label(venue, systemImage: "building.2")
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                            .lineLimit(2)
-                            .truncationMode(.tail)
-                            .multilineTextAlignment(.leading)
-                    }
-
-                    if !event.summaryLocation.isEmpty {
-                        Label(event.summaryLocation, systemImage: "mappin.and.ellipse")
+                    let addressText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !addressText.isEmpty {
+                        Label(addressText, systemImage: "mappin.and.ellipse")
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                             .lineLimit(2)

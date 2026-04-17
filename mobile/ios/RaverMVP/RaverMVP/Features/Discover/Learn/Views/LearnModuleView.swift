@@ -2528,12 +2528,7 @@ struct LearnFestivalDetailView: View {
     }
 
     private func festivalEventRow(_ event: WebEvent) -> some View {
-        let locationText = [event.city, event.country, event.venueName]
-            .compactMap { value in
-                guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-                return value
-            }
-            .joined(separator: " · ")
+        let locationText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return HStack(alignment: .top, spacing: 10) {
             festivalEventCoverImage(event)

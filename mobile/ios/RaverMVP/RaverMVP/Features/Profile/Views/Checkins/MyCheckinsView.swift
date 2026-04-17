@@ -1189,18 +1189,14 @@ struct MyCheckinsView: View {
 
     private func eventNodeSubtitle(for node: TimelineNode, fallbackEvent: CheckinEventLite) -> String? {
         if let fullEvent = localizedEventDetail(for: node) {
-            let location = [fullEvent.city, fullEvent.country]
-                .compactMap { value in
-                    guard let value, !value.isEmpty else { return nil }
-                    return value
-                }
-                .joined(separator: " · ")
+            let location = fullEvent.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
             if !location.isEmpty { return location }
         }
 
         let event = resolvedEvent(for: node) ?? fallbackEvent
-        if let localizedLocation = localizedBiText(event.locationI18n) {
-            return localizedLocation
+        let unifiedLocation = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !unifiedLocation.isEmpty {
+            return unifiedLocation
         }
 
         let localizedCountry = localizedBiText(event.countryI18n)

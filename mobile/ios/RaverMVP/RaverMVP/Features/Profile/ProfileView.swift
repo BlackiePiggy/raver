@@ -456,36 +456,8 @@ struct ProfileRecentCheckinsCard: View {
     private func checkinSubtitle(_ item: WebCheckin) -> String {
         let location: String = {
             if let event = item.event {
-                if let locationI18n = event.locationI18n {
-                    let localized = locationI18n.text(for: AppLanguagePreference.current.effectiveLanguage)
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !localized.isEmpty {
-                        return localized
-                    }
-                }
-
-                let localizedCountry: String? = {
-                    if let countryI18n = event.countryI18n {
-                        let localized = countryI18n.text(for: AppLanguagePreference.current.effectiveLanguage)
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                        return localized.isEmpty ? nil : localized
-                    }
-                    return nil
-                }()
-                let text = [event.city, event.country]
-                    .compactMap { value in
-                        guard let value, !value.isEmpty else { return nil }
-                        return value
-                    }
-                    .joined(separator: " · ")
-                let localizedText = [event.city, localizedCountry]
-                    .compactMap { value in
-                        guard let value, !value.isEmpty else { return nil }
-                        return value
-                    }
-                    .joined(separator: " · ")
-                if !localizedText.isEmpty { return localizedText }
-                return text.isEmpty ? L("现场记录", "Live Record") : text
+                let unified = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+                return unified.isEmpty ? L("现场记录", "Live Record") : unified
             }
             if let country = item.dj?.country, !country.isEmpty {
                 return country

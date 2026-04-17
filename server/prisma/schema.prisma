@@ -77,6 +77,7 @@ model Event {
   descriptionI18n Json?    @map("description_i18n")
   locationI18n    Json?    @map("location_i18n")
   countryI18n     Json?    @map("country_i18n")
+  cityI18n        Json?    @map("city_i18n")
   coverImageUrl   String?  @map("cover_image_url")
   lineupImageUrl  String?  @map("lineup_image_url")
   imageAssets     Json?    @map("image_assets")
@@ -90,6 +91,8 @@ model Event {
   venueAddress    String?  @map("venue_address")
   city            String?
   country         String?
+  manualLocation  Json?    @map("manual_location")
+  locationPoint   Json?    @map("location_point")
   latitude        Decimal? @db.Decimal(10, 8)
   longitude       Decimal? @db.Decimal(11, 8)
   startDate       DateTime @map("start_date")
@@ -634,6 +637,7 @@ model Post {
   boundDjIds   String[] @default([]) @map("bound_dj_ids")
   boundBrandIds String[] @default([]) @map("bound_brand_ids")
   boundEventIds String[] @default([]) @map("bound_event_ids")
+  displayPublishedAt DateTime? @db.Timestamptz(3) @map("display_published_at")
   likeCount    Int      @default(0) @map("like_count")
   repostCount  Int      @default(0) @map("repost_count")
   commentCount Int      @default(0) @map("comment_count")

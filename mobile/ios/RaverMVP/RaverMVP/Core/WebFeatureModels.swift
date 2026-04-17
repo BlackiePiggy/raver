@@ -35,14 +35,19 @@ struct LearnLabelListPage: Codable {
 struct WebBiText: Codable, Hashable {
     var en: String
     var zh: String
+    var enFull: String? = nil
 
     func text(for language: AppLanguage) -> String {
         switch language.effectiveLanguage {
         case .zh:
             let zhText = zh.trimmingCharacters(in: .whitespacesAndNewlines)
             if !zhText.isEmpty { return zhText }
+            let enFullText = (enFull ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !enFullText.isEmpty { return enFullText }
             return en
         case .en, .system:
+            let enFullText = (enFull ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !enFullText.isEmpty { return enFullText }
             let enText = en.trimmingCharacters(in: .whitespacesAndNewlines)
             if !enText.isEmpty { return enText }
             return zh
@@ -221,6 +226,91 @@ struct WebEventImageAsset: Codable, Hashable, Identifiable {
     var fileName: String?
 }
 
+struct WebEventLocationCoordinate: Codable, Hashable {
+    var lng: Double
+    var lat: Double
+}
+
+struct WebEventLocationPoint: Codable, Hashable {
+    var provider: String? = nil
+    var sourceMode: String? = nil
+    var providerPlaceId: String? = nil
+    var poiId: String? = nil
+    var location: WebEventLocationCoordinate? = nil
+    var nameI18n: WebBiText? = nil
+    var addressI18n: WebBiText? = nil
+    var formattedAddressI18n: WebBiText? = nil
+    var city: String? = nil
+    var district: String? = nil
+    var province: String? = nil
+    var countryCode: String? = nil
+}
+
+struct WebEventManualLocation: Codable, Hashable {
+    var detailAddressI18n: WebBiText? = nil
+    var formattedAddressI18n: WebBiText? = nil
+    var selectedAt: Date? = nil
+}
+
+private func normalizedAddressText(_ value: String?) -> String? {
+    let text = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return text.isEmpty ? nil : text
+}
+
+private func localizedAddressText(_ value: WebBiText?, language: AppLanguage) -> String? {
+    let localized = value?.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !localized.isEmpty { return localized }
+    let zh = value?.zh.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !zh.isEmpty { return zh }
+    let en = value?.en.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return en.isEmpty ? nil : en
+}
+
+private func joinAddressComponents(_ values: [String?]) -> String {
+    var seen = Set<String>()
+    var items: [String] = []
+    for value in values {
+        guard let text = normalizedAddressText(value) else { continue }
+        let key = text.lowercased()
+        if seen.contains(key) { continue }
+        seen.insert(key)
+        items.append(text)
+    }
+    return items.joined(separator: " · ")
+}
+
+private func resolveEventUnifiedAddress(
+    language: AppLanguage,
+    manualLocation: WebEventManualLocation?,
+    locationPoint: WebEventLocationPoint?,
+    cityI18n: WebBiText?,
+    city: String?,
+    countryI18n: WebBiText?,
+    country: String?
+) -> String {
+    if let manualFormatted = localizedAddressText(manualLocation?.formattedAddressI18n, language: language) {
+        return manualFormatted
+    }
+
+    if let pointFormatted = localizedAddressText(locationPoint?.formattedAddressI18n, language: language) {
+        return pointFormatted
+    }
+
+    // Fallback for old records missing formattedAddressI18n.
+    if let manualDetailText = localizedAddressText(manualLocation?.detailAddressI18n, language: language) {
+        return manualDetailText
+    }
+
+    // Last fallback (legacy): still avoid multi-part composition.
+    if let cityText = localizedAddressText(cityI18n, language: language) ?? normalizedAddressText(city) {
+        return cityText
+    }
+    if let countryText = localizedAddressText(countryI18n, language: language) ?? normalizedAddressText(country) {
+        return countryText
+    }
+    return ""
+}
+
 struct WebEventFestivalLite: Codable, Identifiable, Hashable {
     let id: String
     var name: String
@@ -241,17 +331,17 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var slug: String
     var description: String?
     var descriptionI18n: WebBiText? = nil
-    var locationI18n: WebBiText? = nil
     var countryI18n: WebBiText? = nil
+    var cityI18n: WebBiText? = nil
     var coverImageUrl: String?
     var lineupImageUrl: String?
     var imageAssets: [WebEventImageAsset]? = nil
     var eventType: String?
     var organizerName: String?
-    var venueName: String?
-    var venueAddress: String?
     var city: String?
     var country: String?
+    var manualLocation: WebEventManualLocation? = nil
+    var locationPoint: WebEventLocationPoint? = nil
     var latitude: Double?
     var longitude: Double?
     var startDate: Date
@@ -272,8 +362,20 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var ticketTiers: [WebEventTicketTier]
     var lineupSlots: [WebEventLineupSlot]
 
+    var unifiedAddress: String {
+        resolveEventUnifiedAddress(
+            language: AppLanguagePreference.current.effectiveLanguage,
+            manualLocation: manualLocation,
+            locationPoint: locationPoint,
+            cityI18n: cityI18n,
+            city: city,
+            countryI18n: countryI18n,
+            country: country
+        )
+    }
+
     var summaryLocation: String {
-        [city, country].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        unifiedAddress
     }
 }
 
@@ -283,9 +385,11 @@ struct CreateEventInput: Codable {
     var description: String?
     var eventType: String? = nil
     var city: String?
+    var cityI18n: WebBiText? = nil
     var country: String?
-    var venueName: String?
-    var venueAddress: String? = nil
+    var countryI18n: WebBiText? = nil
+    var manualLocation: WebEventManualLocation? = nil
+    var locationPoint: WebEventLocationPoint? = nil
     var latitude: Double? = nil
     var longitude: Double? = nil
     var ticketUrl: String? = nil
@@ -302,15 +406,17 @@ struct CreateEventInput: Codable {
     var status: String?
 }
 
-struct UpdateEventInput: Codable {
+struct UpdateEventInput: Encodable {
     var name: String?
     var wikiFestivalId: String? = nil
     var description: String?
     var eventType: String? = nil
     var city: String?
+    var cityI18n: WebBiText? = nil
     var country: String?
-    var venueName: String?
-    var venueAddress: String? = nil
+    var countryI18n: WebBiText? = nil
+    var manualLocation: WebEventManualLocation? = nil
+    var locationPoint: WebEventLocationPoint? = nil
     var latitude: Double? = nil
     var longitude: Double? = nil
     var ticketUrl: String? = nil
@@ -325,6 +431,76 @@ struct UpdateEventInput: Codable {
     var ticketTiers: [EventTicketTierInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
     var status: String?
+    var clearCityI18n: Bool = false
+    var clearCountryI18n: Bool = false
+    var clearManualLocation: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case wikiFestivalId
+        case description
+        case eventType
+        case city
+        case cityI18n
+        case country
+        case countryI18n
+        case manualLocation
+        case locationPoint
+        case latitude
+        case longitude
+        case ticketUrl
+        case ticketCurrency
+        case ticketNotes
+        case officialWebsite
+        case startDate
+        case endDate
+        case dayRolloverHour
+        case coverImageUrl
+        case lineupImageUrl
+        case ticketTiers
+        case lineupSlots
+        case status
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(name, forKey: .name)
+        try container.encodeIfPresent(wikiFestivalId, forKey: .wikiFestivalId)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(eventType, forKey: .eventType)
+        try container.encodeIfPresent(city, forKey: .city)
+        if clearCityI18n {
+            try container.encodeNil(forKey: .cityI18n)
+        } else {
+            try container.encodeIfPresent(cityI18n, forKey: .cityI18n)
+        }
+        try container.encodeIfPresent(country, forKey: .country)
+        if clearCountryI18n {
+            try container.encodeNil(forKey: .countryI18n)
+        } else {
+            try container.encodeIfPresent(countryI18n, forKey: .countryI18n)
+        }
+        if clearManualLocation {
+            try container.encodeNil(forKey: .manualLocation)
+        } else {
+            try container.encodeIfPresent(manualLocation, forKey: .manualLocation)
+        }
+        try container.encodeIfPresent(locationPoint, forKey: .locationPoint)
+        try container.encodeIfPresent(latitude, forKey: .latitude)
+        try container.encodeIfPresent(longitude, forKey: .longitude)
+        try container.encodeIfPresent(ticketUrl, forKey: .ticketUrl)
+        try container.encodeIfPresent(ticketCurrency, forKey: .ticketCurrency)
+        try container.encodeIfPresent(ticketNotes, forKey: .ticketNotes)
+        try container.encodeIfPresent(officialWebsite, forKey: .officialWebsite)
+        try container.encodeIfPresent(startDate, forKey: .startDate)
+        try container.encodeIfPresent(endDate, forKey: .endDate)
+        try container.encodeIfPresent(dayRolloverHour, forKey: .dayRolloverHour)
+        try container.encodeIfPresent(coverImageUrl, forKey: .coverImageUrl)
+        try container.encodeIfPresent(lineupImageUrl, forKey: .lineupImageUrl)
+        try container.encodeIfPresent(ticketTiers, forKey: .ticketTiers)
+        try container.encodeIfPresent(lineupSlots, forKey: .lineupSlots)
+        try container.encodeIfPresent(status, forKey: .status)
+    }
 }
 
 struct WebDJ: Codable, Identifiable, Hashable {
@@ -593,13 +769,27 @@ struct CheckinEventLite: Codable, Identifiable, Hashable {
     let id: String
     var name: String
     var nameI18n: WebBiText? = nil
-    var locationI18n: WebBiText? = nil
+    var cityI18n: WebBiText? = nil
     var countryI18n: WebBiText? = nil
+    var manualLocation: WebEventManualLocation? = nil
+    var locationPoint: WebEventLocationPoint? = nil
     var coverImageUrl: String?
     var city: String?
     var country: String?
     var startDate: Date?
     var endDate: Date?
+
+    var unifiedAddress: String {
+        resolveEventUnifiedAddress(
+            language: AppLanguagePreference.current.effectiveLanguage,
+            manualLocation: manualLocation,
+            locationPoint: locationPoint,
+            cityI18n: cityI18n,
+            city: city,
+            countryI18n: countryI18n,
+            country: country
+        )
+    }
 }
 
 struct CheckinDJLite: Codable, Identifiable, Hashable {
@@ -797,12 +987,29 @@ struct MyPublishSet: Codable, Identifiable, Hashable {
 struct MyPublishEvent: Codable, Identifiable, Hashable {
     let id: String
     var name: String
+    var nameI18n: WebBiText? = nil
+    var cityI18n: WebBiText? = nil
+    var countryI18n: WebBiText? = nil
+    var manualLocation: WebEventManualLocation? = nil
+    var locationPoint: WebEventLocationPoint? = nil
     var coverImageUrl: String?
     var city: String?
     var country: String?
     var startDate: Date
     var createdAt: Date
     var lineupSlotCount: Int
+
+    var unifiedAddress: String {
+        resolveEventUnifiedAddress(
+            language: AppLanguagePreference.current.effectiveLanguage,
+            manualLocation: manualLocation,
+            locationPoint: locationPoint,
+            cityI18n: cityI18n,
+            city: city,
+            countryI18n: countryI18n,
+            country: country
+        )
+    }
 }
 
 struct MyPublishRatingEvent: Codable, Identifiable, Hashable {

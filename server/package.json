@@ -24,6 +24,7 @@
     "events:lineup:autobind-djs": "ts-node prisma/backfill-event-lineup-autobind-djs.ts",
     "wiki:festivals:seed-uploadtester": "ts-node prisma/seed-wiki-festivals.ts",
     "wiki:festivals:media:backfill-oss": "ts-node prisma/backfill-wiki-festival-media-from-oss.ts",
+    "country:backfill:en-full": "ts-node prisma/backfill-country-en-full.ts",
     "brands:import:downloads": "ts-node prisma/import-wiki-festivals-from-downloads.ts",
     "brands:import:complete-json": "ts-node prisma/import-wiki-festivals-complete-json.ts"
   },

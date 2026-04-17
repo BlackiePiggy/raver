@@ -47,7 +47,7 @@ enum DiscoverNewsCodec {
             body: body,
             link: link,
             coverImageURL: post.images.first,
-            publishedAt: post.createdAt,
+            publishedAt: post.displayPublishedAt ?? post.createdAt,
             replyCount: post.commentCount,
             authorID: post.author.id,
             authorUsername: post.author.username,
@@ -135,4 +135,3 @@ func fetchDiscoverNewsArticles(
 
     return articles.sorted { $0.publishedAt > $1.publishedAt }
 }
-

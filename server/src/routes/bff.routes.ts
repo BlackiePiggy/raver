@@ -166,6 +166,18 @@ const parseCursorDate = (cursor: unknown): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const parseFeedPostDateInput = (value: unknown): Date | null | 'invalid' => {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? 'invalid' : value;
+  }
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return 'invalid';
+  return parsed;
+};
+
 type BasicUser = {
   id: string;
   username: string;
@@ -270,7 +282,9 @@ const mapPost = (
     boundDjIds?: string[] | null;
     boundBrandIds?: string[] | null;
     boundEventIds?: string[] | null;
+    displayPublishedAt?: Date | null;
     createdAt: Date;
+    updatedAt: Date;
     likeCount: number;
     repostCount: number;
     commentCount: number;
@@ -279,6 +293,7 @@ const mapPost = (
   likedPostIds: Set<string>,
   repostedPostIds: Set<string>
 ) => {
+  const displayPublishedAt = post.displayPublishedAt ?? post.createdAt;
   return {
     id: post.id,
     author: toUserSummary(post.user, followingSet.has(post.user.id)),
@@ -289,7 +304,11 @@ const mapPost = (
     boundDjIDs: Array.isArray(post.boundDjIds) ? post.boundDjIds : [],
     boundBrandIDs: Array.isArray(post.boundBrandIds) ? post.boundBrandIds : [],
     boundEventIDs: Array.isArray(post.boundEventIds) ? post.boundEventIds : [],
+    displayPublishedAt,
+    publishedAt: displayPublishedAt,
+    firstPublishedAt: post.createdAt,
     createdAt: post.createdAt,
+    updatedAt: post.updatedAt,
     likeCount: post.likeCount,
     repostCount: post.repostCount,
     commentCount: post.commentCount,
@@ -2317,6 +2336,18 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
     const normalizedBoundEventIDs = normalizePostBindingIDs(
       body.boundEventIDs ?? body.boundEventIds ?? body.bound_event_ids
     );
+    const displayPublishedAtInput =
+      body.displayPublishedAt ??
+      body.display_published_at ??
+      body.publishedAt ??
+      body.published_at ??
+      body.publishAt ??
+      body.publish_at;
+    const parsedDisplayPublishedAt = parseFeedPostDateInput(displayPublishedAtInput);
+    if (parsedDisplayPublishedAt === 'invalid') {
+      res.status(400).json({ error: 'displayPublishedAt is invalid' });
+      return;
+    }
     const trimmed = String(content || '').trim();
     if (!trimmed && normalizedImages.length === 0) {
       res.status(400).json({ error: 'content or images is required' });
@@ -2363,6 +2394,7 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
         boundDjIds: normalizedBoundDjIDs,
         boundBrandIds: normalizedBoundBrandIDs,
         boundEventIds: normalizedBoundEventIDs,
+        displayPublishedAt: parsedDisplayPublishedAt || new Date(),
       } as any,
       include: {
         user: {
@@ -2408,6 +2440,25 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
     const boundDjIDs = body.boundDjIDs ?? body.boundDjIds ?? body.boundDJIDs ?? body.bound_dj_ids;
     const boundBrandIDs = body.boundBrandIDs ?? body.boundBrandIds ?? body.bound_brand_ids;
     const boundEventIDs = body.boundEventIDs ?? body.boundEventIds ?? body.bound_event_ids;
+    const hasDisplayPublishedAt =
+      Object.prototype.hasOwnProperty.call(body, 'displayPublishedAt') ||
+      Object.prototype.hasOwnProperty.call(body, 'display_published_at') ||
+      Object.prototype.hasOwnProperty.call(body, 'publishedAt') ||
+      Object.prototype.hasOwnProperty.call(body, 'published_at') ||
+      Object.prototype.hasOwnProperty.call(body, 'publishAt') ||
+      Object.prototype.hasOwnProperty.call(body, 'publish_at');
+    const displayPublishedAtInput =
+      body.displayPublishedAt ??
+      body.display_published_at ??
+      body.publishedAt ??
+      body.published_at ??
+      body.publishAt ??
+      body.publish_at;
+    const parsedDisplayPublishedAt = parseFeedPostDateInput(displayPublishedAtInput);
+    if (hasDisplayPublishedAt && parsedDisplayPublishedAt === 'invalid') {
+      res.status(400).json({ error: 'displayPublishedAt is invalid' });
+      return;
+    }
 
     const hasContent = typeof content === 'string';
     const hasImages = Array.isArray(images);
@@ -2415,8 +2466,16 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
     const hasBoundDjIDs = Array.isArray(boundDjIDs);
     const hasBoundBrandIDs = Array.isArray(boundBrandIDs);
     const hasBoundEventIDs = Array.isArray(boundEventIDs);
-    if (!hasContent && !hasImages && !hasLocation && !hasBoundDjIDs && !hasBoundBrandIDs && !hasBoundEventIDs) {
-      res.status(400).json({ error: 'content, images, location or binding fields is required' });
+    if (
+      !hasContent &&
+      !hasImages &&
+      !hasLocation &&
+      !hasBoundDjIDs &&
+      !hasBoundBrandIDs &&
+      !hasBoundEventIDs &&
+      !hasDisplayPublishedAt
+    ) {
+      res.status(400).json({ error: 'content, images, location, displayPublishedAt or binding fields is required' });
       return;
     }
 
@@ -2471,6 +2530,7 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
       boundDjIds?: string[];
       boundBrandIds?: string[];
       boundEventIds?: string[];
+      displayPublishedAt?: Date;
     } = {};
     if (hasContent) {
       updateData.content = nextContent;
@@ -2490,6 +2550,13 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
     }
     if (hasBoundEventIDs) {
       updateData.boundEventIds = normalizePostBindingIDs(boundEventIDs);
+    }
+    if (hasDisplayPublishedAt) {
+      const normalizedDisplayPublishedAt =
+        parsedDisplayPublishedAt && parsedDisplayPublishedAt !== 'invalid'
+          ? parsedDisplayPublishedAt
+          : null;
+      updateData.displayPublishedAt = normalizedDisplayPublishedAt || existing.createdAt;
     }
 
     const updated =

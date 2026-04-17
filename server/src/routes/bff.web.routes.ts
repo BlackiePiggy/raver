@@ -11,6 +11,9 @@ import spotifyArtistService, { SpotifyUpstreamError } from '../services/spotify-
 import discogsArtistService, { DiscogsUpstreamError } from '../services/discogs-artist.service';
 import soundcloudArtistService, { SoundCloudUpstreamError } from '../services/soundcloud-artist.service';
 import { verifyToken, type JWTPayload } from '../utils/auth';
+import {
+  normalizeCountryBiTextPayload,
+} from '../utils/country-i18n';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -96,6 +99,7 @@ const toNumber = (value: unknown): number | null => {
 type EventBiTextPayload = {
   en: string;
   zh: string;
+  enFull?: string;
 };
 
 type EventSocialLinkPayload = {
@@ -117,22 +121,33 @@ type EventImageAssetPayload = {
 
 const normalizeEventText = (value: unknown): string => {
   if (typeof value !== 'string') return '';
-  return value.trim();
+  const text = value.trim();
+  if (!text) return '';
+  if (/^\[object\s+object\]$/i.test(text)) return '';
+  return text;
 };
 
 const normalizeEventBiText = (value: unknown, fallback = ''): EventBiTextPayload | null => {
-  const fallbackText = fallback.trim();
+  const fallbackText = normalizeEventText(fallback);
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const row = value as Record<string, unknown>;
     const en = normalizeEventText(row.en ?? row.EN ?? row.english) || fallbackText;
     const zh = normalizeEventText(row.zh ?? row.ZH ?? row.cn ?? row.chinese) || en || fallbackText;
+    const enFull = normalizeEventText(
+      row.enFull
+      ?? row.en_full
+      ?? row.englishFull
+      ?? row.country_en_full
+    );
     const normalizedEn = en || zh || fallbackText;
     const normalizedZh = zh || en || fallbackText;
     if (!normalizedEn && !normalizedZh) return null;
-    return {
+    const out: EventBiTextPayload = {
       en: normalizedEn,
       zh: normalizedZh,
     };
+    if (enFull) out.enFull = enFull;
+    return out;
   }
 
   const plain = normalizeEventText(value) || fallbackText;
@@ -148,6 +163,273 @@ const normalizeDJBiText = (value: unknown, fallback = ''): EventBiTextPayload | 
 
 const resolveBiTextWithFallback = (value: unknown, fallback = ''): EventBiTextPayload | null =>
   normalizeEventBiText(value, fallback);
+
+const normalizeCountryBiText = (value: unknown, fallback = ''): EventBiTextPayload | null => {
+  const normalized = normalizeCountryBiTextPayload(value, fallback);
+  if (!normalized) return null;
+  return normalized;
+};
+
+const resolveCountryBiTextWithFallback = (value: unknown, fallback = ''): EventBiTextPayload | null =>
+  normalizeCountryBiText(value, fallback);
+
+const asEventLocationObject = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const EVENT_LOCATION_PROVIDERS = new Set(['amap', 'google', 'mapkit', 'mapbox', 'geoapify']);
+
+const normalizeEventLocationProvider = (value: unknown, fallback = 'amap'): string => {
+  const preferred = normalizeEventText(value).toLowerCase();
+  if (EVENT_LOCATION_PROVIDERS.has(preferred)) return preferred;
+  const fb = normalizeEventText(fallback).toLowerCase();
+  return EVENT_LOCATION_PROVIDERS.has(fb) ? fb : 'amap';
+};
+
+const normalizeEventLocationSourceMode = (value: unknown, fallback = 'manual_search'): string => {
+  const text = normalizeEventText(value);
+  if (!text) return fallback;
+  return text.slice(0, 64);
+};
+
+const normalizeEventLocationStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => normalizeEventText(item))
+    .filter((item) => item.length > 0)
+    .slice(0, 20);
+};
+
+const normalizeEventLocationProviderMeta = (
+  value: unknown,
+  provider: string,
+  providerPlaceId: string,
+  legacyPoiId: string,
+  legacyAdcode: string
+): Record<string, unknown> | null => {
+  const src = asEventLocationObject(value) || {};
+  const out: Record<string, unknown> = {};
+
+  const amapRaw = asEventLocationObject(src.amap);
+  const amapPoiId = normalizeEventText(amapRaw?.poiId) || legacyPoiId || (provider === 'amap' ? providerPlaceId : '');
+  const amapAdcode = normalizeEventText(amapRaw?.adcode) || legacyAdcode;
+  if (amapPoiId || amapAdcode) {
+    out.amap = {
+      ...(amapPoiId ? { poiId: amapPoiId } : {}),
+      ...(amapAdcode ? { adcode: amapAdcode } : {}),
+    };
+  }
+
+  const googleRaw = asEventLocationObject(src.google);
+  const googlePlaceId = normalizeEventText(googleRaw?.placeId) || (provider === 'google' ? providerPlaceId : '');
+  const googleTypes = normalizeEventLocationStringArray(googleRaw?.types);
+  if (googlePlaceId || googleTypes.length > 0) {
+    out.google = {
+      ...(googlePlaceId ? { placeId: googlePlaceId } : {}),
+      ...(googleTypes.length > 0 ? { types: googleTypes } : {}),
+    };
+  }
+
+  const mapkitRaw = asEventLocationObject(src.mapkit);
+  const mapkitIdentifier = normalizeEventText(mapkitRaw?.mapItemIdentifier) || (provider === 'mapkit' ? providerPlaceId : '');
+  if (mapkitIdentifier) {
+    out.mapkit = { mapItemIdentifier: mapkitIdentifier };
+  }
+
+  const mapboxRaw = asEventLocationObject(src.mapbox);
+  const mapboxPlaceId = normalizeEventText(mapboxRaw?.placeId) || (provider === 'mapbox' ? providerPlaceId : '');
+  const mapboxFeatureType = normalizeEventText(mapboxRaw?.featureType);
+  if (mapboxPlaceId || mapboxFeatureType) {
+    out.mapbox = {
+      ...(mapboxPlaceId ? { placeId: mapboxPlaceId } : {}),
+      ...(mapboxFeatureType ? { featureType: mapboxFeatureType } : {}),
+    };
+  }
+
+  const geoapifyRaw = asEventLocationObject(src.geoapify);
+  const geoapifyPlaceId = normalizeEventText(geoapifyRaw?.placeId) || (provider === 'geoapify' ? providerPlaceId : '');
+  const geoapifyFeatureType = normalizeEventText(geoapifyRaw?.featureType);
+  if (geoapifyPlaceId || geoapifyFeatureType) {
+    out.geoapify = {
+      ...(geoapifyPlaceId ? { placeId: geoapifyPlaceId } : {}),
+      ...(geoapifyFeatureType ? { featureType: geoapifyFeatureType } : {}),
+    };
+  }
+
+  return Object.keys(out).length > 0 ? out : null;
+};
+
+const normalizeEventLocationPointPayload = (
+  value: unknown,
+  fallback: unknown = null
+): Record<string, unknown> | null => {
+  const src = asEventLocationObject(value) || asEventLocationObject(fallback);
+  if (!src) return null;
+  const lng = toNumber((src.location as any)?.lng ?? src.lng ?? src.longitude);
+  const lat = toNumber((src.location as any)?.lat ?? src.lat ?? src.latitude);
+  if (lng === null || lat === null) return null;
+
+  const provider = normalizeEventLocationProvider(src.provider, 'amap');
+  const sourceMode = normalizeEventLocationSourceMode(src.sourceMode, 'manual_search');
+  const legacyPoiId = normalizeEventText(src.poiId);
+  const legacyAdcode = normalizeEventText(src.adcode);
+
+  const providerMetaPreview = asEventLocationObject(src.providerMeta) || {};
+  let providerPlaceId =
+    normalizeEventText(src.providerPlaceId)
+    || legacyPoiId
+    || normalizeEventText((asEventLocationObject(providerMetaPreview.amap) || {}).poiId)
+    || normalizeEventText((asEventLocationObject(providerMetaPreview.google) || {}).placeId)
+    || normalizeEventText((asEventLocationObject(providerMetaPreview.mapkit) || {}).mapItemIdentifier)
+    || normalizeEventText((asEventLocationObject(providerMetaPreview.mapbox) || {}).placeId)
+    || normalizeEventText((asEventLocationObject(providerMetaPreview.geoapify) || {}).placeId);
+  providerPlaceId = providerPlaceId.slice(0, 256);
+
+  const nameI18n = normalizeEventBiText(src.nameI18n ?? src.name, '');
+  const addressI18n = normalizeEventBiText(src.addressI18n ?? src.address, '');
+  const formattedAddressI18n = normalizeEventBiText(
+    src.formattedAddressI18n ?? src.formattedAddress ?? src.addressI18n ?? src.address,
+    ''
+  );
+
+  const countryCodeRaw = normalizeEventText(src.countryCode).toUpperCase();
+  const countryCode = countryCodeRaw.replace(/[^A-Z]/g, '').slice(0, 3);
+
+  const providerMeta = normalizeEventLocationProviderMeta(
+    src.providerMeta,
+    provider,
+    providerPlaceId,
+    legacyPoiId,
+    legacyAdcode
+  );
+  const amapMeta = asEventLocationObject(providerMeta?.amap);
+  const normalizedPoiId = normalizeEventText(amapMeta?.poiId) || legacyPoiId || (provider === 'amap' ? providerPlaceId : '');
+  const normalizedAdcode = normalizeEventText(amapMeta?.adcode) || legacyAdcode;
+
+  const selectedAtRaw = normalizeEventText(src.selectedAt);
+  const selectedAtDate = selectedAtRaw ? new Date(selectedAtRaw) : new Date();
+  const selectedAt = Number.isNaN(selectedAtDate.getTime()) ? new Date().toISOString() : selectedAtDate.toISOString();
+
+  return {
+    provider,
+    sourceMode,
+    providerPlaceId: providerPlaceId || null,
+    // Legacy alias kept for existing clients/modules.
+    poiId: normalizedPoiId || null,
+    location: {
+      lng: Number(lng),
+      lat: Number(lat),
+    },
+    nameI18n: nameI18n ?? { zh: '', en: '' },
+    addressI18n: addressI18n ?? { zh: '', en: '' },
+    formattedAddressI18n: formattedAddressI18n ?? { zh: '', en: '' },
+    city: normalizeEventText(src.city),
+    district: normalizeEventText(src.district),
+    province: normalizeEventText(src.province),
+    countryCode: countryCode || null,
+    i18nPending: !!src.i18nPending,
+    selectedAt,
+    providerMeta: providerMeta ?? null,
+    // Legacy alias kept for existing clients/modules.
+    adcode: normalizedAdcode || null,
+  };
+};
+
+const normalizeEventManualLocationPayload = (
+  value: unknown,
+  fallback: unknown = null
+): Record<string, unknown> | null => {
+  const src = asEventLocationObject(value) || asEventLocationObject(fallback);
+  if (!src) return null;
+
+  const detailAddressI18n = normalizeEventBiText(
+    src.detailAddressI18n
+      ?? src.detail_address_i18n
+      ?? src.detailAddress
+      ?? src.detail_address
+      ?? src.addressI18n
+      ?? src.address,
+    ''
+  );
+  const formattedAddressI18n = normalizeEventBiText(
+    src.formattedAddressI18n
+      ?? src.formattedAddress
+      ?? detailAddressI18n,
+    ''
+  );
+
+  const hasDetail =
+    !!detailAddressI18n
+    && !!(normalizeEventText(detailAddressI18n.zh) || normalizeEventText(detailAddressI18n.en));
+  const hasFormatted =
+    !!formattedAddressI18n
+    && !!(normalizeEventText(formattedAddressI18n.zh) || normalizeEventText(formattedAddressI18n.en));
+  if (!hasDetail && !hasFormatted) {
+    return null;
+  }
+
+  const selectedAtRaw = normalizeEventText(src.selectedAt);
+  const selectedAtDate = selectedAtRaw ? new Date(selectedAtRaw) : new Date();
+  const selectedAt = Number.isNaN(selectedAtDate.getTime()) ? new Date().toISOString() : selectedAtDate.toISOString();
+
+  return {
+    detailAddressI18n: detailAddressI18n ?? { zh: '', en: '' },
+    formattedAddressI18n: formattedAddressI18n ?? { zh: '', en: '' },
+    selectedAt,
+  };
+};
+
+const joinEventAddressComponents = (values: Array<unknown>): string => {
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  for (const raw of values) {
+    const text = normalizeEventText(raw);
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parts.push(text);
+  }
+  return parts.join(' · ');
+};
+
+const mergeManualLocationFormattedWithBaseI18n = (
+  manualLocation: Record<string, unknown> | null,
+  cityI18n: EventBiTextPayload | null,
+  countryI18n: EventBiTextPayload | null
+): Record<string, unknown> | null => {
+  if (!manualLocation) return null;
+  const detailAddressI18n = normalizeEventBiText((manualLocation as any).detailAddressI18n ?? null, '');
+  const formattedAddressI18n = normalizeEventBiText((manualLocation as any).formattedAddressI18n ?? null, '');
+
+  const detailZh = normalizeEventText(detailAddressI18n?.zh ?? detailAddressI18n?.en ?? '');
+  const detailEn = normalizeEventText(detailAddressI18n?.en ?? detailAddressI18n?.zh ?? '');
+  const cityZh = normalizeEventText(cityI18n?.zh ?? cityI18n?.en ?? '');
+  const cityEn = normalizeEventText(cityI18n?.en ?? cityI18n?.zh ?? '');
+  const countryZh = normalizeEventText(countryI18n?.zh ?? countryI18n?.en ?? '');
+  const countryEn = normalizeEventText(countryI18n?.enFull ?? countryI18n?.en ?? countryI18n?.zh ?? '');
+
+  const derivedZh = joinEventAddressComponents([detailZh, cityZh, countryZh]);
+  const derivedEn = joinEventAddressComponents([detailEn, cityEn, countryEn]);
+  const rawZh = normalizeEventText(formattedAddressI18n?.zh ?? '');
+  const rawEn = normalizeEventText(formattedAddressI18n?.en ?? '');
+
+  const shouldRepairZh = !!derivedZh && (!rawZh || (rawEn && rawZh.toLowerCase() === rawEn.toLowerCase()));
+  const shouldRepairEn = !!derivedEn && !rawEn;
+
+  const nextZh = shouldRepairZh ? derivedZh : (rawZh || derivedZh || rawEn);
+  const nextEn = shouldRepairEn ? derivedEn : (rawEn || derivedEn || rawZh);
+  if (!nextZh && !nextEn) return manualLocation;
+
+  return {
+    ...manualLocation,
+    formattedAddressI18n: {
+      zh: nextZh || nextEn,
+      en: nextEn || nextZh,
+    },
+  };
+};
 
 const parseEventReferenceLinks = (value: unknown): string[] => {
   const list = Array.isArray(value)
@@ -1152,6 +1434,54 @@ const deleteOssObjects = async (keys: string[]): Promise<void> => {
   }
 };
 
+const listOssObjectKeysByPrefix = async (prefix: string): Promise<string[]> => {
+  if (!postMediaOssClient) return [];
+  const safePrefix = String(prefix || '').trim();
+  if (!safePrefix) return [];
+
+  const keys: string[] = [];
+  let marker: string | undefined;
+
+  do {
+    let listed:
+      | {
+          objects?: Array<{ name?: string }>;
+          nextMarker?: string;
+          isTruncated?: boolean;
+        }
+      | undefined;
+
+    try {
+      listed = await postMediaOssClient.list(
+        {
+          prefix: safePrefix,
+          marker,
+          'max-keys': 1000,
+        },
+        {}
+      );
+    } catch (error) {
+      console.error('BFF web list OSS folder by prefix error:', error);
+      return keys;
+    }
+
+    const objects = Array.isArray(listed?.objects) ? listed.objects : [];
+    for (const item of objects) {
+      if (item?.name) {
+        keys.push(item.name);
+      }
+    }
+
+    if (listed?.isTruncated && listed.nextMarker) {
+      marker = listed.nextMarker;
+    } else {
+      marker = undefined;
+    }
+  } while (marker);
+
+  return keys;
+};
+
 const deleteSingleEventOssObjectIfOwned = async (url: string | null | undefined, eventId: string): Promise<void> => {
   if (!postMediaOssClient || !url) return;
   const objectKey = parseOssObjectKeyFromUrl(url);
@@ -1188,6 +1518,16 @@ const deleteSingleRatingOssObjectIfOwned = async (url: string | null | undefined
   const objectKey = parseOssObjectKeyFromUrl(url);
   if (!objectKey || !isRatingOssObjectKey(objectKey)) return;
   await deleteOssObjects([objectKey]);
+};
+
+const isFeedNewsOssObjectKey = (objectKey: string): boolean =>
+  objectKey.startsWith(`${ossPostsPrefix}/news/`);
+
+const listFeedDraftOssKeys = async (newsKey: string): Promise<string[]> => {
+  const safeNewsKey = sanitizeOssPathSegment(newsKey);
+  if (!safeNewsKey) return [];
+  const prefix = `${ossPostsPrefix}/news/draft-${safeNewsKey}/`;
+  return listOssObjectKeysByPrefix(prefix);
 };
 
 const deleteEventOssFolder = async (eventId: string): Promise<void> => {
@@ -2129,8 +2469,8 @@ const mapDJ = (
     ? resolveBiTextWithFallback(row.bioI18n ?? null, row.bio ?? '')
     : (row.bioI18n ? resolveBiTextWithFallback(row.bioI18n, '') : null);
   const countryI18n = row.country
-    ? resolveBiTextWithFallback(row.countryI18n ?? null, row.country ?? '')
-    : (row.countryI18n ? resolveBiTextWithFallback(row.countryI18n, '') : null);
+    ? resolveCountryBiTextWithFallback(row.countryI18n ?? null, row.country ?? '')
+    : (row.countryI18n ? resolveCountryBiTextWithFallback(row.countryI18n, '') : null);
   const contributorInfo = contributorInfoFromRow(row);
   const statsInfo = statsInfoFromRow(row);
   const contributorUsernames = contributorInfo.usernames;
@@ -2343,7 +2683,7 @@ const mapWikiFestival = (
   const nameI18n = resolveBiTextWithFallback(row?.nameI18n ?? null, row?.name ?? '');
   const descriptionI18n = resolveBiTextWithFallback(row?.descriptionI18n ?? null, row?.introduction ?? '');
   const cityI18n = resolveBiTextWithFallback(row?.cityI18n ?? null, row?.city ?? '');
-  const countryI18n = resolveBiTextWithFallback(row?.countryI18n ?? null, row?.country ?? '');
+  const countryI18n = resolveCountryBiTextWithFallback(row?.countryI18n ?? null, row?.country ?? '');
   const frequencyI18n = resolveBiTextWithFallback(row?.frequencyI18n ?? null, row?.frequency ?? '');
   const links = mergeWikiFestivalLinks(parseWikiFestivalLinks(row?.links), {
     officialWebsite: row?.officialWebsite ?? null,
@@ -2389,96 +2729,119 @@ const mapWikiFestival = (
   };
 };
 
-const mapEvent = (row: any) => ({
-  id: row.id,
-  name: row.name,
-  nameI18n: row.nameI18n ?? null,
-  wikiFestivalId: row.wikiFestivalId ?? null,
-  slug: row.slug,
-  archiveFestivalId: row.archiveFestivalId ?? null,
-  description: row.description,
-  descriptionI18n: row.descriptionI18n ?? null,
-  locationI18n: row.locationI18n ?? null,
-  countryI18n: row.countryI18n ?? null,
-  coverImageUrl: row.coverImageUrl,
-  lineupImageUrl: row.lineupImageUrl,
-  imageAssets: row.imageAssets ?? null,
-  referenceLinks: Array.isArray(row.referenceLinks) ? row.referenceLinks : [],
-  socialLinks: row.socialLinks ?? null,
-  sourceProvider: row.sourceProvider ?? null,
-  sourceEventUrl: row.sourceEventUrl ?? null,
-  eventType: row.eventType,
-  organizerName: row.organizerName,
-  venueName: row.venueName,
-  venueAddress: row.venueAddress,
-  city: row.city,
-  country: row.country,
-  latitude: toNumber(row.latitude),
-  longitude: toNumber(row.longitude),
-  startDate: row.startDate,
-  endDate: row.endDate,
-  dayRolloverHour: row.dayRolloverHour ?? 6,
-  ticketUrl: row.ticketUrl,
-  ticketPriceMin: toNumber(row.ticketPriceMin),
-  ticketPriceMax: toNumber(row.ticketPriceMax),
-  ticketCurrency: row.ticketCurrency,
-  ticketNotes: row.ticketNotes,
-  officialWebsite: row.officialWebsite,
-  status: resolveEventStatus(new Date(row.startDate), new Date(row.endDate), row.status),
-  isVerified: row.isVerified,
-  createdAt: row.createdAt,
-  updatedAt: row.updatedAt,
-  organizer: mapUserLite(row.organizer),
-  wikiFestival: row.wikiFestival
-    ? {
-        id: row.wikiFestival.id,
-        name: row.wikiFestival.name,
-        nameI18n: row.wikiFestival.nameI18n ?? null,
-        country: row.wikiFestival.country,
-        countryI18n: row.wikiFestival.countryI18n ?? null,
-        city: row.wikiFestival.city,
-        cityI18n: row.wikiFestival.cityI18n ?? null,
-        avatarUrl: row.wikiFestival.avatarUrl ?? null,
-        backgroundUrl: row.wikiFestival.backgroundUrl ?? null,
-      }
-    : null,
-  ticketTiers: Array.isArray(row.ticketTiers)
-    ? row.ticketTiers.map((tier: any) => ({
-        id: tier.id,
-        name: tier.name,
-        price: toNumber(tier.price),
-        currency: tier.currency,
-        sortOrder: tier.sortOrder,
-      }))
-    : [],
-  lineupSlots: Array.isArray(row.lineupSlots)
-    ? row.lineupSlots.map((slot: any) => ({
-        id: slot.id,
-        eventId: slot.eventId,
-        djId: slot.djId,
-        djIds: Array.isArray(slot.djIds) ? slot.djIds : (slot.djId ? [slot.djId] : []),
-        djName: slot.djName,
-        festivalDayIndex: typeof slot.festivalDayIndex === 'number' ? slot.festivalDayIndex : null,
-        stageName: slot.stageName,
-        sortOrder: slot.sortOrder,
-        startTime: slot.startTime,
-        endTime: slot.endTime,
-        dj: slot.dj
-          ? {
-              id: slot.dj.id,
-              name: slot.dj.name,
-              avatarUrl: slot.dj.avatarUrl,
-              avatarOriginalUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'original'),
-              avatarMediumUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'medium'),
-              avatarSmallUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'small'),
-              bannerUrl: slot.dj.bannerUrl,
-              country: slot.dj.country,
-              soundCloudFollowers: slot.dj.soundCloudFollowers ?? null,
-            }
-          : null,
-      }))
-    : [],
-});
+const mapEvent = (row: any) => {
+  const latitude = toNumber(row.latitude);
+  const longitude = toNumber(row.longitude);
+  const locationFallback =
+    latitude !== null && longitude !== null
+      ? {
+          provider: 'amap',
+          sourceMode: 'legacy_coords',
+          location: { lng: longitude, lat: latitude },
+          nameI18n: row.city ?? row.name ?? '',
+          addressI18n: '',
+          formattedAddressI18n: '',
+          city: row.city ?? '',
+          countryCode: row.country ?? '',
+        }
+      : null;
+  const cityI18n = normalizeEventBiText(row.cityI18n ?? null, row.city ?? '');
+  const countryI18n = normalizeCountryBiText(row.countryI18n ?? null, row.country ?? '');
+  const manualLocationRaw = normalizeEventManualLocationPayload(row.manualLocation ?? null);
+  const manualLocation = mergeManualLocationFormattedWithBaseI18n(manualLocationRaw, cityI18n, countryI18n);
+  const locationPoint = normalizeEventLocationPointPayload(row.locationPoint ?? null, locationFallback);
+
+  return {
+    id: row.id,
+    name: row.name,
+    nameI18n: row.nameI18n ?? null,
+    wikiFestivalId: row.wikiFestivalId ?? null,
+    slug: row.slug,
+    archiveFestivalId: row.archiveFestivalId ?? null,
+    description: row.description,
+    descriptionI18n: row.descriptionI18n ?? null,
+    countryI18n: countryI18n ?? null,
+    cityI18n: cityI18n ?? null,
+    coverImageUrl: row.coverImageUrl,
+    lineupImageUrl: row.lineupImageUrl,
+    imageAssets: row.imageAssets ?? null,
+    referenceLinks: Array.isArray(row.referenceLinks) ? row.referenceLinks : [],
+    socialLinks: row.socialLinks ?? null,
+    sourceProvider: row.sourceProvider ?? null,
+    sourceEventUrl: row.sourceEventUrl ?? null,
+    eventType: row.eventType,
+    organizerName: row.organizerName,
+    city: row.city,
+    country: row.country,
+    manualLocation: manualLocation ?? null,
+    locationPoint: locationPoint ?? null,
+    latitude,
+    longitude,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    dayRolloverHour: row.dayRolloverHour ?? 6,
+    ticketUrl: row.ticketUrl,
+    ticketPriceMin: toNumber(row.ticketPriceMin),
+    ticketPriceMax: toNumber(row.ticketPriceMax),
+    ticketCurrency: row.ticketCurrency,
+    ticketNotes: row.ticketNotes,
+    officialWebsite: row.officialWebsite,
+    status: resolveEventStatus(new Date(row.startDate), new Date(row.endDate), row.status),
+    isVerified: row.isVerified,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    organizer: mapUserLite(row.organizer),
+    wikiFestival: row.wikiFestival
+      ? {
+          id: row.wikiFestival.id,
+          name: row.wikiFestival.name,
+          nameI18n: row.wikiFestival.nameI18n ?? null,
+          country: row.wikiFestival.country,
+          countryI18n: row.wikiFestival.countryI18n ?? null,
+          city: row.wikiFestival.city,
+          cityI18n: row.wikiFestival.cityI18n ?? null,
+          avatarUrl: row.wikiFestival.avatarUrl ?? null,
+          backgroundUrl: row.wikiFestival.backgroundUrl ?? null,
+        }
+      : null,
+    ticketTiers: Array.isArray(row.ticketTiers)
+      ? row.ticketTiers.map((tier: any) => ({
+          id: tier.id,
+          name: tier.name,
+          price: toNumber(tier.price),
+          currency: tier.currency,
+          sortOrder: tier.sortOrder,
+        }))
+      : [],
+    lineupSlots: Array.isArray(row.lineupSlots)
+      ? row.lineupSlots.map((slot: any) => ({
+          id: slot.id,
+          eventId: slot.eventId,
+          djId: slot.djId,
+          djIds: Array.isArray(slot.djIds) ? slot.djIds : (slot.djId ? [slot.djId] : []),
+          djName: slot.djName,
+          festivalDayIndex: typeof slot.festivalDayIndex === 'number' ? slot.festivalDayIndex : null,
+          stageName: slot.stageName,
+          sortOrder: slot.sortOrder,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          dj: slot.dj
+            ? {
+                id: slot.dj.id,
+                name: slot.dj.name,
+                avatarUrl: slot.dj.avatarUrl,
+                avatarOriginalUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'original'),
+                avatarMediumUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'medium'),
+                avatarSmallUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'small'),
+                bannerUrl: slot.dj.bannerUrl,
+                country: slot.dj.country,
+                soundCloudFollowers: slot.dj.soundCloudFollowers ?? null,
+              }
+            : null,
+        }))
+      : [],
+  };
+};
 
 const mapTrack = (track: any) => ({
   id: track.id,
@@ -3146,17 +3509,21 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
         { slug: { contains: search, mode: 'insensitive' } },
         { city: { contains: search, mode: 'insensitive' } },
         { country: { contains: search, mode: 'insensitive' } },
-        { venueName: { contains: search, mode: 'insensitive' } },
         { organizerName: { contains: search, mode: 'insensitive' } },
         { wikiFestivalId: { contains: search, mode: 'insensitive' } },
         { nameI18n: { path: ['zh'], string_contains: search } },
         { nameI18n: { path: ['en'], string_contains: search } },
         { descriptionI18n: { path: ['zh'], string_contains: search } },
         { descriptionI18n: { path: ['en'], string_contains: search } },
-        { locationI18n: { path: ['zh'], string_contains: search } },
-        { locationI18n: { path: ['en'], string_contains: search } },
+        { manualLocation: { path: ['detailAddressI18n', 'zh'], string_contains: search } },
+        { manualLocation: { path: ['detailAddressI18n', 'en'], string_contains: search } },
+        { manualLocation: { path: ['formattedAddressI18n', 'zh'], string_contains: search } },
+        { manualLocation: { path: ['formattedAddressI18n', 'en'], string_contains: search } },
+        { cityI18n: { path: ['zh'], string_contains: search } },
+        { cityI18n: { path: ['en'], string_contains: search } },
         { countryI18n: { path: ['zh'], string_contains: search } },
         { countryI18n: { path: ['en'], string_contains: search } },
+        { countryI18n: { path: ['enFull'], string_contains: search } },
       ];
     }
     if (city) where.city = city;
@@ -3448,21 +3815,53 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         ? body.sourceEventUrl.trim()
         : null;
 
-    const locationSeed =
-      (typeof body.location === 'string' && body.location.trim()) ||
-      (typeof body.venueName === 'string' && body.venueName.trim()) ||
-      (typeof body.city === 'string' && body.city.trim()) ||
-      '';
+    const citySeed = typeof body.city === 'string' ? body.city : '';
     const countrySeed = typeof body.country === 'string' ? body.country : '';
     const descriptionSeed = typeof body.description === 'string' ? body.description : '';
 
     const nameI18n = normalizeEventBiText(body.nameI18n, name);
-    const locationI18n = normalizeEventBiText(body.locationI18n, locationSeed);
-    const countryI18n = normalizeEventBiText(body.countryI18n, countrySeed);
+    const cityI18n = normalizeEventBiText(body.cityI18n ?? body.city_i18n, citySeed);
+    const countryI18n = normalizeCountryBiText(body.countryI18n ?? body.country_i18n, countrySeed);
     const descriptionI18n = normalizeEventBiText(body.descriptionI18n, descriptionSeed);
     const referenceLinks = parseEventReferenceLinks(body.referenceLinks ?? body.relatedLinks);
     const socialLinks = parseEventSocialLinks(body.socialLinks);
     const imageAssets = parseEventImageAssets(body.imageAssets);
+    const rawManualLocation = Object.prototype.hasOwnProperty.call(body, 'manualLocation')
+      ? body.manualLocation
+      : body.manual_location;
+    const manualLocationFallback = {
+      detailAddressI18n: body.detailAddressI18n ?? body.addressI18n ?? null,
+      formattedAddressI18n: body.formattedAddressI18n ?? null,
+    };
+    const manualLocation = normalizeEventManualLocationPayload(rawManualLocation ?? null, manualLocationFallback);
+    if (rawManualLocation !== undefined && rawManualLocation !== null && !manualLocation) {
+      res.status(400).json({ error: 'Invalid manualLocation payload' });
+      return;
+    }
+    const rawLocationPoint = Object.prototype.hasOwnProperty.call(body, 'locationPoint')
+      ? body.locationPoint
+      : body.location_point;
+    const locationPoint = normalizeEventLocationPointPayload(rawLocationPoint ?? null);
+    if (rawLocationPoint !== undefined && rawLocationPoint !== null && !locationPoint) {
+      res.status(400).json({ error: 'Invalid locationPoint payload' });
+      return;
+    }
+    const hasLatitudeField = Object.prototype.hasOwnProperty.call(body, 'latitude');
+    const hasLongitudeField = Object.prototype.hasOwnProperty.call(body, 'longitude');
+    const latitudeInput = hasLatitudeField ? toNumber(body.latitude) : null;
+    const longitudeInput = hasLongitudeField ? toNumber(body.longitude) : null;
+    const locationPointLatitude = toNumber((locationPoint?.location as any)?.lat);
+    const locationPointLongitude = toNumber((locationPoint?.location as any)?.lng);
+    const resolvedCity =
+      normalizeEventText(typeof body.city === 'string' ? body.city : null)
+      || normalizeEventText(cityI18n?.zh)
+      || normalizeEventText(cityI18n?.en)
+      || null;
+    const resolvedCountry =
+      normalizeEventText(typeof body.country === 'string' ? body.country : null)
+      || normalizeEventText(countryI18n?.en)
+      || normalizeEventText(countryI18n?.zh)
+      || null;
 
     if (wikiFestivalIdInput) {
       const brand = await prisma.wikiFestival.findUnique({
@@ -3502,7 +3901,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         archiveFestivalId: archiveFestivalIdInput,
         description: typeof body.description === 'string' ? body.description : null,
         descriptionI18n: descriptionI18n ? (descriptionI18n as unknown as Prisma.InputJsonValue) : undefined,
-        locationI18n: locationI18n ? (locationI18n as unknown as Prisma.InputJsonValue) : undefined,
+        cityI18n: cityI18n ? (cityI18n as unknown as Prisma.InputJsonValue) : undefined,
         countryI18n: countryI18n ? (countryI18n as unknown as Prisma.InputJsonValue) : undefined,
         coverImageUrl: coverImageUrlInput,
         lineupImageUrl: lineupImageUrlInput,
@@ -3513,12 +3912,12 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         sourceEventUrl: sourceEventUrlInput,
         eventType: typeof body.eventType === 'string' ? body.eventType : null,
         organizerName: typeof body.organizerName === 'string' ? body.organizerName : null,
-        venueName: typeof body.venueName === 'string' ? body.venueName : null,
-        venueAddress: typeof body.venueAddress === 'string' ? body.venueAddress : null,
-        city: typeof body.city === 'string' ? body.city : null,
-        country: typeof body.country === 'string' ? body.country : null,
-        latitude: toNumber(body.latitude),
-        longitude: toNumber(body.longitude),
+        city: resolvedCity,
+        country: resolvedCountry,
+        manualLocation: manualLocation ? (manualLocation as unknown as Prisma.InputJsonValue) : undefined,
+        locationPoint: locationPoint ? (locationPoint as unknown as Prisma.InputJsonValue) : undefined,
+        latitude: latitudeInput ?? locationPointLatitude,
+        longitude: longitudeInput ?? locationPointLongitude,
         startDate: parsedStartDate,
         endDate: parsedEndDate,
         dayRolloverHour,
@@ -3622,14 +4021,22 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       || Object.prototype.hasOwnProperty.call(body, 'brandId');
     const hasNameI18nField = Object.prototype.hasOwnProperty.call(body, 'nameI18n');
     const hasDescriptionI18nField = Object.prototype.hasOwnProperty.call(body, 'descriptionI18n');
-    const hasLocationI18nField = Object.prototype.hasOwnProperty.call(body, 'locationI18n');
-    const hasCountryI18nField = Object.prototype.hasOwnProperty.call(body, 'countryI18n');
+    const hasCityI18nField = Object.prototype.hasOwnProperty.call(body, 'cityI18n')
+      || Object.prototype.hasOwnProperty.call(body, 'city_i18n');
+    const hasCountryI18nField = Object.prototype.hasOwnProperty.call(body, 'countryI18n')
+      || Object.prototype.hasOwnProperty.call(body, 'country_i18n');
     const hasReferenceLinksField = Object.prototype.hasOwnProperty.call(body, 'referenceLinks')
       || Object.prototype.hasOwnProperty.call(body, 'relatedLinks');
     const hasSocialLinksField = Object.prototype.hasOwnProperty.call(body, 'socialLinks');
     const hasImageAssetsField = Object.prototype.hasOwnProperty.call(body, 'imageAssets');
     const hasSourceProviderField = Object.prototype.hasOwnProperty.call(body, 'sourceProvider');
     const hasSourceEventUrlField = Object.prototype.hasOwnProperty.call(body, 'sourceEventUrl');
+    const hasManualLocationField = Object.prototype.hasOwnProperty.call(body, 'manualLocation')
+      || Object.prototype.hasOwnProperty.call(body, 'manual_location');
+    const hasLocationPointField = Object.prototype.hasOwnProperty.call(body, 'locationPoint')
+      || Object.prototype.hasOwnProperty.call(body, 'location_point');
+    const hasLatitudeField = Object.prototype.hasOwnProperty.call(body, 'latitude');
+    const hasLongitudeField = Object.prototype.hasOwnProperty.call(body, 'longitude');
 
     const nextCoverImageUrl =
       hasCoverImageField
@@ -3661,17 +4068,13 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
 
     const updateName = typeof body.name === 'string' ? body.name : '';
     const updateDescription = typeof body.description === 'string' ? body.description : '';
-    const updateLocationSeed =
-      (typeof body.location === 'string' && body.location.trim())
-      || (typeof body.venueName === 'string' && body.venueName.trim())
-      || (typeof body.city === 'string' && body.city.trim())
-      || '';
+    const updateCitySeed = typeof body.city === 'string' ? body.city : '';
     const updateCountrySeed = typeof body.country === 'string' ? body.country : '';
 
     const nextNameI18n = hasNameI18nField ? normalizeEventBiText(body.nameI18n, updateName) : null;
     const nextDescriptionI18n = hasDescriptionI18nField ? normalizeEventBiText(body.descriptionI18n, updateDescription) : null;
-    const nextLocationI18n = hasLocationI18nField ? normalizeEventBiText(body.locationI18n, updateLocationSeed) : null;
-    const nextCountryI18n = hasCountryI18nField ? normalizeEventBiText(body.countryI18n, updateCountrySeed) : null;
+    const nextCityI18n = hasCityI18nField ? normalizeEventBiText(body.cityI18n ?? body.city_i18n, updateCitySeed) : null;
+    const nextCountryI18n = hasCountryI18nField ? normalizeCountryBiText(body.countryI18n ?? body.country_i18n, updateCountrySeed) : null;
     const nextReferenceLinks = hasReferenceLinksField ? parseEventReferenceLinks(body.referenceLinks ?? body.relatedLinks) : null;
     const nextSocialLinks = hasSocialLinksField ? parseEventSocialLinks(body.socialLinks) : null;
     const nextImageAssets = hasImageAssetsField ? parseEventImageAssets(body.imageAssets) : null;
@@ -3683,6 +4086,48 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       hasSourceEventUrlField
         ? (typeof body.sourceEventUrl === 'string' && body.sourceEventUrl.trim() ? body.sourceEventUrl.trim() : null)
         : undefined;
+    const rawManualLocation = hasManualLocationField
+      ? (Object.prototype.hasOwnProperty.call(body, 'manualLocation') ? body.manualLocation : body.manual_location)
+      : undefined;
+    const manualLocationFallback = {
+      detailAddressI18n: body.detailAddressI18n ?? body.addressI18n ?? null,
+      formattedAddressI18n: body.formattedAddressI18n ?? null,
+    };
+    const nextManualLocation = hasManualLocationField
+      ? normalizeEventManualLocationPayload(rawManualLocation ?? null, manualLocationFallback)
+      : null;
+    if (hasManualLocationField && rawManualLocation !== null && rawManualLocation !== undefined && !nextManualLocation) {
+      res.status(400).json({ error: 'Invalid manualLocation payload' });
+      return;
+    }
+    const rawLocationPoint = hasLocationPointField
+      ? (Object.prototype.hasOwnProperty.call(body, 'locationPoint') ? body.locationPoint : body.location_point)
+      : undefined;
+    const nextLocationPoint = hasLocationPointField
+      ? normalizeEventLocationPointPayload(rawLocationPoint ?? null)
+      : null;
+    if (hasLocationPointField && rawLocationPoint !== null && rawLocationPoint !== undefined && !nextLocationPoint) {
+      res.status(400).json({ error: 'Invalid locationPoint payload' });
+      return;
+    }
+    const nextLatitude = hasLatitudeField
+      ? toNumber(body.latitude)
+      : (hasLocationPointField ? toNumber((nextLocationPoint?.location as any)?.lat) : undefined);
+    const nextLongitude = hasLongitudeField
+      ? toNumber(body.longitude)
+      : (hasLocationPointField ? toNumber((nextLocationPoint?.location as any)?.lng) : undefined);
+    const cityFromBody = Object.prototype.hasOwnProperty.call(body, 'city')
+      ? normalizeEventText(typeof body.city === 'string' ? body.city : null)
+      : null;
+    const countryFromBody = Object.prototype.hasOwnProperty.call(body, 'country')
+      ? normalizeEventText(typeof body.country === 'string' ? body.country : null)
+      : null;
+    const cityFromI18n = hasCityI18nField
+      ? (normalizeEventText(nextCityI18n?.zh) || normalizeEventText(nextCityI18n?.en))
+      : null;
+    const countryFromI18n = hasCountryI18nField
+      ? (normalizeEventText(nextCountryI18n?.en) || normalizeEventText(nextCountryI18n?.zh))
+      : null;
 
     const parsedStartDate = body.startDate !== undefined ? parseDateInput(body.startDate) : null;
     const parsedEndDate = body.endDate !== undefined ? parseDateInput(body.endDate) : null;
@@ -3732,11 +4177,11 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         descriptionI18n: hasDescriptionI18nField
           ? (nextDescriptionI18n ? (nextDescriptionI18n as unknown as Prisma.InputJsonValue) : undefined)
           : undefined,
-        locationI18n: hasLocationI18nField
-          ? (nextLocationI18n ? (nextLocationI18n as unknown as Prisma.InputJsonValue) : undefined)
+        cityI18n: hasCityI18nField
+          ? (nextCityI18n ? (nextCityI18n as unknown as Prisma.InputJsonValue) : Prisma.DbNull)
           : undefined,
         countryI18n: hasCountryI18nField
-          ? (nextCountryI18n ? (nextCountryI18n as unknown as Prisma.InputJsonValue) : undefined)
+          ? (nextCountryI18n ? (nextCountryI18n as unknown as Prisma.InputJsonValue) : Prisma.DbNull)
           : undefined,
         coverImageUrl: nextCoverImageUrl,
         lineupImageUrl: nextLineupImageUrl,
@@ -3753,12 +4198,24 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         sourceEventUrl: nextSourceEventUrl,
         eventType: typeof body.eventType === 'string' ? body.eventType : undefined,
         organizerName: typeof body.organizerName === 'string' ? body.organizerName : undefined,
-        venueName: typeof body.venueName === 'string' ? body.venueName : undefined,
-        venueAddress: typeof body.venueAddress === 'string' ? body.venueAddress : undefined,
-        city: typeof body.city === 'string' ? body.city : undefined,
-        country: typeof body.country === 'string' ? body.country : undefined,
-        latitude: body.latitude !== undefined ? toNumber(body.latitude) : undefined,
-        longitude: body.longitude !== undefined ? toNumber(body.longitude) : undefined,
+        city: cityFromBody !== null
+          ? cityFromBody
+          : (hasCityI18nField ? (cityFromI18n || null) : undefined),
+        country: countryFromBody !== null
+          ? countryFromBody
+          : (hasCountryI18nField ? (countryFromI18n || null) : undefined),
+        manualLocation: hasManualLocationField
+          ? (nextManualLocation ? (nextManualLocation as unknown as Prisma.InputJsonValue) : Prisma.DbNull)
+          : undefined,
+        locationPoint: hasLocationPointField
+          ? (nextLocationPoint ? (nextLocationPoint as unknown as Prisma.InputJsonValue) : Prisma.DbNull)
+          : undefined,
+        latitude: hasLatitudeField
+          ? nextLatitude
+          : (hasLocationPointField ? (nextLatitude ?? null) : undefined),
+        longitude: hasLongitudeField
+          ? nextLongitude
+          : (hasLocationPointField ? (nextLongitude ?? null) : undefined),
         startDate: body.startDate !== undefined ? parsedStartDate ?? undefined : undefined,
         endDate: body.endDate !== undefined ? parsedEndDate ?? undefined : undefined,
         dayRolloverHour: body.dayRolloverHour !== undefined ? nextDayRolloverHour : undefined,
@@ -4087,6 +4544,56 @@ router.post('/feed/upload-video', optionalAuth, feedVideoUpload.single('video'),
     ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload feed video error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/feed/draft-media/cleanup', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const payload = (req.body && typeof req.body === 'object' && !Array.isArray(req.body))
+      ? (req.body as Record<string, unknown>)
+      : {};
+
+    const newsKeyRaw = typeof payload.newsKey === 'string' ? payload.newsKey.trim() : '';
+    const rawUrls = Array.isArray(payload.urls) ? payload.urls : [];
+    const urls = rawUrls
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter(Boolean);
+
+    const keys = new Set<string>();
+
+    if (newsKeyRaw) {
+      const folderKeys = await listFeedDraftOssKeys(newsKeyRaw);
+      for (const key of folderKeys) {
+        if (isFeedNewsOssObjectKey(key)) {
+          keys.add(key);
+        }
+      }
+    }
+
+    for (const url of urls) {
+      const objectKey = parseOssObjectKeyFromUrl(url);
+      if (!objectKey) continue;
+      if (!isFeedNewsOssObjectKey(objectKey)) continue;
+      keys.add(objectKey);
+    }
+
+    const toDelete = Array.from(keys);
+    if (toDelete.length > 0) {
+      await deleteOssObjects(toDelete);
+    }
+
+    ok(res, {
+      deleted: toDelete.length,
+      byNewsKey: Boolean(newsKeyRaw),
+      byUrlCount: urls.length,
+    });
+  } catch (error) {
+    console.error('BFF web cleanup feed draft media error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -4853,7 +5360,7 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
           bio: requestedBio || target.bio || derivedBio || null,
           bioI18n: (normalizeDJBiText(target.bioI18n ?? null, requestedBio || target.bio || derivedBio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: requestedCountry || target.country || null,
-          countryI18n: (normalizeDJBiText(target.countryI18n ?? null, requestedCountry || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+          countryI18n: (normalizeCountryBiText(target.countryI18n ?? null, requestedCountry || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyId: spotifyArtist.id,
           spotifyFollowers: hasSpotifyFollowersInput ? requestedSpotifyFollowers : derivedSpotifyFollowers,
           followerCount: spotifyArtist.followers || target.followerCount || 0,
@@ -4889,7 +5396,7 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
           bio: requestedBio || derivedBio || null,
           bioI18n: (normalizeDJBiText(payload.bioI18n ?? null, requestedBio || derivedBio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: requestedCountry || null,
-          countryI18n: (normalizeDJBiText(payload.countryI18n ?? null, requestedCountry || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+          countryI18n: (normalizeCountryBiText(payload.countryI18n ?? null, requestedCountry || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyId: spotifyArtist.id,
           spotifyFollowers: hasSpotifyFollowersInput ? requestedSpotifyFollowers : derivedSpotifyFollowers,
           followerCount: spotifyArtist.followers || 0,
@@ -5142,7 +5649,7 @@ router.post('/djs/discogs/import', optionalAuth, async (req: Request, res: Respo
           bio: requestedBio || target.bio || derivedBio || null,
           bioI18n: (normalizeDJBiText(target.bioI18n ?? null, requestedBio || target.bio || derivedBio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: requestedCountry || target.country || null,
-          countryI18n: (normalizeDJBiText(target.countryI18n ?? null, requestedCountry || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+          countryI18n: (normalizeCountryBiText(target.countryI18n ?? null, requestedCountry || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyId: requestedSpotifyId || target.spotifyId || null,
           spotifyFollowers: hasSpotifyFollowersInput ? requestedSpotifyFollowers : (target.spotifyFollowers ?? null),
           instagramUrl: requestedInstagram || target.instagramUrl || derivedInstagram || null,
@@ -5180,7 +5687,7 @@ router.post('/djs/discogs/import', optionalAuth, async (req: Request, res: Respo
           bio: requestedBio || derivedBio || null,
           bioI18n: (normalizeDJBiText(payload.bioI18n ?? null, requestedBio || derivedBio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: requestedCountry || null,
-          countryI18n: (normalizeDJBiText(payload.countryI18n ?? null, requestedCountry || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+          countryI18n: (normalizeCountryBiText(payload.countryI18n ?? null, requestedCountry || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyId: requestedSpotifyId || null,
           spotifyFollowers: hasSpotifyFollowersInput ? requestedSpotifyFollowers : null,
           instagramUrl: requestedInstagram || derivedInstagram || null,
@@ -5388,7 +5895,7 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
           bio: bio || target.bio || null,
           bioI18n: (normalizeDJBiText(target.bioI18n ?? null, bio || target.bio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: country || target.country || null,
-          countryI18n: (normalizeDJBiText(target.countryI18n ?? null, country || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+          countryI18n: (normalizeCountryBiText(target.countryI18n ?? null, country || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyId: spotifyId || target.spotifyId || null,
           spotifyFollowers: hasSpotifyFollowersInput ? spotifyFollowers : (target.spotifyFollowers ?? null),
           instagramUrl: instagramUrl || target.instagramUrl || null,
@@ -5422,7 +5929,7 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
           bio: bio || null,
           bioI18n: (normalizeDJBiText(payload.bioI18n ?? null, bio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: country || null,
-          countryI18n: (normalizeDJBiText(payload.countryI18n ?? null, country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+          countryI18n: (normalizeCountryBiText(payload.countryI18n ?? null, country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyId: spotifyId || null,
           spotifyFollowers,
           instagramUrl: instagramUrl || null,
@@ -5777,13 +6284,13 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
       const countrySeed = hasCountryField
         ? (typeof payload.country === 'string' ? payload.country.trim() : '')
         : (existing.country ?? '');
-      const normalized = normalizeDJBiText(payload.countryI18n, countrySeed);
+      const normalized = normalizeCountryBiText(payload.countryI18n, countrySeed);
       if (normalized) {
         updateData.countryI18n = normalized as unknown as Prisma.InputJsonValue;
       }
     } else if (hasCountryField) {
       const countrySeed = typeof payload.country === 'string' ? payload.country.trim() : '';
-      const normalized = normalizeDJBiText(existing.countryI18n ?? null, countrySeed);
+      const normalized = normalizeCountryBiText(existing.countryI18n ?? null, countrySeed);
       if (normalized) {
         updateData.countryI18n = normalized as unknown as Prisma.InputJsonValue;
       }
@@ -6667,8 +7174,10 @@ router.get('/checkins', optionalAuth, async (req: Request, res: Response): Promi
               id: true,
               name: true,
               nameI18n: true,
-              locationI18n: true,
+              cityI18n: true,
               countryI18n: true,
+              manualLocation: true,
+              locationPoint: true,
               coverImageUrl: true,
               city: true,
               country: true,
@@ -6791,8 +7300,10 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
             id: true,
             name: true,
             nameI18n: true,
-            locationI18n: true,
+            cityI18n: true,
             countryI18n: true,
+            manualLocation: true,
+            locationPoint: true,
             coverImageUrl: true,
             city: true,
             country: true,
@@ -6835,8 +7346,10 @@ router.patch('/checkins/:id', optionalAuth, async (req: Request, res: Response):
             id: true,
             name: true,
             nameI18n: true,
-            locationI18n: true,
+            cityI18n: true,
             countryI18n: true,
+            manualLocation: true,
+            locationPoint: true,
             coverImageUrl: true,
             city: true,
             country: true,
@@ -6927,8 +7440,10 @@ router.patch('/checkins/:id', optionalAuth, async (req: Request, res: Response):
             id: true,
             name: true,
             nameI18n: true,
-            locationI18n: true,
+            cityI18n: true,
             countryI18n: true,
+            manualLocation: true,
+            locationPoint: true,
             coverImageUrl: true,
             city: true,
             country: true,
@@ -7727,7 +8242,7 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
       : rows.filter((row) => {
           const nameI18n = resolveBiTextWithFallback(row.nameI18n ?? null, row.name ?? '');
           const descriptionI18n = resolveBiTextWithFallback(row.descriptionI18n ?? null, row.introduction ?? '');
-          const countryI18n = resolveBiTextWithFallback(row.countryI18n ?? null, row.country ?? '');
+          const countryI18n = resolveCountryBiTextWithFallback(row.countryI18n ?? null, row.country ?? '');
           const cityI18n = resolveBiTextWithFallback(row.cityI18n ?? null, row.city ?? '');
           const frequencyI18n = resolveBiTextWithFallback(row.frequencyI18n ?? null, row.frequency ?? '');
           const pool = [
@@ -7739,6 +8254,7 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
             row.country,
             countryI18n?.zh,
             countryI18n?.en,
+            countryI18n?.enFull,
             row.city,
             cityI18n?.zh,
             cityI18n?.en,
@@ -7793,7 +8309,7 @@ router.post('/learn/festivals', optionalAuth, async (req: Request, res: Response
     const abbreviation = normalizeWikiFestivalText(body.abbreviation);
     const aliases = parseWikiFestivalAliases(body.aliases);
     const rawCountry = normalizeWikiFestivalText(body.country);
-    const countryI18n = normalizeWikiFestivalBiText(body.countryI18n, rawCountry);
+    const countryI18n = normalizeCountryBiText(body.countryI18n, rawCountry);
     const country = rawCountry || pickWikiFestivalPrimaryText(countryI18n);
     const rawCity = normalizeWikiFestivalText(body.city);
     const cityI18n = normalizeWikiFestivalBiText(body.cityI18n, rawCity);
@@ -7967,7 +8483,7 @@ router.patch('/learn/festivals/:id', optionalAuth, async (req: Request, res: Res
     if (hasCountryField || hasCountryI18nField) {
       let nextCountry = hasCountryField ? normalizeWikiFestivalText(body.country) : existing.country;
       if (hasCountryI18nField) {
-        const normalized = normalizeWikiFestivalBiText(body.countryI18n, nextCountry);
+        const normalized = normalizeCountryBiText(body.countryI18n, nextCountry);
         updateData.countryI18n = normalized ? (normalized as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
         if (!hasCountryField && normalized) {
           nextCountry = pickWikiFestivalPrimaryText(normalized, existing.country);
@@ -8789,6 +9305,11 @@ router.get('/publishes/me', optionalAuth, async (req: Request, res: Response): P
       events: events.map((event) => ({
         id: event.id,
         name: event.name,
+        nameI18n: event.nameI18n,
+        cityI18n: event.cityI18n,
+        countryI18n: event.countryI18n,
+        manualLocation: event.manualLocation,
+        locationPoint: event.locationPoint,
         coverImageUrl: event.coverImageUrl,
         city: event.city,
         country: event.country,

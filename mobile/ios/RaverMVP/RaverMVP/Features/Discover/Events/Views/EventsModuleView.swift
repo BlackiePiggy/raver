@@ -571,10 +571,10 @@ struct EventsModuleView: View {
         guard isCountryFilterActive else { return true }
 
         let normalizedCountry = normalizedSearchToken(event.country)
+        let canonicalCountryCode = eventCountryCode(event)
 
         if !selectedAreaBuckets.isEmpty {
-            guard let normalizedCountry else { return false }
-            let isDomestic = Self.chinaCountryTokens.contains(normalizedCountry)
+            let isDomestic = canonicalCountryCode == "CHN"
             let selectedDomestic = selectedAreaBuckets.contains(.domestic)
             let selectedForeign = selectedAreaBuckets.contains(.foreign)
 
@@ -603,6 +603,23 @@ struct EventsModuleView: View {
         }
 
         return true
+    }
+
+    private func eventCountryCode(_ event: WebEvent) -> String? {
+        if let code = normalizedCountryCodeToken(event.countryI18n?.en) {
+            return code
+        }
+        return normalizedCountryCodeToken(event.country)
+    }
+
+    private func normalizedCountryCodeToken(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let normalized = trimmed
+            .uppercased()
+            .replacingOccurrences(of: "[^A-Z0-9]", with: "", options: .regularExpression)
+        return normalized.isEmpty ? nil : normalized
     }
 
     private func continentBucket(for country: String?) -> ContinentBucket? {
@@ -659,12 +676,8 @@ struct EventsModuleView: View {
         .buttonStyle(.plain)
     }
 
-    private static let chinaCountryTokens: Set<String> = [
-        "china", "cn", "prc", "中国", "中国大陆", "中华人民共和国"
-    ]
-
     private static let continentBucketByCountryToken: [String: ContinentBucket] = [
-        "中国": .asia, "中国大陆": .asia, "中华人民共和国": .asia, "china": .asia, "cn": .asia, "prc": .asia,
+        "中国": .asia, "中国大陆": .asia, "中华人民共和国": .asia, "china": .asia, "cn": .asia, "prc": .asia, "chn": .asia,
         "日本": .asia, "japan": .asia, "jp": .asia,
         "韩国": .asia, "southkorea": .asia, "korea": .asia, "kr": .asia,
         "泰国": .asia, "thailand": .asia,

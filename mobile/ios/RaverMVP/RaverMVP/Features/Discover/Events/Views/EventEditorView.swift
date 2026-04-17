@@ -1051,10 +1051,13 @@ struct EventEditorView: View {
     @State private var name = ""
     @State private var description = ""
     @State private var eventType = ""
-    @State private var city = ""
-    @State private var country = ""
-    @State private var venueName = ""
-    @State private var venueAddress = ""
+    @State private var cityEn = ""
+    @State private var cityZh = ""
+    @State private var countryEn = ""
+    @State private var countryEnFull = ""
+    @State private var countryZh = ""
+    @State private var detailAddressZh = ""
+    @State private var detailAddressEn = ""
     @State private var ticketUrl = ""
     @State private var officialWebsite = ""
     @State private var ticketCurrency = "CNY"
@@ -1063,6 +1066,7 @@ struct EventEditorView: View {
     @State private var pickedLatitude: Double?
     @State private var pickedLongitude: Double?
     @State private var pickedMapAddress = ""
+    @State private var pickedPlaceName = ""
     @State private var showLocationPicker = false
     @State private var startDate = EventEditorView.normalizedStartOfDay(Date())
     @State private var endDate = EventEditorView.normalizedStartOfDay(Date())
@@ -1105,10 +1109,13 @@ struct EventEditorView: View {
                             Text(EventTypeOption.displayTitle(for: key)).tag(key)
                         }
                     }
-                    TextField(LL("城市"), text: $city)
-                    TextField(LL("国家"), text: $country)
-                    TextField(LL("场地"), text: $venueName)
-                    TextField(LL("详细地址（手动输入）"), text: $venueAddress, axis: .vertical)
+                    TextField(L("City (English)", "City (English)"), text: $cityEn)
+                    TextField(LL("城市（中文）"), text: $cityZh)
+                    TextField(L("Country (English)", "Country (English)"), text: $countryEn)
+                    TextField(L("Country (English Full)", "Country (English Full)"), text: $countryEnFull)
+                    TextField(LL("国家（中文）"), text: $countryZh)
+                    TextField(LL("详细地址（中文）"), text: $detailAddressZh, axis: .vertical)
+                    TextField(L("Detailed Address (English)", "Detailed Address (English)"), text: $detailAddressEn, axis: .vertical)
                     TextField(LL("购票链接（可选）"), text: $ticketUrl)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
@@ -1457,20 +1464,34 @@ struct EventEditorView: View {
                     pickedLatitude = result.latitude
                     pickedLongitude = result.longitude
                     pickedMapAddress = result.displayAddress
+                    pickedPlaceName = result.placeName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
                     if !result.displayAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        venueAddress = result.displayAddress
+                        if detailAddressZh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            detailAddressZh = result.displayAddress
+                        }
+                        if detailAddressEn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            detailAddressEn = result.displayAddress
+                        }
                     }
                     if let city = result.city, !city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        self.city = city
+                        if cityZh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            cityZh = city
+                        }
+                        if cityEn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            cityEn = city
+                        }
                     }
                     if let country = result.country, !country.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        self.country = country
-                    }
-                    if venueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                       let placeName = result.placeName,
-                       !placeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        venueName = placeName
+                        if countryZh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            countryZh = country
+                        }
+                        if countryEn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            countryEn = country
+                        }
+                        if countryEnFull.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            countryEnFull = country
+                        }
                     }
                 }
             }
@@ -2499,10 +2520,34 @@ struct EventEditorView: View {
         } else {
             eventType = ""
         }
-        city = event.city ?? ""
-        country = event.country ?? ""
-        venueName = event.venueName ?? ""
-        venueAddress = event.venueAddress ?? ""
+        cityEn = event.cityI18n?.en ?? event.city ?? ""
+        cityZh = event.cityI18n?.zh ?? event.city ?? ""
+        countryEn = event.countryI18n?.en ?? event.country ?? ""
+        countryEnFull = event.countryI18n?.enFull ?? event.countryI18n?.en ?? event.country ?? ""
+        countryZh = event.countryI18n?.zh ?? event.country ?? ""
+        let language = AppLanguagePreference.current.effectiveLanguage
+        let manualFormatted = event.manualLocation?.formattedAddressI18n?.text(for: language)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let pointFormatted = event.locationPoint?.formattedAddressI18n?.text(for: language)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let manualAddressZh = event.manualLocation?.detailAddressI18n?.zh
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let manualAddressEn = event.manualLocation?.detailAddressI18n?.en
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let resolvedAddressZh = manualAddressZh
+            ?? manualFormatted
+            ?? pointFormatted
+            ?? ""
+        let resolvedAddressEn = manualAddressEn
+            ?? manualFormatted
+            ?? pointFormatted
+            ?? ""
+        detailAddressZh = resolvedAddressZh
+        detailAddressEn = resolvedAddressEn
         ticketUrl = event.ticketUrl ?? ""
         officialWebsite = event.officialWebsite ?? ""
         ticketCurrency = event.ticketCurrency?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "CNY"
@@ -2518,9 +2563,12 @@ struct EventEditorView: View {
                     currency: tier.currency?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? ticketCurrency
                 )
             }
-        pickedLatitude = event.latitude
-        pickedLongitude = event.longitude
-        pickedMapAddress = event.venueAddress ?? ""
+        pickedLatitude = event.locationPoint?.location?.lat ?? event.latitude
+        pickedLongitude = event.locationPoint?.location?.lng ?? event.longitude
+        pickedMapAddress = pointFormatted ?? resolvedAddressZh
+        pickedPlaceName = event.locationPoint?.nameI18n?.text(for: language)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty ?? ""
         startDate = Self.normalizedStartOfDay(event.startDate)
         endDate = Self.normalizedStartOfDay(event.endDate)
         coverImageUrl = event.coverImageUrl ?? ""
@@ -2647,12 +2695,51 @@ struct EventEditorView: View {
 
         let normalizedStartDate = Self.normalizedStartOfDay(startDate)
         let normalizedEndDate = Self.normalizedEndOfDay(max(endDate, startDate))
-        let resolvedVenueAddress = venueAddress.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedCityEn = cityEn.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedCityZh = cityZh.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedCountryEn = countryEn.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedCountryEnFull = countryEnFull.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedCountryZh = countryZh.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedCityPrimary = resolvedCityZh ?? resolvedCityEn
+        let resolvedCountryPrimary = resolvedCountryZh ?? resolvedCountryEnFull ?? resolvedCountryEn
+        let resolvedCityI18n = (resolvedCityEn != nil || resolvedCityZh != nil)
+            ? WebBiText(en: resolvedCityEn ?? resolvedCityZh ?? "", zh: resolvedCityZh ?? resolvedCityEn ?? "")
+            : nil
+        let resolvedCountryI18n = (resolvedCountryEn != nil || resolvedCountryZh != nil || resolvedCountryEnFull != nil)
+            ? WebBiText(
+                en: resolvedCountryEn ?? resolvedCountryZh ?? "",
+                zh: resolvedCountryZh ?? resolvedCountryEn ?? "",
+                enFull: resolvedCountryEnFull
+            )
+            : nil
+        let shouldClearCityI18n = resolvedCityEn == nil && resolvedCityZh == nil
+        let shouldClearCountryI18n = resolvedCountryEn == nil && resolvedCountryZh == nil && resolvedCountryEnFull == nil
+        let resolvedDetailAddressZh = detailAddressZh.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedDetailAddressEn = detailAddressEn.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedPrimaryAddress = resolvedDetailAddressZh ?? resolvedDetailAddressEn
         let resolvedTicketUrl = ticketUrl.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let resolvedOfficialWebsite = officialWebsite.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let resolvedTicketCurrency = ticketCurrency.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let resolvedTicketNotes = ticketNotes.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let encodedDescription = EventWeekScheduleMode.embedMarker(into: description, enabled: isWeekScheduleEnabled)
+        let resolvedManualLocation = buildManualLocationPayload(
+            detailAddressZh: resolvedDetailAddressZh,
+            detailAddressEn: resolvedDetailAddressEn,
+            cityZh: resolvedCityZh,
+            cityEn: resolvedCityEn,
+            countryZh: resolvedCountryZh,
+            countryEn: resolvedCountryEn,
+            countryEnFull: resolvedCountryEnFull
+        )
+        let shouldClearManualLocation = resolvedManualLocation == nil
+        let resolvedLocationPoint = buildLocationPointPayload(
+            latitude: pickedLatitude,
+            longitude: pickedLongitude,
+            displayAddress: pickedMapAddress.nilIfEmpty ?? resolvedPrimaryAddress,
+            city: resolvedCityPrimary,
+            country: resolvedCountryPrimary,
+            placeName: pickedPlaceName.nilIfEmpty
+        )
 
         if normalizedEndDate < normalizedStartDate {
             errorMessage = L("结束时间不能早于开始时间", "End time cannot be earlier than start time.")
@@ -2685,10 +2772,12 @@ struct EventEditorView: View {
                         name: trimmedName,
                         description: encodedDescription,
                         eventType: resolvedEventType,
-                        city: city.nilIfEmpty,
-                        country: country.nilIfEmpty,
-                        venueName: venueName.nilIfEmpty,
-                        venueAddress: resolvedVenueAddress,
+                        city: resolvedCityPrimary,
+                        cityI18n: resolvedCityI18n,
+                        country: resolvedCountryPrimary,
+                        countryI18n: resolvedCountryI18n,
+                        manualLocation: resolvedManualLocation,
+                        locationPoint: resolvedLocationPoint,
                         latitude: pickedLatitude,
                         longitude: pickedLongitude,
                         ticketUrl: resolvedTicketUrl,
@@ -2767,14 +2856,16 @@ struct EventEditorView: View {
 
                 _ = try await eventsRepository.updateEvent(
                     id: event.id,
-                    input: UpdateEventInput(
-                        name: trimmedName,
-                        description: encodedDescription,
-                        eventType: resolvedEventType,
-                        city: city.nilIfEmpty,
-                        country: country.nilIfEmpty,
-                        venueName: venueName.nilIfEmpty,
-                        venueAddress: resolvedVenueAddress ?? "",
+                        input: UpdateEventInput(
+                            name: trimmedName,
+                            description: encodedDescription,
+                            eventType: resolvedEventType,
+                            city: resolvedCityPrimary,
+                            cityI18n: resolvedCityI18n,
+                            country: resolvedCountryPrimary,
+                            countryI18n: resolvedCountryI18n,
+                            manualLocation: resolvedManualLocation,
+                            locationPoint: resolvedLocationPoint,
                         latitude: pickedLatitude,
                         longitude: pickedLongitude,
                         ticketUrl: resolvedTicketUrl ?? "",
@@ -2787,7 +2878,10 @@ struct EventEditorView: View {
                         lineupImageUrl: finalLineup.nilIfEmpty ?? "",
                         ticketTiers: ticketTierInputs,
                         lineupSlots: lineupSlotsInput,
-                        status: resolvedStatus
+                        status: resolvedStatus,
+                        clearCityI18n: shouldClearCityI18n,
+                        clearCountryI18n: shouldClearCountryI18n,
+                        clearManualLocation: shouldClearManualLocation
                     )
                 )
             }
@@ -2797,6 +2891,77 @@ struct EventEditorView: View {
         } catch {
             errorMessage = error.userFacingMessage
         }
+    }
+
+    private func buildManualLocationPayload(
+        detailAddressZh: String?,
+        detailAddressEn: String?,
+        cityZh: String?,
+        cityEn: String?,
+        countryZh: String?,
+        countryEn: String?,
+        countryEnFull: String?
+    ) -> WebEventManualLocation? {
+        let resolvedZh = detailAddressZh?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedEn = detailAddressEn?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let detailBi = WebBiText(
+            en: resolvedEn ?? resolvedZh ?? "",
+            zh: resolvedZh ?? resolvedEn ?? ""
+        )
+        let hasDetail = !detailBi.en.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !detailBi.zh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard hasDetail else {
+            return nil
+        }
+        let formattedZh = [countryZh ?? countryEn, cityZh ?? cityEn, detailBi.zh]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
+            .joined(separator: " · ")
+            .nilIfEmpty
+        let formattedEn = [countryEnFull ?? countryEn ?? countryZh, cityEn ?? cityZh, detailBi.en]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
+            .joined(separator: " · ")
+            .nilIfEmpty
+        return WebEventManualLocation(
+            detailAddressI18n: detailBi,
+            formattedAddressI18n: WebBiText(
+                en: formattedEn ?? detailBi.en,
+                zh: formattedZh ?? detailBi.zh
+            ),
+            selectedAt: Date()
+        )
+    }
+
+    private func buildLocationPointPayload(
+        latitude: Double?,
+        longitude: Double?,
+        displayAddress: String?,
+        city: String?,
+        country: String?,
+        placeName: String?
+    ) -> WebEventLocationPoint? {
+        guard let lat = latitude, let lng = longitude else {
+            return nil
+        }
+        let resolvedAddress = displayAddress?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedPlaceName = placeName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let formatted = [country, city, resolvedAddress ?? resolvedPlaceName]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
+            .joined(separator: " · ")
+            .nilIfEmpty
+        return WebEventLocationPoint(
+            provider: "apple_mapkit",
+            sourceMode: "manual_pin",
+            providerPlaceId: nil,
+            poiId: nil,
+            location: WebEventLocationCoordinate(lng: lng, lat: lat),
+            nameI18n: resolvedPlaceName.map { WebBiText(en: $0, zh: $0) },
+            addressI18n: resolvedAddress.map { WebBiText(en: $0, zh: $0) },
+            formattedAddressI18n: formatted.map { WebBiText(en: $0, zh: $0) },
+            city: city?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            district: nil,
+            province: nil,
+            countryCode: country?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        )
     }
 
     private enum EventImageTarget {

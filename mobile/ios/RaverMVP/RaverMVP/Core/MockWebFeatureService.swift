@@ -82,14 +82,19 @@ actor MockWebFeatureService: WebFeatureService {
             name: "Raver Night Shanghai",
             slug: "raver-night-shanghai",
             description: "Warehouse techno special.",
+            countryI18n: WebBiText(en: "China", zh: "中国"),
+            cityI18n: WebBiText(en: "Shanghai", zh: "上海"),
             coverImageUrl: nil,
             lineupImageUrl: nil,
             eventType: "club",
             organizerName: "Raver Crew",
-            venueName: "Warehouse 01",
-            venueAddress: "No.88 Xuhui",
             city: "Shanghai",
             country: "CN",
+            manualLocation: WebEventManualLocation(
+                detailAddressI18n: WebBiText(en: "No.88 Xuhui", zh: "徐汇区 88 号"),
+                formattedAddressI18n: WebBiText(en: "CN · Shanghai · No.88 Xuhui", zh: "中国 · 上海 · 徐汇区 88 号"),
+                selectedAt: now.addingTimeInterval(-86400 * 2)
+            ),
             latitude: nil,
             longitude: nil,
             startDate: now.addingTimeInterval(86400 * 6),
@@ -466,6 +471,8 @@ actor MockWebFeatureService: WebFeatureService {
             name: input.name,
             slug: slugify(input.name),
             description: input.description,
+            countryI18n: input.countryI18n,
+            cityI18n: input.cityI18n,
             coverImageUrl: input.coverImageUrl,
             lineupImageUrl: input.lineupImageUrl,
             eventType: {
@@ -473,10 +480,10 @@ actor MockWebFeatureService: WebFeatureService {
                 return trimmed.isEmpty ? nil : trimmed
             }(),
             organizerName: currentUser.displayName,
-            venueName: input.venueName,
-            venueAddress: normalizedOptional(input.venueAddress),
             city: input.city,
             country: input.country,
+            manualLocation: input.manualLocation,
+            locationPoint: input.locationPoint,
             latitude: input.latitude,
             longitude: input.longitude,
             startDate: input.startDate,
@@ -512,10 +519,26 @@ actor MockWebFeatureService: WebFeatureService {
         if let name = input.name { events[idx].name = name }
         if let description = input.description { events[idx].description = description }
         if let city = input.city { events[idx].city = city }
+        if input.clearCityI18n {
+            events[idx].cityI18n = nil
+            events[idx].city = nil
+        } else if let cityI18n = input.cityI18n {
+            events[idx].cityI18n = cityI18n
+        }
         if let country = input.country { events[idx].country = country }
-        if let venueName = input.venueName { events[idx].venueName = venueName }
-        if let venueAddress = input.venueAddress {
-            events[idx].venueAddress = normalizedOptional(venueAddress)
+        if input.clearCountryI18n {
+            events[idx].countryI18n = nil
+            events[idx].country = nil
+        } else if let countryI18n = input.countryI18n {
+            events[idx].countryI18n = countryI18n
+        }
+        if input.clearManualLocation {
+            events[idx].manualLocation = nil
+        } else if let manualLocation = input.manualLocation {
+            events[idx].manualLocation = manualLocation
+        }
+        if let locationPoint = input.locationPoint {
+            events[idx].locationPoint = locationPoint
         }
         if let latitude = input.latitude { events[idx].latitude = latitude }
         if let longitude = input.longitude { events[idx].longitude = longitude }

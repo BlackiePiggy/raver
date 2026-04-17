@@ -812,21 +812,6 @@ final class LiveWebFeatureService: WebFeatureService {
             let next = countryI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
             if !next.isEmpty { localized.country = next }
         }
-        if let locationI18n = event.locationI18n {
-            let next = locationI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !next.isEmpty {
-                localized.city = next
-                // Prefer localized location text as a whole block to avoid mixing untranslated venue text.
-                localized.venueName = nil
-                let normalizedLocation = next.lowercased()
-                if let country = localized.country?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !country.isEmpty,
-                   normalizedLocation.contains(country.lowercased()) {
-                    // Avoid duplicated output like "上海 · 中国 · 中国" when location already contains country.
-                    localized.country = nil
-                }
-            }
-        }
         return localized
     }
 
@@ -894,18 +879,6 @@ final class LiveWebFeatureService: WebFeatureService {
             if let countryI18n = event.countryI18n {
                 let next = countryI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
                 if !next.isEmpty { event.country = next }
-            }
-            if let locationI18n = event.locationI18n {
-                let next = locationI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !next.isEmpty {
-                    event.city = next
-                    let normalizedLocation = next.lowercased()
-                    if let country = event.country?.trimmingCharacters(in: .whitespacesAndNewlines),
-                       !country.isEmpty,
-                       normalizedLocation.contains(country.lowercased()) {
-                        event.country = nil
-                    }
-                }
             }
             localized.event = event
         }

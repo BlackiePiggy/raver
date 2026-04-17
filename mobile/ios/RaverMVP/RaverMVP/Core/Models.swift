@@ -56,6 +56,7 @@ struct Post: Codable, Identifiable, Hashable {
     var boundEventIDs: [String] = []
     var squad: PostSquad?
     var createdAt: Date
+    var displayPublishedAt: Date? = nil
     var likeCount: Int
     var repostCount: Int
     var commentCount: Int
