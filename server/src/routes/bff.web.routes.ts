@@ -3470,6 +3470,161 @@ const normalizeEventWikiFestivalId = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+type EventRecommendationStatus = 'ongoing' | 'upcoming' | 'ended' | 'cancelled';
+
+const eventRecommendationStatusOrder: EventRecommendationStatus[] = [
+  'ongoing',
+  'upcoming',
+  'ended',
+  'cancelled',
+];
+
+const parseEventRecommendationStatuses = (value: unknown): EventRecommendationStatus[] => {
+  if (typeof value !== 'string' || !value.trim()) {
+    return ['ongoing', 'upcoming', 'ended'];
+  }
+
+  const tokens = value
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+    .map((item) => (item === 'canceled' ? 'cancelled' : item));
+
+  const seen = new Set<EventRecommendationStatus>();
+  const parsed: EventRecommendationStatus[] = [];
+  for (const token of tokens) {
+    if (
+      (token === 'ongoing' || token === 'upcoming' || token === 'ended' || token === 'cancelled') &&
+      !seen.has(token)
+    ) {
+      seen.add(token);
+      parsed.push(token);
+    }
+  }
+
+  if (parsed.length === 0) {
+    return ['ongoing', 'upcoming', 'ended'];
+  }
+
+  return eventRecommendationStatusOrder.filter((status) => parsed.includes(status));
+};
+
+const buildEventStatusWhere = (status: EventRecommendationStatus, now: Date): any => {
+  if (status === 'upcoming') {
+    return {
+      startDate: { gt: now },
+      status: { not: 'cancelled' },
+    };
+  }
+  if (status === 'ongoing') {
+    return {
+      startDate: { lte: now },
+      endDate: { gte: now },
+      status: { not: 'cancelled' },
+    };
+  }
+  if (status === 'ended') {
+    return {
+      endDate: { lt: now },
+      status: { not: 'cancelled' },
+    };
+  }
+  return { status: 'cancelled' };
+};
+
+const popRandomItem = <T>(items: T[]): T | null => {
+  if (items.length === 0) return null;
+  const randomIndex = Math.floor(Math.random() * items.length);
+  return items.splice(randomIndex, 1)[0] ?? null;
+};
+
+router.get('/events/recommendations', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limit = normalizeLimit(req.query.limit, 10, 20);
+    const requestedStatuses = parseEventRecommendationStatuses(req.query.statuses);
+    const now = new Date();
+
+    const poolEntries = await Promise.all(
+      requestedStatuses.map(async (status) => {
+        const rows = await prisma.event.findMany({
+          where: buildEventStatusWhere(status, now),
+          select: { id: true },
+        });
+        return [status, rows.map((row) => row.id)] as const;
+      })
+    );
+
+    const idPoolByStatus: Record<EventRecommendationStatus, string[]> = {
+      ongoing: [],
+      upcoming: [],
+      ended: [],
+      cancelled: [],
+    };
+    for (const [status, ids] of poolEntries) {
+      idPoolByStatus[status] = ids;
+    }
+
+    const selectedIds: string[] = [];
+    const selectedSet = new Set<string>();
+
+    // Step 1: Keep diversity by taking at least one event from each requested status bucket when possible.
+    for (const status of requestedStatuses) {
+      if (selectedIds.length >= limit) break;
+      const picked = popRandomItem(idPoolByStatus[status]);
+      if (!picked || selectedSet.has(picked)) continue;
+      selectedSet.add(picked);
+      selectedIds.push(picked);
+    }
+
+    // Step 2: Fill remaining slots from the merged pool.
+    const remainingPool = requestedStatuses.flatMap((status) => idPoolByStatus[status]);
+    while (selectedIds.length < limit) {
+      const picked = popRandomItem(remainingPool);
+      if (!picked) break;
+      if (selectedSet.has(picked)) continue;
+      selectedSet.add(picked);
+      selectedIds.push(picked);
+    }
+
+    if (selectedIds.length === 0) {
+      ok(
+        res,
+        { items: [] },
+        {
+          limit,
+          selected: 0,
+          statuses: requestedStatuses,
+        }
+      );
+      return;
+    }
+
+    // Fetch only selected events to keep payload generation cheap.
+    const rows = await prisma.event.findMany({
+      where: {
+        id: { in: selectedIds },
+      },
+    });
+    const rowById = new Map(rows.map((row) => [row.id, row]));
+    const orderedRows = selectedIds
+      .map((id) => rowById.get(id))
+      .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+    ok(
+      res,
+      { items: orderedRows.map(mapEvent) },
+      {
+        limit,
+        selected: orderedRows.length,
+        statuses: requestedStatuses,
+      }
+    );
+  } catch (error) {
+    console.error('BFF web event recommendations error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const page = normalizePage(req.query.page, 1);
