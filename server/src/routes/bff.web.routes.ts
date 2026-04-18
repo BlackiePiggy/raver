@@ -3587,15 +3587,14 @@ router.get('/events/recommendations', optionalAuth, async (req: Request, res: Re
     }
 
     if (selectedIds.length === 0) {
-      ok(
-        res,
-        { items: [] },
-        {
+      ok(res, {
+        items: [],
+        meta: {
           limit,
           selected: 0,
           statuses: requestedStatuses,
-        }
-      );
+        },
+      });
       return;
     }
 
@@ -3610,15 +3609,14 @@ router.get('/events/recommendations', optionalAuth, async (req: Request, res: Re
       .map((id) => rowById.get(id))
       .filter((row): row is NonNullable<typeof row> => Boolean(row));
 
-    ok(
-      res,
-      { items: orderedRows.map(mapEvent) },
-      {
+    ok(res, {
+      items: orderedRows.map(mapEvent),
+      meta: {
         limit,
         selected: orderedRows.length,
         statuses: requestedStatuses,
-      }
-    );
+      },
+    });
   } catch (error) {
     console.error('BFF web event recommendations error:', error);
     res.status(500).json({ error: 'Internal server error' });
