@@ -542,6 +542,35 @@ const parseDateInput = (value: unknown): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const EVENT_DEFAULT_START_TIME = '00:00:00';
+const EVENT_DEFAULT_END_TIME = '23:59:59';
+
+const normalizeEventClockTime = (value: unknown, fallback: string): string => {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  const match = trimmed.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+  if (!match) return fallback;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const second = Number(match[3] ?? '0');
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || !Number.isInteger(second)) return fallback;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return fallback;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
+};
+
+const normalizeEventStartDate = (date: Date): Date => {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+};
+
+const normalizeEventEndDate = (date: Date): Date => {
+  const next = new Date(date);
+  next.setHours(23, 59, 59, 0);
+  return next;
+};
+
 const resolveEventStatus = (
   startDate: Date,
   endDate: Date,
@@ -605,6 +634,21 @@ const normalizeDayRolloverHour = (value: unknown, fallback = 6): number => {
   const hour = Math.floor(numeric);
   if (hour < 0 || hour > 23) return fallback;
   return hour;
+};
+
+const normalizeEventStageOrder = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of value) {
+    const text = typeof item === 'string' ? item.trim() : '';
+    if (!text) continue;
+    const key = text.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(text);
+  }
+  return result;
 };
 
 const inferFestivalDayIndex = (
@@ -2779,7 +2823,10 @@ const mapEvent = (row: any) => {
     longitude,
     startDate: row.startDate,
     endDate: row.endDate,
+    startTime: normalizeEventClockTime(row.startTime, EVENT_DEFAULT_START_TIME),
+    endTime: normalizeEventClockTime(row.endTime, EVENT_DEFAULT_END_TIME),
     dayRolloverHour: row.dayRolloverHour ?? 6,
+    stageOrder: normalizeEventStageOrder(row.stageOrder ?? null),
     ticketUrl: row.ticketUrl,
     ticketPriceMin: toNumber(row.ticketPriceMin),
     ticketPriceMax: toNumber(row.ticketPriceMax),
@@ -3929,12 +3976,16 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       return;
     }
 
-    const parsedStartDate = new Date(startDate);
-    const parsedEndDate = new Date(endDate);
-    if (Number.isNaN(parsedStartDate.getTime()) || Number.isNaN(parsedEndDate.getTime())) {
+    const parsedStartDateInput = new Date(startDate);
+    const parsedEndDateInput = new Date(endDate);
+    if (Number.isNaN(parsedStartDateInput.getTime()) || Number.isNaN(parsedEndDateInput.getTime())) {
       res.status(400).json({ error: 'Invalid event date range' });
       return;
     }
+    const parsedStartDate = normalizeEventStartDate(parsedStartDateInput);
+    const parsedEndDate = normalizeEventEndDate(parsedEndDateInput);
+    const startTime = normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME);
+    const endTime = normalizeEventClockTime(body.endTime, EVENT_DEFAULT_END_TIME);
 
     const desiredSlug = String(body.slug || '').trim() || `${slugify(name)}-${Date.now().toString().slice(-6)}`;
     const slugUsed = await prisma.event.findUnique({ where: { slug: desiredSlug }, select: { id: true } });
@@ -3946,6 +3997,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     const dayRolloverHour = normalizeDayRolloverHour(body.dayRolloverHour, 6);
     const rawSlots = Array.isArray(body.lineupSlots) ? body.lineupSlots : [];
     const lineupSlots = normalizeLineupSlots(rawSlots, parsedStartDate, dayRolloverHour);
+    const stageOrder = normalizeEventStageOrder(body.stageOrder ?? body.stage_order);
     const coverImageUrlInput =
       typeof body.coverImageUrl === 'string' && body.coverImageUrl.trim()
         ? body.coverImageUrl.trim()
@@ -4073,7 +4125,10 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         longitude: longitudeInput ?? locationPointLongitude,
         startDate: parsedStartDate,
         endDate: parsedEndDate,
+        startTime,
+        endTime,
         dayRolloverHour,
+        stageOrder: stageOrder.length ? (stageOrder as unknown as Prisma.InputJsonValue) : undefined,
         status: resolveEventStatus(parsedStartDate, parsedEndDate, typeof body.status === 'string' ? body.status : null),
         ticketUrl: typeof body.ticketUrl === 'string' ? body.ticketUrl : null,
         ticketPriceMin: toNumber(body.ticketPriceMin),
@@ -4140,6 +4195,8 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         wikiFestivalId: true,
         startDate: true,
         endDate: true,
+        startTime: true,
+        endTime: true,
         dayRolloverHour: true,
         status: true,
         coverImageUrl: true,
@@ -4188,6 +4245,10 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       || Object.prototype.hasOwnProperty.call(body, 'manual_location');
     const hasLocationPointField = Object.prototype.hasOwnProperty.call(body, 'locationPoint')
       || Object.prototype.hasOwnProperty.call(body, 'location_point');
+    const hasStageOrderField = Object.prototype.hasOwnProperty.call(body, 'stageOrder')
+      || Object.prototype.hasOwnProperty.call(body, 'stage_order');
+    const hasStartTimeField = Object.prototype.hasOwnProperty.call(body, 'startTime');
+    const hasEndTimeField = Object.prototype.hasOwnProperty.call(body, 'endTime');
     const hasLatitudeField = Object.prototype.hasOwnProperty.call(body, 'latitude');
     const hasLongitudeField = Object.prototype.hasOwnProperty.call(body, 'longitude');
 
@@ -4269,6 +4330,9 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const nextLongitude = hasLongitudeField
       ? toNumber(body.longitude)
       : (hasLocationPointField ? toNumber((nextLocationPoint?.location as any)?.lng) : undefined);
+    const nextStageOrder = hasStageOrderField
+      ? normalizeEventStageOrder(body.stageOrder ?? body.stage_order)
+      : null;
     const cityFromBody = Object.prototype.hasOwnProperty.call(body, 'city')
       ? normalizeEventText(typeof body.city === 'string' ? body.city : null)
       : null;
@@ -4282,8 +4346,10 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       ? (normalizeEventText(nextCountryI18n?.en) || normalizeEventText(nextCountryI18n?.zh))
       : null;
 
-    const parsedStartDate = body.startDate !== undefined ? parseDateInput(body.startDate) : null;
-    const parsedEndDate = body.endDate !== undefined ? parseDateInput(body.endDate) : null;
+    const parsedStartDateRaw = body.startDate !== undefined ? parseDateInput(body.startDate) : null;
+    const parsedEndDateRaw = body.endDate !== undefined ? parseDateInput(body.endDate) : null;
+    const parsedStartDate = parsedStartDateRaw ? normalizeEventStartDate(parsedStartDateRaw) : null;
+    const parsedEndDate = parsedEndDateRaw ? normalizeEventEndDate(parsedEndDateRaw) : null;
     if (body.startDate !== undefined && parsedStartDate === null) {
       res.status(400).json({ error: 'Invalid startDate' });
       return;
@@ -4296,6 +4362,12 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const nextDayRolloverHour = body.dayRolloverHour !== undefined
       ? normalizeDayRolloverHour(body.dayRolloverHour, existing.dayRolloverHour ?? 6)
       : (existing.dayRolloverHour ?? 6);
+    const nextStartTime = hasStartTimeField
+      ? normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME)
+      : normalizeEventClockTime(existing.startTime, EVENT_DEFAULT_START_TIME);
+    const nextEndTime = hasEndTimeField
+      ? normalizeEventClockTime(body.endTime, EVENT_DEFAULT_END_TIME)
+      : normalizeEventClockTime(existing.endTime, EVENT_DEFAULT_END_TIME);
     const lineupBaseDate = parsedStartDate ?? existing.startDate;
     const effectiveStartDate = parsedStartDate ?? existing.startDate;
     const effectiveEndDate = parsedEndDate ?? existing.endDate;
@@ -4371,7 +4443,12 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
           : (hasLocationPointField ? (nextLongitude ?? null) : undefined),
         startDate: body.startDate !== undefined ? parsedStartDate ?? undefined : undefined,
         endDate: body.endDate !== undefined ? parsedEndDate ?? undefined : undefined,
+        startTime: hasStartTimeField ? nextStartTime : undefined,
+        endTime: hasEndTimeField ? nextEndTime : undefined,
         dayRolloverHour: body.dayRolloverHour !== undefined ? nextDayRolloverHour : undefined,
+        stageOrder: hasStageOrderField
+          ? (nextStageOrder && nextStageOrder.length ? (nextStageOrder as unknown as Prisma.InputJsonValue) : Prisma.DbNull)
+          : undefined,
         ticketUrl: typeof body.ticketUrl === 'string' ? body.ticketUrl : undefined,
         ticketPriceMin: body.ticketPriceMin !== undefined ? toNumber(body.ticketPriceMin) : undefined,
         ticketPriceMax: body.ticketPriceMax !== undefined ? toNumber(body.ticketPriceMax) : undefined,
@@ -6549,11 +6626,22 @@ router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response):
     const djId = req.params.id as string;
     const rows = await prisma.event.findMany({
       where: {
-        lineupSlots: {
-          some: {
-            djId,
+        OR: [
+          {
+            lineupSlots: {
+              some: {
+                djId,
+              },
+            },
           },
-        },
+          {
+            lineupSlots: {
+              some: {
+                djIds: { has: djId },
+              },
+            },
+          },
+        ],
       },
       orderBy: [{ startDate: 'desc' }, { name: 'asc' }],
       include: {

@@ -63,6 +63,35 @@ const parseOptionalDate = (value: unknown): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const EVENT_DEFAULT_START_TIME = '00:00:00';
+const EVENT_DEFAULT_END_TIME = '23:59:59';
+
+const normalizeEventClockTime = (value: unknown, fallback: string): string => {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  const match = trimmed.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+  if (!match) return fallback;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const second = Number(match[3] ?? '0');
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || !Number.isInteger(second)) return fallback;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return fallback;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
+};
+
+const normalizeEventStartDate = (date: Date): Date => {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+};
+
+const normalizeEventEndDate = (date: Date): Date => {
+  const next = new Date(date);
+  next.setHours(23, 59, 59, 0);
+  return next;
+};
+
 const resolveEventStatus = (
   startDate: Date,
   endDate: Date,
@@ -417,6 +446,8 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       longitude,
       startDate,
       endDate,
+      startTime,
+      endTime,
       dayRolloverHour,
       ticketUrl,
       ticketPriceMin,
@@ -445,12 +476,16 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const normalizedTicketTiers = normalizeTicketTiers(ticketTiers);
-    const parsedStartDate = new Date(startDate);
-    const parsedEndDate = new Date(endDate);
-    if (Number.isNaN(parsedStartDate.getTime()) || Number.isNaN(parsedEndDate.getTime())) {
+    const parsedStartDateInput = new Date(startDate);
+    const parsedEndDateInput = new Date(endDate);
+    if (Number.isNaN(parsedStartDateInput.getTime()) || Number.isNaN(parsedEndDateInput.getTime())) {
       res.status(400).json({ error: 'Invalid event date range' });
       return;
     }
+    const parsedStartDate = normalizeEventStartDate(parsedStartDateInput);
+    const parsedEndDate = normalizeEventEndDate(parsedEndDateInput);
+    const normalizedStartTime = normalizeEventClockTime(startTime, EVENT_DEFAULT_START_TIME);
+    const normalizedEndTime = normalizeEventClockTime(endTime, EVENT_DEFAULT_END_TIME);
     const normalizedDayRolloverHour = normalizeDayRolloverHour(dayRolloverHour, 6);
     const normalizedSlots = normalizeLineupSlots(lineupSlots, parsedStartDate, normalizedDayRolloverHour);
 
@@ -474,6 +509,8 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
         longitude: toNumberOrNull(longitude),
         startDate: parsedStartDate,
         endDate: parsedEndDate,
+        startTime: normalizedStartTime,
+        endTime: normalizedEndTime,
         dayRolloverHour: normalizedDayRolloverHour,
         status: resolveEventStatus(parsedStartDate, parsedEndDate, typeof status === 'string' ? status : null),
         ticketUrl,
@@ -565,6 +602,8 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       longitude,
       startDate,
       endDate,
+      startTime,
+      endTime,
       dayRolloverHour,
       ticketUrl,
       ticketPriceMin,
@@ -579,7 +618,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
 
     const existing = await prisma.event.findUnique({
       where: { id: id as string },
-      select: { id: true, organizerId: true, startDate: true, endDate: true, dayRolloverHour: true, status: true },
+      select: { id: true, organizerId: true, startDate: true, endDate: true, startTime: true, endTime: true, dayRolloverHour: true, status: true },
     });
     if (!existing) {
       res.status(404).json({ error: 'Event not found' });
@@ -590,16 +629,24 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const nextStartDate = startDate ? new Date(startDate) : null;
-    if (nextStartDate && Number.isNaN(nextStartDate.getTime())) {
+    const nextStartDateInput = startDate ? new Date(startDate) : null;
+    if (nextStartDateInput && Number.isNaN(nextStartDateInput.getTime())) {
       res.status(400).json({ error: 'Invalid startDate' });
       return;
     }
-    const nextEndDate = endDate ? new Date(endDate) : null;
-    if (nextEndDate && Number.isNaN(nextEndDate.getTime())) {
+    const nextEndDateInput = endDate ? new Date(endDate) : null;
+    if (nextEndDateInput && Number.isNaN(nextEndDateInput.getTime())) {
       res.status(400).json({ error: 'Invalid endDate' });
       return;
     }
+    const nextStartDate = nextStartDateInput ? normalizeEventStartDate(nextStartDateInput) : null;
+    const nextEndDate = nextEndDateInput ? normalizeEventEndDate(nextEndDateInput) : null;
+    const nextStartTime = startTime !== undefined
+      ? normalizeEventClockTime(startTime, EVENT_DEFAULT_START_TIME)
+      : normalizeEventClockTime(existing.startTime, EVENT_DEFAULT_START_TIME);
+    const nextEndTime = endTime !== undefined
+      ? normalizeEventClockTime(endTime, EVENT_DEFAULT_END_TIME)
+      : normalizeEventClockTime(existing.endTime, EVENT_DEFAULT_END_TIME);
     const effectiveStartDate = nextStartDate ?? existing.startDate;
     const effectiveEndDate = nextEndDate ?? existing.endDate;
     const nextDayRolloverHour = dayRolloverHour !== undefined
@@ -628,6 +675,8 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         longitude: longitude !== undefined ? toNumberOrNull(longitude) : undefined,
         startDate: startDate ? nextStartDate ?? undefined : undefined,
         endDate: endDate ? nextEndDate ?? undefined : undefined,
+        startTime: startTime !== undefined ? nextStartTime : undefined,
+        endTime: endTime !== undefined ? nextEndTime : undefined,
         dayRolloverHour: dayRolloverHour !== undefined ? nextDayRolloverHour : undefined,
         ticketUrl: ticketUrl ?? undefined,
         ticketPriceMin: ticketPriceMin !== undefined ? toNumberOrNull(ticketPriceMin) : undefined,
