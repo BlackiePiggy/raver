@@ -40,6 +40,38 @@ struct EventDetailView: View {
         var djID: String? { act.type == .solo ? act.performers.first?.djID : nil }
     }
 
+    private enum LineupSortMode: String {
+        case alphabetical
+        case popularity
+
+        var toggleTitle: String {
+            switch self {
+            case .alphabetical:
+                return L("按热度", "By popularity")
+            case .popularity:
+                return L("按字母", "A-Z")
+            }
+        }
+
+        var activeTitle: String {
+            switch self {
+            case .alphabetical:
+                return "A-Z"
+            case .popularity:
+                return L("热度", "Hot")
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .alphabetical:
+                return "chart.line.uptrend.xyaxis"
+            case .popularity:
+                return "arrow.up.arrow.down"
+            }
+        }
+    }
+
     @State private var event: WebEvent?
     @State private var isLoading = false
     @State private var showEventCheckinSheet = false
@@ -60,6 +92,8 @@ struct EventDetailView: View {
     @State private var isLoadingRelatedArticles = false
     @State private var selectedRatingEventID: String?
     @State private var showExpandedLineupList = false
+    @State private var lineupSortMode: LineupSortMode = .alphabetical
+    @State private var expandedLineupPage = 0
     @State private var venueMapContext: EventVenueMapContext?
     @State private var selectedLineupMedia: FullscreenMediaSelection?
 
@@ -94,6 +128,12 @@ struct EventDetailView: View {
             case .sets: return Color(red: 0.58, green: 0.43, blue: 0.95)
             }
         }
+    }
+
+    init(eventID: String, initialTabRawValue: String? = nil) {
+        self.eventID = eventID
+        let initialTab = initialTabRawValue.flatMap(EventDetailTab.init(rawValue:)) ?? .info
+        _selectedTab = State(initialValue: initialTab)
     }
 
     private struct EventVenueMapContext: Identifiable {
@@ -268,6 +308,7 @@ struct EventDetailView: View {
                     await geocodeIfNeeded()
                 }
             }
+            .raverEnableCustomSwipeBack(edgeRatio: 0.2)
         }
 
         @MainActor
@@ -924,7 +965,7 @@ struct EventDetailView: View {
         let lineupPreviewItems: [FullscreenMediaItem] = allLineupMediaURLs.enumerated().map { index, raw in
             FullscreenMediaItem(rawURL: raw.trimmingCharacters(in: .whitespacesAndNewlines), index: index)
         }
-        let hasLineupDJs = !lineupDJEntries(for: event).isEmpty
+        let hasLineupDJs = !lineupDJEntries(for: event, sortMode: lineupSortMode).isEmpty
 
         lineupDJsStrip(for: event)
 
@@ -1432,6 +1473,7 @@ struct EventDetailView: View {
                     queryText: queryText,
                     venueDisplayText: eventVenueDisplayText(event)
                 )
+                .allowsHitTesting(false)
 
                 HStack(spacing: 6) {
                     Image(systemName: "location.viewfinder")
@@ -1450,12 +1492,14 @@ struct EventDetailView: View {
             .frame(maxWidth: .infinity)
             .frame(height: 146)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(Color.white.opacity(0.1), lineWidth: 0.8)
             )
         }
         .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .padding(.top, 2)
     }
 
@@ -1505,7 +1549,7 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private func lineupDJsStrip(for event: WebEvent) -> some View {
-        let djs = lineupDJEntries(for: event)
+        let djs = lineupDJEntries(for: event, sortMode: lineupSortMode)
         let canExpand = djs.count > 8
         if !djs.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
@@ -1513,11 +1557,29 @@ struct EventDetailView: View {
                     Text(LL("参演 DJ"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
+                    Text(lineupSortMode.activeTitle)
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(RaverTheme.accent)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(RaverTheme.accent.opacity(0.12), in: Capsule())
                     Spacer(minLength: 0)
+                    Button {
+                        withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.86)) {
+                            lineupSortMode = lineupSortMode == .alphabetical ? .popularity : .alphabetical
+                            expandedLineupPage = 0
+                        }
+                    } label: {
+                        Label(lineupSortMode.toggleTitle, systemImage: lineupSortMode.iconName)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(lineupSortMode == .alphabetical ? Color(red: 0.98, green: 0.45, blue: 0.27) : RaverTheme.accent)
+                    }
+                    .buttonStyle(.plain)
                     if canExpand {
                         Button {
                             withAnimation(.interactiveSpring(response: 0.26, dampingFraction: 0.85)) {
                                 showExpandedLineupList.toggle()
+                                expandedLineupPage = 0
                             }
                         } label: {
                             Label(
@@ -1542,38 +1604,110 @@ struct EventDetailView: View {
                 .frame(height: 82)
 
                 if showExpandedLineupList {
-                    VStack(alignment: .leading, spacing: 0) {
-                        LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 74), spacing: 10)],
-                            alignment: .leading,
-                            spacing: 12
-                        ) {
-                            ForEach(djs) { dj in
-                                lineupDJAvatarItem(dj)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(RaverTheme.card.opacity(0.86))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
-                    )
-                    .padding(.top, 4)
-                    .transition(
-                        .asymmetric(
-                            insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
-                        )
-                    )
+                    lineupExpandedPager(djs)
                 }
             }
             .animation(.spring(response: 0.34, dampingFraction: 0.86), value: showExpandedLineupList)
+            .animation(.spring(response: 0.26, dampingFraction: 0.88), value: lineupSortMode)
+        }
+    }
+
+    private func lineupExpandedPager(_ djs: [EventLineupDJEntry]) -> some View {
+        let pages = lineupDJPages(djs)
+        let pageCount = max(pages.count, 1)
+
+        return VStack(spacing: 10) {
+            TabView(selection: $expandedLineupPage) {
+                ForEach(Array(pages.enumerated()), id: \.offset) { pageIndex, pageItems in
+                    lineupExpandedGrid(pageItems)
+                        .tag(pageIndex)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(height: 368)
+
+            HStack(spacing: 12) {
+                Button {
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                        expandedLineupPage = max(0, expandedLineupPage - 1)
+                    }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.caption.weight(.bold))
+                        .frame(width: 32, height: 28)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(expandedLineupPage <= 0 ? RaverTheme.secondaryText.opacity(0.35) : RaverTheme.accent)
+                .disabled(expandedLineupPage <= 0)
+
+                Spacer(minLength: 0)
+
+                Text("\(min(expandedLineupPage + 1, pageCount)) / \(pageCount)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(RaverTheme.background.opacity(0.42), in: Capsule())
+
+                Spacer(minLength: 0)
+
+                Button {
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                        expandedLineupPage = min(pageCount - 1, expandedLineupPage + 1)
+                    }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .frame(width: 32, height: 28)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(expandedLineupPage >= pageCount - 1 ? RaverTheme.secondaryText.opacity(0.35) : RaverTheme.accent)
+                .disabled(expandedLineupPage >= pageCount - 1)
+            }
+            .padding(.horizontal, 6)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(RaverTheme.card.opacity(0.86))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+        )
+        .padding(.top, 4)
+        .transition(
+            .asymmetric(
+                insertion: .opacity.combined(with: .move(edge: .top)),
+                removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+            )
+        )
+    }
+
+    private func lineupExpandedGrid(_ djs: [EventLineupDJEntry]) -> some View {
+        let columns = [
+            GridItem(.flexible(minimum: 0), spacing: 12, alignment: .top),
+            GridItem(.flexible(minimum: 0), spacing: 12, alignment: .top),
+            GridItem(.flexible(minimum: 0), spacing: 12, alignment: .top),
+            GridItem(.flexible(minimum: 0), spacing: 12, alignment: .top)
+        ]
+
+        return LazyVGrid(columns: columns, alignment: .center, spacing: 12) {
+            ForEach(djs) { dj in
+                lineupDJAvatarItem(dj)
+                    .frame(maxWidth: .infinity, minHeight: 80, alignment: .top)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 356, maxHeight: 356, alignment: .top)
+        .padding(.top, 2)
+    }
+
+    private func lineupDJPages(_ djs: [EventLineupDJEntry]) -> [[EventLineupDJEntry]] {
+        let pageSize = 16
+        guard !djs.isEmpty else { return [[]] }
+        return stride(from: 0, to: djs.count, by: pageSize).map { start in
+            Array(djs[start..<min(start + pageSize, djs.count)])
         }
     }
 
@@ -1684,12 +1818,10 @@ struct EventDetailView: View {
             )
     }
 
-    private func lineupDJEntries(for event: WebEvent) -> [EventLineupDJEntry] {
+    private func lineupDJEntries(for event: WebEvent, sortMode: LineupSortMode) -> [EventLineupDJEntry] {
         var seen = Set<String>()
         var result: [EventLineupDJEntry] = []
         let avatarByName = performerAvatarMap(from: event)
-        let followerByName = lineupFollowerMapByName(from: event)
-        let followerByID = lineupFollowerMapByID(from: event)
 
         for slot in event.lineupSlots.sorted(by: { $0.startTime < $1.startTime }) {
             var act = EventLineupActCodec.parse(slot: slot)
@@ -1715,6 +1847,17 @@ struct EventDetailView: View {
             result.append(EventLineupDJEntry(id: key, act: act))
         }
 
+        if sortMode == .alphabetical {
+            return result
+                .enumerated()
+                .sorted { lhs, rhs in
+                    shouldOrderLineupActAlphabetically(lhs.element.act, before: rhs.element.act, lhsIndex: lhs.offset, rhsIndex: rhs.offset)
+                }
+                .map(\.element)
+        }
+
+        let followerByName = lineupFollowerMapByName(from: event)
+        let followerByID = lineupFollowerMapByID(from: event)
         return result
             .enumerated()
             .sorted { lhs, rhs in
@@ -1818,6 +1961,21 @@ struct EventDetailView: View {
             break
         }
 
+        let leftName = lineupSortName(for: lhs)
+        let rightName = lineupSortName(for: rhs)
+        let nameCompare = leftName.localizedCaseInsensitiveCompare(rightName)
+        if nameCompare != .orderedSame {
+            return nameCompare == .orderedAscending
+        }
+        return lhsIndex < rhsIndex
+    }
+
+    private func shouldOrderLineupActAlphabetically(
+        _ lhs: EventLineupResolvedAct,
+        before rhs: EventLineupResolvedAct,
+        lhsIndex: Int,
+        rhsIndex: Int
+    ) -> Bool {
         let leftName = lineupSortName(for: lhs)
         let rightName = lineupSortName(for: rhs)
         let nameCompare = leftName.localizedCaseInsensitiveCompare(rightName)
@@ -2512,6 +2670,7 @@ private enum EventScheduleTypography {
 private struct EventTimelineLayout {
     static let axisWidth: CGFloat = 54
     static let stageHeaderHeight: CGFloat = 74
+    static let stageHeaderFadeHeight: CGFloat = 20
     static let stageGap: CGFloat = 4
     static let timelineTopInset: CGFloat = 50
     static let timelineBottomInset: CGFloat = 40
@@ -2534,6 +2693,7 @@ private struct EventTimelineLayout {
 
     init(
         slots: [WebEventLineupSlot],
+        stageOrder: [String] = [],
         availableWidth: CGFloat,
         maxVisibleStages: Int = Self.maxVisibleStageCount
     ) {
@@ -2547,14 +2707,25 @@ private struct EventTimelineLayout {
             let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return trimmed.isEmpty ? "MAIN STAGE" : trimmed
         }
+        var groupedStageByKey: [String: String] = [:]
+        for stage in grouped.keys {
+            groupedStageByKey[stage.localizedLowercase] = stage
+        }
         let slotsOrderedBySort = normalizedSlots.sorted {
             if $0.sortOrder == $1.sortOrder {
                 return $0.startTime < $1.startTime
             }
             return $0.sortOrder < $1.sortOrder
         }
+        let configuredStageOrder = Self.normalizedStageOrder(stageOrder)
         var orderedStages: [String] = []
         var seenStages = Set<String>()
+        for stage in configuredStageOrder {
+            guard let canonicalStage = groupedStageByKey[stage.localizedLowercase] else { continue }
+            if seenStages.insert(canonicalStage).inserted {
+                orderedStages.append(canonicalStage)
+            }
+        }
         for slot in slotsOrderedBySort {
             let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let stage = trimmed.isEmpty ? "MAIN STAGE" : trimmed
@@ -2621,6 +2792,19 @@ private struct EventTimelineLayout {
         return max(1, names.count)
     }
 
+    private static func normalizedStageOrder(_ stageOrder: [String]) -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
+        for raw in stageOrder {
+            let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            let key = text.localizedLowercase
+            guard seen.insert(key).inserted else { continue }
+            result.append(text)
+        }
+        return result
+    }
+
     private static func timeBounds(for slots: [WebEventLineupSlot]) -> (start: Date, end: Date) {
         let reference = slots.map(\.startTime).min() ?? Date()
         let earliest = slots.map(\.startTime).min() ?? reference
@@ -2673,45 +2857,105 @@ private struct EventTimelineLayout {
 }
 
 private struct EventTimelineBoardView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let event: WebEvent
     let day: EventScheduleDay
     let selectedSlotIDs: Set<String>
     let selectable: Bool
     let onToggleSlot: ((WebEventLineupSlot) -> Void)?
+    var onSelectSlot: ((WebEventLineupSlot) -> Void)? = nil
     var maxVisibleStages: Int = EventTimelineLayout.maxVisibleStageCount
+    var stickyTopInset: CGFloat = 0
 
     private var boardHeight: CGFloat {
         EventTimelineLayout.estimatedHeight(for: day.slots)
+    }
+
+    private var isDarkMode: Bool {
+        colorScheme == .dark
+    }
+
+    private var boardGradientColors: [Color] {
+        if isDarkMode {
+            return [
+                Color(red: 0.09, green: 0.10, blue: 0.14),
+                Color(red: 0.06, green: 0.06, blue: 0.09)
+            ]
+        }
+        return [
+            Color.white,
+            Color(red: 0.94, green: 0.94, blue: 0.985)
+        ]
+    }
+
+    private var boardStrokeColor: Color {
+        isDarkMode ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
+    }
+
+    private var headerBackdropColor: Color {
+        isDarkMode ? Color(red: 0.08, green: 0.09, blue: 0.13) : Color(red: 0.965, green: 0.965, blue: 0.99)
+    }
+
+    private var axisHeaderTextColor: Color {
+        isDarkMode ? Color.white.opacity(0.72) : Color.black.opacity(0.54)
+    }
+
+    private var axisTextColor: Color {
+        isDarkMode ? Color.white.opacity(0.92) : Color.black.opacity(0.62)
+    }
+
+    private var stageHeaderStrokeColor: Color {
+        isDarkMode ? Color.white.opacity(0.36) : Color.white.opacity(0.72)
+    }
+
+    private var stageHeaderTextColor: Color {
+        Color.black.opacity(isDarkMode ? 0.72 : 0.76)
+    }
+
+    private var columnFillColor: Color {
+        isDarkMode ? Color.white.opacity(0.04) : Color.black.opacity(0.035)
+    }
+
+    private var gridLineColor: Color {
+        isDarkMode ? Color.white.opacity(0.10) : Color.black.opacity(0.08)
+    }
+
+    private var normalCardTextColor: Color {
+        Color.black.opacity(isDarkMode ? 0.84 : 0.78)
+    }
+
+    private var selectedCardFillColor: Color {
+        isDarkMode ? Color.black.opacity(0.88) : Color.white.opacity(0.94)
     }
 
     var body: some View {
         GeometryReader { geo in
             let layout = EventTimelineLayout(
                 slots: day.slots,
+                stageOrder: event.stageOrder ?? [],
                 availableWidth: max(geo.size.width, EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth),
                 maxVisibleStages: maxVisibleStages
             )
+            let stickyHeaderOffset = stickyHeaderOffset(containerMinY: geo.frame(in: .global).minY, layout: layout)
 
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [
-                                Color(red: 0.09, green: 0.10, blue: 0.14),
-                                Color(red: 0.06, green: 0.06, blue: 0.09)
-                            ],
+                            colors: boardGradientColors,
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                            .stroke(boardStrokeColor, lineWidth: 1)
                     )
 
                 HStack(spacing: 0) {
-                    timelineAxis(layout: layout)
-                    stageMatrix(layout: layout)
+                    timelineAxis(layout: layout, stickyHeaderOffset: stickyHeaderOffset)
+                    stageMatrix(layout: layout, stickyHeaderOffset: stickyHeaderOffset)
                 }
                 .padding(.vertical, 10)
             }
@@ -2719,10 +2963,17 @@ private struct EventTimelineBoardView: View {
         .frame(height: boardHeight)
     }
 
+    private func stickyHeaderOffset(containerMinY: CGFloat, layout: EventTimelineLayout) -> CGFloat {
+        let rawOffset = max(0, stickyTopInset - containerMinY)
+        return min(rawOffset, max(0, layout.bodyHeight - 1))
+    }
+
     @ViewBuilder
-    private func stageMatrix(layout: EventTimelineLayout) -> some View {
+    private func stageMatrix(layout: EventTimelineLayout, stickyHeaderOffset: CGFloat) -> some View {
         let stageContent = VStack(spacing: 0) {
-            stageHeaderRow(layout: layout)
+            stageHeaderRow(layout: layout, stickyHeaderOffset: stickyHeaderOffset)
+                .offset(y: stickyHeaderOffset)
+                .zIndex(3)
             stageColumnsRow(layout: layout)
         }
 
@@ -2733,16 +2984,30 @@ private struct EventTimelineBoardView: View {
         .frame(width: layout.stageViewportWidth, alignment: .leading)
     }
 
-    private func timelineAxis(layout: EventTimelineLayout) -> some View {
+    private func timelineAxis(layout: EventTimelineLayout, stickyHeaderOffset: CGFloat) -> some View {
         VStack(spacing: 0) {
-            Color.clear
-                .frame(width: EventTimelineLayout.axisWidth, height: EventTimelineLayout.stageHeaderHeight)
+            ZStack(alignment: .top) {
+                headerBackdrop(width: EventTimelineLayout.axisWidth, topExtension: stickyHeaderOffset)
+
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(headerBackdropColor.opacity(stickyHeaderOffset > 0 ? 1.0 : 0.0))
+                    .overlay(
+                        Text("TIME")
+                            .font(EventScheduleTypography.semibold(12))
+                            .tracking(1.2)
+                            .foregroundStyle(axisHeaderTextColor.opacity(stickyHeaderOffset > 0 ? 1.0 : 0.0))
+                    )
+                    .frame(width: EventTimelineLayout.axisWidth, height: EventTimelineLayout.stageHeaderHeight)
+            }
+            .frame(width: EventTimelineLayout.axisWidth, height: EventTimelineLayout.stageHeaderHeight, alignment: .top)
+            .offset(y: stickyHeaderOffset)
+            .zIndex(3)
 
             ZStack(alignment: .topTrailing) {
                 ForEach(layout.tickDates, id: \.timeIntervalSinceReferenceDate) { tick in
                     Text(Self.axisTimeFormatter.string(from: tick))
-                        .font(EventScheduleTypography.semibold(15))
-                        .foregroundStyle(Color.white.opacity(0.92))
+                        .font(EventScheduleTypography.heavy(12))
+                        .foregroundStyle(axisTextColor)
                         .frame(width: EventTimelineLayout.axisWidth - 8, alignment: .trailing)
                         .offset(y: layout.yPosition(for: tick) - 12)
                 }
@@ -2752,38 +3017,69 @@ private struct EventTimelineBoardView: View {
         .frame(width: EventTimelineLayout.axisWidth)
     }
 
-    private func stageHeaderRow(layout: EventTimelineLayout) -> some View {
-        HStack(spacing: EventTimelineLayout.stageGap) {
-            ForEach(layout.stageNames, id: \.self) { stageName in
-                let stageColor = layout.color(for: stageName)
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                stageColor.opacity(0.98),
-                                stageColor.opacity(0.78),
-                                stageColor.opacity(0.56)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+    private func stageHeaderRow(layout: EventTimelineLayout, stickyHeaderOffset: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            headerBackdrop(width: layout.stageContentWidth, topExtension: stickyHeaderOffset)
+
+            HStack(spacing: EventTimelineLayout.stageGap) {
+                ForEach(layout.stageNames, id: \.self) { stageName in
+                    let stageColor = layout.color(for: stageName)
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    stageColor,
+                                    stageColor.opacity(0.92),
+                                    stageColor.opacity(0.84)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .stroke(Color.white.opacity(0.36), lineWidth: 1)
-                    )
-                    .overlay(
-                        Text(stageName)
-                            .font(EventScheduleTypography.heavy(26))
-                            .minimumScaleFactor(0.24)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(Color.black.opacity(0.72))
-                            .padding(.horizontal, 4)
-                    )
-                    .frame(width: layout.stageWidth, height: EventTimelineLayout.stageHeaderHeight)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .stroke(stageHeaderStrokeColor, lineWidth: 1)
+                        )
+                        .overlay(
+                            Text(stageName)
+                                .font(EventScheduleTypography.heavy(26))
+                                .minimumScaleFactor(0.24)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.center)
+                                .foregroundStyle(stageHeaderTextColor)
+                                .padding(.horizontal, 4)
+                        )
+                        .frame(width: layout.stageWidth, height: EventTimelineLayout.stageHeaderHeight)
+                }
             }
         }
+        .frame(width: layout.stageContentWidth, height: EventTimelineLayout.stageHeaderHeight, alignment: .topLeading)
+    }
+
+    private func headerBackdrop(width: CGFloat, topExtension: CGFloat = 0) -> some View {
+        let resolvedTopExtension = max(0, topExtension)
+
+        return VStack(spacing: 0) {
+            headerBackdropColor
+                .frame(
+                    width: width,
+                    height: resolvedTopExtension + EventTimelineLayout.stageHeaderHeight
+                )
+                .offset(y: -resolvedTopExtension)
+
+            LinearGradient(
+                colors: [
+                    headerBackdropColor.opacity(isDarkMode ? 0.86 : 0.92),
+                    headerBackdropColor.opacity(isDarkMode ? 0.34 : 0.46),
+                    headerBackdropColor.opacity(0.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(width: width, height: EventTimelineLayout.stageHeaderFadeHeight)
+            .offset(y: -resolvedTopExtension)
+        }
+        .allowsHitTesting(false)
     }
 
     private func stageColumnsRow(layout: EventTimelineLayout) -> some View {
@@ -2801,11 +3097,11 @@ private struct EventTimelineBoardView: View {
 
         return ZStack(alignment: .top) {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.04))
+                .fill(columnFillColor)
 
             ForEach(layout.tickDates, id: \.timeIntervalSinceReferenceDate) { tick in
                 Rectangle()
-                    .fill(Color.white.opacity(0.10))
+                    .fill(gridLineColor)
                     .frame(height: 1)
                     .offset(y: layout.yPosition(for: tick))
             }
@@ -2822,45 +3118,53 @@ private struct EventTimelineBoardView: View {
     private func timelineCard(frame: EventTimelineCardFrame, stageColor: Color) -> some View {
         let isSelected = selectedSlotIDs.contains(frame.slot.id)
         let displayAct = EventLineupActCodec.parse(slot: frame.slot)
-        let cardFill = isSelected ? Color.black.opacity(0.88) : stageColor.opacity(0.92)
-        let textColor = isSelected ? stageColor : Color.black.opacity(0.84)
-        let nameTimeSpacing: CGFloat = 1
+        let cardFill = isSelected ? selectedCardFillColor : stageColor.opacity(0.92)
+        let textColor = isSelected ? stageColor : normalCardTextColor
+        let nameTimeSpacing: CGFloat = 0.2
 
         let content = RoundedRectangle(cornerRadius: 9, style: .continuous)
             .fill(cardFill)
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .stroke(
-                        isSelected ? stageColor.opacity(0.95) : Color.black.opacity(0.42),
+                        isSelected ? stageColor.opacity(0.95) : Color.black.opacity(isDarkMode ? 0.42 : 0.22),
                         lineWidth: isSelected ? 2.0 : 1.1
                     )
             )
             .shadow(color: stageColor.opacity(isSelected ? 0.58 : 0.30), radius: isSelected ? 12 : 8, x: 0, y: 2)
-            .overlay(alignment: .topLeading) {
-                VStack(alignment: .leading, spacing: nameTimeSpacing) {
+            .overlay(alignment: .bottomTrailing) {
+                VStack(alignment: .trailing, spacing: nameTimeSpacing) {
                     Text(displayAct.displayName)
                         .font(EventScheduleTypography.heavy(28))
+                        .lineSpacing(-4)
                         .minimumScaleFactor(0.21)
                         .lineLimit(3)
-                        .multilineTextAlignment(.leading)
+                        .multilineTextAlignment(.trailing)
                         .foregroundStyle(textColor)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
 
-                    Text(Self.cardStartTimeText(for: frame.slot))
-                        .font(EventScheduleTypography.semibold(12))
+                    Text(Self.cardTimeRangeText(for: frame.slot))
+                        .font(EventScheduleTypography.heavy(12))
                         .monospacedDigit()
                         .foregroundStyle(textColor.opacity(0.95))
                         .lineLimit(1)
                 }
-                .padding(.horizontal, 8)
-                .padding(.top, 7)
-                .padding(.bottom, 6)
+                .padding(.horizontal, 3)
+                .padding(.top, 3)
+                .padding(.bottom, 3)
             }
 
         return Group {
             if selectable, let onToggleSlot {
                 Button {
                     onToggleSlot(frame.slot)
+                } label: {
+                    content
+                }
+                .buttonStyle(.plain)
+            } else if let onSelectSlot {
+                Button {
+                    onSelectSlot(frame.slot)
                 } label: {
                     content
                 }
@@ -2897,8 +3201,8 @@ private struct EventTimelineBoardView: View {
         return result
     }
 
-    private static func cardStartTimeText(for slot: WebEventLineupSlot) -> String {
-        cardTimeFormatter.string(from: slot.startTime)
+    private static func cardTimeRangeText(for slot: WebEventLineupSlot) -> String {
+        "\(cardTimeFormatter.string(from: slot.startTime))-\(cardTimeFormatter.string(from: slot.endTime))"
     }
 
     private static let axisTimeFormatter: DateFormatter = {
@@ -2913,85 +3217,118 @@ private struct EventTimelineBoardView: View {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = .current
-        formatter.dateFormat = "h:mma"
+        formatter.dateFormat = "HH:mm"
         return formatter
     }()
 }
 
-private struct EventRouteSharePosterView: View {
+private struct EventRoutePlannerShareSnapshotView: View {
     let event: WebEvent
-    let day: EventScheduleDay
+    let days: [EventScheduleDay]
+    let selectedDayID: String
     let selectedSlotIDs: Set<String>
-    let username: String
-    let coverImage: UIImage?
+    let contentWidth: CGFloat
+
+    private var selectedDay: EventScheduleDay? {
+        days.first(where: { $0.id == selectedDayID }) ?? days.first
+    }
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var selectedDayTextColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.85) : Color.white.opacity(0.97)
+    }
+
+    private var selectedDayBackgroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.92) : RaverTheme.accent.opacity(0.92)
+    }
+
+    private var unselectedDayTextColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.88) : RaverTheme.primaryText.opacity(0.86)
+    }
+
+    private var unselectedDayBackgroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.13) : Color.black.opacity(0.08)
+    }
+
+    private var unselectedDayStrokeColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.10)
+    }
+
+    private var plannerBackgroundGradientColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                Color(red: 0.05, green: 0.06, blue: 0.11),
+                Color(red: 0.03, green: 0.03, blue: 0.04)
+            ]
+        }
+        return [
+            Color.white,
+            RaverTheme.background
+        ]
+    }
 
     var body: some View {
         ZStack {
-            if let coverImage {
-                Image(uiImage: coverImage)
-                    .resizable()
-                    .scaledToFill()
-                    .overlay(Color.black.opacity(0.70))
-                    .blur(radius: 12)
-                    .ignoresSafeArea()
-            } else {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.07, blue: 0.14),
-                        Color(red: 0.11, green: 0.05, blue: 0.20),
-                        Color(red: 0.04, green: 0.05, blue: 0.08)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+            LinearGradient(
+                colors: plannerBackgroundGradientColors,
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 14) {
+                if days.count > 1 {
+                    daySelector
+                }
+
+                if let selectedDay {
+                    EventTimelineBoardView(
+                        event: event,
+                        day: selectedDay,
+                        selectedSlotIDs: selectedSlotIDs,
+                        selectable: false,
+                        onToggleSlot: nil,
+                        maxVisibleStages: Int.max,
+                        stickyTopInset: 0
+                    )
+                    .frame(width: contentWidth, height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots), alignment: .leading)
+                } else {
+                    ContentUnavailableView(LL("等待时间表发布"), systemImage: "calendar.badge.exclamationmark")
+                        .frame(width: contentWidth, alignment: .leading)
+                }
             }
+            .padding(.horizontal, 10)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
+            .frame(width: contentWidth + 20, alignment: .leading)
+        }
+        .frame(width: contentWidth + 20)
+    }
 
-            VStack(alignment: .leading, spacing: 16) {
-                Text(L("\(username)的\(event.name)电音节行程", "\(username)'s \(event.name) festival route"))
-                    .font(EventScheduleTypography.heavy(42))
-                    .foregroundStyle(Color.white)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.72)
-
-                Text(day.subtitle)
-                    .font(EventScheduleTypography.semibold(26))
-                    .foregroundStyle(Color.white.opacity(0.9))
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 8)
-                    .background(Capsule().fill(Color.white.opacity(0.14)))
-
-                EventTimelineBoardView(
-                    event: event,
-                    day: day,
-                    selectedSlotIDs: selectedSlotIDs,
-                    selectable: false,
-                    onToggleSlot: nil,
-                    maxVisibleStages: Int.max
-                )
-                .frame(height: EventTimelineLayout.estimatedHeight(for: day.slots))
-
-                HStack {
-                    Spacer()
-                    Text("RaveHub")
-                        .font(EventScheduleTypography.heavy(26))
-                        .foregroundStyle(Color.white.opacity(0.9))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
+    private var daySelector: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(days) { day in
+                    let selected = day.id == selectedDayID
+                    Text(day.subtitle)
+                        .font(EventScheduleTypography.semibold(15))
+                        .foregroundStyle(selected ? selectedDayTextColor : unselectedDayTextColor)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
                         .background(
                             Capsule()
-                                .fill(Color.black.opacity(0.42))
+                                .fill(selected ? selectedDayBackgroundColor : unselectedDayBackgroundColor)
                                 .overlay(
                                     Capsule()
-                                        .stroke(Color.white.opacity(0.20), lineWidth: 1)
+                                        .stroke(unselectedDayStrokeColor, lineWidth: selected ? 0 : 1)
                                 )
                         )
                 }
             }
-            .padding(.horizontal, 36)
-            .padding(.top, 40)
-            .padding(.bottom, 28)
+            .padding(.horizontal, 2)
         }
+        .frame(width: contentWidth, alignment: .leading)
     }
 }
 
@@ -3000,8 +3337,8 @@ private struct EventRoutePlannerView: View {
     let days: [EventScheduleDay]
     let initialDayID: String
 
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var routeStore = EventRouteStore.shared
 
     @State private var selectedDayID: String
     @State private var selectedSlotIDs: Set<String> = []
@@ -3009,101 +3346,162 @@ private struct EventRoutePlannerView: View {
     @State private var shareImage: UIImage?
     @State private var showShareSheet = false
     @State private var feedbackMessage: String?
-    @State private var coverImage: UIImage?
+    @State private var showRouteSavedToast = false
 
     init(event: WebEvent, days: [EventScheduleDay], initialDayID: String) {
         self.event = event
         self.days = days
         self.initialDayID = initialDayID
         _selectedDayID = State(initialValue: initialDayID)
+        _selectedSlotIDs = State(initialValue: EventRouteStore.shared.route(for: event.id)?.selectedSlotIDSet ?? [])
     }
 
     private var selectedDay: EventScheduleDay? {
         days.first(where: { $0.id == selectedDayID }) ?? days.first
     }
 
-    private var displayNameForShare: String {
-        let trimmed = appState.session?.user.displayName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !trimmed.isEmpty { return trimmed }
-        return appState.session?.user.username ?? "Raver"
+    private var selectedDayTextColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.85) : Color.white.opacity(0.97)
+    }
+
+    private var selectedDayBackgroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.92) : RaverTheme.accent.opacity(0.92)
+    }
+
+    private var unselectedDayTextColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.88) : RaverTheme.primaryText.opacity(0.86)
+    }
+
+    private var unselectedDayBackgroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.13) : Color.black.opacity(0.08)
+    }
+
+    private var unselectedDayStrokeColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.10)
+    }
+
+    private var plannerBackgroundGradientColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                Color(red: 0.05, green: 0.06, blue: 0.11),
+                Color(red: 0.03, green: 0.03, blue: 0.04)
+            ]
+        }
+        return [
+            Color.white,
+            RaverTheme.background
+        ]
+    }
+
+    private var routePlannerTimelineStickyTopInset: CGFloat {
+        topSafeAreaInset() + 44
     }
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.06, blue: 0.11),
-                        Color(red: 0.03, green: 0.03, blue: 0.04)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+        ZStack {
+            LinearGradient(
+                colors: plannerBackgroundGradientColors,
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        if days.count > 1 {
-                            daySelector
-                        }
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 14) {
+                    if days.count > 1 {
+                        daySelector
+                    }
 
-                        if let selectedDay {
-                            EventTimelineBoardView(
-                                event: event,
-                                day: selectedDay,
-                                selectedSlotIDs: selectedSlotIDs,
-                                selectable: true,
-                                onToggleSlot: { slot in
-                                    if selectedSlotIDs.contains(slot.id) {
-                                        selectedSlotIDs.remove(slot.id)
-                                    } else {
-                                        selectedSlotIDs.insert(slot.id)
-                                    }
+                    if let selectedDay {
+                        EventTimelineBoardView(
+                            event: event,
+                            day: selectedDay,
+                            selectedSlotIDs: selectedSlotIDs,
+                            selectable: true,
+                            onToggleSlot: { slot in
+                                if selectedSlotIDs.contains(slot.id) {
+                                    selectedSlotIDs.remove(slot.id)
+                                } else {
+                                    selectedSlotIDs.insert(slot.id)
                                 }
+                            },
+                            stickyTopInset: routePlannerTimelineStickyTopInset
+                        )
+                        .frame(height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots))
+                    } else {
+                        ContentUnavailableView(LL("等待时间表发布"), systemImage: "calendar.badge.exclamationmark")
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
+            }
+        }
+        .overlay {
+            if showRouteSavedToast {
+                Text(LL("在个人主页-我的行程可以快速查看路线"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    .background(
+                        Capsule()
+                            .fill(Color.black.opacity(0.82))
+                            .overlay(
+                                Capsule()
+                                    .stroke(RaverTheme.accent.opacity(0.55), lineWidth: 1)
                             )
-                            .frame(height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots))
-                        } else {
-                            ContentUnavailableView(LL("等待时间表发布"), systemImage: "calendar.badge.exclamationmark")
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.top, 12)
-                    .padding(.bottom, 24)
+                    )
+                    .shadow(color: Color.black.opacity(0.28), radius: 18, x: 0, y: 8)
+                    .transition(.scale(scale: 0.94).combined(with: .opacity))
+                    .zIndex(10)
+            }
+        }
+        .animation(.spring(response: 0.30, dampingFraction: 0.86), value: showRouteSavedToast)
+        .raverSystemNavigation(title: LL("定制路线"), backgroundColor: RaverTheme.background)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    saveCurrentRoute()
+                } label: {
+                    Label(LL("保存"), systemImage: "square.and.arrow.down")
                 }
-            }
-            .raverSystemNavigation(title: LL("定制路线"))
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await exportSharePoster() }
-                    } label: {
-                        Image(systemName: "square.and.arrow.up")
-                    }
-                    .disabled(isGeneratingShare)
-                    .opacity(isGeneratingShare ? 0.6 : 1)
+
+                Button {
+                    Task { await exportSharePoster() }
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
                 }
+                .disabled(isGeneratingShare)
+                .opacity(isGeneratingShare ? 0.6 : 1)
             }
-            .onAppear {
-                if selectedDayID.isEmpty {
-                    selectedDayID = days.first?.id ?? ""
-                }
+        }
+        .onAppear {
+            if selectedDayID.isEmpty {
+                selectedDayID = days.first?.id ?? ""
             }
-            .task {
-                await loadCoverImageIfNeeded()
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let shareImage {
+                ActivityShareSheet(items: [shareImage], completion: nil)
             }
-            .sheet(isPresented: $showShareSheet) {
-                if let shareImage {
-                    ActivityShareSheet(items: [shareImage], completion: nil)
-                }
-            }
-            .alert(L("提示", "Notice"), isPresented: Binding(
-                get: { feedbackMessage != nil },
-                set: { if !$0 { feedbackMessage = nil } }
-            )) {
-                Button(L("确定", "OK"), role: .cancel) {}
-            } message: {
-                Text(feedbackMessage ?? "")
-            }
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { feedbackMessage != nil },
+            set: { if !$0 { feedbackMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(feedbackMessage ?? "")
+        }
+    }
+
+    private func saveCurrentRoute() {
+        routeStore.save(event: event, selectedSlotIDs: selectedSlotIDs)
+        showRouteSavedToast = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.1) {
+            showRouteSavedToast = false
         }
     }
 
@@ -3118,12 +3516,16 @@ private struct EventRoutePlannerView: View {
                     } label: {
                         Text(day.subtitle)
                             .font(EventScheduleTypography.semibold(15))
-                            .foregroundStyle(selected ? Color.black.opacity(0.85) : Color.white.opacity(0.88))
+                            .foregroundStyle(selected ? selectedDayTextColor : unselectedDayTextColor)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                             .background(
                                 Capsule()
-                                    .fill(selected ? Color.white.opacity(0.92) : Color.white.opacity(0.13))
+                                    .fill(selected ? selectedDayBackgroundColor : unselectedDayBackgroundColor)
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(unselectedDayStrokeColor, lineWidth: selected ? 0 : 1)
+                                    )
                             )
                     }
                     .buttonStyle(.plain)
@@ -3148,23 +3550,22 @@ private struct EventRoutePlannerView: View {
         let stageRegionWidth =
             CGFloat(stageCount) * EventTimelineLayout.minStageWidth +
             CGFloat(max(stageCount - 1, 0)) * EventTimelineLayout.stageGap
-        let boardWidth = EventTimelineLayout.axisWidth + stageRegionWidth
-        let horizontalPadding: CGFloat = 72
-        let posterWidth = max(1080, boardWidth + horizontalPadding)
-        let boardHeight = EventTimelineLayout.estimatedHeight(for: selectedDay.slots)
-        let posterHeight = max(1920, boardHeight + 280)
+        let fullBoardWidth = EventTimelineLayout.axisWidth + stageRegionWidth
+        let viewportContentWidth = max(UIScreen.main.bounds.width - 20, EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth)
+        let snapshotContentWidth = max(fullBoardWidth, viewportContentWidth)
 
-        let poster = EventRouteSharePosterView(
+        let snapshotView = EventRoutePlannerShareSnapshotView(
             event: event,
-            day: selectedDay,
+            days: days,
+            selectedDayID: selectedDay.id,
             selectedSlotIDs: selectedSlotIDs,
-            username: displayNameForShare,
-            coverImage: coverImage
+            contentWidth: snapshotContentWidth
         )
-        .frame(width: posterWidth, height: posterHeight)
+        .environment(\.colorScheme, colorScheme)
 
-        let renderer = ImageRenderer(content: poster)
+        let renderer = ImageRenderer(content: snapshotView)
         renderer.scale = UIScreen.main.scale
+        renderer.proposedSize = ProposedViewSize(width: snapshotContentWidth + 20, height: nil)
 
         guard let image = renderer.uiImage else {
             feedbackMessage = L("行程图生成失败，请重试", "Failed to generate route image. Please try again.")
@@ -3202,23 +3603,6 @@ private struct EventRoutePlannerView: View {
         }
     }
 
-    @MainActor
-    private func loadCoverImageIfNeeded() async {
-        guard coverImage == nil,
-              let urlString = AppConfig.resolvedURLString(event.coverImageUrl),
-              let url = URL(string: urlString) else {
-            return
-        }
-
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            if let image = UIImage(data: data) {
-                coverImage = image
-            }
-        } catch {
-            // Keep gradient fallback for poster background.
-        }
-    }
 }
 
 private struct EventRoutineView: View {
@@ -3227,12 +3611,23 @@ private struct EventRoutineView: View {
         case embedded
     }
 
+    private struct EventScheduleDJSelectionOption: Identifiable, Hashable {
+        let id: String
+        let name: String
+    }
+
     let event: WebEvent
     let scheduledSlots: [WebEventLineupSlot]
     var presentationStyle: PresentationStyle = .pushed
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appPush) private var appPush
+    @ObservedObject private var routeStore = EventRouteStore.shared
     @State private var selectedDayID: String = ""
     @State private var showRoutePlanner = false
+    @State private var showsSavedRouteOverlay = true
+    @State private var pendingDJSelectionOptions: [EventScheduleDJSelectionOption] = []
+    @State private var showDJSelectionDialog = false
 
     private var isEmbedded: Bool {
         presentationStyle == .embedded
@@ -3249,6 +3644,65 @@ private struct EventRoutineView: View {
 
     private var selectedDay: EventScheduleDay? {
         days.first(where: { $0.id == selectedDayID }) ?? days.first
+    }
+
+    private var savedRoute: SavedEventRoute? {
+        routeStore.route(for: event.id)
+    }
+
+    private var displayedRouteSlotIDs: Set<String> {
+        guard showsSavedRouteOverlay else { return [] }
+        return savedRoute?.selectedSlotIDSet ?? []
+    }
+
+    private var selectedDayTextColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.85) : Color.white.opacity(0.97)
+    }
+
+    private var selectedDayBackgroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.92) : RaverTheme.accent.opacity(0.92)
+    }
+
+    private var unselectedDayTextColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.88) : RaverTheme.primaryText.opacity(0.86)
+    }
+
+    private var unselectedDayBackgroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.13) : Color.black.opacity(0.06)
+    }
+
+    private var unselectedDayStrokeColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.10)
+    }
+
+    private var scheduleBackgroundGradientColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                Color(red: 0.05, green: 0.06, blue: 0.11),
+                RaverTheme.background
+            ]
+        }
+        return [
+            Color.white,
+            RaverTheme.background
+        ]
+    }
+
+    private var routeActionIdleFillColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.035)
+    }
+
+    private var routeActionIdleStrokeColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
+    }
+
+    private var timelineStickyTopInset: CGFloat {
+        switch presentationStyle {
+        case .embedded:
+            return topSafeAreaInset() + 44 + 52
+        case .pushed:
+            return topSafeAreaInset() + 44
+        }
     }
 
     var body: some View {
@@ -3275,18 +3729,26 @@ private struct EventRoutineView: View {
                 initialDayID: selectedDayID
             )
         }
+        .confirmationDialog(
+            "",
+            isPresented: $showDJSelectionDialog,
+            titleVisibility: .hidden
+        ) {
+            ForEach(pendingDJSelectionOptions) { option in
+                Button(option.name) {
+                    appPush(.djDetail(djID: option.id))
+                    clearPendingDJSelection()
+                }
+            }
+            Button(L("取消", "Cancel"), role: .cancel) {
+                clearPendingDJSelection()
+            }
+        }
     }
 
     private var embeddedContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Spacer()
-                Button(LL("定制路线")) {
-                    showRoutePlanner = true
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(RaverTheme.accent)
-            }
+            routeControlRow
 
             if days.count > 1 {
                 daySelector
@@ -3299,6 +3761,8 @@ private struct EventRoutineView: View {
     private var standaloneContent: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
+                routeControlRow
+
                 if days.count > 1 {
                     daySelector
                 }
@@ -3311,24 +3775,56 @@ private struct EventRoutineView: View {
         }
         .background(
             LinearGradient(
-                colors: [
-                    Color(red: 0.05, green: 0.06, blue: 0.11),
-                    RaverTheme.background
-                ],
+                colors: scheduleBackgroundGradientColors,
                 startPoint: .top,
                 endPoint: .bottom
             )
         )
         .raverSystemNavigation(title: L("活动日程", "Event Schedule"))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(L("定制路线", "Custom Route")) {
-                    showRoutePlanner = true
+    }
+
+    private var routeControlRow: some View {
+        HStack(spacing: 10) {
+            Spacer()
+
+            if savedRoute != nil {
+                Button {
+                    showsSavedRouteOverlay.toggle()
+                } label: {
+                    Label(
+                        showsSavedRouteOverlay ? LL("隐藏路线") : LL("显示路线"),
+                        systemImage: showsSavedRouteOverlay ? "eye.slash.fill" : "eye.fill"
+                    )
                 }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(RaverTheme.accent)
+                .buttonStyle(.plain)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(showsSavedRouteOverlay ? RaverTheme.accent : RaverTheme.secondaryText)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(routeActionBackground(isHighlighted: showsSavedRouteOverlay))
             }
+
+            Button {
+                showRoutePlanner = true
+            } label: {
+                Label(LL("定制路线"), systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+            }
+            .buttonStyle(.plain)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(RaverTheme.accent)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(routeActionBackground(isHighlighted: true))
         }
+    }
+
+    private func routeActionBackground(isHighlighted: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(isHighlighted ? RaverTheme.accent.opacity(0.13) : routeActionIdleFillColor)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isHighlighted ? RaverTheme.accent.opacity(0.42) : routeActionIdleStrokeColor, lineWidth: 1)
+            )
     }
 
     @ViewBuilder
@@ -3337,9 +3833,13 @@ private struct EventRoutineView: View {
             EventTimelineBoardView(
                 event: event,
                 day: selectedDay,
-                selectedSlotIDs: [],
+                selectedSlotIDs: displayedRouteSlotIDs,
                 selectable: false,
-                onToggleSlot: nil
+                onToggleSlot: nil,
+                onSelectSlot: { slot in
+                    handleTimelineSlotTap(slot)
+                },
+                stickyTopInset: timelineStickyTopInset
             )
             .frame(height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots))
         } else {
@@ -3347,23 +3847,106 @@ private struct EventRoutineView: View {
         }
     }
 
+    private func handleTimelineSlotTap(_ slot: WebEventLineupSlot) {
+        let act = EventLineupActCodec.parse(slot: slot)
+        let options = djSelectionOptions(for: slot, act: act)
+        if act.isCollaborative, options.count > 1 {
+            pendingDJSelectionOptions = options
+            showDJSelectionDialog = true
+            return
+        }
+
+        let djID = options.first?.id ?? preferredDJID(for: slot)
+        guard let djID else { return }
+        appPush(.djDetail(djID: djID))
+    }
+
+    private func djSelectionOptions(
+        for slot: WebEventLineupSlot,
+        act: EventLineupResolvedAct
+    ) -> [EventScheduleDJSelectionOption] {
+        var options: [EventScheduleDJSelectionOption] = []
+        var seenIDs = Set<String>()
+
+        let appendOption: (_ djID: String, _ name: String) -> Void = { djID, name in
+            let normalizedID = djID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedID.isEmpty, seenIDs.insert(normalizedID).inserted else { return }
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedName = trimmedName.isEmpty ? normalizedID : trimmedName
+            options.append(EventScheduleDJSelectionOption(id: normalizedID, name: resolvedName))
+        }
+
+        for performer in act.performers {
+            let djID = performer.djID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            appendOption(djID, performer.name)
+        }
+
+        let fallbackIDs = (slot.djIds ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        for (index, djID) in fallbackIDs.enumerated() {
+            let fallbackName: String
+            if index < act.performers.count {
+                fallbackName = act.performers[index].name
+            } else {
+                fallbackName = "DJ \(index + 1)"
+            }
+            appendOption(djID, fallbackName)
+        }
+
+        let primaryID = slot.djId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !primaryID.isEmpty {
+            appendOption(primaryID, act.performers.first?.name ?? "")
+        }
+
+        return options
+    }
+
+    private func preferredDJID(for slot: WebEventLineupSlot) -> String? {
+        let primary = slot.djId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !primary.isEmpty { return primary }
+
+        if let fallback = (slot.djIds ?? [])
+            .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .first(where: { !$0.isEmpty }) {
+            return fallback
+        }
+
+        let act = EventLineupActCodec.parse(slot: slot)
+        for performer in act.performers {
+            let inline = performer.djID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !inline.isEmpty { return inline }
+        }
+
+        return nil
+    }
+
+    private func clearPendingDJSelection() {
+        pendingDJSelectionOptions = []
+    }
+
     private var daySelector: some View {
         //HorizontalAxisLockedScrollView(showsIndicators: false) {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                ForEach(Array(days.enumerated()), id: \.offset) { _, day in
+                // ForEach(Array(days.enumerated()), id: \.offset) { _, day in
+                ForEach(days) { day in
                     let selected = day.id == selectedDayID
                     Button {
                         selectedDayID = day.id
                     } label: {
                         Text(day.subtitle)
                             .font(EventScheduleTypography.semibold(15))
-                            .foregroundStyle(selected ? Color.black.opacity(0.85) : Color.white.opacity(0.88))
+                            .foregroundStyle(selected ? selectedDayTextColor : unselectedDayTextColor)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                             .background(
                                 Capsule()
-                                    .fill(selected ? Color.white.opacity(0.92) : Color.white.opacity(0.13))
+                                    .fill(selected ? selectedDayBackgroundColor : unselectedDayBackgroundColor)
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(unselectedDayStrokeColor, lineWidth: selected ? 0 : 1)
+                                    )
                             )
                     }
                     .buttonStyle(.plain)

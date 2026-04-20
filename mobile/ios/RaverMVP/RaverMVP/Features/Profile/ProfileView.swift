@@ -118,6 +118,13 @@ struct ProfileView: View {
                 .buttonStyle(.plain)
 
                 Button {
+                    profilePush(.myRoutes)
+                } label: {
+                    quickActionRow(title: L("我的行程", "My Routes"), icon: "point.topleft.down.curvedto.point.bottomright.up")
+                }
+                .buttonStyle(.plain)
+
+                Button {
                     profilePush(.publishEvent)
                 } label: {
                     quickActionRow(title: L("发布活动", "Publish Event"), icon: "calendar.badge.plus")
@@ -576,4 +583,99 @@ private struct ProfileAvatarSquareImage: View {
             .resizable()
             .scaledToFill()
     }
+}
+
+struct MyRoutesView: View {
+    @Environment(\.appPush) private var appPush
+    @ObservedObject private var routeStore = EventRouteStore.shared
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                if routeStore.routes.isEmpty {
+                    ContentUnavailableView(
+                        L("暂无我的行程", "No Saved Routes"),
+                        systemImage: "point.topleft.down.curvedto.point.bottomright.up",
+                        description: Text(L("在活动时间表中定制并保存路线后，会显示在这里。", "Customize and save an event route from the timetable, then it will appear here."))
+                    )
+                    .padding(.top, 80)
+                } else {
+                    ForEach(routeStore.routes) { route in
+                        Button {
+                            appPush(.eventSchedule(eventID: route.eventID))
+                        } label: {
+                            savedRouteRow(route)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                routeStore.delete(eventID: route.eventID)
+                            } label: {
+                                Label(L("删除", "Delete"), systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(16)
+        }
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: L("我的行程", "My Routes"))
+    }
+
+    private func savedRouteRow(_ route: SavedEventRoute) -> some View {
+        GlassCard {
+            HStack(spacing: 12) {
+                ImageLoaderView(urlString: route.coverImageUrl, resizingMode: .fill)
+                    .frame(width: 72, height: 72)
+                    .background(
+                        LinearGradient(
+                            colors: [RaverTheme.accent.opacity(0.28), Color.black.opacity(0.18)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(route.eventName)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(2)
+
+                    Label(eventDateText(route), systemImage: "calendar")
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+
+                    Label(
+                        L("\(route.selectedSlotIDs.count) 个已选演出", "\(route.selectedSlotIDs.count) selected sets"),
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.accent)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+    }
+
+    private func eventDateText(_ route: SavedEventRoute) -> String {
+        let start = Self.dateFormatter.string(from: route.startDate)
+        let end = Self.dateFormatter.string(from: route.endDate)
+        return start == end ? start : "\(start) - \(end)"
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage == .zh ? "zh_Hans_CN" : "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
 }

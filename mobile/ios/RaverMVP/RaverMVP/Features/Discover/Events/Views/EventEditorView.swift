@@ -281,6 +281,7 @@ struct EventCheckinSelectionSheet: View {
                 applyInitialSelections()
             }
         }
+        .raverEnableCustomSwipeBack(edgeRatio: 0.2)
     }
 
     private var selectedDJCount: Int {
@@ -737,6 +738,7 @@ private struct DJCheckinBindingSheet: View {
                 }
             }
         }
+        .raverEnableCustomSwipeBack(edgeRatio: 0.2)
     }
 
     @ViewBuilder
@@ -2583,9 +2585,14 @@ struct EventEditorView: View {
         showLineupImportEditor = false
         isImportingLineupImage = false
         isApplyingLineupImport = false
-        let prefilledStageEntries = Array(NSOrderedSet(array: event.lineupSlots.compactMap { slot in
+        let stageOrderFromEvent = event.stageOrder?
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+        let stagesFromLineup = Array(NSOrderedSet(array: event.lineupSlots.compactMap { slot in
             slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         })) as? [String] ?? []
+        let stageOrderKeys = Set(stageOrderFromEvent.map { $0.localizedLowercase })
+        let prefilledStageEntries = stageOrderFromEvent + stagesFromLineup.filter { !stageOrderKeys.contains($0.localizedLowercase) }
         stageEntries = prefilledStageEntries.isEmpty ? [""] : prefilledStageEntries
         lineupTimeDraftBySlotID = [:]
         pendingLineupEntry = nil
@@ -2786,6 +2793,7 @@ struct EventEditorView: View {
                         officialWebsite: resolvedOfficialWebsite,
                         startDate: normalizedStartDate,
                         endDate: normalizedEndDate,
+                        stageOrder: normalizedStageEntries,
                         coverImageUrl: nil,
                         lineupImageUrl: nil,
                         ticketTiers: ticketTierInputs,
@@ -2874,6 +2882,7 @@ struct EventEditorView: View {
                         officialWebsite: resolvedOfficialWebsite ?? "",
                         startDate: normalizedStartDate,
                         endDate: normalizedEndDate,
+                        stageOrder: normalizedStageEntries,
                         coverImageUrl: finalCover.nilIfEmpty ?? "",
                         lineupImageUrl: finalLineup.nilIfEmpty ?? "",
                         ticketTiers: ticketTierInputs,
@@ -3520,6 +3529,7 @@ struct EventEditorView: View {
                 }
             }
         }
+        .raverEnableCustomSwipeBack(edgeRatio: 0.2)
     }
 
     private func isUnknownImportValue(_ raw: String?) -> Bool {
@@ -4337,6 +4347,7 @@ private struct EventLocationPickerSheet: View {
                 Text(errorMessage ?? "")
             }
         }
+        .raverEnableCustomSwipeBack(edgeRatio: 0.2)
     }
 
     private var mapArea: some View {

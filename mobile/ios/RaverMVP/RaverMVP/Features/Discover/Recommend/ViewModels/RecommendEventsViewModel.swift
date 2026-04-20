@@ -8,11 +8,13 @@ final class RecommendEventsViewModel: ObservableObject {
     @Published private(set) var markedCheckinIDsByEventID: [String: String] = [:]
     @Published var errorMessage: String?
 
+    private let fetchRecommendedEventsUseCase: FetchRecommendedDiscoverEventsUseCase
     private let fetchEventsPageUseCase: FetchDiscoverEventsPageUseCase
     private let fetchMarkedEventCheckinsUseCase: FetchMarkedEventCheckinsUseCase
     private let toggleMarkedEventUseCase: ToggleMarkedEventUseCase
 
     init(repository: DiscoverEventsRepository) {
+        self.fetchRecommendedEventsUseCase = FetchRecommendedDiscoverEventsUseCase(repository: repository)
         self.fetchEventsPageUseCase = FetchDiscoverEventsPageUseCase(repository: repository)
         self.fetchMarkedEventCheckinsUseCase = FetchMarkedEventCheckinsUseCase(repository: repository)
         self.toggleMarkedEventUseCase = ToggleMarkedEventUseCase(repository: repository)
@@ -58,34 +60,96 @@ final class RecommendEventsViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            var uniqueByID: [String: WebEvent] = [:]
-            var page = 1
-            var totalPages = 1
-
-            repeat {
-                let result = try await fetchEventsPageUseCase.execute(
-                    DiscoverEventsPageRequest(
-                        page: page,
-                        limit: 100,
-                        search: nil,
-                        eventType: nil,
-                        status: "all"
-                    )
-                )
-                for event in result.items {
-                    uniqueByID[event.id] = event
-                }
-                totalPages = max(result.pagination?.totalPages ?? 1, 1)
-                page += 1
-            } while page <= totalPages
-
-            let source = Array(uniqueByID.values).filter { event in
-                EventVisualStatus.resolve(event: event) != .cancelled
+            let recommended = try await fetchRecommendedEventsUseCase.execute(
+                limit: 10,
+                statuses: ["ongoing", "upcoming", "ended"]
+            )
+            if !recommended.isEmpty {
+                events = recommended
+                return
             }
 
-            events = Array(source.shuffled().prefix(10))
+            events = try await loadRecommendationsLegacy()
         } catch {
-            errorMessage = error.userFacingMessage
+            // Backward-compatible fallback for servers that have not deployed /v1/events/recommendations yet.
+            do {
+                events = try await loadRecommendationsLegacy()
+            } catch {
+                errorMessage = error.userFacingMessage
+            }
         }
+    }
+
+    private func loadRecommendationsLegacy() async throws -> [WebEvent] {
+        let statuses = ["ongoing", "upcoming", "ended"]
+        let perPage = 40
+        var candidatesByStatus: [String: [WebEvent]] = [:]
+
+        for status in statuses {
+            candidatesByStatus[status] = try await loadLegacyCandidates(for: status, perPage: perPage)
+        }
+
+        var selected: [WebEvent] = []
+        var selectedIDs = Set<String>()
+
+        // Keep status diversity first when backend recommendation endpoint is unavailable.
+        for status in statuses {
+            guard let bucket = candidatesByStatus[status], !bucket.isEmpty else { continue }
+            if let picked = bucket.shuffled().first(where: { !selectedIDs.contains($0.id) }) {
+                selected.append(picked)
+                selectedIDs.insert(picked.id)
+            }
+            if selected.count >= 10 {
+                return selected
+            }
+        }
+
+        let pool = statuses
+            .flatMap { candidatesByStatus[$0] ?? [] }
+            .shuffled()
+        for event in pool where !selectedIDs.contains(event.id) {
+            selected.append(event)
+            selectedIDs.insert(event.id)
+            if selected.count >= 10 {
+                break
+            }
+        }
+        return selected
+    }
+
+    private func loadLegacyCandidates(for status: String, perPage: Int) async throws -> [WebEvent] {
+        let firstPage = try await fetchEventsPageUseCase.execute(
+            DiscoverEventsPageRequest(
+                page: 1,
+                limit: perPage,
+                search: nil,
+                eventType: nil,
+                status: status
+            )
+        )
+
+        var merged = firstPage.items
+        let totalPages = max(firstPage.pagination?.totalPages ?? 1, 1)
+        if totalPages > 1 {
+            let randomPage = Int.random(in: 1...totalPages)
+            if randomPage > 1 {
+                let randomPageResult = try await fetchEventsPageUseCase.execute(
+                    DiscoverEventsPageRequest(
+                        page: randomPage,
+                        limit: perPage,
+                        search: nil,
+                        eventType: nil,
+                        status: status
+                    )
+                )
+                merged.append(contentsOf: randomPageResult.items)
+            }
+        }
+
+        var uniqueByID: [String: WebEvent] = [:]
+        for event in merged where EventVisualStatus.resolve(event: event) != .cancelled {
+            uniqueByID[event.id] = event
+        }
+        return Array(uniqueByID.values)
     }
 }

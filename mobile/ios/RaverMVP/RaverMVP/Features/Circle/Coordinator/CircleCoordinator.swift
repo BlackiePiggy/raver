@@ -56,6 +56,7 @@ struct CircleCoordinatorView<Content: View>: View {
                     routeDestination(for: route)
                 }
         }
+        .raverEnableCustomSwipeBack(edgeRatio: 0.2)
         .background(RaverTheme.background)
         .environment(\.circlePush) { route in
             navPath.append(route)

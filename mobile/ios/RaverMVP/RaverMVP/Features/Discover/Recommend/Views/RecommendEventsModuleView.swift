@@ -3,11 +3,13 @@ import SwiftUI
 struct DiscoverRecommendEventsRootView: View {
     @EnvironmentObject private var appContainer: AppContainer
     var onHorizontalDragStateChanged: ((Bool) -> Void)? = nil
+    var onRequestMoveToNextDiscoverSection: (() -> Void)? = nil
 
     var body: some View {
         RecommendEventsModuleView(
             viewModel: RecommendEventsViewModel(repository: appContainer.discoverEventsRepository),
-            onHorizontalDragStateChanged: onHorizontalDragStateChanged
+            onHorizontalDragStateChanged: onHorizontalDragStateChanged,
+            onRequestMoveToNextDiscoverSection: onRequestMoveToNextDiscoverSection
         )
     }
 }
@@ -15,10 +17,13 @@ struct DiscoverRecommendEventsRootView: View {
 struct RecommendEventsModuleView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.appPush) private var appPush
+    @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: RecommendEventsViewModel
 
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
+    private let onRequestMoveToNextDiscoverSection: (() -> Void)?
     private let cardCornerRadius: CGFloat = 28
 
     @State private var isHorizontalDragging = false
@@ -26,25 +31,34 @@ struct RecommendEventsModuleView: View {
 
     init(
         viewModel: RecommendEventsViewModel,
-        onHorizontalDragStateChanged: ((Bool) -> Void)? = nil
+        onHorizontalDragStateChanged: ((Bool) -> Void)? = nil,
+        onRequestMoveToNextDiscoverSection: (() -> Void)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: viewModel)
         self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
+        self.onRequestMoveToNextDiscoverSection = onRequestMoveToNextDiscoverSection
     }
 
     var body: some View {
-        Group {
-            if viewModel.isLoading && viewModel.events.isEmpty {
-                ProgressView(L("正在生成推荐...", "Generating recommendations..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if viewModel.events.isEmpty {
-                ContentUnavailableView(
-                    L("暂无可推荐活动", "No Recommended Events"),
-                    systemImage: "sparkles.tv"
-                )
-            } else {
-                recommendationPager
+        ZStack(alignment: .top) {
+            Group {
+                if viewModel.isLoading && viewModel.events.isEmpty {
+                    ProgressView(L("正在生成推荐...", "Generating recommendations..."))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if viewModel.events.isEmpty {
+                    ContentUnavailableView(
+                        L("暂无可推荐活动", "No Recommended Events"),
+                        systemImage: "sparkles.tv"
+                    )
+                } else {
+                    recommendationPager
+                }
             }
+
+            topSearchRow
+                .padding(.horizontal, 16)
+                .padding(.top, topSearchContentInset)
+                .zIndex(8)
         }
         .background(RaverTheme.background)
         .navigationTitle("")
@@ -66,6 +80,86 @@ struct RecommendEventsModuleView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
+    }
+
+    private var topSearchContentInset: CGFloat {
+        14
+    }
+
+    private var topSearchRow: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Spacer(minLength: 0)
+            Button {
+                discoverPush(.searchInput(domain: .events, initialQuery: ""))
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(searchFieldIconColor)
+
+                    Text(L("寻找你的现场记忆", "Find your live memories"))
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .foregroundStyle(searchFieldPlaceholderColor)
+                }
+                .padding(.horizontal, 12)
+                .frame(width: topSearchFieldWidth, height: 34, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                        .fill(searchFieldGlassTintColor)
+                )
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                        .strokeBorder(searchFieldBorderColor, lineWidth: 0.8)
+                )
+                .overlay(alignment: .topLeading) {
+                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                        .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.22 : 0.34), lineWidth: 0.6)
+                        .blur(radius: 0.2)
+                        .mask(
+                            LinearGradient(
+                                colors: [Color.white, Color.white.opacity(0.0)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+                .shadow(color: searchFieldShadowColor, radius: 8, x: 0, y: 4)
+            }
+            .buttonStyle(.plain)
+            Spacer(minLength: 0)
+        }
+        .frame(height: 40, alignment: .center)
+    }
+
+    private var topSearchFieldWidth: CGFloat {
+        min(max(UIScreen.main.bounds.width * 0.34, 132), 168) + 20
+    }
+
+    private var searchFieldIconColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.84) : Color.black.opacity(0.68)
+    }
+
+    private var searchFieldPlaceholderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.56) : Color.black.opacity(0.44)
+    }
+
+    private var searchFieldBorderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.14) : Color.white.opacity(0.26)
+    }
+
+    private var searchFieldGlassTintColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.035)
+            : Color.white.opacity(0.10)
+    }
+
+    private var searchFieldShadowColor: Color {
+        colorScheme == .dark
+            ? Color.black.opacity(0.12)
+            : Color.black.opacity(0.08)
     }
 
     private var recommendationPager: some View {
@@ -117,7 +211,7 @@ struct RecommendEventsModuleView: View {
                         let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
                         if isHorizontal { notifyHorizontalDragging(true) }
                     }
-                    .onEnded { _ in notifyHorizontalDragging(false) }
+                    .onEnded { value in handleRecommendationDragEnded(value) }
             )
             .overlay(alignment: .bottom) {
                 pageIndicator
@@ -343,6 +437,21 @@ struct RecommendEventsModuleView: View {
         guard isHorizontalDragging != isDragging else { return }
         isHorizontalDragging = isDragging
         onHorizontalDragStateChanged?(isDragging)
+    }
+
+    private func handleRecommendationDragEnded(_ value: DragGesture.Value) {
+        notifyHorizontalDragging(false)
+
+        guard currentIndex == viewModel.events.count - 1 else { return }
+        guard viewModel.events.count > 1 else { return }
+        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+
+        let didPullTowardNextDiscoverSection = value.translation.width < -48
+            || value.predictedEndTranslation.width < -90
+
+        if didPullTowardNextDiscoverSection {
+            onRequestMoveToNextDiscoverSection?()
+        }
     }
 }
 

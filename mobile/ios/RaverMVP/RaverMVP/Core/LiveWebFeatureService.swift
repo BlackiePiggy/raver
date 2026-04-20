@@ -27,6 +27,26 @@ final class LiveWebFeatureService: WebFeatureService {
         return EventListPage(items: response.data.items.map(localizedEvent), pagination: response.pagination)
     }
 
+    func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent] {
+        var queryItems = [
+            URLQueryItem(name: "limit", value: "\(max(1, min(20, limit)))")
+        ]
+        if let statuses {
+            let normalized = statuses
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+            if !normalized.isEmpty {
+                queryItems.append(URLQueryItem(name: "statuses", value: normalized.joined(separator: ",")))
+            }
+        }
+        let response: BFFEnvelope<BFFItems<WebEvent>> = try await request(
+            path: "/v1/events/recommendations",
+            method: "GET",
+            queryItems: queryItems
+        )
+        return response.data.items.map(localizedEvent)
+    }
+
     func fetchEvent(id: String) async throws -> WebEvent {
         let response: BFFEnvelope<WebEvent> = try await request(path: "/v1/events/\(id)", method: "GET")
         return localizedEvent(response.data)

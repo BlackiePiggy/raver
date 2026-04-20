@@ -5,10 +5,8 @@ import UIKit
 struct SquadProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appPush) private var appPush
-    @EnvironmentObject private var appContainer: AppContainer
     private let service: SocialService
     @StateObject private var viewModel: SquadProfileViewModel
-    @State private var showManageSheet = false
     @State private var myNicknameDraft = ""
     @State private var myNotificationsEnabled = true
 
@@ -36,7 +34,7 @@ struct SquadProfileView: View {
 
                     if canManageSquad(profile) {
                         Button {
-                            showManageSheet = true
+                            appPush(.squadManage(squadID: profile.id))
                         } label: {
                             Label(L("编辑小队信息", "Edit Squad"), systemImage: "square.and.pencil")
                                 .frame(maxWidth: .infinity)
@@ -78,26 +76,6 @@ struct SquadProfileView: View {
         .raverGradientNavigationChrome(title: LL("小队")) {
             dismiss()
         }
-        .navigationDestination(isPresented: $showManageSheet) {
-            if let profile = viewModel.profile {
-                SquadManageSheet(
-                    profile: profile,
-                    isSaving: viewModel.isSavingGroupInfo,
-                    webService: appContainer.webService,
-                    socialService: service
-                ) { input in
-                    Task {
-                        let success = await viewModel.saveGroupInfo(input: input)
-                        if success {
-                            showManageSheet = false
-                            syncMySettingsFromProfile()
-                        }
-                    }
-                }
-            } else {
-                ContentUnavailableView(LL("小队不存在"), systemImage: "person.3.sequence")
-            }
-        }
         .task {
             await viewModel.load()
             syncMySettingsFromProfile()
@@ -109,8 +87,10 @@ struct SquadProfileView: View {
         .onChange(of: viewModel.profile?.updatedAt) { _, _ in
             syncMySettingsFromProfile()
         }
-        .onChange(of: showManageSheet) { _, isPresented in
-            guard !isPresented else { return }
+        .onReceive(NotificationCenter.default.publisher(for: .squadProfileDidUpdate)) { notification in
+            let updatedSquadID = notification.object as? String
+            guard let profile = viewModel.profile,
+                  updatedSquadID == profile.id else { return }
             Task {
                 await viewModel.load()
                 syncMySettingsFromProfile()
@@ -471,7 +451,96 @@ struct SquadProfileView: View {
     }
 }
 
-private struct SquadManageSheet: View {
+struct SquadManageRouteView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let squadID: String
+    let service: SocialService
+    let webService: WebFeatureService
+
+    @State private var profile: SquadProfile?
+    @State private var isLoading = false
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Group {
+            if isLoading && profile == nil {
+                ProgressView(L("加载小队中...", "Loading squads..."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let profile {
+                SquadManageFormView(
+                    profile: profile,
+                    isSaving: isSaving,
+                    webService: webService,
+                    socialService: service
+                ) { input in
+                    Task {
+                        await save(input: input)
+                    }
+                }
+            } else {
+                VStack(spacing: 10) {
+                    ContentUnavailableView(LL("小队不存在"), systemImage: "person.3.sequence")
+                    Button(L("重试", "Retry")) {
+                        Task {
+                            await load(force: true)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: LL("编辑小队信息"))
+        .task {
+            await load(force: false)
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    @MainActor
+    private func load(force: Bool) async {
+        if isLoading { return }
+        if profile != nil && !force { return }
+
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            profile = try await service.fetchSquadProfile(squadID: squadID)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    @MainActor
+    private func save(input: UpdateSquadInfoInput) async {
+        guard !isSaving else { return }
+
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            try await service.updateSquadInfo(squadID: squadID, input: input)
+            NotificationCenter.default.post(name: .squadProfileDidUpdate, object: squadID)
+            dismiss()
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+}
+
+private struct SquadManageFormView: View {
     private enum PrivacyOption: String, CaseIterable, Identifiable {
         case `public`
         case `private`
@@ -486,8 +555,6 @@ private struct SquadManageSheet: View {
 
         var isPublic: Bool { self == .public }
     }
-
-    @Environment(\.dismiss) private var dismiss
 
     let isSaving: Bool
     let onSave: (UpdateSquadInfoInput) -> Void
@@ -530,99 +597,96 @@ private struct SquadManageSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section(LL("基础")) {
-                    TextField(LL("小队名称"), text: $name)
-                        .submitLabel(.done)
-                        .onSubmit {
-                            dismissKeyboard()
-                        }
-                    TextField(LL("简介"), text: $descriptionText, axis: .vertical)
-                        .lineLimit(2...4)
-                    Picker(LL("小队性质"), selection: $privacyOption) {
-                        ForEach(PrivacyOption.allCases) { item in
-                            Text(item.title).tag(item)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-
-                Section(LL("展示")) {
-                    TextField(LL("头像 URL（可选）"), text: $avatarURL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .onSubmit {
-                            dismissKeyboard()
-                        }
-                    PhotosPicker(selection: $selectedAvatarPhotoItem, matching: .images) {
-                        if isUploadingAvatar {
-                            Label(LL("头像上传中..."), systemImage: "arrow.trianglehead.2.clockwise")
-                        } else {
-                            Label(LL("从相册选择小队头像"), systemImage: "person.crop.circle.badge.plus")
-                        }
-                    }
-                    .disabled(isUploadingAvatar || isUploadingFlag)
-                    TextField(LL("旗帜图 URL（可选）"), text: $bannerURL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .onSubmit {
-                            dismissKeyboard()
-                        }
-                    PhotosPicker(selection: $selectedFlagPhotoItem, matching: .images) {
-                        if isUploadingFlag {
-                            Label(LL("旗帜图上传中..."), systemImage: "arrow.trianglehead.2.clockwise")
-                        } else {
-                            Label(LL("从相册选择旗帜图"), systemImage: "flag.pattern.checkered")
-                        }
-                    }
-                    .disabled(isUploadingFlag)
-                    TextField(LL("小队二维码 URL（可选）"), text: $qrCodeURL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .onSubmit {
-                            dismissKeyboard()
-                        }
-                }
-
-                Section(LL("小队通知")) {
-                    TextField(LL("小队通知内容"), text: $notice, axis: .vertical)
-                        .lineLimit(2...4)
-                }
-            }
-            .raverSystemNavigation(title: LL("编辑小队信息"))
-            .scrollDismissesKeyboard(.interactively)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        onSave(
-                            UpdateSquadInfoInput(
-                                name: name,
-                                description: descriptionText,
-                                isPublic: privacyOption.isPublic,
-                                avatarURL: avatarURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : avatarURL,
-                                bannerURL: bannerURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : bannerURL,
-                                notice: notice,
-                                qrCodeURL: qrCodeURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : qrCodeURL
-                            )
-                        )
-                    } label: {
-                        if isSaving {
-                            ProgressView()
-                        } else {
-                            Text(L("保存", "Save"))
-                        }
-                    }
-                    .disabled(isSaving || isUploadingAvatar || isUploadingFlag || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button(L("收起", "Dismiss")) {
+        Form {
+            Section(LL("基础")) {
+                TextField(LL("小队名称"), text: $name)
+                    .submitLabel(.done)
+                    .onSubmit {
                         dismissKeyboard()
                     }
+                TextField(LL("简介"), text: $descriptionText, axis: .vertical)
+                    .lineLimit(2...4)
+                Picker(LL("小队性质"), selection: $privacyOption) {
+                    ForEach(PrivacyOption.allCases) { item in
+                        Text(item.title).tag(item)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            Section(LL("展示")) {
+                TextField(LL("头像 URL（可选）"), text: $avatarURL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .onSubmit {
+                        dismissKeyboard()
+                    }
+                PhotosPicker(selection: $selectedAvatarPhotoItem, matching: .images) {
+                    if isUploadingAvatar {
+                        Label(LL("头像上传中..."), systemImage: "arrow.trianglehead.2.clockwise")
+                    } else {
+                        Label(LL("从相册选择小队头像"), systemImage: "person.crop.circle.badge.plus")
+                    }
+                }
+                .disabled(isUploadingAvatar || isUploadingFlag)
+                TextField(LL("旗帜图 URL（可选）"), text: $bannerURL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .onSubmit {
+                        dismissKeyboard()
+                    }
+                PhotosPicker(selection: $selectedFlagPhotoItem, matching: .images) {
+                    if isUploadingFlag {
+                        Label(LL("旗帜图上传中..."), systemImage: "arrow.trianglehead.2.clockwise")
+                    } else {
+                        Label(LL("从相册选择旗帜图"), systemImage: "flag.pattern.checkered")
+                    }
+                }
+                .disabled(isUploadingFlag)
+                TextField(LL("小队二维码 URL（可选）"), text: $qrCodeURL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .onSubmit {
+                        dismissKeyboard()
+                    }
+            }
+
+            Section(LL("小队通知")) {
+                TextField(LL("小队通知内容"), text: $notice, axis: .vertical)
+                    .lineLimit(2...4)
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button {
+                    onSave(
+                        UpdateSquadInfoInput(
+                            name: name,
+                            description: descriptionText,
+                            isPublic: privacyOption.isPublic,
+                            avatarURL: avatarURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : avatarURL,
+                            bannerURL: bannerURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : bannerURL,
+                            notice: notice,
+                            qrCodeURL: qrCodeURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : qrCodeURL
+                        )
+                    )
+                } label: {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Text(L("保存", "Save"))
+                    }
+                }
+                .disabled(isSaving || isUploadingAvatar || isUploadingFlag || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(L("收起", "Dismiss")) {
+                    dismissKeyboard()
                 }
             }
         }
@@ -697,4 +761,8 @@ private struct SquadManageSheet: View {
             uploadError = error.userFacingMessage
         }
     }
+}
+
+extension Notification.Name {
+    static let squadProfileDidUpdate = Notification.Name("squadProfileDidUpdate")
 }

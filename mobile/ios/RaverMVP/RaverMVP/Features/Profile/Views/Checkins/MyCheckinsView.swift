@@ -1547,7 +1547,10 @@ struct MyCheckinsView: View {
             slot.dj?.avatarMediumUrl,
             slot.dj?.avatarOriginalUrl
         )
-        return timelineParseLineupAct(name: rawName, djIDs: normalizedDJIDs, slotAvatar: slotAvatar)
+        guard let act = timelineParseLineupAct(name: rawName, djIDs: normalizedDJIDs, slotAvatar: slotAvatar) else {
+            return nil
+        }
+        return timelineCanonicalizedLineupAct(act)
     }
 
     private func timelineParseLineupAct(
@@ -1593,6 +1596,23 @@ struct MyCheckinsView: View {
             return avatar
         }
         return firstNonEmptyValue(fallbackAvatar)
+    }
+
+    private func timelineCanonicalizedLineupAct(_ act: TimelineLineupResolvedAct) -> TimelineLineupResolvedAct {
+        let performers = act.performers.map { performer in
+            guard let djID = normalizedTimelineDJID(performer.djID ?? ""),
+                  let resolved = timelineDJIdentityByID[djID] else {
+                return performer
+            }
+
+            return TimelineLineupActPerformer(
+                name: firstNonEmptyValue(resolved.name, performer.name) ?? performer.name,
+                djID: performer.djID,
+                avatarUrl: firstNonEmptyValue(performer.avatarUrl, resolved.avatarUrl)
+            )
+        }
+
+        return TimelineLineupResolvedAct(type: act.type, performers: performers)
     }
 
     private func timelineNormalizedLineupDJIDs(from slot: WebEventLineupSlot) -> [String] {
@@ -1716,6 +1736,7 @@ struct MyCheckinsView: View {
         let lookupKey = normalizedTimelineNameKey(cleanedName)
         let resolvedByName = timelineDJIdentityByName[lookupKey]
         let resolvedByID = explicitDJID.flatMap { timelineDJIdentityByID[$0] }
+        let displayName = firstNonEmptyValue(resolvedByID?.name, resolvedByName?.name, cleanedName) ?? cleanedName
 
         let resolvedID: String = {
             if let explicitDJID, !explicitDJID.isEmpty { return explicitDJID }
@@ -1738,7 +1759,7 @@ struct MyCheckinsView: View {
             attendedAt: attendedAt,
             dj: CheckinDJLite(
                 id: resolvedID,
-                name: cleanedName,
+                name: displayName,
                 avatarUrl: avatar,
                 country: country,
                 followerCount: followerCount,
@@ -1929,17 +1950,18 @@ struct MyCheckinsView: View {
         let lookupKey = normalizedTimelineNameKey(normalizedName)
         let resolved = timelineDJIdentityByName[lookupKey]
         let resolvedID = resolved?.id
-        let resolvedAvatar = resolved?.avatarUrl
-        let resolvedFollowers = resolved?.soundCloudFollowers
         let resolvedByID = explicitDJID.flatMap { timelineDJIdentityByID[$0] }
+        let resolvedAvatar = resolvedByID?.avatarUrl ?? resolved?.avatarUrl
+        let resolvedFollowers = resolved?.soundCloudFollowers
         let resolvedByIDFollowers = resolvedByID?.soundCloudFollowers
         let djID = (explicitDJID?.isEmpty == false) ? explicitDJID : resolvedID
         let avatar = (explicitAvatarURL?.isEmpty == false) ? explicitAvatarURL : resolvedAvatar
         let followers = resolvedByIDFollowers ?? resolvedFollowers
+        let displayName = firstNonEmptyValue(resolvedByID?.name, resolved?.name, normalizedName) ?? normalizedName
 
         return TimelineActPerformer(
             id: fallbackID,
-            name: normalizedName,
+            name: displayName,
             djID: djID,
             avatarUrl: avatar,
             followerCount: followers
@@ -1991,10 +2013,11 @@ struct MyCheckinsView: View {
         let country = firstNonEmptyValue(dj.country, resolvedByID?.country, resolvedByName?.country)
         let followerCount = dj.followerCount ?? resolvedByID?.followerCount ?? resolvedByName?.followerCount
         let soundCloudFollowers = dj.soundCloudFollowers ?? resolvedByID?.soundCloudFollowers ?? resolvedByName?.soundCloudFollowers
+        let displayName = firstNonEmptyValue(resolvedByID?.name, resolvedByName?.name, dj.name) ?? dj.name
 
         return CheckinDJLite(
             id: resolvedID,
-            name: dj.name,
+            name: displayName,
             avatarUrl: avatar,
             country: country,
             followerCount: followerCount,
@@ -2012,7 +2035,7 @@ struct MyCheckinsView: View {
             ?? normalizedTimelineDJID(candidate.id)
             ?? existing.id
 
-        let mergedName = firstNonEmptyValue(existing.name, candidate.name) ?? existing.name
+        let mergedName = firstNonEmptyValue(timelineDJIdentityByID[mergedID]?.name, existing.name, candidate.name) ?? existing.name
         let mergedAvatar = firstNonEmptyValue(existing.avatarUrl, candidate.avatarUrl)
         let mergedCountry = firstNonEmptyValue(existing.country, candidate.country)
 

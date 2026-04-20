@@ -1191,6 +1191,7 @@ private struct PostLocationPickerSheet: View {
                 Text(errorMessage ?? "")
             }
         }
+        .raverEnableCustomSwipeBack(edgeRatio: 0.2)
     }
 
     private var mapArea: some View {

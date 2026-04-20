@@ -434,6 +434,56 @@ actor MockWebFeatureService: WebFeatureService {
         return paginateEvents(sorted, page: page, limit: limit)
     }
 
+    func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent] {
+        let normalizedStatuses = (statuses ?? ["ongoing", "upcoming", "ended"])
+            .map { value -> String in
+                let lowered = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                return lowered == "canceled" ? "cancelled" : lowered
+            }
+            .filter { ["ongoing", "upcoming", "ended", "cancelled"].contains($0) }
+        let requestedStatuses: [String] = {
+            if normalizedStatuses.isEmpty {
+                return ["ongoing", "upcoming", "ended"]
+            }
+            var seen = Set<String>()
+            var ordered: [String] = []
+            for status in normalizedStatuses where seen.insert(status).inserted {
+                ordered.append(status)
+            }
+            return ordered
+        }()
+
+        var poolByStatus: [String: [WebEvent]] = [:]
+        for status in requestedStatuses {
+            poolByStatus[status] = events.filter { resolveEventStatus(for: $0) == status }
+        }
+
+        var selected: [WebEvent] = []
+        var selectedIDs = Set<String>()
+        let cappedLimit = max(1, min(20, limit))
+
+        // Pick at least one event from each available status bucket.
+        for status in requestedStatuses where selected.count < cappedLimit {
+            guard var pool = poolByStatus[status], !pool.isEmpty else { continue }
+            pool.shuffle()
+            if let candidate = pool.first, selectedIDs.insert(candidate.id).inserted {
+                selected.append(candidate)
+            }
+            poolByStatus[status] = Array(pool.dropFirst())
+        }
+
+        var remainingPool = requestedStatuses
+            .flatMap { poolByStatus[$0] ?? [] }
+            .filter { !selectedIDs.contains($0.id) }
+        remainingPool.shuffle()
+        for item in remainingPool where selected.count < cappedLimit {
+            guard selectedIDs.insert(item.id).inserted else { continue }
+            selected.append(item)
+        }
+
+        return selected
+    }
+
     func fetchEvent(id: String) async throws -> WebEvent {
         guard let item = events.first(where: { $0.id == id }) else {
             throw ServiceError.message("活动不存在")
@@ -488,6 +538,7 @@ actor MockWebFeatureService: WebFeatureService {
             longitude: input.longitude,
             startDate: input.startDate,
             endDate: input.endDate,
+            stageOrder: input.stageOrder,
             ticketUrl: {
                 let trimmed = input.ticketUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 return trimmed.isEmpty ? nil : trimmed
@@ -554,6 +605,7 @@ actor MockWebFeatureService: WebFeatureService {
         }
         if let startDate = input.startDate { events[idx].startDate = startDate }
         if let endDate = input.endDate { events[idx].endDate = endDate }
+        if let stageOrder = input.stageOrder { events[idx].stageOrder = stageOrder }
         if let coverImageUrl = input.coverImageUrl { events[idx].coverImageUrl = coverImageUrl }
         if let lineupImageUrl = input.lineupImageUrl { events[idx].lineupImageUrl = lineupImageUrl }
         if let eventType = input.eventType {
@@ -1144,7 +1196,9 @@ actor MockWebFeatureService: WebFeatureService {
     func fetchDJEvents(djID: String) async throws -> [WebEvent] {
         events
             .filter { event in
-                event.lineupSlots.contains(where: { $0.djId == djID })
+                event.lineupSlots.contains(where: { slot in
+                    slot.djId == djID || (slot.djIds ?? []).contains(djID)
+                })
             }
             .sorted(by: { $0.startDate > $1.startDate })
     }

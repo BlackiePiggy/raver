@@ -2868,23 +2868,6 @@ struct DJDetailView: View {
                                     )
                             )
                             .buttonStyle(.plain)
-
-                            Button(L("去活动打卡", "Check")) {
-                                selectDJDetailTab(.events)
-                                errorMessage = djEvents.isEmpty
-                                    ? L("请在对应活动详情页完成打卡；当前暂未找到这位 DJ 的活动记录。", "Please check in from the related event detail page; no event record is currently found for this DJ.")
-                                    : L("请进入对应活动详情页完成打卡，并在活动打卡里选择本场观看的 DJ。", "Please check in from the related event detail page and select this watched DJ in event check-in.")
-                            }
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.white)
-                            .lineLimit(1)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(
-                                Capsule()
-                                    .fill(RaverTheme.accent)
-                            )
-                            .buttonStyle(.plain)
                         }
                         .fixedSize(horizontal: true, vertical: false)
                         .layoutPriority(2)
@@ -3149,6 +3132,35 @@ struct DJDetailView: View {
         )
     }
 
+    private func genreTag(_ title: String) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(RaverTheme.primaryText)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(RaverTheme.card)
+            )
+    }
+
+    private func normalizedDJGenres(_ dj: WebDJ) -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
+        for raw in dj.genres ?? [] {
+            let segments = raw
+                .components(separatedBy: CharacterSet(charactersIn: ",\n"))
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            for item in segments {
+                let key = item.lowercased()
+                guard seen.insert(key).inserted else { continue }
+                result.append(item)
+            }
+        }
+        return result
+    }
+
     @ViewBuilder
     private func socialLinks(_ dj: WebDJ) -> some View {
         HStack(spacing: 8) {
@@ -3325,7 +3337,6 @@ struct DJDetailView: View {
     @ViewBuilder
     private func introTabContent(_ dj: WebDJ) -> some View {
         HStack(spacing: 14) {
-            infoPill(icon: "person.2", text: L("\(dj.followerCount ?? 0) 粉丝", "\(dj.followerCount ?? 0) followers"))
             infoPill(icon: "headphones", text: L("已看 \(watchedSetCount) 场", "Watched \(watchedSetCount) sets"))
             if let country = dj.country, !country.isEmpty {
                 infoPill(icon: "globe", text: country)
@@ -3335,7 +3346,16 @@ struct DJDetailView: View {
             }
         }
 
-        socialLinks(dj)
+        let genreTags = normalizedDJGenres(dj)
+        if !genreTags.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(genreTags, id: \.self) { genre in
+                        genreTag(genre)
+                    }
+                }
+            }
+        }
 
         if let bio = dj.bio, !bio.isEmpty {
             JustifiedUILabelText(
@@ -3347,6 +3367,8 @@ struct DJDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
         }
+
+        socialLinks(dj)
 
         let contributorUsers = (dj.contributors ?? []).filter { !$0.username.isEmpty }
         if !contributorUsers.isEmpty {

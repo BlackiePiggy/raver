@@ -23,6 +23,14 @@ interface TicketTierForm {
   currency: string;
 }
 
+interface LineupStageGroup {
+  stageName: string;
+  items: Array<{
+    index: number;
+    slot: LineupSlotForm;
+  }>;
+}
+
 function UploadDropZone({
   label,
   previewUrl,
@@ -120,6 +128,34 @@ export default function EditMyEventPage() {
   }, [isLoading, user, router]);
 
   const eventId = useMemo(() => String(params.id || ''), [params.id]);
+  const lineupStageGroups = useMemo<LineupStageGroup[]>(() => {
+    if (lineupSlots.length === 0) return [];
+
+    const groupMap = new Map<string, LineupStageGroup['items']>();
+    lineupSlots.forEach((slot, index) => {
+      const stageName = slot.stageName.trim() || '未命名舞台';
+      if (!groupMap.has(stageName)) {
+        groupMap.set(stageName, []);
+      }
+      groupMap.get(stageName)!.push({ index, slot });
+    });
+
+    return Array.from(groupMap.entries())
+      .map(([stageName, items]) => ({
+        stageName,
+        items: [...items].sort((a, b) => {
+          if (!a.slot.startTime && !b.slot.startTime) return a.index - b.index;
+          if (!a.slot.startTime) return 1;
+          if (!b.slot.startTime) return -1;
+          return new Date(a.slot.startTime).getTime() - new Date(b.slot.startTime).getTime();
+        }),
+      }))
+      .sort((a, b) => {
+        if (a.stageName === '未命名舞台' && b.stageName !== '未命名舞台') return 1;
+        if (a.stageName !== '未命名舞台' && b.stageName === '未命名舞台') return -1;
+        return a.stageName.localeCompare(b.stageName, 'zh-CN');
+      });
+  }, [lineupSlots]);
 
   useEffect(() => {
     const loadDjs = async () => {
@@ -308,7 +344,7 @@ export default function EditMyEventPage() {
   return (
     <div className="min-h-screen bg-bg-primary">
       <Navigation />
-      <div className="pt-[44px] max-w-6xl mx-auto p-6">
+      <div className="pt-[44px] max-w-[1400px] mx-auto p-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-text-primary">编辑我发布的活动</h1>
           <button
@@ -417,37 +453,52 @@ export default function EditMyEventPage() {
                 <h2 className="text-xl font-semibold text-text-primary">参演DJ与时段</h2>
                 <button type="button" onClick={addLineupSlot} className="px-3 py-2 rounded-lg bg-primary-blue hover:bg-primary-purple text-white text-sm">+ 添加时段</button>
               </div>
+              <p className="text-xs text-text-tertiary mb-3">已按舞台分组展示，修改舞台名后会自动重新分组。</p>
 
-              <div className="space-y-3">
-                {lineupSlots.map((slot, index) => (
-                  <div key={`${slot.id || 'new'}-${index}`} className="rounded-lg border border-bg-primary bg-bg-tertiary p-3 grid grid-cols-1 md:grid-cols-5 gap-2">
-                    <div>
-                      <label className="block text-xs text-text-tertiary mb-1">选择DJ</label>
-                      <select value={slot.djId || ''} onChange={(e) => updateLineupSlot(index, 'djId', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm">
-                        <option value="">手动填写</option>
-                        {djs.map((dj) => (
-                          <option key={dj.id} value={dj.id}>{dj.name}</option>
-                        ))}
-                      </select>
+              <div className="space-y-4">
+                {lineupStageGroups.length === 0 && (
+                  <p className="text-sm text-text-tertiary">还未添加DJ时段。</p>
+                )}
+                {lineupStageGroups.map((group) => (
+                  <div key={group.stageName} className="rounded-xl border border-bg-primary bg-bg-tertiary/40 p-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-text-primary">{group.stageName}</h3>
+                      <span className="text-xs text-text-tertiary">{group.items.length} 个时段</span>
                     </div>
-                    <div>
-                      <label className="block text-xs text-text-tertiary mb-1">DJ名称</label>
-                      <input value={slot.djName} onChange={(e) => updateLineupSlot(index, 'djName', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-text-tertiary mb-1">舞台</label>
-                      <input value={slot.stageName} onChange={(e) => updateLineupSlot(index, 'stageName', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-text-tertiary mb-1">开始</label>
-                      <input type="datetime-local" value={slot.startTime} onChange={(e) => updateLineupSlot(index, 'startTime', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-text-tertiary mb-1">结束</label>
-                      <div className="flex items-center gap-2">
-                        <input type="datetime-local" value={slot.endTime} onChange={(e) => updateLineupSlot(index, 'endTime', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
-                        <button type="button" onClick={() => removeLineupSlot(index)} className="text-accent-red text-xs">删除</button>
-                      </div>
+                    <div className="space-y-2">
+                      {group.items.map(({ slot, index }) => (
+                        <div
+                          key={`${slot.id || 'new'}-${index}`}
+                          className="rounded-lg border border-bg-primary bg-bg-tertiary p-3 grid grid-cols-1 xl:grid-cols-[minmax(180px,0.9fr)_minmax(240px,1.2fr)_minmax(150px,0.8fr)_minmax(200px,1fr)_minmax(200px,1fr)_88px] gap-2 items-end"
+                        >
+                          <div className="min-w-0">
+                            <label className="block text-xs text-text-tertiary mb-1">选择DJ</label>
+                            <select value={slot.djId || ''} onChange={(e) => updateLineupSlot(index, 'djId', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm">
+                              <option value="">手动填写</option>
+                              {djs.map((dj) => (
+                                <option key={dj.id} value={dj.id}>{dj.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="min-w-0">
+                            <label className="block text-xs text-text-tertiary mb-1">DJ名称</label>
+                            <input value={slot.djName} onChange={(e) => updateLineupSlot(index, 'djName', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
+                          </div>
+                          <div className="min-w-0">
+                            <label className="block text-xs text-text-tertiary mb-1">舞台</label>
+                            <input value={slot.stageName} onChange={(e) => updateLineupSlot(index, 'stageName', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
+                          </div>
+                          <div className="min-w-0">
+                            <label className="block text-xs text-text-tertiary mb-1">开始</label>
+                            <input type="datetime-local" value={slot.startTime} onChange={(e) => updateLineupSlot(index, 'startTime', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
+                          </div>
+                          <div className="min-w-0">
+                            <label className="block text-xs text-text-tertiary mb-1">结束</label>
+                            <input type="datetime-local" value={slot.endTime} onChange={(e) => updateLineupSlot(index, 'endTime', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
+                          </div>
+                          <button type="button" onClick={() => removeLineupSlot(index)} className="h-10 rounded-lg border border-accent-red/40 text-accent-red text-xs hover:bg-accent-red/10">删除</button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}

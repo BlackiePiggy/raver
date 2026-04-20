@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 struct BFFPagination: Codable {
     let page: Int
@@ -346,7 +347,10 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var longitude: Double?
     var startDate: Date
     var endDate: Date
+    var startTime: String? = nil
+    var endTime: String? = nil
     var dayRolloverHour: Int? = nil
+    var stageOrder: [String]? = nil
     var ticketUrl: String?
     var ticketPriceMin: Double?
     var ticketPriceMax: Double?
@@ -398,7 +402,10 @@ struct CreateEventInput: Codable {
     var officialWebsite: String? = nil
     var startDate: Date
     var endDate: Date
+    var startTime: String? = nil
+    var endTime: String? = nil
     var dayRolloverHour: Int? = nil
+    var stageOrder: [String]? = nil
     var coverImageUrl: String?
     var lineupImageUrl: String?
     var ticketTiers: [EventTicketTierInput]? = nil
@@ -425,7 +432,10 @@ struct UpdateEventInput: Encodable {
     var officialWebsite: String? = nil
     var startDate: Date?
     var endDate: Date?
+    var startTime: String? = nil
+    var endTime: String? = nil
     var dayRolloverHour: Int? = nil
+    var stageOrder: [String]? = nil
     var coverImageUrl: String?
     var lineupImageUrl: String?
     var ticketTiers: [EventTicketTierInput]? = nil
@@ -454,7 +464,10 @@ struct UpdateEventInput: Encodable {
         case officialWebsite
         case startDate
         case endDate
+        case startTime
+        case endTime
         case dayRolloverHour
+        case stageOrder
         case coverImageUrl
         case lineupImageUrl
         case ticketTiers
@@ -494,7 +507,10 @@ struct UpdateEventInput: Encodable {
         try container.encodeIfPresent(officialWebsite, forKey: .officialWebsite)
         try container.encodeIfPresent(startDate, forKey: .startDate)
         try container.encodeIfPresent(endDate, forKey: .endDate)
+        try container.encodeIfPresent(startTime, forKey: .startTime)
+        try container.encodeIfPresent(endTime, forKey: .endTime)
         try container.encodeIfPresent(dayRolloverHour, forKey: .dayRolloverHour)
+        try container.encodeIfPresent(stageOrder, forKey: .stageOrder)
         try container.encodeIfPresent(coverImageUrl, forKey: .coverImageUrl)
         try container.encodeIfPresent(lineupImageUrl, forKey: .lineupImageUrl)
         try container.encodeIfPresent(ticketTiers, forKey: .ticketTiers)
@@ -508,6 +524,7 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var name: String
     var nameI18n: WebBiText? = nil
     var aliases: [String]?
+    var genres: [String]? = nil
     var slug: String?
     var bio: String?
     var bioI18n: WebBiText? = nil
@@ -1167,4 +1184,82 @@ struct UpdateDJInput: Codable, Hashable {
     var soundcloudUrl: String?
     var twitterUrl: String?
     var isVerified: Bool?
+}
+
+struct SavedEventRoute: Codable, Identifiable, Hashable {
+    var id: String { eventID }
+
+    let eventID: String
+    var eventName: String
+    var coverImageUrl: String?
+    var startDate: Date
+    var endDate: Date
+    var selectedSlotIDs: [String]
+    var savedAt: Date
+
+    var selectedSlotIDSet: Set<String> {
+        Set(selectedSlotIDs)
+    }
+}
+
+final class EventRouteStore: ObservableObject {
+    static let shared = EventRouteStore()
+
+    @Published private(set) var routes: [SavedEventRoute] = []
+
+    private let storageKey = "raver.savedEventRoutes.v1"
+    private let userDefaults: UserDefaults
+
+    private init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+        routes = Self.loadRoutes(from: userDefaults, key: storageKey)
+    }
+
+    func route(for eventID: String) -> SavedEventRoute? {
+        routes.first { $0.eventID == eventID }
+    }
+
+    func save(event: WebEvent, selectedSlotIDs: Set<String>) {
+        let route = SavedEventRoute(
+            eventID: event.id,
+            eventName: event.name,
+            coverImageUrl: event.coverImageUrl,
+            startDate: event.startDate,
+            endDate: event.endDate,
+            selectedSlotIDs: selectedSlotIDs.sorted(),
+            savedAt: Date()
+        )
+
+        if let index = routes.firstIndex(where: { $0.eventID == event.id }) {
+            routes[index] = route
+        } else {
+            routes.append(route)
+        }
+        routes.sort { $0.savedAt > $1.savedAt }
+        persist()
+    }
+
+    func delete(eventID: String) {
+        routes.removeAll { $0.eventID == eventID }
+        persist()
+    }
+
+    private func persist() {
+        do {
+            let data = try JSONEncoder().encode(routes)
+            userDefaults.set(data, forKey: storageKey)
+        } catch {
+            assertionFailure("Failed to persist saved event routes: \(error)")
+        }
+    }
+
+    private static func loadRoutes(from userDefaults: UserDefaults, key: String) -> [SavedEventRoute] {
+        guard let data = userDefaults.data(forKey: key) else { return [] }
+        do {
+            return try JSONDecoder().decode([SavedEventRoute].self, from: data)
+                .sorted { $0.savedAt > $1.savedAt }
+        } catch {
+            return []
+        }
+    }
 }

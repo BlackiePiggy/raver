@@ -14,20 +14,64 @@ enum AppConfig {
 
     private static let localUserAvatarAssets: [String] = (1...24).map { String(format: "LocalUserAvatar%02d", $0) }
     private static let localGroupAvatarAssets: [String] = (1...12).map { String(format: "LocalGroupAvatar%02d", $0) }
+    private static let persistedRuntimeModeKey = "raver.persisted.runtimeMode"
+    private static let persistedBFFBaseURLKey = "raver.persisted.bffBaseURL"
 
     static var runtimeMode: AppRuntimeMode {
-        if ProcessInfo.processInfo.environment["RAVER_USE_MOCK"] == "0" {
-            return .live
+        if let envMode = runtimeModeFromEnvironmentValue(ProcessInfo.processInfo.environment["RAVER_USE_MOCK"]) {
+            UserDefaults.standard.set(envMode.rawValue, forKey: persistedRuntimeModeKey)
+            return envMode
         }
+
+        if let persisted = UserDefaults.standard.string(forKey: persistedRuntimeModeKey),
+           let mode = AppRuntimeMode(rawValue: persisted) {
+            return mode
+        }
+
         return .mock
     }
 
     static var bffBaseURL: URL {
-        if let custom = ProcessInfo.processInfo.environment["RAVER_BFF_BASE_URL"],
+        if let custom = normalizedBaseURLString(ProcessInfo.processInfo.environment["RAVER_BFF_BASE_URL"]),
            let url = URL(string: custom) {
+            UserDefaults.standard.set(custom, forKey: persistedBFFBaseURLKey)
+            return url
+        }
+
+        if let persisted = normalizedBaseURLString(UserDefaults.standard.string(forKey: persistedBFFBaseURLKey)),
+           let url = URL(string: persisted) {
             return url
         }
         return URL(string: "http://localhost:8787")!
+    }
+
+    private static func normalizedBaseURLString(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let url = URL(string: trimmed), url.scheme != nil {
+            return url.absoluteString
+        }
+
+        let withDefaultScheme = "http://\(trimmed)"
+        guard let url = URL(string: withDefaultScheme), url.host != nil else { return nil }
+        return url.absoluteString
+    }
+
+    private static func runtimeModeFromEnvironmentValue(_ raw: String?) -> AppRuntimeMode? {
+        guard let raw else { return nil }
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+
+        switch normalized {
+        case "0", "false", "live":
+            return .live
+        case "1", "true", "mock":
+            return .mock
+        default:
+            return nil
+        }
     }
 
     static func resolvedURLString(_ value: String?) -> String? {

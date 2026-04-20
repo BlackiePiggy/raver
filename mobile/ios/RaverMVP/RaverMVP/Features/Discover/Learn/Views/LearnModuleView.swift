@@ -96,9 +96,6 @@ struct LearnModuleView: View {
             .task {
                 await loadInitial()
             }
-            .refreshable {
-                await refreshAll()
-            }
             .onChange(of: selectedSort) { _, next in
                 sortOrder = next.defaultOrder
                 Task { await loadLabels() }
@@ -142,22 +139,27 @@ struct LearnModuleView: View {
     @ViewBuilder
     private var headerTabs: some View {
         HStack(spacing: 8) {
-            ForEach(LearnModuleSection.allCases) { item in
-                Button(item.title) {
-                    withAnimation(.interactiveSpring(response: 0.26, dampingFraction: 0.84)) {
-                        selectedSection = item
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(LearnModuleSection.allCases) { item in
+                        Button(item.title) {
+                            withAnimation(.interactiveSpring(response: 0.26, dampingFraction: 0.84)) {
+                                selectedSection = item
+                            }
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(selectedSection == item ? RaverTheme.accent : RaverTheme.card)
+                        .foregroundStyle(selectedSection == item ? Color.white : RaverTheme.primaryText)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
                 }
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(selectedSection == item ? RaverTheme.accent : RaverTheme.card)
-                .foregroundStyle(selectedSection == item ? Color.white : RaverTheme.primaryText)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .fixedSize(horizontal: true, vertical: false)
             }
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
                 switch selectedSection {
@@ -208,6 +210,8 @@ struct LearnModuleView: View {
                         Text(LL("搜索厂牌名 / 简介"))
                             .font(.subheadline)
                             .foregroundStyle(RaverTheme.secondaryText)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 10)
@@ -374,6 +378,8 @@ struct LearnModuleView: View {
                         Text(LL("搜索电音节名 / 城市 / 国家"))
                             .font(.subheadline)
                             .foregroundStyle(RaverTheme.secondaryText)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 10)
@@ -440,6 +446,9 @@ struct LearnModuleView: View {
                 .padding(.top, 12)
                 .padding(.bottom, max(0, tabBarReservedHeight) + 12)
             }
+            .refreshable {
+                await refreshAll()
+            }
         }
     }
 
@@ -469,6 +478,9 @@ struct LearnModuleView: View {
                 .padding(.top, 14)
                 .padding(.bottom, max(0, tabBarReservedHeight) + 14)
             }
+            .refreshable {
+                await refreshAll()
+            }
         }
     }
 
@@ -492,6 +504,9 @@ struct LearnModuleView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
                 .padding(.bottom, max(0, tabBarReservedHeight) + 12)
+            }
+            .refreshable {
+                await refreshAll()
             }
             .simultaneousGesture(
                 TapGesture().onEnded {
@@ -530,6 +545,9 @@ struct LearnModuleView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
                 .padding(.bottom, max(0, tabBarReservedHeight) + 12)
+            }
+            .refreshable {
+                await refreshAll()
             }
         }
     }
@@ -801,6 +819,7 @@ struct LearnModuleView: View {
             .raverSystemNavigation(title: LL("新增电音节"))
             .scrollDismissesKeyboard(.interactively)
         }
+        .raverEnableCustomSwipeBack(edgeRatio: 0.2)
     }
 
     private func prepareFestivalCreateDraft() {
@@ -2889,6 +2908,7 @@ struct LearnFestivalDetailView: View {
             .raverSystemNavigation(title: LL("编辑电音节"))
             .scrollDismissesKeyboard(.interactively)
         }
+        .raverEnableCustomSwipeBack(edgeRatio: 0.2)
     }
 
     private enum FestivalEditPhotoTarget {

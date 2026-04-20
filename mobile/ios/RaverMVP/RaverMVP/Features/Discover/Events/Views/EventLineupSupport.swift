@@ -57,12 +57,16 @@ enum EventLineupActCodec {
         let preferredName = slot.djName.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallbackName = slot.dj?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let rawName = preferredName.isEmpty ? fallbackName : preferredName
-        return parse(
+        var act = parse(
             name: rawName,
             djID: slot.dj?.id ?? slot.djId,
             avatarUrl: slot.dj?.avatarUrl,
             performerIDPrefix: "slot-\(slot.id)-p"
         )
+        if !fallbackName.isEmpty, !act.performers.isEmpty {
+            act.performers[0].name = fallbackName
+        }
+        return act
     }
 
     static func parse(

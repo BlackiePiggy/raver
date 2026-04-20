@@ -410,6 +410,7 @@ struct DJSetDetailView: View {
                         Task { await load() }
                     }
                 }
+                .raverEnableCustomSwipeBack(edgeRatio: 0.2)
             }
         }
         .sheet(isPresented: Binding(
@@ -428,6 +429,7 @@ struct DJSetDetailView: View {
                         }
                     }
                 }
+                .raverEnableCustomSwipeBack(edgeRatio: 0.2)
             }
         }
         .sheet(isPresented: Binding(
@@ -443,6 +445,7 @@ struct DJSetDetailView: View {
                         }
                     }
                 }
+                .raverEnableCustomSwipeBack(edgeRatio: 0.2)
             }
         }
         .fullScreenCover(
@@ -450,13 +453,14 @@ struct DJSetDetailView: View {
                 get: { audioListenSetID != nil },
                 set: { if !$0 { audioListenSetID = nil } }
             )
-        ) {
-            if let audioSetID = audioListenSetID {
-                NavigationStack {
-                    DJSetDetailView(setID: audioSetID, playbackMode: .audioOnly)
+            ) {
+                if let audioSetID = audioListenSetID {
+                    NavigationStack {
+                        DJSetDetailView(setID: audioSetID, playbackMode: .audioOnly)
+                    }
+                    .raverEnableCustomSwipeBack(edgeRatio: 0.2)
                 }
             }
-        }
         .onAppear {
             if !isAudioOnlyMode {
                 AppOrientationLock.shared.allowLandscape()
@@ -3637,6 +3641,7 @@ private struct SetEventBindingSheet: View {
                 Text(errorMessage ?? "")
             }
         }
+        .raverEnableCustomSwipeBack(edgeRatio: 0.2)
     }
 
     @MainActor

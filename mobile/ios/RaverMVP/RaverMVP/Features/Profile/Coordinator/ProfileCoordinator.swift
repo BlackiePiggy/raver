@@ -4,6 +4,7 @@ enum ProfileRoute: Hashable {
     case followList(userID: String, kind: FollowListKind)
     case settings
     case myPublishes
+    case myRoutes
     case editProfile
     case myCheckins(targetUserID: String?, title: String)
     case avatarFullscreen

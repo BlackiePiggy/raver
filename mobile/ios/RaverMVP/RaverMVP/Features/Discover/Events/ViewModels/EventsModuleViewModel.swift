@@ -11,6 +11,7 @@ struct DiscoverEventsPageRequest: Equatable {
 
 protocol DiscoverEventsRepository {
     func fetchEvents(request: DiscoverEventsPageRequest) async throws -> EventListPage
+    func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent]
     func fetchEvent(id: String) async throws -> WebEvent
     func createEvent(input: CreateEventInput) async throws -> WebEvent
     func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent
@@ -53,6 +54,10 @@ struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
             eventType: request.eventType,
             status: request.status
         )
+    }
+
+    func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent] {
+        try await service.fetchRecommendedEvents(limit: limit, statuses: statuses)
     }
 
     func fetchEvent(id: String) async throws -> WebEvent {
@@ -144,6 +149,18 @@ struct FetchDiscoverEventsPageUseCase {
     }
 }
 
+struct FetchRecommendedDiscoverEventsUseCase {
+    private let repository: DiscoverEventsRepository
+
+    init(repository: DiscoverEventsRepository) {
+        self.repository = repository
+    }
+
+    func execute(limit: Int, statuses: [String]?) async throws -> [WebEvent] {
+        try await repository.fetchRecommendedEvents(limit: limit, statuses: statuses)
+    }
+}
+
 struct FetchMarkedEventCheckinsUseCase {
     private let repository: DiscoverEventsRepository
 
@@ -219,6 +236,8 @@ final class EventsModuleViewModel: ObservableObject {
     private var currentAllQuery = AllQuery(search: "", eventTypeKey: "")
     private var nextAllPage = 1
     private var totalAllPages = 1
+    private var totalOngoingPages = 1
+    private var totalUpcomingPages = 1
     private var allReloadToken = UUID()
     private var markedReloadToken = UUID()
     private var hasLoadedMarkedState = false
@@ -244,19 +263,15 @@ final class EventsModuleViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            let result = try await fetchEventsPageUseCase.execute(
-                DiscoverEventsPageRequest(
-                    page: 1,
-                    limit: pageSize,
-                    search: query.searchParam,
-                    eventType: query.eventTypeParam,
-                    status: "upcoming"
-                )
-            )
+            async let ongoingResult = try fetchActiveEventsPage(query: query, page: 1, status: "ongoing")
+            async let upcomingResult = try fetchActiveEventsPage(query: query, page: 1, status: "upcoming")
+            let (ongoingPage, upcomingPage) = try await (ongoingResult, upcomingResult)
 
             guard allReloadToken == token else { return }
-            allEvents = result.items
-            totalAllPages = result.pagination?.totalPages ?? 1
+            allEvents = mergeAndSortActiveEvents(ongoing: ongoingPage.items, upcoming: upcomingPage.items)
+            totalOngoingPages = ongoingPage.pagination?.totalPages ?? 1
+            totalUpcomingPages = upcomingPage.pagination?.totalPages ?? 1
+            totalAllPages = max(totalOngoingPages, totalUpcomingPages)
             nextAllPage = 2
         } catch {
             guard allReloadToken == token else { return }
@@ -276,19 +291,36 @@ final class EventsModuleViewModel: ObservableObject {
         isLoadingMoreAll = true
 
         do {
-            let result = try await fetchEventsPageUseCase.execute(
-                DiscoverEventsPageRequest(
-                    page: pageToLoad,
-                    limit: pageSize,
-                    search: query.searchParam,
-                    eventType: query.eventTypeParam,
-                    status: "upcoming"
-                )
+            let shouldLoadOngoing = pageToLoad <= totalOngoingPages
+            let shouldLoadUpcoming = pageToLoad <= totalUpcomingPages
+
+            async let ongoingPage = try fetchActiveEventsPageIfNeeded(
+                shouldLoadOngoing,
+                query: query,
+                page: pageToLoad,
+                status: "ongoing"
             )
+            async let upcomingPage = try fetchActiveEventsPageIfNeeded(
+                shouldLoadUpcoming,
+                query: query,
+                page: pageToLoad,
+                status: "upcoming"
+            )
+            let (ongoingResult, upcomingResult) = try await (ongoingPage, upcomingPage)
 
             guard query == currentAllQuery else { return }
-            allEvents = mergeUnique(existing: allEvents, with: result.items)
-            totalAllPages = result.pagination?.totalPages ?? totalAllPages
+            let mergedPageItems = mergeAndSortActiveEvents(
+                ongoing: ongoingResult?.items ?? [],
+                upcoming: upcomingResult?.items ?? []
+            )
+            allEvents = mergeUnique(existing: allEvents, with: mergedPageItems)
+            if let ongoingResult {
+                totalOngoingPages = ongoingResult.pagination?.totalPages ?? totalOngoingPages
+            }
+            if let upcomingResult {
+                totalUpcomingPages = upcomingResult.pagination?.totalPages ?? totalUpcomingPages
+            }
+            totalAllPages = max(totalOngoingPages, totalUpcomingPages)
             nextAllPage = pageToLoad + 1
         } catch {
             if query == currentAllQuery {
@@ -401,6 +433,39 @@ final class EventsModuleViewModel: ObservableObject {
         for item in incoming where seen.insert(item.id).inserted {
             merged.append(item)
         }
-        return merged
+        return merged.sorted(by: sortEventByActiveTimeline)
+    }
+
+    private func fetchActiveEventsPage(query: AllQuery, page: Int, status: String) async throws -> EventListPage {
+        try await fetchEventsPageUseCase.execute(
+            DiscoverEventsPageRequest(
+                page: page,
+                limit: pageSize,
+                search: query.searchParam,
+                eventType: query.eventTypeParam,
+                status: status
+            )
+        )
+    }
+
+    private func fetchActiveEventsPageIfNeeded(
+        _ shouldLoad: Bool,
+        query: AllQuery,
+        page: Int,
+        status: String
+    ) async throws -> EventListPage? {
+        guard shouldLoad else { return nil }
+        return try await fetchActiveEventsPage(query: query, page: page, status: status)
+    }
+
+    private func mergeAndSortActiveEvents(ongoing: [WebEvent], upcoming: [WebEvent]) -> [WebEvent] {
+        mergeUnique(existing: ongoing, with: upcoming)
+    }
+
+    private func sortEventByActiveTimeline(_ lhs: WebEvent, _ rhs: WebEvent) -> Bool {
+        if lhs.startDate == rhs.startDate {
+            return lhs.endDate < rhs.endDate
+        }
+        return lhs.startDate < rhs.startDate
     }
 }

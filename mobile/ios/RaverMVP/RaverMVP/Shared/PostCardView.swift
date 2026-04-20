@@ -360,6 +360,7 @@ private struct PostLocationMapView: View {
                 await resolveLocation()
             }
         }
+        .raverEnableCustomSwipeBack(edgeRatio: 0.2)
     }
 
     @MainActor

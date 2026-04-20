@@ -77,6 +77,10 @@ struct DiscoverHomeView: View {
                 onHorizontalDragStateChanged: { isDragging in
                     guard isChildHorizontalDragging != isDragging else { return }
                     isChildHorizontalDragging = isDragging
+                },
+                onRequestMoveToNextDiscoverSection: {
+                    isChildHorizontalDragging = false
+                    self.section = .events
                 }
             )
         case .events:

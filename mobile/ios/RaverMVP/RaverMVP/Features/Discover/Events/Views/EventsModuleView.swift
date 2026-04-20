@@ -849,6 +849,7 @@ private struct EventCountryFilterSheet: View {
             .navigationTitle(L("筛选活动", "Filter Events"))
             .navigationBarTitleDisplayMode(.inline)
         }
+        .raverEnableCustomSwipeBack(edgeRatio: 0.2)
     }
 
     private func chipSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {

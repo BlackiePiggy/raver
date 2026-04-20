@@ -15,10 +15,12 @@ enum AppRoute: Hashable {
     case conversation(conversationID: String)
     case postDetail(postID: String)
     case eventDetail(eventID: String)
+    case eventSchedule(eventID: String)
     case djDetail(djID: String)
     case rankingBoardDetail(board: RankingBoard)
     case userProfile(userID: String)
     case squadProfile(squadID: String)
+    case squadManage(squadID: String)
     case ratingUnitDetail(unitID: String)
 }
 
@@ -33,10 +35,12 @@ extension AppRoute {
         case .conversation,
              .postDetail,
              .eventDetail,
+             .eventSchedule,
              .djDetail,
              .rankingBoardDetail,
              .userProfile,
              .squadProfile,
+             .squadManage,
              .ratingUnitDetail:
             return true
         }
@@ -58,6 +62,8 @@ extension AppRoute {
             return "post.detail"
         case .eventDetail:
             return "event.detail"
+        case .eventSchedule:
+            return "event.schedule"
         case .djDetail:
             return "dj.detail"
         case .rankingBoardDetail:
@@ -66,6 +72,8 @@ extension AppRoute {
             return "user.profile"
         case .squadProfile:
             return "squad.profile"
+        case .squadManage:
+            return "squad.manage"
         case .ratingUnitDetail:
             return "rating.unit.detail"
         }
@@ -83,9 +91,9 @@ extension AppRoute {
             return .profile
         case .conversation:
             return .messages
-        case .postDetail, .squadProfile, .ratingUnitDetail:
+        case .postDetail, .squadProfile, .squadManage, .ratingUnitDetail:
             return .circle
-        case .eventDetail, .djDetail, .rankingBoardDetail:
+        case .eventDetail, .eventSchedule, .djDetail, .rankingBoardDetail:
             return .discover
         case .userProfile:
             return .profile
@@ -197,6 +205,7 @@ struct MainTabCoordinatorView: View {
                     routeDestination(for: route)
                 }
         }
+        .raverEnableCustomSwipeBack(edgeRatio: 0.2)
         .sheet(item: $router.sheet) { route in
             sheetDestination(for: route)
         }
@@ -324,6 +333,8 @@ struct MainTabCoordinatorView: View {
                     service: appContainer.webService,
                     socialService: appContainer.socialService
                 )
+            case .myRoutes:
+                MyRoutesView()
             case .editProfile:
                 CurrentUserProfileLoaderView(repository: appContainer.profileSocialRepository) { profile in
                     EditProfileView(profile: profile, repository: appContainer.profileSocialRepository) { updated in
@@ -367,6 +378,9 @@ struct MainTabCoordinatorView: View {
         case .eventDetail(let eventID):
             EventDetailView(eventID: eventID)
 
+        case .eventSchedule(let eventID):
+            EventDetailView(eventID: eventID, initialTabRawValue: "schedule")
+
         case .djDetail(let djID):
             DJDetailView(djID: djID)
 
@@ -377,8 +391,18 @@ struct MainTabCoordinatorView: View {
             UserProfileView(userID: userID)
 
         case .squadProfile(let squadID):
-            SquadProfileView(squadID: squadID, service: appContainer.socialService)
+            SquadProfileView(
+                squadID: squadID,
+                service: appContainer.socialService
+            )
                 .environmentObject(appState)
+
+        case .squadManage(let squadID):
+            SquadManageRouteView(
+                squadID: squadID,
+                service: appContainer.socialService,
+                webService: appContainer.webService
+            )
 
         case .ratingUnitDetail(let unitID):
             CircleRatingUnitDetailView(unitID: unitID) {
@@ -400,9 +424,13 @@ struct MainTabCoordinatorView: View {
         switch route {
         case .squadProfile(let squadID):
             NavigationStack {
-                SquadProfileView(squadID: squadID, service: appContainer.socialService)
+                SquadProfileView(
+                    squadID: squadID,
+                    service: appContainer.socialService
+                )
                     .environmentObject(appState)
             }
+            .raverEnableCustomSwipeBack(edgeRatio: 0.2)
         }
     }
 
@@ -452,6 +480,7 @@ struct MainTabCoordinatorView: View {
         case .followList,
                 .settings,
                 .myPublishes,
+                .myRoutes,
                 .editProfile,
                 .myCheckins,
                 .publishEvent,

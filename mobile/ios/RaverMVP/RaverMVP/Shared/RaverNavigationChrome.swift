@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import ObjectiveC
 
 enum RaverNavigationCircleButtonStyle {
     case glass
@@ -386,12 +388,14 @@ private struct RaverImmersiveDetailVerticalOffsetPreferenceKey: PreferenceKey {
 extension View {
     func raverSystemNavigation(
         title: String,
-        displayMode: NavigationBarItem.TitleDisplayMode = .inline
+        displayMode: NavigationBarItem.TitleDisplayMode = .inline,
+        backgroundColor: Color? = nil
     ) -> some View {
         modifier(
             RaverSystemNavigationModifier(
                 title: title,
-                displayMode: displayMode
+                displayMode: displayMode,
+                backgroundColor: backgroundColor
             )
         )
     }
@@ -431,18 +435,31 @@ extension View {
     func eraseToAnyView() -> AnyView {
         AnyView(self)
     }
+
+    func raverEnableCustomSwipeBack(edgeRatio: CGFloat = 0.2) -> some View {
+        modifier(RaverCustomSwipeBackModifier(edgeRatio: edgeRatio))
+    }
 }
 
 private struct RaverSystemNavigationModifier: ViewModifier {
     let title: String
     let displayMode: NavigationBarItem.TitleDisplayMode
+    let backgroundColor: Color?
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
+        let base = content
             .toolbar(.visible, for: .navigationBar)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(displayMode)
             .tint(RaverTheme.primaryText)
+        if let backgroundColor {
+            base
+                .toolbarBackground(backgroundColor, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+        } else {
+            base
+        }
     }
 }
 
@@ -485,5 +502,197 @@ private struct RaverGradientNavigationModifier: ViewModifier {
                     )
                 )
             )
+    }
+}
+
+private struct RaverCustomSwipeBackModifier: ViewModifier {
+    let edgeRatio: CGFloat
+
+    func body(content: Content) -> some View {
+        content.background(
+            RaverCustomSwipeBackInstaller(edgeRatio: edgeRatio)
+                .frame(width: 0, height: 0)
+                .allowsHitTesting(false)
+        )
+    }
+}
+
+private struct RaverCustomSwipeBackInstaller: UIViewRepresentable {
+    let edgeRatio: CGFloat
+
+    func makeUIView(context: Context) -> RaverSwipeBackResolvingView {
+        let view = RaverSwipeBackResolvingView()
+        view.edgeRatio = edgeRatio
+        return view
+    }
+
+    func updateUIView(_ uiView: RaverSwipeBackResolvingView, context: Context) {
+        uiView.edgeRatio = edgeRatio
+        uiView.scheduleInstall()
+    }
+}
+
+private final class RaverSwipeBackResolvingView: UIView {
+    var edgeRatio: CGFloat = 0.2
+    private var installedNavigationController: UINavigationController?
+    private var installWorkItem: DispatchWorkItem?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        scheduleInstall()
+    }
+
+    func scheduleInstall() {
+        installWorkItem?.cancel()
+        guard window != nil else { return }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.installIfNeeded()
+        }
+        installWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: workItem)
+    }
+
+    private func installIfNeeded() {
+        guard let navigationController = findNavigationController() else { return }
+        let coordinator = RaverCustomSwipeBackCoordinator.resolve(for: navigationController)
+        coordinator.edgeRatio = max(0.05, min(0.5, edgeRatio))
+        coordinator.install(on: navigationController)
+        installedNavigationController = navigationController
+    }
+
+    private func findNavigationController() -> UINavigationController? {
+        findUINavigationController() ?? window?.rootViewController?.raverSearchNavigationController()
+    }
+}
+
+private extension UIViewController {
+    func raverSearchNavigationController() -> UINavigationController? {
+        if let navigationController = self as? UINavigationController {
+            return navigationController
+        }
+        if let navigationController {
+            return navigationController
+        }
+        if let presentedViewController,
+           let navigationController = presentedViewController.raverSearchNavigationController() {
+            return navigationController
+        }
+        for child in children {
+            if let navigationController = child.raverSearchNavigationController() {
+                return navigationController
+            }
+        }
+        return nil
+    }
+}
+
+private extension UIView {
+    func findUINavigationController() -> UINavigationController? {
+        var responder: UIResponder? = self
+
+        while let current = responder {
+            if let navigationController = current as? UINavigationController {
+                return navigationController
+            }
+            if let viewController = current as? UIViewController,
+               let navigationController = viewController.navigationController {
+                return navigationController
+            }
+            responder = current.next
+        }
+
+        return nil
+    }
+}
+
+private final class RaverCustomSwipeBackCoordinator: NSObject, UIGestureRecognizerDelegate {
+    private enum AssociatedKeys {
+        static var coordinatorKey: UInt8 = 0
+    }
+
+    private let gestureName = "RaverCustomSwipeBackGesture"
+    weak var navigationController: UINavigationController?
+    var edgeRatio: CGFloat = 0.2
+
+    static func resolve(for navigationController: UINavigationController) -> RaverCustomSwipeBackCoordinator {
+        if let existing = objc_getAssociatedObject(navigationController, &AssociatedKeys.coordinatorKey)
+            as? RaverCustomSwipeBackCoordinator {
+            existing.navigationController = navigationController
+            return existing
+        }
+
+        let coordinator = RaverCustomSwipeBackCoordinator()
+        coordinator.navigationController = navigationController
+        objc_setAssociatedObject(
+            navigationController,
+            &AssociatedKeys.coordinatorKey,
+            coordinator,
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+        return coordinator
+    }
+
+    func install(on navigationController: UINavigationController) {
+        self.navigationController = navigationController
+
+        if let existing = navigationController.view.gestureRecognizers?.first(where: { $0.name == gestureName }) {
+            existing.delegate = self
+            navigationController.interactivePopGestureRecognizer?.isEnabled = false
+            return
+        }
+
+        guard let systemPopGesture = navigationController.interactivePopGestureRecognizer else { return }
+        guard
+            let targets = systemPopGesture.value(forKey: "targets") as? [NSObject],
+            let targetObject = targets.first,
+            let target = targetObject.value(forKey: "target")
+        else {
+            return
+        }
+
+        let action = NSSelectorFromString("handleNavigationTransition:")
+        let customPanGesture = RaverCustomSwipeBackPanGestureRecognizer(target: target, action: action)
+        customPanGesture.name = gestureName
+        customPanGesture.maximumNumberOfTouches = 1
+        customPanGesture.delegate = self
+
+        navigationController.view.addGestureRecognizer(customPanGesture)
+        systemPopGesture.isEnabled = false
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer.name == gestureName else { return false }
+        guard let navigationController else { return false }
+        guard navigationController.viewControllers.count > 1 else { return false }
+        guard navigationController.transitionCoordinator == nil else { return false }
+        guard let panGesture = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+
+        let location = panGesture.location(in: navigationController.view)
+        let velocity = panGesture.velocity(in: navigationController.view)
+        let width = max(navigationController.view.bounds.width, 1)
+
+        guard location.x <= width * edgeRatio else { return false }
+        guard velocity.x > 0 else { return false }
+        guard abs(velocity.x) > abs(velocity.y) else { return false }
+
+        return true
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        false
+    }
+}
+
+private final class RaverCustomSwipeBackPanGestureRecognizer: UIPanGestureRecognizer {
+    override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool {
+        true
+    }
+
+    override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool {
+        false
     }
 }
