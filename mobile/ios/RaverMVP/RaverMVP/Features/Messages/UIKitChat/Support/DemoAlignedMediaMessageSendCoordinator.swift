@@ -24,6 +24,7 @@ final class DemoAlignedMediaMessageSendCoordinator {
 
     func sendImage(fileURL: URL) async {
         progressPresenter.setSendingState(true)
+        let sessionID = progressPresenter.currentSendingSessionID()
         defer { progressPresenter.setSendingState(false) }
 
         do {
@@ -31,7 +32,7 @@ final class DemoAlignedMediaMessageSendCoordinator {
                 fileURL: fileURL,
                 onProgress: { [weak self] progress in
                     Task { @MainActor in
-                        self?.progressPresenter.updateProgress(progress)
+                        self?.progressPresenter.updateProgress(progress, sessionID: sessionID)
                     }
                 }
             )
@@ -48,6 +49,7 @@ final class DemoAlignedMediaMessageSendCoordinator {
 
     func sendVideo(fileURL: URL) async {
         progressPresenter.setSendingState(true)
+        let sessionID = progressPresenter.currentSendingSessionID()
         defer { progressPresenter.setSendingState(false) }
 
         do {
@@ -55,7 +57,7 @@ final class DemoAlignedMediaMessageSendCoordinator {
                 fileURL: fileURL,
                 onProgress: { [weak self] progress in
                     Task { @MainActor in
-                        self?.progressPresenter.updateProgress(progress)
+                        self?.progressPresenter.updateProgress(progress, sessionID: sessionID)
                     }
                 }
             )

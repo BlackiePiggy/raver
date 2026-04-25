@@ -60,6 +60,7 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
         senderAvatarView.image = UIImage(systemName: "person.crop.circle.fill")
         senderNameLabel.text = nil
         senderMetaRow.isHidden = true
+        setBubbleAlignment(isMine: false)
         stopSendingIconAnimation()
         statusPillIconView.image = nil
         statusPillIconView.isHidden = true
@@ -80,8 +81,12 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
         senderAvatarView.layer.cornerRadius = 10
         senderAvatarView.tintColor = UIColor(RaverTheme.secondaryText)
         senderAvatarView.image = UIImage(systemName: "person.crop.circle.fill")
-        senderAvatarView.widthAnchor.constraint(equalToConstant: 20).isActive = true
-        senderAvatarView.heightAnchor.constraint(equalToConstant: 20).isActive = true
+        let senderAvatarWidthConstraint = senderAvatarView.widthAnchor.constraint(equalToConstant: 20)
+        senderAvatarWidthConstraint.priority = .defaultHigh
+        senderAvatarWidthConstraint.isActive = true
+        let senderAvatarHeightConstraint = senderAvatarView.heightAnchor.constraint(equalToConstant: 20)
+        senderAvatarHeightConstraint.priority = .defaultHigh
+        senderAvatarHeightConstraint.isActive = true
         senderMetaRow.addArrangedSubview(senderAvatarView)
 
         senderNameLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -134,8 +139,12 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
         iconView.contentMode = .scaleAspectFit
         iconView.tintColor = UIColor(RaverTheme.secondaryText)
         iconView.setContentHuggingPriority(.required, for: .horizontal)
-        iconView.widthAnchor.constraint(equalToConstant: 18).isActive = true
-        iconView.heightAnchor.constraint(equalToConstant: 18).isActive = true
+        let iconWidthConstraint = iconView.widthAnchor.constraint(equalToConstant: 18)
+        iconWidthConstraint.priority = .defaultHigh
+        iconWidthConstraint.isActive = true
+        let iconHeightConstraint = iconView.heightAnchor.constraint(equalToConstant: 18)
+        iconHeightConstraint.priority = .defaultHigh
+        iconHeightConstraint.isActive = true
 
         textStack.axis = .vertical
         textStack.spacing = 2
@@ -223,6 +232,7 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
         ])
 
         previewHeightConstraint = previewContainer.heightAnchor.constraint(equalToConstant: 0)
+        previewHeightConstraint.priority = .defaultHigh
         previewHeightConstraint.isActive = true
         NSLayoutConstraint.activate([
             previewImageView.topAnchor.constraint(equalTo: previewContainer.topAnchor),
@@ -273,12 +283,8 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
             configureSenderMeta(for: message.sender)
         }
 
+        setBubbleAlignment(isMine: message.isMine)
         if message.isMine {
-            mineTrailingConstraint.isActive = true
-            mineLeadingConstraint.isActive = true
-            otherLeadingConstraint.isActive = false
-            otherTrailingConstraint.isActive = false
-
             bubbleView.backgroundColor = UIColor(RaverTheme.accent)
             iconView.tintColor = .white
             titleLabel.textColor = .white
@@ -286,11 +292,6 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
             timeLabel.textColor = UIColor.white.withAlphaComponent(0.85)
             configureDeliveryStatus(message.deliveryStatus, isMine: true)
         } else {
-            mineTrailingConstraint.isActive = false
-            mineLeadingConstraint.isActive = false
-            otherLeadingConstraint.isActive = true
-            otherTrailingConstraint.isActive = true
-
             bubbleView.backgroundColor = UIColor(RaverTheme.card)
             iconView.tintColor = UIColor(RaverTheme.secondaryText)
             titleLabel.textColor = UIColor(RaverTheme.primaryText)
@@ -500,6 +501,27 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
 
     private func stopSendingIconAnimation() {
         statusPillIconView.layer.removeAnimation(forKey: Self.sendingIconSpinKey)
+    }
+
+    private func setBubbleAlignment(isMine: Bool) {
+        NSLayoutConstraint.deactivate([
+            mineTrailingConstraint,
+            mineLeadingConstraint,
+            otherLeadingConstraint,
+            otherTrailingConstraint
+        ])
+
+        if isMine {
+            NSLayoutConstraint.activate([
+                mineTrailingConstraint,
+                mineLeadingConstraint
+            ])
+        } else {
+            NSLayoutConstraint.activate([
+                otherLeadingConstraint,
+                otherTrailingConstraint
+            ])
+        }
     }
 
     private func applyClusterLayout(

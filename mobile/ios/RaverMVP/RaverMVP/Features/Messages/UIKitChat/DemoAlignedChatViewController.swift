@@ -393,7 +393,12 @@ final class DemoAlignedChatViewController: UIViewController {
     }
 
     private func handleSendSucceeded() {
-        viewportScrollCoordinator?.forceScrollOnNextApply()
+        let isNearBottom = viewportScrollCoordinator?.isNearBottom(
+            threshold: UIConstants.nearBottomThreshold
+        ) ?? true
+        if isNearBottom {
+            viewportScrollCoordinator?.scrollToBottom(animated: false)
+        }
     }
 
     private func handleSendFailureHint() {
@@ -583,6 +588,10 @@ final class DemoAlignedChatViewController: UIViewController {
             dependencies: DemoAlignedComposerActionCoordinatorFactoryDependencies(
                 nearBottomThreshold: UIConstants.nearBottomThreshold,
                 textSendCoordinator: textSendCoordinator,
+                currentInputText: { [weak inputField] in inputField?.text ?? "" },
+                notifyInputChanged: { [weak chatController] text in
+                    chatController?.handleComposerInputChanged(text)
+                },
                 mediaProgressPresenter: mediaProgressPresenter,
                 mediaSendCoordinator: mediaSendCoordinator,
                 viewportScrollCoordinator: viewportScrollCoordinator,

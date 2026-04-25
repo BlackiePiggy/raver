@@ -669,7 +669,6 @@ private struct ConversationLoaderView: View {
             }
         }
         .task {
-            debug("task start conversationID=\(conversationID)")
             await loadConversation(force: false)
         }
         .onChange(of: appState.openIMConnectionState) { oldValue, newValue in

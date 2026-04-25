@@ -4,6 +4,7 @@ import Combine
 @MainActor
 final class RaverChatController: ObservableObject {
     @Published private(set) var messages: [ChatMessage] = []
+    @Published private(set) var latestInputStatus: OpenIMInputStatusEvent?
     @Published private(set) var isInitialLoading = false
     @Published private(set) var isLoadingOlder = false
     @Published private(set) var hasCompletedInitialLoad = false
@@ -39,6 +40,10 @@ final class RaverChatController: ObservableObject {
         await openIMController.loadOlderMessagesIfNeeded()
     }
 
+    func currentMessagesSnapshot() -> [ChatMessage] {
+        openIMController.renderedMessages
+    }
+
     @discardableResult
     func sendTextMessage(_ text: String) async throws -> ChatMessage {
         try await openIMController.sendTextMessage(text)
@@ -71,6 +76,10 @@ final class RaverChatController: ObservableObject {
         try await openIMController.resendFailedMessage(messageID: messageID)
     }
 
+    func handleComposerInputChanged(_ text: String) {
+        openIMController.handleComposerInputChanged(text)
+    }
+
     func searchMessages(
         query: String,
         limit: Int = 30,
@@ -90,6 +99,11 @@ final class RaverChatController: ObservableObject {
         openIMController.$renderedMessages
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.messages = $0 }
+            .store(in: &cancellables)
+
+        openIMController.$latestInputStatus
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.latestInputStatus = $0 }
             .store(in: &cancellables)
 
         openIMController.$isInitialLoading
@@ -122,10 +136,34 @@ final class RaverChatController: ObservableObject {
 #if canImport(OpenIMSDK)
 import OpenIMSDK
 
+private struct OpenIMChatItem: Equatable {
+    let messageID: String
+    let rawMessage: OIMMessageInfo
+    let renderedMessage: ChatMessage
+}
+
+@MainActor
+private enum OpenIMMessageRenderMapper {
+    static func map(
+        _ message: OIMMessageInfo,
+        conversation: Conversation,
+        rawChatService: OpenIMRawChatService
+    ) -> OpenIMChatItem {
+        let openIMConversationID = conversation.openIMConversationID ?? conversation.id
+        let rendered = rawChatService.chatMessageSnapshot(from: message, conversationID: openIMConversationID)
+        return OpenIMChatItem(
+            messageID: rendered.id,
+            rawMessage: message,
+            renderedMessage: rendered
+        )
+    }
+}
+
 @MainActor
 final class RaverOpenIMChatController: ObservableObject {
     @Published private(set) var rawMessages: [OIMMessageInfo] = []
     @Published private(set) var renderedMessages: [ChatMessage] = []
+    @Published private(set) var latestInputStatus: OpenIMInputStatusEvent?
     @Published private(set) var isInitialLoading = false
     @Published private(set) var isLoadingOlder = false
     @Published private(set) var hasCompletedInitialLoad = false
@@ -139,8 +177,17 @@ final class RaverOpenIMChatController: ObservableObject {
     private var hasBoundRealtime = false
     private var lastOlderLoadAt: Date = .distantPast
     private let olderLoadThrottleSeconds: TimeInterval = 0.45
+    private let typingStatusExpireSeconds: TimeInterval = 4
+    private let typingSendThrottleSeconds: TimeInterval = 2
+    private let readMarkThrottleSeconds: TimeInterval = 0.75
     private var oldestClientMsgID: String?
     private var reachedBeginning = false
+    private var renderedItems: [OpenIMChatItem] = []
+    private var latestInputStatusClearTask: Task<Void, Never>?
+    private var lastTypingStatusSentAt: Date = .distantPast
+    private var lastReadMarkAt: Date = .distantPast
+    private let chatStore = OpenIMChatStore.shared
+    private var hasRegisteredActiveConversation = false
 
     init(
         conversation: Conversation,
@@ -152,7 +199,19 @@ final class RaverOpenIMChatController: ObservableObject {
         self.session = session
     }
 
+    deinit {
+        Task { @MainActor [conversation, chatStore, hasRegisteredActiveConversation] in
+            guard hasRegisteredActiveConversation else { return }
+            chatStore.deactivateConversation(conversation)
+        }
+    }
+
+    private var rawChatService: OpenIMRawChatService {
+        (service as? OpenIMRawChatService) ?? session
+    }
+
     func start() {
+        ensureActiveConversationRegistration()
         bindRealtimeIfNeeded()
         Task { @MainActor [weak self] in
             await self?.loadInitialMessagesIfNeeded()
@@ -160,6 +219,7 @@ final class RaverOpenIMChatController: ObservableObject {
     }
 
     func updateContext(conversation: Conversation, service: SocialService) {
+        releaseActiveConversationRegistration()
         self.conversation = conversation
         self.service = service
         resetState()
@@ -178,7 +238,7 @@ final class RaverOpenIMChatController: ObservableObject {
         defer { isLoadingOlder = false }
 
         do {
-            guard let page = try await session.fetchRawMessagesPage(
+            guard let page = try await rawChatService.fetchRawMessagesPage(
                 conversationID: conversation.id,
                 startClientMsgID: oldestClientMsgID,
                 count: 30
@@ -201,7 +261,7 @@ final class RaverOpenIMChatController: ObservableObject {
 
     @discardableResult
     func sendTextMessage(_ text: String) async throws -> ChatMessage {
-        let message = session.createRawTextMessage(content: text)
+        let message = rawChatService.createRawTextMessage(content: text)
         return try await sendPreparedMessage(
             message,
             failurePrefix: "OpenIM send text message failed"
@@ -213,7 +273,7 @@ final class RaverOpenIMChatController: ObservableObject {
         fileURL: URL,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> ChatMessage {
-        let message = try session.createRawImageMessage(fileURL: fileURL)
+        let message = try rawChatService.createRawImageMessage(fileURL: fileURL)
         return try await sendPreparedMessage(
             message,
             failurePrefix: "OpenIM send image message failed",
@@ -226,7 +286,7 @@ final class RaverOpenIMChatController: ObservableObject {
         fileURL: URL,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> ChatMessage {
-        let message = try session.createRawVideoMessage(fileURL: fileURL)
+        let message = try rawChatService.createRawVideoMessage(fileURL: fileURL)
         return try await sendPreparedMessage(
             message,
             failurePrefix: "OpenIM send video message failed",
@@ -253,16 +313,41 @@ final class RaverOpenIMChatController: ObservableObject {
         )
     }
 
+    func handleComposerInputChanged(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard Date().timeIntervalSince(lastTypingStatusSentAt) >= typingSendThrottleSeconds else {
+            return
+        }
+
+        lastTypingStatusSentAt = Date()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await self.session.sendTypingStatus(conversationID: self.conversation.id)
+            } catch {
+                // Typing status is best-effort and should stay silent on failure.
+            }
+        }
+    }
+
     private func bindRealtimeIfNeeded() {
         guard !hasBoundRealtime else { return }
         hasBoundRealtime = true
 
-        session.rawMessagePublisher
+        rawChatService.rawMessagePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] message in
                 guard let self else { return }
                 guard self.matchesCurrentConversation(message) else { return }
                 self.appendOrReplace(message)
+            }
+            .store(in: &cancellables)
+
+        session.inputStatusPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                self?.consumeInputStatus(event)
             }
             .store(in: &cancellables)
     }
@@ -274,7 +359,7 @@ final class RaverOpenIMChatController: ObservableObject {
         defer { isInitialLoading = false }
 
         do {
-            if let page = try await session.fetchRawMessagesPage(
+            if let page = try await rawChatService.fetchRawMessagesPage(
                 conversationID: conversation.id,
                 startClientMsgID: nil,
                 count: 50
@@ -288,7 +373,7 @@ final class RaverOpenIMChatController: ObservableObject {
                 canLoadOlderMessages = false
             }
 
-            _ = try await session.markConversationRead(conversationID: conversation.id)
+            await markConversationReadBestEffort(force: true)
         } catch {
             if !error.isUserInitiatedCancellation {
                 lastErrorMessage = error.userFacingMessage
@@ -299,7 +384,7 @@ final class RaverOpenIMChatController: ObservableObject {
     }
 
     private func matchesCurrentConversation(_ message: OIMMessageInfo) -> Bool {
-        guard let businessConversationID = session.businessConversationIDSnapshot(for: message) else {
+        guard let businessConversationID = rawChatService.businessConversationIDSnapshot(for: message) else {
             return false
         }
         return businessConversationID == conversation.id
@@ -313,8 +398,38 @@ final class RaverOpenIMChatController: ObservableObject {
         } else {
             rawMessages.append(message)
         }
+        if message.typingElem == nil {
+            latestInputStatus = nil
+            latestInputStatusClearTask?.cancel()
+        }
         rawMessages = deduplicatedAndSorted(rawMessages)
         rebuildRenderedMessages()
+        if !message.isSelf(), message.typingElem == nil {
+            Task { @MainActor [weak self] in
+                await self?.markConversationReadBestEffort()
+            }
+        }
+    }
+
+    private func consumeInputStatus(_ event: OpenIMInputStatusEvent) {
+        guard matchesCurrentConversation(rawConversationID: event.conversationID) else { return }
+        if let currentUserID = session.currentBusinessUserIDSnapshot(), currentUserID == event.userID {
+            return
+        }
+
+        latestInputStatus = event
+        latestInputStatusClearTask?.cancel()
+        latestInputStatusClearTask = Task { [weak self] in
+            let delay = UInt64((self?.typingStatusExpireSeconds ?? 4) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self else { return }
+                if self.latestInputStatus == event {
+                    self.latestInputStatus = nil
+                }
+            }
+        }
     }
 
     private func sendPreparedMessage(
@@ -326,7 +441,7 @@ final class RaverOpenIMChatController: ObservableObject {
         onProgress?(0)
 
         do {
-            let sent = try await session.sendPreparedRawMessage(
+            let sent = try await rawChatService.sendPreparedRawMessage(
                 message,
                 conversationID: conversation.id,
                 failurePrefix: failurePrefix,
@@ -360,19 +475,32 @@ final class RaverOpenIMChatController: ObservableObject {
         return fallback.isEmpty ? nil : fallback
     }
 
+    private func matchesCurrentConversation(rawConversationID: String) -> Bool {
+        rawConversationID == conversation.id || rawConversationID == conversation.openIMConversationID
+    }
+
     private func rebuildRenderedMessages() {
-        let openIMConversationID = conversation.openIMConversationID ?? conversation.id
-        renderedMessages = rawMessages.map { session.chatMessageSnapshot(from: $0, conversationID: openIMConversationID) }
+        renderedItems = rawMessages.map {
+            OpenIMMessageRenderMapper.map(
+                $0,
+                conversation: conversation,
+                rawChatService: rawChatService
+            )
+        }
+        renderedMessages = renderedItems.map(\.renderedMessage)
     }
 
     private func renderedMessageSnapshot(from message: OIMMessageInfo) -> ChatMessage {
         let messageID = normalizedClientMsgID(for: message)
         if let messageID,
-           let rendered = renderedMessages.first(where: { $0.id == messageID }) {
+           let rendered = renderedItems.first(where: { $0.messageID == messageID })?.renderedMessage {
             return rendered
         }
-        let openIMConversationID = conversation.openIMConversationID ?? conversation.id
-        return session.chatMessageSnapshot(from: message, conversationID: openIMConversationID)
+        return OpenIMMessageRenderMapper.map(
+            message,
+            conversation: conversation,
+            rawChatService: rawChatService
+        ).renderedMessage
     }
 
     private func deduplicatedAndSorted(_ messages: [OIMMessageInfo]) -> [OIMMessageInfo] {
@@ -399,7 +527,9 @@ final class RaverOpenIMChatController: ObservableObject {
 
     private func resetState() {
         rawMessages = []
+        renderedItems = []
         renderedMessages = []
+        latestInputStatus = nil
         isInitialLoading = false
         isLoadingOlder = false
         hasCompletedInitialLoad = false
@@ -408,6 +538,46 @@ final class RaverOpenIMChatController: ObservableObject {
         lastOlderLoadAt = .distantPast
         oldestClientMsgID = nil
         reachedBeginning = false
+        latestInputStatusClearTask?.cancel()
+        latestInputStatusClearTask = nil
+        lastTypingStatusSentAt = .distantPast
+        lastReadMarkAt = .distantPast
+    }
+
+    private func ensureActiveConversationRegistration() {
+        guard !hasRegisteredActiveConversation else { return }
+        chatStore.activateConversation(conversation)
+        hasRegisteredActiveConversation = true
+    }
+
+    private func releaseActiveConversationRegistration() {
+        guard hasRegisteredActiveConversation else { return }
+        chatStore.deactivateConversation(conversation)
+        hasRegisteredActiveConversation = false
+    }
+
+    private func markConversationReadBestEffort(force: Bool = false) async {
+        guard force || Date().timeIntervalSince(lastReadMarkAt) >= readMarkThrottleSeconds else {
+            #if DEBUG
+            print("[RaverOpenIMChatController] mark read throttled conversation=\(conversation.id)")
+            #endif
+            return
+        }
+
+        lastReadMarkAt = Date()
+        do {
+            _ = try await rawChatService.markConversationRead(conversationID: conversation.id)
+            #if DEBUG
+            print("[RaverOpenIMChatController] mark read success conversation=\(conversation.id) force=\(force ? 1 : 0)")
+            #endif
+        } catch {
+            if !error.isUserInitiatedCancellation {
+                #if DEBUG
+                print("[RaverOpenIMChatController] mark read failed conversation=\(conversation.id) error=\(error.localizedDescription)")
+                #endif
+                // Read sync is best-effort for the open conversation; keep failures silent.
+            }
+        }
     }
 }
 #endif

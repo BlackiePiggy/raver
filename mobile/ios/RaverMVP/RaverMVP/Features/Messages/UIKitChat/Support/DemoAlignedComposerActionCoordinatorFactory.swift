@@ -4,6 +4,8 @@ import UIKit
 struct DemoAlignedComposerActionCoordinatorFactoryDependencies {
     let nearBottomThreshold: CGFloat
     let textSendCoordinator: DemoAlignedTextSendCoordinator?
+    let currentInputText: () -> String
+    let notifyInputChanged: (String) -> Void
     let mediaProgressPresenter: DemoAlignedMediaSendProgressPresenter?
     let mediaSendCoordinator: DemoAlignedMediaSendCoordinator?
     let viewportScrollCoordinator: DemoAlignedMessageViewportScrollCoordinator?
@@ -23,6 +25,8 @@ enum DemoAlignedComposerActionCoordinatorFactory {
             refreshSendButtonState: { [weak textSendCoordinator = dependencies.textSendCoordinator] in
                 textSendCoordinator?.refreshSendButtonState()
             },
+            currentInputText: dependencies.currentInputText,
+            notifyInputChanged: dependencies.notifyInputChanged,
             isSendingMedia: { [weak mediaProgressPresenter = dependencies.mediaProgressPresenter] in
                 mediaProgressPresenter?.isSendingMedia == true
             },

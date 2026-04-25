@@ -48,9 +48,6 @@ final class DemoAlignedMessageApplyCoordinator {
         let isNearBottomBeforeApply = viewportScrollCoordinator.isNearBottom(
             threshold: nearBottomThreshold
         )
-        OpenIMProbeLogger.log(
-            "[DemoAlignedMessageApply] before reload previousTail={\(debugMessageSummary(currentMessages.last))} nextTail={\(debugMessageSummary(nextMessages.last))}"
-        )
 
         collectionDataSource.updateMessages(nextMessages)
         collectionView.reloadData()
@@ -76,9 +73,6 @@ final class DemoAlignedMessageApplyCoordinator {
         let isNearBottomAfterApply = viewportScrollCoordinator.isNearBottom(
             threshold: nearBottomThreshold
         )
-        OpenIMProbeLogger.log(
-            "[DemoAlignedMessageApply] after reload shouldAutoScroll=\(shouldAutoScroll ? 1 : 0) pendingDelta=\(pendingDelta) nearBottomAfter=\(isNearBottomAfterApply ? 1 : 0) renderedTail={\(debugMessageSummary(nextMessages.last))}"
-        )
 
         return Outcome(
             shouldAutoScroll: shouldAutoScroll,
@@ -86,13 +80,6 @@ final class DemoAlignedMessageApplyCoordinator {
             isNearBottomAfterApply: isNearBottomAfterApply,
             hasNewFailedOutgoingMessage: hasNewFailedOutgoingMessage(previous: currentMessages, current: nextMessages)
         )
-    }
-
-    private func debugMessageSummary(_ message: ChatMessage?) -> String {
-        guard let message else { return "-" }
-        let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        let snippet = text.isEmpty ? "-" : (text.count > 24 ? "\(text.prefix(24))..." : text)
-        return "id=\(message.id) mine=\(message.isMine ? 1 : 0) status=\(message.deliveryStatus.rawValue) content=\(snippet)"
     }
 
     private func hasNewFailedOutgoingMessage(

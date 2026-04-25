@@ -1,4 +1,46 @@
 import Foundation
+import Combine
+
+#if canImport(OpenIMSDK)
+import OpenIMSDK
+
+@MainActor
+protocol OpenIMRawChatService: AnyObject {
+    var rawMessagePublisher: AnyPublisher<OIMMessageInfo, Never> { get }
+
+    @discardableResult
+    func markConversationRead(conversationID: String) async throws -> Bool
+
+    func fetchRawMessagesPage(
+        conversationID: String,
+        startClientMsgID: String?,
+        count: Int
+    ) async throws -> OpenIMRawMessagePage?
+
+    func createRawTextMessage(content: String) -> OIMMessageInfo
+    func createRawImageMessage(fileURL: URL) throws -> OIMMessageInfo
+    func createRawVideoMessage(fileURL: URL) throws -> OIMMessageInfo
+
+    func sendPreparedRawMessage(
+        _ message: OIMMessageInfo,
+        conversationID: String,
+        failurePrefix: String,
+        onProgress: ((Int) -> Void)?
+    ) async throws -> OIMMessageInfo?
+
+    func businessConversationIDSnapshot(for message: OIMMessageInfo) -> String?
+    func chatMessageSnapshot(from message: OIMMessageInfo, conversationID: String) -> ChatMessage
+}
+#endif
+
+// Temporary compatibility zone for surfaces that still return `ChatMessage`.
+// New demo-style chat code should prefer `OpenIMRawChatService`.
+protocol OpenIMChatCompatibilityService: AnyObject {
+    func fetchMessages(conversationID: String) async throws -> [ChatMessage]
+    func sendMessage(conversationID: String, content: String) async throws -> ChatMessage
+    func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
+    func sendVideoMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
+}
 
 enum FeedMode: String, Codable, CaseIterable, Identifiable {
     case recommended
@@ -16,7 +58,7 @@ enum FeedMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-protocol SocialService: OpenIMChatMessageDataSource {
+protocol SocialService: OpenIMChatConversationDataSource, OpenIMChatCompatibilityService {
     func restoreSession() async -> Session?
     func login(username: String, password: String) async throws -> Session
     func loginWithSms(phoneNumber: String, code: String) async throws -> Session
@@ -52,10 +94,6 @@ protocol SocialService: OpenIMChatMessageDataSource {
     func setConversationMuted(conversationID: String, muted: Bool) async throws
     func clearConversationHistory(conversationID: String) async throws
     func startDirectConversation(identifier: String) async throws -> Conversation
-    func fetchMessages(conversationID: String) async throws -> [ChatMessage]
-    func sendMessage(conversationID: String, content: String) async throws -> ChatMessage
-    func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
-    func sendVideoMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
     func fetchRecommendedSquads() async throws -> [SquadSummary]
     func fetchMySquads() async throws -> [SquadSummary]
     func fetchSquadProfile(squadID: String) async throws -> SquadProfile
@@ -91,6 +129,18 @@ protocol SocialService: OpenIMChatMessageDataSource {
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post
 }
 
+extension OpenIMChatCompatibilityService {
+    func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        _ = fileURL
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendVideoMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        _ = fileURL
+        throw ServiceError.message("Not supported")
+    }
+}
+
 extension SocialService {
     func setConversationMuted(conversationID: String, muted: Bool) async throws {
         throw ServiceError.message("Not supported")
@@ -106,16 +156,6 @@ extension SocialService {
 
     func disbandSquad(squadID: String) async throws {
         _ = squadID
-        throw ServiceError.message("Not supported")
-    }
-
-    func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
-        _ = fileURL
-        throw ServiceError.message("Not supported")
-    }
-
-    func sendVideoMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
-        _ = fileURL
         throw ServiceError.message("Not supported")
     }
 

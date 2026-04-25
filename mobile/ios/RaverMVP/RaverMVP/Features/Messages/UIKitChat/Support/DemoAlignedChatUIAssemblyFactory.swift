@@ -127,13 +127,22 @@ enum DemoAlignedChatUIAssemblyFactory {
         dependencies.mediaProgressView.progress = 0
         dependencies.mediaProgressView.trackTintColor = dependencies.dividerColor
         dependencies.mediaProgressView.progressTintColor = dependencies.accentColor
-        dependencies.mediaProgressContainer.addSubview(dependencies.mediaProgressView)
+        dependencies.mediaProgressView.isHidden = true
 
         dependencies.mediaProgressLabel.translatesAutoresizingMaskIntoConstraints = false
         dependencies.mediaProgressLabel.font = .systemFont(ofSize: 11, weight: .medium)
         dependencies.mediaProgressLabel.textColor = dependencies.secondaryTextColor
         dependencies.mediaProgressLabel.text = dependencies.mediaProgressText
-        dependencies.mediaProgressContainer.addSubview(dependencies.mediaProgressLabel)
+        dependencies.mediaProgressLabel.isHidden = true
+
+        let mediaProgressStack = UIStackView(arrangedSubviews: [
+            dependencies.mediaProgressView,
+            dependencies.mediaProgressLabel
+        ])
+        mediaProgressStack.translatesAutoresizingMaskIntoConstraints = false
+        mediaProgressStack.axis = .vertical
+        mediaProgressStack.spacing = 4
+        dependencies.mediaProgressContainer.addSubview(mediaProgressStack)
 
         dependencies.inputField.translatesAutoresizingMaskIntoConstraints = false
         dependencies.inputField.placeholder = dependencies.inputPlaceholder
@@ -190,14 +199,10 @@ enum DemoAlignedChatUIAssemblyFactory {
             dependencies.mediaProgressContainer.trailingAnchor.constraint(equalTo: dependencies.composerContainer.trailingAnchor, constant: -12),
             dependencies.mediaProgressContainer.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 4),
 
-            dependencies.mediaProgressView.leadingAnchor.constraint(equalTo: dependencies.mediaProgressContainer.leadingAnchor),
-            dependencies.mediaProgressView.trailingAnchor.constraint(equalTo: dependencies.mediaProgressContainer.trailingAnchor),
-            dependencies.mediaProgressView.topAnchor.constraint(equalTo: dependencies.mediaProgressContainer.topAnchor, constant: 2),
-
-            dependencies.mediaProgressLabel.leadingAnchor.constraint(equalTo: dependencies.mediaProgressContainer.leadingAnchor),
-            dependencies.mediaProgressLabel.trailingAnchor.constraint(equalTo: dependencies.mediaProgressContainer.trailingAnchor),
-            dependencies.mediaProgressLabel.topAnchor.constraint(equalTo: dependencies.mediaProgressView.bottomAnchor, constant: 4),
-            dependencies.mediaProgressLabel.bottomAnchor.constraint(equalTo: dependencies.mediaProgressContainer.bottomAnchor),
+            mediaProgressStack.leadingAnchor.constraint(equalTo: dependencies.mediaProgressContainer.leadingAnchor),
+            mediaProgressStack.trailingAnchor.constraint(equalTo: dependencies.mediaProgressContainer.trailingAnchor),
+            mediaProgressStack.topAnchor.constraint(equalTo: dependencies.mediaProgressContainer.topAnchor),
+            mediaProgressStack.bottomAnchor.constraint(equalTo: dependencies.mediaProgressContainer.bottomAnchor),
 
             dependencies.imageButton.leadingAnchor.constraint(equalTo: dependencies.composerContainer.leadingAnchor, constant: 10),
             dependencies.imageButton.centerYAnchor.constraint(equalTo: dependencies.inputField.centerYAnchor),

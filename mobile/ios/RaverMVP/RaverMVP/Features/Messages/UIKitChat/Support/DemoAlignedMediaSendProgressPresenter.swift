@@ -9,6 +9,7 @@ final class DemoAlignedMediaSendProgressPresenter {
     private let progressLabel: UILabel
     private let heightConstraint: NSLayoutConstraint
     private let hostView: UIView
+    private var sendingSessionID = UUID()
 
     private(set) var isSendingMedia = false
     var onSendingStateChanged: ((Bool) -> Void)?
@@ -33,6 +34,7 @@ final class DemoAlignedMediaSendProgressPresenter {
 
     func setSendingState(_ sending: Bool) {
         isSendingMedia = sending
+        sendingSessionID = UUID()
         onSendingStateChanged?(sending)
         imageButton.isEnabled = !sending
         videoButton.isEnabled = !sending
@@ -48,14 +50,27 @@ final class DemoAlignedMediaSendProgressPresenter {
 
         progressView.setProgress(0, animated: false)
         progressLabel.text = L("发送媒体 0%", "Sending media 0%")
+        progressView.isHidden = true
+        progressLabel.isHidden = true
         heightConstraint.constant = 0
         containerView.isHidden = true
     }
 
-    func updateProgress(_ progress: Double) {
+    func currentSendingSessionID() -> UUID {
+        sendingSessionID
+    }
+
+    func updateProgress(_ progress: Double, sessionID: UUID? = nil) {
+        if let sessionID, sessionID != sendingSessionID {
+            return
+        }
+        guard isSendingMedia else { return }
+
         let clamped = min(1, max(0, progress))
         if containerView.isHidden {
             containerView.isHidden = false
+            progressView.isHidden = false
+            progressLabel.isHidden = false
             heightConstraint.constant = 24
             UIView.animate(withDuration: 0.18) {
                 self.hostView.layoutIfNeeded()
@@ -65,5 +80,9 @@ final class DemoAlignedMediaSendProgressPresenter {
         progressView.setProgress(Float(clamped), animated: true)
         let percent = Int(round(clamped * 100))
         progressLabel.text = L("发送媒体 \(percent)%", "Sending media \(percent)%")
+    }
+
+    func updateProgress(_ progress: Double) {
+        updateProgress(progress, sessionID: nil)
     }
 }

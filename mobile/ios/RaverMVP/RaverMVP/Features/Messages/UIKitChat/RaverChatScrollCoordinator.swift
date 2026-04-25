@@ -49,25 +49,8 @@ final class RaverChatScrollCoordinator {
         let shouldScroll =
             forceScrollToBottom ||
             bootstrapForce ||
-            (!isLoadingOlder && isNearBottom && lastIDChanged)
-
-        let reason: String
-        if forceScrollToBottom {
-            reason = "force-scroll-token"
-        } else if bootstrapForce {
-            reason = "initial-bootstrap"
-        } else if !isLoadingOlder && isNearBottom && lastIDChanged {
-            reason = "near-bottom-tail-changed"
-        } else if isLoadingOlder {
-            reason = "blocked-loading-older"
-        } else if !isNearBottom {
-            reason = "blocked-not-near-bottom"
-        } else {
-            reason = "blocked-tail-unchanged"
-        }
-        OpenIMProbeLogger.log(
-            "[DemoAlignedScroll] auto-scroll decision result=\(shouldScroll ? 1 : 0) reason=\(reason) force=\(forceScrollToBottom ? 1 : 0) bootstrap=\(bootstrapForce ? 1 : 0) loadingOlder=\(isLoadingOlder ? 1 : 0) nearBottom=\(isNearBottom ? 1 : 0) tailChanged=\(lastIDChanged ? 1 : 0)"
-        )
+            (!isLoadingOlder && isNearBottom)
+        _ = lastIDChanged
 
         shouldForceScrollOnNextApply = false
         return shouldScroll

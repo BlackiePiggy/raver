@@ -6,6 +6,8 @@ final class DemoAlignedComposerActionCoordinator {
     private let nearBottomThreshold: CGFloat
     private let sendText: () async -> Void
     private let refreshSendButtonState: () -> Void
+    private let currentInputText: () -> String
+    private let notifyInputChanged: (String) -> Void
     private let isSendingMedia: () -> Bool
     private let presentImagePicker: () -> Void
     private let presentVideoPicker: () -> Void
@@ -17,6 +19,8 @@ final class DemoAlignedComposerActionCoordinator {
         nearBottomThreshold: CGFloat,
         sendText: @escaping () async -> Void,
         refreshSendButtonState: @escaping () -> Void,
+        currentInputText: @escaping () -> String,
+        notifyInputChanged: @escaping (String) -> Void,
         isSendingMedia: @escaping () -> Bool,
         presentImagePicker: @escaping () -> Void,
         presentVideoPicker: @escaping () -> Void,
@@ -27,6 +31,8 @@ final class DemoAlignedComposerActionCoordinator {
         self.nearBottomThreshold = nearBottomThreshold
         self.sendText = sendText
         self.refreshSendButtonState = refreshSendButtonState
+        self.currentInputText = currentInputText
+        self.notifyInputChanged = notifyInputChanged
         self.isSendingMedia = isSendingMedia
         self.presentImagePicker = presentImagePicker
         self.presentVideoPicker = presentVideoPicker
@@ -43,6 +49,7 @@ final class DemoAlignedComposerActionCoordinator {
 
     func handleInputEditingChanged() {
         refreshSendButtonState()
+        notifyInputChanged(currentInputText())
     }
 
     func handleImageTapped() {

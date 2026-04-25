@@ -64,11 +64,14 @@ final class OpenIMSession {
     private let totalUnreadSubject = PassthroughSubject<Int, Never>()
     private let inputStatusSubject = PassthroughSubject<OpenIMInputStatusEvent, Never>()
 
+    // Compatibility outlet retained while store/service layers still expect `ChatMessage`.
+    // New chat flows should subscribe to `rawMessagePublisher` instead.
     var messagePublisher: AnyPublisher<ChatMessage, Never> {
         messageSubject.eraseToAnyPublisher()
     }
 
     #if canImport(OpenIMSDK)
+    // Primary message stream for demo-style chat flows.
     var rawMessagePublisher: AnyPublisher<OIMMessageInfo, Never> {
         rawMessageSubject.eraseToAnyPublisher()
     }
@@ -260,6 +263,10 @@ final class OpenIMSession {
         #endif
     }
 
+    // MARK: - ChatMessage Compatibility API
+
+    // Legacy compatibility wrapper around the raw history pipeline.
+    // New demo-style chat flows should prefer `fetchRawMessagesPage(...)`.
     func fetchMessages(conversationID: String) async throws -> [ChatMessage]? {
         let page = try await fetchMessagesPage(
             conversationID: conversationID,
@@ -269,58 +276,33 @@ final class OpenIMSession {
         return page?.messages
     }
 
+    // Legacy compatibility wrapper around the raw history pipeline.
+    // Kept so compatibility services can continue returning `ChatMessage`.
     func fetchMessagesPage(
         conversationID: String,
         startClientMsgID: String?,
         count: Int
     ) async throws -> OpenIMMessageHistoryPage? {
         #if canImport(OpenIMSDK)
-        await waitForConnectionIfNeeded()
-        guard hasInitializedSDK, state.isConnected else {
-            debug("fetchMessages skipped: initialized=\(hasInitializedSDK) state=\(state) conversationID=\(conversationID)")
+        guard let page = try await fetchRawMessagesPage(
+            conversationID: conversationID,
+            startClientMsgID: startClientMsgID,
+            count: count
+        ) else {
             return nil
         }
 
-        guard let openIMConversationID = try await resolveOpenIMConversationID(for: conversationID) else {
-            debug("fetchMessages missing OpenIM conversationID for businessID=\(conversationID)")
-            return nil
-        }
-
-        let options = OIMGetAdvancedHistoryMessageListParam()
-        options.conversationID = openIMConversationID
-        options.viewType = .history
-        options.count = max(1, count)
-        if let startClientMsgID = normalizedText(startClientMsgID) {
-            options.startClientMsgID = startClientMsgID
-        }
-
-        let result = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<OIMGetAdvancedHistoryMessageListInfo, Error>) in
-            OIMManager.manager.getAdvancedHistoryMessageList(
-                options,
-                onSuccess: { info in
-                    if let info {
-                        continuation.resume(returning: info)
-                    } else {
-                        continuation.resume(returning: OIMGetAdvancedHistoryMessageListInfo())
-                    }
-                },
-                onFailure: { code, message in
-                    let resolved = (message ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                    let text = resolved.isEmpty ? "OpenIM fetch messages failed (\(code))" : resolved
-                    continuation.resume(throwing: ServiceError.message(text))
-                }
-            )
-        }
-
-        let mapped = (result.messageList).map { toChatMessage($0, conversationID: openIMConversationID) }
-        let sorted = mapped.sorted { $0.createdAt < $1.createdAt }
-        return OpenIMMessageHistoryPage(messages: sorted, isEnd: result.isEnd)
+        let openIMConversationID = try await resolveOpenIMConversationID(for: conversationID) ?? conversationID
+        let mapped = page.messages.map { chatMessageSnapshot(from: $0, conversationID: openIMConversationID) }
+        return OpenIMMessageHistoryPage(messages: mapped, isEnd: page.isEnd)
         #else
         return nil
         #endif
     }
 
     #if canImport(OpenIMSDK)
+    // MARK: - Raw Message API
+
     func fetchRawMessages(conversationID: String) async throws -> [OIMMessageInfo]? {
         let page = try await fetchRawMessagesPage(
             conversationID: conversationID,
@@ -384,22 +366,20 @@ final class OpenIMSession {
     }
     #endif
 
+    // Legacy compatibility wrapper around raw create/send/replace flow.
+    // New demo-style chat flows should create/send raw messages directly.
     func sendTextMessage(conversationID: String, content: String) async throws -> ChatMessage? {
         #if canImport(OpenIMSDK)
-        guard let target = try await resolveSendTarget(for: conversationID, actionName: "sendTextMessage") else {
+        let prepared = createRawTextMessage(content: content)
+        guard let sent = try await sendPreparedRawMessage(
+            prepared,
+            conversationID: conversationID,
+            failurePrefix: "OpenIM send text message failed"
+        ) else {
             return nil
         }
-
-        let message = OIMMessageInfo.createTextMessage(content)
-        debug(
-            "sendTextMessage prepared businessConversation=\(conversationID) openIMConversation=\(target.openIMConversationID) clientMsgID=\(normalizedText(message.clientMsgID) ?? "-") recvID=\(target.recvID ?? "-") groupID=\(target.groupID ?? "-") content=\(debugSnippet(content))"
-        )
-        let sent = try await sendPreparedMessage(message, to: target, failurePrefix: "OpenIM send text message failed")
-        let mapped = toChatMessage(sent, conversationID: target.openIMConversationID)
-        debug(
-            "sendTextMessage mapped businessConversation=\(conversationID) openIMConversation=\(target.openIMConversationID) payload={\(debugMessageSummary(mapped))}"
-        )
-        return mapped
+        let openIMConversationID = try await resolveOpenIMConversationID(for: conversationID) ?? conversationID
+        return chatMessageSnapshot(from: sent, conversationID: openIMConversationID)
         #else
         return nil
         #endif
@@ -458,64 +438,49 @@ final class OpenIMSession {
     }
     #endif
 
+    // Legacy compatibility wrapper around raw create/send/replace flow.
+    // New demo-style chat flows should create/send raw messages directly.
     func sendImageMessage(
         conversationID: String,
         fileURL: URL,
         onProgress: ((Int) -> Void)? = nil
     ) async throws -> ChatMessage? {
         #if canImport(OpenIMSDK)
-        guard let target = try await resolveSendTarget(for: conversationID, actionName: "sendImageMessage") else {
-            return nil
-        }
-
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            throw ServiceError.message(L("图片文件不存在", "Image file not found"))
-        }
-
-        let message = OIMMessageInfo.createImageMessage(fromFullPath: fileURL.path)
-        let sent = try await sendPreparedMessage(
-            message,
-            to: target,
+        let prepared = try createRawImageMessage(fileURL: fileURL)
+        guard let sent = try await sendPreparedRawMessage(
+            prepared,
+            conversationID: conversationID,
             failurePrefix: "OpenIM send image message failed",
             onProgress: onProgress
-        )
-        return toChatMessage(sent, conversationID: target.openIMConversationID)
+        ) else {
+            return nil
+        }
+        let openIMConversationID = try await resolveOpenIMConversationID(for: conversationID) ?? conversationID
+        return chatMessageSnapshot(from: sent, conversationID: openIMConversationID)
         #else
         return nil
         #endif
     }
 
+    // Legacy compatibility wrapper around raw create/send/replace flow.
+    // New demo-style chat flows should create/send raw messages directly.
     func sendVideoMessage(
         conversationID: String,
         fileURL: URL,
         onProgress: ((Int) -> Void)? = nil
     ) async throws -> ChatMessage? {
         #if canImport(OpenIMSDK)
-        guard let target = try await resolveSendTarget(for: conversationID, actionName: "sendVideoMessage") else {
-            return nil
-        }
-
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            throw ServiceError.message(L("视频文件不存在", "Video file not found"))
-        }
-
-        let duration = resolvedVideoDurationSeconds(fileURL: fileURL)
-        let snapshotURL = try createVideoSnapshotFile(videoURL: fileURL)
-        let mimeType = resolvedMimeType(for: fileURL, fallback: "video/mp4")
-        let message = OIMMessageInfo.createVideoMessage(
-            fromFullPath: fileURL.path,
-            videoType: mimeType,
-            duration: duration,
-            snapshotPath: snapshotURL.path
-        )
-
-        let sent = try await sendPreparedMessage(
-            message,
-            to: target,
+        let prepared = try createRawVideoMessage(fileURL: fileURL)
+        guard let sent = try await sendPreparedRawMessage(
+            prepared,
+            conversationID: conversationID,
             failurePrefix: "OpenIM send video message failed",
             onProgress: onProgress
-        )
-        return toChatMessage(sent, conversationID: target.openIMConversationID)
+        ) else {
+            return nil
+        }
+        let openIMConversationID = try await resolveOpenIMConversationID(for: conversationID) ?? conversationID
+        return chatMessageSnapshot(from: sent, conversationID: openIMConversationID)
         #else
         return nil
         #endif
@@ -1119,7 +1084,7 @@ final class OpenIMSession {
             return L("[表情]", "[Emoji]")
         }
         if message.notificationElem != nil {
-            return L("[系统消息]", "[System Message]")
+            return systemNotificationPreviewText(from: message)
         }
         if message.customElem != nil {
             return L("[自定义消息]", "[Custom Message]")
@@ -1130,6 +1095,66 @@ final class OpenIMSession {
         }
 
         return L("[消息]", "[Message]")
+    }
+
+    private func systemNotificationPreviewText(from message: OIMMessageInfo) -> String {
+        let notification = message.notificationElem
+        let actorName = normalizedText(notification?.opUser?.nickname)
+            ?? normalizedText(message.senderNickname)
+            ?? L("系统", "System")
+        let groupName = normalizedText(notification?.group?.groupName)
+        let kickedName = normalizedText(notification?.kickedUserList?.first?.nickname)
+        let invitedName = normalizedText(notification?.invitedUserList?.first?.nickname)
+        let entrantName = normalizedText(notification?.entrantUser?.nickname)
+        let quitName = normalizedText(notification?.quitUser?.nickname)
+
+        switch message.contentType {
+        case .groupCreated:
+            if let groupName {
+                return L("已创建群聊：\(groupName)", "Created group: \(groupName)")
+            }
+            return L("已创建群聊", "Created group")
+        case .memberQuit:
+            if let quitName {
+                return L("\(quitName) 已退出群聊", "\(quitName) left the group")
+            }
+            return L("有成员退出群聊", "A member left the group")
+        case .memberKicked:
+            if let kickedName {
+                return L("\(kickedName) 已被移出群聊", "\(kickedName) was removed from the group")
+            }
+            return L("有成员被移出群聊", "A member was removed from the group")
+        case .memberInvited:
+            if let invitedName {
+                return L("\(invitedName) 已加入群聊", "\(invitedName) joined the group")
+            }
+            return L("有成员被邀请加入群聊", "A member was invited to the group")
+        case .memberEnter:
+            if let entrantName {
+                return L("\(entrantName) 已加入群聊", "\(entrantName) joined the group")
+            }
+            return L("有成员加入群聊", "A member joined the group")
+        case .dismissGroup:
+            if let groupName {
+                return L("群聊已解散：\(groupName)", "Group dismissed: \(groupName)")
+            }
+            return L("群聊已解散", "Group dismissed")
+        case .groupAnnouncement:
+            return L("群公告已更新", "Group announcement updated")
+        case .groupSetNameNotification:
+            if let groupName {
+                return L("群名称已更新为 \(groupName)", "Group renamed to \(groupName)")
+            }
+            return L("群名称已更新", "Group name updated")
+        default:
+            if let detail = normalizedText(notification?.detail) {
+                return detail
+            }
+            if actorName == L("系统", "System") {
+                return L("[系统消息]", "[System Message]")
+            }
+            return L("\(actorName) 更新了群系统消息", "\(actorName) updated a group system message")
+        }
     }
 
     private func dateFromOpenIMTimestamp(_ timestamp: Int) -> Date {
@@ -1629,3 +1654,7 @@ final class OpenIMSession {
     }
     #endif
 }
+
+#if canImport(OpenIMSDK)
+extension OpenIMSession: OpenIMRawChatService {}
+#endif

@@ -9,6 +9,7 @@ final class DemoAlignedMessageFlowCoordinator {
     private let onSendFailureHint: () -> Void
 
     private var messages: [ChatMessage] = []
+    private var pendingPaginationAnchor: RaverChatScrollCoordinator.PaginationAnchor?
 
     init(
         chatController: RaverChatController,
@@ -30,6 +31,7 @@ final class DemoAlignedMessageFlowCoordinator {
 
     func reset() {
         messages.removeAll(keepingCapacity: true)
+        pendingPaginationAnchor = nil
     }
 
     func loadOlderMessagesIfNeeded() async {
@@ -38,20 +40,29 @@ final class DemoAlignedMessageFlowCoordinator {
         guard !messages.isEmpty else { return }
         guard chatController.canLoadOlderMessages else { return }
 
-        OpenIMProbeLogger.log("[DemoAlignedMessageFlow] load-older start")
-        let anchor = viewportScrollCoordinator.capturePaginationAnchor()
+        let previousCount = messages.count
+        pendingPaginationAnchor = viewportScrollCoordinator.capturePaginationAnchor()
         await chatController.loadOlderMessagesIfNeeded()
-        applyMessagesFromController(forceScrollToBottom: false)
-        viewportScrollCoordinator.restorePaginationAnchor(anchor)
-        OpenIMProbeLogger.log("[DemoAlignedMessageFlow] load-older end")
+
+        if pendingPaginationAnchor != nil {
+            let currentMessages = chatController.currentMessagesSnapshot()
+            let didPrependMessages = currentMessages.count > previousCount
+
+            if didPrependMessages {
+                applyMessages(currentMessages, forceScrollToBottom: false)
+            } else {
+                pendingPaginationAnchor = nil
+            }
+        }
     }
 
     func applyMessagesFromController(forceScrollToBottom: Bool = false) {
-        let next = chatController.messages
+        let next = chatController.currentMessagesSnapshot()
+        applyMessages(next, forceScrollToBottom: forceScrollToBottom)
+    }
+
+    private func applyMessages(_ next: [ChatMessage], forceScrollToBottom: Bool) {
         let previousMessages = messages
-        OpenIMProbeLogger.log(
-            "[DemoAlignedMessageFlow] apply-start previousCount=\(previousMessages.count) nextCount=\(next.count) previousTail={\(debugMessageSummary(previousMessages.last))} nextTail={\(debugMessageSummary(next.last))}"
-        )
         messages = next
 
         let outcome = messageApplyCoordinator.apply(
@@ -62,35 +73,28 @@ final class DemoAlignedMessageFlowCoordinator {
             hasCompletedInitialLoad: chatController.hasCompletedInitialLoad
         )
 
+        let didPrependOlderMessages =
+            pendingPaginationAnchor != nil &&
+            next.count > previousMessages.count
+
+        if didPrependOlderMessages {
+            viewportScrollCoordinator.restorePaginationAnchor(pendingPaginationAnchor)
+            pendingPaginationAnchor = nil
+        }
+
         if outcome.shouldAutoScroll {
-            OpenIMProbeLogger.log(
-                "[DemoAlignedMessageFlow] apply outcome auto-scroll=1 nearBottom=\(outcome.isNearBottomAfterApply ? 1 : 0)"
-            )
-            viewportScrollCoordinator.scrollToBottom(animated: chatController.hasCompletedInitialLoad)
+            // Demo-style chat should stay pinned to bottom without a visible bounce when
+            // a tall incoming/outgoing media bubble changes content height.
+            viewportScrollCoordinator.scrollToBottom(animated: false)
             viewportCoordinator.clearPendingMessages()
         } else if outcome.pendingMessagesDelta > 0 {
-            OpenIMProbeLogger.log(
-                "[DemoAlignedMessageFlow] apply outcome auto-scroll=0 pendingDelta=\(outcome.pendingMessagesDelta)"
-            )
             viewportCoordinator.accumulatePendingMessages(by: outcome.pendingMessagesDelta)
         }
 
         viewportCoordinator.updateJumpToBottomUI(isNearBottom: outcome.isNearBottomAfterApply, animated: true)
 
         if outcome.hasNewFailedOutgoingMessage {
-            OpenIMProbeLogger.log("[DemoAlignedMessageFlow] apply outcome failure-hint=1")
             onSendFailureHint()
         }
-
-        OpenIMProbeLogger.log(
-            "[DemoAlignedMessageFlow] apply-end renderedTail={\(debugMessageSummary(messages.last))}"
-        )
-    }
-
-    private func debugMessageSummary(_ message: ChatMessage?) -> String {
-        guard let message else { return "-" }
-        let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        let snippet = text.isEmpty ? "-" : (text.count > 24 ? "\(text.prefix(24))..." : text)
-        return "id=\(message.id) mine=\(message.isMine ? 1 : 0) status=\(message.deliveryStatus.rawValue) content=\(snippet)"
     }
 }

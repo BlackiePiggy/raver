@@ -42,6 +42,7 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
         senderAvatarView.image = UIImage(systemName: "person.crop.circle.fill")
         senderNameLabel.text = nil
         senderMetaRow.isHidden = true
+        setBubbleAlignment(isMine: false)
         stopSendingIconAnimation()
         statusPillIconView.image = nil
         statusPillIconView.isHidden = true
@@ -191,22 +192,13 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
             configureSenderMeta(for: message.sender)
         }
 
+        setBubbleAlignment(isMine: message.isMine)
         if message.isMine {
-            mineTrailingConstraint.isActive = true
-            mineLeadingConstraint.isActive = true
-            otherLeadingConstraint.isActive = false
-            otherTrailingConstraint.isActive = false
-
             bubbleView.backgroundColor = UIColor(RaverTheme.accent)
             messageLabel.textColor = .white
             timeLabel.textColor = UIColor.white.withAlphaComponent(0.85)
             configureDeliveryStatus(message.deliveryStatus, isMine: true)
         } else {
-            mineTrailingConstraint.isActive = false
-            mineLeadingConstraint.isActive = false
-            otherLeadingConstraint.isActive = true
-            otherTrailingConstraint.isActive = true
-
             bubbleView.backgroundColor = UIColor(RaverTheme.card)
             messageLabel.textColor = UIColor(RaverTheme.primaryText)
             timeLabel.textColor = UIColor(RaverTheme.secondaryText)
@@ -279,6 +271,27 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
 
     private func stopSendingIconAnimation() {
         statusPillIconView.layer.removeAnimation(forKey: Self.sendingIconSpinKey)
+    }
+
+    private func setBubbleAlignment(isMine: Bool) {
+        NSLayoutConstraint.deactivate([
+            mineTrailingConstraint,
+            mineLeadingConstraint,
+            otherLeadingConstraint,
+            otherTrailingConstraint
+        ])
+
+        if isMine {
+            NSLayoutConstraint.activate([
+                mineTrailingConstraint,
+                mineLeadingConstraint
+            ])
+        } else {
+            NSLayoutConstraint.activate([
+                otherLeadingConstraint,
+                otherTrailingConstraint
+            ])
+        }
     }
 
     private func applyClusterLayout(

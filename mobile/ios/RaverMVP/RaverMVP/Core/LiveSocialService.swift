@@ -1,4 +1,9 @@
 import Foundation
+import Combine
+
+#if canImport(OpenIMSDK)
+import OpenIMSDK
+#endif
 
 private actor AuthRefreshGate {
     private var inFlightTask: Task<Session, Error>?
@@ -307,6 +312,20 @@ final class LiveSocialService: SocialService {
         startClientMsgID: String?,
         count: Int
     ) async throws -> ChatMessageHistoryPage {
+        #if canImport(OpenIMSDK)
+        if let page = try await fetchRawMessagesPage(
+            conversationID: conversationID,
+            startClientMsgID: startClientMsgID,
+            count: count
+        ) {
+            var messages: [ChatMessage] = []
+            messages.reserveCapacity(page.messages.count)
+            for message in page.messages {
+                messages.append(await compatibilityChatMessageSnapshot(from: message, conversationID: conversationID))
+            }
+            return ChatMessageHistoryPage(messages: messages, isEnd: page.isEnd)
+        }
+        #else
         if let page = try await OpenIMSession.shared.fetchMessagesPage(
             conversationID: conversationID,
             startClientMsgID: startClientMsgID,
@@ -314,13 +333,26 @@ final class LiveSocialService: SocialService {
         ) {
             return ChatMessageHistoryPage(messages: page.messages, isEnd: page.isEnd)
         }
+        #endif
         throw await openIMUnavailableError(for: "fetch messages")
     }
 
     func sendMessage(conversationID: String, content: String) async throws -> ChatMessage {
+        #if canImport(OpenIMSDK)
+        let prepared = await createRawTextMessage(content: content)
+        if let message = try await sendPreparedRawMessage(
+            prepared,
+            conversationID: conversationID,
+            failurePrefix: "OpenIM send text message failed",
+            onProgress: nil
+        ) {
+            return await compatibilityChatMessageSnapshot(from: message, conversationID: conversationID)
+        }
+        #else
         if let message = try await OpenIMSession.shared.sendTextMessage(conversationID: conversationID, content: content) {
             return message
         }
+        #endif
         throw await openIMUnavailableError(for: "send message")
     }
 
@@ -333,6 +365,17 @@ final class LiveSocialService: SocialService {
         fileURL: URL,
         onProgress: ((Int) -> Void)?
     ) async throws -> ChatMessage {
+        #if canImport(OpenIMSDK)
+        let prepared = try await createRawImageMessage(fileURL: fileURL)
+        if let message = try await sendPreparedRawMessage(
+            prepared,
+            conversationID: conversationID,
+            failurePrefix: "OpenIM send image message failed",
+            onProgress: onProgress
+        ) {
+            return await compatibilityChatMessageSnapshot(from: message, conversationID: conversationID)
+        }
+        #else
         if let message = try await OpenIMSession.shared.sendImageMessage(
             conversationID: conversationID,
             fileURL: fileURL,
@@ -340,6 +383,7 @@ final class LiveSocialService: SocialService {
         ) {
             return message
         }
+        #endif
         throw await openIMUnavailableError(for: "send image message")
     }
 
@@ -352,6 +396,17 @@ final class LiveSocialService: SocialService {
         fileURL: URL,
         onProgress: ((Int) -> Void)?
     ) async throws -> ChatMessage {
+        #if canImport(OpenIMSDK)
+        let prepared = try await createRawVideoMessage(fileURL: fileURL)
+        if let message = try await sendPreparedRawMessage(
+            prepared,
+            conversationID: conversationID,
+            failurePrefix: "OpenIM send video message failed",
+            onProgress: onProgress
+        ) {
+            return await compatibilityChatMessageSnapshot(from: message, conversationID: conversationID)
+        }
+        #else
         if let message = try await OpenIMSession.shared.sendVideoMessage(
             conversationID: conversationID,
             fileURL: fileURL,
@@ -359,8 +414,20 @@ final class LiveSocialService: SocialService {
         ) {
             return message
         }
+        #endif
         throw await openIMUnavailableError(for: "send video message")
     }
+
+    #if canImport(OpenIMSDK)
+    private func compatibilityChatMessageSnapshot(from message: OIMMessageInfo, conversationID: String) async -> ChatMessage {
+        let resolvedConversationID = await businessConversationIDSnapshot(for: message)
+            ?? conversationID
+        return await chatMessageSnapshot(
+            from: message,
+            conversationID: resolvedConversationID
+        )
+    }
+    #endif
 
     func fetchRecommendedSquads() async throws -> [SquadSummary] {
         try await request(path: "/v1/squads/recommended", method: "GET")
@@ -828,6 +895,65 @@ final class LiveSocialService: SocialService {
         }
     }
 }
+
+#if canImport(OpenIMSDK)
+@MainActor
+extension LiveSocialService: OpenIMRawChatService {
+    var rawMessagePublisher: AnyPublisher<OIMMessageInfo, Never> {
+        OpenIMSession.shared.rawMessagePublisher
+    }
+
+    func markConversationRead(conversationID: String) async throws -> Bool {
+        try await OpenIMSession.shared.markConversationRead(conversationID: conversationID)
+    }
+
+    func fetchRawMessagesPage(
+        conversationID: String,
+        startClientMsgID: String?,
+        count: Int
+    ) async throws -> OpenIMRawMessagePage? {
+        try await OpenIMSession.shared.fetchRawMessagesPage(
+            conversationID: conversationID,
+            startClientMsgID: startClientMsgID,
+            count: count
+        )
+    }
+
+    func createRawTextMessage(content: String) -> OIMMessageInfo {
+        OpenIMSession.shared.createRawTextMessage(content: content)
+    }
+
+    func createRawImageMessage(fileURL: URL) throws -> OIMMessageInfo {
+        try OpenIMSession.shared.createRawImageMessage(fileURL: fileURL)
+    }
+
+    func createRawVideoMessage(fileURL: URL) throws -> OIMMessageInfo {
+        try OpenIMSession.shared.createRawVideoMessage(fileURL: fileURL)
+    }
+
+    func sendPreparedRawMessage(
+        _ message: OIMMessageInfo,
+        conversationID: String,
+        failurePrefix: String,
+        onProgress: ((Int) -> Void)?
+    ) async throws -> OIMMessageInfo? {
+        try await OpenIMSession.shared.sendPreparedRawMessage(
+            message,
+            conversationID: conversationID,
+            failurePrefix: failurePrefix,
+            onProgress: onProgress
+        )
+    }
+
+    func businessConversationIDSnapshot(for message: OIMMessageInfo) -> String? {
+        OpenIMSession.shared.businessConversationIDSnapshot(for: message)
+    }
+
+    func chatMessageSnapshot(from message: OIMMessageInfo, conversationID: String) -> ChatMessage {
+        OpenIMSession.shared.chatMessageSnapshot(from: message, conversationID: conversationID)
+    }
+}
+#endif
 
 private struct JoinSquadResponse: Decodable {
     let success: Bool

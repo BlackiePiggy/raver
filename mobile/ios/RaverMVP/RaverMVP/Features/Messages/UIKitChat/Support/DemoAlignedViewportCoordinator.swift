@@ -28,30 +28,18 @@ final class DemoAlignedViewportCoordinator {
     }
 
     func clearPendingMessages() {
-        if pendingNewMessageCount > 0 {
-            OpenIMProbeLogger.log("[DemoAlignedViewport] clear pending count=\(pendingNewMessageCount)")
-        }
         pendingNewMessageCount = 0
     }
 
     func accumulatePendingMessages(by delta: Int) {
         guard delta > 0 else { return }
-        let previous = pendingNewMessageCount
         pendingNewMessageCount = min(999, pendingNewMessageCount + delta)
-        OpenIMProbeLogger.log(
-            "[DemoAlignedViewport] pending +\(delta) total=\(pendingNewMessageCount) previous=\(previous)"
-        )
     }
 
     func updateJumpToBottomUI(isNearBottom: Bool, animated: Bool) {
         guard let jumpToBottomButton else { return }
 
         if isNearBottom {
-            if pendingNewMessageCount > 0 || isJumpToBottomVisible {
-                OpenIMProbeLogger.log(
-                    "[DemoAlignedViewport] near-bottom hide pending=\(pendingNewMessageCount)"
-                )
-            }
             pendingNewMessageCount = 0
             lastJumpToBottomTitle = ""
             setJumpToBottomVisible(false, animated: animated)
@@ -69,19 +57,11 @@ final class DemoAlignedViewportCoordinator {
         var config = jumpToBottomButton.configuration ?? UIButton.Configuration.filled()
         config.title = title
         jumpToBottomButton.configuration = config
-        if title != lastJumpToBottomTitle {
-            OpenIMProbeLogger.log(
-                "[DemoAlignedViewport] jump-title title=\(title) pending=\(pendingNewMessageCount)"
-            )
-            lastJumpToBottomTitle = title
-        }
+        lastJumpToBottomTitle = title
         setJumpToBottomVisible(true, animated: animated)
     }
 
     func handleJumpToBottomTapped(scrollToBottom: (Bool) -> Void) {
-        OpenIMProbeLogger.log(
-            "[DemoAlignedViewport] jump-tap pending=\(pendingNewMessageCount)"
-        )
         pendingNewMessageCount = 0
         lastJumpToBottomTitle = ""
         scrollToBottom(true)
@@ -126,9 +106,6 @@ final class DemoAlignedViewportCoordinator {
         guard let jumpToBottomButton else { return }
         guard visible != isJumpToBottomVisible else { return }
         isJumpToBottomVisible = visible
-        OpenIMProbeLogger.log(
-            "[DemoAlignedViewport] jump-visible state=\(visible ? 1 : 0) animated=\(animated ? 1 : 0)"
-        )
 
         let applyVisibility = {
             jumpToBottomButton.alpha = visible ? 1 : 0
