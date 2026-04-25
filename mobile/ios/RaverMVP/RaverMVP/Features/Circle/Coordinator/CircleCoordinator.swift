@@ -25,6 +25,7 @@ extension Notification.Name {
     static let circlePostDidCreate = Notification.Name("circlePostDidCreate")
     static let circlePostDidUpdate = Notification.Name("circlePostDidUpdate")
     static let circlePostDidDelete = Notification.Name("circlePostDidDelete")
+    static let circlePostDidHide = Notification.Name("circlePostDidHide")
     static let circleIDDidCreate = Notification.Name("circleIDDidCreate")
     static let circleRatingEventDidCreate = Notification.Name("circleRatingEventDidCreate")
     static let circleRatingUnitDidCreate = Notification.Name("circleRatingUnitDidCreate")

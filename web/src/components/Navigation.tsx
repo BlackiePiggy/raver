@@ -16,6 +16,7 @@ export default function Navigation() {
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showBackButton = pathname !== '/';
+  const canManagePreRegistration = user?.role === 'admin' || user?.role === 'operator';
 
   // 加载通知数量
   useEffect(() => {
@@ -149,6 +150,30 @@ export default function Navigation() {
                   >
                     我的小队
                   </Link>
+                  {canManagePreRegistration && (
+                    <Link
+                      href="/admin/pre-registrations"
+                      className="block px-3 py-2 text-sm rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
+                    >
+                      预登记后台
+                    </Link>
+                  )}
+                  {user.role === 'admin' && (
+                    <Link
+                      href="/community/openim"
+                      className="block px-3 py-2 text-sm rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
+                    >
+                      OpenIM 管理
+                    </Link>
+                  )}
+                  {user.role === 'admin' && (
+                    <Link
+                      href="/admin/notification-center"
+                      className="block px-3 py-2 text-sm rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
+                    >
+                      通知中心后台
+                    </Link>
+                  )}
                   <div className="my-1 border-t border-bg-tertiary"></div>
                   <Link href="/publish/new" className="block px-3 py-2 text-sm rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary">
                     新建发布

@@ -1,0 +1,1537 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXAggregateTarget section */
+		0E87F100EFC3B44F5BB5AF12375D07F1 /* OpenIMSDKCore */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = FEC2AD93CCCDCC2DD410DF90571765BE /* Build configuration list for PBXAggregateTarget "OpenIMSDKCore" */;
+			buildPhases = (
+				3086088BBF0946FE2A05B783142D4D6F /* [CP] Copy XCFrameworks */,
+			);
+			dependencies = (
+			);
+			name = OpenIMSDKCore;
+		};
+/* End PBXAggregateTarget section */
+
+/* Begin PBXBuildFile section */
+		02E3116300863BD1C354A8D903D7565B /* OIMMessageInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 8C210ACEFB066CE7660C38561C420448 /* OIMMessageInfo.m */; };
+		042116C407630C22F93E1349008E29F8 /* OIMMergeElem.m in Sources */ = {isa = PBXBuildFile; fileRef = DE0CD5947917D21812AEF172D96C3773 /* OIMMergeElem.m */; };
+		05C2F1443184466A943591154955D0D1 /* SendMessageCallbackProxy.h in Headers */ = {isa = PBXBuildFile; fileRef = 74B9E9BB4D74E3B4A92D612B88B9D0F3 /* SendMessageCallbackProxy.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		084E3F3EE06EF32DA4968A7DE4AC79AA /* NSString+MJExtension.h in Headers */ = {isa = PBXBuildFile; fileRef = 935F6656F32E165F162FD4C2EADF634D /* NSString+MJExtension.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		091C8409581AE1022225E05E5416E01E /* OIMUpdateFriendsReq.h in Headers */ = {isa = PBXBuildFile; fileRef = 7C4296CE990BB2B9B0F9EB1AD0BAAB8A /* OIMUpdateFriendsReq.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		09E7A90FB3F07BB8C752B0C74D866643 /* MJExtension-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = 9AA3DD254870032E481AA9D70547510B /* MJExtension-dummy.m */; };
+		0D97A8A4AC6C7B5ECBC2120ADDF396E3 /* OIMFullUserInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 5387737BB9F05C91AF23E056E2A8CEAC /* OIMFullUserInfo.m */; };
+		12747F86266940B02E2B373CFB2EE754 /* OIMSoundElem.h in Headers */ = {isa = PBXBuildFile; fileRef = C0569B1322B0A54D48FCFEE68D660FFA /* OIMSoundElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		1463FCD0976200B9E656F31FC5803F5C /* OIMFaceElem.m in Sources */ = {isa = PBXBuildFile; fileRef = D50DB0A8755F5BF5FD976EB7BDA6886C /* OIMFaceElem.m */; };
+		1509D9892B9A6D6BE7DE77053F26DDBA /* OIMGroupApplicationInfo.h in Headers */ = {isa = PBXBuildFile; fileRef = F94A395EF892D03DAF8E087B8BA85A6C /* OIMGroupApplicationInfo.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		16CC427093CE09F879561F11238C085A /* OpenIMSDK-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = A901283FDA3B932A8C1D4E78901A02C2 /* OpenIMSDK-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		178C56922BA738F67A565CA8681F0F05 /* OIMFriendApplication.h in Headers */ = {isa = PBXBuildFile; fileRef = A60DB754467F6BCB63528C29237CAEE9 /* OIMFriendApplication.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		178F45F63E4AD95BF74A6C64D7EEABDB /* NSObject+MJClass.h in Headers */ = {isa = PBXBuildFile; fileRef = F2A4DFA5E873E82B4FA8327696100167 /* NSObject+MJClass.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		1A8C915663836B11DC3524DAAE284FF7 /* OIMVideoElem.h in Headers */ = {isa = PBXBuildFile; fileRef = 4525A8E7EBDC14FC232AF130EB7B90D8 /* OIMVideoElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		1B87A741E524BA00E3CFD3A38E24F71A /* OIMUpdateFriendsReq.m in Sources */ = {isa = PBXBuildFile; fileRef = 7C925A6C3515242EFD16D50FF09D0CB5 /* OIMUpdateFriendsReq.m */; };
+		1C016469B5AA70C08BDFECAA27EAB051 /* OIMLocationElem.m in Sources */ = {isa = PBXBuildFile; fileRef = 9BADE022052E9EDF4064F70CB79698BF /* OIMLocationElem.m */; };
+		1D2D66E3331F77A55BB82C3920F7C40C /* OIMManager+Group.m in Sources */ = {isa = PBXBuildFile; fileRef = 6A5AED6953D138279DDE66462F5A2951 /* OIMManager+Group.m */; };
+		1F2DEB722138E3D7CCC4A02F01414AEC /* OIMUserInfo.h in Headers */ = {isa = PBXBuildFile; fileRef = D4A3BA746B296F5D02E6BF5014A45E66 /* OIMUserInfo.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		202812410FF22B588DF523787B54E176 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 384DDA2CB25005BD6479B5987C619DD4 /* Foundation.framework */; };
+		280159C811343669BD8CA8A23A24DF75 /* OIMConversationInfo.h in Headers */ = {isa = PBXBuildFile; fileRef = 9EF33DB7C19E59851C4760C084CDB671 /* OIMConversationInfo.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		28DDF775177170CEF65E550AD4EF6111 /* OIMSimpleResultInfo.h in Headers */ = {isa = PBXBuildFile; fileRef = 9790BDDD1824F901B17D0D74E355D451 /* OIMSimpleResultInfo.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		299BC9F3FD6FDB13F90CAADA0E85E625 /* OIMSimpleRequstInfo.h in Headers */ = {isa = PBXBuildFile; fileRef = 7BBB3F21F4C406968F5BB770E236E595 /* OIMSimpleRequstInfo.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		2A61C66DF98A7F7FC183B67F5B9F97F8 /* CallbackProxy.h in Headers */ = {isa = PBXBuildFile; fileRef = 23B40A36C7AC6350403B5DA9CBA2A4FF /* CallbackProxy.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		308AC672301C6E7DB6824993D255E0DA /* OIMMergeElem.h in Headers */ = {isa = PBXBuildFile; fileRef = F74EEDC02D44DA8F1B152B3C8C114CE2 /* OIMMergeElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		3345899CAB69BA4C8E09CEE3C7BD8270 /* OIMPictureElem.m in Sources */ = {isa = PBXBuildFile; fileRef = D6860CFEAE7620E848C74D7CDB5E5A3B /* OIMPictureElem.m */; };
+		33476FD5E53BCDFDF5EC6882D951B06A /* OIMNotificationElem.h in Headers */ = {isa = PBXBuildFile; fileRef = 9BB9D10C3C66A6FD7D8FD9B803B9B954 /* OIMNotificationElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		3540E178FA1028BA33C5308A5E70B24A /* OIMMessageElem.m in Sources */ = {isa = PBXBuildFile; fileRef = 4A6A453970BA838F1A20286E0DF7E6BE /* OIMMessageElem.m */; };
+		36599F353846A95112E54DF95DDA4482 /* MJPropertyKey.h in Headers */ = {isa = PBXBuildFile; fileRef = 9E4C0B7A691F8F633EBF3B6A69CEEA5B /* MJPropertyKey.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		3D38566043D0931C63B34BEA53D591CF /* MJExtension-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = 7190F4E340205D4B1500813383C7CB61 /* MJExtension-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		3FBA98216749EFB55B3D7FFEFE2681B2 /* OIMReachability.m in Sources */ = {isa = PBXBuildFile; fileRef = 5378862FEADA59093CC37150530FCE6F /* OIMReachability.m */; };
+		40F950A0A5D40B5F56CF435287643B88 /* NSObject+MJCoding.h in Headers */ = {isa = PBXBuildFile; fileRef = DDFD63080EDFF31F6AECAA59EB138492 /* NSObject+MJCoding.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		43DE8C31D6AC6DF88E03EF5C2F9AB778 /* OIMSearchResultInfo.h in Headers */ = {isa = PBXBuildFile; fileRef = 41731F8EA30DBC074D26B5086047F0A4 /* OIMSearchResultInfo.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		4533898C4946124EA1F111F1835EC6BE /* OIMVideoElem.m in Sources */ = {isa = PBXBuildFile; fileRef = 6C6D4091E78EE3F142A676C6A8200867 /* OIMVideoElem.m */; };
+		47FDC613EB659CD76681F25442F48C22 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 384DDA2CB25005BD6479B5987C619DD4 /* Foundation.framework */; };
+		4C76A7083CB882DBA6D7AB708AF8A300 /* SendMessageCallbackProxy.m in Sources */ = {isa = PBXBuildFile; fileRef = 391AD7D4337DB7E25125BB3612D9717B /* SendMessageCallbackProxy.m */; };
+		544DCA9B0544E2C12983779DE85D91AE /* MJProperty.h in Headers */ = {isa = PBXBuildFile; fileRef = 6E26E03EDC119240612B0B0BBA2B91DA /* MJProperty.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		54D0A443ADA6D6F309E7D326BE652DD2 /* OIMReachability.h in Headers */ = {isa = PBXBuildFile; fileRef = DEF01227AF55730956679158107F791C /* OIMReachability.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		595FC1B83C3124AC916FE978EEB3BF90 /* OIMAttachedInfoElem.h in Headers */ = {isa = PBXBuildFile; fileRef = FC4C0F574B30ABB56B4435D3E087A400 /* OIMAttachedInfoElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		599414177DF1030663EFC5A430FDDE57 /* NSObject+MJClass.m in Sources */ = {isa = PBXBuildFile; fileRef = 10A97F421FD4F5AF2225F100A6C6EDF0 /* NSObject+MJClass.m */; };
+		5A59B9480008B1E5D4A86DB270FAB470 /* UploadFileCallbackProxy.m in Sources */ = {isa = PBXBuildFile; fileRef = AD581EA8D1E49C486B3F6FE87AF70433 /* UploadFileCallbackProxy.m */; };
+		5AB3AFD3D81DA6CEE2927B2D024AF7FE /* MJExtensionConst.h in Headers */ = {isa = PBXBuildFile; fileRef = F688517E185998CAAE8F6E97FD44B795 /* MJExtensionConst.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		5B08AE4C304C9CF545CE37131B3A3BB3 /* OIMCallbacker+Closure.h in Headers */ = {isa = PBXBuildFile; fileRef = 212C141CAD49ED68829E41567DA9EB39 /* OIMCallbacker+Closure.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		5B1E0BF4678455BC502D2B7B2DC48BF6 /* OIMMessageInfo.h in Headers */ = {isa = PBXBuildFile; fileRef = 6B0B89746B3D285CD1D9B55A331A7018 /* OIMMessageInfo.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		5B9F6CF9C6FB7194478B84FB5ADE24E3 /* OIMGroupApplicationInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = D1D7BA2D3601BD6B732FD64F8486438C /* OIMGroupApplicationInfo.m */; };
+		5D7E849A018F61621B78F76D64063F98 /* MJFoundation.m in Sources */ = {isa = PBXBuildFile; fileRef = CF069546A0E148985B239C4F759BF7DA /* MJFoundation.m */; };
+		5DEE0A7469BAACD2EA71A8DE205D333E /* OIMManager+Conversation.m in Sources */ = {isa = PBXBuildFile; fileRef = 4234C90C213A303437DC251B90B74745 /* OIMManager+Conversation.m */; };
+		5EA055EF73E9639BBE8A176CF6167602 /* OIMManager+Login.m in Sources */ = {isa = PBXBuildFile; fileRef = 6C6F701233C0B877FE0CDFA0A586B172 /* OIMManager+Login.m */; };
+		685573DE5F3B2F837EAB992129C06732 /* OIMManager+User.m in Sources */ = {isa = PBXBuildFile; fileRef = 43155B87291569EBAEFD2C26F61E6DDB /* OIMManager+User.m */; };
+		69C938D0947A9B1BC57063E62FD6FD80 /* OIMSimpleResultInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 40C5175C61D5CFCA409568D92069D55E /* OIMSimpleResultInfo.m */; };
+		6A65A82E68C189E50B1097C4802FCCFB /* NSObject+MJCoding.m in Sources */ = {isa = PBXBuildFile; fileRef = 13E72656F90D3F9D2BB2D45618B4650A /* NSObject+MJCoding.m */; };
+		74714664EA6A6A0178114C1570835B66 /* OIMManager+Message.h in Headers */ = {isa = PBXBuildFile; fileRef = 834057B44B744D8BDAF548BD7DA74B4C /* OIMManager+Message.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		767452CB86F59965A89EA27B63C264EC /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 384DDA2CB25005BD6479B5987C619DD4 /* Foundation.framework */; };
+		798802F71E005751FEA1036DC398B9A8 /* UploadFileCallbackProxy.h in Headers */ = {isa = PBXBuildFile; fileRef = 68893217BF9D4D5FDA10B20A1EA21E7B /* UploadFileCallbackProxy.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		79DF74409328C4173E4C3678B2E8E0BF /* OIMFileElem.m in Sources */ = {isa = PBXBuildFile; fileRef = 1472863F007A675037FDD01710544354 /* OIMFileElem.m */; };
+		7A366C79F00849F36EF83F0B31C68A6E /* OpenIMSDK.h in Headers */ = {isa = PBXBuildFile; fileRef = 43C838BA658082BFAF366D1E6A68CDF8 /* OpenIMSDK.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		7A71AAC5815E5298DEF632D6B49F2BA2 /* Pods-RaverMVP-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = A505799E5FBD67B5C4122DE4730EDFCC /* Pods-RaverMVP-dummy.m */; };
+		7A80DEB95ED22729738A514B448AD383 /* OIMManager+Group.h in Headers */ = {isa = PBXBuildFile; fileRef = 24F4B587DACA9D1A10FEDA0E030CDA60 /* OIMManager+Group.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		7FADE3B72EDEC6913DC839D679C7578F /* OIMSearchResultInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 4AFA70D5301093932D1D9B15BDF7B26D /* OIMSearchResultInfo.m */; };
+		803C8DBF8B2FF6B70E15E0B31A992827 /* OIMGCDMulticastDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = E72B70F5CA1E003BD265ADFAFAEEBFAB /* OIMGCDMulticastDelegate.m */; };
+		80721615C3658BF57B31FA699F19E9B5 /* OIMManager+Connection.h in Headers */ = {isa = PBXBuildFile; fileRef = 11D4D74C351DAF9D8BC3AEC81BA7CE0A /* OIMManager+Connection.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		8094FC31D39D05DD242F6D843FB6EEE6 /* OIMSimpleRequstInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = DF59FB4E0CAAFA7C83C06154E5C5A620 /* OIMSimpleRequstInfo.m */; };
+		8385174309933447A5EDBDEE95BE31EF /* MJProperty.m in Sources */ = {isa = PBXBuildFile; fileRef = AC624DBFEEE806EDFABAF2FF37854A0E /* MJProperty.m */; };
+		84F3F943906105FE27ADCB8177D997CC /* OIMCallbacker.m in Sources */ = {isa = PBXBuildFile; fileRef = F20955DEA73BB5C3A0D053D243CBB782 /* OIMCallbacker.m */; };
+		86B7946E6E92C0BB75E233F860B24D60 /* OpenIMSDK-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = 19C282744ED3F93912A0312CBE4CA4FC /* OpenIMSDK-dummy.m */; };
+		883C4B3FA7C98CA11B121BC4E0092B73 /* OIMAtElem.h in Headers */ = {isa = PBXBuildFile; fileRef = 1354364D1D40C13C061DDC8043F2DE30 /* OIMAtElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		8BDFF6854FDB9ADD36712C8FC66597AA /* MJFoundation.h in Headers */ = {isa = PBXBuildFile; fileRef = 0B3723B461B72EF74D39D25E32587EFC /* MJFoundation.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		8DEEB14ADAB3484C323DFEF17D67A518 /* Pods-RaverMVP-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = BA51341977C8F16572A9C6390B07D29B /* Pods-RaverMVP-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		8E2CA0865DE0A2AAF339EE30A9B44B56 /* OIMManager.m in Sources */ = {isa = PBXBuildFile; fileRef = AB65C3A82B22CB96BFF7032FE70B6B18 /* OIMManager.m */; };
+		9525A6A2C41573F215C275041F090AA4 /* NSObject+MJProperty.m in Sources */ = {isa = PBXBuildFile; fileRef = 9790AFFDA513BCA59C9D57548CFFCC4D /* NSObject+MJProperty.m */; };
+		9AD9BA7A311DF770828C4B304E63A9A1 /* OIMQuoteElem.h in Headers */ = {isa = PBXBuildFile; fileRef = EC17E60A701100B96568603CADA92C6C /* OIMQuoteElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		9D3503AD6B9B4367B93A5B548AA24040 /* OIMManager+Connection.m in Sources */ = {isa = PBXBuildFile; fileRef = D9E61A82A66B869DDF007B13EED73E13 /* OIMManager+Connection.m */; };
+		9D8BF11B27F90EE2FEC8E030D8D324C7 /* OIMConversationInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 7C301F063A7E578B9BA07D99BEB2439C /* OIMConversationInfo.m */; };
+		9D99119517C283B342844D8DA80A1F26 /* OIMDefine.h in Headers */ = {isa = PBXBuildFile; fileRef = F33F900EC0D7E1CB48DD1624EBACBDF9 /* OIMDefine.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		9E1B9E12EB2FA47D31C61522122C6CF5 /* OIMManager+Friend.m in Sources */ = {isa = PBXBuildFile; fileRef = E72D0E8D1F25C1446B059320D3C41DDD /* OIMManager+Friend.m */; };
+		9E8ABB2490C30D6462B91C63A60D4A03 /* OIMGroupInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = F89CC2C8DCF7A5C072744AE283F88EFF /* OIMGroupInfo.m */; };
+		A0034878F89732B4AED408F487A1EF35 /* NSString+MJExtension.m in Sources */ = {isa = PBXBuildFile; fileRef = 311A3DA978EE4C88F0ADD83C40AC73AA /* NSString+MJExtension.m */; };
+		A1B9F6EEF6C55476EA99FAE120274B2F /* MJPropertyType.m in Sources */ = {isa = PBXBuildFile; fileRef = 26C68FCF933E916F0F405949390946BC /* MJPropertyType.m */; };
+		A55FA53F690C15B96D16270FA0DDCA61 /* OIMGroupMemberInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 777F8D483956F11D414C7421E8C5788A /* OIMGroupMemberInfo.m */; };
+		AC96BFB862497EB630494B5BA6FC06ED /* MJPropertyType.h in Headers */ = {isa = PBXBuildFile; fileRef = 6EABF23DD727FA0C3B601AEFD1F4271C /* MJPropertyType.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		AF28EF187B5278B9BBDBA36DE7452166 /* OIMSearchParam.m in Sources */ = {isa = PBXBuildFile; fileRef = 3FAF0BA3E42CA083F89B6982812DF8B4 /* OIMSearchParam.m */; };
+		AFAC54AB9B003E85E8D1D3E076D2ACDD /* OIMNotificationElem.m in Sources */ = {isa = PBXBuildFile; fileRef = 923C1C2FC8110CAB05D1255D79DB5E24 /* OIMNotificationElem.m */; };
+		B09A70A587400F738C138BB0487F08E0 /* OIMCallbacker.h in Headers */ = {isa = PBXBuildFile; fileRef = B39301EC51190D17CCE11E2BD6F54C04 /* OIMCallbacker.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		B0ED3A9AFF050F528F62FA62A2ED867E /* OIMSoundElem.m in Sources */ = {isa = PBXBuildFile; fileRef = FFB4E33A86B500519E31329D27C0423D /* OIMSoundElem.m */; };
+		B186A7028D06E8C1196CE78DC5CCBA97 /* OIMAtElem.m in Sources */ = {isa = PBXBuildFile; fileRef = 5FF4214F4C60FF29E107A7D51596A27D /* OIMAtElem.m */; };
+		B20CF9BA80C38488F04F90EC817A3B23 /* OIMGCDMulticastDelegate.h in Headers */ = {isa = PBXBuildFile; fileRef = 928B745A15884AC6FAD19FAA869B89AE /* OIMGCDMulticastDelegate.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		B673D2E104D413AA84CF2924084B4596 /* OIMQuoteElem.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F20E19C70AAE7D91ED16F1B805A44A0 /* OIMQuoteElem.m */; };
+		B9E2DC5B8A62D07383AE695D13A30CBE /* OIMManager+Conversation.h in Headers */ = {isa = PBXBuildFile; fileRef = DA1FB1142346DA83DED3C641BBE8C3C3 /* OIMManager+Conversation.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		BB8854955B704BFF79EDD38538B9568B /* OIMManager+Login.h in Headers */ = {isa = PBXBuildFile; fileRef = 0E68E0F82AE8C6E15A3F46DD30A6F546 /* OIMManager+Login.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		BE8527AE8767A7B99250200F93B54A02 /* OIMSearchParam.h in Headers */ = {isa = PBXBuildFile; fileRef = 864B4EE5250F1E9E8FC4EFD13D553B10 /* OIMSearchParam.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		BED118EF040F7D9B701E1749380AA3FC /* OIMPictureElem.h in Headers */ = {isa = PBXBuildFile; fileRef = D2389CEBCA38ADDCA021FE26A133C32B /* OIMPictureElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		C60EC74042996CB1CB1ECF6EAA642372 /* MJExtensionConst.m in Sources */ = {isa = PBXBuildFile; fileRef = 258A1504CD9F70B64F1BAE0001589FCA /* MJExtensionConst.m */; };
+		C7715123861E25EAB3E44E72397CECE5 /* CallbackProxy.m in Sources */ = {isa = PBXBuildFile; fileRef = E8C33793CE9B5293873451B189A870A0 /* CallbackProxy.m */; };
+		C7D693676710714878F4633AE77C881B /* OIMUserInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 013C688980BD5AD9735902BB58A051CA /* OIMUserInfo.m */; };
+		C937AC5DC84D468EBAB678025048B400 /* OIMFileElem.h in Headers */ = {isa = PBXBuildFile; fileRef = 2E0D8DE0B7D353678255DA001FAAA08A /* OIMFileElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		CC9CBC1F47B2FBA33DD0203ED7E1CF6C /* OIMMessageElem.h in Headers */ = {isa = PBXBuildFile; fileRef = A727391C76072CFFD2C663E21AC45722 /* OIMMessageElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		CD53A651B66F3AC1A45F49B5BF5F0DBB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3351F90A08E8AF49BCC4A79819C42F84 /* PrivacyInfo.xcprivacy */; };
+		CE5B659A4A205A83F45732FE734FBE4E /* NSObject+MJKeyValue.m in Sources */ = {isa = PBXBuildFile; fileRef = A49D46F9C381111CD7383EF4807C70D9 /* NSObject+MJKeyValue.m */; };
+		CE8BB3B50C1DDEFF60DD465EABC40A50 /* OIMManager+Message.m in Sources */ = {isa = PBXBuildFile; fileRef = 38D8248090546B4D480921DF30260F56 /* OIMManager+Message.m */; };
+		CF4F390AD14CD99E57253BE9D96DB274 /* OIMFaceElem.h in Headers */ = {isa = PBXBuildFile; fileRef = 98F3862ABE3B774D8840620FF11B9611 /* OIMFaceElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		D63AACB28313CEB9B9465C50A5A23892 /* OIMLocationElem.h in Headers */ = {isa = PBXBuildFile; fileRef = 418FC00A5F053AD0E34DA766C2CE901B /* OIMLocationElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		D6748A967D1B41C6C74B8987F21CE201 /* OIMCallbacker+Closure.m in Sources */ = {isa = PBXBuildFile; fileRef = 84D0BC3CB0F505079877FEC5352791DC /* OIMCallbacker+Closure.m */; };
+		D8FE326DA0F68CF2BE6BAD6E02485DC7 /* NSObject+MJProperty.h in Headers */ = {isa = PBXBuildFile; fileRef = 5F18285D83AB657EB7A05644DF911D6C /* NSObject+MJProperty.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		DC1380F89C13E6AD588136A434F3A572 /* OIMFriendApplication.m in Sources */ = {isa = PBXBuildFile; fileRef = E8CAB25F71E504A49AC22B632CAB68E8 /* OIMFriendApplication.m */; };
+		DF7DC58EB9217CBF2B6DA9EB3B4F5F6C /* OIMFullUserInfo.h in Headers */ = {isa = PBXBuildFile; fileRef = 748CCDB0B07D7059F747768CC1240D14 /* OIMFullUserInfo.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		E080E4E10F9EE84CF6A4EF650744131C /* OIMGroupInfo.h in Headers */ = {isa = PBXBuildFile; fileRef = 08D5D30E4A59E36F19036B9722819FB3 /* OIMGroupInfo.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		E6A94F529B95809112533914EC89CF36 /* OIMAttachedInfoElem.m in Sources */ = {isa = PBXBuildFile; fileRef = 79AF875CFB96A57DC9615B5885E351C0 /* OIMAttachedInfoElem.m */; };
+		E6AC3AF0CBAA1843B13F34AB5CA491E7 /* OIMManager+Friend.h in Headers */ = {isa = PBXBuildFile; fileRef = F17DB6EB618457A916BD8F223684E892 /* OIMManager+Friend.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		E9F1CF2BE311C33A9629B0EC6D019F3A /* OIMManager.h in Headers */ = {isa = PBXBuildFile; fileRef = 84BC464157A3D636E133CD02D62C62CD /* OIMManager.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		EA874E8F629AEBCAAF4D502A6733CED9 /* MJExtension.h in Headers */ = {isa = PBXBuildFile; fileRef = 9B580E10443A7C49938CC76ECB5874E8 /* MJExtension.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		EBC4FC6407FF65199FF804F8076DE315 /* OIMCustomElem.m in Sources */ = {isa = PBXBuildFile; fileRef = 9DB54322A34C16354BCFAFE56B61D15B /* OIMCustomElem.m */; };
+		F325BEE3115C5BE3907B073DDC9F5852 /* OIMGroupMemberInfo.h in Headers */ = {isa = PBXBuildFile; fileRef = A19438FD88032819C931A57BA818BF34 /* OIMGroupMemberInfo.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		F446E12C0CBAA5E3B9AB03F1AD36EA38 /* OIMManager+User.h in Headers */ = {isa = PBXBuildFile; fileRef = 3633F49EFB3391742230A17FC43EF6A5 /* OIMManager+User.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		F6CD53C28EB56CA26110BF09DE5954FC /* NSObject+MJKeyValue.h in Headers */ = {isa = PBXBuildFile; fileRef = D4BB724691513468875B244E989DD29F /* NSObject+MJKeyValue.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		FBBDF31BD5CA23C47E4C18BCA47A4194 /* OIMCustomElem.h in Headers */ = {isa = PBXBuildFile; fileRef = B058B7A5D6E6CA57F81DAE8F86B5A980 /* OIMCustomElem.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		FFC15BB2392CA5D560BA4A66C8F624EA /* MJPropertyKey.m in Sources */ = {isa = PBXBuildFile; fileRef = 92823A0BED75BE7B8C8269BC66571141 /* MJPropertyKey.m */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0641191CF0DAA667936880D57B222A7A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0E87F100EFC3B44F5BB5AF12375D07F1;
+			remoteInfo = OpenIMSDKCore;
+		};
+		32D81857856E61F891360DA5E4D10FF1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0E87F100EFC3B44F5BB5AF12375D07F1;
+			remoteInfo = OpenIMSDKCore;
+		};
+		64B55C5463AA0A89B4BBE124ED7B1CE8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4D3BA58D0583DF37575CACAB3DDADC85;
+			remoteInfo = MJExtension;
+		};
+		7E3BBFB1AA6B9A029D089ABF68DD7E28 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4D3BA58D0583DF37575CACAB3DDADC85;
+			remoteInfo = MJExtension;
+		};
+		B3157EA7A0BFBD0F138F08462B4E9C9F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0028E46539689892CC926BB8D811EF54;
+			remoteInfo = OpenIMSDK;
+		};
+		C7DE87C2A8550A4EC7DC47E395B66F37 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B32AF3F43989CBA171BB1FB3957A4509;
+			remoteInfo = "MJExtension-MJExtension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		013C688980BD5AD9735902BB58A051CA /* OIMUserInfo.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMUserInfo.m; path = OpenIMSDK/Model/OIMUserInfo.m; sourceTree = "<group>"; };
+		08D5D30E4A59E36F19036B9722819FB3 /* OIMGroupInfo.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMGroupInfo.h; path = OpenIMSDK/Model/OIMGroupInfo.h; sourceTree = "<group>"; };
+		0B3723B461B72EF74D39D25E32587EFC /* MJFoundation.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = MJFoundation.h; path = MJExtension/MJFoundation.h; sourceTree = "<group>"; };
+		0E68E0F82AE8C6E15A3F46DD30A6F546 /* OIMManager+Login.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "OIMManager+Login.h"; path = "OpenIMSDK/Interface/OIMManager+Login.h"; sourceTree = "<group>"; };
+		10A97F421FD4F5AF2225F100A6C6EDF0 /* NSObject+MJClass.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "NSObject+MJClass.m"; path = "MJExtension/NSObject+MJClass.m"; sourceTree = "<group>"; };
+		11D4D74C351DAF9D8BC3AEC81BA7CE0A /* OIMManager+Connection.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "OIMManager+Connection.h"; path = "OpenIMSDK/Interface/OIMManager+Connection.h"; sourceTree = "<group>"; };
+		1354364D1D40C13C061DDC8043F2DE30 /* OIMAtElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMAtElem.h; path = OpenIMSDK/Model/OIMAtElem.h; sourceTree = "<group>"; };
+		13E72656F90D3F9D2BB2D45618B4650A /* NSObject+MJCoding.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "NSObject+MJCoding.m"; path = "MJExtension/NSObject+MJCoding.m"; sourceTree = "<group>"; };
+		1472863F007A675037FDD01710544354 /* OIMFileElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMFileElem.m; path = OpenIMSDK/Model/OIMFileElem.m; sourceTree = "<group>"; };
+		19C282744ED3F93912A0312CBE4CA4FC /* OpenIMSDK-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "OpenIMSDK-dummy.m"; sourceTree = "<group>"; };
+		1D69344D5C325F6D0720667CAF49E4D4 /* Pods-RaverMVP */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = "Pods-RaverMVP"; path = Pods_RaverMVP.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		1D6CFC15839ACA2CFFE42FF0D4017A07 /* OpenIMSDK */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = OpenIMSDK; path = OpenIMSDK.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		212C141CAD49ED68829E41567DA9EB39 /* OIMCallbacker+Closure.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "OIMCallbacker+Closure.h"; path = "OpenIMSDK/Callbacker/OIMCallbacker+Closure.h"; sourceTree = "<group>"; };
+		23B40A36C7AC6350403B5DA9CBA2A4FF /* CallbackProxy.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = CallbackProxy.h; path = OpenIMSDK/CallbackProxy/CallbackProxy.h; sourceTree = "<group>"; };
+		24F4B587DACA9D1A10FEDA0E030CDA60 /* OIMManager+Group.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "OIMManager+Group.h"; path = "OpenIMSDK/Interface/OIMManager+Group.h"; sourceTree = "<group>"; };
+		258A1504CD9F70B64F1BAE0001589FCA /* MJExtensionConst.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = MJExtensionConst.m; path = MJExtension/MJExtensionConst.m; sourceTree = "<group>"; };
+		26C68FCF933E916F0F405949390946BC /* MJPropertyType.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = MJPropertyType.m; path = MJExtension/MJPropertyType.m; sourceTree = "<group>"; };
+		2B276B0A79173A1D6E83C9B4FB9A4A57 /* MJExtension */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = MJExtension; path = MJExtension.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		2E0D8DE0B7D353678255DA001FAAA08A /* OIMFileElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMFileElem.h; path = OpenIMSDK/Model/OIMFileElem.h; sourceTree = "<group>"; };
+		311A3DA978EE4C88F0ADD83C40AC73AA /* NSString+MJExtension.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "NSString+MJExtension.m"; path = "MJExtension/NSString+MJExtension.m"; sourceTree = "<group>"; };
+		3351F90A08E8AF49BCC4A79819C42F84 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = MJExtension/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		3633F49EFB3391742230A17FC43EF6A5 /* OIMManager+User.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "OIMManager+User.h"; path = "OpenIMSDK/Interface/OIMManager+User.h"; sourceTree = "<group>"; };
+		384DDA2CB25005BD6479B5987C619DD4 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		38D8248090546B4D480921DF30260F56 /* OIMManager+Message.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "OIMManager+Message.m"; path = "OpenIMSDK/Interface/OIMManager+Message.m"; sourceTree = "<group>"; };
+		391AD7D4337DB7E25125BB3612D9717B /* SendMessageCallbackProxy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = SendMessageCallbackProxy.m; path = OpenIMSDK/CallbackProxy/SendMessageCallbackProxy.m; sourceTree = "<group>"; };
+		3FAF0BA3E42CA083F89B6982812DF8B4 /* OIMSearchParam.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMSearchParam.m; path = OpenIMSDK/Model/OIMSearchParam.m; sourceTree = "<group>"; };
+		40C5175C61D5CFCA409568D92069D55E /* OIMSimpleResultInfo.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMSimpleResultInfo.m; path = OpenIMSDK/Model/OIMSimpleResultInfo.m; sourceTree = "<group>"; };
+		40F790690AB1763D22134F95047E30AA /* MJExtension.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = MJExtension.release.xcconfig; sourceTree = "<group>"; };
+		41731F8EA30DBC074D26B5086047F0A4 /* OIMSearchResultInfo.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMSearchResultInfo.h; path = OpenIMSDK/Model/OIMSearchResultInfo.h; sourceTree = "<group>"; };
+		418FC00A5F053AD0E34DA766C2CE901B /* OIMLocationElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMLocationElem.h; path = OpenIMSDK/Model/OIMLocationElem.h; sourceTree = "<group>"; };
+		4234C90C213A303437DC251B90B74745 /* OIMManager+Conversation.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "OIMManager+Conversation.m"; path = "OpenIMSDK/Interface/OIMManager+Conversation.m"; sourceTree = "<group>"; };
+		43155B87291569EBAEFD2C26F61E6DDB /* OIMManager+User.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "OIMManager+User.m"; path = "OpenIMSDK/Interface/OIMManager+User.m"; sourceTree = "<group>"; };
+		43C838BA658082BFAF366D1E6A68CDF8 /* OpenIMSDK.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OpenIMSDK.h; path = OpenIMSDK/OpenIMSDK.h; sourceTree = "<group>"; };
+		43EAAD2AB7E6B407E80E95F643F93D22 /* MJExtension-MJExtension */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; name = "MJExtension-MJExtension"; path = MJExtension.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		4525A8E7EBDC14FC232AF130EB7B90D8 /* OIMVideoElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMVideoElem.h; path = OpenIMSDK/Model/OIMVideoElem.h; sourceTree = "<group>"; };
+		4A6A453970BA838F1A20286E0DF7E6BE /* OIMMessageElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMMessageElem.m; path = OpenIMSDK/Model/OIMMessageElem.m; sourceTree = "<group>"; };
+		4AFA70D5301093932D1D9B15BDF7B26D /* OIMSearchResultInfo.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMSearchResultInfo.m; path = OpenIMSDK/Model/OIMSearchResultInfo.m; sourceTree = "<group>"; };
+		4F20E19C70AAE7D91ED16F1B805A44A0 /* OIMQuoteElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMQuoteElem.m; path = OpenIMSDK/Model/OIMQuoteElem.m; sourceTree = "<group>"; };
+		5378862FEADA59093CC37150530FCE6F /* OIMReachability.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMReachability.m; path = OpenIMSDK/Utils/OIMReachability.m; sourceTree = "<group>"; };
+		5387737BB9F05C91AF23E056E2A8CEAC /* OIMFullUserInfo.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMFullUserInfo.m; path = OpenIMSDK/Model/OIMFullUserInfo.m; sourceTree = "<group>"; };
+		5F18285D83AB657EB7A05644DF911D6C /* NSObject+MJProperty.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "NSObject+MJProperty.h"; path = "MJExtension/NSObject+MJProperty.h"; sourceTree = "<group>"; };
+		5FF4214F4C60FF29E107A7D51596A27D /* OIMAtElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMAtElem.m; path = OpenIMSDK/Model/OIMAtElem.m; sourceTree = "<group>"; };
+		6101A817E26C048A73F62E1442DD225E /* Pods-RaverMVP-acknowledgements.markdown */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = "Pods-RaverMVP-acknowledgements.markdown"; sourceTree = "<group>"; };
+		6108F975F5222EC5B92DFDC8B34880F9 /* Pods-RaverMVP-acknowledgements.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-RaverMVP-acknowledgements.plist"; sourceTree = "<group>"; };
+		68893217BF9D4D5FDA10B20A1EA21E7B /* UploadFileCallbackProxy.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = UploadFileCallbackProxy.h; path = OpenIMSDK/CallbackProxy/UploadFileCallbackProxy.h; sourceTree = "<group>"; };
+		6A5AED6953D138279DDE66462F5A2951 /* OIMManager+Group.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "OIMManager+Group.m"; path = "OpenIMSDK/Interface/OIMManager+Group.m"; sourceTree = "<group>"; };
+		6B0B89746B3D285CD1D9B55A331A7018 /* OIMMessageInfo.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMMessageInfo.h; path = OpenIMSDK/Model/OIMMessageInfo.h; sourceTree = "<group>"; };
+		6BA2B97E1F0997563BDB7C9B56346F6C /* MJExtension.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = MJExtension.modulemap; sourceTree = "<group>"; };
+		6C6D4091E78EE3F142A676C6A8200867 /* OIMVideoElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMVideoElem.m; path = OpenIMSDK/Model/OIMVideoElem.m; sourceTree = "<group>"; };
+		6C6F701233C0B877FE0CDFA0A586B172 /* OIMManager+Login.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "OIMManager+Login.m"; path = "OpenIMSDK/Interface/OIMManager+Login.m"; sourceTree = "<group>"; };
+		6E26E03EDC119240612B0B0BBA2B91DA /* MJProperty.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = MJProperty.h; path = MJExtension/MJProperty.h; sourceTree = "<group>"; };
+		6EABF23DD727FA0C3B601AEFD1F4271C /* MJPropertyType.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = MJPropertyType.h; path = MJExtension/MJPropertyType.h; sourceTree = "<group>"; };
+		7031FDCCD9E03337D98722F9F8226518 /* OpenIMCore.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; name = OpenIMCore.xcframework; path = Framework/OpenIMCore.xcframework; sourceTree = "<group>"; };
+		7190F4E340205D4B1500813383C7CB61 /* MJExtension-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "MJExtension-umbrella.h"; sourceTree = "<group>"; };
+		748CCDB0B07D7059F747768CC1240D14 /* OIMFullUserInfo.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMFullUserInfo.h; path = OpenIMSDK/Model/OIMFullUserInfo.h; sourceTree = "<group>"; };
+		74B9E9BB4D74E3B4A92D612B88B9D0F3 /* SendMessageCallbackProxy.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = SendMessageCallbackProxy.h; path = OpenIMSDK/CallbackProxy/SendMessageCallbackProxy.h; sourceTree = "<group>"; };
+		777F8D483956F11D414C7421E8C5788A /* OIMGroupMemberInfo.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMGroupMemberInfo.m; path = OpenIMSDK/Model/OIMGroupMemberInfo.m; sourceTree = "<group>"; };
+		79AF875CFB96A57DC9615B5885E351C0 /* OIMAttachedInfoElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMAttachedInfoElem.m; path = OpenIMSDK/Model/OIMAttachedInfoElem.m; sourceTree = "<group>"; };
+		7AED01FDC7FBA3363F1385E9B3A3A650 /* Pods-RaverMVP-resources.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "Pods-RaverMVP-resources.sh"; sourceTree = "<group>"; };
+		7B5214F73BCED8040D7A1A2EB02910F0 /* MJExtension.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = MJExtension.debug.xcconfig; sourceTree = "<group>"; };
+		7BBB3F21F4C406968F5BB770E236E595 /* OIMSimpleRequstInfo.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMSimpleRequstInfo.h; path = OpenIMSDK/Model/OIMSimpleRequstInfo.h; sourceTree = "<group>"; };
+		7C301F063A7E578B9BA07D99BEB2439C /* OIMConversationInfo.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMConversationInfo.m; path = OpenIMSDK/Model/OIMConversationInfo.m; sourceTree = "<group>"; };
+		7C4296CE990BB2B9B0F9EB1AD0BAAB8A /* OIMUpdateFriendsReq.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMUpdateFriendsReq.h; path = OpenIMSDK/Model/OIMUpdateFriendsReq.h; sourceTree = "<group>"; };
+		7C925A6C3515242EFD16D50FF09D0CB5 /* OIMUpdateFriendsReq.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMUpdateFriendsReq.m; path = OpenIMSDK/Model/OIMUpdateFriendsReq.m; sourceTree = "<group>"; };
+		7E77A32F3EE996C0D8B01F828635853F /* OpenIMSDKCore-xcframeworks.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "OpenIMSDKCore-xcframeworks.sh"; sourceTree = "<group>"; };
+		830964B3F6ED78B771758BFE0716C67B /* OpenIMSDKCore.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = OpenIMSDKCore.debug.xcconfig; sourceTree = "<group>"; };
+		834057B44B744D8BDAF548BD7DA74B4C /* OIMManager+Message.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "OIMManager+Message.h"; path = "OpenIMSDK/Interface/OIMManager+Message.h"; sourceTree = "<group>"; };
+		84BC464157A3D636E133CD02D62C62CD /* OIMManager.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMManager.h; path = OpenIMSDK/Interface/OIMManager.h; sourceTree = "<group>"; };
+		84D0BC3CB0F505079877FEC5352791DC /* OIMCallbacker+Closure.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "OIMCallbacker+Closure.m"; path = "OpenIMSDK/Callbacker/OIMCallbacker+Closure.m"; sourceTree = "<group>"; };
+		864B4EE5250F1E9E8FC4EFD13D553B10 /* OIMSearchParam.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMSearchParam.h; path = OpenIMSDK/Model/OIMSearchParam.h; sourceTree = "<group>"; };
+		88EBBEB42985D6444DEFC97AA4B7070C /* OpenIMSDK.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = OpenIMSDK.modulemap; sourceTree = "<group>"; };
+		8C210ACEFB066CE7660C38561C420448 /* OIMMessageInfo.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMMessageInfo.m; path = OpenIMSDK/Model/OIMMessageInfo.m; sourceTree = "<group>"; };
+		923C1C2FC8110CAB05D1255D79DB5E24 /* OIMNotificationElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMNotificationElem.m; path = OpenIMSDK/Model/OIMNotificationElem.m; sourceTree = "<group>"; };
+		92823A0BED75BE7B8C8269BC66571141 /* MJPropertyKey.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = MJPropertyKey.m; path = MJExtension/MJPropertyKey.m; sourceTree = "<group>"; };
+		928B745A15884AC6FAD19FAA869B89AE /* OIMGCDMulticastDelegate.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMGCDMulticastDelegate.h; path = OpenIMSDK/Callbacker/OIMGCDMulticastDelegate.h; sourceTree = "<group>"; };
+		935F6656F32E165F162FD4C2EADF634D /* NSString+MJExtension.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "NSString+MJExtension.h"; path = "MJExtension/NSString+MJExtension.h"; sourceTree = "<group>"; };
+		9790AFFDA513BCA59C9D57548CFFCC4D /* NSObject+MJProperty.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "NSObject+MJProperty.m"; path = "MJExtension/NSObject+MJProperty.m"; sourceTree = "<group>"; };
+		9790BDDD1824F901B17D0D74E355D451 /* OIMSimpleResultInfo.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMSimpleResultInfo.h; path = OpenIMSDK/Model/OIMSimpleResultInfo.h; sourceTree = "<group>"; };
+		98F3862ABE3B774D8840620FF11B9611 /* OIMFaceElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMFaceElem.h; path = OpenIMSDK/Model/OIMFaceElem.h; sourceTree = "<group>"; };
+		9AA3DD254870032E481AA9D70547510B /* MJExtension-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "MJExtension-dummy.m"; sourceTree = "<group>"; };
+		9B580E10443A7C49938CC76ECB5874E8 /* MJExtension.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = MJExtension.h; path = MJExtension/MJExtension.h; sourceTree = "<group>"; };
+		9BADE022052E9EDF4064F70CB79698BF /* OIMLocationElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMLocationElem.m; path = OpenIMSDK/Model/OIMLocationElem.m; sourceTree = "<group>"; };
+		9BB9D10C3C66A6FD7D8FD9B803B9B954 /* OIMNotificationElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMNotificationElem.h; path = OpenIMSDK/Model/OIMNotificationElem.h; sourceTree = "<group>"; };
+		9D940727FF8FB9C785EB98E56350EF41 /* Podfile */ = {isa = PBXFileReference; explicitFileType = text.script.ruby; includeInIndex = 1; indentWidth = 2; lastKnownFileType = text; name = Podfile; path = ../Podfile; sourceTree = SOURCE_ROOT; tabWidth = 2; xcLanguageSpecificationIdentifier = xcode.lang.ruby; };
+		9DB54322A34C16354BCFAFE56B61D15B /* OIMCustomElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMCustomElem.m; path = OpenIMSDK/Model/OIMCustomElem.m; sourceTree = "<group>"; };
+		9E4C0B7A691F8F633EBF3B6A69CEEA5B /* MJPropertyKey.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = MJPropertyKey.h; path = MJExtension/MJPropertyKey.h; sourceTree = "<group>"; };
+		9EF33DB7C19E59851C4760C084CDB671 /* OIMConversationInfo.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMConversationInfo.h; path = OpenIMSDK/Model/OIMConversationInfo.h; sourceTree = "<group>"; };
+		A19438FD88032819C931A57BA818BF34 /* OIMGroupMemberInfo.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMGroupMemberInfo.h; path = OpenIMSDK/Model/OIMGroupMemberInfo.h; sourceTree = "<group>"; };
+		A49D46F9C381111CD7383EF4807C70D9 /* NSObject+MJKeyValue.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "NSObject+MJKeyValue.m"; path = "MJExtension/NSObject+MJKeyValue.m"; sourceTree = "<group>"; };
+		A505799E5FBD67B5C4122DE4730EDFCC /* Pods-RaverMVP-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "Pods-RaverMVP-dummy.m"; sourceTree = "<group>"; };
+		A60DB754467F6BCB63528C29237CAEE9 /* OIMFriendApplication.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMFriendApplication.h; path = OpenIMSDK/Model/OIMFriendApplication.h; sourceTree = "<group>"; };
+		A727391C76072CFFD2C663E21AC45722 /* OIMMessageElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMMessageElem.h; path = OpenIMSDK/Model/OIMMessageElem.h; sourceTree = "<group>"; };
+		A901283FDA3B932A8C1D4E78901A02C2 /* OpenIMSDK-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "OpenIMSDK-umbrella.h"; sourceTree = "<group>"; };
+		AB65C3A82B22CB96BFF7032FE70B6B18 /* OIMManager.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMManager.m; path = OpenIMSDK/Interface/OIMManager.m; sourceTree = "<group>"; };
+		AC624DBFEEE806EDFABAF2FF37854A0E /* MJProperty.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = MJProperty.m; path = MJExtension/MJProperty.m; sourceTree = "<group>"; };
+		AD581EA8D1E49C486B3F6FE87AF70433 /* UploadFileCallbackProxy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = UploadFileCallbackProxy.m; path = OpenIMSDK/CallbackProxy/UploadFileCallbackProxy.m; sourceTree = "<group>"; };
+		B058B7A5D6E6CA57F81DAE8F86B5A980 /* OIMCustomElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMCustomElem.h; path = OpenIMSDK/Model/OIMCustomElem.h; sourceTree = "<group>"; };
+		B39301EC51190D17CCE11E2BD6F54C04 /* OIMCallbacker.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMCallbacker.h; path = OpenIMSDK/Callbacker/OIMCallbacker.h; sourceTree = "<group>"; };
+		BA51341977C8F16572A9C6390B07D29B /* Pods-RaverMVP-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "Pods-RaverMVP-umbrella.h"; sourceTree = "<group>"; };
+		C0569B1322B0A54D48FCFEE68D660FFA /* OIMSoundElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMSoundElem.h; path = OpenIMSDK/Model/OIMSoundElem.h; sourceTree = "<group>"; };
+		C1B37245E140555F8970331D3C2B7EA1 /* MJExtension-prefix.pch */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "MJExtension-prefix.pch"; sourceTree = "<group>"; };
+		C1C64CEAC10393C2B1E56A19030EC2AC /* Pods-RaverMVP.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-RaverMVP.debug.xcconfig"; sourceTree = "<group>"; };
+		C30EAE5B9CFE4B5FD15F57A46FE5B63C /* MJExtension-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "MJExtension-Info.plist"; sourceTree = "<group>"; };
+		C4B8E4D07FA086DDFFA08FC4C73B7B7A /* Pods-RaverMVP.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-RaverMVP.release.xcconfig"; sourceTree = "<group>"; };
+		CF069546A0E148985B239C4F759BF7DA /* MJFoundation.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = MJFoundation.m; path = MJExtension/MJFoundation.m; sourceTree = "<group>"; };
+		CF8F66116AE98518D9A2304110A6DFD9 /* Pods-RaverMVP.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = "Pods-RaverMVP.modulemap"; sourceTree = "<group>"; };
+		D08D040362F298BA124C867B21136BF3 /* OpenIMSDK.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = OpenIMSDK.release.xcconfig; sourceTree = "<group>"; };
+		D1D7BA2D3601BD6B732FD64F8486438C /* OIMGroupApplicationInfo.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMGroupApplicationInfo.m; path = OpenIMSDK/Model/OIMGroupApplicationInfo.m; sourceTree = "<group>"; };
+		D2389CEBCA38ADDCA021FE26A133C32B /* OIMPictureElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMPictureElem.h; path = OpenIMSDK/Model/OIMPictureElem.h; sourceTree = "<group>"; };
+		D4A3BA746B296F5D02E6BF5014A45E66 /* OIMUserInfo.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMUserInfo.h; path = OpenIMSDK/Model/OIMUserInfo.h; sourceTree = "<group>"; };
+		D4BB724691513468875B244E989DD29F /* NSObject+MJKeyValue.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "NSObject+MJKeyValue.h"; path = "MJExtension/NSObject+MJKeyValue.h"; sourceTree = "<group>"; };
+		D50DB0A8755F5BF5FD976EB7BDA6886C /* OIMFaceElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMFaceElem.m; path = OpenIMSDK/Model/OIMFaceElem.m; sourceTree = "<group>"; };
+		D6860CFEAE7620E848C74D7CDB5E5A3B /* OIMPictureElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMPictureElem.m; path = OpenIMSDK/Model/OIMPictureElem.m; sourceTree = "<group>"; };
+		D7E7989F0A5941B0B416514C330A54C9 /* OpenIMSDK.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = OpenIMSDK.debug.xcconfig; sourceTree = "<group>"; };
+		D9E61A82A66B869DDF007B13EED73E13 /* OIMManager+Connection.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "OIMManager+Connection.m"; path = "OpenIMSDK/Interface/OIMManager+Connection.m"; sourceTree = "<group>"; };
+		DA1FB1142346DA83DED3C641BBE8C3C3 /* OIMManager+Conversation.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "OIMManager+Conversation.h"; path = "OpenIMSDK/Interface/OIMManager+Conversation.h"; sourceTree = "<group>"; };
+		DDFD63080EDFF31F6AECAA59EB138492 /* NSObject+MJCoding.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "NSObject+MJCoding.h"; path = "MJExtension/NSObject+MJCoding.h"; sourceTree = "<group>"; };
+		DE0CD5947917D21812AEF172D96C3773 /* OIMMergeElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMMergeElem.m; path = OpenIMSDK/Model/OIMMergeElem.m; sourceTree = "<group>"; };
+		DEF01227AF55730956679158107F791C /* OIMReachability.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMReachability.h; path = OpenIMSDK/Utils/OIMReachability.h; sourceTree = "<group>"; };
+		DF59FB4E0CAAFA7C83C06154E5C5A620 /* OIMSimpleRequstInfo.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMSimpleRequstInfo.m; path = OpenIMSDK/Model/OIMSimpleRequstInfo.m; sourceTree = "<group>"; };
+		E4044126580CE48E14810BE281940BD1 /* OpenIMSDKCore.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = OpenIMSDKCore.release.xcconfig; sourceTree = "<group>"; };
+		E72B70F5CA1E003BD265ADFAFAEEBFAB /* OIMGCDMulticastDelegate.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMGCDMulticastDelegate.m; path = OpenIMSDK/Callbacker/OIMGCDMulticastDelegate.m; sourceTree = "<group>"; };
+		E72D0E8D1F25C1446B059320D3C41DDD /* OIMManager+Friend.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "OIMManager+Friend.m"; path = "OpenIMSDK/Interface/OIMManager+Friend.m"; sourceTree = "<group>"; };
+		E8C33793CE9B5293873451B189A870A0 /* CallbackProxy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = CallbackProxy.m; path = OpenIMSDK/CallbackProxy/CallbackProxy.m; sourceTree = "<group>"; };
+		E8CAB25F71E504A49AC22B632CAB68E8 /* OIMFriendApplication.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMFriendApplication.m; path = OpenIMSDK/Model/OIMFriendApplication.m; sourceTree = "<group>"; };
+		EC17E60A701100B96568603CADA92C6C /* OIMQuoteElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMQuoteElem.h; path = OpenIMSDK/Model/OIMQuoteElem.h; sourceTree = "<group>"; };
+		EEB786B03D4EC615FCF96339576D521C /* ResourceBundle-MJExtension-MJExtension-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "ResourceBundle-MJExtension-MJExtension-Info.plist"; sourceTree = "<group>"; };
+		F17DB6EB618457A916BD8F223684E892 /* OIMManager+Friend.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "OIMManager+Friend.h"; path = "OpenIMSDK/Interface/OIMManager+Friend.h"; sourceTree = "<group>"; };
+		F20955DEA73BB5C3A0D053D243CBB782 /* OIMCallbacker.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMCallbacker.m; path = OpenIMSDK/Callbacker/OIMCallbacker.m; sourceTree = "<group>"; };
+		F2A4DFA5E873E82B4FA8327696100167 /* NSObject+MJClass.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = "NSObject+MJClass.h"; path = "MJExtension/NSObject+MJClass.h"; sourceTree = "<group>"; };
+		F33F900EC0D7E1CB48DD1624EBACBDF9 /* OIMDefine.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMDefine.h; path = OpenIMSDK/Utils/OIMDefine.h; sourceTree = "<group>"; };
+		F688517E185998CAAE8F6E97FD44B795 /* MJExtensionConst.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = MJExtensionConst.h; path = MJExtension/MJExtensionConst.h; sourceTree = "<group>"; };
+		F74EEDC02D44DA8F1B152B3C8C114CE2 /* OIMMergeElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMMergeElem.h; path = OpenIMSDK/Model/OIMMergeElem.h; sourceTree = "<group>"; };
+		F757134A68EA94537E33612563A52A9A /* OpenIMSDK-prefix.pch */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "OpenIMSDK-prefix.pch"; sourceTree = "<group>"; };
+		F89CC2C8DCF7A5C072744AE283F88EFF /* OIMGroupInfo.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMGroupInfo.m; path = OpenIMSDK/Model/OIMGroupInfo.m; sourceTree = "<group>"; };
+		F90125603EBD0DD7E0EE57B3327BA7F8 /* OpenIMSDK-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "OpenIMSDK-Info.plist"; sourceTree = "<group>"; };
+		F94A395EF892D03DAF8E087B8BA85A6C /* OIMGroupApplicationInfo.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMGroupApplicationInfo.h; path = OpenIMSDK/Model/OIMGroupApplicationInfo.h; sourceTree = "<group>"; };
+		FC4C0F574B30ABB56B4435D3E087A400 /* OIMAttachedInfoElem.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = OIMAttachedInfoElem.h; path = OpenIMSDK/Model/OIMAttachedInfoElem.h; sourceTree = "<group>"; };
+		FD5FDFBD4B40F33492BF017742D9F320 /* Pods-RaverMVP-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-RaverMVP-Info.plist"; sourceTree = "<group>"; };
+		FFB4E33A86B500519E31329D27C0423D /* OIMSoundElem.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = OIMSoundElem.m; path = OpenIMSDK/Model/OIMSoundElem.m; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0DFEBF6D5E3C7C73145E1449BA46D43A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				202812410FF22B588DF523787B54E176 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1053BE406C9C378477637413389D10F7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				767452CB86F59965A89EA27B63C264EC /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		652074BBB4AB3A278D18B241BC90E56E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				47FDC613EB659CD76681F25442F48C22 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E3506E696CB57CF9478365BC5F3A120A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0BA42451347AB5C515C99138F4D2188D /* MJExtension */ = {
+			isa = PBXGroup;
+			children = (
+				9B580E10443A7C49938CC76ECB5874E8 /* MJExtension.h */,
+				F688517E185998CAAE8F6E97FD44B795 /* MJExtensionConst.h */,
+				258A1504CD9F70B64F1BAE0001589FCA /* MJExtensionConst.m */,
+				0B3723B461B72EF74D39D25E32587EFC /* MJFoundation.h */,
+				CF069546A0E148985B239C4F759BF7DA /* MJFoundation.m */,
+				6E26E03EDC119240612B0B0BBA2B91DA /* MJProperty.h */,
+				AC624DBFEEE806EDFABAF2FF37854A0E /* MJProperty.m */,
+				9E4C0B7A691F8F633EBF3B6A69CEEA5B /* MJPropertyKey.h */,
+				92823A0BED75BE7B8C8269BC66571141 /* MJPropertyKey.m */,
+				6EABF23DD727FA0C3B601AEFD1F4271C /* MJPropertyType.h */,
+				26C68FCF933E916F0F405949390946BC /* MJPropertyType.m */,
+				F2A4DFA5E873E82B4FA8327696100167 /* NSObject+MJClass.h */,
+				10A97F421FD4F5AF2225F100A6C6EDF0 /* NSObject+MJClass.m */,
+				DDFD63080EDFF31F6AECAA59EB138492 /* NSObject+MJCoding.h */,
+				13E72656F90D3F9D2BB2D45618B4650A /* NSObject+MJCoding.m */,
+				D4BB724691513468875B244E989DD29F /* NSObject+MJKeyValue.h */,
+				A49D46F9C381111CD7383EF4807C70D9 /* NSObject+MJKeyValue.m */,
+				5F18285D83AB657EB7A05644DF911D6C /* NSObject+MJProperty.h */,
+				9790AFFDA513BCA59C9D57548CFFCC4D /* NSObject+MJProperty.m */,
+				935F6656F32E165F162FD4C2EADF634D /* NSString+MJExtension.h */,
+				311A3DA978EE4C88F0ADD83C40AC73AA /* NSString+MJExtension.m */,
+				9A60CB0DF946A554DBF8F9E28625E02E /* Resources */,
+				741992FA47F3694CE719A58C49CFBE61 /* Support Files */,
+			);
+			name = MJExtension;
+			path = MJExtension;
+			sourceTree = "<group>";
+		};
+		1D02D352B01D263BDCCA6C4E197E5577 /* Support Files */ = {
+			isa = PBXGroup;
+			children = (
+				7E77A32F3EE996C0D8B01F828635853F /* OpenIMSDKCore-xcframeworks.sh */,
+				830964B3F6ED78B771758BFE0716C67B /* OpenIMSDKCore.debug.xcconfig */,
+				E4044126580CE48E14810BE281940BD1 /* OpenIMSDKCore.release.xcconfig */,
+			);
+			name = "Support Files";
+			path = "../Target Support Files/OpenIMSDKCore";
+			sourceTree = "<group>";
+		};
+		2F181331D589905034FE9D780C2A78EC /* Targets Support Files */ = {
+			isa = PBXGroup;
+			children = (
+				A596557591BE2E53FD5A90D490AA0086 /* Pods-RaverMVP */,
+			);
+			name = "Targets Support Files";
+			sourceTree = "<group>";
+		};
+		2FBB769F065BACAA365FED989D893809 /* Callbacker */ = {
+			isa = PBXGroup;
+			children = (
+				B39301EC51190D17CCE11E2BD6F54C04 /* OIMCallbacker.h */,
+				F20955DEA73BB5C3A0D053D243CBB782 /* OIMCallbacker.m */,
+				212C141CAD49ED68829E41567DA9EB39 /* OIMCallbacker+Closure.h */,
+				84D0BC3CB0F505079877FEC5352791DC /* OIMCallbacker+Closure.m */,
+				928B745A15884AC6FAD19FAA869B89AE /* OIMGCDMulticastDelegate.h */,
+				E72B70F5CA1E003BD265ADFAFAEEBFAB /* OIMGCDMulticastDelegate.m */,
+			);
+			name = Callbacker;
+			sourceTree = "<group>";
+		};
+		38C6B529CC5E2D32C9F8D239536CC123 /* OpenIMSDKCore */ = {
+			isa = PBXGroup;
+			children = (
+				D20946C40B71519C2A875F6355958693 /* Frameworks */,
+				1D02D352B01D263BDCCA6C4E197E5577 /* Support Files */,
+			);
+			name = OpenIMSDKCore;
+			path = OpenIMSDKCore;
+			sourceTree = "<group>";
+		};
+		41336B653DE2297E5005C54C555C1B1A /* OpenIMSDK */ = {
+			isa = PBXGroup;
+			children = (
+				43C838BA658082BFAF366D1E6A68CDF8 /* OpenIMSDK.h */,
+				2FBB769F065BACAA365FED989D893809 /* Callbacker */,
+				9F2C3CC1199FB662AA758795332057A1 /* CallbackProxy */,
+				D9D5987813683A0B58F5D6E5C881BE14 /* Interface */,
+				890209D9F6F19458E834530F3549790B /* Model */,
+				68AD11A9A56164EA633CB20AC7347D56 /* Support Files */,
+				7CB2FA95F7212ED4EC8CFFCC8724E15F /* Utils */,
+			);
+			name = OpenIMSDK;
+			path = OpenIMSDK;
+			sourceTree = "<group>";
+		};
+		5E0489D6B60BC51B475335C844D287AD /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				0BA42451347AB5C515C99138F4D2188D /* MJExtension */,
+				41336B653DE2297E5005C54C555C1B1A /* OpenIMSDK */,
+				38C6B529CC5E2D32C9F8D239536CC123 /* OpenIMSDKCore */,
+			);
+			name = Pods;
+			sourceTree = "<group>";
+		};
+		68AD11A9A56164EA633CB20AC7347D56 /* Support Files */ = {
+			isa = PBXGroup;
+			children = (
+				88EBBEB42985D6444DEFC97AA4B7070C /* OpenIMSDK.modulemap */,
+				19C282744ED3F93912A0312CBE4CA4FC /* OpenIMSDK-dummy.m */,
+				F90125603EBD0DD7E0EE57B3327BA7F8 /* OpenIMSDK-Info.plist */,
+				F757134A68EA94537E33612563A52A9A /* OpenIMSDK-prefix.pch */,
+				A901283FDA3B932A8C1D4E78901A02C2 /* OpenIMSDK-umbrella.h */,
+				D7E7989F0A5941B0B416514C330A54C9 /* OpenIMSDK.debug.xcconfig */,
+				D08D040362F298BA124C867B21136BF3 /* OpenIMSDK.release.xcconfig */,
+			);
+			name = "Support Files";
+			path = "../Target Support Files/OpenIMSDK";
+			sourceTree = "<group>";
+		};
+		741992FA47F3694CE719A58C49CFBE61 /* Support Files */ = {
+			isa = PBXGroup;
+			children = (
+				6BA2B97E1F0997563BDB7C9B56346F6C /* MJExtension.modulemap */,
+				9AA3DD254870032E481AA9D70547510B /* MJExtension-dummy.m */,
+				C30EAE5B9CFE4B5FD15F57A46FE5B63C /* MJExtension-Info.plist */,
+				C1B37245E140555F8970331D3C2B7EA1 /* MJExtension-prefix.pch */,
+				7190F4E340205D4B1500813383C7CB61 /* MJExtension-umbrella.h */,
+				7B5214F73BCED8040D7A1A2EB02910F0 /* MJExtension.debug.xcconfig */,
+				40F790690AB1763D22134F95047E30AA /* MJExtension.release.xcconfig */,
+				EEB786B03D4EC615FCF96339576D521C /* ResourceBundle-MJExtension-MJExtension-Info.plist */,
+			);
+			name = "Support Files";
+			path = "../Target Support Files/MJExtension";
+			sourceTree = "<group>";
+		};
+		7CB2FA95F7212ED4EC8CFFCC8724E15F /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				F33F900EC0D7E1CB48DD1624EBACBDF9 /* OIMDefine.h */,
+				DEF01227AF55730956679158107F791C /* OIMReachability.h */,
+				5378862FEADA59093CC37150530FCE6F /* OIMReachability.m */,
+			);
+			name = Utils;
+			sourceTree = "<group>";
+		};
+		890209D9F6F19458E834530F3549790B /* Model */ = {
+			isa = PBXGroup;
+			children = (
+				1354364D1D40C13C061DDC8043F2DE30 /* OIMAtElem.h */,
+				5FF4214F4C60FF29E107A7D51596A27D /* OIMAtElem.m */,
+				FC4C0F574B30ABB56B4435D3E087A400 /* OIMAttachedInfoElem.h */,
+				79AF875CFB96A57DC9615B5885E351C0 /* OIMAttachedInfoElem.m */,
+				9EF33DB7C19E59851C4760C084CDB671 /* OIMConversationInfo.h */,
+				7C301F063A7E578B9BA07D99BEB2439C /* OIMConversationInfo.m */,
+				B058B7A5D6E6CA57F81DAE8F86B5A980 /* OIMCustomElem.h */,
+				9DB54322A34C16354BCFAFE56B61D15B /* OIMCustomElem.m */,
+				98F3862ABE3B774D8840620FF11B9611 /* OIMFaceElem.h */,
+				D50DB0A8755F5BF5FD976EB7BDA6886C /* OIMFaceElem.m */,
+				2E0D8DE0B7D353678255DA001FAAA08A /* OIMFileElem.h */,
+				1472863F007A675037FDD01710544354 /* OIMFileElem.m */,
+				A60DB754467F6BCB63528C29237CAEE9 /* OIMFriendApplication.h */,
+				E8CAB25F71E504A49AC22B632CAB68E8 /* OIMFriendApplication.m */,
+				748CCDB0B07D7059F747768CC1240D14 /* OIMFullUserInfo.h */,
+				5387737BB9F05C91AF23E056E2A8CEAC /* OIMFullUserInfo.m */,
+				F94A395EF892D03DAF8E087B8BA85A6C /* OIMGroupApplicationInfo.h */,
+				D1D7BA2D3601BD6B732FD64F8486438C /* OIMGroupApplicationInfo.m */,
+				08D5D30E4A59E36F19036B9722819FB3 /* OIMGroupInfo.h */,
+				F89CC2C8DCF7A5C072744AE283F88EFF /* OIMGroupInfo.m */,
+				A19438FD88032819C931A57BA818BF34 /* OIMGroupMemberInfo.h */,
+				777F8D483956F11D414C7421E8C5788A /* OIMGroupMemberInfo.m */,
+				418FC00A5F053AD0E34DA766C2CE901B /* OIMLocationElem.h */,
+				9BADE022052E9EDF4064F70CB79698BF /* OIMLocationElem.m */,
+				F74EEDC02D44DA8F1B152B3C8C114CE2 /* OIMMergeElem.h */,
+				DE0CD5947917D21812AEF172D96C3773 /* OIMMergeElem.m */,
+				A727391C76072CFFD2C663E21AC45722 /* OIMMessageElem.h */,
+				4A6A453970BA838F1A20286E0DF7E6BE /* OIMMessageElem.m */,
+				6B0B89746B3D285CD1D9B55A331A7018 /* OIMMessageInfo.h */,
+				8C210ACEFB066CE7660C38561C420448 /* OIMMessageInfo.m */,
+				9BB9D10C3C66A6FD7D8FD9B803B9B954 /* OIMNotificationElem.h */,
+				923C1C2FC8110CAB05D1255D79DB5E24 /* OIMNotificationElem.m */,
+				D2389CEBCA38ADDCA021FE26A133C32B /* OIMPictureElem.h */,
+				D6860CFEAE7620E848C74D7CDB5E5A3B /* OIMPictureElem.m */,
+				EC17E60A701100B96568603CADA92C6C /* OIMQuoteElem.h */,
+				4F20E19C70AAE7D91ED16F1B805A44A0 /* OIMQuoteElem.m */,
+				864B4EE5250F1E9E8FC4EFD13D553B10 /* OIMSearchParam.h */,
+				3FAF0BA3E42CA083F89B6982812DF8B4 /* OIMSearchParam.m */,
+				41731F8EA30DBC074D26B5086047F0A4 /* OIMSearchResultInfo.h */,
+				4AFA70D5301093932D1D9B15BDF7B26D /* OIMSearchResultInfo.m */,
+				7BBB3F21F4C406968F5BB770E236E595 /* OIMSimpleRequstInfo.h */,
+				DF59FB4E0CAAFA7C83C06154E5C5A620 /* OIMSimpleRequstInfo.m */,
+				9790BDDD1824F901B17D0D74E355D451 /* OIMSimpleResultInfo.h */,
+				40C5175C61D5CFCA409568D92069D55E /* OIMSimpleResultInfo.m */,
+				C0569B1322B0A54D48FCFEE68D660FFA /* OIMSoundElem.h */,
+				FFB4E33A86B500519E31329D27C0423D /* OIMSoundElem.m */,
+				7C4296CE990BB2B9B0F9EB1AD0BAAB8A /* OIMUpdateFriendsReq.h */,
+				7C925A6C3515242EFD16D50FF09D0CB5 /* OIMUpdateFriendsReq.m */,
+				D4A3BA746B296F5D02E6BF5014A45E66 /* OIMUserInfo.h */,
+				013C688980BD5AD9735902BB58A051CA /* OIMUserInfo.m */,
+				4525A8E7EBDC14FC232AF130EB7B90D8 /* OIMVideoElem.h */,
+				6C6D4091E78EE3F142A676C6A8200867 /* OIMVideoElem.m */,
+			);
+			name = Model;
+			sourceTree = "<group>";
+		};
+		9A60CB0DF946A554DBF8F9E28625E02E /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				3351F90A08E8AF49BCC4A79819C42F84 /* PrivacyInfo.xcprivacy */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		9F2C3CC1199FB662AA758795332057A1 /* CallbackProxy */ = {
+			isa = PBXGroup;
+			children = (
+				23B40A36C7AC6350403B5DA9CBA2A4FF /* CallbackProxy.h */,
+				E8C33793CE9B5293873451B189A870A0 /* CallbackProxy.m */,
+				74B9E9BB4D74E3B4A92D612B88B9D0F3 /* SendMessageCallbackProxy.h */,
+				391AD7D4337DB7E25125BB3612D9717B /* SendMessageCallbackProxy.m */,
+				68893217BF9D4D5FDA10B20A1EA21E7B /* UploadFileCallbackProxy.h */,
+				AD581EA8D1E49C486B3F6FE87AF70433 /* UploadFileCallbackProxy.m */,
+			);
+			name = CallbackProxy;
+			sourceTree = "<group>";
+		};
+		A596557591BE2E53FD5A90D490AA0086 /* Pods-RaverMVP */ = {
+			isa = PBXGroup;
+			children = (
+				CF8F66116AE98518D9A2304110A6DFD9 /* Pods-RaverMVP.modulemap */,
+				6101A817E26C048A73F62E1442DD225E /* Pods-RaverMVP-acknowledgements.markdown */,
+				6108F975F5222EC5B92DFDC8B34880F9 /* Pods-RaverMVP-acknowledgements.plist */,
+				A505799E5FBD67B5C4122DE4730EDFCC /* Pods-RaverMVP-dummy.m */,
+				FD5FDFBD4B40F33492BF017742D9F320 /* Pods-RaverMVP-Info.plist */,
+				7AED01FDC7FBA3363F1385E9B3A3A650 /* Pods-RaverMVP-resources.sh */,
+				BA51341977C8F16572A9C6390B07D29B /* Pods-RaverMVP-umbrella.h */,
+				C1C64CEAC10393C2B1E56A19030EC2AC /* Pods-RaverMVP.debug.xcconfig */,
+				C4B8E4D07FA086DDFFA08FC4C73B7B7A /* Pods-RaverMVP.release.xcconfig */,
+			);
+			name = "Pods-RaverMVP";
+			path = "Target Support Files/Pods-RaverMVP";
+			sourceTree = "<group>";
+		};
+		CF1408CF629C7361332E53B88F7BD30C = {
+			isa = PBXGroup;
+			children = (
+				9D940727FF8FB9C785EB98E56350EF41 /* Podfile */,
+				D210D550F4EA176C3123ED886F8F87F5 /* Frameworks */,
+				5E0489D6B60BC51B475335C844D287AD /* Pods */,
+				FBAF91B5B23A07469C269881199D7CE9 /* Products */,
+				2F181331D589905034FE9D780C2A78EC /* Targets Support Files */,
+			);
+			sourceTree = "<group>";
+		};
+		D20946C40B71519C2A875F6355958693 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				7031FDCCD9E03337D98722F9F8226518 /* OpenIMCore.xcframework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		D210D550F4EA176C3123ED886F8F87F5 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				E4801F62A6B08CD9B5410329F1A18FDE /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		D9D5987813683A0B58F5D6E5C881BE14 /* Interface */ = {
+			isa = PBXGroup;
+			children = (
+				84BC464157A3D636E133CD02D62C62CD /* OIMManager.h */,
+				AB65C3A82B22CB96BFF7032FE70B6B18 /* OIMManager.m */,
+				11D4D74C351DAF9D8BC3AEC81BA7CE0A /* OIMManager+Connection.h */,
+				D9E61A82A66B869DDF007B13EED73E13 /* OIMManager+Connection.m */,
+				DA1FB1142346DA83DED3C641BBE8C3C3 /* OIMManager+Conversation.h */,
+				4234C90C213A303437DC251B90B74745 /* OIMManager+Conversation.m */,
+				F17DB6EB618457A916BD8F223684E892 /* OIMManager+Friend.h */,
+				E72D0E8D1F25C1446B059320D3C41DDD /* OIMManager+Friend.m */,
+				24F4B587DACA9D1A10FEDA0E030CDA60 /* OIMManager+Group.h */,
+				6A5AED6953D138279DDE66462F5A2951 /* OIMManager+Group.m */,
+				0E68E0F82AE8C6E15A3F46DD30A6F546 /* OIMManager+Login.h */,
+				6C6F701233C0B877FE0CDFA0A586B172 /* OIMManager+Login.m */,
+				834057B44B744D8BDAF548BD7DA74B4C /* OIMManager+Message.h */,
+				38D8248090546B4D480921DF30260F56 /* OIMManager+Message.m */,
+				3633F49EFB3391742230A17FC43EF6A5 /* OIMManager+User.h */,
+				43155B87291569EBAEFD2C26F61E6DDB /* OIMManager+User.m */,
+			);
+			name = Interface;
+			sourceTree = "<group>";
+		};
+		E4801F62A6B08CD9B5410329F1A18FDE /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				384DDA2CB25005BD6479B5987C619DD4 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		FBAF91B5B23A07469C269881199D7CE9 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2B276B0A79173A1D6E83C9B4FB9A4A57 /* MJExtension */,
+				43EAAD2AB7E6B407E80E95F643F93D22 /* MJExtension-MJExtension */,
+				1D6CFC15839ACA2CFFE42FF0D4017A07 /* OpenIMSDK */,
+				1D69344D5C325F6D0720667CAF49E4D4 /* Pods-RaverMVP */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		6377FF3F62D2469BCB9F55CD732EBABC /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EA874E8F629AEBCAAF4D502A6733CED9 /* MJExtension.h in Headers */,
+				3D38566043D0931C63B34BEA53D591CF /* MJExtension-umbrella.h in Headers */,
+				5AB3AFD3D81DA6CEE2927B2D024AF7FE /* MJExtensionConst.h in Headers */,
+				8BDFF6854FDB9ADD36712C8FC66597AA /* MJFoundation.h in Headers */,
+				544DCA9B0544E2C12983779DE85D91AE /* MJProperty.h in Headers */,
+				36599F353846A95112E54DF95DDA4482 /* MJPropertyKey.h in Headers */,
+				AC96BFB862497EB630494B5BA6FC06ED /* MJPropertyType.h in Headers */,
+				178F45F63E4AD95BF74A6C64D7EEABDB /* NSObject+MJClass.h in Headers */,
+				40F950A0A5D40B5F56CF435287643B88 /* NSObject+MJCoding.h in Headers */,
+				F6CD53C28EB56CA26110BF09DE5954FC /* NSObject+MJKeyValue.h in Headers */,
+				D8FE326DA0F68CF2BE6BAD6E02485DC7 /* NSObject+MJProperty.h in Headers */,
+				084E3F3EE06EF32DA4968A7DE4AC79AA /* NSString+MJExtension.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		833DCDF93248A958EF47196BB6205126 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2A61C66DF98A7F7FC183B67F5B9F97F8 /* CallbackProxy.h in Headers */,
+				883C4B3FA7C98CA11B121BC4E0092B73 /* OIMAtElem.h in Headers */,
+				595FC1B83C3124AC916FE978EEB3BF90 /* OIMAttachedInfoElem.h in Headers */,
+				B09A70A587400F738C138BB0487F08E0 /* OIMCallbacker.h in Headers */,
+				5B08AE4C304C9CF545CE37131B3A3BB3 /* OIMCallbacker+Closure.h in Headers */,
+				280159C811343669BD8CA8A23A24DF75 /* OIMConversationInfo.h in Headers */,
+				FBBDF31BD5CA23C47E4C18BCA47A4194 /* OIMCustomElem.h in Headers */,
+				9D99119517C283B342844D8DA80A1F26 /* OIMDefine.h in Headers */,
+				CF4F390AD14CD99E57253BE9D96DB274 /* OIMFaceElem.h in Headers */,
+				C937AC5DC84D468EBAB678025048B400 /* OIMFileElem.h in Headers */,
+				178C56922BA738F67A565CA8681F0F05 /* OIMFriendApplication.h in Headers */,
+				DF7DC58EB9217CBF2B6DA9EB3B4F5F6C /* OIMFullUserInfo.h in Headers */,
+				B20CF9BA80C38488F04F90EC817A3B23 /* OIMGCDMulticastDelegate.h in Headers */,
+				1509D9892B9A6D6BE7DE77053F26DDBA /* OIMGroupApplicationInfo.h in Headers */,
+				E080E4E10F9EE84CF6A4EF650744131C /* OIMGroupInfo.h in Headers */,
+				F325BEE3115C5BE3907B073DDC9F5852 /* OIMGroupMemberInfo.h in Headers */,
+				D63AACB28313CEB9B9465C50A5A23892 /* OIMLocationElem.h in Headers */,
+				E9F1CF2BE311C33A9629B0EC6D019F3A /* OIMManager.h in Headers */,
+				80721615C3658BF57B31FA699F19E9B5 /* OIMManager+Connection.h in Headers */,
+				B9E2DC5B8A62D07383AE695D13A30CBE /* OIMManager+Conversation.h in Headers */,
+				E6AC3AF0CBAA1843B13F34AB5CA491E7 /* OIMManager+Friend.h in Headers */,
+				7A80DEB95ED22729738A514B448AD383 /* OIMManager+Group.h in Headers */,
+				BB8854955B704BFF79EDD38538B9568B /* OIMManager+Login.h in Headers */,
+				74714664EA6A6A0178114C1570835B66 /* OIMManager+Message.h in Headers */,
+				F446E12C0CBAA5E3B9AB03F1AD36EA38 /* OIMManager+User.h in Headers */,
+				308AC672301C6E7DB6824993D255E0DA /* OIMMergeElem.h in Headers */,
+				CC9CBC1F47B2FBA33DD0203ED7E1CF6C /* OIMMessageElem.h in Headers */,
+				5B1E0BF4678455BC502D2B7B2DC48BF6 /* OIMMessageInfo.h in Headers */,
+				33476FD5E53BCDFDF5EC6882D951B06A /* OIMNotificationElem.h in Headers */,
+				BED118EF040F7D9B701E1749380AA3FC /* OIMPictureElem.h in Headers */,
+				9AD9BA7A311DF770828C4B304E63A9A1 /* OIMQuoteElem.h in Headers */,
+				54D0A443ADA6D6F309E7D326BE652DD2 /* OIMReachability.h in Headers */,
+				BE8527AE8767A7B99250200F93B54A02 /* OIMSearchParam.h in Headers */,
+				43DE8C31D6AC6DF88E03EF5C2F9AB778 /* OIMSearchResultInfo.h in Headers */,
+				299BC9F3FD6FDB13F90CAADA0E85E625 /* OIMSimpleRequstInfo.h in Headers */,
+				28DDF775177170CEF65E550AD4EF6111 /* OIMSimpleResultInfo.h in Headers */,
+				12747F86266940B02E2B373CFB2EE754 /* OIMSoundElem.h in Headers */,
+				091C8409581AE1022225E05E5416E01E /* OIMUpdateFriendsReq.h in Headers */,
+				1F2DEB722138E3D7CCC4A02F01414AEC /* OIMUserInfo.h in Headers */,
+				1A8C915663836B11DC3524DAAE284FF7 /* OIMVideoElem.h in Headers */,
+				7A366C79F00849F36EF83F0B31C68A6E /* OpenIMSDK.h in Headers */,
+				16CC427093CE09F879561F11238C085A /* OpenIMSDK-umbrella.h in Headers */,
+				05C2F1443184466A943591154955D0D1 /* SendMessageCallbackProxy.h in Headers */,
+				798802F71E005751FEA1036DC398B9A8 /* UploadFileCallbackProxy.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AEB1F75806A4ECCBE2B764F31707E8D7 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8DEEB14ADAB3484C323DFEF17D67A518 /* Pods-RaverMVP-umbrella.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		0028E46539689892CC926BB8D811EF54 /* OpenIMSDK */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 02C59A14CDF8B3FAADB6D948935A644D /* Build configuration list for PBXNativeTarget "OpenIMSDK" */;
+			buildPhases = (
+				833DCDF93248A958EF47196BB6205126 /* Headers */,
+				F7560DB6A2B6BB388140846E54CE6F5C /* Sources */,
+				0DFEBF6D5E3C7C73145E1449BA46D43A /* Frameworks */,
+				D985C938ABF056923E1204B0C9199C85 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				916E050FB54E991B1DED66A194B0757A /* PBXTargetDependency */,
+				F968E6970B3CF073960D4E9897E62EDC /* PBXTargetDependency */,
+			);
+			name = OpenIMSDK;
+			productName = OpenIMSDK;
+			productReference = 1D6CFC15839ACA2CFFE42FF0D4017A07 /* OpenIMSDK */;
+			productType = "com.apple.product-type.framework";
+		};
+		4D3BA58D0583DF37575CACAB3DDADC85 /* MJExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DB7BBDBF675823FB11CE464D13293ECD /* Build configuration list for PBXNativeTarget "MJExtension" */;
+			buildPhases = (
+				6377FF3F62D2469BCB9F55CD732EBABC /* Headers */,
+				74C143096B9FE117FADD051DD20CC051 /* Sources */,
+				1053BE406C9C378477637413389D10F7 /* Frameworks */,
+				2E36644F178193E82D518CC7807F319B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				700D53FD344FBB464387D92EACCD90FA /* PBXTargetDependency */,
+			);
+			name = MJExtension;
+			productName = MJExtension;
+			productReference = 2B276B0A79173A1D6E83C9B4FB9A4A57 /* MJExtension */;
+			productType = "com.apple.product-type.framework";
+		};
+		8B6C46B4B0FAAD6C1A0201255DB40D4D /* Pods-RaverMVP */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3CE5A50A91FED820E5A935F2266AB004 /* Build configuration list for PBXNativeTarget "Pods-RaverMVP" */;
+			buildPhases = (
+				AEB1F75806A4ECCBE2B764F31707E8D7 /* Headers */,
+				C3F2215BC4352D296F9F8D93EA78EE25 /* Sources */,
+				652074BBB4AB3A278D18B241BC90E56E /* Frameworks */,
+				1F1BC8E317FAE4C3D5EC2C17CAF9A61B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6D0B204972E0B5D949AE173ABB95918B /* PBXTargetDependency */,
+				4B8CDB99AB07E1DFCE46E9864E3CDC9F /* PBXTargetDependency */,
+				861CDC80DC7005D412A950CFC340C6F9 /* PBXTargetDependency */,
+			);
+			name = "Pods-RaverMVP";
+			productName = Pods_RaverMVP;
+			productReference = 1D69344D5C325F6D0720667CAF49E4D4 /* Pods-RaverMVP */;
+			productType = "com.apple.product-type.framework";
+		};
+		B32AF3F43989CBA171BB1FB3957A4509 /* MJExtension-MJExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ECD54F1C7C3FC9557E82BD4352CB5A8D /* Build configuration list for PBXNativeTarget "MJExtension-MJExtension" */;
+			buildPhases = (
+				C9B4E3CBE6140B2346EA58B6DFF1DDB6 /* Sources */,
+				E3506E696CB57CF9478365BC5F3A120A /* Frameworks */,
+				41984D4CE45777ADB3E28E79BE7C7DA1 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "MJExtension-MJExtension";
+			productName = MJExtension;
+			productReference = 43EAAD2AB7E6B407E80E95F643F93D22 /* MJExtension-MJExtension */;
+			productType = "com.apple.product-type.bundle";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BFDFE7DC352907FC980B868725387E98 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = 4821239608C13582E20E6DA73FD5F1F9 /* Build configuration list for PBXProject "Pods" */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = CF1408CF629C7361332E53B88F7BD30C;
+			minimizedProjectReferenceProxies = 0;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = FBAF91B5B23A07469C269881199D7CE9 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4D3BA58D0583DF37575CACAB3DDADC85 /* MJExtension */,
+				B32AF3F43989CBA171BB1FB3957A4509 /* MJExtension-MJExtension */,
+				0028E46539689892CC926BB8D811EF54 /* OpenIMSDK */,
+				0E87F100EFC3B44F5BB5AF12375D07F1 /* OpenIMSDKCore */,
+				8B6C46B4B0FAAD6C1A0201255DB40D4D /* Pods-RaverMVP */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1F1BC8E317FAE4C3D5EC2C17CAF9A61B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2E36644F178193E82D518CC7807F319B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		41984D4CE45777ADB3E28E79BE7C7DA1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CD53A651B66F3AC1A45F49B5BF5F0DBB /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D985C938ABF056923E1204B0C9199C85 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		3086088BBF0946FE2A05B783142D4D6F /* [CP] Copy XCFrameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/OpenIMSDKCore/OpenIMSDKCore-xcframeworks-input-files.xcfilelist",
+			);
+			name = "[CP] Copy XCFrameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/OpenIMSDKCore/OpenIMSDKCore-xcframeworks-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/OpenIMSDKCore/OpenIMSDKCore-xcframeworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		74C143096B9FE117FADD051DD20CC051 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				09E7A90FB3F07BB8C752B0C74D866643 /* MJExtension-dummy.m in Sources */,
+				C60EC74042996CB1CB1ECF6EAA642372 /* MJExtensionConst.m in Sources */,
+				5D7E849A018F61621B78F76D64063F98 /* MJFoundation.m in Sources */,
+				8385174309933447A5EDBDEE95BE31EF /* MJProperty.m in Sources */,
+				FFC15BB2392CA5D560BA4A66C8F624EA /* MJPropertyKey.m in Sources */,
+				A1B9F6EEF6C55476EA99FAE120274B2F /* MJPropertyType.m in Sources */,
+				599414177DF1030663EFC5A430FDDE57 /* NSObject+MJClass.m in Sources */,
+				6A65A82E68C189E50B1097C4802FCCFB /* NSObject+MJCoding.m in Sources */,
+				CE5B659A4A205A83F45732FE734FBE4E /* NSObject+MJKeyValue.m in Sources */,
+				9525A6A2C41573F215C275041F090AA4 /* NSObject+MJProperty.m in Sources */,
+				A0034878F89732B4AED408F487A1EF35 /* NSString+MJExtension.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C3F2215BC4352D296F9F8D93EA78EE25 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7A71AAC5815E5298DEF632D6B49F2BA2 /* Pods-RaverMVP-dummy.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C9B4E3CBE6140B2346EA58B6DFF1DDB6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F7560DB6A2B6BB388140846E54CE6F5C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C7715123861E25EAB3E44E72397CECE5 /* CallbackProxy.m in Sources */,
+				B186A7028D06E8C1196CE78DC5CCBA97 /* OIMAtElem.m in Sources */,
+				E6A94F529B95809112533914EC89CF36 /* OIMAttachedInfoElem.m in Sources */,
+				84F3F943906105FE27ADCB8177D997CC /* OIMCallbacker.m in Sources */,
+				D6748A967D1B41C6C74B8987F21CE201 /* OIMCallbacker+Closure.m in Sources */,
+				9D8BF11B27F90EE2FEC8E030D8D324C7 /* OIMConversationInfo.m in Sources */,
+				EBC4FC6407FF65199FF804F8076DE315 /* OIMCustomElem.m in Sources */,
+				1463FCD0976200B9E656F31FC5803F5C /* OIMFaceElem.m in Sources */,
+				79DF74409328C4173E4C3678B2E8E0BF /* OIMFileElem.m in Sources */,
+				DC1380F89C13E6AD588136A434F3A572 /* OIMFriendApplication.m in Sources */,
+				0D97A8A4AC6C7B5ECBC2120ADDF396E3 /* OIMFullUserInfo.m in Sources */,
+				803C8DBF8B2FF6B70E15E0B31A992827 /* OIMGCDMulticastDelegate.m in Sources */,
+				5B9F6CF9C6FB7194478B84FB5ADE24E3 /* OIMGroupApplicationInfo.m in Sources */,
+				9E8ABB2490C30D6462B91C63A60D4A03 /* OIMGroupInfo.m in Sources */,
+				A55FA53F690C15B96D16270FA0DDCA61 /* OIMGroupMemberInfo.m in Sources */,
+				1C016469B5AA70C08BDFECAA27EAB051 /* OIMLocationElem.m in Sources */,
+				8E2CA0865DE0A2AAF339EE30A9B44B56 /* OIMManager.m in Sources */,
+				9D3503AD6B9B4367B93A5B548AA24040 /* OIMManager+Connection.m in Sources */,
+				5DEE0A7469BAACD2EA71A8DE205D333E /* OIMManager+Conversation.m in Sources */,
+				9E1B9E12EB2FA47D31C61522122C6CF5 /* OIMManager+Friend.m in Sources */,
+				1D2D66E3331F77A55BB82C3920F7C40C /* OIMManager+Group.m in Sources */,
+				5EA055EF73E9639BBE8A176CF6167602 /* OIMManager+Login.m in Sources */,
+				CE8BB3B50C1DDEFF60DD465EABC40A50 /* OIMManager+Message.m in Sources */,
+				685573DE5F3B2F837EAB992129C06732 /* OIMManager+User.m in Sources */,
+				042116C407630C22F93E1349008E29F8 /* OIMMergeElem.m in Sources */,
+				3540E178FA1028BA33C5308A5E70B24A /* OIMMessageElem.m in Sources */,
+				02E3116300863BD1C354A8D903D7565B /* OIMMessageInfo.m in Sources */,
+				AFAC54AB9B003E85E8D1D3E076D2ACDD /* OIMNotificationElem.m in Sources */,
+				3345899CAB69BA4C8E09CEE3C7BD8270 /* OIMPictureElem.m in Sources */,
+				B673D2E104D413AA84CF2924084B4596 /* OIMQuoteElem.m in Sources */,
+				3FBA98216749EFB55B3D7FFEFE2681B2 /* OIMReachability.m in Sources */,
+				AF28EF187B5278B9BBDBA36DE7452166 /* OIMSearchParam.m in Sources */,
+				7FADE3B72EDEC6913DC839D679C7578F /* OIMSearchResultInfo.m in Sources */,
+				8094FC31D39D05DD242F6D843FB6EEE6 /* OIMSimpleRequstInfo.m in Sources */,
+				69C938D0947A9B1BC57063E62FD6FD80 /* OIMSimpleResultInfo.m in Sources */,
+				B0ED3A9AFF050F528F62FA62A2ED867E /* OIMSoundElem.m in Sources */,
+				1B87A741E524BA00E3CFD3A38E24F71A /* OIMUpdateFriendsReq.m in Sources */,
+				C7D693676710714878F4633AE77C881B /* OIMUserInfo.m in Sources */,
+				4533898C4946124EA1F111F1835EC6BE /* OIMVideoElem.m in Sources */,
+				86B7946E6E92C0BB75E233F860B24D60 /* OpenIMSDK-dummy.m in Sources */,
+				4C76A7083CB882DBA6D7AB708AF8A300 /* SendMessageCallbackProxy.m in Sources */,
+				5A59B9480008B1E5D4A86DB270FAB470 /* UploadFileCallbackProxy.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		4B8CDB99AB07E1DFCE46E9864E3CDC9F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = OpenIMSDK;
+			target = 0028E46539689892CC926BB8D811EF54 /* OpenIMSDK */;
+			targetProxy = B3157EA7A0BFBD0F138F08462B4E9C9F /* PBXContainerItemProxy */;
+		};
+		6D0B204972E0B5D949AE173ABB95918B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = MJExtension;
+			target = 4D3BA58D0583DF37575CACAB3DDADC85 /* MJExtension */;
+			targetProxy = 64B55C5463AA0A89B4BBE124ED7B1CE8 /* PBXContainerItemProxy */;
+		};
+		700D53FD344FBB464387D92EACCD90FA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "MJExtension-MJExtension";
+			target = B32AF3F43989CBA171BB1FB3957A4509 /* MJExtension-MJExtension */;
+			targetProxy = C7DE87C2A8550A4EC7DC47E395B66F37 /* PBXContainerItemProxy */;
+		};
+		861CDC80DC7005D412A950CFC340C6F9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = OpenIMSDKCore;
+			target = 0E87F100EFC3B44F5BB5AF12375D07F1 /* OpenIMSDKCore */;
+			targetProxy = 0641191CF0DAA667936880D57B222A7A /* PBXContainerItemProxy */;
+		};
+		916E050FB54E991B1DED66A194B0757A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = MJExtension;
+			target = 4D3BA58D0583DF37575CACAB3DDADC85 /* MJExtension */;
+			targetProxy = 7E3BBFB1AA6B9A029D089ABF68DD7E28 /* PBXContainerItemProxy */;
+		};
+		F968E6970B3CF073960D4E9897E62EDC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = OpenIMSDKCore;
+			target = 0E87F100EFC3B44F5BB5AF12375D07F1 /* OpenIMSDKCore */;
+			targetProxy = 32D81857856E61F891360DA5E4D10FF1 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		056DDE525A875E4C433CEF9313538D90 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 40F790690AB1763D22134F95047E30AA /* MJExtension.release.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_MODULE_VERIFIER = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_PREFIX_HEADER = "Target Support Files/MJExtension/MJExtension-prefix.pch";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Target Support Files/MJExtension/MJExtension-Info.plist";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACH_O_TYPE = staticlib;
+				MODULEMAP_FILE = "Target Support Files/MJExtension/MJExtension.modulemap";
+				PRODUCT_MODULE_NAME = MJExtension;
+				PRODUCT_NAME = MJExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ";
+				SWIFT_INSTALL_OBJC_HEADER = YES;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Release;
+		};
+		12D7E5C0030F997218A94C99582DB22D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = D7E7989F0A5941B0B416514C330A54C9 /* OpenIMSDK.debug.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_MODULE_VERIFIER = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_PREFIX_HEADER = "Target Support Files/OpenIMSDK/OpenIMSDK-prefix.pch";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Target Support Files/OpenIMSDK/OpenIMSDK-Info.plist";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACH_O_TYPE = staticlib;
+				MODULEMAP_FILE = "Target Support Files/OpenIMSDK/OpenIMSDK.modulemap";
+				PRODUCT_MODULE_NAME = OpenIMSDK;
+				PRODUCT_NAME = OpenIMSDK;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ";
+				SWIFT_INSTALL_OBJC_HEADER = YES;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Debug;
+		};
+		1730F5C44A6522F6AA3E5F154C9131D4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 40F790690AB1763D22134F95047E30AA /* MJExtension.release.xcconfig */;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/MJExtension";
+				IBSC_MODULE = MJExtension;
+				INFOPLIST_FILE = "Target Support Files/MJExtension/ResourceBundle-MJExtension-MJExtension-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				PRODUCT_NAME = MJExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		27BF15A03B3C5BA34D57647649DA2C8D /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = D08D040362F298BA124C867B21136BF3 /* OpenIMSDK.release.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_MODULE_VERIFIER = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_PREFIX_HEADER = "Target Support Files/OpenIMSDK/OpenIMSDK-prefix.pch";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Target Support Files/OpenIMSDK/OpenIMSDK-Info.plist";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACH_O_TYPE = staticlib;
+				MODULEMAP_FILE = "Target Support Files/OpenIMSDK/OpenIMSDK.modulemap";
+				PRODUCT_MODULE_NAME = OpenIMSDK;
+				PRODUCT_NAME = OpenIMSDK;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ";
+				SWIFT_INSTALL_OBJC_HEADER = YES;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Release;
+		};
+		55F6EFEDCC82AFC087B7C48906AEFE7A /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E4044126580CE48E14810BE281940BD1 /* OpenIMSDKCore.release.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		58C02DE558083B537DDB722FB7B69F83 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7B5214F73BCED8040D7A1A2EB02910F0 /* MJExtension.debug.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_MODULE_VERIFIER = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_PREFIX_HEADER = "Target Support Files/MJExtension/MJExtension-prefix.pch";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Target Support Files/MJExtension/MJExtension-Info.plist";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACH_O_TYPE = staticlib;
+				MODULEMAP_FILE = "Target Support Files/MJExtension/MJExtension.modulemap";
+				PRODUCT_MODULE_NAME = MJExtension;
+				PRODUCT_NAME = MJExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ";
+				SWIFT_INSTALL_OBJC_HEADER = YES;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Debug;
+		};
+		6A5C026ED62BBFE3380CD257EEFAEB20 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"POD_CONFIGURATION_DEBUG=1",
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRIP_INSTALLED_PRODUCT = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				SYMROOT = "${SRCROOT}/../build";
+			};
+			name = Debug;
+		};
+		BA6EB8705A015ACD43D4B64413449475 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7B5214F73BCED8040D7A1A2EB02910F0 /* MJExtension.debug.xcconfig */;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/MJExtension";
+				IBSC_MODULE = MJExtension;
+				INFOPLIST_FILE = "Target Support Files/MJExtension/ResourceBundle-MJExtension-MJExtension-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				PRODUCT_NAME = MJExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		D9BBAC62C522B87A345B55A89DA52AE0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C1C64CEAC10393C2B1E56A19030EC2AC /* Pods-RaverMVP.debug.xcconfig */;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_MODULE_VERIFIER = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = "Target Support Files/Pods-RaverMVP/Pods-RaverMVP-Info.plist";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACH_O_TYPE = staticlib;
+				MODULEMAP_FILE = "Target Support Files/Pods-RaverMVP/Pods-RaverMVP.modulemap";
+				OTHER_LDFLAGS = "";
+				OTHER_LIBTOOLFLAGS = "";
+				PODS_ROOT = "$(SRCROOT)";
+				PRODUCT_BUNDLE_IDENTIFIER = "org.cocoapods.${PRODUCT_NAME:rfc1034identifier}";
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Debug;
+		};
+		DAD142D6BFFFE58695698729420804BF /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C4B8E4D07FA086DDFFA08FC4C73B7B7A /* Pods-RaverMVP.release.xcconfig */;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_MODULE_VERIFIER = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = "Target Support Files/Pods-RaverMVP/Pods-RaverMVP-Info.plist";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACH_O_TYPE = staticlib;
+				MODULEMAP_FILE = "Target Support Files/Pods-RaverMVP/Pods-RaverMVP.modulemap";
+				OTHER_LDFLAGS = "";
+				OTHER_LIBTOOLFLAGS = "";
+				PODS_ROOT = "$(SRCROOT)";
+				PRODUCT_BUNDLE_IDENTIFIER = "org.cocoapods.${PRODUCT_NAME:rfc1034identifier}";
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Release;
+		};
+		E873CA97BD124B21839AF13C9BE1CD18 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"POD_CONFIGURATION_RELEASE=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRIP_INSTALLED_PRODUCT = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				SYMROOT = "${SRCROOT}/../build";
+			};
+			name = Release;
+		};
+		E9706653C7C49BF815CFB8E1212EE778 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 830964B3F6ED78B771758BFE0716C67B /* OpenIMSDKCore.debug.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		02C59A14CDF8B3FAADB6D948935A644D /* Build configuration list for PBXNativeTarget "OpenIMSDK" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				12D7E5C0030F997218A94C99582DB22D /* Debug */,
+				27BF15A03B3C5BA34D57647649DA2C8D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3CE5A50A91FED820E5A935F2266AB004 /* Build configuration list for PBXNativeTarget "Pods-RaverMVP" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D9BBAC62C522B87A345B55A89DA52AE0 /* Debug */,
+				DAD142D6BFFFE58695698729420804BF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4821239608C13582E20E6DA73FD5F1F9 /* Build configuration list for PBXProject "Pods" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6A5C026ED62BBFE3380CD257EEFAEB20 /* Debug */,
+				E873CA97BD124B21839AF13C9BE1CD18 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DB7BBDBF675823FB11CE464D13293ECD /* Build configuration list for PBXNativeTarget "MJExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				58C02DE558083B537DDB722FB7B69F83 /* Debug */,
+				056DDE525A875E4C433CEF9313538D90 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ECD54F1C7C3FC9557E82BD4352CB5A8D /* Build configuration list for PBXNativeTarget "MJExtension-MJExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BA6EB8705A015ACD43D4B64413449475 /* Debug */,
+				1730F5C44A6522F6AA3E5F154C9131D4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FEC2AD93CCCDCC2DD410DF90571765BE /* Build configuration list for PBXAggregateTarget "OpenIMSDKCore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E9706653C7C49BF815CFB8E1212EE778 /* Debug */,
+				55F6EFEDCC82AFC087B7C48906AEFE7A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = BFDFE7DC352907FC980B868725387E98 /* Project object */;
+}

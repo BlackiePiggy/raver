@@ -1,6 +1,9 @@
 import Foundation
 
 actor MockSocialService: SocialService {
+    private let mockAccessToken = "mock_token"
+    private let mockRefreshToken = "mock_refresh_token"
+
     private var currentUser = UserSummary(
         id: "u_me",
         username: "blackie",
@@ -22,6 +25,8 @@ actor MockSocialService: SocialService {
     private var followingByUserID: [String: Set<String>] = [:]
     private var likeActionAtByPostID: [String: Date] = [:]
     private var repostActionAtByPostID: [String: Date] = [:]
+    private var saveActionAtByPostID: [String: Date] = [:]
+    private var hiddenPostIDs: Set<String> = []
 
     init() {
         let seed = Self.makeSeed()
@@ -38,6 +43,13 @@ actor MockSocialService: SocialService {
         followingByUserID = seed.followingByUserID
         likeActionAtByPostID = seed.likeActionAtByPostID
         repostActionAtByPostID = seed.repostActionAtByPostID
+    }
+
+    func restoreSession() async -> Session? {
+        guard SessionTokenStore.shared.token != nil, SessionTokenStore.shared.refreshToken != nil else {
+            return nil
+        }
+        return issueMockSession()
     }
 
     func login(username: String, password: String) async throws -> Session {
@@ -63,7 +75,20 @@ actor MockSocialService: SocialService {
         for index in posts.indices where posts[index].author.id == currentUser.id {
             posts[index].author.avatarURL = currentUser.avatarURL
         }
-        return Session(token: "mock_token", user: currentUser)
+        return issueMockSession()
+    }
+
+    func loginWithSms(phoneNumber: String, code: String) async throws -> Session {
+        _ = code
+        let digits = phoneNumber.filter(\.isNumber)
+        let suffix = digits.suffix(4)
+        let generatedUsername = suffix.isEmpty ? "sms_user" : "sms_\(suffix)"
+        return try await login(username: generatedUsername, password: "mock")
+    }
+
+    func sendLoginSmsCode(phoneNumber: String) async throws -> Int {
+        _ = phoneNumber
+        return 300
     }
 
     func register(username: String, email: String, password: String, displayName: String) async throws -> Session {
@@ -94,14 +119,62 @@ actor MockSocialService: SocialService {
         )
 
         applyCurrentFollowFlags()
-        return Session(token: "mock_token", user: currentUser)
+        return issueMockSession()
     }
 
-    func logout() async {}
+    func logout() async {
+        SessionTokenStore.shared.clear()
+    }
 
-    func fetchFeed(cursor: String?) async throws -> FeedPage {
+    private func issueMockSession() -> Session {
+        SessionTokenStore.shared.token = mockAccessToken
+        SessionTokenStore.shared.refreshToken = mockRefreshToken
+        return Session(token: mockAccessToken, refreshToken: mockRefreshToken, user: currentUser)
+    }
+
+    func fetchOpenIMBootstrap() async throws -> OpenIMBootstrap {
+        OpenIMBootstrap(
+            enabled: false,
+            userID: "u_mock_me",
+            token: nil,
+            apiURL: AppConfig.bffBaseURL.absoluteString,
+            wsURL: "ws://localhost:10001",
+            platformID: 1,
+            systemUserID: "raver_system",
+            expiresAt: nil
+        )
+    }
+
+    func fetchFeed(cursor: String?, mode: FeedMode?) async throws -> FeedPage {
         _ = cursor
-        let sorted = posts.sorted(by: { $0.createdAt > $1.createdAt })
+        let targetMode = mode ?? .recommended
+        let visible = posts.filter { !hiddenPostIDs.contains($0.id) }
+        let sorted: [Post]
+        switch targetMode {
+        case .recommended:
+            sorted = visible
+                .sorted {
+                    let lhsScore = Double($0.likeCount + $0.commentCount * 2 + $0.repostCount * 2 + $0.saveCount * 2 + $0.shareCount * 2)
+                    let rhsScore = Double($1.likeCount + $1.commentCount * 2 + $1.repostCount * 2 + $1.saveCount * 2 + $1.shareCount * 2)
+                    if lhsScore == rhsScore {
+                        return $0.createdAt > $1.createdAt
+                    }
+                    return lhsScore > rhsScore
+                }
+                .map { post in
+                    var copied = post
+                    copied.recommendationReasonCode = "trending"
+                    copied.recommendationReason = L("热门推荐", "Trending for you")
+                    return copied
+                }
+        case .following:
+            sorted = visible
+                .filter { $0.author.isFollowing }
+                .sorted(by: { $0.createdAt > $1.createdAt })
+        case .latest:
+            sorted = visible
+                .sorted(by: { $0.createdAt > $1.createdAt })
+        }
         return FeedPage(posts: sorted, nextCursor: nil)
     }
 
@@ -112,9 +185,10 @@ actor MockSocialService: SocialService {
         }
 
         let filtered = posts.filter { post in
-            post.content.lowercased().contains(normalized) ||
+            !hiddenPostIDs.contains(post.id) &&
+            (post.content.lowercased().contains(normalized) ||
                 post.author.username.lowercased().contains(normalized) ||
-                post.author.displayName.lowercased().contains(normalized)
+                post.author.displayName.lowercased().contains(normalized))
         }
         return FeedPage(posts: filtered.sorted(by: { $0.createdAt > $1.createdAt }), nextCursor: nil)
     }
@@ -234,6 +308,52 @@ actor MockSocialService: SocialService {
         return post
     }
 
+    func toggleSave(postID: String, shouldSave: Bool) async throws -> Post {
+        guard let index = posts.firstIndex(where: { $0.id == postID }) else {
+            throw ServiceError.message("动态不存在")
+        }
+
+        var post = posts[index]
+        if shouldSave && !post.isSaved {
+            post.isSaved = true
+            post.saveCount += 1
+            saveActionAtByPostID[postID] = Date()
+        } else if !shouldSave && post.isSaved {
+            post.isSaved = false
+            post.saveCount = max(0, post.saveCount - 1)
+            saveActionAtByPostID.removeValue(forKey: postID)
+        }
+
+        posts[index] = post
+        return post
+    }
+
+    func recordShare(postID: String, channel: String, status: String) async throws -> Post {
+        _ = channel
+        guard let index = posts.firstIndex(where: { $0.id == postID }) else {
+            throw ServiceError.message("动态不存在")
+        }
+
+        var post = posts[index]
+        if status == "completed" {
+            post.shareCount += 1
+        }
+        posts[index] = post
+        return post
+    }
+
+    func hidePost(postID: String, reason: String?) async throws {
+        _ = reason
+        guard posts.contains(where: { $0.id == postID }) else {
+            throw ServiceError.message("动态不存在")
+        }
+        hiddenPostIDs.insert(postID)
+    }
+
+    func recordFeedEvent(input: FeedEventInput) async throws {
+        _ = input
+    }
+
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post {
         guard let index = posts.firstIndex(where: { $0.id == postID }) else {
             throw ServiceError.message("动态不存在")
@@ -258,7 +378,7 @@ actor MockSocialService: SocialService {
         commentsByPost[postID, default: []].sorted(by: { $0.createdAt < $1.createdAt })
     }
 
-    func addComment(postID: String, content: String) async throws -> Comment {
+    func addComment(postID: String, content: String, parentCommentID: String?) async throws -> Comment {
         guard let index = posts.firstIndex(where: { $0.id == postID }) else {
             throw ServiceError.message("动态不存在")
         }
@@ -268,10 +388,28 @@ actor MockSocialService: SocialService {
             throw ServiceError.message("评论不能为空")
         }
 
+        let existingComments = commentsByPost[postID, default: []]
+        let normalizedParentCommentID = parentCommentID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parentComment = normalizedParentCommentID.flatMap { parentID in
+            existingComments.first(where: { $0.id == parentID })
+        }
+
+        if normalizedParentCommentID != nil && parentComment == nil {
+            throw ServiceError.message("回复目标不存在")
+        }
+
+        let rootCommentID = parentComment.map { $0.rootCommentID ?? $0.id }
+        let depth = parentComment.map { min(max($0.depth, 0) + 1, 2) } ?? 0
+        let replyToAuthor = parentComment?.author
+
         let newComment = Comment(
             id: UUID().uuidString,
             postID: postID,
+            parentCommentID: parentComment?.id,
+            rootCommentID: rootCommentID,
+            depth: depth,
             author: currentUser,
+            replyToAuthor: replyToAuthor,
             content: trimmed,
             createdAt: Date()
         )
@@ -407,6 +545,115 @@ actor MockSocialService: SocialService {
     }
 
     func fetchMessages(conversationID: String) async throws -> [ChatMessage] {
+        normalizedMessagesForConversation(conversationID)
+    }
+
+    func fetchMessages(
+        conversationID: String,
+        startClientMsgID: String?,
+        count: Int
+    ) async throws -> ChatMessageHistoryPage {
+        let normalized = normalizedMessagesForConversation(conversationID)
+        let safeCount = max(1, count)
+
+        let base: [ChatMessage]
+        if let anchor = startClientMsgID,
+           let anchorIndex = normalized.firstIndex(where: { $0.id == anchor }) {
+            base = Array(normalized[..<anchorIndex])
+        } else {
+            base = normalized
+        }
+
+        let page = Array(base.suffix(safeCount))
+        let isEnd = base.count <= safeCount
+        return ChatMessageHistoryPage(messages: page, isEnd: isEnd)
+    }
+
+    func sendMessage(conversationID: String, content: String) async throws -> ChatMessage {
+        appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .text,
+            media: nil
+        )
+    }
+
+    func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        try await sendImageMessage(conversationID: conversationID, fileURL: fileURL, onProgress: nil)
+    }
+
+    func sendImageMessage(
+        conversationID: String,
+        fileURL: URL,
+        onProgress: ((Int) -> Void)?
+    ) async throws -> ChatMessage {
+        onProgress?(100)
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: L("[图片]", "[Image]"),
+            kind: .image,
+            media: ChatMessageMediaPayload(
+                mediaURL: fileURL.absoluteString,
+                thumbnailURL: fileURL.absoluteString
+            )
+        )
+    }
+
+    func sendVideoMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        try await sendVideoMessage(conversationID: conversationID, fileURL: fileURL, onProgress: nil)
+    }
+
+    func sendVideoMessage(
+        conversationID: String,
+        fileURL: URL,
+        onProgress: ((Int) -> Void)?
+    ) async throws -> ChatMessage {
+        onProgress?(100)
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: L("[视频]", "[Video]"),
+            kind: .video,
+            media: ChatMessageMediaPayload(
+                mediaURL: fileURL.absoluteString
+            )
+        )
+    }
+
+    private func appendOutgoingMessage(
+        conversationID: String,
+        content: String,
+        kind: ChatMessageKind,
+        media: ChatMessageMediaPayload?
+    ) -> ChatMessage {
+        var sender = currentUser
+        if let squad = squads.first(where: { $0.id == conversationID }),
+           let myMember = squad.members.first(where: { $0.id == currentUser.id }) {
+            sender.displayName = myMember.shownName
+        }
+
+        let message = ChatMessage(
+            id: UUID().uuidString,
+            conversationID: conversationID,
+            sender: sender,
+            content: content,
+            createdAt: Date(),
+            isMine: true,
+            kind: kind,
+            media: media
+        )
+
+        messagesByConversation[conversationID, default: []].append(message)
+
+        if let index = conversations.firstIndex(where: { $0.id == conversationID }) {
+            conversations[index].lastMessage = content
+            conversations[index].lastMessageSenderID = currentUser.id
+            conversations[index].updatedAt = Date()
+        }
+
+        return message
+    }
+
+    private func normalizedMessagesForConversation(_ conversationID: String) -> [ChatMessage] {
         let sorted = messagesByConversation[conversationID, default: []]
             .sorted(by: { $0.createdAt < $1.createdAt })
 
@@ -422,33 +669,6 @@ actor MockSocialService: SocialService {
             }
             return updated
         }
-    }
-
-    func sendMessage(conversationID: String, content: String) async throws -> ChatMessage {
-        var sender = currentUser
-        if let squad = squads.first(where: { $0.id == conversationID }),
-           let myMember = squad.members.first(where: { $0.id == currentUser.id }) {
-            sender.displayName = myMember.shownName
-        }
-
-        let message = ChatMessage(
-            id: UUID().uuidString,
-            conversationID: conversationID,
-            sender: sender,
-            content: content,
-            createdAt: Date(),
-            isMine: true
-        )
-
-        messagesByConversation[conversationID, default: []].append(message)
-
-        if let index = conversations.firstIndex(where: { $0.id == conversationID }) {
-            conversations[index].lastMessage = content
-            conversations[index].lastMessageSenderID = currentUser.id
-            conversations[index].updatedAt = Date()
-        }
-
-        return message
     }
 
     func fetchRecommendedSquads() async throws -> [SquadSummary] {
@@ -541,6 +761,45 @@ actor MockSocialService: SocialService {
         }
     }
 
+    func leaveSquad(squadID: String) async throws {
+        guard let index = squads.firstIndex(where: { $0.id == squadID }) else {
+            throw ServiceError.message("小队不存在")
+        }
+
+        if squads[index].leader.id == currentUser.id {
+            throw ServiceError.message("队长不能离开小队，请先转让队长")
+        }
+
+        guard squads[index].isMember else {
+            throw ServiceError.message("你还不是小队成员")
+        }
+
+        squads[index].isMember = false
+        squads[index].myRole = nil
+        squads[index].myNickname = nil
+        squads[index].myNotificationsEnabled = nil
+        squads[index].memberCount = max(0, squads[index].memberCount - 1)
+        squads[index].members.removeAll(where: { $0.id == currentUser.id })
+        squads[index].updatedAt = Date()
+
+        conversations.removeAll(where: { $0.id == squadID })
+        messagesByConversation.removeValue(forKey: squadID)
+    }
+
+    func disbandSquad(squadID: String) async throws {
+        guard let index = squads.firstIndex(where: { $0.id == squadID }) else {
+            throw ServiceError.message("小队不存在")
+        }
+
+        guard squads[index].leader.id == currentUser.id else {
+            throw ServiceError.message("只有队长可以解散小队")
+        }
+
+        squads.remove(at: index)
+        conversations.removeAll(where: { $0.id == squadID })
+        messagesByConversation.removeValue(forKey: squadID)
+    }
+
     func createSquad(input: CreateSquadInput) async throws -> Conversation {
         let selectedMemberIds = Array(
             Set(
@@ -549,6 +808,10 @@ actor MockSocialService: SocialService {
                     .filter { !$0.isEmpty && $0 != currentUser.id }
             )
         )
+
+        if selectedMemberIds.count < 2 {
+            throw ServiceError.message("创建小队至少需要 3 人，请至少选择 2 位好友。")
+        }
 
         let myFriendIds = friendIDs(for: currentUser.id)
         let hasNonFriend = selectedMemberIds.contains { !myFriendIds.contains($0) }
@@ -714,6 +977,104 @@ actor MockSocialService: SocialService {
         }
     }
 
+    func updateSquadMemberRole(squadID: String, memberUserID: String, role: String) async throws {
+        guard let squadIndex = squads.firstIndex(where: { $0.id == squadID }) else {
+            throw ServiceError.message("小队不存在")
+        }
+
+        let normalizedRole = role.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard ["leader", "admin", "member"].contains(normalizedRole) else {
+            throw ServiceError.message("role must be one of leader/admin/member")
+        }
+
+        guard let operatorMember = squads[squadIndex].members.first(where: { $0.id == currentUser.id }) else {
+            throw ServiceError.message("你不在这个小队")
+        }
+        guard operatorMember.role == "leader" else {
+            throw ServiceError.message("Only squad leader can update member role")
+        }
+
+        guard let targetIndex = squads[squadIndex].members.firstIndex(where: { $0.id == memberUserID }) else {
+            throw ServiceError.message("小队成员不存在")
+        }
+
+        let targetCurrentRole = squads[squadIndex].members[targetIndex].role
+        if targetCurrentRole == "leader", normalizedRole != "leader" {
+            throw ServiceError.message("Use leader transfer to update current leader role")
+        }
+
+        if normalizedRole == "leader" {
+            if memberUserID == currentUser.id {
+                return
+            }
+
+            guard let oldLeaderIndex = squads[squadIndex].members.firstIndex(where: { $0.id == currentUser.id }) else {
+                throw ServiceError.message("队长成员记录异常")
+            }
+
+            squads[squadIndex].members[oldLeaderIndex].role = "member"
+            squads[squadIndex].members[oldLeaderIndex].isCaptain = false
+            squads[squadIndex].members[oldLeaderIndex].isAdmin = false
+
+            squads[squadIndex].members[targetIndex].role = "leader"
+            squads[squadIndex].members[targetIndex].isCaptain = true
+            squads[squadIndex].members[targetIndex].isAdmin = true
+
+            let target = squads[squadIndex].members[targetIndex]
+            squads[squadIndex].leader = UserSummary(
+                id: target.id,
+                username: target.username,
+                displayName: target.displayName,
+                avatarURL: target.avatarURL,
+                isFollowing: target.isFollowing
+            )
+        } else {
+            squads[squadIndex].members[targetIndex].role = normalizedRole
+            squads[squadIndex].members[targetIndex].isCaptain = normalizedRole == "leader"
+            squads[squadIndex].members[targetIndex].isAdmin = normalizedRole == "leader" || normalizedRole == "admin"
+        }
+
+        if let myUpdatedRole = squads[squadIndex].members.first(where: { $0.id == currentUser.id })?.role {
+            squads[squadIndex].myRole = myUpdatedRole
+            squads[squadIndex].canEditGroup = (myUpdatedRole == "leader" || myUpdatedRole == "admin")
+        }
+        squads[squadIndex].updatedAt = Date()
+    }
+
+    func removeSquadMember(squadID: String, memberUserID: String) async throws {
+        guard let squadIndex = squads.firstIndex(where: { $0.id == squadID }) else {
+            throw ServiceError.message("小队不存在")
+        }
+
+        if memberUserID == currentUser.id {
+            throw ServiceError.message("Use leave action to quit squad yourself")
+        }
+
+        guard let operatorMember = squads[squadIndex].members.first(where: { $0.id == currentUser.id }) else {
+            throw ServiceError.message("你不在这个小队")
+        }
+        guard let targetIndex = squads[squadIndex].members.firstIndex(where: { $0.id == memberUserID }) else {
+            throw ServiceError.message("小队成员不存在")
+        }
+
+        let targetRole = squads[squadIndex].members[targetIndex].role
+        let canRemove: Bool
+        if operatorMember.role == "leader" {
+            canRemove = targetRole == "admin" || targetRole == "member"
+        } else if operatorMember.role == "admin" {
+            canRemove = targetRole == "member"
+        } else {
+            canRemove = false
+        }
+        guard canRemove else {
+            throw ServiceError.message("You do not have permission to remove this member")
+        }
+
+        squads[squadIndex].members.remove(at: targetIndex)
+        squads[squadIndex].memberCount = max(0, squads[squadIndex].memberCount - 1)
+        squads[squadIndex].updatedAt = Date()
+    }
+
     func fetchNotifications(limit: Int) async throws -> NotificationInbox {
         let normalized = max(1, min(limit, 50))
         let sorted = notifications.sorted(by: { $0.createdAt > $1.createdAt })
@@ -736,6 +1097,31 @@ actor MockSocialService: SocialService {
     func markNotificationRead(notificationID: String) async throws {
         guard let index = notifications.firstIndex(where: { $0.id == notificationID }) else { return }
         notifications[index].isRead = true
+    }
+
+    func markNotificationsRead(type: AppNotificationType) async throws {
+        for index in notifications.indices where notifications[index].type == type {
+            notifications[index].isRead = true
+        }
+    }
+
+    func registerDevicePushToken(
+        deviceID: String,
+        platform: String,
+        pushToken: String,
+        appVersion: String?,
+        locale: String?
+    ) async throws {
+        _ = deviceID
+        _ = platform
+        _ = pushToken
+        _ = appVersion
+        _ = locale
+    }
+
+    func deactivateDevicePushToken(deviceID: String, platform: String) async throws {
+        _ = deviceID
+        _ = platform
     }
 
     func fetchMyProfile() async throws -> UserProfile {
@@ -847,6 +1233,18 @@ actor MockSocialService: SocialService {
     func fetchMyRepostHistory(cursor: String?) async throws -> ActivityPostPage {
         _ = cursor
         let items = repostActionAtByPostID
+            .compactMap { postID, actionAt -> ActivityPostItem? in
+                guard let post = posts.first(where: { $0.id == postID }) else { return nil }
+                return ActivityPostItem(actionAt: actionAt, post: post)
+            }
+            .sorted(by: { $0.actionAt > $1.actionAt })
+
+        return ActivityPostPage(items: items, nextCursor: nil)
+    }
+
+    func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage {
+        _ = cursor
+        let items = saveActionAtByPostID
             .compactMap { postID, actionAt -> ActivityPostItem? in
                 guard let post = posts.first(where: { $0.id == postID }) else { return nil }
                 return ActivityPostItem(actionAt: actionAt, post: post)

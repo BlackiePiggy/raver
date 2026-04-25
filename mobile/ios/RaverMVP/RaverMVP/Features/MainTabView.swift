@@ -117,9 +117,7 @@ struct MainTabView: View {
                     router.switchTab(tab)
                 } label: {
                     VStack(spacing: 3) {
-                        Image(systemName: currentTab == tab ? tab.selectedIcon : tab.icon)
-                            .renderingMode(.template)
-                            .font(.system(size: 16, weight: .semibold))
+                        tabIcon(for: tab)
                         Text(tab.title)
                             .font(.system(size: 11, weight: currentTab == tab ? .semibold : .medium))
                             .lineLimit(1)
@@ -154,6 +152,7 @@ struct MainTabView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier(tab.accessibilityIdentifier)
             }
         }
         .animation(.interactiveSpring(response: 0.26, dampingFraction: 0.86), value: currentTab)
@@ -191,11 +190,68 @@ struct MainTabView: View {
         .shadow(color: RaverTheme.tabBarShadowAccent, radius: 12, x: 0, y: 2)
         .padding(.horizontal)
         .padding(.bottom, bottomSafeAreaInset == 0 ? 4 : -14)
+        .accessibilityIdentifier("mainTab.tabBar")
     }
 
+    private func tabIcon(for tab: MainTab) -> some View {
+        ZStack(alignment: .top) {
+            Image(systemName: currentTab == tab ? tab.selectedIcon : tab.icon)
+                .renderingMode(.template)
+                .font(.system(size: 16, weight: .semibold))
+
+            if tab == .messages {
+                TabUnreadBadge(
+                    count: appState.unreadMessagesCount,
+                    color: .red
+                )
+                .offset(x: 15, y: -8)
+            }
+        }
+        .frame(width: 48, height: 22)
+    }
+}
+
+private struct TabUnreadBadge: View {
+    let count: Int
+    let color: Color
+
+    var body: some View {
+        Group {
+            if count > 0 {
+                Text(displayText)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .padding(.horizontal, displayText.count > 1 ? 5 : 4)
+                    .frame(minWidth: 16, minHeight: 16)
+                    .background(color, in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.86), lineWidth: 1)
+                    )
+                    .shadow(color: color.opacity(0.35), radius: 4, x: 0, y: 1)
+                    .accessibilityLabel(L("未读消息 \(displayText)", "\(displayText) unread messages"))
+            }
+        }
+        .frame(width: 24, height: 16)
+    }
+
+    private var displayText: String {
+        count > 99 ? "99+" : "\(count)"
+    }
 }
 
 private extension MainTab {
+    var accessibilityIdentifier: String {
+        switch self {
+        case .discover: return "mainTab.tab.discover"
+        case .circle: return "mainTab.tab.circle"
+        case .messages: return "mainTab.tab.messages"
+        case .profile: return "mainTab.tab.profile"
+        }
+    }
+
     var title: String {
         switch self {
         case .discover: return L("发现", "Discover")

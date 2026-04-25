@@ -1,0 +1,9 @@
+platform :ios, '17.0'
+
+project 'RaverMVP.xcodeproj'
+
+use_frameworks! :linkage => :static
+
+target 'RaverMVP' do
+  pod 'OpenIMSDK', '3.8.3-hotfix.12'
+end

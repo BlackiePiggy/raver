@@ -1,11 +1,31 @@
 import Foundation
 
+private actor AuthRefreshGate {
+    private var inFlightTask: Task<Session, Error>?
+
+    func run(_ operation: @escaping () async throws -> Session) async throws -> Session {
+        if let inFlightTask {
+            return try await inFlightTask.value
+        }
+
+        let task = Task { try await operation() }
+        inFlightTask = task
+        defer { inFlightTask = nil }
+        return try await task.value
+    }
+}
+
 final class LiveSocialService: SocialService {
     private let baseURL: URL
     private let session: URLSession
+    private let refreshGate = AuthRefreshGate()
     private var token: String? {
         get { SessionTokenStore.shared.token }
         set { SessionTokenStore.shared.token = newValue }
+    }
+    private var refreshToken: String? {
+        get { SessionTokenStore.shared.refreshToken }
+        set { SessionTokenStore.shared.refreshToken = newValue }
     }
 
     init(baseURL: URL, session: URLSession = .shared) {
@@ -13,11 +33,65 @@ final class LiveSocialService: SocialService {
         self.session = session
     }
 
+    func restoreSession() async -> Session? {
+        guard refreshToken != nil else {
+            return nil
+        }
+
+        do {
+            let refreshed = try await refreshGate.run { [weak self] in
+                guard let self else { throw ServiceError.unauthorized }
+                return try await self.refreshSessionInternal()
+            }
+            return refreshed
+        } catch {
+            token = nil
+            refreshToken = nil
+            return nil
+        }
+    }
+
     func login(username: String, password: String) async throws -> Session {
         let body = ["username": username, "password": password]
-        let sessionResponse: Session = try await request(path: "/v1/auth/login", method: "POST", body: body)
+        let sessionResponse: Session = try await request(
+            path: "/v1/auth/login",
+            method: "POST",
+            body: body,
+            allowAuthRetry: false,
+            includeAccessToken: false,
+            postSessionExpiredOnUnauthorized: false
+        )
         token = sessionResponse.token
+        refreshToken = sessionResponse.refreshToken
         return sessionResponse
+    }
+
+    func loginWithSms(phoneNumber: String, code: String) async throws -> Session {
+        let body = ["phone": phoneNumber, "code": code]
+        let sessionResponse: Session = try await request(
+            path: "/v1/auth/sms/login",
+            method: "POST",
+            body: body,
+            allowAuthRetry: false,
+            includeAccessToken: false,
+            postSessionExpiredOnUnauthorized: false
+        )
+        token = sessionResponse.token
+        refreshToken = sessionResponse.refreshToken
+        return sessionResponse
+    }
+
+    func sendLoginSmsCode(phoneNumber: String) async throws -> Int {
+        let body = ["phone": phoneNumber, "scene": "login"]
+        let response: SmsCodeSendResponse = try await request(
+            path: "/v1/auth/sms/send",
+            method: "POST",
+            body: body,
+            allowAuthRetry: false,
+            includeAccessToken: false,
+            postSessionExpiredOnUnauthorized: false
+        )
+        return max(0, response.expiresInSeconds)
     }
 
     func register(username: String, email: String, password: String, displayName: String) async throws -> Session {
@@ -27,20 +101,51 @@ final class LiveSocialService: SocialService {
             "password": password,
             "displayName": displayName
         ]
-        let sessionResponse: Session = try await request(path: "/v1/auth/register", method: "POST", body: body)
+        let sessionResponse: Session = try await request(
+            path: "/v1/auth/register",
+            method: "POST",
+            body: body,
+            allowAuthRetry: false,
+            includeAccessToken: false,
+            postSessionExpiredOnUnauthorized: false
+        )
         token = sessionResponse.token
+        refreshToken = sessionResponse.refreshToken
         return sessionResponse
     }
 
     func logout() async {
+        if let refreshToken {
+            let body = ["refreshToken": refreshToken]
+            do {
+                let _: GenericSuccessResponse = try await request(
+                    path: "/v1/auth/logout",
+                    method: "POST",
+                    body: body,
+                    allowAuthRetry: false,
+                    includeAccessToken: false,
+                    postSessionExpiredOnUnauthorized: false
+                )
+            } catch {
+                // Ignore network/logout errors and always clear local session.
+            }
+        }
         token = nil
+        refreshToken = nil
     }
 
-    func fetchFeed(cursor: String?) async throws -> FeedPage {
+    func fetchOpenIMBootstrap() async throws -> OpenIMBootstrap {
+        try await request(path: "/v1/openim/bootstrap", method: "GET")
+    }
+
+    func fetchFeed(cursor: String?, mode: FeedMode?) async throws -> FeedPage {
         var queryItems = ["limit=12"]
         if let cursor {
             let encoded = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor
             queryItems.append("cursor=\(encoded)")
+        }
+        if let mode {
+            queryItems.append("mode=\(mode.rawValue)")
         }
         let path = "/v1/feed?\(queryItems.joined(separator: "&"))"
         return try await request(path: path, method: "GET")
@@ -71,12 +176,44 @@ final class LiveSocialService: SocialService {
         try await request(path: "/v1/feed/posts/\(postID)/like", method: shouldLike ? "POST" : "DELETE")
     }
 
+    func toggleSave(postID: String, shouldSave: Bool) async throws -> Post {
+        try await request(path: "/v1/feed/posts/\(postID)/save", method: shouldSave ? "POST" : "DELETE")
+    }
+
+    func recordShare(postID: String, channel: String, status: String) async throws -> Post {
+        try await request(
+            path: "/v1/feed/posts/\(postID)/share",
+            method: "POST",
+            body: ["channel": channel, "status": status]
+        )
+    }
+
+    func hidePost(postID: String, reason: String?) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/feed/posts/\(postID)/hide",
+            method: "POST",
+            body: ["reason": reason ?? "not_relevant"]
+        )
+    }
+
+    func recordFeedEvent(input: FeedEventInput) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/feed/events",
+            method: "POST",
+            body: input
+        )
+    }
+
     func fetchComments(postID: String) async throws -> [Comment] {
         try await request(path: "/v1/feed/posts/\(postID)/comments", method: "GET")
     }
 
-    func addComment(postID: String, content: String) async throws -> Comment {
-        try await request(path: "/v1/feed/posts/\(postID)/comments", method: "POST", body: ["content": content])
+    func addComment(postID: String, content: String, parentCommentID: String?) async throws -> Comment {
+        var body: [String: String] = ["content": content]
+        if let parentCommentID, !parentCommentID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            body["parentCommentID"] = parentCommentID
+        }
+        return try await request(path: "/v1/feed/posts/\(postID)/comments", method: "POST", body: body)
     }
 
     func searchUsers(query: String) async throws -> [UserSummary] {
@@ -121,14 +258,31 @@ final class LiveSocialService: SocialService {
     }
 
     func fetchConversations(type: ConversationType) async throws -> [Conversation] {
-        try await request(path: "/v1/chat/conversations?type=\(type.rawValue)", method: "GET")
+        if let conversations = try await OpenIMSession.shared.fetchConversations(type: type) {
+            return conversations
+        }
+        throw await openIMUnavailableError(for: "fetch conversations")
     }
 
     func markConversationRead(conversationID: String) async throws {
-        let _: GenericSuccessResponse = try await request(
-            path: "/v1/chat/conversations/\(conversationID)/read",
-            method: "POST"
-        )
+        if try await OpenIMSession.shared.markConversationRead(conversationID: conversationID) {
+            return
+        }
+        throw await openIMUnavailableError(for: "mark conversation read")
+    }
+
+    func setConversationMuted(conversationID: String, muted: Bool) async throws {
+        if try await OpenIMSession.shared.setConversationMuted(conversationID: conversationID, muted: muted) {
+            return
+        }
+        throw await openIMUnavailableError(for: "set conversation muted")
+    }
+
+    func clearConversationHistory(conversationID: String) async throws {
+        if try await OpenIMSession.shared.clearConversationHistory(conversationID: conversationID) {
+            return
+        }
+        throw await openIMUnavailableError(for: "clear conversation history")
     }
 
     func startDirectConversation(identifier: String) async throws -> Conversation {
@@ -140,11 +294,72 @@ final class LiveSocialService: SocialService {
     }
 
     func fetchMessages(conversationID: String) async throws -> [ChatMessage] {
-        try await request(path: "/v1/chat/conversations/\(conversationID)/messages", method: "GET")
+        let page = try await fetchMessages(
+            conversationID: conversationID,
+            startClientMsgID: nil,
+            count: 50
+        )
+        return page.messages
+    }
+
+    func fetchMessages(
+        conversationID: String,
+        startClientMsgID: String?,
+        count: Int
+    ) async throws -> ChatMessageHistoryPage {
+        if let page = try await OpenIMSession.shared.fetchMessagesPage(
+            conversationID: conversationID,
+            startClientMsgID: startClientMsgID,
+            count: count
+        ) {
+            return ChatMessageHistoryPage(messages: page.messages, isEnd: page.isEnd)
+        }
+        throw await openIMUnavailableError(for: "fetch messages")
     }
 
     func sendMessage(conversationID: String, content: String) async throws -> ChatMessage {
-        try await request(path: "/v1/chat/conversations/\(conversationID)/messages", method: "POST", body: ["content": content])
+        if let message = try await OpenIMSession.shared.sendTextMessage(conversationID: conversationID, content: content) {
+            return message
+        }
+        throw await openIMUnavailableError(for: "send message")
+    }
+
+    func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        try await sendImageMessage(conversationID: conversationID, fileURL: fileURL, onProgress: nil)
+    }
+
+    func sendImageMessage(
+        conversationID: String,
+        fileURL: URL,
+        onProgress: ((Int) -> Void)?
+    ) async throws -> ChatMessage {
+        if let message = try await OpenIMSession.shared.sendImageMessage(
+            conversationID: conversationID,
+            fileURL: fileURL,
+            onProgress: onProgress
+        ) {
+            return message
+        }
+        throw await openIMUnavailableError(for: "send image message")
+    }
+
+    func sendVideoMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        try await sendVideoMessage(conversationID: conversationID, fileURL: fileURL, onProgress: nil)
+    }
+
+    func sendVideoMessage(
+        conversationID: String,
+        fileURL: URL,
+        onProgress: ((Int) -> Void)?
+    ) async throws -> ChatMessage {
+        if let message = try await OpenIMSession.shared.sendVideoMessage(
+            conversationID: conversationID,
+            fileURL: fileURL,
+            onProgress: onProgress
+        ) {
+            return message
+        }
+        throw await openIMUnavailableError(for: "send video message")
     }
 
     func fetchRecommendedSquads() async throws -> [SquadSummary] {
@@ -161,6 +376,14 @@ final class LiveSocialService: SocialService {
 
     func joinSquad(squadID: String) async throws {
         let _: JoinSquadResponse = try await request(path: "/v1/squads/\(squadID)/join", method: "POST")
+    }
+
+    func leaveSquad(squadID: String) async throws {
+        let _: GenericSuccessResponse = try await request(path: "/v1/squads/\(squadID)/leave", method: "POST")
+    }
+
+    func disbandSquad(squadID: String) async throws {
+        let _: GenericSuccessResponse = try await request(path: "/v1/squads/\(squadID)/disband", method: "POST")
     }
 
     func createSquad(input: CreateSquadInput) async throws -> Conversation {
@@ -198,20 +421,97 @@ final class LiveSocialService: SocialService {
         )
     }
 
+    func updateSquadMemberRole(squadID: String, memberUserID: String, role: String) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/squads/\(squadID)/members/\(memberUserID)/role",
+            method: "PATCH",
+            body: ["role": role]
+        )
+    }
+
+    func removeSquadMember(squadID: String, memberUserID: String) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/squads/\(squadID)/members/\(memberUserID)/remove",
+            method: "POST"
+        )
+    }
+
     func fetchNotifications(limit: Int) async throws -> NotificationInbox {
         let normalized = max(1, min(50, limit))
-        return try await request(path: "/v1/notifications?limit=\(normalized)", method: "GET")
+        async let inboxResponse: NotificationCenterInboxResponse = request(
+            path: "/v1/notification-center/inbox?limit=\(normalized)",
+            method: "GET"
+        )
+        async let unreadResponse: NotificationCenterUnreadCountResponse = request(
+            path: "/v1/notification-center/inbox/unread-count",
+            method: "GET"
+        )
+        let (inbox, unread) = try await (inboxResponse, unreadResponse)
+
+        let items = inbox.items.compactMap(mapNotificationCenterInboxItem(_:))
+        let effectiveTotal = max(0, unread.communityTotal ?? unread.total)
+        return NotificationInbox(unreadCount: effectiveTotal, items: items)
     }
 
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount {
-        try await request(path: "/v1/notifications/unread-count", method: "GET")
+        let response: NotificationCenterUnreadCountResponse = try await request(
+            path: "/v1/notification-center/inbox/unread-count",
+            method: "GET"
+        )
+        let effectiveTotal = max(0, response.communityTotal ?? response.total)
+        return NotificationUnreadCount(
+            total: effectiveTotal,
+            follows: max(0, response.follows ?? 0),
+            likes: max(0, response.likes ?? 0),
+            comments: max(0, response.comments ?? 0),
+            squadInvites: max(0, response.squadInvites ?? 0)
+        )
     }
 
     func markNotificationRead(notificationID: String) async throws {
         let _: GenericSuccessResponse = try await request(
-            path: "/v1/notifications/read",
+            path: "/v1/notification-center/inbox/read",
             method: "POST",
-            body: ["notificationId": notificationID]
+            body: ["inboxId": notificationID]
+        )
+    }
+
+    func markNotificationsRead(type: AppNotificationType) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/notification-center/inbox/read",
+            method: "POST",
+            body: ["notificationType": type.rawValue]
+        )
+    }
+
+    func registerDevicePushToken(
+        deviceID: String,
+        platform: String,
+        pushToken: String,
+        appVersion: String?,
+        locale: String?
+    ) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/notification-center/push-tokens",
+            method: "POST",
+            body: [
+                "deviceId": deviceID,
+                "platform": platform,
+                "pushToken": pushToken,
+                "appVersion": appVersion ?? "",
+                "locale": locale ?? ""
+            ]
+        )
+    }
+
+    func deactivateDevicePushToken(deviceID: String, platform: String) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/notification-center/push-tokens",
+            method: "DELETE",
+            body: [
+                "deviceId": deviceID,
+                "platform": platform
+            ]
         )
     }
 
@@ -249,6 +549,14 @@ final class LiveSocialService: SocialService {
         return try await request(path: path, method: "GET")
     }
 
+    func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage {
+        var path = "/v1/profile/me/saves"
+        if let cursor {
+            path += "?cursor=\(cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor)"
+        }
+        return try await request(path: path, method: "GET")
+    }
+
     func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary {
         try await request(path: "/v1/social/users/\(userID)/follow", method: shouldFollow ? "POST" : "DELETE")
     }
@@ -257,33 +565,95 @@ final class LiveSocialService: SocialService {
         try await request(path: "/v1/feed/posts/\(postID)/repost", method: shouldRepost ? "POST" : "DELETE")
     }
 
-    private func request<T: Decodable>(path: String, method: String, body: Encodable? = nil) async throws -> T {
-        guard let url = URL(string: path, relativeTo: baseURL) else {
-            throw ServiceError.invalidResponse
+    private func refreshSessionInternal() async throws -> Session {
+        guard let currentRefreshToken = refreshToken, !currentRefreshToken.isEmpty else {
+            throw ServiceError.unauthorized
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.timeoutInterval = 15
-        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
-        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
-        if let token {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        let body = ["refreshToken": currentRefreshToken]
+        let refreshed: Session = try await request(
+            path: "/v1/auth/refresh",
+            method: "POST",
+            body: body,
+            allowAuthRetry: false,
+            includeAccessToken: false,
+            postSessionExpiredOnUnauthorized: false
+        )
 
-        if let body {
-            request.httpBody = try JSONEncoder.raver.encode(AnyEncodable(body))
+        token = refreshed.token
+        if let nextRefreshToken = refreshed.refreshToken, !nextRefreshToken.isEmpty {
+            refreshToken = nextRefreshToken
         }
+        return refreshed
+    }
 
+    private func performRequest(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw ServiceError.invalidResponse
         }
+        return (data, http)
+    }
+
+    private func request<T: Decodable>(
+        path: String,
+        method: String,
+        body: Encodable? = nil,
+        allowAuthRetry: Bool = true,
+        includeAccessToken: Bool = true,
+        postSessionExpiredOnUnauthorized: Bool = true
+    ) async throws -> T {
+        guard let url = URL(string: path, relativeTo: baseURL) else {
+            throw ServiceError.invalidResponse
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = method
+        urlRequest.timeoutInterval = 15
+        urlRequest.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        urlRequest.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        if includeAccessToken, let token {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        if let body {
+            urlRequest.httpBody = try JSONEncoder.raver.encode(AnyEncodable(body))
+        }
+
+        var (data, http) = try await performRequest(urlRequest)
 
         if http.statusCode == 401 {
-            NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+            let canRetryWithRefresh = allowAuthRetry && includeAccessToken && path != "/v1/auth/refresh"
+            if canRetryWithRefresh {
+                do {
+                    let refreshed = try await refreshGate.run { [weak self] in
+                        guard let self else { throw ServiceError.unauthorized }
+                        return try await self.refreshSessionInternal()
+                    }
+
+                    var retryRequest = urlRequest
+                    retryRequest.setValue("Bearer \(refreshed.token)", forHTTPHeaderField: "Authorization")
+                    (data, http) = try await performRequest(retryRequest)
+                } catch {
+                    if postSessionExpiredOnUnauthorized {
+                        NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+                    }
+                    throw ServiceError.unauthorized
+                }
+            } else {
+                if postSessionExpiredOnUnauthorized {
+                    NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+                }
+                throw ServiceError.unauthorized
+            }
+        }
+
+        if http.statusCode == 401 {
+            if postSessionExpiredOnUnauthorized {
+                NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+            }
             throw ServiceError.unauthorized
         }
 
@@ -360,6 +730,103 @@ final class LiveSocialService: SocialService {
             throw ServiceError.message("接口返回格式不匹配，请检查 BFF 契约")
         }
     }
+
+    private func openIMUnavailableError(for action: String) async -> ServiceError {
+        let state = await OpenIMSession.shared.connectionStateSnapshot()
+        switch state {
+        case .unavailable:
+            return .message("OpenIM SDK 未加载，请使用 RaverMVP.xcworkspace 运行并确认 CocoaPods 已安装")
+        case .disabled:
+            return .message("OpenIM 当前被禁用，请检查服务端 /v1/openim/bootstrap 返回 enabled=true")
+        case .initializing, .connecting:
+            return .message("OpenIM 正在连接，请稍后重试")
+        case .failed(let message):
+            if message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return .message("OpenIM \(action)失败，请检查 OpenIM 服务和 token")
+            }
+            return .message("OpenIM \(action)失败：\(message)")
+        case .tokenExpired:
+            return .message("OpenIM token 已过期，请重新登录")
+        case .kickedOffline:
+            return .message("OpenIM 会话已在其他设备登录，请重新进入")
+        case .idle:
+            return .message("OpenIM 尚未初始化，请稍后重试")
+        case .connected:
+            return .message("OpenIM 会话暂不可用，请稍后重试")
+        }
+    }
+
+    private func mapNotificationCenterInboxItem(_ item: NotificationCenterInboxItem) -> AppNotification? {
+        guard item.type == "community_interaction" else {
+            return nil
+        }
+
+        guard let appType = mapNotificationCenterSourceToAppType(item.metadata?.source) else {
+            return nil
+        }
+
+        let actorID = item.metadata?.actorUserID
+            ?? item.metadata?.actorUserId
+            ?? item.metadata?.inviterUserID
+            ?? item.metadata?.inviterUserId
+
+        let target: AppNotificationTarget?
+        switch appType {
+        case .follow:
+            if let actorID, !actorID.isEmpty {
+                target = AppNotificationTarget(type: "user", id: actorID, title: nil)
+            } else {
+                target = nil
+            }
+        case .like, .comment:
+            let postID = item.metadata?.postID ?? item.metadata?.postId
+            if let postID, !postID.isEmpty {
+                target = AppNotificationTarget(type: "post", id: postID, title: item.metadata?.postPreview)
+            } else {
+                target = nil
+            }
+        case .squadInvite:
+            let squadID = item.metadata?.squadID ?? item.metadata?.squadId
+            if let squadID, !squadID.isEmpty {
+                target = AppNotificationTarget(
+                    type: "squad",
+                    id: squadID,
+                    title: item.metadata?.squadName ?? item.metadata?.squadTitle ?? item.title
+                )
+            } else {
+                target = nil
+            }
+        }
+
+        let text = item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? item.title : item.body
+        return AppNotification(
+            id: item.id,
+            type: appType,
+            createdAt: item.createdAt,
+            isRead: item.isRead,
+            actor: nil,
+            text: text,
+            target: target
+        )
+    }
+
+    private func mapNotificationCenterSourceToAppType(_ source: String?) -> AppNotificationType? {
+        guard let normalized = source?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !normalized.isEmpty else {
+            return nil
+        }
+        switch normalized {
+        case "user_follow":
+            return .follow
+        case "post_like":
+            return .like
+        case "post_comment", "post_comment_reply":
+            return .comment
+        case "squad_invite":
+            return .squadInvite
+        default:
+            return nil
+        }
+    }
 }
 
 private struct JoinSquadResponse: Decodable {
@@ -368,6 +835,51 @@ private struct JoinSquadResponse: Decodable {
 
 private struct GenericSuccessResponse: Decodable {
     let success: Bool
+}
+
+private struct SmsCodeSendResponse: Decodable {
+    let success: Bool
+    let expiresInSeconds: Int
+}
+
+private struct NotificationCenterInboxResponse: Decodable {
+    let success: Bool
+    let items: [NotificationCenterInboxItem]
+}
+
+private struct NotificationCenterInboxItem: Decodable {
+    let id: String
+    let type: String
+    let title: String
+    let body: String
+    let metadata: NotificationCenterInboxMetadata?
+    let isRead: Bool
+    let createdAt: Date
+}
+
+private struct NotificationCenterInboxMetadata: Decodable {
+    let source: String?
+    let actorUserID: String?
+    let actorUserId: String?
+    let inviterUserID: String?
+    let inviterUserId: String?
+    let postID: String?
+    let postId: String?
+    let postPreview: String?
+    let squadID: String?
+    let squadId: String?
+    let squadName: String?
+    let squadTitle: String?
+}
+
+private struct NotificationCenterUnreadCountResponse: Decodable {
+    let success: Bool
+    let total: Int
+    let communityTotal: Int?
+    let follows: Int?
+    let likes: Int?
+    let comments: Int?
+    let squadInvites: Int?
 }
 
 private struct AnyEncodable: Encodable {

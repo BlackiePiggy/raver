@@ -15,7 +15,51 @@ enum ConversationType: String, Codable, CaseIterable, Identifiable {
 
 struct Session: Codable {
     let token: String
+    let refreshToken: String?
     let user: UserSummary
+
+    init(token: String, refreshToken: String? = nil, user: UserSummary) {
+        self.token = token
+        self.refreshToken = refreshToken
+        self.user = user
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case token
+        case accessToken
+        case refreshToken
+        case user
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let tokenValue = try container.decodeIfPresent(String.self, forKey: .token)
+            ?? container.decode(String.self, forKey: .accessToken)
+        let refreshTokenValue = try container.decodeIfPresent(String.self, forKey: .refreshToken)
+        let userValue = try container.decode(UserSummary.self, forKey: .user)
+
+        token = tokenValue
+        refreshToken = refreshTokenValue
+        user = userValue
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(token, forKey: .token)
+        try container.encodeIfPresent(refreshToken, forKey: .refreshToken)
+        try container.encode(user, forKey: .user)
+    }
+}
+
+struct OpenIMBootstrap: Codable {
+    let enabled: Bool
+    let userID: String
+    let token: String?
+    let apiURL: String
+    let wsURL: String
+    let platformID: Int
+    let systemUserID: String
+    let expiresAt: String?
 }
 
 struct UserSummary: Codable, Identifiable, Hashable {
@@ -49,19 +93,128 @@ struct Post: Codable, Identifiable, Hashable {
     var author: UserSummary
     var content: String
     var images: [String]
-    var location: String? = nil
-    var eventID: String? = nil
-    var boundDjIDs: [String] = []
-    var boundBrandIDs: [String] = []
-    var boundEventIDs: [String] = []
+    var location: String?
+    var eventID: String?
+    var boundDjIDs: [String]
+    var boundBrandIDs: [String]
+    var boundEventIDs: [String]
     var squad: PostSquad?
     var createdAt: Date
-    var displayPublishedAt: Date? = nil
+    var displayPublishedAt: Date?
     var likeCount: Int
     var repostCount: Int
+    var saveCount: Int
+    var shareCount: Int
     var commentCount: Int
     var isLiked: Bool
     var isReposted: Bool
+    var isSaved: Bool
+    var isHidden: Bool
+    var recommendationReasonCode: String?
+    var recommendationReason: String?
+
+    init(
+        id: String,
+        author: UserSummary,
+        content: String,
+        images: [String],
+        location: String? = nil,
+        eventID: String? = nil,
+        boundDjIDs: [String] = [],
+        boundBrandIDs: [String] = [],
+        boundEventIDs: [String] = [],
+        squad: PostSquad? = nil,
+        createdAt: Date,
+        displayPublishedAt: Date? = nil,
+        likeCount: Int,
+        repostCount: Int,
+        saveCount: Int = 0,
+        shareCount: Int = 0,
+        commentCount: Int,
+        isLiked: Bool,
+        isReposted: Bool,
+        isSaved: Bool = false,
+        isHidden: Bool = false,
+        recommendationReasonCode: String? = nil,
+        recommendationReason: String? = nil
+    ) {
+        self.id = id
+        self.author = author
+        self.content = content
+        self.images = images
+        self.location = location
+        self.eventID = eventID
+        self.boundDjIDs = boundDjIDs
+        self.boundBrandIDs = boundBrandIDs
+        self.boundEventIDs = boundEventIDs
+        self.squad = squad
+        self.createdAt = createdAt
+        self.displayPublishedAt = displayPublishedAt
+        self.likeCount = likeCount
+        self.repostCount = repostCount
+        self.saveCount = saveCount
+        self.shareCount = shareCount
+        self.commentCount = commentCount
+        self.isLiked = isLiked
+        self.isReposted = isReposted
+        self.isSaved = isSaved
+        self.isHidden = isHidden
+        self.recommendationReasonCode = recommendationReasonCode
+        self.recommendationReason = recommendationReason
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case author
+        case content
+        case images
+        case location
+        case eventID
+        case boundDjIDs
+        case boundBrandIDs
+        case boundEventIDs
+        case squad
+        case createdAt
+        case displayPublishedAt
+        case likeCount
+        case repostCount
+        case saveCount
+        case shareCount
+        case commentCount
+        case isLiked
+        case isReposted
+        case isSaved
+        case isHidden
+        case recommendationReasonCode
+        case recommendationReason
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        author = try container.decode(UserSummary.self, forKey: .author)
+        content = try container.decode(String.self, forKey: .content)
+        images = try container.decodeIfPresent([String].self, forKey: .images) ?? []
+        location = try container.decodeIfPresent(String.self, forKey: .location)
+        eventID = try container.decodeIfPresent(String.self, forKey: .eventID)
+        boundDjIDs = try container.decodeIfPresent([String].self, forKey: .boundDjIDs) ?? []
+        boundBrandIDs = try container.decodeIfPresent([String].self, forKey: .boundBrandIDs) ?? []
+        boundEventIDs = try container.decodeIfPresent([String].self, forKey: .boundEventIDs) ?? []
+        squad = try container.decodeIfPresent(PostSquad.self, forKey: .squad)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        displayPublishedAt = try container.decodeIfPresent(Date.self, forKey: .displayPublishedAt)
+        likeCount = try container.decodeIfPresent(Int.self, forKey: .likeCount) ?? 0
+        repostCount = try container.decodeIfPresent(Int.self, forKey: .repostCount) ?? 0
+        saveCount = try container.decodeIfPresent(Int.self, forKey: .saveCount) ?? 0
+        shareCount = try container.decodeIfPresent(Int.self, forKey: .shareCount) ?? 0
+        commentCount = try container.decodeIfPresent(Int.self, forKey: .commentCount) ?? 0
+        isLiked = try container.decodeIfPresent(Bool.self, forKey: .isLiked) ?? false
+        isReposted = try container.decodeIfPresent(Bool.self, forKey: .isReposted) ?? false
+        isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
+        isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
+        recommendationReasonCode = try container.decodeIfPresent(String.self, forKey: .recommendationReasonCode)
+        recommendationReason = try container.decodeIfPresent(String.self, forKey: .recommendationReason)
+    }
 }
 
 struct PostSquad: Codable, Hashable, Identifiable {
@@ -73,9 +226,60 @@ struct PostSquad: Codable, Hashable, Identifiable {
 struct Comment: Codable, Identifiable, Hashable {
     let id: String
     let postID: String
+    var parentCommentID: String?
+    var rootCommentID: String?
+    var depth: Int
     var author: UserSummary
+    var replyToAuthor: UserSummary?
     var content: String
     var createdAt: Date
+
+    init(
+        id: String,
+        postID: String,
+        parentCommentID: String? = nil,
+        rootCommentID: String? = nil,
+        depth: Int = 0,
+        author: UserSummary,
+        replyToAuthor: UserSummary? = nil,
+        content: String,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.postID = postID
+        self.parentCommentID = parentCommentID
+        self.rootCommentID = rootCommentID
+        self.depth = depth
+        self.author = author
+        self.replyToAuthor = replyToAuthor
+        self.content = content
+        self.createdAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case postID
+        case parentCommentID
+        case rootCommentID
+        case depth
+        case author
+        case replyToAuthor
+        case content
+        case createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        postID = try container.decode(String.self, forKey: .postID)
+        parentCommentID = try container.decodeIfPresent(String.self, forKey: .parentCommentID)
+        rootCommentID = try container.decodeIfPresent(String.self, forKey: .rootCommentID)
+        depth = try container.decodeIfPresent(Int.self, forKey: .depth) ?? 0
+        author = try container.decode(UserSummary.self, forKey: .author)
+        replyToAuthor = try container.decodeIfPresent(UserSummary.self, forKey: .replyToAuthor)
+        content = try container.decode(String.self, forKey: .content)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+    }
 }
 
 struct Conversation: Codable, Identifiable, Hashable {
@@ -83,6 +287,7 @@ struct Conversation: Codable, Identifiable, Hashable {
     var type: ConversationType
     var title: String
     var avatarURL: String?
+    var openIMConversationID: String? = nil
     var lastMessage: String
     var lastMessageSenderID: String?
     var unreadCount: Int
@@ -97,6 +302,37 @@ struct Conversation: Codable, Identifiable, Hashable {
     }
 }
 
+enum ChatMessageKind: String, Codable, Hashable, CaseIterable {
+    case text
+    case image
+    case video
+    case voice
+    case file
+    case emoji
+    case location
+    case card
+    case custom
+    case system
+    case typing
+    case unknown
+}
+
+enum ChatMessageDeliveryStatus: String, Codable, Hashable, CaseIterable {
+    case sending
+    case sent
+    case failed
+}
+
+struct ChatMessageMediaPayload: Codable, Hashable {
+    var mediaURL: String? = nil
+    var thumbnailURL: String? = nil
+    var width: Double? = nil
+    var height: Double? = nil
+    var durationSeconds: Int? = nil
+    var fileName: String? = nil
+    var fileSizeBytes: Int? = nil
+}
+
 struct ChatMessage: Codable, Identifiable, Hashable {
     let id: String
     let conversationID: String
@@ -104,11 +340,98 @@ struct ChatMessage: Codable, Identifiable, Hashable {
     var content: String
     var createdAt: Date
     var isMine: Bool
+    var kind: ChatMessageKind = .text
+    var media: ChatMessageMediaPayload? = nil
+    var deliveryStatus: ChatMessageDeliveryStatus = .sent
+    var deliveryError: String? = nil
+
+    init(
+        id: String,
+        conversationID: String,
+        sender: UserSummary,
+        content: String,
+        createdAt: Date,
+        isMine: Bool,
+        kind: ChatMessageKind = .text,
+        media: ChatMessageMediaPayload? = nil,
+        deliveryStatus: ChatMessageDeliveryStatus = .sent,
+        deliveryError: String? = nil
+    ) {
+        self.id = id
+        self.conversationID = conversationID
+        self.sender = sender
+        self.content = content
+        self.createdAt = createdAt
+        self.isMine = isMine
+        self.kind = kind
+        self.media = media
+        self.deliveryStatus = deliveryStatus
+        self.deliveryError = deliveryError
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case conversationID
+        case sender
+        case content
+        case createdAt
+        case isMine
+        case kind
+        case media
+        case deliveryStatus
+        case deliveryError
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        conversationID = try container.decode(String.self, forKey: .conversationID)
+        sender = try container.decode(UserSummary.self, forKey: .sender)
+        content = try container.decode(String.self, forKey: .content)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        isMine = try container.decode(Bool.self, forKey: .isMine)
+        kind = try container.decodeIfPresent(ChatMessageKind.self, forKey: .kind) ?? .text
+        media = try container.decodeIfPresent(ChatMessageMediaPayload.self, forKey: .media)
+        deliveryStatus = try container.decodeIfPresent(ChatMessageDeliveryStatus.self, forKey: .deliveryStatus) ?? .sent
+        deliveryError = try container.decodeIfPresent(String.self, forKey: .deliveryError)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(conversationID, forKey: .conversationID)
+        try container.encode(sender, forKey: .sender)
+        try container.encode(content, forKey: .content)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(isMine, forKey: .isMine)
+        try container.encode(kind, forKey: .kind)
+        try container.encodeIfPresent(media, forKey: .media)
+        try container.encode(deliveryStatus, forKey: .deliveryStatus)
+        try container.encodeIfPresent(deliveryError, forKey: .deliveryError)
+    }
 }
 
 struct FeedPage: Codable {
     let posts: [Post]
     let nextCursor: String?
+}
+
+struct FeedEventInput: Codable {
+    let sessionID: String
+    let eventType: String
+    var postID: String?
+    var feedMode: FeedMode?
+    var position: Int?
+    var metadata: [String: String]?
+
+    private enum CodingKeys: String, CodingKey {
+        case sessionID = "sessionId"
+        case eventType
+        case postID
+        case feedMode
+        case position
+        case metadata
+    }
 }
 
 struct FollowListPage: Codable {

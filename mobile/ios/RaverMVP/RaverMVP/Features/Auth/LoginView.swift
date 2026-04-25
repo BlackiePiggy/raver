@@ -6,11 +6,16 @@ struct LoginView: View {
     @EnvironmentObject private var appState: AppState
 
     @State private var mode: AuthMode = .login
+    @State private var loginMethod: LoginMethod = .account
     @State private var username = "uploadtester"
     @State private var email = ""
     @State private var displayName = ""
     @State private var password = "123456"
+    @State private var phoneNumber = ""
+    @State private var smsCode = ""
     @State private var isLoading = false
+    @State private var smsCooldownSeconds = 0
+    @State private var smsCooldownTask: Task<Void, Never>?
     @State private var hasAgreedTerms = false
     @State private var showManualLogin = false
     @StateObject private var videoController = LoginBackgroundVideoController()
@@ -18,6 +23,8 @@ struct LoginView: View {
 
     private enum ManualAuthField {
         case username
+        case phoneNumber
+        case smsCode
         case email
         case displayName
         case password
@@ -94,6 +101,7 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("login.agreeTermsButton")
 
                         Button {
                             Task { await submitAuth(oneTap: true) }
@@ -113,6 +121,7 @@ struct LoginView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(isLoading || !hasAgreedTerms)
+                        .accessibilityIdentifier("login.oneTapButton")
 
                         Button {
                             withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
@@ -125,6 +134,7 @@ struct LoginView: View {
                         }
                         .buttonStyle(.plain)
                         .padding(.top, 4)
+                        .accessibilityIdentifier("login.showManualButton")
 
                         if showManualLogin {
                             manualLoginPanel
@@ -162,6 +172,12 @@ struct LoginView: View {
         }
         .onDisappear {
             videoController.pause()
+            smsCooldownTask?.cancel()
+        }
+        .onChange(of: mode) { _, newMode in
+            if newMode == .register {
+                loginMethod = .account
+            }
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -189,16 +205,84 @@ struct LoginView: View {
                     .fill(Color.white.opacity(0.14))
             )
 
-            TextField(LL("用户名"), text: $username)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($focusedField, equals: .username)
-                .submitLabel(mode == .register ? .next : .go)
-                .onSubmit {
-                    focusedField = mode == .register ? .email : .password
+            if mode == .login {
+                Picker(L("登录方式", "Login Method"), selection: $loginMethod) {
+                    ForEach(LoginMethod.allCases, id: \.self) { item in
+                        Text(item.title).tag(item)
+                    }
                 }
-                .padding(14)
-                .background(inputFieldBackground)
+                .pickerStyle(.segmented)
+                .padding(6)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white.opacity(0.14))
+                )
+            }
+
+            if mode == .login, loginMethod == .sms {
+                TextField(L("手机号（含区号）", "Phone Number (with country code)"), text: $phoneNumber)
+                    .keyboardType(.phonePad)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: .phoneNumber)
+                    .submitLabel(.next)
+                    .onSubmit {
+                        focusedField = .smsCode
+                    }
+                    .padding(14)
+                    .background(inputFieldBackground)
+
+                HStack(spacing: 10) {
+                    TextField(L("验证码", "Verification Code"), text: $smsCode)
+                        .keyboardType(.numberPad)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .smsCode)
+                        .submitLabel(.done)
+                        .onSubmit {
+                            focusedField = nil
+                            dismissKeyboard()
+                        }
+                        .padding(14)
+                        .background(inputFieldBackground)
+
+                    Button {
+                        Task { await sendSmsCode() }
+                    } label: {
+                        Text(
+                            smsCooldownSeconds > 0
+                            ? "\(smsCooldownSeconds)s"
+                            : L("发送验证码", "Send Code")
+                        )
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.95))
+                        .padding(.horizontal, 14)
+                        .frame(height: 46)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.white.opacity(0.22))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(
+                        isLoading
+                            || smsCooldownSeconds > 0
+                            || phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
+                    .accessibilityIdentifier("login.sendSmsCodeButton")
+                }
+            } else {
+                TextField(LL("用户名"), text: $username)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: .username)
+                    .submitLabel(mode == .register ? .next : .go)
+                    .onSubmit {
+                        focusedField = mode == .register ? .email : .password
+                    }
+                    .padding(14)
+                    .background(inputFieldBackground)
+            }
 
             if mode == .register {
                 TextField(LL("邮箱"), text: $email)
@@ -222,15 +306,17 @@ struct LoginView: View {
                     .background(inputFieldBackground)
             }
 
-            SecureField(L("密码", "Password"), text: $password)
-                .focused($focusedField, equals: .password)
-                .submitLabel(.done)
-                .onSubmit {
-                    focusedField = nil
-                    dismissKeyboard()
-                }
-                .padding(14)
-                .background(inputFieldBackground)
+            if mode == .register || (mode == .login && loginMethod == .account) {
+                SecureField(L("密码", "Password"), text: $password)
+                    .focused($focusedField, equals: .password)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        focusedField = nil
+                        dismissKeyboard()
+                    }
+                    .padding(14)
+                    .background(inputFieldBackground)
+            }
 
             Button {
                 Task { await submitAuth(oneTap: false) }
@@ -238,7 +324,7 @@ struct LoginView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Color.white.opacity(0.2))
-                    Text(mode == .login ? L("账号登录", "Sign In") : L("注册并登录", "Register & Sign In"))
+                    Text(submitTitle)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.97))
                 }
@@ -246,12 +332,14 @@ struct LoginView: View {
             }
             .buttonStyle(.plain)
             .disabled(!canSubmitManual || isLoading)
+            .accessibilityIdentifier("login.manualSubmitButton")
 
             if let error = appState.errorMessage, !error.isEmpty {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(Color(red: 1, green: 0.82, blue: 0.82))
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("login.errorText")
             }
         }
         .padding(14)
@@ -266,9 +354,31 @@ struct LoginView: View {
     }
 
     private var canSubmitManual: Bool {
-        !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !password.isEmpty
-            && (mode == .login || !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        if mode == .register {
+            return !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !password.isEmpty
+                && !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        switch loginMethod {
+        case .account:
+            return !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty
+        case .sms:
+            return !phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !smsCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    private var submitTitle: String {
+        if mode == .register {
+            return L("注册并登录", "Register & Sign In")
+        }
+        switch loginMethod {
+        case .account:
+            return L("账号登录", "Sign In")
+        case .sms:
+            return L("验证码登录", "SMS Sign In")
+        }
     }
 
     private var inputFieldBackground: some View {
@@ -392,6 +502,47 @@ struct LoginView: View {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
+    private func startSmsCooldown(seconds: Int) {
+        let normalized = max(1, min(120, seconds))
+        smsCooldownTask?.cancel()
+        smsCooldownTask = Task {
+            var remaining = normalized
+            while remaining > 0, !Task.isCancelled {
+                await MainActor.run {
+                    smsCooldownSeconds = remaining
+                }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                remaining -= 1
+            }
+
+            await MainActor.run {
+                smsCooldownSeconds = 0
+            }
+        }
+    }
+
+    private func sendSmsCode() async {
+        guard !isLoading else { return }
+        if !hasAgreedTerms {
+            appState.errorMessage = L("请先勾选并同意用户协议", "Please agree to the user terms first.")
+            return
+        }
+
+        let normalizedPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedPhone.isEmpty else {
+            appState.errorMessage = L("请先输入手机号", "Please enter phone number first.")
+            return
+        }
+
+        isLoading = true
+        defer { isLoading = false }
+
+        let expiresIn = await appState.sendLoginSmsCode(phoneNumber: normalizedPhone)
+        guard let expiresIn else { return }
+        let countdown = min(60, max(30, expiresIn / 2))
+        startSmsCooldown(seconds: countdown)
+    }
+
     private func submitAuth(oneTap: Bool) async {
         guard !isLoading else { return }
         if !hasAgreedTerms {
@@ -403,6 +554,14 @@ struct LoginView: View {
         defer { isLoading = false }
 
         if mode == .login {
+            if loginMethod == .sms {
+                await appState.loginWithSms(
+                    phoneNumber: phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines),
+                    code: smsCode.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                return
+            }
+
             await appState.login(
                 username: username.trimmingCharacters(in: .whitespacesAndNewlines),
                 password: password
@@ -441,6 +600,20 @@ private enum AuthMode: String, CaseIterable {
         switch self {
         case .login: return L("登录", "Login")
         case .register: return L("注册", "Register")
+        }
+    }
+}
+
+private enum LoginMethod: String, CaseIterable {
+    case account
+    case sms
+
+    var title: String {
+        switch self {
+        case .account:
+            return L("账号", "Account")
+        case .sms:
+            return L("短信", "SMS")
         }
     }
 }

@@ -12,12 +12,20 @@ struct AppCoordinatorView: View {
         ZStack {
             RaverTheme.background.ignoresSafeArea()
 
-            switch currentFlow {
-            case .authenticated:
-                MainTabCoordinatorView()
-                    .id("main-tabs-\(appState.preferredLanguage.rawValue)")
-            case .unauthenticated:
-                LoginView()
+            if appState.isAuthBootstrapping {
+                ProgressView()
+                    .tint(.white.opacity(0.9))
+                    .accessibilityIdentifier("app.loading")
+            } else {
+                switch currentFlow {
+                case .authenticated:
+                    MainTabCoordinatorView()
+                        .id("main-tabs-\(appState.preferredLanguage.rawValue)")
+                        .accessibilityIdentifier("app.authenticatedRoot")
+                case .unauthenticated:
+                    LoginView()
+                        .accessibilityIdentifier("app.loginRoot")
+                }
             }
         }
         .environment(\.locale, Locale(identifier: appState.preferredLanguage.localeIdentifier))

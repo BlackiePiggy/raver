@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Navigation from '@/components/Navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { squadApi, Squad } from '@/lib/api/squad';
 
-export default function SquadsListPage() {
+function SquadsListPageContent() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const [squads, setSquads] = useState<Squad[]>([]);
@@ -162,5 +162,22 @@ export default function SquadsListPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SquadsListPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-bg-primary">
+          <Navigation />
+          <div className="pt-[44px]">
+            <div className="max-w-7xl mx-auto px-6 py-8 text-text-secondary">加载中...</div>
+          </div>
+        </div>
+      }
+    >
+      <SquadsListPageContent />
+    </Suspense>
   );
 }

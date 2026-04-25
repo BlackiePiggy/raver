@@ -8,6 +8,7 @@ import CoreImage.CIFilterBuiltins
 import MapKit
 import CoreLocation
 import CoreText
+import SDWebImage
 
 struct DiscoverDJsRootView: View {
     @EnvironmentObject private var appContainer: AppContainer
@@ -2418,6 +2419,12 @@ struct DJDetailView: View {
     @State private var editBannerData: Data?
     @State private var relatedArticles: [DiscoverNewsArticle] = []
     @State private var isLoadingRelatedArticles = false
+    @State private var historyEventSearchText = ""
+    @State private var historyEventRegionFilter: DJEventRegionFilter = .all
+    @State private var historyEventStartDate: Date?
+    @State private var historyEventEndDate: Date?
+    @State private var isCachingManualSnapshot = false
+    @State private var manualCachedAt: Date?
 
     fileprivate enum DJDetailTab: String, CaseIterable, Identifiable {
         case intro
@@ -2445,6 +2452,25 @@ struct DJDetailView: View {
             case .sets: return Color(red: 0.30, green: 0.67, blue: 0.97)
             case .events: return Color(red: 0.98, green: 0.71, blue: 0.22)
             case .ratings: return Color(red: 0.58, green: 0.43, blue: 0.95)
+            }
+        }
+    }
+
+    private enum DJEventRegionFilter: String, CaseIterable, Identifiable {
+        case all
+        case domestic
+        case international
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .all:
+                return L("全部地区", "All")
+            case .domestic:
+                return L("国内", "Domestic")
+            case .international:
+                return L("海外", "International")
             }
         }
     }
@@ -2484,6 +2510,7 @@ struct DJDetailView: View {
             dismiss()
         }
         .task {
+            await refreshManualCacheState()
             await load()
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
@@ -2523,19 +2550,43 @@ struct DJDetailView: View {
             async let ratingUnitsTask = djsRepository.fetchDJRatingUnits(djID: djID)
             async let watchedCountTask = djsRepository.fetchMyDJCheckinCount(djID: djID)
             async let relatedArticlesTask = fetchRelatedNewsArticlesForDJ(djID: djID)
-            dj = try await djTask
-            if let loadedDJ = dj {
-                prepareDJEditDraft(from: loadedDJ)
-            }
-            sets = try await setsTask
-            djEvents = (try? await eventsTask) ?? []
-            ratingUnits = (try? await ratingUnitsTask) ?? []
-            watchedSetCount = (try? await watchedCountTask) ?? 0
-            relatedArticles = (try? await relatedArticlesTask) ?? []
+            let loadedDJ = try await djTask
+            let loadedSets = try await setsTask
+            let loadedEvents = (try? await eventsTask) ?? []
+            let loadedRatingUnits = (try? await ratingUnitsTask) ?? []
+            let loadedWatchedCount = (try? await watchedCountTask) ?? 0
+            let loadedRelatedArticles = (try? await relatedArticlesTask) ?? []
+
+            dj = loadedDJ
+            prepareDJEditDraft(from: loadedDJ)
+            sets = loadedSets
+            djEvents = loadedEvents
+            ratingUnits = loadedRatingUnits
+            watchedSetCount = loadedWatchedCount
+            relatedArticles = loadedRelatedArticles
             isLoadingRelatedArticles = false
+
+            let snapshot = makeDJManualCacheSnapshot(
+                dj: loadedDJ,
+                sets: loadedSets,
+                djEvents: loadedEvents,
+                ratingUnits: loadedRatingUnits,
+                relatedArticles: loadedRelatedArticles
+            )
+            await persistDJManualCacheSnapshot(snapshot, prefetchImages: false)
         } catch {
-            isLoadingRelatedArticles = false
-            errorMessage = error.userFacingMessage
+            let canFallback = isOfflineRecoverableError(error) || dj == nil
+            if canFallback, let snapshot = await DJManualCacheStore.shared.loadSnapshot(djID: djID) {
+                applyDJManualCacheSnapshot(snapshot)
+                if isRequestTimeoutError(error) {
+                    errorMessage = L("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version.")
+                } else {
+                    errorMessage = L("网络较弱，已展示 DJ 缓存数据。", "Network is weak. Showing cached DJ data.")
+                }
+            } else {
+                isLoadingRelatedArticles = false
+                errorMessage = error.userFacingMessage
+            }
         }
     }
 
@@ -2545,11 +2596,176 @@ struct DJDetailView: View {
 
     private func reloadDJRatingUnits() async {
         ratingUnits = (try? await djsRepository.fetchDJRatingUnits(djID: djID)) ?? []
+        await persistCurrentDJManualCacheSnapshotIfPossible()
+    }
+
+    @MainActor
+    private func refreshManualCacheState() async {
+        try? await DJManualCacheStore.shared.clearExpiredSnapshots()
+        manualCachedAt = await DJManualCacheStore.shared.loadSnapshot(djID: djID)?.cachedAt
+    }
+
+    @MainActor
+    private func cacheDJManually() async {
+        guard !isCachingManualSnapshot else { return }
+
+        isCachingManualSnapshot = true
+        defer { isCachingManualSnapshot = false }
+
+        do {
+            let djForCache = try await resolveDJForManualCache()
+            async let setsTask = djsRepository.fetchDJSets(djID: djID)
+            async let eventsTask = djsRepository.fetchDJEvents(djID: djID)
+            async let ratingUnitsTask = djsRepository.fetchDJRatingUnits(djID: djID)
+            async let relatedArticlesTask = fetchRelatedNewsArticlesForDJ(djID: djID)
+
+            let snapshot = makeDJManualCacheSnapshot(
+                dj: djForCache,
+                sets: (try? await setsTask) ?? sets,
+                djEvents: (try? await eventsTask) ?? djEvents,
+                ratingUnits: (try? await ratingUnitsTask) ?? ratingUnits,
+                relatedArticles: (try? await relatedArticlesTask) ?? relatedArticles
+            )
+
+            await persistDJManualCacheSnapshot(snapshot, prefetchImages: true)
+            applyDJManualCacheSnapshot(snapshot)
+            errorMessage = L("DJ 页面已缓存，弱网环境也可查看。", "DJ page cached. You can view it in weak-network conditions.")
+        } catch {
+            errorMessage = L("缓存失败，请稍后重试。", "Caching failed. Please try again later.")
+        }
+    }
+
+    @MainActor
+    private func applyDJManualCacheSnapshot(_ snapshot: DJManualCacheSnapshot) {
+        dj = snapshot.dj
+        prepareDJEditDraft(from: snapshot.dj)
+        sets = snapshot.sets
+        djEvents = snapshot.djEvents
+        ratingUnits = snapshot.ratingUnits
+        relatedArticles = snapshot.relatedNewsArticles
+        isLoadingRelatedArticles = false
+        manualCachedAt = snapshot.cachedAt
+    }
+
+    @MainActor
+    private func resolveDJForManualCache() async throws -> WebDJ {
+        if let latest = try? await djsRepository.fetchDJ(id: djID) {
+            return latest
+        }
+        if let dj {
+            return dj
+        }
+        throw ServiceError.message(L("DJ 详情加载失败，请稍后重试。", "Failed to load DJ details. Please try again later."))
+    }
+
+    private func makeDJManualCacheSnapshot(
+        dj: WebDJ,
+        sets: [WebDJSet],
+        djEvents: [WebEvent],
+        ratingUnits: [WebRatingUnit],
+        relatedArticles: [DiscoverNewsArticle]
+    ) -> DJManualCacheSnapshot {
+        DJManualCacheSnapshot(
+            djID: dj.id,
+            dj: dj,
+            sets: sets,
+            djEvents: djEvents,
+            ratingUnits: ratingUnits,
+            relatedArticles: relatedArticles.map(CachedDiscoverNewsArticle.init),
+            cachedAt: Date()
+        )
+    }
+
+    @MainActor
+    private func persistDJManualCacheSnapshot(_ snapshot: DJManualCacheSnapshot, prefetchImages: Bool) async {
+        await DJManualCacheStore.shared.saveSnapshot(snapshot)
+        manualCachedAt = snapshot.cachedAt
+        if prefetchImages {
+            prefetchDJManualCacheImages(from: snapshot)
+        }
+    }
+
+    @MainActor
+    private func persistCurrentDJManualCacheSnapshotIfPossible() async {
+        guard let dj else { return }
+        let snapshot = makeDJManualCacheSnapshot(
+            dj: dj,
+            sets: sets,
+            djEvents: djEvents,
+            ratingUnits: ratingUnits,
+            relatedArticles: relatedArticles
+        )
+        await persistDJManualCacheSnapshot(snapshot, prefetchImages: false)
+    }
+
+    private func prefetchDJManualCacheImages(from snapshot: DJManualCacheSnapshot) {
+        let rawURLs = [
+            snapshot.dj.avatarUrl,
+            snapshot.dj.avatarSmallUrl,
+            snapshot.dj.avatarMediumUrl,
+            snapshot.dj.avatarOriginalUrl,
+            snapshot.dj.bannerUrl
+        ]
+            + snapshot.sets.compactMap(\.thumbnailUrl)
+            + snapshot.djEvents.compactMap(\.coverAssetURL)
+            + snapshot.relatedArticles.compactMap(\.coverImageURL)
+
+        let urls = rawURLs
+            .compactMap(AppConfig.resolvedURLString)
+            .compactMap(URL.init(string:))
+
+        guard !urls.isEmpty else { return }
+        SDWebImagePrefetcher.shared.prefetchURLs(urls)
+    }
+
+    private func isRequestTimeoutError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            return urlError.code == .timedOut
+        }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut
+    }
+
+    private func isOfflineRecoverableError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut,
+                 .notConnectedToInternet,
+                 .networkConnectionLost,
+                 .cannotFindHost,
+                 .cannotConnectToHost,
+                 .dnsLookupFailed,
+                 .internationalRoamingOff,
+                 .callIsActive,
+                 .dataNotAllowed:
+                return true
+            default:
+                break
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            let recoverableCodes: Set<Int> = [
+                NSURLErrorTimedOut,
+                NSURLErrorNotConnectedToInternet,
+                NSURLErrorNetworkConnectionLost,
+                NSURLErrorCannotFindHost,
+                NSURLErrorCannotConnectToHost,
+                NSURLErrorDNSLookupFailed,
+            ]
+            if recoverableCodes.contains(nsError.code) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func toggleFollow(_ item: WebDJ) async {
         do {
             dj = try await djsRepository.toggleDJFollow(djID: item.id, shouldFollow: !(item.isFollowing ?? false))
+            await persistCurrentDJManualCacheSnapshotIfPossible()
             await appState.refreshUnreadMessages()
         } catch {
             errorMessage = error.userFacingMessage
@@ -2909,17 +3125,60 @@ struct DJDetailView: View {
     }
 
     private var immersiveTrailingAction: AnyView? {
-        guard dj?.canEdit == true else { return nil }
+        guard dj != nil else { return nil }
         return AnyView(
-            RaverNavigationCircleIconButton(
-                systemName: "square.and.pencil",
-                style: .immersiveAdaptive
-            ) {
-                guard let currentDJ = dj else { return }
-                prepareDJEditDraft(from: currentDJ)
-                showDJEditSheet = true
+            Menu {
+                if dj?.canEdit == true {
+                    Button {
+                        guard let currentDJ = dj else { return }
+                        prepareDJEditDraft(from: currentDJ)
+                        showDJEditSheet = true
+                    } label: {
+                        Label(L("编辑", "Edit"), systemImage: "square.and.pencil")
+                    }
+                }
+
+                Button {
+                    Task { await cacheDJManually() }
+                } label: {
+                    Label(
+                        isCachingManualSnapshot ? L("缓存中", "Caching") : L("缓存", "Cache"),
+                        systemImage: "arrow.down.circle"
+                    )
+                }
+                .disabled(isCachingManualSnapshot)
+
+                Button {
+                    openDJFeedbackEntry()
+                } label: {
+                    Label(L("贡献信息", "Incorrect Info"), systemImage: "info.circle")
+                }
+
+                Button {
+                    openDJReportEntry()
+                } label: {
+                    Label(L("举报", "Report"), systemImage: "flag")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
+            .menuStyle(.automatic)
         )
+    }
+
+    private func openDJFeedbackEntry() {
+        // TODO: Wire to dedicated feedback route/page when available.
+        errorMessage = L("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.")
+    }
+
+    private func openDJReportEntry() {
+        // TODO: Wire to dedicated report route/page when available.
+        errorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
     }
 
     private var djEditSheet: some View {
@@ -3452,22 +3711,310 @@ struct DJDetailView: View {
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 6)
         } else {
-            ForEach(Array(djEvents.enumerated()), id: \.element.id) { index, event in
-                Button {
-                    appPush(.eventDetail(eventID: event.id))
-                } label: {
-                    historyEventRow(event)
-                }
-                .buttonStyle(.plain)
+            historyEventsFilterPanel
 
-                if index < djEvents.count - 1 {
-                    Rectangle()
-                        .fill(RaverTheme.secondaryText.opacity(0.16))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 1)
+            let filteredEvents = filteredDJEvents
+            if filteredEvents.isEmpty {
+                Text(L("没有匹配的活动", "No matching events"))
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .padding(.top, 8)
+                    .padding(.bottom, 6)
+            } else {
+                ForEach(Array(filteredEvents.enumerated()), id: \.element.id) { index, event in
+                    Button {
+                        appPush(.eventDetail(eventID: event.id))
+                    } label: {
+                        historyEventRow(event)
+                    }
+                    .buttonStyle(.plain)
+
+                    if index < filteredEvents.count - 1 {
+                        Rectangle()
+                            .fill(RaverTheme.secondaryText.opacity(0.16))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 1)
+                    }
                 }
             }
         }
+    }
+
+    private var historyEventsFilterPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+
+                TextField(L("搜索活动名/地点/年份", "Search event/location/year"), text: $historyEventSearchText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+
+                if !historyEventSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button {
+                        historyEventSearchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText.opacity(0.75))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.black.opacity(0.04))
+            )
+
+            Picker(L("地区筛选", "Region"), selection: $historyEventRegionFilter) {
+                ForEach(DJEventRegionFilter.allCases) { filter in
+                    Text(filter.title).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(L("按开始时间筛选", "Filter by start date"), isOn: historyEventStartDateToggleBinding)
+                    .font(.subheadline)
+                if historyEventStartDate != nil {
+                    HStack(spacing: 8) {
+                        Text(L("开始于", "From"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                        Spacer(minLength: 0)
+                        DatePicker("", selection: historyEventStartDateBinding, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                    }
+                }
+
+                Toggle(L("按结束时间筛选", "Filter by end date"), isOn: historyEventEndDateToggleBinding)
+                    .font(.subheadline)
+                if historyEventEndDate != nil {
+                    HStack(spacing: 8) {
+                        Text(L("结束于", "To"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                        Spacer(minLength: 0)
+                        DatePicker("", selection: historyEventEndDateBinding, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                Text(historyEventFilterResultText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                Spacer(minLength: 0)
+                if hasActiveHistoryEventFilters {
+                    Button(L("清空筛选", "Clear")) {
+                        clearHistoryEventFilters()
+                    }
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(RaverTheme.card)
+        )
+        .padding(.bottom, 6)
+    }
+
+    private var historyEventFilterResultText: String {
+        L("显示 \(filteredDJEvents.count) / \(djEvents.count) 场", "\(filteredDJEvents.count) of \(djEvents.count) shown")
+    }
+
+    private var historyEventSearchQuery: String {
+        historyEventSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var hasActiveHistoryEventFilters: Bool {
+        !historyEventSearchQuery.isEmpty
+            || historyEventRegionFilter != .all
+            || historyEventStartDate != nil
+            || historyEventEndDate != nil
+    }
+
+    private var filteredDJEvents: [WebEvent] {
+        djEvents.filter { event in
+            historyEventMatchesSearch(event)
+                && historyEventMatchesRegion(event)
+                && historyEventMatchesDate(event)
+        }
+    }
+
+    private var historyEventStartDateToggleBinding: Binding<Bool> {
+        Binding(
+            get: { historyEventStartDate != nil },
+            set: { enabled in
+                if enabled {
+                    historyEventStartDate = historyEventStartDate ?? fallbackHistoryEventStartDate
+                } else {
+                    historyEventStartDate = nil
+                }
+            }
+        )
+    }
+
+    private var historyEventEndDateToggleBinding: Binding<Bool> {
+        Binding(
+            get: { historyEventEndDate != nil },
+            set: { enabled in
+                if enabled {
+                    historyEventEndDate = historyEventEndDate ?? fallbackHistoryEventEndDate
+                } else {
+                    historyEventEndDate = nil
+                }
+            }
+        )
+    }
+
+    private var historyEventStartDateBinding: Binding<Date> {
+        Binding(
+            get: { historyEventStartDate ?? fallbackHistoryEventStartDate },
+            set: { historyEventStartDate = Calendar.current.startOfDay(for: $0) }
+        )
+    }
+
+    private var historyEventEndDateBinding: Binding<Date> {
+        Binding(
+            get: { historyEventEndDate ?? fallbackHistoryEventEndDate },
+            set: { historyEventEndDate = Calendar.current.startOfDay(for: $0) }
+        )
+    }
+
+    private var fallbackHistoryEventStartDate: Date {
+        let base = djEvents.map(\.startDate).min() ?? Date()
+        return Calendar.current.startOfDay(for: base)
+    }
+
+    private var fallbackHistoryEventEndDate: Date {
+        let base = djEvents.map(\.startDate).max() ?? Date()
+        return Calendar.current.startOfDay(for: base)
+    }
+
+    private var normalizedHistoryDateBounds: (start: Date?, end: Date?) {
+        let calendar = Calendar.current
+        let start = historyEventStartDate.map { calendar.startOfDay(for: $0) }
+        let end = historyEventEndDate.map { calendar.startOfDay(for: $0) }
+        if let start, let end, start > end {
+            return (end, start)
+        }
+        return (start, end)
+    }
+
+    private func clearHistoryEventFilters() {
+        historyEventSearchText = ""
+        historyEventRegionFilter = .all
+        historyEventStartDate = nil
+        historyEventEndDate = nil
+    }
+
+    private func historyEventMatchesSearch(_ event: WebEvent) -> Bool {
+        guard !historyEventSearchQuery.isEmpty else { return true }
+
+        let year = String(Calendar.current.component(.year, from: event.startDate))
+        let searchPool = [
+            event.name,
+            event.summaryLocation,
+            event.city ?? "",
+            event.country ?? "",
+            event.nameI18n?.zh ?? "",
+            event.nameI18n?.en ?? "",
+            event.cityI18n?.zh ?? "",
+            event.cityI18n?.en ?? "",
+            event.countryI18n?.zh ?? "",
+            event.countryI18n?.en ?? "",
+            year
+        ]
+
+        return searchPool.contains { $0.localizedCaseInsensitiveContains(historyEventSearchQuery) }
+    }
+
+    private func historyEventMatchesRegion(_ event: WebEvent) -> Bool {
+        switch historyEventRegionFilter {
+        case .all:
+            return true
+        case .domestic:
+            return historyEventRegionCategory(for: event) == .domestic
+        case .international:
+            return historyEventRegionCategory(for: event) == .international
+        }
+    }
+
+    private func historyEventMatchesDate(_ event: WebEvent) -> Bool {
+        let bounds = normalizedHistoryDateBounds
+        let calendar = Calendar.current
+        let eventStartDay = calendar.startOfDay(for: event.startDate)
+
+        if let start = bounds.start, eventStartDay < start {
+            return false
+        }
+
+        if let end = bounds.end {
+            let endExclusive = calendar.date(byAdding: .day, value: 1, to: end) ?? end.addingTimeInterval(24 * 60 * 60)
+            if eventStartDay >= endExclusive {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    private enum DJEventRegionCategory {
+        case domestic
+        case international
+        case unknown
+    }
+
+    private func historyEventRegionCategory(for event: WebEvent) -> DJEventRegionCategory {
+        if let rawCountryCode = event.locationPoint.flatMap(\.countryCode) {
+            let countryCode = rawCountryCode
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+            if !countryCode.isEmpty {
+                return countryCode == "CN" ? .domestic : .international
+            }
+        }
+
+        let countryCandidates = [
+            event.country,
+            event.countryI18n?.zh,
+            event.countryI18n?.en
+        ]
+
+        var hasKnownCountry = false
+        for raw in countryCandidates {
+            let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !value.isEmpty else { continue }
+            hasKnownCountry = true
+            if isChinaCountryLabel(value) {
+                return .domestic
+            }
+        }
+
+        return hasKnownCountry ? .international : .unknown
+    }
+
+    private func isChinaCountryLabel(_ value: String) -> Bool {
+        let lowered = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let compact = lowered.replacingOccurrences(of: " ", with: "")
+        if compact == "cn"
+            || compact == "china"
+            || compact == "prc"
+            || compact == "peoplesrepublicofchina"
+            || compact == "people'srepublicofchina" {
+            return true
+        }
+        return value.contains("中国")
     }
 
     @ViewBuilder

@@ -12,7 +12,7 @@ echo "   ✅ 后端服务器正常运行"
 echo ""
 
 echo "📊 当前状态:"
-echo "   ✅ 后端: http://localhost:3001 (运行中)"
+echo "   ✅ 后端: http://localhost:3901 (运行中)"
 echo "   ✅ DJ Sets API: 3个Sets可用"
 echo "   ✅ Said the Sky Set: 33首歌曲"
 echo ""

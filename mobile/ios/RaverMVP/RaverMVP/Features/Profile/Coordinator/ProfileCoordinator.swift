@@ -3,6 +3,8 @@ import SwiftUI
 enum ProfileRoute: Hashable {
     case followList(userID: String, kind: FollowListKind)
     case settings
+    case tools
+    case movieBanner
     case myPublishes
     case myRoutes
     case editProfile

@@ -1,20 +1,44 @@
 import Foundation
 
-protocol SocialService {
+enum FeedMode: String, Codable, CaseIterable, Identifiable {
+    case recommended
+    case following
+    case latest
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .recommended: return L("推荐", "Recommended")
+        case .following: return L("关注", "Following")
+        case .latest: return L("最新", "Latest")
+        }
+    }
+}
+
+protocol SocialService: OpenIMChatMessageDataSource {
+    func restoreSession() async -> Session?
     func login(username: String, password: String) async throws -> Session
+    func loginWithSms(phoneNumber: String, code: String) async throws -> Session
+    func sendLoginSmsCode(phoneNumber: String) async throws -> Int
     func register(username: String, email: String, password: String, displayName: String) async throws -> Session
     func logout() async
+    func fetchOpenIMBootstrap() async throws -> OpenIMBootstrap
 
-    func fetchFeed(cursor: String?) async throws -> FeedPage
+    func fetchFeed(cursor: String?, mode: FeedMode?) async throws -> FeedPage
     func searchFeed(query: String) async throws -> FeedPage
     func fetchPost(postID: String) async throws -> Post
     func createPost(input: CreatePostInput) async throws -> Post
     func updatePost(postID: String, input: UpdatePostInput) async throws -> Post
     func deletePost(postID: String) async throws
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post
+    func toggleSave(postID: String, shouldSave: Bool) async throws -> Post
+    func recordShare(postID: String, channel: String, status: String) async throws -> Post
+    func hidePost(postID: String, reason: String?) async throws
+    func recordFeedEvent(input: FeedEventInput) async throws
 
     func fetchComments(postID: String) async throws -> [Comment]
-    func addComment(postID: String, content: String) async throws -> Comment
+    func addComment(postID: String, content: String, parentCommentID: String?) async throws -> Comment
 
     func searchUsers(query: String) async throws -> [UserSummary]
     func fetchUserProfile(userID: String) async throws -> UserProfile
@@ -25,28 +49,88 @@ protocol SocialService {
 
     func fetchConversations(type: ConversationType) async throws -> [Conversation]
     func markConversationRead(conversationID: String) async throws
+    func setConversationMuted(conversationID: String, muted: Bool) async throws
+    func clearConversationHistory(conversationID: String) async throws
     func startDirectConversation(identifier: String) async throws -> Conversation
     func fetchMessages(conversationID: String) async throws -> [ChatMessage]
     func sendMessage(conversationID: String, content: String) async throws -> ChatMessage
+    func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
+    func sendVideoMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
     func fetchRecommendedSquads() async throws -> [SquadSummary]
     func fetchMySquads() async throws -> [SquadSummary]
     func fetchSquadProfile(squadID: String) async throws -> SquadProfile
     func joinSquad(squadID: String) async throws
+    func leaveSquad(squadID: String) async throws
+    func disbandSquad(squadID: String) async throws
     func createSquad(input: CreateSquadInput) async throws -> Conversation
     func uploadSquadAvatar(squadID: String, imageData: Data, fileName: String, mimeType: String) async throws -> AvatarUploadResponse
     func updateSquadMySettings(squadID: String, input: UpdateSquadMySettingsInput) async throws
     func updateSquadInfo(squadID: String, input: UpdateSquadInfoInput) async throws
+    func updateSquadMemberRole(squadID: String, memberUserID: String, role: String) async throws
+    func removeSquadMember(squadID: String, memberUserID: String) async throws
     func fetchNotifications(limit: Int) async throws -> NotificationInbox
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
     func markNotificationRead(notificationID: String) async throws
+    func markNotificationsRead(type: AppNotificationType) async throws
+    func registerDevicePushToken(
+        deviceID: String,
+        platform: String,
+        pushToken: String,
+        appVersion: String?,
+        locale: String?
+    ) async throws
+    func deactivateDevicePushToken(deviceID: String, platform: String) async throws
 
     func fetchMyProfile() async throws -> UserProfile
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile
     func uploadMyAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> AvatarUploadResponse
     func fetchMyLikeHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchMyRepostHistory(cursor: String?) async throws -> ActivityPostPage
+    func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage
     func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post
+}
+
+extension SocialService {
+    func setConversationMuted(conversationID: String, muted: Bool) async throws {
+        throw ServiceError.message("Not supported")
+    }
+
+    func clearConversationHistory(conversationID: String) async throws {
+        throw ServiceError.message("Not supported")
+    }
+
+    func leaveSquad(squadID: String) async throws {
+        throw ServiceError.message("Not supported")
+    }
+
+    func disbandSquad(squadID: String) async throws {
+        _ = squadID
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        _ = fileURL
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendVideoMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        _ = fileURL
+        throw ServiceError.message("Not supported")
+    }
+
+    func updateSquadMemberRole(squadID: String, memberUserID: String, role: String) async throws {
+        _ = squadID
+        _ = memberUserID
+        _ = role
+        throw ServiceError.message("Not supported")
+    }
+
+    func removeSquadMember(squadID: String, memberUserID: String) async throws {
+        _ = squadID
+        _ = memberUserID
+        throw ServiceError.message("Not supported")
+    }
 }
 
 enum ServiceError: LocalizedError {

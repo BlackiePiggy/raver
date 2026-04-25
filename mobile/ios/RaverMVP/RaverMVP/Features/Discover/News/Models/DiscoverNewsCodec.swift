@@ -124,7 +124,7 @@ func fetchDiscoverNewsArticles(
     var articles: [DiscoverNewsArticle] = []
 
     repeat {
-        let page = try await socialService.fetchFeed(cursor: cursor)
+        let page = try await socialService.fetchFeed(cursor: cursor, mode: .latest)
         let parsed = page.posts.compactMap { DiscoverNewsCodec.decode(post: $0) }
         for article in parsed where seen.insert(article.id).inserted {
             articles.append(article)

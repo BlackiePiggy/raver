@@ -13,7 +13,7 @@ export const squadController = {
   // 创建小队
   async createSquad(req: Request, res: Response): Promise<void> {
     try {
-      const { name, description, isPublic, maxMembers } = req.body;
+      const { name, description, isPublic, maxMembers, memberIds } = req.body;
       const userId = (req as AuthRequest).user?.userId;
 
       if (!userId) {
@@ -30,6 +30,7 @@ export const squadController = {
         name: name.trim(),
         description: description?.trim(),
         leaderId: userId,
+        memberIds: Array.isArray(memberIds) ? memberIds : [],
         isPublic,
         maxMembers,
       });
@@ -37,7 +38,9 @@ export const squadController = {
       res.status(201).json(squad);
     } catch (error: any) {
       console.error('创建小队失败:', error);
-      res.status(500).json({ error: error.message || '创建小队失败' });
+      const message = error.message || '创建小队失败';
+      const status = message.includes('至少需要 3 人') || message.includes('不能小于') ? 400 : 500;
+      res.status(status).json({ error: message });
     }
   },
 

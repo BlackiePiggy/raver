@@ -77,8 +77,16 @@ Raver 继续负责：
 建议映射：
 
 ```text
-Raver Squad.id = OpenIM groupID
-Raver User.id = OpenIM userID
+Raver Squad.id -> OpenIM groupID(确定性映射)
+Raver User.id -> OpenIM userID(确定性映射)
+```
+
+创建规则：
+
+```text
+创建小队 = 创建群聊空间
+创建者本人 + 初始成员必须不少于 3 人
+即创建时至少选择 2 个好友
 ```
 
 小队本质上是一个群聊空间，但 Raver 会在业务层额外赋予：
@@ -95,13 +103,25 @@ OpenIM 只承载群聊能力，不成为小队主库。
 
 ### 2.4 用户 ID
 
-可以复用：
+本地 OpenIM v3.8 实测发现：
+
+- Raver 当前主键是带 `-` 的 UUID；
+- OpenIM `userID` 不接受该格式直接注册；
+- 因此不能再假设 `Raver User.id = OpenIM userID`。
+
+当前落地方案：
 
 ```text
-Raver User.id = OpenIM userID
+OpenIM userID = toOpenIMUserID(Raver User.id)
+OpenIM groupID = toOpenIMGroupID(Raver Squad.id)
 ```
 
-不再额外维护 `openimUserId` 映射，降低同步和排查复杂度。
+建议规则：
+
+- userID 使用 `u_` 前缀 + 去掉非法字符后的稳定值；
+- groupID 使用 `g_` 前缀 + 去掉非法字符后的稳定值；
+- `ex` / 自定义扩展字段里保留原始 `raverUserId`、`raverSquadId` 便于排障；
+- 不使用用户名作为 OpenIM 主键，避免后续改名带来漂移。
 
 ### 2.5 历史消息迁移
 
@@ -277,11 +297,12 @@ OpenIM 官方文档显示：
 - 群管理 API 支持创建群、成员管理等能力。
 - Webhook 能在消息发送前后、群变更等阶段通知业务系统。
 
-需要重点验证的约束：
+已确认的产品约束：
 
 - OpenIM 创建群接口文档说明：创建群指定群主，群成员包含群主不能少于 3 人。
-- Raver 当前 Squad 可能允许 1 人先创建小队。
-- 如果该约束在所选 OpenIM 版本中仍存在，则需要采用“延迟物化 OpenIM 群”或“产品层要求创建群时至少 3 人”的策略。
+- Raver 与 OpenIM 对齐：创建小队/群聊空间时，必须满足“创建者 + 初始成员 >= 3 人”。
+- Raver 后端必须做硬校验，客户端只做体验层提示。
+- 不采用假用户凑数，也不采用 1 人小队延迟物化群。
 
 官方文档参考：
 
@@ -338,14 +359,15 @@ flowchart TD
 ### 5.1 用户映射
 
 ```text
-Raver User.id       -> OpenIM userID
+Raver User.id       -> toOpenIMUserID(User.id)
 User.username       -> OpenIM nickname fallback
 User.displayName    -> OpenIM nickname
 User.avatarUrl      -> OpenIM faceURL
 User.isActive=false -> OpenIM disable / Raver 阻止 token 签发
 ```
 
-不建议新增 `openimUserId`。如果未来需要兼容第三方 IM，再加 `external_accounts` 表。
+当前阶段先使用确定性函数映射，不新增数据库映射表。  
+如果未来出现多 IM、历史兼容、或映射规则升级需求，再引入 `external_accounts` / `openim_accounts` 表。
 
 ### 5.2 私信会话映射
 
@@ -381,7 +403,7 @@ model OpenIMConversationMirror {
 ### 5.3 小队群映射
 
 ```text
-Raver Squad.id          -> OpenIM groupID
+Raver Squad.id          -> toOpenIMGroupID(Squad.id)
 Squad.name              -> groupName
 Squad.avatarUrl         -> faceURL
 Squad.description       -> introduction
@@ -488,6 +510,15 @@ OPENIM_ADMIN_SECRET=
 OPENIM_PLATFORM_ID=1
 OPENIM_SYSTEM_USER_ID=raver_system
 OPENIM_CALLBACK_SECRET=
+OPENIM_PATH_GET_ADMIN_TOKEN=/auth/get_admin_token
+OPENIM_PATH_GET_USER_TOKEN=/auth/get_user_token
+OPENIM_PATH_USER_REGISTER=/user/user_register
+OPENIM_PATH_CREATE_GROUP=/group/create_group
+OPENIM_PATH_INVITE_USER_TO_GROUP=/group/invite_user_to_group
+OPENIM_PATH_KICK_GROUP=/group/kick_group
+OPENIM_PATH_SET_GROUP_INFO=/group/set_group_info_ex
+OPENIM_PATH_SET_GROUP_MEMBER_INFO=/group/set_group_member_info
+OPENIM_PATH_TRANSFER_GROUP=/group/transfer_group
 
 OPENIM_MIGRATION_BATCH_SIZE=200
 OPENIM_MIGRATION_DRY_RUN=true
@@ -566,7 +597,7 @@ Authorization: Bearer <raver_jwt>
 ```json
 {
   "enabled": true,
-  "userID": "raver-user-id",
+  "userID": "u_<mapped_openim_user_id>",
   "token": "openim-user-token",
   "apiURL": "https://im-api.raver.example.com",
   "wsURL": "wss://im-ws.raver.example.com",
@@ -638,7 +669,7 @@ model OpenIMSyncJob {
 | 用户注册 | user_register |
 | 用户改昵称/头像 | update user info |
 | 用户封禁 | 禁止 token 签发，必要时 OpenIM 禁用 |
-| 创建小队 | create group |
+| 创建小队，且创建者 + 初始成员 >= 3 人 | create group |
 | 修改小队资料 | update group info |
 | 小队认证变化 | update group ex/custom field or Raver mirror |
 | 加入小队 | add group member |
@@ -1534,6 +1565,1939 @@ im-admin.raver.example.com  internal only, if needed
 - 无明显消息丢失。
 - 回滚预案可执行。
 
+### 13.7 当前执行看板
+
+> 说明：这里记录“实际已经动手执行”的状态，不再只是规划。  
+> 更新规则：做完即勾选；遇到阻塞时在“当前阻塞与下一步”补充原因；关键命令输出沉淀到“关键执行日志”。
+
+#### Phase 0：接入前验证
+
+状态：已完成
+
+- [x] 本地拉起 OpenIM 官方 `openim-docker`
+- [x] `openim-server` / `openim-chat` 健康检查通过
+- [x] Raver 后端最小 `OpenIMClient` 可请求 OpenIM API
+- [x] 跑通 admin token
+- [x] 跑通真实 Raver 用户 `user_register`
+- [x] 跑通真实 Raver 用户 `get_user_token`
+- [x] 验证 OpenIM 建群至少 3 人约束
+- [x] 发现并确认 Raver 原始 UUID 不能直接作为 OpenIM `userID`
+- [x] 改为确定性 OpenIM ID 映射策略
+- [x] 用 3 个真实 Raver 用户完成群创建 smoke test
+- [x] 验证 webhook 回调到 Raver
+- [ ] 验证服务端 send message 是否支持历史 `sendTime`
+- [ ] iOS demo 直接登录 OpenIM SDK
+
+#### Phase 1：服务端基础设施
+
+状态：进行中
+
+- [x] 增加 `OPENIM_*` 环境变量约定
+- [x] 新增 [server/.env.openim.example](/Users/blackie/Projects/raver/server/.env.openim.example)
+- [x] 新增本地运行文档 [docs/OPENIM_LOCAL_DEV.md](/Users/blackie/Projects/raver/docs/OPENIM_LOCAL_DEV.md)
+- [x] 新增 `server/src/services/openim/*` 基础 adapter
+- [x] 新增 [server/src/services/openim/openim-client.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-client.ts)
+- [x] 新增 [server/src/services/openim/openim-token.service.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-token.service.ts)
+- [x] 新增 [server/src/services/openim/openim-user.service.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-user.service.ts)
+- [x] 新增 [server/src/services/openim/openim-group.service.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-group.service.ts)
+- [x] 新增 [server/src/services/openim/openim-id.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-id.ts)
+- [x] 新增 `/v1/openim/bootstrap`
+- [x] 新增 `/v1/openim/health`
+- [x] 新增 `pnpm openim:smoke`
+- [x] `/v1/openim/bootstrap` 返回 OpenIM 映射后的 `userID`
+- [x] 用户注册逻辑改为幂等
+- [x] 登录/注册事件自动触发 OpenIM 用户同步（`/v1/auth/*` 与 `/v1/bff/auth/*` 已接 best-effort 同步）
+- [x] 用户资料变更同步 OpenIM（补充 `update_user_info_ex` 路径与资料更新/头像更新同步）
+- [x] 同步任务表 `OpenIMSyncJob`（Prisma model + migration 已落地）
+- [x] 后端统一同步编排与失败重试（入队 + worker 轮询 + 指数退避重试）
+
+#### Phase 2：小队群和活动群同步
+
+状态：进行中
+
+- [x] 产品规则已对齐为“创建小队至少 3 人”
+- [x] 后端创建小队入口已硬校验“至少选择 2 位好友”
+- [x] iOS 创建小队页面已硬校验“至少选择 2 位好友”
+- [x] web 新建小队页面已补充规则提示
+- [x] OpenIM 群创建 payload 已按当前版本修正
+- [x] 群创建 smoke test 已通过
+- [x] 创建真实 `Squad` 时自动创建 OpenIM group
+- [x] 邀请通过/公开加入时同步 OpenIM 群成员
+- [x] 成员退出时同步 OpenIM 群成员
+- [x] 踢人同步 OpenIM 群成员（代码已接入；当前 OpenIM `v3.8.3-patch.12` 实测存在 `maxSeq is invalid` 阻塞，见最新执行日志）
+- [x] leader transfer 同步 OpenIM owner
+- [x] admin/member 角色同步
+- [x] 小队资料同步到 group info
+- [ ] 活动临时群模型与同步链路
+
+#### Phase 3：历史消息迁移
+
+状态：已完成本地迁移验证
+
+- [x] 设计 `OpenIMMessageMigration`（Prisma model + migration 已落地）
+- [x] 设计 DirectMessage dry-run 迁移脚本
+- [x] 设计 SquadMessage dry-run 迁移脚本
+- [x] 验证历史消息时间戳策略（数据侧：`createdAt asc + id asc`，并建议 `sendTime=createdAt`）
+- [x] 生成迁移报告模板
+- [x] 新增真实迁移执行器（pending -> send_msg -> migrated/failed）
+- [x] 真实执行器 plan 模式运行验证
+- [x] 真实执行器 OpenIM 私信沙箱发送验证（1 条 direct_message 成功）
+- [x] 新增小队 OpenIM group reconcile 脚本
+- [x] 真实执行器 OpenIM 小队群消息沙箱发送验证（5 条 squad_message 成功，4 条历史 1/2 人小队按规则 skipped）
+- [x] DirectMessage 本地历史消息真实迁移完成（16/16 migrated）
+- [x] 本地迁移最终状态无 failed
+
+#### Phase 4：iOS SDK 切换
+
+状态：进行中
+
+- [x] iOS `SocialService` 已增加 `fetchOpenIMBootstrap()`
+- [x] iOS `LiveSocialService` 已接 `/v1/openim/bootstrap`
+- [x] iOS `AppState` 已增加 `openIMBootstrap` 状态承载
+- [x] mock service 已增加 OpenIM bootstrap mock
+- [ ] 将登录后 bootstrap 正式接入 App 启动/恢复流程验证
+- [x] 接入 OpenIM iOS SDK（`Podfile + pod install + xcworkspace` 编译通过）
+- [x] 完成 `initSDK + login` 代码路径（编译通过，运行时登录验收待实机/模拟器登录流程）
+- [x] 会话列表切到 OpenIM SDK（OpenIM 优先 + BFF fallback，`xcworkspace` 编译通过）
+- [x] 聊天页切到 OpenIM SDK（OpenIM 优先 + BFF fallback，`xcworkspace` 编译通过）
+- [x] 文本发送切到 OpenIM SDK（OpenIM 优先 + BFF fallback，`xcworkspace` 编译通过）
+- [x] 未读数聚合到 AppState（OpenIM 未读总数优先 + BFF fallback，`xcworkspace` 编译通过）
+- [x] OpenIM 实时消息/会话回调桥接到 SwiftUI 状态（`xcworkspace` 编译通过，待双模拟器复测）
+- [x] 增加 `OpenIMChatStore` 本地同步层，统一接收 OpenIM SDK 事件、前台 catch-up、会话列表和消息页状态
+- [x] `ChatView` / `MessagesViewModel` 改为订阅 `OpenIMChatStore`，页面不再各自维护 SDK 监听和消息缓存
+- [x] 修复 Raver 业务会话 ID 与 OpenIM conversationID 双 key 消息合并，避免实时回调写入 OpenIM key 后 UI 仍读取旧业务 key
+
+#### Phase 5：审核、举报、后台
+
+状态：进行中
+
+- [x] OpenIM webhook 验签（HMAC 校验 + 时间窗 + 落库）
+- [x] 敏感词拦截（支持空格/符号绕过归一化检测 + 正则规则）
+- [x] 图片审核链路（webhook 抽取图片 URL -> 入库任务 -> 后台审核）
+- [x] 举报消息接口（`POST /v1/openim/messages/:messageId/report`）
+- [x] 管理员撤回/删除消息（`POST /v1/openim/admin/messages/:messageId/revoke|delete`）
+- [x] Web 管理后台 OpenIM 模块（最小可用：总览/举报/图片审核/Webhook/同步/审计）
+- [x] 审计日志（`admin_audit_logs` + `GET /v1/openim/admin/audit-logs`）
+
+#### Phase 6：生产上线
+
+状态：未开始
+
+- [x] 本地 OpenIM REST 发消息压测（2000 条消息 / 50 并发 / 100 人群 / 0 失败）
+- [ ] APNs 与推送验证
+- [ ] 1000 个 WebSocket 在线连接 soak test
+- [ ] 监控与报警
+- [ ] 备份恢复演练
+- [ ] TestFlight 灰度
+- [ ] 生产迁移
+- [ ] 旧聊天写入口下线
+
+### 13.8 关键执行日志
+
+#### 2026-04-20 13:28 CST：OpenIM 本地容器启动成功
+
+```text
+NAME            STATUS
+openim-server   Up ... (healthy)
+openim-chat     Up ... (healthy)
+```
+
+关键结果：
+
+- `openim-server` 监听 `10001`、`10002`
+- `openim-chat` 监听 `10008`、`10009`
+- Mongo / Redis / Kafka / MinIO / Etcd 均正常启动
+
+#### 2026-04-20 13:29 CST：OpenIM 服务自检通过
+
+`openim-server` 日志摘要：
+
+```text
+Etcd check succeeded.
+Mongo check succeeded.
+Redis check succeeded.
+Kafka check succeeded.
+MinIO check succeeded.
+All components checks passed successfully.
+All services are running normally.
+```
+
+`openim-chat` 日志摘要：
+
+```text
+Mongo check succeeded.
+Redis check succeeded.
+OpenIM check succeeded.
+All services are running normally.
+```
+
+#### 2026-04-20 13:31 CST：首次 smoke 失败，定位到 header 约束
+
+失败现象：
+
+```text
+OpenIMClientError: ArgsError
+errDlt: header must have operationID
+```
+
+结论：
+
+- 当前 OpenIM 版本要求 `operationID` 必须放在请求 header；
+- 仅放在 JSON body 不够；
+- 已在 `OpenIMClient` 中统一补齐。
+
+#### 2026-04-20 13:36 CST：定位到 UUID 不能直接作为 OpenIM userID
+
+手工注册原始 UUID：
+
+```text
+POST /user/user_register
+errMsg: ArgsError
+errDlt: userID is legal
+```
+
+使用映射后的合法 ID：
+
+```text
+userID = u_0fcba61a6bf340108e33981ed7a2b0e0
+errCode = 0
+```
+
+结论：
+
+- `Raver User.id` 不能直接等于 `OpenIM userID`
+- 必须引入确定性映射：`toOpenIMUserID()` / `toOpenIMGroupID()`
+
+#### 2026-04-20 13:39 CST：真实用户 bootstrap 成功
+
+命令：
+
+```text
+OPENIM_SMOKE_USER_ID=0fcba61a-6bf3-4010-8e33-981ed7a2b0e0 pnpm openim:smoke
+```
+
+结果：
+
+```text
+[openim-smoke] admin token ok
+[openim-smoke] user bootstrap ok
+userID: u_0fcba61a6bf340108e33981ed7a2b0e0
+expiresAt: 2026-07-19T05:39:09.010Z
+```
+
+补充验证：
+
+- 又对另外 2 个真实用户完成了同样的 bootstrap
+- 说明“注册用户 + 获取 user token”链路已经可用
+
+#### 2026-04-20 13:40 CST：3 人群创建 smoke 成功
+
+命令：
+
+```text
+OPENIM_SMOKE_CREATE_GROUP=true
+OPENIM_SMOKE_GROUP_ID=test-squad-openim-001
+OPENIM_SMOKE_GROUP_OWNER_ID=0fcba61a-6bf3-4010-8e33-981ed7a2b0e0
+OPENIM_SMOKE_GROUP_MEMBER_IDS=1f4cafda-6d46-4dcf-8e98-7d4892d09425,30acef14-61a6-4e5e-8087-64ff089fb9b8
+pnpm openim:smoke
+```
+
+结果：
+
+```text
+[openim-smoke] group creation ok
+groupId: test-squad-openim-001
+```
+
+结论：
+
+- 当前 `create_group` payload 已对齐本地 OpenIM 版本
+- “3 人建群”这条关键产品约束已经被真实环境验证
+
+#### 2026-04-20 13:41 CST：iOS 先接入 bootstrap 骨架
+
+已完成：
+
+- `SocialService` 新增 `fetchOpenIMBootstrap()`
+- `LiveSocialService` 已接 `/v1/openim/bootstrap`
+- `AppState` 新增 `openIMBootstrap`
+- 登录/注册成功后会尝试刷新 bootstrap
+
+当前还未完成：
+
+- OpenIM iOS SDK 依赖接入
+- `initSDK + login`
+- 会话页 / 聊天页切换到 SDK
+
+#### 2026-04-20 13:42 CST：当前仓库已有非 OpenIM 编译阻塞
+
+命令：
+
+```text
+cd server && pnpm build
+```
+
+结果摘要：
+
+```text
+src/routes/bff.routes.ts
+Property 'postSave' does not exist on type 'PrismaClient'
+Property 'postHide' does not exist on type 'PrismaClient'
+...
+```
+
+结论：
+
+- `server` 当前存在一组与 `post save/share/hide` 相关的既有类型错误；
+- 这批错误不由本轮 OpenIM 改动引入；
+- 后续如果要以 `pnpm build` 作为全量通过标准，需要先处理这批既有问题。
+
+#### 2026-04-20 14:00 CST：真实 Squad 创建已自动同步 OpenIM group
+
+本轮代码改动：
+
+- `squadService.createSquad()` 在数据库创建成功后，会立即调用 `openIMGroupService.createSquadGroup()`
+- `BFF POST /v1/squads` 也接入了同样的 OpenIM 建群逻辑
+- 如果 OpenIM 建群失败，会补偿删除刚创建的 `Squad` 和 `SquadMember`，避免 Raver 小队与 OpenIM 群状态分裂
+- `openIMGroupService` 新增成员同步能力：
+  - `addGroupMembers()`
+  - `removeGroupMembers()`
+- `squadService.handleInvite()`、`squadService.leaveSquad()`、`BFF POST /v1/squads/:id/join` 已接入成员同步
+- 群创建/加人前会自动补齐 OpenIM 用户注册，避免“用户没 bootstrap 就建群失败”
+
+真实验证命令：
+
+```text
+cd server && node -r ts-node/register -e "require('dotenv/config'); const { squadService } = require('./src/services/squad.service'); (async () => { const squad = await squadService.createSquad({ name: 'OpenIM Sync Smoke ' + Date.now(), description: 'openim sync smoke', leaderId: '0fcba61a-6bf3-4010-8e33-981ed7a2b0e0', memberIds: ['1f4cafda-6d46-4dcf-8e98-7d4892d09425', '30acef14-61a6-4e5e-8087-64ff089fb9b8'], isPublic: false, maxMembers: 50 }); console.log(JSON.stringify({ id: squad.id, name: squad.name, memberCount: squad.members.length }, null, 2)); })().catch((error) => { console.error(error); process.exit(1); });"
+```
+
+结果：
+
+```text
+{
+  "id": "04e8f08a-fcc9-47ba-8314-9badc0c4d2ee",
+  "name": "OpenIM Sync Smoke 1776664795924",
+  "memberCount": 3
+}
+```
+
+结论：
+
+- 真实 Raver `Squad` 创建链路已经接入 OpenIM 建群；
+- 当前这条链路是硬同步，不再只是 smoke script；
+- 真实 3 人小队创建已可作为后续 iOS 接入的后端基座。
+
+#### 2026-04-20 14:00 CST：本轮改动涉及文件通过单独 TypeScript 静态检查
+
+命令：
+
+```text
+cd server && pnpm exec tsc --noEmit --skipLibCheck --target es2020 --module commonjs --esModuleInterop src/services/openim/openim-group.service.ts src/services/openim/openim-user.service.ts src/services/squad.service.ts src/routes/bff.routes.ts
+```
+
+结果：
+
+```text
+exit code 0
+```
+
+结论：
+
+- 本轮新增的 OpenIM 群同步代码已通过单文件级别静态检查；
+- 全量 `pnpm build` 仍然会被仓库中既有的 Prisma 类型问题阻塞。
+
+#### 2026-04-20 15:18 CST：小队资料同步与成员角色同步 adapter 已跑通
+
+本轮新增能力：
+
+- `openIMGroupService.syncSquadGroupProfile()`
+- `openIMGroupService.updateGroupMemberRole()`
+- `openIMGroupService.transferGroupOwner()`
+- `BFF PATCH /v1/squads/:id/manage` 在修改资料后会同步 OpenIM group info
+- `BFF POST /v1/squads/:id/avatar` 在修改头像后会同步 OpenIM group info
+- 新增成员管理路由：
+  - `PATCH /v1/squads/:id/members/:memberUserId/role`
+  - `POST /v1/squads/:id/members/:memberUserId/remove`
+
+真实验证命令：
+
+```text
+cd server && node -r ts-node/register/transpile-only -e "require('dotenv/config'); const { squadService } = require('./src/services/squad.service'); const { openIMGroupService } = require('./src/services/openim/openim-group.service'); (async () => { const leaderId = '0fcba61a-6bf3-4010-8e33-981ed7a2b0e0'; const adminCandidateId = '1f4cafda-6d46-4dcf-8e98-7d4892d09425'; const memberId = '30acef14-61a6-4e5e-8087-64ff089fb9b8'; const seed = Date.now(); const squad = await squadService.createSquad({ name: 'OpenIM Manage Smoke ' + seed, description: 'openim manage smoke', leaderId, memberIds: [adminCandidateId, memberId], isPublic: false, maxMembers: 50 }); await openIMGroupService.syncSquadGroupProfile({ squadId: squad.id, name: squad.name + ' Updated', description: 'openim manage smoke updated', notice: 'notice-' + seed, avatarUrl: squad.avatarUrl, bannerUrl: null, qrCodeUrl: null, isPublic: false, verified: false }); await openIMGroupService.updateGroupMemberRole(squad.id, adminCandidateId, 'admin'); console.log(JSON.stringify({ squadId: squad.id, name: squad.name, syncedProfile: true, promotedAdminUserId: adminCandidateId }, null, 2)); })().catch((error) => { console.error(error); process.exit(1); });"
+```
+
+结果：
+
+```text
+{
+  "squadId": "38d1127f-2f31-4744-9a49-56dc4a955342",
+  "name": "OpenIM Manage Smoke 1776669491732",
+  "syncedProfile": true,
+  "promotedAdminUserId": "1f4cafda-6d46-4dcf-8e98-7d4892d09425"
+}
+```
+
+结论：
+
+- OpenIM `set_group_info_ex` 已经被真实调用通过；
+- OpenIM `set_group_member_info` 已经被真实调用通过；
+- 小队资料镜像和 admin/member 角色镜像已经具备可用基座。
+
+#### 2026-04-20 15:18 CST：`bff.routes.ts` 的单文件静态检查仍被仓库既有错误阻塞
+
+命令：
+
+```text
+cd server && pnpm exec tsc --noEmit --skipLibCheck --target es2020 --module commonjs --esModuleInterop src/services/openim/openim-group.service.ts src/services/openim/openim-user.service.ts src/routes/bff.routes.ts
+```
+
+结果摘要：
+
+```text
+src/routes/bff.routes.ts(1073,73): error TS2339: Property 'user' does not exist ...
+src/routes/bff.routes.ts(1109,25): error TS2353: Object literal may only specify known properties, and 'tags' does not exist ...
+```
+
+补充验证：
+
+```text
+cd server && pnpm exec tsc --noEmit --skipLibCheck --target es2020 --module commonjs --esModuleInterop src/services/openim/openim-group.service.ts src/services/openim/openim-user.service.ts src/services/openim/openim-config.ts src/services/openim/openim-types.ts
+exit code 0
+```
+
+结论：
+
+- 新增的 OpenIM adapter 文件本身类型检查通过；
+- `bff.routes.ts` 仍然受该文件中既有非 OpenIM 类型错误影响，暂时不能把“整文件 typecheck 通过”作为本轮验收标准。
+
+#### 2026-04-20 15:26 CST：综合群管理 smoke 全部通过
+
+本轮对 `pnpm openim:smoke` 做了增强，新增可重复执行的群管理验证项：
+
+- `OPENIM_SMOKE_SYNC_GROUP_INFO`
+- `OPENIM_SMOKE_PROMOTE_ADMIN_USER_ID`
+- `OPENIM_SMOKE_TRANSFER_GROUP_TO_USER_ID`
+- `OPENIM_SMOKE_KICK_GROUP_MEMBER_IDS`
+
+真实验证命令：
+
+```text
+cd server && OPENIM_SMOKE_CREATE_GROUP=true OPENIM_SMOKE_GROUP_ID=test-squad-openim-manage-001 OPENIM_SMOKE_GROUP_OWNER_ID=0fcba61a-6bf3-4010-8e33-981ed7a2b0e0 OPENIM_SMOKE_GROUP_MEMBER_IDS=1f4cafda-6d46-4dcf-8e98-7d4892d09425,30acef14-61a6-4e5e-8087-64ff089fb9b8 OPENIM_SMOKE_SYNC_GROUP_INFO=true OPENIM_SMOKE_PROMOTE_ADMIN_USER_ID=1f4cafda-6d46-4dcf-8e98-7d4892d09425 OPENIM_SMOKE_TRANSFER_GROUP_TO_USER_ID=1f4cafda-6d46-4dcf-8e98-7d4892d09425 OPENIM_SMOKE_KICK_GROUP_MEMBER_IDS=30acef14-61a6-4e5e-8087-64ff089fb9b8 pnpm openim:smoke
+```
+
+结果：
+
+```text
+[openim-smoke] group creation ok
+[openim-smoke] group profile sync ok
+[openim-smoke] promote admin ok
+[openim-smoke] transfer owner ok
+[openim-smoke] kick members ok
+```
+
+结论：
+
+- OpenIM `create_group / set_group_info_ex / set_group_member_info / transfer_group / kick_group` 已在同一条真实 smoke 链路里全部通过；
+- 小队群镜像的核心服务端能力已经闭环；
+- 后续重点可以转到 iOS SDK `initSDK + login`。
+
+#### 2026-04-20 15:26 CST：综合 smoke 脚本与 OpenIM adapter 类型检查通过
+
+命令：
+
+```text
+cd server && pnpm exec tsc --noEmit --skipLibCheck --target es2020 --module commonjs --esModuleInterop src/scripts/openim-smoke.ts src/services/openim/openim-group.service.ts src/services/openim/openim-user.service.ts src/services/openim/openim-config.ts src/services/openim/openim-types.ts
+```
+
+结果：
+
+```text
+exit code 0
+```
+
+结论：
+
+- 可重复执行的 OpenIM smoke 脚本已通过类型检查；
+- OpenIM adapter 当前可以作为后续 iOS 接入与回归验证基座。
+
+#### 2026-04-20 23:34 CST：综合 smoke 复跑，定位踢人链路版本级阻塞
+
+本轮为“确认上次执行是否完整”进行复跑，先后处理了两个环境前置：
+
+1. Docker daemon 未启动（`docker.sock` 不可用），启动 Docker Desktop 后恢复；
+2. 本地 PostgreSQL 未启动（`localhost:5432` 不可达），启动 `raver-postgres` 后恢复。
+
+复跑命令（修正为动态 group id，避免固定 `groupID` 冲突）：
+
+```text
+cd server && GROUP_ID="test-squad-openim-manage-$(date +%s)" && OPENIM_SMOKE_CREATE_GROUP=true OPENIM_SMOKE_GROUP_ID="$GROUP_ID" OPENIM_SMOKE_GROUP_OWNER_ID=0fcba61a-6bf3-4010-8e33-981ed7a2b0e0 OPENIM_SMOKE_GROUP_MEMBER_IDS=1f4cafda-6d46-4dcf-8e98-7d4892d09425,30acef14-61a6-4e5e-8087-64ff089fb9b8 OPENIM_SMOKE_SYNC_GROUP_INFO=true OPENIM_SMOKE_PROMOTE_ADMIN_USER_ID=1f4cafda-6d46-4dcf-8e98-7d4892d09425 OPENIM_SMOKE_TRANSFER_GROUP_TO_USER_ID=1f4cafda-6d46-4dcf-8e98-7d4892d09425 OPENIM_SMOKE_KICK_GROUP_MEMBER_IDS=30acef14-61a6-4e5e-8087-64ff089fb9b8 pnpm openim:smoke
+```
+
+复跑结果：
+
+```text
+[openim-smoke] group creation ok
+[openim-smoke] group profile sync ok
+[openim-smoke] promote admin ok
+[openim-smoke] transfer owner ok
+[openim-smoke] failed OpenIMClientError: ArgsError (errCode: 1001)
+```
+
+`openim-server` 日志关键原因（服务端内部）：
+
+```text
+/openim.group.group/kickGroupMember -> Error: 1001 ArgsError maxSeq is invalid
+```
+
+结论：
+
+- `create_group / set_group_info_ex / set_group_member_info / transfer_group` 当前复跑可通过；
+- `kick_group` 在当前 OpenIM 版本（`v3.8.3-patch.12`）下存在间歇性阻塞，属于上游服务行为而非 Raver payload 基础字段缺失；
+- Phase 2 的“踢人链路”当前应按“实现已接入 + 版本阻塞待解”跟踪，不应视为彻底验收完成。
+
+#### 2026-04-20 23:45 CST：踢人阻塞增加可控容忍开关，脚本双模式复跑
+
+本轮新增：
+
+1. 服务端配置增加 `OPENIM_TOLERATE_KICK_MAXSEQ_ISSUE`（默认 `false`）；
+2. smoke 脚本增加 `OPENIM_SMOKE_ALLOW_KICK_KNOWN_ISSUE`（默认 `false`）；
+3. `openIMGroupService.removeGroupMembers()` 增加已知 `kick_group` 错误容忍分支（仅在显式开启时生效）。
+
+验证 1（严格模式，容忍关闭）：
+
+```text
+cd server && GROUP_ID="test-squad-openim-strict-$(date +%s)" && OPENIM_SMOKE_CREATE_GROUP=true OPENIM_SMOKE_GROUP_ID="$GROUP_ID" OPENIM_SMOKE_GROUP_OWNER_ID=0fcba61a-6bf3-4010-8e33-981ed7a2b0e0 OPENIM_SMOKE_GROUP_MEMBER_IDS=1f4cafda-6d46-4dcf-8e98-7d4892d09425,30acef14-61a6-4e5e-8087-64ff089fb9b8 OPENIM_SMOKE_SYNC_GROUP_INFO=true OPENIM_SMOKE_PROMOTE_ADMIN_USER_ID=1f4cafda-6d46-4dcf-8e98-7d4892d09425 OPENIM_SMOKE_TRANSFER_GROUP_TO_USER_ID=1f4cafda-6d46-4dcf-8e98-7d4892d09425 OPENIM_SMOKE_KICK_GROUP_MEMBER_IDS=30acef14-61a6-4e5e-8087-64ff089fb9b8 OPENIM_SMOKE_ALLOW_KICK_KNOWN_ISSUE=false pnpm openim:smoke
+```
+
+结果（关键行）：
+
+```text
+[openim-smoke] transfer owner ok
+[openim-smoke] failed OpenIMClientError: ArgsError (errCode: 1001)
+```
+
+验证 2（容忍模式，容忍开启）：
+
+```text
+cd server && GROUP_ID="test-squad-openim-tolerant-$(date +%s)" && OPENIM_SMOKE_CREATE_GROUP=true OPENIM_SMOKE_GROUP_ID="$GROUP_ID" OPENIM_SMOKE_GROUP_OWNER_ID=0fcba61a-6bf3-4010-8e33-981ed7a2b0e0 OPENIM_SMOKE_GROUP_MEMBER_IDS=1f4cafda-6d46-4dcf-8e98-7d4892d09425,30acef14-61a6-4e5e-8087-64ff089fb9b8 OPENIM_SMOKE_SYNC_GROUP_INFO=true OPENIM_SMOKE_PROMOTE_ADMIN_USER_ID=1f4cafda-6d46-4dcf-8e98-7d4892d09425 OPENIM_SMOKE_TRANSFER_GROUP_TO_USER_ID=1f4cafda-6d46-4dcf-8e98-7d4892d09425 OPENIM_SMOKE_KICK_GROUP_MEMBER_IDS=30acef14-61a6-4e5e-8087-64ff089fb9b8 OPENIM_SMOKE_ALLOW_KICK_KNOWN_ISSUE=true pnpm openim:smoke
+```
+
+结果（关键行）：
+
+```text
+[openim-smoke] transfer owner ok
+[openim-smoke] kick members ok
+```
+
+本轮结论：
+
+- 脚本已经具备“双模式回归”能力：严格模式用于暴露问题，容忍模式用于不中断后续链路验证；
+- `kick_group` 问题目前表现为间歇性，需要继续保留上游版本兼容跟踪；
+- 在未确认上游彻底修复前，建议 CI 或日常开发默认使用严格模式，联调联排可临时启用容忍模式。
+
+#### 2026-04-20 23:56 CST：iOS OpenIM SDK 真接入并通过 workspace 编译
+
+本轮动作：
+
+1. 本机 Ruby 2.6 环境安装 CocoaPods `1.11.3`（用户目录，不污染系统 Ruby）；
+2. 执行 `pod install`，安装 `OpenIMSDK (3.8.3-hotfix.12)` / `OpenIMSDKCore` / `MJExtension`；
+3. 修复 `OpenIMSession` 中 `initSDK` 调用签名（`withConfig` -> `with`）；
+4. 用 `RaverMVP.xcworkspace` 完成带 Pods 的模拟器编译。
+
+关键命令：
+
+```text
+export PATH="$HOME/.gem/ruby/2.6.0/bin:$PATH"
+cd mobile/ios/RaverMVP && pod install
+xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果（关键行）：
+
+```text
+Pod installation complete! There is 1 dependency from the Podfile and 3 total pods installed.
+** BUILD SUCCEEDED **
+```
+
+备注：
+
+- Pods 工程有 `IPHONEOS_DEPLOYMENT_TARGET=11.0` 的 warning（OpenIM SDK 侧），不影响当前 Debug 编译通过；
+- 运行时登录链路仍需要通过 App 实际登录流程做一次端到端验收（包含 `/v1/openim/bootstrap -> initSDK -> login`）。
+
+#### 2026-04-21 00:10 CST：会话列表切换到 OpenIM 优先路径并编译通过
+
+本轮动作：
+
+1. `OpenIMSession` 新增会话桥接：`fetchConversations(type:)`，将 `OIMConversationInfo` 映射为 `Conversation`；
+2. `OpenIMSession` 新增 `markConversationRead(conversationID:)`，对接 OpenIM `markConversationMessage`；
+3. `LiveSocialService.fetchConversations` 改为 OpenIM 优先，异常或不可用时回退到 BFF；
+4. `LiveSocialService.markConversationRead` 改为 OpenIM 优先，失败回退 BFF；
+5. 用 `RaverMVP.xcworkspace` 进行全量模拟器编译验证。
+
+关键命令：
+
+```text
+xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果（关键行）：
+
+```text
+** BUILD SUCCEEDED **
+```
+
+备注：
+
+- OpenIM Swift API 命名与 ObjC Header 存在桥接差异（例如 `getAllConversationListWith(onSuccess:onFailure:)`、`markConversationMessage(asRead:onSuccess:onFailure:)`），已按真实 Swift 暴露签名修正；
+- 目前仍是“OpenIM 优先 + BFF 兜底”策略，便于灰度期稳定运行。
+
+#### 2026-04-21 00:21 CST：聊天页读取/文本发送切到 OpenIM 优先路径并编译通过
+
+本轮动作：
+
+1. `OpenIMSession` 新增：
+   - `fetchMessages(conversationID:)`
+   - `sendTextMessage(conversationID:content:)`
+2. `LiveSocialService.fetchMessages/sendMessage` 改为 OpenIM 优先，异常或不可用时回退 BFF；
+3. 消息已读场景新增传输 ID 兼容：
+   - `Conversation` 增加 `openIMConversationID`
+   - `ChatView` 发送/拉取优先使用 `openIMConversationID`
+   - `MessagesHomeView` 标记已读优先使用 `openIMConversationID`
+4. OpenIM 用户 ID 到 Raver UUID 的 iOS 侧反向解析已接入（用于私信对象 profile 跳转兼容）。
+
+关键命令：
+
+```text
+xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果（关键行）：
+
+```text
+** BUILD SUCCEEDED **
+```
+
+备注：
+
+- 当前仍需做真实登录后的端到端验证，确认 OpenIM 在线链路下的“拉消息、发文本、标已读”行为与预期一致；
+- Pods 仍有 `IPHONEOS_DEPLOYMENT_TARGET=11.0` warning，不影响当前 Debug 编译。
+
+#### 2026-04-21 00:32 CST：会话 ID 语义修正（业务 ID 与 OpenIM 传输 ID 解耦）
+
+本轮动作：
+
+1. `Conversation.id` 恢复为业务侧可路由 ID（私信用户 ID / 小队 ID）；
+2. 新增 `openIMConversationID` 作为 OpenIM 传输层会话 ID；
+3. `OpenIMSession` 增加 `resolveOpenIMConversationID`：
+   - 支持“业务 ID -> OpenIM conversationID”转换；
+   - `markConversationRead / fetchMessages / sendTextMessage` 全部走该转换；
+4. 聊天页和消息页回到传业务 ID 调用 service，避免 fallback 到 BFF 时误传 OpenIM conversationID。
+
+关键命令：
+
+```text
+xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果（关键行）：
+
+```text
+** BUILD SUCCEEDED **
+```
+
+备注：
+
+- 这一步主要修正“导航与回退路径的一致性”，避免群聊页面跳转 `squadProfile` 使用到 OpenIM conversationID；
+- 下一步仍是做真实登录后的端到端联调验收。
+
+#### 2026-04-21 00:47 CST：AppState 未读聚合切到 OpenIM 优先路径并编译通过
+
+本轮动作：
+
+1. `OpenIMSession` 新增 `fetchTotalUnreadCount()`，直接调用 OpenIM SDK 未读总数接口；
+2. `AppState.refreshUnreadMessages()` 调整为：
+   - OpenIM 在线可用时优先用 `fetchTotalUnreadCount` 作为聊天未读；
+   - OpenIM 不可用或失败时回退到会话列表求和；
+3. 内容通知未读仍由 Raver 通知接口负责，最终在 `AppState` 聚合。
+
+关键命令：
+
+```text
+xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果（关键行）：
+
+```text
+** BUILD SUCCEEDED **
+```
+
+备注：
+
+- 该项已完成代码与编译层验证；
+- 仍需在真实登录链路下做一次端到端验收，确认数值与 OpenIM 会话角标一致。
+
+#### 2026-04-21 01:26 CST：服务端用户同步补齐（登录/注册触发 + 资料变更同步）并编译通过
+
+本轮动作：
+
+1. OpenIM 配置新增 `OPENIM_PATH_UPDATE_USER_INFO`（默认 `/user/update_user_info_ex`）；
+2. `openim-user.service` 增加：
+   - `syncUserProfile`（注册幂等 + 资料更新）；
+   - `syncUserById`（按用户 ID 拉取并同步）；
+   - `update_user_info_ex` 调用并兼容 fallback 到 `/user/update_user_info`；
+3. `/v1/auth` 与 `/v1/bff` 的以下入口已接入 best-effort 自动同步：
+   - 登录；
+   - 注册；
+   - 资料更新；
+   - 头像更新。
+
+关键命令：
+
+```text
+pnpm -C /Users/blackie/Projects/raver/server build
+```
+
+结果（关键行）：
+
+```text
+> raver-server@1.0.0 build /Users/blackie/Projects/raver/server
+> tsc
+```
+
+接口回归（关键状态）：
+
+```text
+/v1/auth/register -> 201
+/v1/auth/login -> 200
+/v1/profile/me (PATCH) -> 200
+```
+
+备注：
+
+- 本轮同步策略为 best-effort：OpenIM 同步失败不会阻断主业务登录/资料更新；
+- 当前下一步重点转到 iOS 真实登录联调验收与 webhook/同步任务编排。
+
+#### 2026-04-21 01:19 CST：OpenIM 同步任务表与重试编排落地（`OpenIMSyncJob`）
+
+本轮动作：
+
+1. Prisma 新增 `OpenIMSyncJob` 模型，并新增 migration：
+   - [server/prisma/migrations/20260421114000_add_openim_sync_jobs/migration.sql](/Users/blackie/Projects/raver/server/prisma/migrations/20260421114000_add_openim_sync_jobs/migration.sql)
+2. 新增同步编排服务：
+   - [server/src/services/openim/openim-sync-job.service.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-sync-job.service.ts)
+   - 支持 `queueUserProfileSync`
+   - 支持 worker `runWorkerOnce/startWorker`
+   - 支持锁超时抢占 + 指数退避重试
+3. 同步入口改为“入队”：
+   - `/v1/auth/*` 与 `/v1/bff/*` 的登录/注册/资料更新/头像更新，统一入 `OpenIMSyncJob`
+4. 服务启动时自动拉起 worker：
+   - [server/src/index.ts](/Users/blackie/Projects/raver/server/src/index.ts)
+
+关键命令：
+
+```text
+pnpm -C /Users/blackie/Projects/raver/server exec prisma migrate deploy
+pnpm -C /Users/blackie/Projects/raver/server exec prisma generate
+pnpm -C /Users/blackie/Projects/raver/server build
+```
+
+结果（关键行）：
+
+```text
+Applying migration `20260421114000_add_openim_sync_jobs`
+All migrations have been successfully applied.
+✔ Generated Prisma Client ...
+> raver-server@1.0.0 build /Users/blackie/Projects/raver/server
+> tsc
+```
+
+补充 smoke（关键结果）：
+
+```text
+queueUserProfileSync + runWorkerOnce => job.status = succeeded
+attempts = 1
+queue missing user + runWorkerOnce => job.status = retrying
+attempts = 1 / maxAttempts = 3
+```
+
+#### 2026-04-21 01:30 CST：OpenIM webhook 验签与事件落库链路落地
+
+本轮动作：
+
+1. 新增 webhook 事件表：
+   - [server/prisma/migrations/20260421122000_add_openim_webhook_events/migration.sql](/Users/blackie/Projects/raver/server/prisma/migrations/20260421122000_add_openim_webhook_events/migration.sql)
+2. 新增 webhook 验签服务：
+   - [server/src/services/openim/openim-webhook.service.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-webhook.service.ts)
+   - 支持 HMAC-SHA256 验签、时间窗校验、签名格式兼容（hex/base64）
+3. 新增基础敏感词审核服务：
+   - [server/src/services/openim/openim-moderation.service.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-moderation.service.ts)
+4. 新增 webhook 路由并落库：
+   - [server/src/routes/openim.routes.ts](/Users/blackie/Projects/raver/server/src/routes/openim.routes.ts)
+   - `POST /v1/openim/webhooks`
+5. 全局请求增加 `rawBody` 捕获用于验签：
+   - [server/src/index.ts](/Users/blackie/Projects/raver/server/src/index.ts)
+
+关键命令：
+
+```text
+pnpm -C /Users/blackie/Projects/raver/server exec prisma migrate deploy
+pnpm -C /Users/blackie/Projects/raver/server exec prisma generate
+pnpm -C /Users/blackie/Projects/raver/server build
+curl -X POST http://localhost:3901/v1/openim/webhooks ...
+```
+
+结果（关键行）：
+
+```text
+Applying migration `20260421122000_add_openim_webhook_events`
+All migrations have been successfully applied.
+> raver-server@1.0.0 build /Users/blackie/Projects/raver/server
+> tsc
+/v1/openim/webhooks -> 200 {"errCode":0,"errMsg":""}
+openim_webhook_events.signature_valid = true
+```
+
+#### 2026-04-21 01:33 CST：消息举报接口落地并 smoke 通过
+
+本轮动作：
+
+1. 新增消息举报表：
+   - [server/prisma/migrations/20260421123500_add_openim_message_reports/migration.sql](/Users/blackie/Projects/raver/server/prisma/migrations/20260421123500_add_openim_message_reports/migration.sql)
+2. 新增举报接口：
+   - `POST /v1/openim/messages/:messageId/report`
+   - 文件：[server/src/routes/openim.routes.ts](/Users/blackie/Projects/raver/server/src/routes/openim.routes.ts)
+3. 接口行为：
+   - 需要登录态；
+   - 支持 `reason/detail/conversationID/metadata`；
+   - `(messageId, reportedByUserId)` 唯一约束，重复举报走 upsert 更新。
+
+关键命令：
+
+```text
+pnpm -C /Users/blackie/Projects/raver/server exec prisma migrate deploy
+pnpm -C /Users/blackie/Projects/raver/server exec prisma generate
+pnpm -C /Users/blackie/Projects/raver/server build
+pnpm -C /Users/blackie/Projects/raver/server dev
+POST /v1/openim/messages/msg_test_001/report
+```
+
+结果（关键行）：
+
+```text
+Applying migration `20260421123500_add_openim_message_reports`
+All migrations have been successfully applied.
+POST /v1/openim/messages/msg_test_001/report -> 201
+{"id":"...","messageID":"msg_test_001","status":"pending","reason":"spam",...}
+```
+
+#### 2026-04-21 01:46 CST：管理员消息治理与管理查询接口落地（后端最小可用）
+
+本轮动作：
+
+1. 新增 OpenIM 消息治理 service：
+   - [server/src/services/openim/openim-message.service.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-message.service.ts)
+   - 支持管理员撤回/删除消息（含 path fallback）。
+2. 新增管理员接口（均为 admin 鉴权）：
+   - `GET /v1/openim/admin/overview`
+   - `GET /v1/openim/admin/reports`
+   - `PATCH /v1/openim/admin/reports/:id/resolve`
+   - `GET /v1/openim/admin/webhooks`
+   - `GET /v1/openim/admin/sync-jobs`
+   - `POST /v1/openim/admin/messages/:messageId/revoke`
+   - `POST /v1/openim/admin/messages/:messageId/delete`
+3. 配置补充：
+   - `OPENIM_PATH_REVOKE_MESSAGE`
+   - `OPENIM_PATH_DELETE_MESSAGE`
+
+关键命令：
+
+```text
+pnpm -C /Users/blackie/Projects/raver/server build
+PORT=3002 pnpm -C /Users/blackie/Projects/raver/server dev
+```
+
+结果（关键行）：
+
+```text
+> raver-server@1.0.0 build /Users/blackie/Projects/raver/server
+> tsc
+GET /v1/openim/admin/overview -> 200
+GET /v1/openim/admin/reports?status=pending&limit=5 -> 200
+PATCH /v1/openim/admin/reports/:id/resolve -> 200
+GET /v1/openim/admin/webhooks?limit=3 -> 200
+GET /v1/openim/admin/sync-jobs?limit=3 -> 200
+GET /v1/openim/admin/overview (non-admin) -> 403
+```
+
+#### 2026-04-21 01:58 CST：审计日志落地并接入管理员操作留痕
+
+本轮动作：
+
+1. 新增审计日志表：
+   - [server/prisma/migrations/20260421125500_add_admin_audit_logs/migration.sql](/Users/blackie/Projects/raver/server/prisma/migrations/20260421125500_add_admin_audit_logs/migration.sql)
+2. 管理员操作留痕：
+   - 举报处理：`openim.report.resolve`
+   - 消息撤回：`openim.message.revoke`
+   - 消息删除：`openim.message.delete`
+3. 新增审计查询接口（admin）：
+   - `GET /v1/openim/admin/audit-logs`
+
+关键命令：
+
+```text
+pnpm -C /Users/blackie/Projects/raver/server exec prisma migrate deploy
+pnpm -C /Users/blackie/Projects/raver/server exec prisma generate
+pnpm -C /Users/blackie/Projects/raver/server build
+PORT=3002 pnpm -C /Users/blackie/Projects/raver/server dev
+GET /v1/openim/admin/audit-logs?action=openim.report.resolve&limit=5
+```
+
+结果（关键行）：
+
+```text
+Applying migration `20260421125500_add_admin_audit_logs`
+All migrations have been successfully applied.
+PATCH /v1/openim/admin/reports/:id/resolve -> 200
+GET /v1/openim/admin/audit-logs?... -> 200
+firstAuditAction = openim.report.resolve
+```
+
+#### 2026-04-21 07:56 CST：敏感词拦截硬化 + 图片审核链路（任务入库 + 管理审核）落地
+
+本轮动作：
+
+1. 扩展 OpenIM 配置与审核服务：
+   - [server/src/services/openim/openim-config.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-config.ts)
+   - [server/src/services/openim/openim-types.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-types.ts)
+   - [server/src/services/openim/openim-moderation.service.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-moderation.service.ts)
+   - 新增能力：敏感词归一化检测（含空格/符号绕过）、`OPENIM_SENSITIVE_PATTERNS` 正则规则、图片 URL 抽取与风险判定。
+2. 新增图片审核任务表：
+   - [server/prisma/migrations/20260421142000_add_openim_image_moderation_jobs/migration.sql](/Users/blackie/Projects/raver/server/prisma/migrations/20260421142000_add_openim_image_moderation_jobs/migration.sql)
+   - [server/prisma/schema.prisma](/Users/blackie/Projects/raver/server/prisma/schema.prisma)
+3. `POST /v1/openim/webhooks` 串起图片审核任务入库：
+   - [server/src/routes/openim.routes.ts](/Users/blackie/Projects/raver/server/src/routes/openim.routes.ts)
+   - 图片 URL 命中后落 `openim_image_moderation_jobs`，可按配置阻断发送。
+4. 新增管理员图片审核接口：
+   - `GET /v1/openim/admin/image-moderation/jobs`
+   - `PATCH /v1/openim/admin/image-moderation/jobs/:id/review`
+   - 审核动作写入 `admin_audit_logs`（`openim.image_moderation.review`）。
+5. 更新本地 runbook 与环境变量示例：
+   - [docs/OPENIM_LOCAL_DEV.md](/Users/blackie/Projects/raver/docs/OPENIM_LOCAL_DEV.md)
+   - [server/.env.openim.example](/Users/blackie/Projects/raver/server/.env.openim.example)
+
+关键命令：
+
+```text
+pnpm -C /Users/blackie/Projects/raver/server exec prisma migrate deploy
+pnpm -C /Users/blackie/Projects/raver/server exec prisma generate
+pnpm -C /Users/blackie/Projects/raver/server build
+PORT=3002 OPENIM_SENSITIVE_WORDS=spam OPENIM_WEBHOOK_BLOCK_SENSITIVE_WORDS=true OPENIM_IMAGE_MODERATION_ENABLED=true OPENIM_IMAGE_MODERATION_ALLOWED_HOSTS=cdn.raverapp.com OPENIM_IMAGE_MODERATION_BLOCK_KEYWORDS=nsfw OPENIM_WEBHOOK_BLOCK_IMAGE_HITS=true OPENIM_WEBHOOK_REQUIRE_SIGNATURE=false pnpm -C /Users/blackie/Projects/raver/server dev
+```
+
+结果（关键行）：
+
+```text
+Applying migration `20260421142000_add_openim_image_moderation_jobs`
+All migrations have been successfully applied.
+> raver-server@1.0.0 build /Users/blackie/Projects/raver/server
+> tsc
+POST /v1/openim/webhooks (msg_img_pending) -> 200 {"errCode":0,"errMsg":""}
+POST /v1/openim/webhooks (msg_img_reject) -> 200 {"errCode":201,"errMsg":"blocked by moderation: image-moderation-blocked:keyword-hit:nsfw"}
+POST /v1/openim/webhooks (msg_sensitive_1) -> 200 {"errCode":201,"errMsg":"blocked by moderation: sensitive-word-detected:spam"}
+GET /v1/openim/admin/image-moderation/jobs?status=pending&limit=1 -> 200
+PATCH /v1/openim/admin/image-moderation/jobs/:id/review -> 200
+GET /v1/openim/admin/audit-logs?action=openim.image_moderation.review&limit=1 -> 200
+```
+
+#### 2026-04-21 08:15 CST：Web 管理后台 OpenIM 模块（最小可用）接入
+
+本轮动作：
+
+1. 新增 OpenIM 管理 API client：
+   - [web/src/lib/api/openim-admin.ts](/Users/blackie/Projects/raver/web/src/lib/api/openim-admin.ts)
+   - 覆盖总览、举报处理、图片审核任务、webhook、sync-jobs、audit-logs。
+2. 新增管理页面：
+   - [web/src/app/community/openim/page.tsx](/Users/blackie/Projects/raver/web/src/app/community/openim/page.tsx)
+   - 能查看指标、处理 pending 举报、处理 pending 图片审核、查看最近 webhook/sync/audit。
+3. 管理员菜单增加入口：
+   - [web/src/components/Navigation.tsx](/Users/blackie/Projects/raver/web/src/components/Navigation.tsx)
+   - `role=admin` 显示 `OpenIM 管理`。
+
+关键命令：
+
+```text
+pnpm -C /Users/blackie/Projects/raver/web exec tsc --noEmit
+pnpm -C /Users/blackie/Projects/raver/web build
+```
+
+结果（关键行）：
+
+```text
+tsc --noEmit -> 0 (通过)
+next build -> 因历史既有页面 /community/squads 的 useSearchParams 缺少 Suspense 边界而失败（与本次 OpenIM 页面改动无直接耦合）
+```
+
+#### 2026-04-21 08:08 CST：历史消息迁移 dry-run 首轮落地（Direct + Squad）
+
+本轮动作：
+
+1. 新增迁移状态模型与迁移表：
+   - [server/prisma/schema.prisma](/Users/blackie/Projects/raver/server/prisma/schema.prisma)
+   - [server/prisma/migrations/20260421150500_add_openim_message_migrations/migration.sql](/Users/blackie/Projects/raver/server/prisma/migrations/20260421150500_add_openim_message_migrations/migration.sql)
+2. 新增 dry-run 脚本（支持 `all/direct/squad`、可选持久化计划行、自动生成报告）：
+   - [server/src/scripts/openim-migration-dryrun.ts](/Users/blackie/Projects/raver/server/src/scripts/openim-migration-dryrun.ts)
+3. 增加脚本入口：
+   - [server/package.json](/Users/blackie/Projects/raver/server/package.json)
+   - `pnpm openim:migration:dry-run`
+   - `pnpm openim:migration:dry-run:direct`
+   - `pnpm openim:migration:dry-run:squad`
+4. 新增迁移报告模板：
+   - [docs/OPENIM_MIGRATION_REPORT_TEMPLATE.md](/Users/blackie/Projects/raver/docs/OPENIM_MIGRATION_REPORT_TEMPLATE.md)
+5. 产出首轮 dry-run 报告：
+   - [docs/reports/openim-migration-dryrun-2026-04-21T00-07-46-284Z.md](/Users/blackie/Projects/raver/docs/reports/openim-migration-dryrun-2026-04-21T00-07-46-284Z.md)
+
+关键命令：
+
+```text
+pnpm -C /Users/blackie/Projects/raver/server exec prisma migrate deploy
+pnpm -C /Users/blackie/Projects/raver/server exec prisma generate
+pnpm -C /Users/blackie/Projects/raver/server build
+pnpm -C /Users/blackie/Projects/raver/server openim:migration:dry-run
+```
+
+结果（关键行）：
+
+```text
+Applying migration `20260421150500_add_openim_message_migrations`
+All migrations have been successfully applied.
+> raver-server@1.0.0 build /Users/blackie/Projects/raver/server
+> tsc
+[openim-migration-dryrun] summary
+direct_message: conversations=12, messages=16, candidates=16, outOfOrder=0
+squad_message: conversations=5, messages=9, candidates=9, outOfOrder=0
+[openim-migration-dryrun] report /Users/blackie/Projects/raver/docs/reports/openim-migration-dryrun-2026-04-21T00-07-46-284Z.md
+```
+
+#### 2026-04-21 08:31 MYT：历史消息真实迁移执行器落地（编译通过）
+
+本轮动作：
+
+1. OpenIM message service 增加历史消息发送能力：
+   - [server/src/services/openim/openim-message.service.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-message.service.ts)
+   - 新增 `sendHistoricalMessage()`
+   - 支持单聊/群聊、`sendTime=createdAt`、`clientMsgID=raver_migration_<sourceId>`、文本/图片基础映射。
+2. OpenIM path 配置补充：
+   - `OPENIM_PATH_SEND_MESSAGE=/msg/send_msg`
+   - [server/src/services/openim/openim-config.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-config.ts)
+   - [server/.env.openim.example](/Users/blackie/Projects/raver/server/.env.openim.example)
+3. 新增真实迁移执行器：
+   - [server/src/scripts/openim-migration-execute.ts](/Users/blackie/Projects/raver/server/src/scripts/openim-migration-execute.ts)
+   - plan 模式：`pnpm openim:migration:plan`
+   - 真实执行：`OPENIM_ENABLED=true pnpm openim:migration:execute`
+   - 行为：读取 `openim_message_migrations(status=pending)`，补齐源消息上下文，调用 OpenIM `send_msg`，成功写 `migrated/targetMessageId/migratedAt`，失败写 `failed/error`。
+4. 更新本地 runbook：
+   - [docs/OPENIM_LOCAL_DEV.md](/Users/blackie/Projects/raver/docs/OPENIM_LOCAL_DEV.md)
+
+关键命令：
+
+```text
+pnpm -C /Users/blackie/Projects/raver/server build
+```
+
+结果（关键行）：
+
+```text
+> raver-server@1.0.0 build /Users/blackie/Projects/raver/server
+> tsc
+```
+
+补充运行验证：
+
+```text
+OPENIM_MIGRATION_DRYRUN_PERSIST=true pnpm -C server openim:migration:dry-run
+-> direct_message candidates=16, squad_message candidates=9, pending 基线写入成功
+
+pnpm -C server openim:migration:plan
+-> scannedRows=25, planned=25, failed=0, skipped=0
+
+OPENIM_MIGRATION_EXECUTE_BATCH_SIZE=1 OPENIM_MIGRATION_EXECUTE_MAX_MESSAGES=1 pnpm -C server openim:migration:execute
+-> scannedRows=1, sourceType=squad_message, failed=1, error=RecordNotFoundError
+
+OPENIM_MIGRATION_SOURCE_TYPE=direct_message OPENIM_MIGRATION_EXECUTE_BATCH_SIZE=1 OPENIM_MIGRATION_EXECUTE_MAX_MESSAGES=1 pnpm -C server openim:migration:execute
+-> scannedRows=1, migrated=1, targetMessageId=f5506c76e204667060e9a198e2103719
+```
+
+报告文件：
+
+- [docs/reports/openim-migration-dryrun-2026-04-21T08-48-47-747Z.md](/Users/blackie/Projects/raver/docs/reports/openim-migration-dryrun-2026-04-21T08-48-47-747Z.md)
+- [docs/reports/openim-migration-execute-2026-04-21T08-49-01-555Z.md](/Users/blackie/Projects/raver/docs/reports/openim-migration-execute-2026-04-21T08-49-01-555Z.md)
+- [docs/reports/openim-migration-execute-2026-04-21T08-49-15-511Z.md](/Users/blackie/Projects/raver/docs/reports/openim-migration-execute-2026-04-21T08-49-15-511Z.md)
+- [docs/reports/openim-migration-execute-2026-04-21T08-49-28-654Z.md](/Users/blackie/Projects/raver/docs/reports/openim-migration-execute-2026-04-21T08-49-28-654Z.md)
+
+迁移状态表当前统计：
+
+```text
+direct_message: migrated=1, pending=15
+squad_message: failed=1, pending=8
+```
+
+结论：
+
+- `send_msg` payload 对私信历史迁移可用；
+- 小队群消息失败原因是 OpenIM 返回 `RecordNotFoundError`，更像是 group 前置同步/本地 OpenIM 数据缺失，而不是执行器本身无法调用；
+- 执行器已支持 `OPENIM_MIGRATION_INCLUDE_FAILED=true`，修复 group 同步后可重跑失败行。
+
+#### 2026-04-21 08:54 MYT：小队 OpenIM group reconcile + SquadMessage 迁移验证通过
+
+本轮动作：
+
+1. 新增小队 group reconcile 脚本：
+   - [server/src/scripts/openim-squad-reconcile.ts](/Users/blackie/Projects/raver/server/src/scripts/openim-squad-reconcile.ts)
+   - plan：`pnpm openim:squad:reconcile:plan`
+   - execute：`OPENIM_ENABLED=true pnpm openim:squad:reconcile`
+2. 迁移执行器增强：
+   - [server/src/scripts/openim-migration-execute.ts](/Users/blackie/Projects/raver/server/src/scripts/openim-migration-execute.ts)
+   - 自动识别历史 1/2 人小队，按当前 3 人开群规则标记 `skipped`，避免反复失败。
+3. 更新 runbook：
+   - [docs/OPENIM_LOCAL_DEV.md](/Users/blackie/Projects/raver/docs/OPENIM_LOCAL_DEV.md)
+
+关键命令：
+
+```text
+pnpm -C /Users/blackie/Projects/raver/server build
+pnpm -C /Users/blackie/Projects/raver/server openim:squad:reconcile:plan
+OPENIM_ENABLED=true pnpm -C /Users/blackie/Projects/raver/server openim:squad:reconcile
+OPENIM_MIGRATION_SOURCE_TYPE=squad_message OPENIM_MIGRATION_INCLUDE_FAILED=true OPENIM_MIGRATION_EXECUTE_BATCH_SIZE=20 OPENIM_MIGRATION_EXECUTE_MAX_MESSAGES=20 pnpm -C /Users/blackie/Projects/raver/server openim:migration:execute
+```
+
+结果（关键行）：
+
+```text
+openim:squad:reconcile:plan -> blocked=3, planned=2
+openim:squad:reconcile -> blocked=3, reconciled=2
+openim:migration:execute squad_message -> scannedRows=9, migrated=5, skipped=4, failed=0
+```
+
+报告文件：
+
+- [docs/reports/openim-squad-reconcile-2026-04-21T08-54-02-060Z.md](/Users/blackie/Projects/raver/docs/reports/openim-squad-reconcile-2026-04-21T08-54-02-060Z.md)
+- [docs/reports/openim-squad-reconcile-2026-04-21T08-54-11-997Z.md](/Users/blackie/Projects/raver/docs/reports/openim-squad-reconcile-2026-04-21T08-54-11-997Z.md)
+- [docs/reports/openim-migration-execute-2026-04-21T08-54-16-612Z.md](/Users/blackie/Projects/raver/docs/reports/openim-migration-execute-2026-04-21T08-54-16-612Z.md)
+
+迁移状态表当前统计：
+
+```text
+direct_message: migrated=1, pending=15
+squad_message: migrated=5, skipped=4
+```
+
+结论：
+
+- 符合 3 人规则的历史小队消息已完成真实迁移；
+- 4 条 skipped 来自历史 1/2 人小队，按“当前 app 与 OpenIM 对齐为 3 人开群”的产品规则不创建 OpenIM group；
+- 小队消息迁移链路本身已经跑通。
+
+#### 2026-04-21 08:55 MYT：DirectMessage 剩余历史消息迁移完成
+
+本轮动作：
+
+1. 历史消息发送前自动补齐 OpenIM 用户镜像：
+   - [server/src/services/openim/openim-message.service.ts](/Users/blackie/Projects/raver/server/src/services/openim/openim-message.service.ts)
+   - direct message 迁移前确保 sender/receiver 均已注册 OpenIM；
+   - group message 迁移前确保 sender 已注册 OpenIM。
+2. 重跑失败 DirectMessage：
+   - 使用 `OPENIM_MIGRATION_INCLUDE_FAILED=true`；
+   - 8 条此前因 `RecordNotFoundError` 失败的私信全部迁移成功。
+
+关键命令：
+
+```text
+pnpm -C /Users/blackie/Projects/raver/server build
+OPENIM_MIGRATION_SOURCE_TYPE=direct_message OPENIM_MIGRATION_INCLUDE_FAILED=true OPENIM_MIGRATION_EXECUTE_BATCH_SIZE=20 OPENIM_MIGRATION_EXECUTE_MAX_MESSAGES=20 pnpm -C /Users/blackie/Projects/raver/server openim:migration:execute
+```
+
+结果（关键行）：
+
+```text
+openim:migration:execute direct_message -> scannedRows=8, migrated=8, failed=0, skipped=0
+```
+
+报告文件：
+
+- [docs/reports/openim-migration-execute-2026-04-21T08-55-07-354Z.md](/Users/blackie/Projects/raver/docs/reports/openim-migration-execute-2026-04-21T08-55-07-354Z.md)
+- [docs/reports/openim-migration-execute-2026-04-21T08-55-39-293Z.md](/Users/blackie/Projects/raver/docs/reports/openim-migration-execute-2026-04-21T08-55-39-293Z.md)
+
+迁移状态表最终统计：
+
+```text
+direct_message: migrated=16
+squad_message: migrated=5, skipped=4
+failed=0
+```
+
+结论：
+
+- 本地历史私信已全部迁移成功；
+- 合规小队群历史消息已迁移成功；
+- 历史 1/2 人小队消息按产品规则 skipped；
+- Phase 3 在本地开发环境已经完成闭环验证。
+
+#### 2026-04-22 09:35 MYT：OpenIM 本地 REST 发消息压测通过
+
+新增可重复执行压测脚本：
+
+```text
+server/src/scripts/openim-load-test.ts
+pnpm -C server openim:load-test
+```
+
+脚本能力：
+
+- 创建/复用本地压测用户；
+- 注册 OpenIM 用户镜像；
+- 创建 OpenIM 群；
+- 通过 OpenIM REST `send_msg` 并发发送私信和群聊文本消息；
+- 统计 min / avg / p50 / p95 / p99 / max；
+- 输出 Markdown 报告到 `docs/reports/openim-load-test-*.md`。
+
+本地结果：
+
+| 轮次 | users | groupSize | direct | group | concurrency | attempted | succeeded | failed | p50 | p95 | p99 | max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| smoke | 20 | 10 | 100 | 100 | 10 | 200 | 200 | 0 | 5.27ms | 17.32ms | 44.98ms | 45.52ms |
+| burst-1k | 50 | 30 | 500 | 500 | 25 | 1000 | 1000 | 0 | 8.79ms | 23.8ms | 33.93ms | 37.79ms |
+| burst-2k | 100 | 100 | 1000 | 1000 | 50 | 2000 | 2000 | 0 | 14.93ms | 33.78ms | 46.24ms | 77.18ms |
+
+报告文件：
+
+- [docs/reports/openim-load-test-2026-04-22T01-34-30-128Z.md](/Users/blackie/Projects/raver/docs/reports/openim-load-test-2026-04-22T01-34-30-128Z.md)
+- [docs/reports/openim-load-test-2026-04-22T01-34-36-002Z.md](/Users/blackie/Projects/raver/docs/reports/openim-load-test-2026-04-22T01-34-36-002Z.md)
+- [docs/reports/openim-load-test-2026-04-22T01-35-36-577Z.md](/Users/blackie/Projects/raver/docs/reports/openim-load-test-2026-04-22T01-35-36-577Z.md)
+
+第三轮压测后 Docker 资源快照：
+
+```text
+openim-chat   CPU 1.36%   MEM 300MiB
+openim-server CPU 8.51%   MEM 1.466GiB
+mongo         CPU 1.07%   MEM 364.2MiB
+kafka         CPU 3.43%   MEM 1.209GiB
+redis         CPU 0.36%   MEM 27.39MiB
+etcd          CPU 0.68%   MEM 83.93MiB
+```
+
+结论：
+
+- 当前本地 OpenIM REST 发消息链路在 2000 条消息、50 并发、100 人群的 burst 下 0 失败；
+- 这对“每日消息量 1000”的服务端发送入口是一个正向信号；
+- 但它不等价于“1000 个在线用户保证”，生产前仍需补 WebSocket 在线连接、iOS SDK 端到端、APNs 和长时间 soak test。
+
+详细压测方案：
+
+[docs/OPENIM_LOAD_TEST_PLAN.md](/Users/blackie/Projects/raver/docs/OPENIM_LOAD_TEST_PLAN.md)
+
+#### 2026-04-22 10:31 MYT：iOS OpenIM 实时回调桥接完成
+
+问题现象：
+
+- 双模拟器聊天时，A 发送消息后，B 在聊天页内不会立即显示；
+- B 返回会话列表再进入聊天页后可以看到新消息；
+- B 停留在会话列表时，如果不刷新，列表也不会出现新消息提示。
+
+原因判断：
+
+- iOS 已经能通过 OpenIM SDK 拉取会话和消息；
+- 但 `OpenIMSession` 只实现了主动拉取和发送，没有注册 SDK 的 `onRecvNewMessage`、`onConversationChanged`、`onNewConversation`、`onTotalUnreadMessageCountChanged`；
+- `ChatView` 和 `MessagesViewModel` 因此只能在页面重新加载时看到 OpenIM 本地库里的新数据。
+
+本轮修复：
+
+1. `OpenIMSession` 注册 OpenIM SDK 实时监听：
+   - `setAdvancedMsgListenerWithOnRecvNewMessage`
+   - `setConversationListenerWithOnConversationChanged`
+   - `setConversationListenerWithOnNewConversation`
+   - `setConversationListenerWithOnTotalUnreadMessageCountChanged`
+2. 将 SDK 回调桥接为 Combine publisher：
+   - `messagePublisher`
+   - `conversationPublisher`
+   - `totalUnreadPublisher`
+3. `ChatView` 订阅 `messagePublisher`：
+   - 当前会话收到新消息时立即 append；
+   - 自动去重；
+   - 自动滚到底部；
+   - 当前聊天页内收到消息后 best-effort 标记已读并刷新未读数。
+4. `MessagesViewModel` 订阅 `conversationPublisher`：
+   - 会话列表实时更新最新消息、未读数和排序；
+   - 新会话自动插入列表。
+5. `AppState` 订阅 OpenIM 实时未读/消息事件：
+   - 主 Tab badge 跟随刷新。
+
+关键文件：
+
+- [OpenIMSession.swift](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Core/OpenIMSession.swift)
+- [ChatView.swift](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/ChatView.swift)
+- [MessagesViewModel.swift](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/MessagesViewModel.swift)
+- [AppState.swift](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Core/AppState.swift)
+
+验证命令：
+
+```text
+xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果：
+
+```text
+** BUILD SUCCEEDED **
+```
+
+待复测：
+
+- 双模拟器同时停留在同一聊天页，A 发消息后 B 应立即显示；
+- B 停留在会话列表，A 发消息后 B 的会话列表应立即更新最新消息和未读数；
+- B 打开聊天页后未读数应清零，主 Tab badge 应同步刷新。
+
+#### 2026-04-22 10:38 MYT：iOS 前台 catch-up 同步补强
+
+复测反馈：
+
+- 仅接 OpenIM listener 后，双模拟器仍然没有立即刷新 UI。
+
+判断：
+
+- “监听 SDK 实时事件”是成熟 IM 客户端的标准方案，但成熟聊天软件不会只依赖单个 UI 回调；
+- 稳定方案通常是“长连接事件 -> 本地消息库 -> seq/游标同步 -> UI 订阅本地数据源”；
+- 如果实时事件丢失、回调没触发、客户端切后台、网络重连或本地数据库同步稍慢，前台页面仍需要可恢复的 catch-up 同步。
+
+本轮补强：
+
+1. `OpenIMSession` 增加 DEBUG 日志：
+   - listener 注册；
+   - `onRecvNewMessage`；
+   - `onConversationChanged`；
+   - `onNewConversation`；
+   - `onTotalUnreadMessageCountChanged`；
+   - 消息 conversation 映射失败。
+2. `ChatView` 增加前台可见 catch-up：
+   - 页面可见时每 2 秒静默拉一次当前会话 OpenIM 本地消息；
+   - 仅有变化时更新 `messages`；
+   - 不显示 loading，不影响手动刷新/显式错误提示。
+3. `MessagesViewModel` 增加前台可见 catch-up：
+   - 消息列表可见时每 3 秒静默拉一次 direct/group 会话；
+   - 仅有变化时更新列表和未读数。
+
+验证命令：
+
+```text
+xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果：
+
+```text
+** BUILD SUCCEEDED **
+```
+
+下一轮复测时需要观察 Xcode console：
+
+- 如果能看到 `[OpenIMSession] onRecvNewMessage...`，说明 SDK 实时回调到了，后续重点看 conversationID 映射；
+- 如果只看到 catch-up 后 UI 更新，看不到 `onRecvNewMessage`，说明当前 OpenIM iOS SDK listener 没按预期触发，需要进一步查 SDK 登录态、WS 回调或官方 listener 使用方式；
+- 如果 catch-up 也不更新，则说明当前页面的 `conversation.id` 和 OpenIM 本地会话映射仍有问题。
+
+#### 2026-04-22 10:47 MYT：iOS 成熟 IM 同步层改造
+
+目标：
+
+- 从“页面直接订阅 SDK 回调”升级为“OpenIM 事件/拉取补偿 -> 本地同步 Store -> SwiftUI 页面观察 Store”；
+- 对齐成熟聊天客户端常见架构：长连接事件负责实时性，前台 catch-up 负责容错，UI 不直接依赖单个 SDK callback；
+- 修复双模拟器复测中“回到列表再进入才看到新消息”的高概率根因：Raver 业务会话 ID 和 OpenIM conversationID 分别作为 key 写入/读取，导致实时消息进入 OpenIM key 后页面仍优先读取旧业务 key。
+
+本轮改造：
+
+1. 新增 `mobile/ios/RaverMVP/RaverMVP/Core/OpenIMChatStore.swift`：
+   - 统一维护 `conversations`、`unreadTotal`、`messagesByConversationID`；
+   - 内部订阅 `OpenIMSession.messagePublisher`、`conversationPublisher`、`totalUnreadPublisher`；
+   - 提供会话加载、消息加载、发送消息、标记已读、前台会话列表同步、前台聊天页同步入口。
+2. `MessagesViewModel` 改为订阅 `OpenIMChatStore`：
+   - 不再直接订阅 OpenIM SDK publisher；
+   - 不再本地维护另一套会话排序/未读聚合；
+   - 前台 catch-up 统一委托给 Store。
+3. `ChatView` 改为订阅 `OpenIMChatStore`：
+   - 页面不再持有独立 `@State messages`；
+   - 消息列表始终从 Store 读取；
+   - 发送成功后由 Store 合并消息；
+   - 可见聊天页消息变化后自动标记当前会话已读并刷新全局 badge。
+4. `AppState` 改为观察 `OpenIMChatStore`：
+   - 全局未读刷新由 Store 的会话/未读变化触发；
+   - logout、session expired、未登录状态统一 reset Store。
+5. `OpenIMChatStore` 修复双 key 合并：
+   - `messages(for:)` 会合并业务 conversation id 和 OpenIM conversation id 下的消息并去重排序；
+   - 实时消息进入时会根据会话映射同步写回业务 id、OpenIM id 和 message.conversationID，避免 UI 读取旧 key。
+
+验证命令：
+
+```text
+xcodegen generate
+xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果：
+
+```text
+Created project at /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcodeproj
+** BUILD SUCCEEDED **
+```
+
+复测预期：
+
+- 双模拟器同时停留在同一聊天页，A 发消息后 B 应通过 Store 立即显示；如果 SDK callback 没触发，前台 catch-up 应在约 2 秒内补齐；
+- B 停留在会话列表，A 发消息后 B 的列表应通过 Store 更新；如果 conversation callback 没触发，前台 catch-up 应在约 3 秒内补齐；
+- B 当前打开聊天页时，新消息进入后会自动标记当前会话已读，主 Tab badge 随后刷新。
+
+### 13.9 当前阻塞与下一步
+
+当前阻塞：
+
+1. iOS 运行时链路已升级为 `OpenIMSession -> OpenIMChatStore -> SwiftUI`，仍需你在双模拟器复测 `/v1/openim/bootstrap -> initSDK -> login -> 会话列表 -> 拉消息 -> 实时收消息 -> 标已读 -> 未读聚合`。
+2. `AppState` 未读聚合已改为 OpenIM/Store 驱动，但尚未完成“OpenIM 在线态 + 双模拟器 + 前后台切换”的人工验收。
+3. 1000 个 WebSocket 在线连接 soak test 尚未开始；当前只完成 REST 发消息压测。
+4. `kick_group` 在 OpenIM `v3.8.3-patch.12` 复跑中间歇性出现 `maxSeq is invalid`，已支持可控容忍开关，仍需上游版本确认。
+5. 历史消息迁移本地闭环完成；旧 1/2 人小队历史消息按规则 skipped；活动临时群链路仍未开始；Web 管理台仍需补充更细粒度筛选与批量处理。
+
+下一步建议顺序：
+
+1. 在模拟器做一次真实登录联调，确认会话列表、拉消息、发文本、已读回执走 OpenIM（含 fallback 观测）。
+2. 验证 `AppState` 未读总数在 OpenIM 在线态下的准确性。
+3. 补 1000 个 WebSocket 在线连接 soak test，确认连接稳定性和消息实时送达。
+4. 补齐管理台筛选/批处理能力，并开始活动临时群模型与同步链路。
+5. 活动临时群在服务端群镜像稳定后单独接入。
+
+### 13.10 第二阶段：商用级聊天系统改造
+
+状态：已开启
+
+启动时间：2026-04-22 11:02 +08
+
+第二阶段目标不是“能聊天”，而是把 Raver 的聊天系统提升到可以承接真实用户、真实运营、真实事故排查的商用级能力。核心标准：
+
+- 消息实时到达可观测、可补偿、可恢复；
+- 聊天未读和社区互动未读分离展示、分离统计、分离排障；
+- 客户端以本地同步层为主，具备离线可读、重连补齐、去重排序能力；
+- 服务端具备同步任务、审核、举报、删除/撤回、审计、压测和回滚能力；
+- 所有关键改造都有勾选式进度、执行日志、验收命令和复测结论。
+
+#### Phase 2-A：未读模型和入口体验
+
+目标：先把用户最容易感知的消息入口做成商用形态。
+
+- [x] 设计消息 Tab 统一红色未读模型：
+  - 聊天未读：私信、小队群聊、活动临时群；
+  - 社区互动未读：关注、点赞、评论、小队邀请；
+  - 两类未读统一汇总为一个红色 badge。
+- [x] `AppState.unreadMessagesCount` 统一承载聊天 + 社区互动总未读。
+- [x] TabBar 消息 icon 右上角展示一个红色未读 badge。
+- [x] 会话列表中的聊天未读 badge 从紫色改为红色。
+- [x] 聊天页打开当前会话后，聊天未读能通过 `refreshUnreadMessages()` 刷新统一红色 badge（代码路径已接入，待双模拟器复测）。
+- [x] 社区通知读完后，社区未读能刷新统一红色 badge。
+- [ ] 双模拟器复测统一 badge：聊天消息和社区互动都能增加同一个红色未读数。
+
+验收标准：
+
+- B 停留在消息 Tab 或其他 Tab 时，A 发聊天消息，B 的消息 Tab 红色 badge 增加；
+- B 收到点赞/评论/关注/小队邀请时，消息 Tab 红色 badge 增加；
+- 聊天未读和社区互动未读同时存在时，只显示一个合计红色 badge；
+- 任一未读超过 99 时显示 `99+`，不撑破 TabBar 布局；
+- 未登录、退出登录、session expired 时红色 badge 归零。
+
+#### Phase 2-B：客户端本地消息库
+
+目标：从内存 Store 升级到本地持久化同步层，达到成熟 IM 客户端的基础形态。
+
+- [ ] 选型本地持久化方案：SQLite/GRDB 优先，CoreData 备选。
+- [ ] 设计本地表：
+  - `local_conversations`
+  - `local_messages`
+  - `local_message_sync_state`
+  - `local_pending_messages`
+  - `local_message_attachments`
+- [ ] `OpenIMChatStore` 读写本地库，而不是只保存在内存。
+- [ ] 消息页先显示本地库，再后台向 OpenIM 拉取增量。
+- [ ] 会话列表先显示本地库，再后台向 OpenIM 拉取增量。
+- [ ] 本地消息按 `sendTime/serverTime + seq + clientMsgID` 去重排序。
+- [ ] App 重启后无需网络也能看到最近会话和历史消息。
+
+验收标准：
+
+- 断网重启 App 后，最近会话和已拉取消息仍可展示；
+- 重新联网后自动补齐缺口；
+- 同一条消息经实时回调、前台 catch-up、历史拉取重复到达时只显示一次；
+- 本地库升级失败有回滚策略，不导致 App 白屏或崩溃。
+
+#### Phase 2-C：增量同步、重连补偿和一致性
+
+目标：把“实时性”从依赖单个 callback 升级为完整同步协议。
+
+- [ ] 梳理 OpenIM iOS SDK 支持的 seq/cursor/拉取接口。
+- [ ] 为每个 conversation 保存本地同步位点。
+- [ ] 前台启动执行会话级增量补齐。
+- [ ] App 从后台回到前台执行轻量补齐。
+- [ ] OpenIM 重连成功后执行 gap fill。
+- [ ] 发送消息失败进入 pending 队列，可重试、可取消。
+- [ ] 处理消息撤回、删除、编辑、已读回执、群公告等状态事件。
+
+验收标准：
+
+- 人为断网 30 秒再恢复，消息不丢、不重复、顺序正确；
+- 杀 App 后重新打开，未同步消息能补齐；
+- 后台超过 10 分钟再回前台，未读和会话预览准确；
+- 发送失败时 UI 明确展示失败状态，不伪装成功。
+
+#### Phase 2-D：多媒体和自定义消息
+
+目标：覆盖真实社交 App 的核心消息类型。
+
+- [ ] 文本消息完善：复制、撤回、删除、举报。
+- [ ] 图片消息：上传、审核、缩略图、原图查看。
+- [ ] 语音消息：录制、上传、播放进度、时长展示。
+- [ ] 视频消息：上传、封面、转码状态、播放。
+- [ ] 表情消息。
+- [ ] 活动卡片消息。
+- [ ] DJ/Set 卡片消息。
+- [ ] 系统消息样式。
+- [ ] 多媒体消息发送失败重试和取消。
+
+验收标准：
+
+- 每种消息在私信、小队群、活动群至少各完成一次收发；
+- 媒体审核未通过时消息不可见或被替换为审核提示；
+- 自定义卡片消息点击后能跳转正确业务页面；
+- 网络不稳定时不会出现重复媒体消息。
+
+#### Phase 2-E：离线推送和通知路由
+
+目标：用户不在 App 内时仍能收到可控、可跳转、可统计的通知。
+
+- [ ] 接入 APNs token 注册和刷新。
+- [ ] OpenIM 离线推送配置。
+- [ ] Raver 自有内容通知推送配置。
+- [ ] 推送路由：
+  - 私信 -> 对话页；
+  - 小队群聊 -> 小队会话；
+  - 活动临时群 -> 活动群会话；
+  - 点赞/评论/关注/邀请 -> 对应社区通知页或业务详情。
+- [ ] 前台通知展示策略。
+- [ ] 后台点击通知后的会话/未读补齐。
+
+验收标准：
+
+- App 退出后能收到聊天推送；
+- App 退出后能收到社区互动推送；
+- 点击推送跳转准确；
+- 推送到达后本地未读不会和服务端未读长期不一致。
+
+#### Phase 2-F：治理、风控和后台运营
+
+目标：达到可以面向真实社区运营的治理能力。
+
+- [ ] 敏感词规则支持分级：拦截、替换、仅记录。
+- [ ] 图片/视频审核接入异步任务和人工复核。
+- [ ] 消息举报进入管理后台处理流。
+- [ ] 管理员撤回消息、删除消息、禁言用户。
+- [ ] 群主/管理员/成员权限完整接入。
+- [ ] 邀请审核、群公告、踢人、退群、解散群完成 iOS UI。
+- [ ] 审计日志可按用户、群、消息、操作人、时间筛选。
+
+验收标准：
+
+- 每个治理动作都有后台记录；
+- 用户端能感知被撤回/被删除/被禁言状态；
+- 管理后台操作后 iOS 能同步反映；
+- 审计日志能复盘一次完整举报处理链路。
+
+#### Phase 2-G：压测、稳定性和容量规划
+
+目标：证明系统在目标规模下不会靠运气运行。
+
+- [ ] REST 发消息压测：保留 2000 条/50 并发基线。
+- [ ] WebSocket 在线连接 soak test：1000 在线，至少 2 小时。
+- [ ] 群聊 fanout 压测：100 人群、200 人群、活动群峰值。
+- [ ] 客户端双模拟器长期收发 soak test。
+- [ ] OpenIM/Raver 服务端 CPU、内存、连接数、错误率监控。
+- [ ] 数据库慢查询和队列堆积监控。
+- [ ] 灾难演练：OpenIM 短暂不可用、Raver BFF 不可用、网络抖动。
+
+验收标准：
+
+- 目标 MVP 规模：注册 1k、DAU 1k、同时在线 1k、小队 100、单队 200、每日消息 1000，系统稳定运行；
+- P95 发送接口延迟和接收端展示延迟有明确指标；
+- 出现 OpenIM 短暂不可用时，App 不崩溃，能恢复同步；
+- 压测报告沉淀到 `docs/reports/`。
+
+#### Phase 2-H：迁移、灰度和回滚
+
+目标：确保从旧聊天到 OpenIM 的迁移可以被控制。
+
+- [ ] 旧聊天写入口下线计划。
+- [ ] 旧消息迁移生产 dry-run。
+- [ ] 生产迁移抽样校验。
+- [ ] TestFlight 灰度 5% / 20% / 50% / 100%。
+- [ ] 每一档灰度记录 crash、消息丢失、重复消息、未读偏差。
+- [ ] OpenIM 关闭开关和 Raver fallback 开关演练。
+- [ ] 迁移完成后旧表只读保留期和删除策略。
+
+验收标准：
+
+- 任一灰度阶段可暂停、回滚；
+- 回滚后用户仍能看到迁移前的可用消息视图；
+- 上线报告包含问题清单、指标截图、回滚演练结果。
+
+#### Phase 2-I：日志和观测系统
+
+目标：任何“消息没到、未读不准、推送没跳转”的问题都能定位。
+
+客户端 DEBUG 日志事件：
+
+```text
+openim.sdk.init
+openim.sdk.login.success
+openim.sdk.login.failed
+openim.connection.changed
+openim.message.recv
+openim.conversation.changed
+openim.store.merge_message
+openim.store.refresh_conversations
+openim.store.refresh_messages
+openim.unread.refresh
+openim.badge.update
+openim.push.received
+openim.push.opened
+```
+
+服务端结构化日志事件：
+
+```text
+openim.user.sync.started
+openim.user.sync.succeeded
+openim.user.sync.failed
+openim.group.sync.started
+openim.group.sync.succeeded
+openim.group.sync.failed
+openim.message.migration.started
+openim.message.migration.succeeded
+openim.message.migration.failed
+openim.webhook.received
+openim.webhook.rejected
+openim.moderation.action
+openim.admin.audit
+```
+
+每条日志至少包含：
+
+```text
+event
+timestamp
+requestId / traceId
+raverUserId
+openIMUserId
+conversationId
+openIMConversationId
+messageId / clientMsgID
+source: sdk | bff | webhook | admin | migration | push
+durationMs
+status
+errorCode
+errorMessage
+```
+
+文档执行日志规则：
+
+- 每完成一个阶段任务，在本文件对应 Phase 勾选；
+- 每次关键命令必须记录命令和结果；
+- 每次双模拟器复测必须记录：设备、账号、场景、预期、实际、结论；
+- 每次压测必须记录：并发、用户数、消息数、失败数、P50/P95/P99、服务端资源；
+- 每个阻塞必须记录：阻塞原因、影响范围、下一步动作、负责人。
+
+执行日志模板：
+
+````text
+#### YYYY-MM-DD HH:mm TZ：标题
+
+范围：
+- 
+
+执行：
+- 
+
+命令：
+```text
+
+```
+
+结果：
+```text
+
+```
+
+结论：
+- 
+
+下一步：
+- 
+````
+
+#### 2026-04-22 11:02 +08：第二阶段商用化改造启动
+
+范围：
+
+- 开启第二阶段商用级聊天系统改造；
+- 明确 Phase 2-A 到 Phase 2-I 的任务拆解、验收标准和日志规范；
+- 首个执行项为消息 Tab 未读 badge，最终产品决策为聊天和社区互动统一红色 badge。
+
+执行：
+
+- 已在本文档新增第二阶段商用化改造看板；
+- 下一步进入 iOS 状态和 TabBar 统一红色 badge 实现。
+
+结论：
+
+- 第二阶段已开启；
+- 后续每一轮代码改动必须同步更新本节执行日志和 Phase 勾选状态。
+
+#### 2026-04-22 11:05 +08：Phase 2-A 未读 badge 初版接入
+
+范围：
+
+- 曾按聊天和社区互动拆分未读进行初版接入；
+- 该方案已在 2026-04-22 11:23 +08 按最新产品决策调整为统一红色 badge；
+- 社区互动未读统计纳入小队邀请。
+
+执行：
+
+- `AppState` 在初版中曾拆分聊天和社区互动未读，后续已回收为统一 `unreadMessagesCount`；
+- `refreshUnreadMessages()` 统一计算聊天未读 + 社区互动未读；
+- logout、session expired、未登录状态统一清零未读计数；
+- `MainTabView` 新增 `TabUnreadBadge`；
+- `MessageNotificationsViewModel` 的 `total` 计算补入 `squadInvites`。
+
+命令：
+
+```text
+xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果：
+
+```text
+** BUILD SUCCEEDED **
+```
+
+结论：
+
+- Phase 2-A 的未读 badge 初版已通过编译；
+- 最新结论见 2026-04-22 11:23 +08 执行日志，当前 UI 为统一红色 badge。
+
+下一步：
+
+- 用两个模拟器验证 OpenIM 聊天未读和 TabBar 统一红色 badge；
+- 触发点赞/评论/关注/小队邀请验证统一红色 badge；
+- 如视觉位置有偏差，再用截图微调 badge 贴边距离。
+
+#### 2026-04-22 11:23 +08：Phase 2-A 统一红色 badge 与实时/兜底日志
+
+范围：
+
+- 按最新产品决策取消聊天/社区双 badge；
+- 聊天消息和社区互动通知统一汇总到消息 Tab 的一个红色未读 badge；
+- 会话列表中的聊天未读 badge 从紫色改为红色；
+- 增加 OpenIM 实时回调和 2s/3s catch-up 的区分日志。
+
+执行：
+
+- `AppState` 移除 UI 层拆分展示，只保留 `unreadMessagesCount = chatsUnread + communityUnread`；
+- `MainTabView` 的消息 Tab 改为单个红色 `TabUnreadBadge`；
+- `MessagesHomeView` 的会话未读角标改为红色；
+- `OpenIMChatStore` 增加 DEBUG 日志：
+  - `realtime message received ...`
+  - `realtime conversations changed ...`
+  - `realtime total unread changed ...`
+  - `catchup messages changed ...`
+  - `catchup conversations changed ...`
+  - `catchup unread changed ...`
+  - `merge message inserted ...`
+
+命令：
+
+```text
+xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果：
+
+```text
+** BUILD SUCCEEDED **
+```
+
+判断实时还是兜底：
+
+```text
+[OpenIMSession] onRecvNewMessage...
+[OpenIMChatStore] realtime message received...
+[OpenIMChatStore] merge message inserted...
+```
+
+如果先看到以上日志并且 UI 立刻更新，说明 OpenIM 实时通信链路生效。
+
+```text
+[OpenIMChatStore] catchup messages changed...
+```
+
+如果没有看到实时日志，而是约 2 秒后看到 `catchup messages changed` 才更新聊天页，说明是聊天页 2 秒兜底同步生效。
+
+```text
+[OpenIMChatStore] catchup conversations changed...
+[OpenIMChatStore] catchup unread changed...
+```
+
+如果会话列表约 3 秒后才更新，说明是会话列表 3 秒兜底同步生效。
+
+结论：
+
+- 当前 UI 已回到一个红色总未读 badge；
+- 后续双模拟器复测时，Xcode console 可以直接区分实时回调和兜底刷新。
+
+#### 2026-04-22 20:27 +08：Phase 2-A 社区已读联动统一红色 badge
+
+范围：
+
+- 收口“社区通知读完后，消息 Tab 红色 badge 立即刷新”。
+
+执行：
+
+- `AppState` 新增 `Notification.Name.raverCommunityUnreadDidChange` 监听；
+- `MessageNotificationsViewModel` 在通知加载、已读递减、失败回滚时统一广播 `userInfo.total`；
+- `NotificationsViewModel` 新增 `markRead`，并统一广播社区未读总数；
+- `NotificationsView` 点击通知先 `markRead`，再执行 deep link 跳转。
+
+命令：
+
+```text
+xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果：
+
+```text
+** BUILD SUCCEEDED **
+```
+
+#### 2026-04-22 21:11 +08：Phase 2-A 双模拟器验收工具链就绪
+
+范围：
+
+- 提供可重复执行的双模拟器日志探针，降低“实时链路 vs catch-up 链路”排查成本；
+- 给统一红色 badge 增加来源级日志，直接定位触发源。
+
+执行：
+
+- `AppState` 新增 badge 重算来源日志：
+  - `badge recompute source=openim-realtime`
+  - `badge recompute source=community-event`
+  - `badge recompute source=refresh-success|refresh-fallback`
+- 新增脚本：
+  - [`mobile/ios/RaverMVP/scripts/openim_dual_sim_probe.sh`](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/openim_dual_sim_probe.sh)
+  - 作用：自动 boot 两台模拟器并并行抓取 `[OpenIMSession] / [OpenIMChatStore] / [AppState]` 日志
+- 新增 runbook：
+  - [`docs/OPENIM_DUAL_SIM_BADGE_RUNBOOK.md`](/Users/blackie/Projects/raver/docs/OPENIM_DUAL_SIM_BADGE_RUNBOOK.md)
+  - 包含：双模拟器步骤、判定规则、日志检索命令、通过标准
+
+命令：
+
+```text
+bash mobile/ios/RaverMVP/scripts/openim_dual_sim_probe.sh
+xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果：
+
+```text
+script syntax check passed
+** BUILD SUCCEEDED **
+```
+
+说明：
+
+- 本轮完成“验收工具链搭建 + 编译验收”，
+- `双模拟器复测统一 badge` checkbox 仍保留未勾，待你按 runbook 完成实操后再勾选。
+
+#### 2026-04-22 21:22 +08：Phase 2-A 双模拟器探针修正（路径 + PID 分流）
+
+范围：
+
+- 修复脚本输出路径错误与“日志文件 0 行”的高概率原因；
+- 保持 Xcode Console 与探针日志可同时定位问题。
+
+执行：
+
+- 修复探针输出目录根路径：`/Users/blackie/Projects/raver/docs/reports/...`；
+- 探针从 `processImagePath CONTAINS UDID` 改为 `processIdentifier == <pid>` 分流，避免 UDID 过滤不命中；
+- 探针启动时打印 `SIM1 PID` / `SIM2 PID`，便于核对当前进程；
+- `OpenIMSession` / `OpenIMChatStore` / `AppState` 的 `debug` 日志改为：
+  - `os.Logger` 写统一日志（用于脚本抓取）
+  - `print` 保留（用于 Xcode Console 现场排查）
+  - 且统一带 `[OpenIMSession] / [OpenIMChatStore] / [AppState]` 前缀。
+
+命令：
+
+```text
+bash mobile/ios/RaverMVP/scripts/openim_dual_sim_probe.sh
+xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+结果：
+
+```text
+探针启动成功，显示 SIM1/SIM2 PID 与 reports 目录
+** BUILD SUCCEEDED **
+```
+
+说明：
+
+- `getpwuid_r did not find a match for uid 501` 不属于业务链路错误，可忽略；
+- `双模拟器复测统一 badge` 仍待你按 runbook 完成实测后勾选。
+
+#### 2026-04-22 21:35 +08：Phase 2-A 社区分类详情“进入即清零”修复
+
+范围：
+
+- 修复“点进点赞/评论/关注详情页后返回，分类 badge 不消失”的体验问题；
+- 产品规则对齐为：进入分类详情页即将该分类未读整体置零，不依赖用户是否逐条点开。
+
+执行：
+
+- iOS `MessageNotificationsViewModel` 新增 `markAllRead(for:)`，进入分类页时批量清零本地状态并同步后端；
+- iOS `MainTabCoordinator` 的 `MessagesAlertDetailContainerView` 调整为：`load -> markAllRead(for: category.type) -> onReadChange`；
+- iOS 增加 `Notification.Name.raverMessageAlertsDidMutate`，用于详情页和首页分类 badge 的状态同步；
+- iOS `MessagesHomeView` 监听上述事件并触发 `alertViewModel.load()`，保证返回首页时分类 badge 立即同步；
+- BFF `POST /v1/notifications/read` 新增 `notificationType` 入参（`follow|like|comment|squad_invite`），支持按类型一键标记已读。
+
+命令：
+
+```text
+xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+pnpm -C server exec tsc --noEmit
+```
+
+结果：
+
+```text
+** BUILD SUCCEEDED **
+tsc --noEmit exited 0
+```
+
+说明：
+
+- 这是“分类级清零”而不是“单条已读”，进入分类详情页即触发；
+- 若后续要把小队邀请也改为“进入即清零”，可复用同一机制。
+
 ## 14. 回滚方案
 
 必须保留功能开关：
@@ -1576,17 +3540,38 @@ OPENIM_MIGRATION_READ_ONLY=true
 
 风险：
 
-- Raver 小队允许 1 人创建，但 OpenIM 可能要求创建群时至少 3 人。
+- OpenIM 要求创建群时至少 3 人，如果 Raver 允许 1 人或 2 人小队，会导致小队业务和 IM 群物化规则不一致。
 
-方案：
+已定方案：
 
-1. 接入前实测当前版本。
-2. 如果确实限制，产品选择：
-   - 小队至少邀请 2 人后才开通群聊；
-   - 或小队先创建，OpenIM group 延迟物化；
-   - 不推荐加入假用户凑数。
+1. Raver 产品规则直接对齐 OpenIM：创建小队必须满足创建者 + 初始成员不少于 3 人。
+2. 后端在所有创建小队入口硬校验。
+3. iOS 创建页要求至少选择 2 个好友。
+4. 不支持假用户凑数。
+5. 不支持 1 人小队延迟创建 OpenIM group。
 
-### R2：历史消息迁移顺序和时间
+### R2：OpenIM ID 合法性约束
+
+风险：
+
+- OpenIM 当前版本不接受 Raver 现有带连字符 UUID 直接作为 `userID`；
+- 如果继续按“Raver 主键直接等于 OpenIM 主键”实现，用户注册、token 签发、建群都会失败；
+- `Squad.id` / `Event temp group id` 同样不应再直接作为 OpenIM `groupID`。
+
+已验证事实：
+
+1. `user_register` 对原始 UUID 返回 `ArgsError`。
+2. 使用 `u_<uuid去掉连字符>` 的合法 ID 后，`user_register` 与 `get_user_token` 可成功。
+3. 因此接入方案必须改为确定性 ID 映射。
+
+已定方案：
+
+1. 后端统一通过 `toOpenIMUserID()` / `toOpenIMGroupID()` 生成 OpenIM 主键。
+2. iOS `/v1/openim/bootstrap` 返回的是 OpenIM userID，不再是 Raver raw user id。
+3. OpenIM 自定义字段 `ex` 中写回原始 Raver ID，方便后台排障和数据回溯。
+4. 文档、迁移脚本、管理后台全部按“映射后 ID”实现。
+
+### R3：历史消息迁移顺序和时间
 
 风险：
 
@@ -1598,7 +3583,7 @@ OPENIM_MIGRATION_READ_ONLY=true
 - 按会话串行迁移。
 - 迁移后抽样校验。
 
-### R3：iOS SDK 集成方式
+### R4：iOS SDK 集成方式
 
 风险：
 
@@ -1659,9 +3644,10 @@ OPENIM_MIGRATION_READ_ONLY=true
 
 ### 基础
 
-- [ ] OpenIM 本地部署成功。
-- [ ] Raver 后端能获取 admin token。
-- [ ] Raver 用户能注册到 OpenIM。
+- [x] OpenIM 本地部署成功。
+- [x] Raver 后端能获取 admin token。
+- [x] Raver 用户能注册到 OpenIM。
+- [x] 本地 OpenIM REST 发消息压测通过（2000 条消息 / 50 并发 / 0 失败）。
 - [ ] iOS 能获取 `/v1/openim/bootstrap`。
 - [ ] iOS 能登录 OpenIM SDK。
 
@@ -1675,10 +3661,10 @@ OPENIM_MIGRATION_READ_ONLY=true
 
 ### 小队群
 
-- [ ] 创建小队后生成 OpenIM group。
-- [ ] 加入小队后进入群。
-- [ ] 退出小队后退出群。
-- [ ] 队长/管理员/成员角色正确。
+- [x] 创建小队后生成 OpenIM group。
+- [x] 加入小队后进入群。
+- [x] 退出小队后退出群。
+- [x] 队长/管理员/成员角色正确。
 - [ ] 群公告可用。
 - [ ] 禁言可用。
 - [ ] 踢人可用。
@@ -1701,29 +3687,31 @@ OPENIM_MIGRATION_READ_ONLY=true
 
 ### 审核和治理
 
-- [ ] 敏感词拦截。
-- [ ] 图片审核。
-- [ ] 举报消息。
-- [ ] 管理员撤回消息。
-- [ ] 管理员删除消息。
-- [ ] 审计日志。
+- [x] 敏感词拦截。
+- [x] 图片审核。
+- [x] 举报消息。
+- [x] 管理员撤回消息。
+- [x] 管理员删除消息。
+- [x] 审计日志。
 
 ### 迁移
 
-- [ ] DirectMessage dry-run。
-- [ ] SquadMessage dry-run。
-- [ ] 生产迁移报告。
-- [ ] 抽样消息顺序正确。
+- [x] DirectMessage dry-run。
+- [x] SquadMessage dry-run。
+- [x] 本地 DirectMessage 真实迁移。
+- [x] 本地 SquadMessage 真实迁移。
+- [x] 生产迁移报告模板。
+- [x] 抽样消息顺序正确（dry-run 校验 outOfOrder=0）。
 - [ ] 旧聊天写入口停止。
 
 ### 后台
 
-- [ ] OpenIM 总览。
+- [x] OpenIM 总览。
 - [ ] 用户同步状态。
 - [ ] 群同步状态。
-- [ ] 举报处理。
-- [ ] 同步任务重试。
-- [ ] Webhook 事件查看。
+- [x] 举报处理。
+- [x] 同步任务重试。
+- [x] Webhook 事件查看。
 
 ## 17. 建议开发顺序
 
@@ -1796,13 +3784,51 @@ infra/openim/.env.example
 
 ## 19. 后续待决策项
 
-1. OpenIM 群创建是否确实要求至少 3 人。
-2. 小队是否允许 1 人创建后暂不开通群聊。
-3. 活动临时群的加入条件。
-4. 活动临时群结束后是归档、禁言还是解散。
-5. OpenIM iOS SDK 使用 SPM 还是 CocoaPods。
-6. 多媒体是否完全走 Raver OSS。
-7. 敏感词服务用本地词库还是第三方内容安全。
-8. 图片/视频审核服务选型。
-9. 管理后台是否先做最小页面还是完整模块。
-10. 旧聊天表保留多久。
+1. 活动临时群的加入条件。
+2. 活动临时群结束后是归档、禁言还是解散。
+3. OpenIM iOS SDK 使用 SPM 还是 CocoaPods。
+4. 多媒体是否完全走 Raver OSS。
+5. 敏感词服务用本地词库还是第三方内容安全。
+6. 图片/视频审核服务选型。
+7. 管理后台是否先做最小页面还是完整模块。
+8. 旧聊天表保留多久。
+
+## 20. 通知系统拆分与无轮询策略（2026-04-22）
+
+为便于后续扩展与集中管理，通知系统已从本方案中独立拆分到：
+
+- [NOTIFICATION_SYSTEM_V1_PLAN.md](/Users/blackie/Projects/raver/docs/NOTIFICATION_SYSTEM_V1_PLAN.md)
+
+同步策略更新：
+
+- 聊天链路采用实时事件驱动（OpenIM listener + APNs），不再使用固定间隔轮询兜底；
+- 允许的补偿同步仅限事件触发（登录、重连、回前台、点击推送）；
+- 后续通知新需求统一在独立通知系统文档中扩展，不再散落在 OpenIM 接入条目里。
+- 2026-04-22 本轮代码已移除 iOS 侧聊天 API 的 BFF 回退（OpenIM-only），避免聊天变化导致后端高频兜底请求；
+- 2026-04-22 本轮代码已将未读聚合改为“OpenIM 实时未读 + 社区未读缓存聚合”，不再因聊天实时变化反复请求社区未读接口。
+- 2026-04-22 已接入通知中心核心表与 `push-token` 上报接口，并在 iOS AppState 完成 APNs token 登录态自动上报骨架。
+- 2026-04-22 本轮已将聊天/社区真实事件接入通知中台：
+  - 聊天发送（私信/群聊）-> `chat_message`
+  - 关注/点赞/评论/小队邀请 -> `community_interaction`
+  - OpenIM webhook 新消息事件 -> best-effort 通知桥接（解析到用户/群时触发）
+- 2026-04-22 已新增服务端 APNs 投递 handler（`notification-center`）并在服务启动时注册，支持 JWT token auth + HTTP/2 投递 + 无效 token 回收；待配置 Apple 凭证进行联调验收。
+- 2026-04-22 iOS 已接入系统通知 deep link 路由链路（冷启动 payload 缓存 + AppState 事件发布 + MainTabCoordinator 跳转），首批支持会话/动态/活动/DJ/小队/用户主页。
+- 2026-04-22 iOS `xcworkspace` 无沙箱构建复测通过（`BUILD SUCCEEDED`），通知 deep link 改造已通过编译验收。
+- 2026-04-22 通知中心已补充 admin 可观测 API：`GET /v1/notification-center/admin/status`、`GET /v1/notification-center/admin/deliveries`，用于查看 APNs 配置健康与投递明细。
+- 2026-04-22 APNs 渠道投递结果已升级为“按用户聚合落库”，`notification_deliveries` 记录可直接用于后台排障与运营追踪。
+- 2026-04-22 Web 已新增通知中心后台入口：`/admin/notification-center`，可直接查看 APNs 状态、渠道统计与投递明细筛选。
+- 2026-04-22 通知中心已完成 Phase N1 配置化收口：模板管理、分类/渠道开关、灰度配置均已在 `/admin/notification-center` 落地并接入服务端持久化。
+- 2026-04-22 通知系统已进入 Phase N3：活动倒计时提醒（用户可配置）已打通（偏好接口 + 调度器 + 统一投递 + 去重）。
+- 2026-04-22 通知系统 Phase N3-2 已打通：活动日更提醒（资讯/打分/打卡）已落地（偏好接口 + 调度器 + 可重复执行脚本 + 幂等去重）。
+- 2026-04-22 通知系统 Phase N3-3 已打通：定制路线 DJ 开演前提醒已落地（用户路线槽位配置 + 调度器 + 可重复执行脚本 + 幂等去重）。
+- 2026-04-22 通知系统 Phase N3-4 已打通：关注 DJ 动态提醒已落地（真实关注关系聚合资讯/Sets/打分 + 用户偏好接口 + 调度器 + 可重复执行脚本 + 幂等去重）。
+- 2026-04-22 通知系统 Phase N3-5 已打通：关注 Brand 动态提醒已落地（用户关注 Brand 列表聚合资讯/活动更新 + 用户偏好接口 + 调度器 + 可重复执行脚本 + 幂等去重）。
+- 2026-04-22 通知系统 Phase N3-6 已打通：重大资讯运营推送通道已落地（管理员发布接口 + 批量目标用户 + 统一投递与审计日志）。
+- 2026-04-22 通知系统 Phase N4-2 已打通：通知中心状态接口与 Web 后台已支持投递成功率、Inbox 打开率、订阅退订率监控（含窗口内退订变化计数）。
+- 2026-04-22 通知系统 Phase N4-3 已打通：通知中心状态接口与 Web 后台已支持失败率/重试次数/队列积压告警摘要，`notification_deliveries + notification_events` 可用于审计排障闭环。
+- 2026-04-22 通知系统治理配置已在 Web 后台可编辑：限频（窗口/上限/豁免）与免打扰（时段/时区/静默渠道/豁免）均支持在线配置并持久化。
+- 2026-04-22 OpenIM iOS 前后台 `10102 User has logged in repeatedly` 专项修复已落地：
+  - `OpenIMSession` 登录前读取 SDK `getLoginStatus/getLoginUserID`，同账号已登录时不再重复调用 `login`；
+  - 命中 `10102` 时按 SDK 当前状态做自愈：同账号视为已连接，不同账号先 `logout` 再重登；
+  - `AppState.refreshOpenIMBootstrap` 增加 in-flight 合并（single-flight）与来源标记日志，避免前后台/通知并发触发重复登录链路；
+  - iOS `xcworkspace` 编译复测通过（`BUILD SUCCEEDED`）。

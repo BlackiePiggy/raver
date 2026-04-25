@@ -1,0 +1,51 @@
+PODS:
+  - MJExtension (3.4.2)
+  - OpenIMSDK (3.8.3-hotfix.12):
+    - MJExtension
+    - OpenIMSDK/Callbacker (= 3.8.3-hotfix.12)
+    - OpenIMSDK/CallbackProxy (= 3.8.3-hotfix.12)
+    - OpenIMSDK/Interface (= 3.8.3-hotfix.12)
+    - OpenIMSDK/Model (= 3.8.3-hotfix.12)
+    - OpenIMSDK/Utils (= 3.8.3-hotfix.12)
+    - OpenIMSDKCore (= 3.8.3-hotfix.12)
+  - OpenIMSDK/Callbacker (3.8.3-hotfix.12):
+    - MJExtension
+    - OpenIMSDK/Model
+    - OpenIMSDK/Utils
+    - OpenIMSDKCore (= 3.8.3-hotfix.12)
+  - OpenIMSDK/CallbackProxy (3.8.3-hotfix.12):
+    - MJExtension
+    - OpenIMSDK/Utils
+    - OpenIMSDKCore (= 3.8.3-hotfix.12)
+  - OpenIMSDK/Interface (3.8.3-hotfix.12):
+    - MJExtension
+    - OpenIMSDK/Callbacker
+    - OpenIMSDK/CallbackProxy
+    - OpenIMSDK/Model
+    - OpenIMSDKCore (= 3.8.3-hotfix.12)
+  - OpenIMSDK/Model (3.8.3-hotfix.12):
+    - MJExtension
+    - OpenIMSDK/Utils
+    - OpenIMSDKCore (= 3.8.3-hotfix.12)
+  - OpenIMSDK/Utils (3.8.3-hotfix.12):
+    - MJExtension
+    - OpenIMSDKCore (= 3.8.3-hotfix.12)
+  - OpenIMSDKCore (3.8.3-hotfix.12)
+
+DEPENDENCIES:
+  - OpenIMSDK (= 3.8.3-hotfix.12)
+
+SPEC REPOS:
+  trunk:
+    - MJExtension
+    - OpenIMSDK
+    - OpenIMSDKCore
+
+SPEC CHECKSUMS:
+  MJExtension: e97d164cb411aa9795cf576093a1fa208b4a8dd8
+  OpenIMSDK: 539858326b8046531c413011ac7693b0408f8cd9
+  OpenIMSDKCore: 02383b2a3f989a1fff29ad5f83c1dac1ee5bfb36
+
+PODFILE CHECKSUM: 54dbf1355405d54b60f46369f167fccb393c295b
+
+COCOAPODS: 1.16.2

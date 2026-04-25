@@ -193,12 +193,13 @@ struct MainTabCoordinatorView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @EnvironmentObject private var appState: AppState
     @StateObject private var router = AppRouter()
+    @State private var handledSystemDeepLinkEventID: UUID?
 
     var body: some View {
         NavigationStack(path: $router.path) {
             MainTabView()
                 .toolbar(
-                    router.selectedTab == .profile ? .visible : .hidden,
+                    shouldShowNavigationBar ? .visible : .hidden,
                     for: .navigationBar
                 )
                 .navigationDestination(for: AppRoute.self) { route in
@@ -231,6 +232,18 @@ struct MainTabCoordinatorView: View {
         .environment(\.profilePush) { route in
             pushProfileRoute(route)
         }
+        .onReceive(appState.$systemDeepLinkEvent.compactMap { $0 }) { event in
+            guard handledSystemDeepLinkEventID != event.id else { return }
+            handledSystemDeepLinkEventID = event.id
+            handleSystemDeepLink(event.deeplink)
+        }
+    }
+
+    private var shouldShowNavigationBar: Bool {
+        if router.selectedTab == .messages || router.selectedTab == .profile {
+            return true
+        }
+        return !router.path.isEmpty
     }
 
     @ViewBuilder
@@ -312,6 +325,7 @@ struct MainTabCoordinatorView: View {
                     category: category,
                     repository: appContainer.messagesRepository
                 ) {
+                    NotificationCenter.default.post(name: .raverMessageAlertsDidMutate, object: nil)
                     Task {
                         await appState.refreshUnreadMessages()
                     }
@@ -328,6 +342,10 @@ struct MainTabCoordinatorView: View {
                 )
             case .settings:
                 SettingsView()
+            case .tools:
+                ProfileToolsHubView()
+            case .movieBanner:
+                MovieBannerEditorView()
             case .myPublishes:
                 MyPublishesView(
                     service: appContainer.webService,
@@ -479,6 +497,8 @@ struct MainTabCoordinatorView: View {
         switch route {
         case .followList,
                 .settings,
+                .tools,
+                .movieBanner,
                 .myPublishes,
                 .myRoutes,
                 .editProfile,
@@ -493,6 +513,68 @@ struct MainTabCoordinatorView: View {
         case .avatarFullscreen:
             router.presentFullScreen(.avatarFullscreen)
         }
+    }
+
+    private func handleSystemDeepLink(_ deeplink: String) {
+        guard let route = mapAppRoute(from: deeplink) else { return }
+        if let tab = route.preferredTab {
+            router.switchTab(tab)
+        }
+        if router.path.last == route {
+            return
+        }
+        router.push(route)
+    }
+
+    private func mapAppRoute(from deeplink: String) -> AppRoute? {
+        guard let url = URL(string: deeplink) else { return nil }
+        let host = url.host?.lowercased() ?? ""
+        let pathParts = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
+
+        if host == "messages", pathParts.count >= 2, pathParts[0].lowercased() == "conversation" {
+            return .conversation(conversationID: pathParts[1])
+        }
+
+        if host == "community", pathParts.count >= 2, pathParts[0].lowercased() == "post" {
+            return .postDetail(postID: pathParts[1])
+        }
+
+        if host == "event", let eventID = pathParts.first {
+            return .eventDetail(eventID: eventID)
+        }
+
+        if host == "dj", let djID = pathParts.first {
+            return .djDetail(djID: djID)
+        }
+
+        if host == "squad", let squadID = pathParts.first {
+            return .squadProfile(squadID: squadID)
+        }
+
+        if host == "profile", let userID = pathParts.first {
+            return .userProfile(userID: userID)
+        }
+
+        let normalizedParts = ([host] + pathParts).filter { !$0.isEmpty }
+        if normalizedParts.count >= 3, normalizedParts[0] == "messages", normalizedParts[1] == "conversation" {
+            return .conversation(conversationID: normalizedParts[2])
+        }
+        if normalizedParts.count >= 3, normalizedParts[0] == "community", normalizedParts[1] == "post" {
+            return .postDetail(postID: normalizedParts[2])
+        }
+        if normalizedParts.count >= 2, normalizedParts[0] == "event" {
+            return .eventDetail(eventID: normalizedParts[1])
+        }
+        if normalizedParts.count >= 2, normalizedParts[0] == "dj" {
+            return .djDetail(djID: normalizedParts[1])
+        }
+        if normalizedParts.count >= 2, normalizedParts[0] == "squad" {
+            return .squadProfile(squadID: normalizedParts[1])
+        }
+        if normalizedParts.count >= 2, normalizedParts[0] == "profile" {
+            return .userProfile(userID: normalizedParts[1])
+        }
+        return nil
     }
 }
 
@@ -519,11 +601,17 @@ private struct MessagesAlertDetailContainerView: View {
         )
         .task {
             await viewModel.load()
+            await viewModel.markAllRead(for: category.type)
+            onReadChange()
         }
     }
 }
 
 private struct ConversationLoaderView: View {
+    @EnvironmentObject private var appState: AppState
+    @ObservedObject private var chatStore = OpenIMChatStore.shared
+    @StateObject private var navigationBridge = DemoAlignedChatNavigationBridge()
+
     let conversationID: String
     let service: SocialService
 
@@ -534,7 +622,30 @@ private struct ConversationLoaderView: View {
     var body: some View {
         Group {
             if let conversation {
-                ChatView(conversation: conversation, service: service)
+                DemoAlignedChatView(
+                    conversation: conversation,
+                    service: service,
+                    navigationBridge: navigationBridge
+                )
+                .navigationTitle(conversation.title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button {
+                            navigationBridge.presentConversationSearch()
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                        }
+                        .accessibilityLabel(L("会话内搜索", "Search in Conversation"))
+
+                        Button {
+                            navigationBridge.presentChatSettings()
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
+                        .accessibilityLabel(L("聊天设置", "Chat Settings"))
+                    }
+                }
             } else if isLoading {
                 ProgressView(L("加载会话中...", "Loading conversation..."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -558,29 +669,122 @@ private struct ConversationLoaderView: View {
             }
         }
         .task {
+            debug("task start conversationID=\(conversationID)")
             await loadConversation(force: false)
+        }
+        .onChange(of: appState.openIMConnectionState) { oldValue, newValue in
+            debug("openim state changed \(oldValue) -> \(newValue) conversationID=\(conversationID)")
+            guard conversation == nil else { return }
+            guard case .connected = newValue else { return }
+            Task {
+                await loadConversation(force: true)
+            }
+        }
+        .onChange(of: chatStore.conversations.count) { _, newCount in
+            guard conversation == nil else { return }
+            debug("chatStore conversations changed count=\(newCount) try resolve cache")
+            _ = resolveConversationFromCache()
         }
     }
 
     @MainActor
     private func loadConversation(force: Bool) async {
-        if conversation != nil && !force { return }
+        if conversation != nil && !force {
+            debug("skip load conversation: already resolved")
+            return
+        }
+
+        if resolveConversationFromCache() {
+            debug("resolved from cache before remote fetch")
+            return
+        }
+
         isLoading = true
         defer { isLoading = false }
+        debug(
+            "load start force=\(force) conversationID=\(conversationID) openIMState=\(appState.openIMConnectionState) cachedCount=\(chatStore.conversations.count)"
+        )
 
         do {
-            async let directConversations = service.fetchConversations(type: .direct)
-            async let groupConversations = service.fetchConversations(type: .group)
-            let allConversations = try await directConversations + groupConversations
-            if let found = allConversations.first(where: { $0.id == conversationID }) {
+            let allConversations = try await withTimeout(seconds: 8) {
+                async let directConversations = service.fetchConversations(type: .direct)
+                async let groupConversations = service.fetchConversations(type: .group)
+                return try await directConversations + groupConversations
+            }
+            debug("remote fetch success total=\(allConversations.count)")
+
+            if let found = allConversations.first(where: {
+                $0.id == conversationID || $0.openIMConversationID == conversationID
+            }) {
                 conversation = found
                 errorMessage = nil
+                debug("resolved from remote id=\(found.id) openIM=\(found.openIMConversationID ?? "-")")
             } else {
                 errorMessage = L("会话不存在或已被移除", "Conversation not found")
+                debug("remote fetch completed but conversation not found")
             }
         } catch {
-            errorMessage = error.userFacingMessage
+            debug("remote fetch failed error=\(error.localizedDescription)")
+
+            if resolveConversationFromCache() {
+                debug("resolved from cache after remote failure")
+                return
+            }
+
+            if let message = error.userFacingMessage, !message.isEmpty {
+                errorMessage = message
+            } else {
+                errorMessage = L(
+                    "聊天连接恢复中，请稍后重试",
+                    "Chat connection is recovering. Please retry in a moment."
+                )
+            }
+            debug("set error message=\(errorMessage ?? "nil")")
         }
+    }
+
+    @MainActor
+    private func resolveConversationFromCache() -> Bool {
+        if let found = chatStore.conversations.first(where: {
+            $0.id == conversationID || $0.openIMConversationID == conversationID
+        }) {
+            conversation = found
+            errorMessage = nil
+            debug("cache hit id=\(found.id) openIM=\(found.openIMConversationID ?? "-")")
+            return true
+        }
+        return false
+    }
+
+    private func withTimeout<T>(
+        seconds: TimeInterval,
+        operation: @escaping () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw ServiceError.message(
+                    L("会话加载超时，请稍后重试", "Conversation loading timed out. Please retry.")
+                )
+            }
+            guard let result = try await group.next() else {
+                throw ServiceError.message(
+                    L("会话加载失败，请稍后重试", "Failed to load conversation. Please retry.")
+                )
+            }
+            group.cancelAll()
+            return result
+        }
+    }
+
+    private func debug(_ message: String) {
+        #if DEBUG
+        print("[ConversationLoader] \(message)")
+        OpenIMProbeLogger.log("[ConversationLoader] \(message)")
+        #endif
     }
 }
 

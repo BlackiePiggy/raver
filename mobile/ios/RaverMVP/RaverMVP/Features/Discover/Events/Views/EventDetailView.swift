@@ -9,6 +9,7 @@ import MapKit
 import CoreLocation
 import CoreText
 import SDWebImageSwiftUI
+import SDWebImage
 
 private struct EventDetailTabFramePreferenceKey: PreferenceKey {
     static var defaultValue: [EventDetailView.EventDetailTab: CGRect] = [:]
@@ -96,6 +97,8 @@ struct EventDetailView: View {
     @State private var expandedLineupPage = 0
     @State private var venueMapContext: EventVenueMapContext?
     @State private var selectedLineupMedia: FullscreenMediaSelection?
+    @State private var isCachingManualSnapshot = false
+    @State private var manualCachedAt: Date?
 
     fileprivate enum EventDetailTab: String, CaseIterable, Identifiable {
         case info
@@ -646,6 +649,7 @@ struct EventDetailView: View {
             }
         }
         .task {
+            await refreshManualCacheState()
             if event == nil {
                 await load()
             }
@@ -1306,7 +1310,7 @@ struct EventDetailView: View {
 
             VStack(spacing: 0) {
             Spacer()   // 把内容推到底
-            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 8) {
                         Spacer(minLength: 0)
                         Button {
@@ -1536,15 +1540,58 @@ struct EventDetailView: View {
     }()
 
     private var immersiveTrailingAction: AnyView? {
-        guard let event, isMine(event) else { return nil }
+        guard event != nil else { return nil }
         return AnyView(
-            RaverNavigationCircleIconButton(
-                systemName: "square.and.pencil",
-                style: .immersiveAdaptive
-            ) {
-                discoverPush(.eventEdit(eventID: event.id))
+            Menu {
+                if let event, isMine(event) {
+                    Button {
+                        discoverPush(.eventEdit(eventID: event.id))
+                    } label: {
+                        Label(L("编辑", "Edit"), systemImage: "square.and.pencil")
+                    }
+                }
+
+                Button {
+                    Task { await cacheEventManually() }
+                } label: {
+                    Label(
+                        isCachingManualSnapshot ? L("缓存中", "Caching") : L("缓存", "Cache"),
+                        systemImage: "arrow.down.circle"
+                    )
+                }
+                .disabled(isCachingManualSnapshot)
+
+                Button {
+                    openEventFeedbackEntry()
+                } label: {
+                    Label(L("贡献信息", "Incorrect Info"), systemImage: "info.circle")
+                }
+
+                Button {
+                    openEventReportEntry()
+                } label: {
+                    Label(L("举报", "Report"), systemImage: "flag")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
+            .menuStyle(.automatic)
         )
+    }
+
+    private func openEventFeedbackEntry() {
+        // TODO: Wire to dedicated feedback route/page when available.
+        errorMessage = L("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.")
+    }
+
+    private func openEventReportEntry() {
+        // TODO: Wire to dedicated report route/page when available.
+        errorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
     }
 
     @ViewBuilder
@@ -2140,15 +2187,38 @@ struct EventDetailView: View {
             async let relatedArticlesTask = fetchRelatedNewsArticlesForEvent(eventID: eventID)
 
             let loadedEvent = try await eventTask
+            let loadedCheckins = await checkinsTask
+            let loadedRatingEvents = (try? await ratingEventsTask) ?? []
+            let loadedEventSets = (try? await eventsRepository.fetchEventDJSets(eventName: loadedEvent.name)) ?? []
+            let loadedArticles = (try? await relatedArticlesTask) ?? []
+
             event = loadedEvent
-            relatedEventCheckins = await checkinsTask
-            relatedRatingEvents = (try? await ratingEventsTask) ?? []
-            relatedEventSets = (try? await eventsRepository.fetchEventDJSets(eventName: loadedEvent.name)) ?? []
-            relatedArticles = (try? await relatedArticlesTask) ?? []
+            relatedEventCheckins = loadedCheckins
+            relatedRatingEvents = loadedRatingEvents
+            relatedEventSets = loadedEventSets
+            relatedArticles = loadedArticles
             isLoadingRelatedArticles = false
+
+            let snapshot = makeManualCacheSnapshot(
+                event: loadedEvent,
+                relatedRatingEvents: loadedRatingEvents,
+                relatedEventSets: loadedEventSets,
+                relatedArticles: loadedArticles
+            )
+            await persistManualCacheSnapshot(snapshot, prefetchImages: false)
         } catch {
-            isLoadingRelatedArticles = false
-            errorMessage = error.userFacingMessage
+            let canFallback = isOfflineRecoverableError(error) || event == nil
+            if canFallback, let snapshot = await EventManualCacheStore.shared.loadSnapshot(eventID: eventID) {
+                applyManualCacheSnapshot(snapshot)
+                if isRequestTimeoutError(error) {
+                    errorMessage = L("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version.")
+                } else {
+                    errorMessage = L("网络较弱，已展示活动缓存数据。", "Network is weak. Showing cached event data.")
+                }
+            } else {
+                isLoadingRelatedArticles = false
+                errorMessage = error.userFacingMessage
+            }
         }
     }
 
@@ -2158,6 +2228,7 @@ struct EventDetailView: View {
 
     private func reloadEventRatings() async {
         relatedRatingEvents = (try? await eventsRepository.fetchEventRatingEvents(eventID: eventID)) ?? []
+        await persistCurrentManualCacheSnapshotIfPossible()
     }
 
     private func reloadEventSets() async {
@@ -2166,6 +2237,161 @@ struct EventDetailView: View {
             return
         }
         relatedEventSets = (try? await eventsRepository.fetchEventDJSets(eventName: event.name)) ?? []
+        await persistCurrentManualCacheSnapshotIfPossible()
+    }
+
+    @MainActor
+    private func refreshManualCacheState() async {
+        try? await EventManualCacheStore.shared.clearExpiredSnapshots()
+        manualCachedAt = await EventManualCacheStore.shared.loadSnapshot(eventID: eventID)?.cachedAt
+    }
+
+    @MainActor
+    private func cacheEventManually() async {
+        guard !isCachingManualSnapshot else { return }
+
+        isCachingManualSnapshot = true
+        defer { isCachingManualSnapshot = false }
+
+        do {
+            let eventForCache = try await resolveEventForManualCache()
+            async let ratingsTask = eventsRepository.fetchEventRatingEvents(eventID: eventID)
+            async let setsTask = eventsRepository.fetchEventDJSets(eventName: eventForCache.name)
+            async let articlesTask = fetchRelatedNewsArticlesForEvent(eventID: eventID)
+
+            let snapshot = EventManualCacheSnapshot(
+                eventID: eventID,
+                event: eventForCache,
+                relatedRatingEvents: (try? await ratingsTask) ?? relatedRatingEvents,
+                relatedEventSets: (try? await setsTask) ?? relatedEventSets,
+                relatedArticles: ((try? await articlesTask) ?? relatedArticles).map(CachedDiscoverNewsArticle.init),
+                cachedAt: Date()
+            )
+
+            await persistManualCacheSnapshot(snapshot, prefetchImages: true)
+            applyManualCacheSnapshot(snapshot)
+            errorMessage = L("活动已缓存，弱网环境也可查看。", "Event cached. You can view it in weak-network conditions.")
+        } catch {
+            errorMessage = L("缓存失败，请稍后重试。", "Caching failed. Please try again later.")
+        }
+    }
+
+    @MainActor
+    private func applyManualCacheSnapshot(_ snapshot: EventManualCacheSnapshot) {
+        event = snapshot.event
+        relatedRatingEvents = snapshot.relatedRatingEvents
+        relatedEventSets = snapshot.relatedEventSets
+        relatedArticles = snapshot.relatedNewsArticles
+        isLoadingRelatedArticles = false
+        manualCachedAt = snapshot.cachedAt
+    }
+
+    @MainActor
+    private func resolveEventForManualCache() async throws -> WebEvent {
+        if let latest = try? await eventsRepository.fetchEvent(id: eventID) {
+            return latest
+        }
+        if let event {
+            return event
+        }
+        throw ServiceError.message(L("活动详情加载失败，请稍后重试。", "Failed to load event details. Please try again later."))
+    }
+
+    private func prefetchManualCacheImages(from snapshot: EventManualCacheSnapshot) {
+        let event = snapshot.event
+        let rawURLs = [event.coverAssetURL]
+            + event.lineupAssetURLs
+            + event.timetableAssetURLs
+            + snapshot.relatedEventSets.compactMap(\.thumbnailUrl)
+            + snapshot.relatedArticles.compactMap(\.coverImageURL)
+
+        let urls = rawURLs
+            .compactMap(AppConfig.resolvedURLString)
+            .compactMap(URL.init(string:))
+
+        guard !urls.isEmpty else { return }
+        SDWebImagePrefetcher.shared.prefetchURLs(urls)
+    }
+
+    private func makeManualCacheSnapshot(
+        event: WebEvent,
+        relatedRatingEvents: [WebRatingEvent],
+        relatedEventSets: [WebDJSet],
+        relatedArticles: [DiscoverNewsArticle]
+    ) -> EventManualCacheSnapshot {
+        EventManualCacheSnapshot(
+            eventID: event.id,
+            event: event,
+            relatedRatingEvents: relatedRatingEvents,
+            relatedEventSets: relatedEventSets,
+            relatedArticles: relatedArticles.map(CachedDiscoverNewsArticle.init),
+            cachedAt: Date()
+        )
+    }
+
+    @MainActor
+    private func persistManualCacheSnapshot(_ snapshot: EventManualCacheSnapshot, prefetchImages: Bool) async {
+        await EventManualCacheStore.shared.saveSnapshot(snapshot)
+        manualCachedAt = snapshot.cachedAt
+        if prefetchImages {
+            prefetchManualCacheImages(from: snapshot)
+        }
+    }
+
+    @MainActor
+    private func persistCurrentManualCacheSnapshotIfPossible() async {
+        guard let event else { return }
+        let snapshot = makeManualCacheSnapshot(
+            event: event,
+            relatedRatingEvents: relatedRatingEvents,
+            relatedEventSets: relatedEventSets,
+            relatedArticles: relatedArticles
+        )
+        await persistManualCacheSnapshot(snapshot, prefetchImages: false)
+    }
+
+    private func isRequestTimeoutError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            return urlError.code == .timedOut
+        }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut
+    }
+
+    private func isOfflineRecoverableError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut,
+                 .notConnectedToInternet,
+                 .networkConnectionLost,
+                 .cannotFindHost,
+                 .cannotConnectToHost,
+                 .dnsLookupFailed,
+                 .internationalRoamingOff,
+                 .callIsActive,
+                 .dataNotAllowed:
+                return true
+            default:
+                break
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            let recoverableCodes: Set<Int> = [
+                NSURLErrorTimedOut,
+                NSURLErrorNotConnectedToInternet,
+                NSURLErrorNetworkConnectionLost,
+                NSURLErrorCannotFindHost,
+                NSURLErrorCannotConnectToHost,
+                NSURLErrorDNSLookupFailed,
+            ]
+            if recoverableCodes.contains(nsError.code) {
+                return true
+            }
+        }
+
+        return false
     }
 
     @MainActor

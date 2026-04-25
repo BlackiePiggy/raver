@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3901/api';
 
 export interface Squad {
   id: string;
@@ -128,6 +128,7 @@ export const squadApi = {
     description?: string;
     isPublic?: boolean;
     maxMembers?: number;
+    memberIds?: string[];
   }): Promise<Squad> {
     const token = localStorage.getItem('token');
     if (!token) {

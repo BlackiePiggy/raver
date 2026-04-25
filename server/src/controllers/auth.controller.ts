@@ -1,8 +1,18 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { hashPassword, comparePassword, generateToken } from '../utils/auth';
+import { openIMSyncJobService } from '../services/openim/openim-sync-job.service';
 
 const prisma = new PrismaClient();
+
+const syncOpenIMUserBestEffort = async (userId: string, reason: string): Promise<void> => {
+  try {
+    await openIMSyncJobService.queueUserProfileSync(userId, { reason });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[openim] user sync skipped during ${reason}: ${message}`, { userId });
+  }
+};
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -53,6 +63,8 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       email: user.email,
       role: 'user',
     });
+
+    await syncOpenIMUserBestEffort(user.id, 'auth-register');
 
     res.status(201).json({
       user,
@@ -106,6 +118,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
+
+    await syncOpenIMUserBestEffort(user.id, 'auth-login');
 
     const token = generateToken({
       userId: user.id,
@@ -247,6 +261,8 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       },
     });
 
+    await syncOpenIMUserBestEffort(userId, 'auth-update-profile');
+
     res.json(updatedUser);
   } catch (error) {
     console.error('Update profile error:', error);
@@ -288,6 +304,8 @@ export const uploadAvatar = async (req: Request, res: Response): Promise<void> =
         createdAt: true,
       },
     });
+
+    await syncOpenIMUserBestEffort(userId, 'auth-upload-avatar');
 
     res.status(201).json(updatedUser);
   } catch (error) {

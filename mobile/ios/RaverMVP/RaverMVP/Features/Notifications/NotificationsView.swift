@@ -31,7 +31,9 @@ private struct NotificationsScreen: View {
             } else {
                 List(viewModel.notifications) { item in
                     Button {
-                        handleTap(item)
+                        Task {
+                            await handleTap(item)
+                        }
                     } label: {
                         HStack(alignment: .top, spacing: 12) {
                             notificationLeadingAvatar(for: item)
@@ -90,7 +92,8 @@ private struct NotificationsScreen: View {
         }
     }
 
-    private func handleTap(_ item: AppNotification) {
+    private func handleTap(_ item: AppNotification) async {
+        await viewModel.markRead(item)
         guard let target = item.target else { return }
         switch target.type {
         case "user":

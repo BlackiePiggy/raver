@@ -1,0 +1,6 @@
+framework module Pods_RaverMVP {
+  umbrella header "Pods-RaverMVP-umbrella.h"
+
+  export *
+  module * { export * }
+}

@@ -1186,6 +1186,316 @@ struct UpdateDJInput: Codable, Hashable {
     var isVerified: Bool?
 }
 
+struct CachedDiscoverNewsArticle: Codable, Hashable {
+    var id: String
+    var categoryRawValue: String
+    var source: String
+    var title: String
+    var summary: String
+    var body: String
+    var link: String?
+    var coverImageURL: String?
+    var publishedAt: Date
+    var replyCount: Int
+    var authorID: String
+    var authorUsername: String
+    var authorName: String
+    var authorAvatarURL: String?
+    var legacyEventID: String?
+    var boundDjIDs: [String]
+    var boundBrandIDs: [String]
+    var boundEventIDs: [String]
+
+    init(article: DiscoverNewsArticle) {
+        self.id = article.id
+        self.categoryRawValue = article.category.rawValue
+        self.source = article.source
+        self.title = article.title
+        self.summary = article.summary
+        self.body = article.body
+        self.link = article.link
+        self.coverImageURL = article.coverImageURL
+        self.publishedAt = article.publishedAt
+        self.replyCount = article.replyCount
+        self.authorID = article.authorID
+        self.authorUsername = article.authorUsername
+        self.authorName = article.authorName
+        self.authorAvatarURL = article.authorAvatarURL
+        self.legacyEventID = article.legacyEventID
+        self.boundDjIDs = article.boundDjIDs
+        self.boundBrandIDs = article.boundBrandIDs
+        self.boundEventIDs = article.boundEventIDs
+    }
+
+    var article: DiscoverNewsArticle {
+        DiscoverNewsArticle(
+            id: id,
+            category: DiscoverNewsCategory.mapFromRaw(categoryRawValue),
+            source: source,
+            title: title,
+            summary: summary,
+            body: body,
+            link: link,
+            coverImageURL: coverImageURL,
+            publishedAt: publishedAt,
+            replyCount: replyCount,
+            authorID: authorID,
+            authorUsername: authorUsername,
+            authorName: authorName,
+            authorAvatarURL: authorAvatarURL,
+            legacyEventID: legacyEventID,
+            boundDjIDs: boundDjIDs,
+            boundBrandIDs: boundBrandIDs,
+            boundEventIDs: boundEventIDs
+        )
+    }
+}
+
+struct EventManualCacheSnapshot: Codable, Hashable, Identifiable {
+    var id: String { eventID }
+
+    var eventID: String
+    var event: WebEvent
+    var relatedRatingEvents: [WebRatingEvent]
+    var relatedEventSets: [WebDJSet]
+    var relatedArticles: [CachedDiscoverNewsArticle]
+    var cachedAt: Date
+
+    var relatedNewsArticles: [DiscoverNewsArticle] {
+        relatedArticles.map(\.article)
+    }
+
+    var expiresAt: Date {
+        event.endDate.addingTimeInterval(12 * 60 * 60)
+    }
+}
+
+actor EventManualCacheStore {
+    static let shared = EventManualCacheStore()
+
+    private let fileManager: FileManager
+    private let encoder: JSONEncoder
+    private let decoder: JSONDecoder
+
+    init(fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+        self.encoder = .raver
+        self.decoder = .raver
+    }
+
+    func allSnapshots(referenceDate: Date = Date()) -> [EventManualCacheSnapshot] {
+        do {
+            try clearExpiredSnapshots(referenceDate: referenceDate)
+            let urls = try fileManager.contentsOfDirectory(
+                at: directoryURL,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            let snapshots = urls
+                .filter { $0.pathExtension == "json" }
+                .compactMap { url -> EventManualCacheSnapshot? in
+                    guard let data = try? Data(contentsOf: url) else { return nil }
+                    return try? decoder.decode(EventManualCacheSnapshot.self, from: data)
+                }
+                .sorted { lhs, rhs in
+                    if lhs.cachedAt != rhs.cachedAt { return lhs.cachedAt > rhs.cachedAt }
+                    return lhs.event.startDate > rhs.event.startDate
+                }
+            return snapshots
+        } catch {
+            return []
+        }
+    }
+
+    func loadSnapshot(eventID: String) -> EventManualCacheSnapshot? {
+        try? clearExpiredSnapshots()
+        let url = snapshotURL(for: eventID)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? decoder.decode(EventManualCacheSnapshot.self, from: data)
+    }
+
+    func saveSnapshot(_ snapshot: EventManualCacheSnapshot) {
+        do {
+            try ensureDirectoryIfNeeded()
+            let data = try encoder.encode(snapshot)
+            try data.write(to: snapshotURL(for: snapshot.eventID), options: .atomic)
+        } catch {
+            assertionFailure("Failed to save event manual cache: \(error)")
+        }
+    }
+
+    func removeSnapshot(eventID: String) {
+        let url = snapshotURL(for: eventID)
+        try? fileManager.removeItem(at: url)
+    }
+
+    func clearExpiredSnapshots(referenceDate: Date = Date()) throws {
+        try ensureDirectoryIfNeeded()
+        let fileURLs = try fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+
+        for fileURL in fileURLs where fileURL.pathExtension == "json" {
+            guard let data = try? Data(contentsOf: fileURL),
+                  let snapshot = try? decoder.decode(EventManualCacheSnapshot.self, from: data) else {
+                try? fileManager.removeItem(at: fileURL)
+                continue
+            }
+
+            if snapshot.expiresAt <= referenceDate {
+                try? fileManager.removeItem(at: fileURL)
+            }
+        }
+    }
+
+    private var directoryURL: URL {
+        let root = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return root
+            .appendingPathComponent("Raver", isDirectory: true)
+            .appendingPathComponent("EventManualCache", isDirectory: true)
+    }
+
+    private func ensureDirectoryIfNeeded() throws {
+        if !fileManager.fileExists(atPath: directoryURL.path) {
+            try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        }
+    }
+
+    private func snapshotURL(for eventID: String) -> URL {
+        let encodedID = Data(eventID.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "=", with: "")
+        return directoryURL.appendingPathComponent("\(encodedID).json", isDirectory: false)
+    }
+}
+
+struct DJManualCacheSnapshot: Codable, Hashable, Identifiable {
+    var id: String { djID }
+
+    var djID: String
+    var dj: WebDJ
+    var sets: [WebDJSet]
+    var djEvents: [WebEvent]
+    var ratingUnits: [WebRatingUnit]
+    var relatedArticles: [CachedDiscoverNewsArticle]
+    var cachedAt: Date
+
+    var relatedNewsArticles: [DiscoverNewsArticle] {
+        relatedArticles.map(\.article)
+    }
+
+    var expiresAt: Date {
+        cachedAt.addingTimeInterval(30 * 24 * 60 * 60)
+    }
+}
+
+actor DJManualCacheStore {
+    static let shared = DJManualCacheStore()
+
+    private let fileManager: FileManager
+    private let encoder: JSONEncoder
+    private let decoder: JSONDecoder
+
+    init(fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+        self.encoder = .raver
+        self.decoder = .raver
+    }
+
+    func allSnapshots(referenceDate: Date = Date()) -> [DJManualCacheSnapshot] {
+        do {
+            try clearExpiredSnapshots(referenceDate: referenceDate)
+            let urls = try fileManager.contentsOfDirectory(
+                at: directoryURL,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            return urls
+                .filter { $0.pathExtension == "json" }
+                .compactMap { url -> DJManualCacheSnapshot? in
+                    guard let data = try? Data(contentsOf: url) else { return nil }
+                    return try? decoder.decode(DJManualCacheSnapshot.self, from: data)
+                }
+                .sorted { lhs, rhs in
+                    lhs.cachedAt > rhs.cachedAt
+                }
+        } catch {
+            return []
+        }
+    }
+
+    func loadSnapshot(djID: String) -> DJManualCacheSnapshot? {
+        try? clearExpiredSnapshots()
+        let url = snapshotURL(for: djID)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? decoder.decode(DJManualCacheSnapshot.self, from: data)
+    }
+
+    func saveSnapshot(_ snapshot: DJManualCacheSnapshot) {
+        do {
+            try ensureDirectoryIfNeeded()
+            let data = try encoder.encode(snapshot)
+            try data.write(to: snapshotURL(for: snapshot.djID), options: .atomic)
+        } catch {
+            assertionFailure("Failed to save DJ manual cache: \(error)")
+        }
+    }
+
+    func removeSnapshot(djID: String) {
+        let url = snapshotURL(for: djID)
+        try? fileManager.removeItem(at: url)
+    }
+
+    func clearExpiredSnapshots(referenceDate: Date = Date()) throws {
+        try ensureDirectoryIfNeeded()
+        let fileURLs = try fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+
+        for fileURL in fileURLs where fileURL.pathExtension == "json" {
+            guard let data = try? Data(contentsOf: fileURL),
+                  let snapshot = try? decoder.decode(DJManualCacheSnapshot.self, from: data) else {
+                try? fileManager.removeItem(at: fileURL)
+                continue
+            }
+
+            if snapshot.expiresAt <= referenceDate {
+                try? fileManager.removeItem(at: fileURL)
+            }
+        }
+    }
+
+    private var directoryURL: URL {
+        let root = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return root
+            .appendingPathComponent("Raver", isDirectory: true)
+            .appendingPathComponent("DJManualCache", isDirectory: true)
+    }
+
+    private func ensureDirectoryIfNeeded() throws {
+        if !fileManager.fileExists(atPath: directoryURL.path) {
+            try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        }
+    }
+
+    private func snapshotURL(for djID: String) -> URL {
+        let encodedID = Data(djID.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "=", with: "")
+        return directoryURL.appendingPathComponent("\(encodedID).json", isDirectory: false)
+    }
+}
+
 struct SavedEventRoute: Codable, Identifiable, Hashable {
     var id: String { eventID }
 

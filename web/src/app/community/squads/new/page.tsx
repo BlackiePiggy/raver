@@ -83,7 +83,7 @@ export default function NewSquadPage() {
               创建小队
             </h1>
             <p className="text-text-secondary">
-              创建一个小队，邀请朋友一起参加电音节
+              创建小队至少需要 3 人，以便直接开通群聊空间
             </p>
           </div>
 
@@ -137,13 +137,17 @@ export default function NewSquadPage() {
                 type="number"
                 value={maxMembers}
                 onChange={(e) => setMaxMembers(parseInt(e.target.value) || 50)}
-                min={2}
+                min={3}
                 max={200}
                 className="w-full px-4 py-3 bg-bg-primary border border-bg-tertiary rounded-lg text-text-primary focus:outline-none focus:border-primary-purple"
               />
               <p className="mt-1 text-xs text-text-secondary">
-                设置小队可容纳的最大成员数（2-200人）
+                设置小队可容纳的最大成员数（3-200人）
               </p>
+            </div>
+
+            <div className="mb-6 p-4 bg-primary-purple/10 border border-primary-purple/20 rounded-lg text-sm text-text-secondary">
+              当前 Web 创建页暂不支持选择初始成员。请先在 iOS App 创建小队并至少选择 2 位好友，Web 端后续会补齐成员选择能力。
             </div>
 
             <div className="mb-8">

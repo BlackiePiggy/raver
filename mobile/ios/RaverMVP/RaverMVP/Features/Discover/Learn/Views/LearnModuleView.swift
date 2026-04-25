@@ -2240,16 +2240,59 @@ struct LearnFestivalDetailView: View {
     }
 
     private var immersiveTrailingAction: AnyView? {
-        guard canEditFestival else { return nil }
         return AnyView(
-            RaverNavigationCircleIconButton(
-                systemName: "square.and.pencil",
-                style: .immersiveAdaptive
-            ) {
-                prepareFestivalEditDraft()
-                discoverPush(.learnFestivalEdit(festivalID: currentFestival.id))
+            Menu {
+                if canEditFestival {
+                    Button {
+                        prepareFestivalEditDraft()
+                        discoverPush(.learnFestivalEdit(festivalID: currentFestival.id))
+                    } label: {
+                        Label(L("编辑", "Edit"), systemImage: "square.and.pencil")
+                    }
+                }
+
+                Button {
+                    openFestivalCacheEntry()
+                } label: {
+                    Label(L("缓存", "Cache"), systemImage: "arrow.down.circle")
+                }
+
+                Button {
+                    openFestivalFeedbackEntry()
+                } label: {
+                    Label(L("贡献信息", "Incorrect Info"), systemImage: "info.circle")
+                }
+
+                Button {
+                    openFestivalReportEntry()
+                } label: {
+                    Label(L("举报", "Report"), systemImage: "flag")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
+            .menuStyle(.automatic)
         )
+    }
+
+    private func openFestivalCacheEntry() {
+        // TODO: Add festival-level cache workflow if needed.
+        errorMessage = L("该页面缓存能力正在建设中。", "Caching for this page is under construction.")
+    }
+
+    private func openFestivalFeedbackEntry() {
+        // TODO: Wire to dedicated feedback route/page when available.
+        errorMessage = L("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.")
+    }
+
+    private func openFestivalReportEntry() {
+        // TODO: Wire to dedicated report route/page when available.
+        errorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
     }
 
     @ViewBuilder

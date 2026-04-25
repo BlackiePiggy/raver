@@ -1,5 +1,7 @@
 import Foundation
 import Combine
+import OSLog
+import UIKit
 
 enum AppLanguage: String, CaseIterable, Codable, Hashable, Identifiable {
     case system
@@ -539,41 +541,208 @@ enum AppAppearancePreference {
     }
 }
 
+struct SystemDeepLinkEvent: Identifiable, Equatable {
+    let id = UUID()
+    let deeplink: String
+    let source: String
+}
+
 @MainActor
 final class AppState: ObservableObject {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.raver.mvp",
+        category: "AppState"
+    )
     @Published var session: Session?
     @Published var errorMessage: String?
+    @Published var isAuthBootstrapping: Bool = true
     @Published var unreadMessagesCount: Int = 0
+    @Published var openIMBootstrap: OpenIMBootstrap?
+    @Published var openIMConnectionState: OpenIMConnectionState = .idle
+    @Published var systemDeepLinkEvent: SystemDeepLinkEvent?
     @Published var preferredLanguage: AppLanguage = AppLanguagePreference.current
     @Published var preferredAppearance: AppAppearance = AppAppearancePreference.current
 
     let service: SocialService
     private var cancellables: Set<AnyCancellable> = []
+    private let openIMSession = OpenIMSession.shared
+    private let openIMChatStore = OpenIMChatStore.shared
+    private let uiTestForceSessionExpiredOnBootstrap: Bool
+    private var hasAppliedUITestForcedExpiry = false
+    private var openIMRecoveryTask: Task<Void, Never>?
+    private var openIMBootstrapRefreshTask: Task<Void, Never>?
+    private var cachedCommunityUnread = 0
+    private var latestPushToken: String?
+    private var lastOpenIMBootstrapRefreshAt: Date?
 
     init(service: SocialService) {
         self.service = service
+        self.uiTestForceSessionExpiredOnBootstrap = Self.parseBool(
+            ProcessInfo.processInfo.environment["RAVER_UI_TEST_FORCE_SESSION_EXPIRED_ON_BOOT"],
+            fallback: false
+        )
+        OpenIMProbeLogger.resetForCurrentProcessIfNeeded()
+        OpenIMStorageGovernance.runAuditIfNeeded(trigger: "app-init", force: true)
+        openIMSession.onStateChange = { [weak self] state in
+            self?.handleOpenIMStateChange(state)
+        }
+
+        openIMChatStore.$unreadTotal
+            .receive(on: DispatchQueue.main)
+            .dropFirst()
+            .sink { [weak self] count in
+                guard let self, self.session != nil else { return }
+                self.recomputeUnreadMessagesCount(chatsUnread: count, source: "openim-realtime")
+            }
+            .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: .raverSessionExpired)
             .sink { [weak self] _ in
                 guard let self else { return }
                 self.session = nil
-                self.unreadMessagesCount = 0
+                self.resetUnreadCounts()
+                self.openIMBootstrap = nil
+                self.openIMSession.reset()
+                self.openIMChatStore.reset()
+                self.openIMRecoveryTask?.cancel()
+                self.openIMRecoveryTask = nil
+                self.openIMBootstrapRefreshTask?.cancel()
+                self.openIMBootstrapRefreshTask = nil
+                SessionTokenStore.shared.clear()
                 self.errorMessage = L("登录状态已失效，请重新登录", "Session expired. Please log in again.")
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                guard let self, self.session != nil else { return }
+                Task {
+                    let recovered = await self.openIMSession.recoverSessionAfterAppBecameActive()
+                    OpenIMStorageGovernance.runAuditIfNeeded(trigger: "didBecomeActive")
+                    let shouldRefreshBootstrap = !recovered && self.shouldRefreshOpenIMBootstrapOnActive()
+                    if shouldRefreshBootstrap {
+                        await self.refreshOpenIMBootstrap(source: "didBecomeActive")
+                    } else if recovered {
+                        self.debug("skip OpenIM bootstrap refresh on active: recovered from sdk state")
+                    } else {
+                        self.debug("skip OpenIM bootstrap refresh on active: connection healthy")
+                    }
+                    await self.refreshUnreadMessages()
+                }
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .raverDidRegisterPushToken)
+            .sink { [weak self] notification in
+                guard let self else { return }
+                let token = (notification.object as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !token.isEmpty else { return }
+                self.latestPushToken = token
+                guard self.session != nil else { return }
+                Task {
+                    await self.uploadPushTokenIfPossible()
+                }
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .raverDidOpenSystemNotification)
+            .sink { [weak self] notification in
+                guard let self, self.session != nil else { return }
+                let userInfo = notification.userInfo ?? [:]
+                self.handleSystemNotificationPayload(userInfo, source: "notification-center")
+                Task {
+                    await self.refreshOpenIMBootstrap(source: "system-notification-open")
+                    await self.refreshUnreadMessages()
+                }
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .raverCommunityUnreadDidChange)
+            .sink { [weak self] notification in
+                guard let self, self.session != nil else { return }
+                guard let total = Self.parseCommunityUnreadTotal(from: notification.userInfo) else { return }
+                self.cachedCommunityUnread = max(0, total)
+                self.recomputeUnreadMessagesCount(source: "community-event")
+                self.debug("community unread updated total=\(self.cachedCommunityUnread)")
+            }
+            .store(in: &cancellables)
+
+        if let pendingPayload = RaverAppDelegate.consumePendingSystemNotificationUserInfo() {
+            handleSystemNotificationPayload(pendingPayload, source: "launch-options")
+        }
+
+        Task {
+            await bootstrapSessionIfPossible()
+        }
     }
 
     var isLoggedIn: Bool {
         session != nil
     }
 
+    private func bootstrapSessionIfPossible() async {
+        defer { isAuthBootstrapping = false }
+
+        guard let restored = await service.restoreSession() else {
+            return
+        }
+
+        session = restored
+        await refreshOpenIMBootstrap(source: "bootstrap-restore-session")
+        await refreshUnreadMessages()
+        await uploadPushTokenIfPossible()
+        errorMessage = nil
+
+        if uiTestForceSessionExpiredOnBootstrap && !hasAppliedUITestForcedExpiry {
+            hasAppliedUITestForcedExpiry = true
+            NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+        }
+    }
+
+    private static func parseBool(_ value: String?, fallback: Bool) -> Bool {
+        guard let value else { return fallback }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on" {
+            return true
+        }
+        if normalized == "0" || normalized == "false" || normalized == "no" || normalized == "off" {
+            return false
+        }
+        return fallback
+    }
+
     func login(username: String, password: String) async {
         do {
             session = try await service.login(username: username, password: password)
+            await refreshOpenIMBootstrap(source: "login-password")
             await refreshUnreadMessages()
+            await uploadPushTokenIfPossible()
             errorMessage = nil
         } catch {
             errorMessage = error.userFacingMessage
+        }
+    }
+
+    func loginWithSms(phoneNumber: String, code: String) async {
+        do {
+            session = try await service.loginWithSms(phoneNumber: phoneNumber, code: code)
+            await refreshOpenIMBootstrap(source: "login-sms")
+            await refreshUnreadMessages()
+            await uploadPushTokenIfPossible()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    func sendLoginSmsCode(phoneNumber: String) async -> Int? {
+        do {
+            let expiresInSeconds = try await service.sendLoginSmsCode(phoneNumber: phoneNumber)
+            errorMessage = nil
+            return expiresInSeconds
+        } catch {
+            errorMessage = error.userFacingMessage
+            return nil
         }
     }
 
@@ -585,7 +754,9 @@ final class AppState: ObservableObject {
                 password: password,
                 displayName: displayName
             )
+            await refreshOpenIMBootstrap(source: "register")
             await refreshUnreadMessages()
+            await uploadPushTokenIfPossible()
             errorMessage = nil
         } catch {
             errorMessage = error.userFacingMessage
@@ -593,11 +764,29 @@ final class AppState: ObservableObject {
     }
 
     func logout() {
+        let shouldDeactivatePushToken = session != nil
+        let deviceID = UIDevice.current.identifierForVendor?.uuidString ?? "ios-device-unknown"
         Task {
+            if shouldDeactivatePushToken {
+                do {
+                    try await service.deactivateDevicePushToken(deviceID: deviceID, platform: "ios")
+                    debug("deactivate push token success deviceID=\(deviceID)")
+                } catch {
+                    debug("deactivate push token failed: \(error.localizedDescription)")
+                }
+            }
             await service.logout()
+            SessionTokenStore.shared.clear()
         }
         session = nil
-        unreadMessagesCount = 0
+        resetUnreadCounts()
+        openIMBootstrap = nil
+        openIMSession.reset()
+        openIMChatStore.reset()
+        openIMRecoveryTask?.cancel()
+        openIMRecoveryTask = nil
+        openIMBootstrapRefreshTask?.cancel()
+        openIMBootstrapRefreshTask = nil
     }
 
     func setPreferredLanguage(_ language: AppLanguage) {
@@ -614,24 +803,316 @@ final class AppState: ObservableObject {
 
     func refreshUnreadMessages() async {
         guard session != nil else {
-            unreadMessagesCount = 0
+            resetUnreadCounts()
+            openIMChatStore.reset()
             return
         }
 
         do {
-            async let directConversations = service.fetchConversations(type: .direct)
-            async let groupConversations = service.fetchConversations(type: .group)
-            async let notificationsUnread = service.fetchNotificationUnreadCount()
-            let merged = try await directConversations + groupConversations
-            let chatsUnread = merged.reduce(0) { $0 + max(0, $1.unreadCount) }
-            let socialUnread = try await notificationsUnread
-            unreadMessagesCount = chatsUnread + max(0, socialUnread.follows + socialUnread.likes + socialUnread.comments)
+            async let notificationsUnreadTask = service.fetchNotificationUnreadCount()
+            let chatsUnread = try await openIMSession.fetchTotalUnreadCount() ?? openIMChatStore.unreadTotal
+            let socialUnread = try await notificationsUnreadTask
+            cachedCommunityUnread = Self.communityUnreadCount(from: socialUnread)
+            recomputeUnreadMessagesCount(chatsUnread: chatsUnread, source: "refresh-success")
         } catch {
             // Keep current count when refresh fails.
+            recomputeUnreadMessagesCount(source: "refresh-fallback")
         }
+    }
+
+    private func resetUnreadCounts() {
+        cachedCommunityUnread = 0
+        unreadMessagesCount = 0
+    }
+
+    private func uploadPushTokenIfPossible() async {
+        guard session != nil else { return }
+        guard let latestPushToken, !latestPushToken.isEmpty else { return }
+        let deviceID = UIDevice.current.identifierForVendor?.uuidString ?? "ios-device-unknown"
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        let locale = Locale.preferredLanguages.first
+        do {
+            try await service.registerDevicePushToken(
+                deviceID: deviceID,
+                platform: "ios",
+                pushToken: latestPushToken,
+                appVersion: appVersion,
+                locale: locale
+            )
+            debug("register push token success deviceID=\(deviceID)")
+        } catch {
+            debug("register push token failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func recomputeUnreadMessagesCount(chatsUnread: Int? = nil, source: String = "unspecified") {
+        let previous = unreadMessagesCount
+        let chatUnread = max(0, chatsUnread ?? openIMChatStore.unreadTotal)
+        let communityUnread = max(0, cachedCommunityUnread)
+        let next = chatUnread + communityUnread
+        unreadMessagesCount = next
+        if previous != next {
+            debug("badge recompute source=\(source) from=\(previous) to=\(next) chat=\(chatUnread) community=\(communityUnread)")
+        }
+    }
+
+    private static func communityUnreadCount(from count: NotificationUnreadCount) -> Int {
+        max(0, count.follows)
+            + max(0, count.likes)
+            + max(0, count.comments)
+            + max(0, count.squadInvites)
+    }
+
+    private static func parseCommunityUnreadTotal(from userInfo: [AnyHashable: Any]?) -> Int? {
+        guard let raw = userInfo?["total"] else { return nil }
+        if let value = raw as? Int {
+            return value
+        }
+        if let value = raw as? NSNumber {
+            return value.intValue
+        }
+        return nil
+    }
+
+    @MainActor
+    func refreshOpenIMBootstrap(source: String = "unspecified") async {
+        if let inFlight = openIMBootstrapRefreshTask {
+            debug("refreshOpenIMBootstrap join in-flight source=\(source)")
+            await inFlight.value
+            return
+        }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                self.openIMBootstrapRefreshTask = nil
+            }
+            await self.performRefreshOpenIMBootstrap(source: source)
+        }
+        openIMBootstrapRefreshTask = task
+        await task.value
+    }
+
+    @MainActor
+    private func performRefreshOpenIMBootstrap(source: String) async {
+        guard session != nil else {
+            openIMBootstrap = nil
+            openIMSession.reset()
+            openIMChatStore.reset()
+            openIMRecoveryTask?.cancel()
+            openIMRecoveryTask = nil
+            return
+        }
+
+        do {
+            let fetchedBootstrap = try await service.fetchOpenIMBootstrap()
+            let bootstrap = normalizeOpenIMBootstrapForCurrentRuntime(fetchedBootstrap)
+            debug("refreshOpenIMBootstrap success source=\(source) enabled=\(bootstrap.enabled) userID=\(bootstrap.userID)")
+            openIMBootstrap = bootstrap
+            await openIMSession.sync(with: bootstrap)
+            lastOpenIMBootstrapRefreshAt = Date()
+        } catch {
+            debug("refreshOpenIMBootstrap failed source=\(source): \(error.localizedDescription)")
+            if openIMBootstrap == nil {
+                openIMSession.reset()
+            }
+        }
+    }
+
+    private func normalizeOpenIMBootstrapForCurrentRuntime(_ bootstrap: OpenIMBootstrap) -> OpenIMBootstrap {
+#if targetEnvironment(simulator)
+        guard shouldForceSimulatorOpenIMLocalhost else { return bootstrap }
+
+        let normalizedApiURL = normalizeOpenIMEndpointForSimulator(
+            bootstrap.apiURL,
+            defaultScheme: "http",
+            defaultPort: 10002
+        )
+        let normalizedWsURL = normalizeOpenIMEndpointForSimulator(
+            bootstrap.wsURL,
+            defaultScheme: "ws",
+            defaultPort: 10001
+        )
+
+        guard normalizedApiURL != bootstrap.apiURL || normalizedWsURL != bootstrap.wsURL else {
+            return bootstrap
+        }
+
+        debug(
+            "simulator OpenIM endpoint normalized api=\(bootstrap.apiURL)->\(normalizedApiURL) ws=\(bootstrap.wsURL)->\(normalizedWsURL)"
+        )
+
+        return OpenIMBootstrap(
+            enabled: bootstrap.enabled,
+            userID: bootstrap.userID,
+            token: bootstrap.token,
+            apiURL: normalizedApiURL,
+            wsURL: normalizedWsURL,
+            platformID: bootstrap.platformID,
+            systemUserID: bootstrap.systemUserID,
+            expiresAt: bootstrap.expiresAt
+        )
+#else
+        return bootstrap
+#endif
+    }
+
+    private var shouldForceSimulatorOpenIMLocalhost: Bool {
+#if targetEnvironment(simulator)
+        guard let raw = ProcessInfo.processInfo.environment["RAVER_OPENIM_SIMULATOR_FORCE_LOCALHOST"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return true
+        }
+
+        switch raw.lowercased() {
+        case "0", "false", "no", "off":
+            return false
+        default:
+            return true
+        }
+#else
+        return false
+#endif
+    }
+
+    private func normalizeOpenIMEndpointForSimulator(
+        _ endpoint: String,
+        defaultScheme: String,
+        defaultPort: Int
+    ) -> String {
+        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return endpoint }
+
+        guard var components = URLComponents(string: trimmed),
+              let host = components.host?.lowercased() else {
+            return "\(defaultScheme)://127.0.0.1:\(defaultPort)"
+        }
+
+        guard host != "localhost", host != "127.0.0.1" else {
+            return trimmed
+        }
+
+        components.host = "127.0.0.1"
+        if components.port == nil {
+            components.port = defaultPort
+        }
+        return components.string ?? trimmed
+    }
+
+    private func shouldRefreshOpenIMBootstrapOnActive() -> Bool {
+        switch openIMConnectionState {
+        case .connected:
+            break
+        case .idle, .disabled, .unavailable, .initializing, .connecting, .tokenExpired, .kickedOffline, .failed:
+            return true
+        }
+
+        guard let last = lastOpenIMBootstrapRefreshAt else {
+            return true
+        }
+
+        // Avoid repeated bootstrap/login churn when app quickly switches foreground/background.
+        return Date().timeIntervalSince(last) >= 90
+    }
+
+    private func handleOpenIMStateChange(_ state: OpenIMConnectionState) {
+        if openIMConnectionState == state {
+            return
+        }
+        openIMConnectionState = state
+        debug("OpenIM state -> \(state)")
+
+        guard session != nil else { return }
+        switch state {
+        case .tokenExpired:
+            scheduleOpenIMRecovery(reason: "state=\(state)")
+        case .kickedOffline:
+            // Kicked-offline usually means same account logged in elsewhere.
+            // Do not auto-retry in a loop; surface an actionable message instead.
+            openIMRecoveryTask?.cancel()
+            openIMRecoveryTask = nil
+            errorMessage = L(
+                "聊天连接已在其他设备登录，请重新进入或重新登录",
+                "Chat connection was logged in on another device. Please re-enter or sign in again."
+            )
+        case .failed(let message):
+            if !message.isEmpty {
+                scheduleOpenIMRecovery(reason: "state=failed")
+            }
+        case .idle, .disabled, .unavailable, .initializing, .connecting, .connected:
+            break
+        }
+    }
+
+    private func scheduleOpenIMRecovery(reason: String) {
+        guard openIMRecoveryTask == nil else { return }
+        debug("schedule OpenIM recovery reason=\(reason)")
+        openIMRecoveryTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.openIMRecoveryTask = nil }
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            if Task.isCancelled { return }
+            await self.refreshOpenIMBootstrap(source: "recovery-\(reason)")
+            await self.refreshUnreadMessages()
+        }
+    }
+
+    private func debug(_ message: String) {
+        #if DEBUG
+        Self.logger.debug("[AppState] \(message, privacy: .public)")
+        print("[AppState] \(message)")
+        OpenIMProbeLogger.log("[AppState] \(message)")
+        #endif
+    }
+
+    private func handleSystemNotificationPayload(_ payload: [AnyHashable: Any], source: String) {
+        let deeplink = Self.readSystemDeeplink(from: payload)
+        guard let deeplink else { return }
+        systemDeepLinkEvent = SystemDeepLinkEvent(deeplink: deeplink, source: source)
+        debug("system deeplink received source=\(source) deeplink=\(deeplink)")
+    }
+
+    private static func readSystemDeeplink(from payload: [AnyHashable: Any]) -> String? {
+        let preferredKeys = ["deeplink", "deep_link", "url", "link", "target_url"]
+
+        for key in preferredKeys {
+            if let value = payload[key] as? String {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return trimmed
+                }
+            }
+        }
+
+        if let nested = payload["metadata"] as? [String: Any] {
+            for key in preferredKeys {
+                if let value = nested[key] as? String {
+                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        return trimmed
+                    }
+                }
+            }
+        }
+
+        if let aps = payload["aps"] as? [String: Any],
+           let nested = aps["metadata"] as? [String: Any] {
+            for key in preferredKeys {
+                if let value = nested[key] as? String {
+                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        return trimmed
+                    }
+                }
+            }
+        }
+
+        return nil
     }
 }
 
 extension Notification.Name {
     static let raverSessionExpired = Notification.Name("raver.session.expired")
+    static let raverCommunityUnreadDidChange = Notification.Name("raver.community.unreadDidChange")
 }

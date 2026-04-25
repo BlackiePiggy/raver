@@ -1,8 +1,8 @@
+import 'dotenv/config';
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
 import path from 'path';
 import authRoutes from './routes/auth.routes';
 import eventRoutes from './routes/event.routes';
@@ -18,11 +18,22 @@ import notificationRoutes from './routes/notification.routes';
 import labelRoutes from './routes/label.routes';
 import bffRoutes from './routes/bff.routes';
 import bffWebRoutes from './routes/bff.web.routes';
-
-dotenv.config();
+import openIMRoutes from './routes/openim.routes';
+import preRegistrationRoutes from './routes/pre-registration.routes';
+import notificationCenterRoutes from './routes/notification-center.routes';
+import { openIMSyncJobService } from './services/openim/openim-sync-job.service';
+import {
+  registerNotificationCenterAPNSHandler,
+  startNotificationEventCountdownScheduler,
+  startNotificationEventDailyDigestScheduler,
+  startNotificationRouteDJReminderScheduler,
+  startNotificationFollowedDJUpdateScheduler,
+  startNotificationFollowedBrandUpdateScheduler,
+  startNotificationOutboxWorker,
+} from './services/notification-center';
 
 const app: Express = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 3901;
 
 const detectProxyEnv = (): string | null => {
   const keys = [
@@ -47,6 +58,13 @@ const hasUseEnvProxyFlag = (): boolean => {
   return process.execArgv.includes('--use-env-proxy') || nodeOptions.includes('--use-env-proxy');
 };
 
+const captureRawBody = (req: Request, _res: Response, buf: Buffer): void => {
+  if (!buf || buf.length === 0) {
+    return;
+  }
+  (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+};
+
 // Middleware
 app.use(
   helmet({
@@ -55,8 +73,8 @@ app.use(
 );
 app.use(cors());
 app.use(morgan('dev'));
-app.use(express.json({ limit: '512kb' }));
-app.use(express.urlencoded({ extended: true, limit: '512kb' }));
+app.use(express.json({ limit: '512kb', verify: captureRawBody }));
+app.use(express.urlencoded({ extended: true, limit: '512kb', verify: captureRawBody }));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Health check
@@ -78,8 +96,12 @@ app.use('/api/music', musicRoutes);
 app.use('/api/squads', squadRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/labels', labelRoutes);
+app.use('/api', preRegistrationRoutes);
 app.use('/v1', bffRoutes);
 app.use('/v1', bffWebRoutes);
+app.use('/v1/openim', openIMRoutes);
+app.use('/v1/notification-center', notificationCenterRoutes);
+registerNotificationCenterAPNSHandler();
 
 app.get('/api', (_req: Request, res: Response) => {
   res.json({
@@ -98,6 +120,8 @@ app.get('/api', (_req: Request, res: Response) => {
       squads: '/api/squads',
       notifications: '/api/notifications',
       labels: '/api/labels',
+      preRegistrations: '/api/pre-registrations',
+      preRegistrationAdmin: '/api/admin/pre-registrations',
       bffV1: '/v1',
     },
   });
@@ -124,4 +148,11 @@ app.listen(port, () => {
     }
   }
   console.log(`🎵 RaveHub API Server running on http://localhost:${port}`);
+  openIMSyncJobService.startWorker();
+  startNotificationEventCountdownScheduler();
+  startNotificationEventDailyDigestScheduler();
+  startNotificationRouteDJReminderScheduler();
+  startNotificationFollowedDJUpdateScheduler();
+  startNotificationFollowedBrandUpdateScheduler();
+  startNotificationOutboxWorker();
 });

@@ -1,0 +1,97 @@
+name: Auth Integration Guard
+
+on:
+  pull_request:
+    paths:
+      - "server/**"
+      - ".github/workflows/auth-integration-guard.yml"
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "server/**"
+      - ".github/workflows/auth-integration-guard.yml"
+  workflow_dispatch:
+
+jobs:
+  auth-integration:
+    name: Server Auth Integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: raver
+          POSTGRES_PASSWORD: raver_dev_password
+          POSTGRES_DB: raver_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U raver -d raver_dev"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://raver:raver_dev_password@127.0.0.1:5432/raver_dev
+      NODE_ENV: test
+      OPENIM_ENABLED: "false"
+      ACCESS_TOKEN_EXPIRES_IN: 15m
+      REFRESH_TOKEN_EXPIRES_IN: 30d
+      AUTH_SMS_PROVIDER: mock
+      AUTH_SMS_DEBUG_RETURN_CODE: "true"
+      AUTH_SMS_DEBUG_PHONE_ALLOWLIST: ""
+      AUTH_INTEGRATION_BASE_URL: http://127.0.0.1:3911/v1
+      AUTH_INTEGRATION_EXPECT_ACCESS_EXPIRES_IN: "900"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: server/pnpm-lock.yaml
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        working-directory: server
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply Prisma migrations
+        working-directory: server
+        run: pnpm prisma migrate deploy
+
+      - name: Build server
+        working-directory: server
+        run: pnpm build
+
+      - name: Start server and run auth integration checks
+        working-directory: server
+        run: |
+          set -euo pipefail
+          node dist/index.js > /tmp/raver-server.log 2>&1 &
+          SERVER_PID=$!
+          cleanup() {
+            kill "${SERVER_PID}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          for _ in $(seq 1 20); do
+            if curl -sf "http://127.0.0.1:3911/health" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          curl -sf "http://127.0.0.1:3911/health" >/dev/null
+          pnpm auth:integration
+
+      - name: Dump server log on failure
+        if: failure()
+        run: cat /tmp/raver-server.log || true

@@ -135,7 +135,7 @@ struct DiscoverNewsRepositoryAdapter: DiscoverNewsRepository {
     }
 
     func fetchFeedPage(cursor: String?) async throws -> DiscoverNewsPage {
-        let page = try await socialService.fetchFeed(cursor: cursor)
+        let page = try await socialService.fetchFeed(cursor: cursor, mode: .latest)
         let items = page.posts.compactMap { DiscoverNewsCodec.decode(post: $0) }
         return DiscoverNewsPage(items: items, nextCursor: page.nextCursor)
     }
@@ -168,7 +168,7 @@ struct DiscoverNewsRepositoryAdapter: DiscoverNewsRepository {
     }
 
     func addComment(postID: String, content: String) async throws -> Comment {
-        try await socialService.addComment(postID: postID, content: content)
+        try await socialService.addComment(postID: postID, content: content, parentCommentID: nil)
     }
 
     func fetchDJ(id: String) async throws -> WebDJ {

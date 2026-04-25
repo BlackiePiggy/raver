@@ -26,7 +26,11 @@ final class MessageNotificationsViewModel: ObservableObject {
 
             notifications = inboxResult.items
             unreadCounts = unreadResult
-            unreadCounts.total = unreadCounts.follows + unreadCounts.likes + unreadCounts.comments
+            unreadCounts.total = unreadCounts.follows
+                + unreadCounts.likes
+                + unreadCounts.comments
+                + unreadCounts.squadInvites
+            publishCommunityUnreadDidChange()
             error = nil
         } catch {
             self.error = error.userFacingMessage
@@ -46,6 +50,30 @@ final class MessageNotificationsViewModel: ObservableObject {
         } catch {
             notifications[index].isRead = false
             incrementUnread(for: item.type)
+            self.error = error.userFacingMessage
+        }
+    }
+
+    func markAllRead(for type: AppNotificationType) async {
+        let unread = unreadCount(for: type)
+        guard unread > 0 else { return }
+
+        let previousNotifications = notifications
+        let previousUnreadCounts = unreadCounts
+
+        for index in notifications.indices where notifications[index].type == type {
+            notifications[index].isRead = true
+        }
+        setUnreadCount(0, for: type)
+        publishCommunityUnreadDidChange()
+
+        do {
+            try await repository.markNotificationsRead(type: type)
+            error = nil
+        } catch {
+            notifications = previousNotifications
+            unreadCounts = previousUnreadCounts
+            publishCommunityUnreadDidChange()
             self.error = error.userFacingMessage
         }
     }
@@ -81,6 +109,7 @@ final class MessageNotificationsViewModel: ObservableObject {
             unreadCounts.squadInvites = max(0, unreadCounts.squadInvites - 1)
         }
         unreadCounts.total = max(0, unreadCounts.total - 1)
+        publishCommunityUnreadDidChange()
     }
 
     private func incrementUnread(for type: AppNotificationType) {
@@ -95,5 +124,32 @@ final class MessageNotificationsViewModel: ObservableObject {
             unreadCounts.squadInvites += 1
         }
         unreadCounts.total += 1
+        publishCommunityUnreadDidChange()
+    }
+
+    private func setUnreadCount(_ count: Int, for type: AppNotificationType) {
+        let normalized = max(0, count)
+        switch type {
+        case .follow:
+            unreadCounts.follows = normalized
+        case .like:
+            unreadCounts.likes = normalized
+        case .comment:
+            unreadCounts.comments = normalized
+        case .squadInvite:
+            unreadCounts.squadInvites = normalized
+        }
+        unreadCounts.total = unreadCounts.follows
+            + unreadCounts.likes
+            + unreadCounts.comments
+            + unreadCounts.squadInvites
+    }
+
+    private func publishCommunityUnreadDidChange() {
+        NotificationCenter.default.post(
+            name: .raverCommunityUnreadDidChange,
+            object: nil,
+            userInfo: ["total": unreadCounts.total]
+        )
     }
 }

@@ -74,10 +74,10 @@ else
     echo -e "${GREEN}✓${NC} 端口3000可用"
 fi
 
-if lsof -Pi :3001 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${YELLOW}!${NC} 端口3001已被占用"
+if lsof -Pi :3901 -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo -e "${YELLOW}!${NC} 端口3901已被占用"
 else
-    echo -e "${GREEN}✓${NC} 端口3001可用"
+    echo -e "${GREEN}✓${NC} 端口3901可用"
 fi
 
 if lsof -Pi :5432 -sTCP:LISTEN -t >/dev/null 2>&1; then
@@ -126,7 +126,7 @@ echo ""
 
 echo -e "${YELLOW}5.${NC} 访问应用"
 echo -e "   前端: ${BLUE}http://localhost:3000${NC}"
-echo -e "   后端: ${BLUE}http://localhost:3001${NC}"
+echo -e "   后端: ${BLUE}http://localhost:3901${NC}"
 echo ""
 
 echo "================================"

@@ -8,6 +8,7 @@ final class SquadProfileViewModel: ObservableObject {
     @Published var isProcessingJoin = false
     @Published var isSavingMySettings = false
     @Published var isSavingGroupInfo = false
+    @Published var memberActionInFlightUserID: String?
     @Published var error: String?
 
     private let squadID: String
@@ -96,6 +97,42 @@ final class SquadProfileViewModel: ObservableObject {
 
         do {
             try await service.updateSquadInfo(squadID: profile.id, input: input)
+            self.profile = try await service.fetchSquadProfile(squadID: profile.id)
+            error = nil
+            return true
+        } catch {
+            self.error = error.userFacingMessage
+            return false
+        }
+    }
+
+    func updateMemberRole(memberUserID: String, role: String) async -> Bool {
+        guard let profile else { return false }
+        if memberActionInFlightUserID != nil { return false }
+
+        memberActionInFlightUserID = memberUserID
+        defer { memberActionInFlightUserID = nil }
+
+        do {
+            try await service.updateSquadMemberRole(squadID: profile.id, memberUserID: memberUserID, role: role)
+            self.profile = try await service.fetchSquadProfile(squadID: profile.id)
+            error = nil
+            return true
+        } catch {
+            self.error = error.userFacingMessage
+            return false
+        }
+    }
+
+    func removeMember(memberUserID: String) async -> Bool {
+        guard let profile else { return false }
+        if memberActionInFlightUserID != nil { return false }
+
+        memberActionInFlightUserID = memberUserID
+        defer { memberActionInFlightUserID = nil }
+
+        do {
+            try await service.removeSquadMember(squadID: profile.id, memberUserID: memberUserID)
             self.profile = try await service.fetchSquadProfile(squadID: profile.id)
             error = nil
             return true

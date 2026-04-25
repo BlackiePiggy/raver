@@ -6,6 +6,7 @@ enum MessageAlertCategory: String, CaseIterable, Identifiable, Hashable {
     case like
     case comment
     case follow
+    case squadInvite
 
     var id: String { rawValue }
 
@@ -14,6 +15,7 @@ enum MessageAlertCategory: String, CaseIterable, Identifiable, Hashable {
         case .like: return L("点赞消息", "Like Notifications")
         case .comment: return L("评论消息", "Comment Notifications")
         case .follow: return L("关注消息", "Follow Notifications")
+        case .squadInvite: return L("小队邀请", "Squad Invites")
         }
     }
 
@@ -22,6 +24,7 @@ enum MessageAlertCategory: String, CaseIterable, Identifiable, Hashable {
         case .like: return "heart.fill"
         case .comment: return "text.bubble.fill"
         case .follow: return "person.badge.plus"
+        case .squadInvite: return "person.3.fill"
         }
     }
 
@@ -30,6 +33,7 @@ enum MessageAlertCategory: String, CaseIterable, Identifiable, Hashable {
         case .like: return .like
         case .comment: return .comment
         case .follow: return .follow
+        case .squadInvite: return .squadInvite
         }
     }
 }
@@ -207,10 +211,14 @@ struct CreateSquadView: View {
                             Text(LL("选择好友"))
                                 .font(.headline)
                             Spacer()
-                            Text(L("已选 \(selectedFriendIDs.count)", "Selected \(selectedFriendIDs.count)"))
+                            Text(L("已选 \(selectedFriendIDs.count)/2", "Selected \(selectedFriendIDs.count)/2"))
                                 .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
+                                .foregroundStyle(selectedFriendIDs.count >= 2 ? RaverTheme.secondaryText : .orange)
                         }
+
+                        Text(L("创建小队至少需要 3 人，请至少选择 2 位好友。", "Squads need at least 3 people. Select at least 2 friends."))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
 
                         if isLoadingFriends {
                             ProgressView(L("加载好友中...", "Loading friends..."))
@@ -256,7 +264,7 @@ struct CreateSquadView: View {
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(isSubmitting || squadPrivacy == nil)
+                .disabled(isSubmitting || squadPrivacy == nil || selectedFriendIDs.count < 2)
             }
             .padding(16)
         }
@@ -390,6 +398,10 @@ struct CreateSquadView: View {
     private func createSquad() async {
         guard let squadPrivacy else {
             error = L("请选择小队性质（公开或私密）", "Please choose a squad type (public or private).")
+            return
+        }
+        guard selectedFriendIDs.count >= 2 else {
+            error = L("创建小队至少需要 3 人，请至少选择 2 位好友。", "Squads need at least 3 people. Select at least 2 friends.")
             return
         }
         isSubmitting = true
@@ -550,6 +562,7 @@ struct MessagesHomeView: View {
     @ObservedObject var chatViewModel: MessagesViewModel
     @ObservedObject var alertViewModel: MessageNotificationsViewModel
     let onUnreadStateChanged: () -> Void
+    @State private var isGlobalSearchPresented = false
 
     init(
         chatViewModel: MessagesViewModel,
@@ -604,6 +617,38 @@ struct MessagesHomeView: View {
         .background(RaverTheme.background)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isGlobalSearchPresented = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel(L("全局聊天搜索", "Global Chat Search"))
+            }
+        }
+        .sheet(isPresented: $isGlobalSearchPresented) {
+            MessageGlobalSearchSheet(chatViewModel: chatViewModel) { section, result in
+                OpenIMProbeLogger.log(
+                    "[GlobalSearch] result-selected conversation=\(section.conversation.id) message=\(result.message.id) source=\(result.source.rawValue)"
+                )
+                OpenIMChatStore.shared.setPendingMessageFocus(
+                    messageID: result.message.id,
+                    conversationID: section.conversation.id
+                )
+                if result.conversationID != section.conversation.id {
+                    OpenIMChatStore.shared.setPendingMessageFocus(
+                        messageID: result.message.id,
+                        conversationID: result.conversationID
+                    )
+                }
+                appPush(.conversation(conversationID: section.conversation.id))
+                Task {
+                    await chatViewModel.markConversationRead(conversationID: section.conversation.id)
+                    onUnreadStateChanged()
+                }
+            }
+        }
         .task {
             await refreshAll()
         }
@@ -615,6 +660,12 @@ struct MessagesHomeView: View {
         }
         .onChange(of: alertViewModel.unreadCounts.total) { _, _ in
             onUnreadStateChanged()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .raverMessageAlertsDidMutate)) { _ in
+            Task {
+                await alertViewModel.load()
+                onUnreadStateChanged()
+            }
         }
         .alert(L("消息加载失败", "Failed to Load Messages"), isPresented: Binding(
             get: { chatViewModel.error != nil || alertViewModel.error != nil },
@@ -650,7 +701,7 @@ struct MessagesHomeView: View {
 
                     let count = alertViewModel.unreadCount(for: category.type)
                     if count > 0 {
-                        Text("\(count)")
+                        Text(unreadBadgeText(for: count))
                             .font(.caption2.bold())
                             .foregroundStyle(Color.white)
                             .padding(.horizontal, 6)
@@ -710,11 +761,11 @@ struct MessagesHomeView: View {
                     Spacer(minLength: 0)
 
                     if conversation.unreadCount > 0 {
-                        Text("\(conversation.unreadCount)")
+                        Text(unreadBadgeText(for: conversation.unreadCount))
                             .font(.caption2.bold())
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(RaverTheme.accent)
+                            .background(Color.red)
                             .clipShape(Capsule())
                             .foregroundStyle(Color.white)
                     }
@@ -724,6 +775,10 @@ struct MessagesHomeView: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+    }
+
+    private func unreadBadgeText(for count: Int) -> String {
+        count > 99 ? "99+" : "\(count)"
     }
 
     @ViewBuilder
@@ -773,6 +828,219 @@ struct MessagesHomeView: View {
             group.addTask { await alertViewModel.load() }
         }
         onUnreadStateChanged()
+    }
+}
+
+private struct MessageGlobalSearchSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var chatViewModel: MessagesViewModel
+    let onSelectResult: (MessagesViewModel.GlobalSearchSection, ChatMessageSearchResult) -> Void
+
+    @State private var query = ""
+    @State private var debounceTask: Task<Void, Never>?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if !chatViewModel.globalSearchSections.isEmpty {
+                    ForEach(chatViewModel.globalSearchSections) { section in
+                        Section {
+                            ForEach(section.results, id: \.message.id) { result in
+                                Button {
+                                    onSelectResult(section, result)
+                                    dismiss()
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(previewText(for: result.message))
+                                            .font(.subheadline)
+                                            .foregroundStyle(RaverTheme.primaryText)
+                                            .lineLimit(2)
+
+                                        HStack(spacing: 6) {
+                                            Text(result.message.isMine ? L("我", "Me") : result.message.sender.displayName)
+                                                .lineLimit(1)
+                                            Text("·")
+                                            Text(result.message.createdAt.chatTimeText)
+                                                .lineLimit(1)
+                                            Text("·")
+                                            Text(result.source == .localIndex ? L("本地", "Local") : L("远端", "Remote"))
+                                                .lineLimit(1)
+                                        }
+                                        .font(.caption)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                    }
+                                    .padding(.vertical, 2)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        } header: {
+                            HStack(spacing: 8) {
+                                conversationHeaderAvatar(section.conversation)
+                                    .frame(width: 22, height: 22)
+                                    .clipShape(Circle())
+                                Text(section.conversation.title)
+                                    .font(.caption.bold())
+                                    .lineLimit(1)
+                                Spacer(minLength: 8)
+                                Text("\(section.results.count)")
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                        }
+                    }
+                } else if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                          !chatViewModel.isGlobalSearching,
+                          chatViewModel.globalSearchError == nil {
+                    ContentUnavailableView(
+                        L("无搜索结果", "No Results"),
+                        systemImage: "magnifyingglass",
+                        description: Text(L("请尝试更换关键词。", "Try a different keyword."))
+                    )
+                }
+            }
+            .listStyle(.insetGrouped)
+            .overlay(alignment: .center) {
+                if chatViewModel.isGlobalSearching {
+                    ProgressView(L("搜索中...", "Searching..."))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+            .searchable(
+                text: $query,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: L("搜索消息内容或文件名", "Search message text or file name")
+            )
+            .onSubmit(of: .search) {
+                triggerSearch(immediate: true)
+            }
+            .onChange(of: query) { _, _ in
+                triggerSearch(immediate: false)
+            }
+            .navigationTitle(L("全局聊天搜索", "Global Chat Search"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(L("关闭", "Close")) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .alert(
+            L("搜索失败", "Search Failed"),
+            isPresented: Binding(
+                get: { chatViewModel.globalSearchError != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        chatViewModel.globalSearchError = nil
+                    }
+                }
+            )
+        ) {
+            Button(L("好的", "OK"), role: .cancel) {}
+        } message: {
+            Text(chatViewModel.globalSearchError ?? "")
+        }
+        .onDisappear {
+            debounceTask?.cancel()
+            debounceTask = nil
+            chatViewModel.clearGlobalSearchState()
+        }
+    }
+
+    private func triggerSearch(immediate: Bool) {
+        debounceTask?.cancel()
+        let delay: UInt64 = immediate ? 0 : 250_000_000
+        let pendingQuery = query
+        let normalizedQuery = pendingQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedQuery.isEmpty {
+            OpenIMProbeLogger.log(
+                "[GlobalSearch] trigger query=\(normalizedQuery) immediate=\(immediate ? 1 : 0)"
+            )
+        }
+        debounceTask = Task {
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: delay)
+            }
+            guard !Task.isCancelled else { return }
+            await chatViewModel.searchGlobally(query: pendingQuery)
+        }
+    }
+
+    private func previewText(for message: ChatMessage) -> String {
+        let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+            return text
+        }
+
+        switch message.kind {
+        case .image:
+            return L("[图片]", "[Image]")
+        case .video:
+            return L("[视频]", "[Video]")
+        case .voice:
+            return L("[语音]", "[Voice]")
+        case .file:
+            return message.media?.fileName ?? L("[文件]", "[File]")
+        case .emoji:
+            return L("[表情]", "[Emoji]")
+        case .location:
+            return L("[位置]", "[Location]")
+        case .card:
+            return L("[名片]", "[Card]")
+        case .custom:
+            return L("[自定义消息]", "[Custom Message]")
+        case .system:
+            return L("[系统消息]", "[System Message]")
+        case .typing:
+            return L("[输入中]", "[Typing]")
+        case .unknown:
+            return L("[消息]", "[Message]")
+        case .text:
+            return L("[文本消息]", "[Text Message]")
+        }
+    }
+
+    @ViewBuilder
+    private func conversationHeaderAvatar(_ conversation: Conversation) -> some View {
+        if conversation.type == .group,
+           let resolved = AppConfig.resolvedURLString(conversation.avatarURL),
+           (resolved.hasPrefix("http://") || resolved.hasPrefix("https://")),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+        } else if conversation.type == .direct,
+                  let resolved = AppConfig.resolvedURLString(conversation.peer?.avatarURL ?? conversation.avatarURL),
+                  (resolved.hasPrefix("http://") || resolved.hasPrefix("https://")),
+                  URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+        } else {
+            fallbackConversationAvatar(conversation)
+        }
+    }
+
+    private func fallbackConversationAvatar(_ conversation: Conversation) -> some View {
+        let avatarAsset: String = {
+            if conversation.type == .group {
+                return AppConfig.resolvedGroupAvatarAssetName(
+                    groupID: conversation.id,
+                    groupName: conversation.title,
+                    avatarURL: conversation.avatarURL
+                )
+            }
+            return AppConfig.resolvedUserAvatarAssetName(
+                userID: conversation.peer?.id,
+                username: conversation.peer?.username,
+                avatarURL: conversation.peer?.avatarURL ?? conversation.avatarURL
+            )
+        }()
+
+        return Image(avatarAsset)
+            .resizable()
+            .scaledToFill()
+            .background(RaverTheme.card)
     }
 }
 

@@ -9,6 +9,7 @@ struct SquadProfileView: View {
     @StateObject private var viewModel: SquadProfileViewModel
     @State private var myNicknameDraft = ""
     @State private var myNotificationsEnabled = true
+    @State private var pendingRemoveMember: SquadMemberProfile?
 
     init(squadID: String, service: SocialService) {
         self.service = service
@@ -104,6 +105,29 @@ struct SquadProfileView: View {
         } message: {
             Text(viewModel.error ?? "")
         }
+        .confirmationDialog(
+            L("移出小队成员", "Remove Squad Member"),
+            isPresented: Binding(
+                get: { pendingRemoveMember != nil },
+                set: { if !$0 { pendingRemoveMember = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let member = pendingRemoveMember {
+                Button(L("移出 \(member.shownName)", "Remove \(member.shownName)"), role: .destructive) {
+                    let memberID = member.id
+                    pendingRemoveMember = nil
+                    Task { _ = await viewModel.removeMember(memberUserID: memberID) }
+                }
+            }
+            Button(L("取消", "Cancel"), role: .cancel) {
+                pendingRemoveMember = nil
+            }
+        } message: {
+            if let member = pendingRemoveMember {
+                Text(L("将从小队中移出 \(member.shownName)。", "Remove \(member.shownName) from squad."))
+            }
+        }
     }
 
     private func headerCard(_ profile: SquadProfile) -> some View {
@@ -157,6 +181,9 @@ struct SquadProfileView: View {
                                 .frame(width: 70)
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                memberContextMenu(profile: profile, member: member)
+                            }
                         }
                     }
                 }
@@ -317,6 +344,49 @@ struct SquadProfileView: View {
         }
         guard let role = profile.myRole else { return false }
         return role == "leader" || role == "admin"
+    }
+
+    @ViewBuilder
+    private func memberContextMenu(profile: SquadProfile, member: SquadMemberProfile) -> some View {
+        if let myRole = profile.myRole, viewModel.memberActionInFlightUserID == nil {
+            if myRole == "leader" {
+                if member.role == "member" {
+                    Button {
+                        Task { _ = await viewModel.updateMemberRole(memberUserID: member.id, role: "admin") }
+                    } label: {
+                        Label(L("设为管理员", "Promote to Admin"), systemImage: "person.badge.plus")
+                    }
+                }
+
+                if member.role == "admin" {
+                    Button {
+                        Task { _ = await viewModel.updateMemberRole(memberUserID: member.id, role: "member") }
+                    } label: {
+                        Label(L("降为成员", "Demote to Member"), systemImage: "person.badge.minus")
+                    }
+                }
+
+                if member.role != "leader" {
+                    Button {
+                        Task { _ = await viewModel.updateMemberRole(memberUserID: member.id, role: "leader") }
+                    } label: {
+                        Label(L("转让队长", "Transfer Leader"), systemImage: "crown")
+                    }
+
+                    Button(role: .destructive) {
+                        pendingRemoveMember = member
+                    } label: {
+                        Label(L("移出小队", "Remove from Squad"), systemImage: "person.crop.circle.badge.xmark")
+                    }
+                }
+            } else if myRole == "admin", member.role == "member" {
+                Button(role: .destructive) {
+                    pendingRemoveMember = member
+                } label: {
+                    Label(L("移出小队", "Remove from Squad"), systemImage: "person.crop.circle.badge.xmark")
+                }
+            }
+        }
     }
 
     @ViewBuilder

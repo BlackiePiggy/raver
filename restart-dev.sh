@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WEB_DIR="$ROOT_DIR/web"
 SERVER_DIR="$ROOT_DIR/server"
 WEB_PORT=3000
-API_PORT=3001
+API_PORT=3901
 
 detect_lan_ip() {
   local ip

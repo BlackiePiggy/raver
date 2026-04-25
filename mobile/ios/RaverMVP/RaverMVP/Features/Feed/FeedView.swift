@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct FeedView: View {
     @EnvironmentObject private var appContainer: AppContainer
@@ -19,79 +20,108 @@ private struct FeedScreen: View {
     @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: FeedViewModel
     @State private var editTapPostID: String?
+    @State private var sharePayload: PostSharePayload?
+    @State private var hideReasonTargetPost: Post?
 
     init(viewModel: FeedViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
-        Group {
-            if viewModel.isLoading && viewModel.posts.isEmpty {
-                ProgressView(L("加载中...", "Loading..."))
-                    .padding(.top, 12)
-            } else if viewModel.posts.isEmpty {
-                ContentUnavailableView(
-                    L("还没有动态", "No Posts Yet"),
-                    systemImage: "square.and.pencil",
-                    description: Text(LL("成为第一个发帖的人，开始你的社群互动。"))
-                )
-                .padding(.top, 12)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(viewModel.posts) { post in
-                            PostCardView(
-                                post: post,
-                                currentUserId: appState.session?.user.id,
-                                showsFollowButton: false,
-                                onLikeTap: {
-                                    Task { await viewModel.toggleLike(post: post) }
-                                },
-                                onRepostTap: {
-                                    Task { await viewModel.toggleRepost(post: post) }
-                                },
-                                onFollowTap: nil,
-                                onMessageTap: nil,
-                                onAuthorTap: {
-                                    appPush(.userProfile(userID: post.author.id))
-                                },
-                                onSquadTap: nil,
-                                onEditTap: post.author.id == appState.session?.user.id
-                                    ? {
-                                        editTapPostID = post.id
-                                        circlePush(.postEdit(postID: post.id))
-                                    }
-                                    : nil
-                            )
-                            .foregroundStyle(RaverTheme.primaryText)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if editTapPostID == post.id {
-                                    editTapPostID = nil
-                                    return
-                                }
-                                appPush(.postDetail(postID: post.id))
-                            }
-                            .onAppear {
-                                Task { await viewModel.loadMoreIfNeeded(currentPost: post) }
-                            }
-                        }
-
-                        if viewModel.isLoadingMore {
-                            HStack {
-                                Spacer()
-                                ProgressView(L("加载更多...", "Loading more..."))
-                                Spacer()
-                            }
-                            .padding(.vertical, 10)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 18)
-                    .padding(.bottom, 92)
+        VStack(spacing: 0) {
+            Picker(LL("动态排序"), selection: $viewModel.selectedMode) {
+                ForEach(FeedMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
                 }
-                .refreshable {
-                    await viewModel.refresh()
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            Group {
+                if viewModel.isLoading && viewModel.posts.isEmpty {
+                    ProgressView(L("加载中...", "Loading..."))
+                        .padding(.top, 12)
+                } else if viewModel.posts.isEmpty {
+                    ContentUnavailableView(
+                        L("还没有动态", "No Posts Yet"),
+                        systemImage: "square.and.pencil",
+                        description: Text(LL("成为第一个发帖的人，开始你的社群互动。"))
+                    )
+                    .padding(.top, 12)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(Array(viewModel.posts.enumerated()), id: \.element.id) { index, post in
+                                PostCardView(
+                                    post: post,
+                                    currentUserId: appState.session?.user.id,
+                                    showsFollowButton: false,
+                                    onLikeTap: {
+                                        Task { await viewModel.toggleLike(post: post, position: index) }
+                                    },
+                                    onRepostTap: {
+                                        Task { await viewModel.toggleRepost(post: post) }
+                                    },
+                                    onSaveTap: {
+                                        guard appState.session != nil else {
+                                            viewModel.error = L("请先登录后再收藏", "Please sign in before saving.")
+                                            return
+                                        }
+                                        Task { await viewModel.toggleSave(post: post, position: index) }
+                                    },
+                                    onShareTap: {
+                                        sharePayload = PostSharePayload(post: post)
+                                    },
+                                    onHideTap: {
+                                        hideReasonTargetPost = post
+                                    },
+                                    onFollowTap: nil,
+                                    onMessageTap: nil,
+                                    onAuthorTap: {
+                                        appPush(.userProfile(userID: post.author.id))
+                                    },
+                                    onSquadTap: nil,
+                                    onEditTap: post.author.id == appState.session?.user.id
+                                        ? {
+                                            editTapPostID = post.id
+                                            circlePush(.postEdit(postID: post.id))
+                                        }
+                                        : nil
+                                )
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    if editTapPostID == post.id {
+                                        editTapPostID = nil
+                                        return
+                                    }
+                                    viewModel.trackOpenPost(post: post, position: index)
+                                    appPush(.postDetail(postID: post.id))
+                                }
+                                .onAppear {
+                                    viewModel.trackImpressionIfNeeded(post: post, position: index)
+                                    Task { await viewModel.loadMoreIfNeeded(currentPost: post) }
+                                }
+                            }
+
+                            if viewModel.isLoadingMore {
+                                HStack {
+                                    Spacer()
+                                    ProgressView(L("加载更多...", "Loading more..."))
+                                    Spacer()
+                                }
+                                .padding(.vertical, 10)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 10)
+                        .padding(.bottom, 92)
+                    }
+                    .refreshable {
+                        await viewModel.refresh()
+                    }
                 }
             }
         }
@@ -126,8 +156,49 @@ private struct FeedScreen: View {
             guard let deletedPostID = notification.object as? String else { return }
             viewModel.removePost(deletedPostID)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .circlePostDidHide)) { notification in
+            guard let hiddenPostID = notification.object as? String else { return }
+            viewModel.removePost(hiddenPostID)
+        }
+        .onChange(of: viewModel.selectedMode) { _, newMode in
+            Task { await viewModel.switchMode(newMode) }
+        }
         .task {
             await viewModel.load()
+        }
+        .sheet(item: $sharePayload) { payload in
+            PostInAppShareSheet(payload: payload) { channel in
+                guard appState.session != nil else { return }
+                let position = viewModel.posts.firstIndex(where: { $0.id == payload.post.id })
+                Task { await viewModel.recordShare(post: payload.post, channel: channel, position: position) }
+            }
+        }
+        .confirmationDialog(
+            L("告诉我们原因", "Tell us why"),
+            isPresented: Binding(
+                get: { hideReasonTargetPost != nil },
+                set: { if !$0 { hideReasonTargetPost = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            ForEach(PostHideReasonOption.allCases) { reason in
+                Button(reason.title) {
+                    guard let post = hideReasonTargetPost else { return }
+                    hideReasonTargetPost = nil
+                    if appState.session == nil {
+                        let position = viewModel.posts.firstIndex(where: { $0.id == post.id })
+                        viewModel.hideLocally(postID: post.id, position: position)
+                    } else {
+                        let position = viewModel.posts.firstIndex(where: { $0.id == post.id })
+                        Task { await viewModel.hide(post: post, reason: reason.rawValue, position: position) }
+                    }
+                }
+            }
+            Button(L("取消", "Cancel"), role: .cancel) {
+                hideReasonTargetPost = nil
+            }
+        } message: {
+            Text(L("我们会据此减少类似内容。", "We'll show fewer similar posts."))
         }
         .alert(L("加载失败", "Load Failed"), isPresented: Binding(
             get: { viewModel.error != nil },

@@ -116,7 +116,7 @@ cd /opt/raver/scrapRave
 
 ```dotenv
 NODE_ENV=staging
-PORT=3001
+PORT=3901
 DATABASE_URL=postgresql://...
 JWT_SECRET=请替换为高强度随机串
 JWT_EXPIRES_IN=7d
@@ -146,7 +146,7 @@ COZE_WORKFLOW_RUN_URL=
 ## 4.6 配置 WebTool 环境变量（`scrapRave/.env.local`）
 
 ```dotenv
-RAVER_BFF_BASE=http://127.0.0.1:3001
+RAVER_BFF_BASE=http://127.0.0.1:3901
 
 # 地图（按需）
 AMAP_JS_API_KEY=
@@ -194,7 +194,7 @@ pm2 startup
 
 ```caddy
 api-stg.example.com {
-    reverse_proxy 127.0.0.1:3001
+    reverse_proxy 127.0.0.1:3901
 }
 
 tool-stg.example.com {
@@ -289,4 +289,3 @@ RAVER_BFF_BASE_URL=https://api-stg.example.com
 - Vercel Pricing: https://vercel.com/pricing
 - Hetzner Cloud CX 价格发布: https://www.hetzner.com/pressroom/new-cx-plans/
 - Railway Pricing: https://railway.com/pricing
-

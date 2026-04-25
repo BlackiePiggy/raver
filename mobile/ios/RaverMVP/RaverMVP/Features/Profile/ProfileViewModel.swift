@@ -7,9 +7,11 @@ protocol ProfileSocialRepository {
     func fetchPostsByUser(userID: String, cursor: String?) async throws -> FeedPage
     func fetchMyLikeHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchMyRepostHistory(cursor: String?) async throws -> ActivityPostPage
+    func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post
+    func toggleSave(postID: String, shouldSave: Bool) async throws -> Post
     func fetchFollowers(userID: String, cursor: String?) async throws -> FollowListPage
     func fetchFollowing(userID: String, cursor: String?) async throws -> FollowListPage
     func fetchFriends(userID: String, cursor: String?) async throws -> FollowListPage
@@ -50,6 +52,10 @@ struct ProfileSocialRepositoryAdapter: ProfileSocialRepository {
         try await socialService.fetchMyRepostHistory(cursor: cursor)
     }
 
+    func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage {
+        try await socialService.fetchMySaveHistory(cursor: cursor)
+    }
+
     func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
         try await webService.fetchUserCheckins(userID: userID, page: page, limit: limit, type: type)
     }
@@ -60,6 +66,10 @@ struct ProfileSocialRepositoryAdapter: ProfileSocialRepository {
 
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post {
         try await socialService.toggleRepost(postID: postID, shouldRepost: shouldRepost)
+    }
+
+    func toggleSave(postID: String, shouldSave: Bool) async throws -> Post {
+        try await socialService.toggleSave(postID: postID, shouldSave: shouldSave)
     }
 
     func fetchFollowers(userID: String, cursor: String?) async throws -> FollowListPage {
@@ -92,7 +102,18 @@ struct ProfileDashboardSnapshot {
     let recentPosts: [Post]
     let likedItems: [ActivityPostItem]
     let repostedItems: [ActivityPostItem]
+    let savedItems: [ActivityPostItem]
     let recentCheckins: [WebCheckin]
+}
+
+private struct ProfileOfflineSnapshot: Codable {
+    var profile: UserProfile
+    var recentPosts: [Post]
+    var likedItems: [ActivityPostItem]
+    var repostedItems: [ActivityPostItem]
+    var savedItems: [ActivityPostItem]
+    var recentCheckins: [WebCheckin]
+    var cachedAt: Date
 }
 
 struct LoadMyProfileDashboardUseCase {
@@ -108,8 +129,9 @@ struct LoadMyProfileDashboardUseCase {
         async let postsTask = repository.fetchPostsByUser(userID: profileValue.id, cursor: nil)
         async let likesTask = repository.fetchMyLikeHistory(cursor: nil)
         async let repostsTask = repository.fetchMyRepostHistory(cursor: nil)
+        async let savesTask = repository.fetchMySaveHistory(cursor: nil)
 
-        let (postsPage, likesPage, repostsPage) = try await (postsTask, likesTask, repostsTask)
+        let (postsPage, likesPage, repostsPage, savesPage) = try await (postsTask, likesTask, repostsTask, savesTask)
         let checkins = (try? await repository.fetchUserCheckins(userID: profileValue.id, page: 1, limit: 6, type: nil))?.items ?? []
 
         return ProfileDashboardSnapshot(
@@ -117,6 +139,7 @@ struct LoadMyProfileDashboardUseCase {
             recentPosts: postsPage.posts.filter { !$0.isRaverNews },
             likedItems: likesPage.items,
             repostedItems: repostsPage.items,
+            savedItems: savesPage.items,
             recentCheckins: checkins
         )
     }
@@ -128,6 +151,7 @@ final class ProfileViewModel: ObservableObject {
         case recent
         case likes
         case reposts
+        case saves
 
         var id: String { rawValue }
 
@@ -136,6 +160,7 @@ final class ProfileViewModel: ObservableObject {
             case .recent: return L("近期动态", "Recent")
             case .likes: return L("点赞历史", "Likes")
             case .reposts: return L("转发历史", "Reposts")
+            case .saves: return L("收藏", "Saves")
             }
         }
     }
@@ -144,6 +169,7 @@ final class ProfileViewModel: ObservableObject {
     @Published var recentPosts: [Post] = []
     @Published var likedItems: [ActivityPostItem] = []
     @Published var repostedItems: [ActivityPostItem] = []
+    @Published var savedItems: [ActivityPostItem] = []
     @Published var recentCheckins: [WebCheckin] = []
     @Published var selectedSection: Section = .recent
     @Published var isLoading = false
@@ -151,6 +177,7 @@ final class ProfileViewModel: ObservableObject {
 
     private let repository: ProfileSocialRepository
     private let loadDashboardUseCase: LoadMyProfileDashboardUseCase
+    private let offlineSnapshotStorageKey = "raver.profile.offlineSnapshot.v1"
 
     init(repository: ProfileSocialRepository) {
         self.repository = repository
@@ -168,10 +195,16 @@ final class ProfileViewModel: ObservableObject {
             recentPosts = dashboard.recentPosts
             likedItems = dashboard.likedItems
             repostedItems = dashboard.repostedItems
+            savedItems = dashboard.savedItems
             recentCheckins = dashboard.recentCheckins
+            persistOfflineSnapshot()
             error = nil
         } catch {
-            self.error = error.userFacingMessage
+            if restoreOfflineSnapshot() {
+                self.error = L("当前离线，已显示上次同步的个人主页数据。", "You're offline. Showing your latest synced profile snapshot.")
+            } else {
+                self.error = error.userFacingMessage
+            }
         }
     }
 
@@ -189,10 +222,13 @@ final class ProfileViewModel: ObservableObject {
                 likedItems = try await repository.fetchMyLikeHistory(cursor: nil).items
             case .reposts:
                 repostedItems = try await repository.fetchMyRepostHistory(cursor: nil).items
+            case .saves:
+                savedItems = try await repository.fetchMySaveHistory(cursor: nil).items
             }
             if let checkinPage = try? await repository.fetchUserCheckins(userID: profile.id, page: 1, limit: 6, type: nil) {
                 recentCheckins = checkinPage.items
             }
+            persistOfflineSnapshot()
             error = nil
         } catch {
             self.error = error.userFacingMessage
@@ -201,6 +237,7 @@ final class ProfileViewModel: ObservableObject {
 
     func applyUpdatedProfile(_ profile: UserProfile) {
         self.profile = profile
+        persistOfflineSnapshot()
     }
 
     func toggleLike(post: Post) async {
@@ -210,6 +247,7 @@ final class ProfileViewModel: ObservableObject {
             if !updated.isLiked {
                 likedItems.removeAll { $0.post.id == updated.id }
             }
+            persistOfflineSnapshot()
         } catch {
             self.error = error.userFacingMessage
         }
@@ -222,6 +260,20 @@ final class ProfileViewModel: ObservableObject {
             if !updated.isReposted {
                 repostedItems.removeAll { $0.post.id == updated.id }
             }
+            persistOfflineSnapshot()
+        } catch {
+            self.error = error.userFacingMessage
+        }
+    }
+
+    func toggleSave(post: Post) async {
+        do {
+            let updated = try await repository.toggleSave(postID: post.id, shouldSave: !post.isSaved)
+            replacePost(updated)
+            if !updated.isSaved {
+                savedItems.removeAll { $0.post.id == updated.id }
+            }
+            persistOfflineSnapshot()
         } catch {
             self.error = error.userFacingMessage
         }
@@ -239,5 +291,44 @@ final class ProfileViewModel: ObservableObject {
         for index in repostedItems.indices where repostedItems[index].post.id == updated.id {
             repostedItems[index].post = updated
         }
+
+        for index in savedItems.indices where savedItems[index].post.id == updated.id {
+            savedItems[index].post = updated
+        }
+    }
+
+    private func persistOfflineSnapshot() {
+        guard let profile else { return }
+        let snapshot = ProfileOfflineSnapshot(
+            profile: profile,
+            recentPosts: recentPosts,
+            likedItems: likedItems,
+            repostedItems: repostedItems,
+            savedItems: savedItems,
+            recentCheckins: recentCheckins,
+            cachedAt: Date()
+        )
+
+        do {
+            let data = try JSONEncoder.raver.encode(snapshot)
+            UserDefaults.standard.set(data, forKey: offlineSnapshotStorageKey)
+        } catch {
+            assertionFailure("Failed to persist profile offline snapshot: \(error)")
+        }
+    }
+
+    private func restoreOfflineSnapshot() -> Bool {
+        guard let data = UserDefaults.standard.data(forKey: offlineSnapshotStorageKey),
+              let snapshot = try? JSONDecoder.raver.decode(ProfileOfflineSnapshot.self, from: data) else {
+            return false
+        }
+
+        profile = snapshot.profile
+        recentPosts = snapshot.recentPosts
+        likedItems = snapshot.likedItems
+        repostedItems = snapshot.repostedItems
+        savedItems = snapshot.savedItems
+        recentCheckins = snapshot.recentCheckins
+        return true
     }
 }

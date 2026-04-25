@@ -8,6 +8,10 @@ enum MessagesModalRoute: Hashable {
     case squadProfile(String)
 }
 
+extension Notification.Name {
+    static let raverMessageAlertsDidMutate = Notification.Name("raverMessageAlertsDidMutate")
+}
+
 private struct MessagesPushKey: EnvironmentKey {
     static let defaultValue: (MessagesRoute) -> Void = { _ in }
 }

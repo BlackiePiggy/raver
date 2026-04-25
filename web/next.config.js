@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3901/api';
 const backendOrigin = apiBase.replace(/\/api\/?$/, '');
 
 const nextConfig = {

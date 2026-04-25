@@ -39,13 +39,27 @@ cd /Users/blackie/Projects/raver/mobile/ios/RaverMVP
 xcodegen generate
 ```
 
-3. 打开项目
+3. 安装 iOS 依赖
+
+```bash
+pod install
+```
+
+4. 打开工程
+
+如果已经执行了 `pod install`，优先打开 workspace：
+
+```bash
+open /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace
+```
+
+如果还没安装 CocoaPods，也可以先继续打开项目文件做纯 Swift 开发：
 
 ```bash
 open /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcodeproj
 ```
 
-4. Xcode 里选择模拟器（例如 `iPhone 16 Pro`）后点击 Run
+5. Xcode 里选择模拟器（例如 `iPhone 16 Pro`）后点击 Run
 
 ## 如何查看效果
 
@@ -72,6 +86,24 @@ open /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcodeproj
 - `GET /v1/profile/me`
 - `POST|DELETE /v1/social/users/:id/follow`
 - `GET /v1/notifications`
+- `GET /v1/openim/bootstrap`
+
+## OpenIM iOS SDK
+
+当前工程已预留 OpenIM iOS 登录骨架：
+
+- 登录/注册成功后会请求 `/v1/openim/bootstrap`
+- App 回到前台时会再次刷新 bootstrap
+- 如果工程能 `import OpenIMSDK`，会自动执行 `initSDK + login`
+
+如果本机还没安装 CocoaPods：
+
+```bash
+gem install ffi -v 1.15.5 --user-install --no-document
+gem install zeitwerk -v 2.6.18 --user-install --no-document
+gem install cocoapods -v 1.11.3 --user-install --no-document
+export PATH="$HOME/.gem/ruby/2.6.0/bin:$PATH"
+```
 
 ## 你接下来怎么开发（建议）
 

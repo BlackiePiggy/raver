@@ -1,6 +1,10 @@
 import { PrismaClient } from '@prisma/client';
+import { openIMGroupService } from './openim/openim-group.service';
+import { notificationCenterService } from './notification-center';
 
 const prisma = new PrismaClient();
+const MIN_SQUAD_INITIAL_MEMBERS = 3;
+const MIN_SQUAD_INVITED_MEMBERS = MIN_SQUAD_INITIAL_MEMBERS - 1;
 
 export const squadService = {
   // 创建小队
@@ -8,49 +12,100 @@ export const squadService = {
     name: string;
     description?: string;
     leaderId: string;
+    memberIds?: string[];
     isPublic?: boolean;
     maxMembers?: number;
   }) {
-    const squad = await prisma.squad.create({
-      data: {
-        name: data.name,
-        description: data.description,
-        leaderId: data.leaderId,
-        isPublic: data.isPublic ?? false,
-        maxMembers: data.maxMembers ?? 50,
-      },
-      include: {
-        leader: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-          },
+    const memberIds = Array.from(
+      new Set((data.memberIds ?? []).map((id) => id.trim()).filter((id) => id.length > 0 && id !== data.leaderId))
+    );
+
+    if (memberIds.length < MIN_SQUAD_INVITED_MEMBERS) {
+      throw new Error('创建小队至少需要 3 人，请至少选择 2 位好友');
+    }
+
+    const maxMembers = data.maxMembers ?? 50;
+    if (maxMembers < MIN_SQUAD_INITIAL_MEMBERS) {
+      throw new Error('小队最大成员数不能小于 3 人');
+    }
+    if (maxMembers < memberIds.length + 1) {
+      throw new Error('小队最大成员数不能小于初始成员数');
+    }
+
+    const squad = await prisma.$transaction(async (tx) => {
+      const created = await tx.squad.create({
+        data: {
+          name: data.name,
+          description: data.description,
+          leaderId: data.leaderId,
+          isPublic: data.isPublic ?? false,
+          maxMembers,
         },
-        members: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-                displayName: true,
-                avatarUrl: true,
+      });
+
+      await tx.squadMember.createMany({
+        data: [
+          {
+            squadId: created.id,
+            userId: data.leaderId,
+            role: 'leader',
+          },
+          ...memberIds.map((memberId) => ({
+            squadId: created.id,
+            userId: memberId,
+            role: 'member',
+          })),
+        ],
+      });
+
+      return tx.squad.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          leader: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarUrl: true,
+            },
+          },
+          members: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  username: true,
+                  displayName: true,
+                  avatarUrl: true,
+                },
               },
             },
           },
         },
-      },
+      });
     });
 
-    // 自动添加队长为成员
-    await prisma.squadMember.create({
-      data: {
+    try {
+      await openIMGroupService.createSquadGroup({
         squadId: squad.id,
-        userId: data.leaderId,
-        role: 'leader',
-      },
-    });
+        name: squad.name,
+        ownerUserId: data.leaderId,
+        memberUserIds: memberIds,
+        avatarUrl: squad.avatarUrl,
+        description: squad.description,
+        verified: false,
+      });
+    } catch (error) {
+      await prisma.$transaction(async (tx) => {
+        await tx.squadMember.deleteMany({
+          where: { squadId: squad.id },
+        });
+        await tx.squad.delete({
+          where: { id: squad.id },
+        });
+      });
+      throw error;
+    }
 
     return squad;
   },
@@ -249,6 +304,31 @@ export const squadService = {
       },
     });
 
+    if (invite.inviteeId !== invite.inviterId) {
+      void notificationCenterService
+        .publish({
+          category: 'community_interaction',
+          targets: [{ userId: invite.inviteeId }],
+          channels: ['in_app', 'apns'],
+          payload: {
+            title: '社区互动',
+            body: `你收到了加入小队「${invite.squad.name}」的邀请`,
+            deeplink: `raver://squad/${invite.squad.id}`,
+            metadata: {
+              source: 'squad_invite',
+              inviteID: invite.id,
+              squadID: invite.squad.id,
+              inviterUserID: invite.inviter.id,
+            },
+          },
+          dedupeKey: `community:squad_invite:${invite.id}`,
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`[notification-center] squad invite publish failed: ${message}`);
+        });
+    }
+
     return invite;
   },
 
@@ -277,26 +357,35 @@ export const squadService = {
       throw new Error('邀请已过期');
     }
 
-    // 更新邀请状态
-    await prisma.squadInvite.update({
-      where: { id: inviteId },
-      data: {
-        status: accept ? 'accepted' : 'rejected',
-      },
-    });
-
-    // 如果接受，添加为成员
-    if (accept) {
-      // 检查小队是否已满
-      const memberCount = await prisma.squadMember.count({
-        where: { squadId: invite.squadId },
+    if (!accept) {
+      await prisma.squadInvite.update({
+        where: { id: inviteId },
+        data: {
+          status: 'rejected',
+        },
       });
 
-      if (memberCount >= invite.squad.maxMembers) {
-        throw new Error('小队已满');
-      }
+      return { success: true, accepted: false };
+    }
 
-      await prisma.squadMember.create({
+    // 检查小队是否已满
+    const memberCount = await prisma.squadMember.count({
+      where: { squadId: invite.squadId },
+    });
+
+    if (memberCount >= invite.squad.maxMembers) {
+      throw new Error('小队已满');
+    }
+
+    const acceptedInvite = await prisma.$transaction(async (tx) => {
+      await tx.squadInvite.update({
+        where: { id: inviteId },
+        data: {
+          status: 'accepted',
+        },
+      });
+
+      const membership = await tx.squadMember.create({
         data: {
           squadId: invite.squadId,
           userId: userId,
@@ -304,8 +393,7 @@ export const squadService = {
         },
       });
 
-      // 发送系统消息
-      await prisma.squadMessage.create({
+      const message = await tx.squadMessage.create({
         data: {
           squadId: invite.squadId,
           userId: userId,
@@ -313,6 +401,31 @@ export const squadService = {
           type: 'system',
         },
       });
+
+      return {
+        membershipId: membership.id,
+        messageId: message.id,
+      };
+    });
+
+    try {
+      await openIMGroupService.addGroupMembers(invite.squad.leaderId, invite.squadId, [userId], 'invite accepted');
+    } catch (error) {
+      await prisma.$transaction(async (tx) => {
+        await tx.squadMessage.delete({
+          where: { id: acceptedInvite.messageId },
+        });
+        await tx.squadMember.delete({
+          where: { id: acceptedInvite.membershipId },
+        });
+        await tx.squadInvite.update({
+          where: { id: inviteId },
+          data: {
+            status: 'pending',
+          },
+        });
+      });
+      throw error;
     }
 
     return { success: true, accepted: accept };
@@ -396,6 +509,47 @@ export const squadService = {
       },
     });
 
+    const [squad, targetMembers] = await Promise.all([
+      prisma.squad.findUnique({
+        where: { id: data.squadId },
+        select: { id: true, name: true },
+      }),
+      prisma.squadMember.findMany({
+        where: {
+          squadId: data.squadId,
+          userId: { not: data.userId },
+          notificationsEnabled: true,
+        },
+        select: { userId: true },
+      }),
+    ]);
+
+    const senderDisplayName = message.user.displayName || message.user.username || '新消息';
+    if (targetMembers.length > 0) {
+      void notificationCenterService
+        .publish({
+          category: 'chat_message',
+          targets: targetMembers.map((item) => ({ userId: item.userId })),
+          channels: ['in_app', 'apns'],
+          payload: {
+            title: squad?.name || '小队消息',
+            body: `${senderDisplayName}: ${data.content.slice(0, 100)}`,
+            deeplink: `raver://messages/conversation/${data.squadId}`,
+            metadata: {
+              scope: 'group',
+              conversationID: data.squadId,
+              messageID: message.id,
+              senderUserID: data.userId,
+            },
+          },
+          dedupeKey: `chat:group:${message.id}`,
+        })
+        .catch((error) => {
+          const messageError = error instanceof Error ? error.message : String(error);
+          console.error(`[notification-center] squad message publish failed: ${messageError}`);
+        });
+    }
+
     return message;
   },
 
@@ -455,24 +609,59 @@ export const squadService = {
       throw new Error('队长不能离开小队，请先转让队长');
     }
 
-    await prisma.squadMember.delete({
+    const existingMembership = await prisma.squadMember.findUnique({
       where: {
         squadId_userId: {
-          squadId: squadId,
-          userId: userId,
+          squadId,
+          userId,
         },
       },
     });
 
-    // 发送系统消息
-    await prisma.squadMessage.create({
-      data: {
-        squadId: squadId,
-        userId: userId,
-        content: '离开了小队',
-        type: 'system',
-      },
+    if (!existingMembership) {
+      throw new Error('你不是该小队成员');
+    }
+
+    const leaveResult = await prisma.$transaction(async (tx) => {
+      await tx.squadMember.delete({
+        where: {
+          squadId_userId: {
+            squadId,
+            userId,
+          },
+        },
+      });
+
+      const message = await tx.squadMessage.create({
+        data: {
+          squadId,
+          userId,
+          content: '离开了小队',
+          type: 'system',
+        },
+      });
+
+      return { messageId: message.id };
     });
+
+    try {
+      await openIMGroupService.removeGroupMembers(squadId, [userId], 'member left squad');
+    } catch (error) {
+      await prisma.$transaction(async (tx) => {
+        await tx.squadMessage.delete({
+          where: { id: leaveResult.messageId },
+        });
+        await tx.squadMember.create({
+          data: {
+            squadId,
+            userId,
+            role: existingMembership.role,
+            lastReadAt: existingMembership.lastReadAt,
+          },
+        });
+      });
+      throw error;
+    }
 
     return { success: true };
   },

@@ -10,8 +10,8 @@ check_port() {
 }
 
 # 启动后端
-echo "📡 检查后端服务器 (端口 3001)..."
-if check_port 3001; then
+echo "📡 检查后端服务器 (端口 3901)..."
+if check_port 3901; then
   echo "✅ 后端服务器已在运行"
 else
   echo "🔄 启动后端服务器..."
@@ -26,7 +26,7 @@ fi
 # 检查后端健康
 echo ""
 echo "🏥 检查后端健康状态..."
-HEALTH=$(curl -s http://localhost:3001/health 2>/dev/null)
+HEALTH=$(curl -s http://localhost:3901/health 2>/dev/null)
 if [ $? -eq 0 ]; then
   echo "✅ 后端服务器健康"
 else
@@ -53,7 +53,7 @@ echo "🎉 所有服务已启动！"
 echo ""
 echo "📍 访问地址:"
 echo "   前端: http://localhost:3000"
-echo "   后端: http://localhost:3001"
+echo "   后端: http://localhost:3901"
 echo ""
 echo "📝 日志文件:"
 echo "   后端: server.log"
