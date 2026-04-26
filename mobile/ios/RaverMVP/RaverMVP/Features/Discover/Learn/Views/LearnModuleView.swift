@@ -762,8 +762,8 @@ struct LearnModuleView: View {
 
     private var festivalCreateSheet: some View {
         NavigationStack {
-            Form {
-                Section(LL("基础信息")) {
+            SwiftUI.Form(content: {
+                SwiftUI.Section(LL("基础信息")) {
                     TextField(LL("电音节名称"), text: $createFestivalName)
                     TextField(LL("别名（英文逗号分隔）"), text: $createFestivalAliases)
                     TextField(LL("国家"), text: $createFestivalCountry)
@@ -777,7 +777,7 @@ struct LearnModuleView: View {
                         .autocorrectionDisabled(true)
                 }
 
-                Section(LL("媒体")) {
+                SwiftUI.Section(LL("媒体")) {
                     HStack(spacing: 12) {
                         PhotosPicker(selection: $createFestivalAvatarItem, matching: .images) {
                             Label(LL("选择头像"), systemImage: "person.crop.square")
@@ -809,13 +809,13 @@ struct LearnModuleView: View {
                     }
                 }
 
-                Section {
+                SwiftUI.Section {
                     Button(isCreatingFestival ? L("创建中...", "Creating...") : "创建电音节") {
                         Task { await createFestival() }
                     }
                     .disabled(isCreatingFestival || createFestivalName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-            }
+            })
             .raverSystemNavigation(title: LL("新增电音节"))
             .scrollDismissesKeyboard(.interactively)
         }
@@ -2882,8 +2882,8 @@ struct LearnFestivalDetailView: View {
 
     private var festivalEditSheet: some View {
         NavigationStack {
-            Form {
-                Section(LL("基础信息")) {
+            SwiftUI.Form(content: {
+                SwiftUI.Section(LL("基础信息")) {
                     TextField(LL("电音节名称"), text: $editName)
                     TextField(LL("别名（英文逗号分隔）"), text: $editAliases)
                     TextField(LL("国家"), text: $editCountry)
@@ -2897,7 +2897,7 @@ struct LearnFestivalDetailView: View {
                         .autocorrectionDisabled(true)
                 }
 
-                Section(LL("媒体")) {
+                SwiftUI.Section(LL("媒体")) {
                     HStack(spacing: 12) {
                         PhotosPicker(selection: $editAvatarItem, matching: .images) {
                             Label(LL("更换头像"), systemImage: "person.crop.square")
@@ -2941,13 +2941,13 @@ struct LearnFestivalDetailView: View {
                     }
                 }
 
-                Section {
+                SwiftUI.Section {
                     Button(isSavingFestival ? L("保存中...", "Saving...") : "保存电音节信息") {
                         Task { await saveFestivalEdits() }
                     }
                     .disabled(isSavingFestival || editName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-            }
+            })
             .raverSystemNavigation(title: LL("编辑电音节"))
             .scrollDismissesKeyboard(.interactively)
         }
@@ -3344,8 +3344,8 @@ struct LearnFestivalEditorView: View {
     }
 
     var body: some View {
-        Form {
-            Section(LL("基础信息")) {
+        SwiftUI.Form(content: {
+            SwiftUI.Section(LL("基础信息")) {
                 TextField(LL("电音节名称"), text: $name)
                 TextField(LL("别名（英文逗号分隔）"), text: $aliases)
                 TextField(LL("国家"), text: $country)
@@ -3359,7 +3359,7 @@ struct LearnFestivalEditorView: View {
                     .autocorrectionDisabled(true)
             }
 
-            Section(LL("媒体")) {
+            SwiftUI.Section(LL("媒体")) {
                 HStack(spacing: 12) {
                     PhotosPicker(selection: $avatarItem, matching: .images) {
                         Label(editingFestival == nil ? LL("选择头像") : LL("更换头像"), systemImage: "person.crop.square")
@@ -3379,13 +3379,13 @@ struct LearnFestivalEditorView: View {
                 }
             }
 
-            Section {
+            SwiftUI.Section {
                 Button(isSaving ? L("保存中...", "Saving...") : mode.commitTitle) {
                     Task { await saveFestival() }
                 }
                 .disabled(isSaving || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-        }
+        })
         .raverSystemNavigation(title: mode.title)
         .scrollDismissesKeyboard(.interactively)
         .task {

@@ -1,2 +1,13 @@
 ${PODS_ROOT}/Target Support Files/Pods-RaverMVP/Pods-RaverMVP-resources.sh
+${PODS_CONFIGURATION_BUILD_DIR}/Kingfisher/Kingfisher.bundle
 ${PODS_CONFIGURATION_BUILD_DIR}/MJExtension/MJExtension.bundle
+${PODS_ROOT}/MJRefresh/MJRefresh/MJRefresh.bundle
+${PODS_CONFIGURATION_BUILD_DIR}/MJRefresh/MJRefresh.Privacy.bundle
+${PODS_CONFIGURATION_BUILD_DIR}/OUICore/OIMUIResource.bundle
+${PODS_CONFIGURATION_BUILD_DIR}/OUICore/OIMUIEmoji.bundle
+${PODS_CONFIGURATION_BUILD_DIR}/ProgressHUD/ProgressHUD.bundle
+${PODS_CONFIGURATION_BUILD_DIR}/RxCocoa/RxCocoa_Privacy.bundle
+${PODS_CONFIGURATION_BUILD_DIR}/RxRelay/RxRelay_Privacy.bundle
+${PODS_CONFIGURATION_BUILD_DIR}/RxSwift/RxSwift_Privacy.bundle
+${PODS_ROOT}/ZFPlayer/ZFPlayer/Classes/ControlView/ZFPlayer.bundle
+${PODS_ROOT}/../../../../thirdparty/openimApp/openim-ios-demo/3rd/ZLPhotoBrowser/Sources/ZLPhotoBrowser.bundle

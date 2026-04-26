@@ -198,7 +198,7 @@ struct MyPublishesView: View {
                 }
 
                 if !viewModel.publishes.ratingEvents.isEmpty {
-                    Section(LL("我发布的打分事件")) {
+                    SwiftUI.Section(LL("我发布的打分事件")) {
                         ForEach(viewModel.publishes.ratingEvents) { event in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(event.name)
@@ -229,7 +229,7 @@ struct MyPublishesView: View {
                 }
 
                 if !viewModel.publishes.ratingUnits.isEmpty {
-                    Section(LL("我发布的打分单位")) {
+                    SwiftUI.Section(LL("我发布的打分单位")) {
                         ForEach(viewModel.publishes.ratingUnits) { unit in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(unit.name)

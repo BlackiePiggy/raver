@@ -21,6 +21,8 @@ BFF_PORT="${OPENIM_PROBE_BFF_PORT:-3901}"
 USE_APP_PROBE_LOG="${OPENIM_PROBE_USE_APP_LOG:-1}"
 APP_PROBE_REL_PATH="${OPENIM_PROBE_APP_LOG_REL_PATH:-Library/Caches/openim-probe.log}"
 OPEN_SIM_WINDOWS="${OPENIM_PROBE_OPEN_SIM_WINDOWS:-0}"
+SKIP_APP_RELAUNCH="${OPENIM_PROBE_SKIP_APP_RELAUNCH:-0}"
+APP_CHILD_BASELINE_CHAT="${OPENIM_PROBE_BASELINE_CHAT:-0}"
 
 ROOT_DIR="$(cd "$(dirname "$0")/../../../.." && pwd)"
 LOG_DIR="$ROOT_DIR/docs/reports"
@@ -223,7 +225,12 @@ launch_with_retry() {
   xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
 
   for i in $(seq 1 "$attempts"); do
-    if output="$(xcrun simctl launch "$udid" "$BUNDLE_ID" 2>&1)"; then
+    if [[ "$APP_CHILD_BASELINE_CHAT" == "1" ]]; then
+      if output="$(SIMCTL_CHILD_RAVER_OPENIM_BASELINE_CHAT=1 xcrun simctl launch "$udid" "$BUNDLE_ID" 2>&1)"; then
+        echo "$output"
+        return 0
+      fi
+    elif output="$(xcrun simctl launch "$udid" "$BUNDLE_ID" 2>&1)"; then
       echo "$output"
       return 0
     fi
@@ -322,6 +329,8 @@ echo "SIM1: $SIM1_NAME ($SIM1_UDID)"
 echo "SIM2: $SIM2_NAME ($SIM2_UDID)"
 echo "Bundle: $BUNDLE_ID"
 echo "Log dir: $RUN_DIR"
+echo "Skip relaunch: $SKIP_APP_RELAUNCH"
+echo "Baseline chat env: $APP_CHILD_BASELINE_CHAT"
 
 boot_and_wait "$SIM1_UDID" "$SIM1_NAME"
 boot_and_wait "$SIM2_UDID" "$SIM2_NAME"
@@ -333,10 +342,15 @@ if [[ "$OPEN_SIM_WINDOWS" == "1" ]]; then
   open -a Simulator --args -CurrentDeviceUDID "$SIM2_UDID" >/dev/null 2>&1 || true
 fi
 
-SIM1_LAUNCH_OUTPUT="$(launch_with_retry "$SIM1_UDID" "$SIM1_NAME")"
-SIM2_LAUNCH_OUTPUT="$(launch_with_retry "$SIM2_UDID" "$SIM2_NAME")"
-echo "SIM1 launch: $SIM1_LAUNCH_OUTPUT"
-echo "SIM2 launch: $SIM2_LAUNCH_OUTPUT"
+if [[ "$SKIP_APP_RELAUNCH" == "1" ]]; then
+  echo "SIM1 launch: skipped (OPENIM_PROBE_SKIP_APP_RELAUNCH=1)"
+  echo "SIM2 launch: skipped (OPENIM_PROBE_SKIP_APP_RELAUNCH=1)"
+else
+  SIM1_LAUNCH_OUTPUT="$(launch_with_retry "$SIM1_UDID" "$SIM1_NAME")"
+  SIM2_LAUNCH_OUTPUT="$(launch_with_retry "$SIM2_UDID" "$SIM2_NAME")"
+  echo "SIM1 launch: $SIM1_LAUNCH_OUTPUT"
+  echo "SIM2 launch: $SIM2_LAUNCH_OUTPUT"
+fi
 ensure_booted_with_app "$SIM1_UDID" "$SIM1_NAME"
 ensure_booted_with_app "$SIM2_UDID" "$SIM2_NAME"
 
@@ -350,7 +364,7 @@ APP_LOG1=""
 APP_LOG2=""
 
 BASE_PREDICATE='process == "RaverMVP" AND (subsystem == "com.raver.mvp" OR eventMessage CONTAINS "[OpenIM" OR eventMessage CONTAINS "[AppState]")'
-FOCUS_REGEX='\[OpenIMSession\]|\[OpenIMChatStore\]|\[AppState\]|\[ConversationLoader\]|\[DemoAlignedChat\]|\[DemoAlignedPagination\]|\[DemoAlignedViewport\]|\[DemoAlignedScroll\]|\[DemoAlignedMessageFlow\]|\[GlobalSearch\]|\[DemoAlignedSearch\]|10102|logged in repeatedly|OpenIM state ->|realtime message received|badge recompute source=openim-realtime|badge recompute source=community-event|catchup messages changed|catchup conversations changed|OpenIM .* unavailable|fallback to BFF'
+FOCUS_REGEX='\[OpenIMSession\]|\[OpenIMChatStore\]|\[AppState\]|\[ConversationLoader\]|\[OpenIMDemoBaselineUpdate\]|\[OpenIMDemoBaselineRoute\]|\[DemoAlignedChat\]|\[DemoAlignedPagination\]|\[DemoAlignedViewport\]|\[DemoAlignedScroll\]|\[DemoAlignedMessageFlow\]|\[GlobalSearch\]|\[DemoAlignedSearch\]|10102|logged in repeatedly|OpenIM state ->|realtime message received|badge recompute source=openim-realtime|badge recompute source=community-event|catchup messages changed|catchup conversations changed|OpenIM .* unavailable|fallback to BFF'
 DIGEST_SCRIPT="$ROOT_DIR/mobile/ios/RaverMVP/scripts/openim_probe_digest.sh"
 
 touch "$LOG1" "$LOG2" "$FOCUS1" "$FOCUS2" "$ERR1" "$ERR2"

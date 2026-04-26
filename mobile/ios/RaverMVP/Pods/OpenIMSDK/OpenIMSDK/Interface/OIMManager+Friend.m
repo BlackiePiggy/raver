@@ -21,14 +21,8 @@
     Open_im_sdkAddFriend(callback, [self operationId], param.mj_JSONString);
 }
 
-- (void)getFriendApplicationListAsRecipientWithOnSuccess:(nullable OIMFriendApplicationsCallback)onSuccess
-                                               onFailure:(nullable OIMFailureCallback)onFailure {
-    [self getFriendApplicationListAsRecipientWithReq:nil onSuccess:onSuccess onFailure:onFailure];
-}
-
-- (void)getFriendApplicationListAsRecipientWithReq:(nullable GetFriendApplicationListAsRecipientReq *)req
-                                           onSuccess:(OIMFriendApplicationsCallback)onSuccess
-                                         onFailure:(OIMFailureCallback)onFailure {
+- (void)getFriendApplicationListAsRecipientWithOnSuccess:(OIMFriendApplicationsCallback)onSuccess
+                                    onFailure:(OIMFailureCallback)onFailure {
     CallbackProxy *callback = [[CallbackProxy alloc]initWithOnSuccess:^(NSString * _Nullable data) {
         if (onSuccess) {
             onSuccess([OIMFriendApplication mj_objectArrayWithKeyValuesArray:data]);
@@ -36,16 +30,10 @@
     } onFailure:onFailure];
     
     
-    Open_im_sdkGetFriendApplicationListAsRecipient(callback, [self operationId], req ? req.mj_JSONString : @"{}");
+    Open_im_sdkGetFriendApplicationListAsRecipient(callback, [self operationId]);
 }
 
-- (void)getFriendApplicationListAsApplicantWithOnSuccess:(nullable OIMFriendApplicationsCallback)onSuccess
-                                               onFailure:(nullable OIMFailureCallback)onFailure {
-    [self getFriendApplicationListAsApplicantWithReq:nil onSuccess:onSuccess onFailure:onFailure];
-}
-
-- (void)getFriendApplicationListAsApplicantWithReq:(nullable GetFriendApplicationListAsApplicantReq *)req
-                                         onSuccess:(nullable OIMFriendApplicationsCallback)onSuccess
+- (void)getFriendApplicationListAsApplicantWithOnSuccess:(OIMFriendApplicationsCallback)onSuccess
                                         onFailure:(OIMFailureCallback)onFailure {
     CallbackProxy *callback = [[CallbackProxy alloc]initWithOnSuccess:^(NSString * _Nullable data) {
         if (onSuccess) {
@@ -53,7 +41,7 @@
         }
     } onFailure:onFailure];
     
-    Open_im_sdkGetFriendApplicationListAsApplicant(callback, [self operationId], req ? req.mj_JSONString : @"{}");
+    Open_im_sdkGetFriendApplicationListAsApplicant(callback, [self operationId]);
 }
 
 - (void)acceptFriendApplication:(NSString *)userID
@@ -216,17 +204,5 @@
     CallbackProxy *callback = [[CallbackProxy alloc]initWithOnSuccess:onSuccess onFailure:onFailure];
 
     Open_im_sdkUpdateFriends(callback, [self operationId], req.mj_JSONString);
-}
-
-- (void)getFriendApplicationUnhandledCount:(GetFriendApplicationUnhandledCountReq *)req
-                                 onSuccess:(OIMNumberCallback)onSuccess
-                                 onFailure:(OIMFailureCallback)onFailure {
-    CallbackProxy *callback = [[CallbackProxy alloc]initWithOnSuccess:^(NSString * _Nullable data) {
-        if (onSuccess) {
-            onSuccess(data.integerValue);
-        }
-    } onFailure:onFailure];
-    
-    Open_im_sdkGetFriendApplicationUnhandledCount(callback, [self operationId], req.mj_JSONString);
 }
 @end

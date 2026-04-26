@@ -2949,7 +2949,7 @@ private struct TracklistSelectorSheet: View {
 
     var body: some View {
         List {
-            Section {
+            SwiftUI.Section {
                 HStack(spacing: 10) {
                     ContributorAvatar(
                         avatarURL: (set.tracklistContributor ?? set.videoContributor)?.avatarUrl,
@@ -2985,7 +2985,7 @@ private struct TracklistSelectorSheet: View {
                 }
             }
 
-            Section(LL("用户上传版本")) {
+            SwiftUI.Section(LL("用户上传版本")) {
                 if filteredTracklists.isEmpty {
                     Text(query.isEmpty ? L("暂无用户上传版本", "No user-uploaded versions yet") : L("未找到匹配版本", "No matching versions found"))
                         .font(.caption)
@@ -3074,18 +3074,18 @@ private struct UploadTracklistSheet: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        Form {
-            Section(LL("当前 Set 信息")) {
+        SwiftUI.Form(content: {
+            SwiftUI.Section(LL("当前 Set 信息")) {
                 LabeledContent(L("Set 标题", "Set Title"), value: set.title)
                 LabeledContent(L("Set ID", "Set ID"), value: set.id)
                 LabeledContent(L("当前默认歌曲数", "Default Track Count"), value: "\(set.trackCount)")
             }
 
-            Section(LL("Tracklist 标题")) {
+            SwiftUI.Section(LL("Tracklist 标题")) {
                 TextField(LL("例如：我的版本"), text: $title)
             }
 
-            Section(LL("批量粘贴")) {
+            SwiftUI.Section(LL("批量粘贴")) {
                 Text(LL("每行格式：`0:00~3:30 - 艺术家 - 歌曲名 | Spotify链接(可选) | 网易云链接(可选)`"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
@@ -3114,7 +3114,7 @@ private struct UploadTracklistSheet: View {
                 }
             }
 
-            Section(L("可视化编辑（\(rows.count)）", "Visual Editor (\(rows.count))")) {
+            SwiftUI.Section(L("可视化编辑（\(rows.count)）", "Visual Editor (\(rows.count))")) {
                 if rows.isEmpty {
                     Text(LL("先粘贴文本并解析，或手动新增 Track。"))
                         .font(.caption)
@@ -3173,13 +3173,13 @@ private struct UploadTracklistSheet: View {
             }
 
             if !infoText.isEmpty {
-                Section {
+                SwiftUI.Section {
                     Text(infoText)
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
             }
-        }
+        })
         .raverSystemNavigation(title: LL("上传我的 Tracklist"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -3313,8 +3313,8 @@ struct DJSetEditorView: View {
     private let demoVideoURL = "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
 
     var body: some View {
-        Form {
-                Section(LL("基础")) {
+        SwiftUI.Form(content: {
+                SwiftUI.Section(LL("基础")) {
                     TextField(L("DJ ID", "DJ ID"), text: $djId)
                     TextField(LL("标题"), text: $title)
                     TextField(LL("简介"), text: $description, axis: .vertical)
@@ -3352,7 +3352,7 @@ struct DJSetEditorView: View {
                     }
                 }
 
-                Section(LL("视频资源")) {
+                SwiftUI.Section(LL("视频资源")) {
                     TextField(LL("视频链接（可选）"), text: $videoUrl)
                     PhotosPicker(selection: $selectedVideo, matching: .videos) {
                         Label(LL("上传视频到资源库"), systemImage: "video.badge.plus")
@@ -3370,14 +3370,14 @@ struct DJSetEditorView: View {
                     }
                 }
 
-                Section(LL("封面")) {
+                SwiftUI.Section(LL("封面")) {
                     TextField(LL("封面 URL"), text: $thumbnailUrl)
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
                         Label(LL("上传封面"), systemImage: "photo")
                     }
                 }
 
-                Section {
+                SwiftUI.Section {
                     Button(LL("预解析视频")) {
                         Task { await preview() }
                     }
@@ -3387,7 +3387,7 @@ struct DJSetEditorView: View {
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
                 }
-            }
+            })
             .raverSystemNavigation(title: mode.title)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -3552,9 +3552,9 @@ private struct SetEventBindingSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            SwiftUI.Form(content: {
                 if !initialEventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Section(LL("当前绑定")) {
+                    SwiftUI.Section(LL("当前绑定")) {
                         Text(initialEventName)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
@@ -3562,7 +3562,7 @@ private struct SetEventBindingSheet: View {
                     }
                 }
 
-                Section(LL("从活动库搜索并绑定")) {
+                SwiftUI.Section(LL("从活动库搜索并绑定")) {
                     TextField(L("搜索活动名称", "Search event name"), text: $searchText)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
@@ -3601,7 +3601,7 @@ private struct SetEventBindingSheet: View {
                     }
                 }
 
-                Section(LL("库里没有时可手动输入")) {
+                SwiftUI.Section(LL("库里没有时可手动输入")) {
                     TextField(LL("手动填写活动名称"), text: $manualEventName)
                     Button(LL("使用手动名称")) {
                         let trimmed = manualEventName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3611,7 +3611,7 @@ private struct SetEventBindingSheet: View {
                     }
                     .disabled(manualEventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-            }
+            })
             .raverSystemNavigation(title: LL("绑定活动"))
             .toolbar {
             }
@@ -3691,15 +3691,15 @@ private struct TracklistEditorView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        Form {
-            Section(LL("当前 Tracklist 信息")) {
+        SwiftUI.Form(content: {
+            SwiftUI.Section(LL("当前 Tracklist 信息")) {
                 LabeledContent(L("名称", "Name"), value: resolvedTracklistTitle)
                 LabeledContent(L("Tracklist ID", "Tracklist ID"), value: selectedTracklistID ?? "default")
                 LabeledContent(L("歌曲数量", "Track Count"), value: "\(rows.count)")
                 LabeledContent(L("贡献者", "Contributor"), value: resolvedTracklistContributor)
             }
 
-            Section(LL("当前歌单文本（已填充）")) {
+            SwiftUI.Section(LL("当前歌单文本（已填充）")) {
                 Text(LL("每行格式：`0:00~3:30 - 艺术家 - 歌曲名 | Spotify链接(可选) | 网易云链接(可选)`"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
@@ -3730,14 +3730,14 @@ private struct TracklistEditorView: View {
             }
 
             if !bulkParseMessage.isEmpty {
-                Section {
+                SwiftUI.Section {
                     Text(bulkParseMessage)
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
             }
 
-            Section(L("可视化编辑（\(rows.count)）", "Visual Editor (\(rows.count))")) {
+            SwiftUI.Section(L("可视化编辑（\(rows.count)）", "Visual Editor (\(rows.count))")) {
                 ForEach($rows) { $row in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
@@ -3786,7 +3786,7 @@ private struct TracklistEditorView: View {
                     Label(LL("新增 Track"), systemImage: "plus")
                 }
             }
-        }
+        })
         .raverSystemNavigation(title: LL("编辑 Tracklist"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

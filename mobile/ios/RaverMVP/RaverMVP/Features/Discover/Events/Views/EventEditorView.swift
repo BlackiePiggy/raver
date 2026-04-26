@@ -632,8 +632,8 @@ private struct DJCheckinBindingSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
+            SwiftUI.Form(content: {
+                SwiftUI.Section {
                     Picker(LL("打卡方式"), selection: $mode) {
                         ForEach(Mode.allCases) { item in
                             Text(item.title).tag(item)
@@ -643,7 +643,7 @@ private struct DJCheckinBindingSheet: View {
                 }
 
                 if mode == .bindEvent {
-                    Section(LL("绑定到活动（优先）")) {
+                    SwiftUI.Section(LL("绑定到活动（优先）")) {
                         TextField(L("搜索活动名称", "Search event name"), text: $eventSearchText)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
@@ -691,7 +691,7 @@ private struct DJCheckinBindingSheet: View {
                         }
                     }
                 } else {
-                    Section(LL("手动填写")) {
+                    SwiftUI.Section(LL("手动填写")) {
                         TextField(LL("活动名称"), text: $manualEventName)
                         DatePicker(
                             L("观演时间", "Attended Time"),
@@ -701,7 +701,7 @@ private struct DJCheckinBindingSheet: View {
                         )
                     }
                 }
-            }
+            })
             .raverSystemNavigation(title: L("\(djName) 打卡", "\(djName) Check-in"))
             .task {
                 await loadHistory()
@@ -1101,8 +1101,8 @@ struct EventEditorView: View {
     @State private var importSuccessMessage: String?
 
     var body: some View {
-        Form {
-                Section(LL("基础信息")) {
+        SwiftUI.Form(content: {
+                SwiftUI.Section(LL("基础信息")) {
                     TextField(LL("活动名称"), text: $name)
                     TextField(LL("简介"), text: $description, axis: .vertical)
                     Picker(LL("活动性质"), selection: $eventType) {
@@ -1123,7 +1123,7 @@ struct EventEditorView: View {
                         .autocorrectionDisabled(true)
                 }
 
-                Section(LL("场地定位")) {
+                SwiftUI.Section(LL("场地定位")) {
                     Button {
                         showLocationPicker = true
                     } label: {
@@ -1152,7 +1152,7 @@ struct EventEditorView: View {
                     }
                 }
 
-                Section(LL("票务信息")) {
+                SwiftUI.Section(LL("票务信息")) {
                     TextField(LL("官网链接（可选）"), text: $officialWebsite)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
@@ -1212,7 +1212,7 @@ struct EventEditorView: View {
                     }
                 }
 
-                Section(LL("时间")) {
+                SwiftUI.Section(LL("时间")) {
                     DatePicker(
                         L("开始日期", "Start Date"),
                         selection: Binding(
@@ -1245,7 +1245,7 @@ struct EventEditorView: View {
                     }
                 }
 
-                Section(LL("图片")) {
+                SwiftUI.Section(LL("图片")) {
                     VStack(alignment: .leading, spacing: 8) {
                         PhotosPicker(selection: $selectedCoverPhoto, matching: .images) {
                             Label(LL("上传活动封面图"), systemImage: "photo")
@@ -1285,7 +1285,7 @@ struct EventEditorView: View {
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
 
-                Section(LL("舞台信息")) {
+                SwiftUI.Section(LL("舞台信息")) {
                     Text(L("已配置 \(normalizedStageEntries.count) 个舞台", "\(normalizedStageEntries.count) stages configured"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
@@ -1328,7 +1328,7 @@ struct EventEditorView: View {
                     }
                 }
 
-                Section(LL("已添加阵容")) {
+                SwiftUI.Section(LL("已添加阵容")) {
                     PhotosPicker(selection: $selectedLineupImportPhoto, matching: .images) {
                         Label(
                             isImportingLineupImage ? L("阵容图识别中...", "Recognizing lineup image...") : L("从阵容图识别并导入", "Recognize from lineup image"),
@@ -1402,7 +1402,7 @@ struct EventEditorView: View {
                         }
                     }
                 }
-            }
+            })
             .scrollDismissesKeyboard(.interactively)
             .raverSystemNavigation(title: mode.title)
             .toolbar {
@@ -3470,8 +3470,8 @@ struct EventEditorView: View {
     @ViewBuilder
     private func lineupImportEditorSheet() -> some View {
         NavigationStack {
-            Form {
-                Section(LL("导入草稿（可编辑）")) {
+            SwiftUI.Form(content: {
+                SwiftUI.Section(LL("导入草稿（可编辑）")) {
                     if lineupImportDraftEntries.isEmpty {
                         Text(LL("暂无可导入条目，请先识别阵容图或粘贴 JSON 后解析。"))
                             .font(.subheadline)
@@ -3504,7 +3504,7 @@ struct EventEditorView: View {
                     }
                 }
 
-                Section(LL("JSON 导入文本（Coze 格式）")) {
+                SwiftUI.Section(LL("JSON 导入文本（Coze 格式）")) {
                     Text(LL("支持 Coze 返回格式：`normalized_text + lineup_info`，也支持直接粘贴数组。"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
@@ -3518,7 +3518,7 @@ struct EventEditorView: View {
                     }
                     .disabled(isParsingLineupImportJSON)
                 }
-            }
+            })
             .raverSystemNavigation(title: LL("阵容导入"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

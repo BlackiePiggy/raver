@@ -667,8 +667,8 @@ private struct SquadManageFormView: View {
     }
 
     var body: some View {
-        Form {
-            Section(LL("基础")) {
+        SwiftUI.Form(content: {
+            SwiftUI.Section(LL("基础")) {
                 TextField(LL("小队名称"), text: $name)
                     .submitLabel(.done)
                     .onSubmit {
@@ -684,7 +684,7 @@ private struct SquadManageFormView: View {
                 .pickerStyle(.segmented)
             }
 
-            Section(LL("展示")) {
+            SwiftUI.Section(LL("展示")) {
                 TextField(LL("头像 URL（可选）"), text: $avatarURL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -724,11 +724,11 @@ private struct SquadManageFormView: View {
                     }
             }
 
-            Section(LL("小队通知")) {
+            SwiftUI.Section(LL("小队通知")) {
                 TextField(LL("小队通知内容"), text: $notice, axis: .vertical)
                     .lineLimit(2...4)
             }
-        }
+        })
         .scrollDismissesKeyboard(.interactively)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {

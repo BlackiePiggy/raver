@@ -47,7 +47,7 @@ classify() {
   local app_events="$7"
 
   if [[ "$app_events" -eq 0 ]]; then
-    echo "无有效 App/OpenIM 事件（采集窗口内可能未登录或未触发聊天路径）"
+    echo "无有效 App/OpenIM 事件（采集窗口内可能未登录、未进入 Messages/聊天页，或未触发聊天路径）"
     return
   fi
 
@@ -91,6 +91,7 @@ print_sim_digest() {
   local connected unavailable login10102 realtime catchup fallback app_events
   local send_failed send_failure_hint resend_failed
   local pagination_trigger scroll_auto_yes scroll_auto_no jump_visible_on jump_visible_off
+  local baseline_updates baseline_trigger_send baseline_trigger_receive baseline_path_batch baseline_path_reload
   local global_trigger global_submit global_result global_result_selected global_failed
   local conversation_submit conversation_result conversation_result_empty conversation_select conversation_failed
   local search_focus_request search_reveal_hit search_reveal_miss search_reveal_load_older
@@ -126,6 +127,11 @@ print_sim_digest() {
   scroll_auto_no="$(count_or_zero '\[DemoAlignedScroll\] auto-scroll decision result=0' "$src")"
   jump_visible_on="$(count_or_zero '\[DemoAlignedViewport\] jump-visible state=1' "$src")"
   jump_visible_off="$(count_or_zero '\[DemoAlignedViewport\] jump-visible state=0' "$src")"
+  baseline_updates="$(count_or_zero '\[OpenIMDemoBaselineUpdate\]' "$src")"
+  baseline_trigger_send="$(count_or_zero '\[OpenIMDemoBaselineUpdate\].*trigger=send' "$src")"
+  baseline_trigger_receive="$(count_or_zero '\[OpenIMDemoBaselineUpdate\].*trigger=receive' "$src")"
+  baseline_path_batch="$(count_or_zero '\[OpenIMDemoBaselineUpdate\].*path=lightweight-batch' "$src")"
+  baseline_path_reload="$(count_or_zero '\[OpenIMDemoBaselineUpdate\].*path=(initial-reload|forced-reload|fallback-reload|lightweight-reload-only)' "$src")"
   global_trigger="$(count_or_zero '\[GlobalSearch\] trigger' "$src")"
   global_submit="$(count_or_zero '\[GlobalSearch\] submit' "$src")"
   global_result="$(count_or_zero '\[GlobalSearch\] result query=' "$src")"
@@ -159,6 +165,7 @@ print_sim_digest() {
   echo "  appEvents=$app_events connected=$connected unavailable=$unavailable login10102=$login10102 realtime=$realtime catchup=$catchup fallback=$fallback"
   echo "  sendFailed=$send_failed resendFailed=$resend_failed failureHint=$send_failure_hint"
   echo "  paginationTrigger=$pagination_trigger autoScrollYes=$scroll_auto_yes autoScrollNo=$scroll_auto_no jumpShow=$jump_visible_on jumpHide=$jump_visible_off"
+  echo "  baselineUpdate total=$baseline_updates triggerSend=$baseline_trigger_send triggerReceive=$baseline_trigger_receive pathBatch=$baseline_path_batch pathReload=$baseline_path_reload"
   echo "  searchGlobal trigger=$global_trigger submit=$global_submit result=$global_result selected=$global_result_selected failed=$global_failed"
   echo "  searchInConversation submit=$conversation_submit result=$conversation_result empty=$conversation_result_empty selected=$conversation_select failed=$conversation_failed"
   echo "  searchAnchor focusRequest=$search_focus_request revealHit=$search_reveal_hit revealMiss=$search_reveal_miss loadOlder=$search_reveal_load_older pendingConsume=$search_pending_consume pendingReveal=$search_pending_reveal"
@@ -172,7 +179,7 @@ print_sim_digest() {
     fi
   fi
   echo "  key tail:"
-  rg -i 'state ->|10102|logged in repeatedly|realtime message received|badge recompute source=openim-realtime|badge recompute source=community-event|catchup messages changed|catchup conversations changed|OpenIM .* unavailable|fallback to BFF|\[ConversationLoader\]|\[DemoAlignedChat\] send .* failed|\[DemoAlignedChat\] resend failed|\[DemoAlignedChat\] send failure hint shown|\[DemoAlignedPagination\]|\[DemoAlignedViewport\]|\[DemoAlignedScroll\]|\[DemoAlignedMessageFlow\]|\[GlobalSearch\]|\[DemoAlignedSearch\]' "$src" 2>/dev/null | tail -n "$MAX_TAIL_LINES" || true
+  rg -i 'state ->|10102|logged in repeatedly|realtime message received|badge recompute source=openim-realtime|badge recompute source=community-event|catchup messages changed|catchup conversations changed|OpenIM .* unavailable|fallback to BFF|\[ConversationLoader\]|\[OpenIMDemoBaselineUpdate\]|\[DemoAlignedChat\] send .* failed|\[DemoAlignedChat\] resend failed|\[DemoAlignedChat\] send failure hint shown|\[DemoAlignedPagination\]|\[DemoAlignedViewport\]|\[DemoAlignedScroll\]|\[DemoAlignedMessageFlow\]|\[GlobalSearch\]|\[DemoAlignedSearch\]' "$src" 2>/dev/null | tail -n "$MAX_TAIL_LINES" || true
   echo
 }
 
@@ -188,7 +195,7 @@ print_sim_digest "SIM2" "$SIM2_SRC"
 if [[ "$SIM1_LINES" -eq 0 || "$SIM2_LINES" -eq 0 ]]; then
   echo "overall: 部分无效（至少一侧日志为 0 行），请重跑双机探针后再下结论。"
 elif [[ "$SIM1_APP_EVENTS" -eq 0 || "$SIM2_APP_EVENTS" -eq 0 ]]; then
-  echo "overall: 部分无效（至少一侧没有 App/OpenIM 事件），请确认两侧均已登录并触发聊天交互后复测。"
+  echo "overall: 部分无效（至少一侧没有 App/OpenIM 事件），请确认两侧均已登录、进入 Messages/目标会话，并触发聊天交互后复测。"
 else
   echo "overall: 双侧日志有效，可用于判断实时链路与回退情况。"
 fi

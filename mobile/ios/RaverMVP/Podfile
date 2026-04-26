@@ -5,5 +5,51 @@ project 'RaverMVP.xcodeproj'
 use_frameworks! :linkage => :static
 
 target 'RaverMVP' do
-  pod 'OpenIMSDK', '3.8.3-hotfix.12'
+  pod 'OpenIMSDK', '3.8.3+3'
+  pod 'OUICore', :path => '../../../thirdparty/openimApp/openim-ios-demo'
+  pod 'OUICoreView', :path => '../../../thirdparty/openimApp/openim-ios-demo'
+  pod 'ChatLayout', '2.0.10'
+  pod 'InputBarAccessoryView', :path => '../../../thirdparty/openimApp/openim-ios-demo/3rd'
+  pod 'MJRefresh'
+  pod 'ZLPhotoBrowser', :path => '../../../thirdparty/openimApp/openim-ios-demo/3rd'
+  pod 'ProgressHUD', :git => 'https://github.com/std-s/ProgressHUD.git'
+  pod 'RxSwift', '~> 6.5'
+  pod 'RxCocoa', '~> 6.0'
+  pod 'RxRelay', '~> 6.0'
+  pod 'DifferenceKit', '1.3.0'
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      settings = config.build_settings
+
+      # Keep CocoaPods products scoped to iOS only for this workspace.
+      settings['SUPPORTED_PLATFORMS'] = 'iphoneos iphonesimulator'
+      settings['TARGETED_DEVICE_FAMILY'] = '1,2'
+
+      # Our verification loop uses Apple Silicon iOS Simulator builds only.
+      if config.name == 'Debug'
+        settings['ONLY_ACTIVE_ARCH'] = 'YES'
+      end
+
+      # Remove legacy simulator arm64 exclusion so Pods can build for iOS sim.
+      settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'x86_64'
+    end
+  end
+
+  Dir.glob(File.join(__dir__, 'Pods/Target Support Files/**/*.xcconfig')).each do |path|
+    next unless File.file?(path)
+
+    contents = File.read(path)
+    next unless contents.include?('EXCLUDED_ARCHS[sdk=iphonesimulator*] = arm64')
+
+    File.write(
+      path,
+      contents.gsub(
+        'EXCLUDED_ARCHS[sdk=iphonesimulator*] = arm64',
+        'EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64'
+      )
+    )
+  end
 end

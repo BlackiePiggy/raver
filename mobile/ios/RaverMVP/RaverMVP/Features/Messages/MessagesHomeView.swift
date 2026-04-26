@@ -841,10 +841,10 @@ private struct MessageGlobalSearchSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            SwiftUI.List {
                 if !chatViewModel.globalSearchSections.isEmpty {
                     ForEach(chatViewModel.globalSearchSections) { section in
-                        Section {
+                        SwiftUI.Section {
                             ForEach(section.results, id: \.message.id) { result in
                                 Button {
                                     onSelectResult(section, result)

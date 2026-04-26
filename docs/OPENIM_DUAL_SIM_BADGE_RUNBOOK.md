@@ -137,6 +137,28 @@ npm run openim:probe:send
 
 建议流程：先启动 `openim_dual_sim_probe.sh`，再执行一次 `openim:probe:send`，最后 Ctrl+C 结束探针并读取 digest。
 
+对当前 baseline 聊天页，digest 里新增了直接可用的更新链摘要：
+
+- `baselineUpdate total=...`
+- `triggerSend=...`
+- `triggerReceive=...`
+- `pathBatch=...`
+- `pathReload=...`
+
+含义：
+
+- `total`：当前日志里一共落了多少条 `[OpenIMDemoBaselineUpdate]`
+- `triggerSend`：其中多少条是本端发送触发
+- `triggerReceive`：其中多少条是接收消息回流触发
+- `pathBatch`：其中多少条走了 `lightweight-batch`
+- `pathReload`：其中多少条走了 reload 类路径
+
+建议判断顺序：
+
+1. 先看 digest 的 `baselineUpdate` 摘要是否为 0
+2. 若不为 0，再结合 `DemoAligned*` 摘要看页面滚动/跳转是否异常
+3. 只有 digest 证据不足时，再人工翻 `sim*.log`
+
 ## 3.2 A6 新旧聊天页对照验收（必做）
 
 新页（UIKit）验收：
@@ -225,6 +247,15 @@ docker compose start openim-server openim-chat
 
 ## 4. 验收步骤
 
+0. A、B 两端都必须已经登录，并且已经进入 `Messages` Tab。
+0. 如果本轮目标是验证 `ConversationLoader -> OpenIMDemoBaselineChatContainerView -> ChatViewController -> OpenIMDemoBaselineUpdate`
+   这条完整路由/更新链，不要在 probe 启动前就停留在聊天页。
+0. 正确顺序是：
+   - 先停在 `Messages` 会话列表页；
+   - 再启动 probe；
+   - probe 开始后，再点进目标会话；
+   - 然后再发消息。
+0. 如果只是验证聊天页更新链而不是路由链，可以在 probe 启动前先进会话；但这样不会看到更早的路由创建日志。
 1. A、B 登录后，B 停留在消息页会话列表。  
 2. A 给 B 发送一条文本消息。  
 3. 观察 B 的会话列表与 Tab badge 是否立即变化。  
@@ -235,6 +266,14 @@ docker compose start openim-server openim-chat
    - B 端会话内能看到图片/视频缩略图与视频播放标记。
 7. B 点击图片/视频消息，确认可进入全屏预览并关闭返回会话。
 8. 制造一次失败重发（例如发送中断网后恢复），确认失败消息文案为“点按重发”，点击可重发成功。
+
+额外说明：
+
+- 如果 probe/digest 显示 `baselineUpdate total=0` 且 `appEvents=0`，优先怀疑：
+  - App 还停在 `Discover` / 非消息路径
+  - 没有进入 `Messages`
+  - 没有进入目标聊天会话
+  - 没有实际触发发送/接收/分页动作
 
 ## 5. 判定规则
 

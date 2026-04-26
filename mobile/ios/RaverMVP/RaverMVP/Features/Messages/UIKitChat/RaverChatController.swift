@@ -580,4 +580,72 @@ final class RaverOpenIMChatController: ObservableObject {
         }
     }
 }
+#else
+@MainActor
+final class RaverOpenIMChatController: ObservableObject {
+    @Published private(set) var rawMessages: [Any] = []
+    @Published private(set) var renderedMessages: [ChatMessage] = []
+    @Published private(set) var latestInputStatus: OpenIMInputStatusEvent?
+    @Published private(set) var isInitialLoading = false
+    @Published private(set) var isLoadingOlder = false
+    @Published private(set) var hasCompletedInitialLoad = false
+    @Published private(set) var canLoadOlderMessages = false
+    @Published private(set) var lastErrorMessage: String?
+
+    private var conversation: Conversation
+    private var service: SocialService
+
+    init(
+        conversation: Conversation,
+        service: SocialService,
+        session: OpenIMSession
+    ) {
+        self.conversation = conversation
+        self.service = service
+    }
+
+    func start() {}
+
+    func updateContext(conversation: Conversation, service: SocialService) {
+        self.conversation = conversation
+        self.service = service
+        renderedMessages = []
+        latestInputStatus = nil
+        isInitialLoading = false
+        isLoadingOlder = false
+        hasCompletedInitialLoad = false
+        canLoadOlderMessages = false
+        lastErrorMessage = "OpenIMSDK unavailable"
+    }
+
+    func loadOlderMessagesIfNeeded() async {}
+
+    @discardableResult
+    func sendTextMessage(_ text: String) async throws -> ChatMessage {
+        throw ServiceError.message("OpenIMSDK unavailable")
+    }
+
+    @discardableResult
+    func sendImageMessage(
+        fileURL: URL,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> ChatMessage {
+        throw ServiceError.message("OpenIMSDK unavailable")
+    }
+
+    @discardableResult
+    func sendVideoMessage(
+        fileURL: URL,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> ChatMessage {
+        throw ServiceError.message("OpenIMSDK unavailable")
+    }
+
+    @discardableResult
+    func resendFailedMessage(messageID: String) async throws -> ChatMessage {
+        throw ServiceError.message("OpenIMSDK unavailable")
+    }
+
+    func handleComposerInputChanged(_ text: String) {}
+}
 #endif

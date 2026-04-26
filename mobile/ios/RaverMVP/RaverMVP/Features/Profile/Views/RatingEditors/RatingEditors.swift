@@ -180,8 +180,8 @@ struct RatingEventEditorSheet: View {
     }
 
     var body: some View {
-        Form {
-                Section(LL("编辑打分事件")) {
+        SwiftUI.Form(content: {
+                SwiftUI.Section(LL("编辑打分事件")) {
                     TextField(LL("名称"), text: $viewModel.name)
                         .submitLabel(.done)
                         .onSubmit {
@@ -215,7 +215,7 @@ struct RatingEventEditorSheet: View {
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
                 }
-            }
+            })
             .raverSystemNavigation(title: LL("编辑打分事件"))
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
@@ -279,8 +279,8 @@ struct RatingUnitEditorSheet: View {
     }
 
     var body: some View {
-        Form {
-                Section(LL("编辑打分单位")) {
+        SwiftUI.Form(content: {
+                SwiftUI.Section(LL("编辑打分单位")) {
                     TextField(LL("名称"), text: $viewModel.name)
                         .submitLabel(.done)
                         .onSubmit {
@@ -314,7 +314,7 @@ struct RatingUnitEditorSheet: View {
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
                 }
-            }
+            })
             .raverSystemNavigation(title: LL("编辑打分单位"))
             .scrollDismissesKeyboard(.interactively)
             .toolbar {

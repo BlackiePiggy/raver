@@ -7,7 +7,7 @@ struct SettingsView: View {
     var body: some View {
         List {
                 // 账号设置
-                Section(L("账号", "Account")) {
+                SwiftUI.Section(L("账号", "Account")) {
                     NavigationLink {
                         SettingsCurrentUserProfileLoaderView(repository: appContainer.profileSocialRepository) { profile in
                             EditProfileView(profile: profile, repository: appContainer.profileSocialRepository) { updated in
@@ -36,7 +36,7 @@ struct SettingsView: View {
                 }
 
                 // 通知设置
-                Section(L("通知", "Notifications")) {
+                SwiftUI.Section(L("通知", "Notifications")) {
                     NavigationLink {
                         Text(L("推送通知", "Push Notifications"))
                     } label: {
@@ -51,7 +51,7 @@ struct SettingsView: View {
                 }
 
                 // 内容偏好
-                Section(L("内容偏好", "Content Preferences")) {
+                SwiftUI.Section(L("内容偏好", "Content Preferences")) {
                     NavigationLink {
                         ThemeSettingsView()
                     } label: {
@@ -85,7 +85,7 @@ struct SettingsView: View {
                 }
 
                 // 数据与存储
-                Section(L("数据与存储", "Data & Storage")) {
+                SwiftUI.Section(L("数据与存储", "Data & Storage")) {
                     NavigationLink {
                         Text(L("缓存管理", "Cache Management"))
                     } label: {
@@ -106,7 +106,7 @@ struct SettingsView: View {
                 }
 
                 // 关于
-                Section(L("关于", "About")) {
+                SwiftUI.Section(L("关于", "About")) {
                     NavigationLink {
                         Text(L("帮助中心", "Help Center"))
                     } label: {
@@ -140,7 +140,7 @@ struct SettingsView: View {
                 }
 
                 // 账号操作
-                Section {
+                SwiftUI.Section {
                     Button(role: .destructive) {
                         appState.logout()
                     } label: {
@@ -160,7 +160,7 @@ private struct LanguageSettingsView: View {
 
     var body: some View {
         List {
-            Section(L("显示语言", "Display Language")) {
+            SwiftUI.Section(L("显示语言", "Display Language")) {
                 ForEach(AppLanguage.allCases) { language in
                     Button {
                         appState.setPreferredLanguage(language)
@@ -189,7 +189,7 @@ private struct ThemeSettingsView: View {
 
     var body: some View {
         List {
-            Section(L("显示主题", "Appearance")) {
+            SwiftUI.Section(L("显示主题", "Appearance")) {
                 ForEach(AppAppearance.allCases) { appearance in
                     Button {
                         appState.setPreferredAppearance(appearance)

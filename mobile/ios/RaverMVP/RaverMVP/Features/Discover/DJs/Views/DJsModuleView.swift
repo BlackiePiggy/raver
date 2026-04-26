@@ -352,8 +352,8 @@ struct DJsModuleView: View {
     }
 
     private var djImportSheet: some View {
-        Form {
-                Section(LL("导入方式")) {
+        SwiftUI.Form(content: {
+                SwiftUI.Section(LL("导入方式")) {
                     Picker(LL("导入方式"), selection: $importMode) {
                         ForEach(DJsImportMode.allCases) { mode in
                             Text(mode.title).tag(mode)
@@ -363,7 +363,7 @@ struct DJsModuleView: View {
                 }
 
                 if importMode == .spotify {
-                    Section(LL("搜索 Spotify DJ")) {
+                    SwiftUI.Section(LL("搜索 Spotify DJ")) {
                         HStack(spacing: 8) {
                             TextField(LL("输入 DJ 名称"), text: $spotifySearchKeyword)
                                 .textInputAutocapitalization(.words)
@@ -389,7 +389,7 @@ struct DJsModuleView: View {
                         }
                     }
 
-                    Section(LL("候选结果")) {
+                    SwiftUI.Section(LL("候选结果")) {
                         if spotifyCandidates.isEmpty {
                             Text(LL("暂无候选，可切换到手动导入。"))
                                 .font(.subheadline)
@@ -407,7 +407,7 @@ struct DJsModuleView: View {
                     }
 
                     if let selected = selectedSpotifyCandidate {
-                        Section(LL("确认导入信息")) {
+                        SwiftUI.Section(LL("确认导入信息")) {
                             Text(L("Spotify ID: \(selected.spotifyId)", "Spotify ID: \(selected.spotifyId)"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
@@ -425,7 +425,7 @@ struct DJsModuleView: View {
                         }
                     }
                 } else if importMode == .discogs {
-                    Section(LL("搜索 Discogs Artist")) {
+                    SwiftUI.Section(LL("搜索 Discogs Artist")) {
                         HStack(spacing: 8) {
                             TextField(LL("输入 DJ 名称"), text: $discogsSearchKeyword)
                                 .textInputAutocapitalization(.words)
@@ -451,7 +451,7 @@ struct DJsModuleView: View {
                         }
                     }
 
-                    Section(LL("Discogs 候选结果")) {
+                    SwiftUI.Section(LL("Discogs 候选结果")) {
                         if discogsCandidates.isEmpty {
                             Text(LL("暂无候选，可继续搜索或切换到手动导入。"))
                                 .font(.subheadline)
@@ -469,7 +469,7 @@ struct DJsModuleView: View {
                     }
 
                     if selectedDiscogsCandidate != nil {
-                        Section(LL("确认导入信息（支持二次修改）")) {
+                        SwiftUI.Section(LL("确认导入信息（支持二次修改）")) {
                             if isLoadingDiscogsDetail {
                                 HStack(spacing: 8) {
                                     ProgressView()
@@ -506,7 +506,7 @@ struct DJsModuleView: View {
                             }
                         }
 
-                        Section(LL("关联 Spotify（可选）")) {
+                        SwiftUI.Section(LL("关联 Spotify（可选）")) {
                             HStack(spacing: 8) {
                                 TextField(LL("搜索 Spotify 用于补全链接"), text: $discogsLinkedSpotifyKeyword)
                                     .textInputAutocapitalization(.words)
@@ -553,7 +553,7 @@ struct DJsModuleView: View {
                         }
                     }
                 } else {
-                    Section(LL("手动填写 DJ 信息")) {
+                    SwiftUI.Section(LL("手动填写 DJ 信息")) {
                         TextField(LL("DJ 名称（必填）"), text: $manualName)
                         TextField(LL("别名（英文逗号分隔）"), text: $manualAliases)
                         TextField(LL("国家（可选）"), text: $manualCountry)
@@ -569,7 +569,7 @@ struct DJsModuleView: View {
                         TextField(LL("简介（可选）"), text: $manualBio, axis: .vertical)
                     }
 
-                    Section(LL("图片（上传到 OSS 的 DJ 文件夹）")) {
+                    SwiftUI.Section(LL("图片（上传到 OSS 的 DJ 文件夹）")) {
                         HStack(spacing: 12) {
                             PhotosPicker(selection: $manualAvatarItem, matching: .images) {
                                 Label(LL("选择头像"), systemImage: "person.crop.circle")
@@ -602,13 +602,13 @@ struct DJsModuleView: View {
                     }
                 }
 
-                Section {
+                SwiftUI.Section {
                     Button(isImportingDJ ? L("导入中...", "Importing...") : L("确认导入到 DJ 数据库", "Confirm import to DJ database")) {
                         Task { await confirmDJImport() }
                     }
                     .disabled(isImportingDJ || isImportConfirmDisabled)
                 }
-            }
+            })
             .raverSystemNavigation(title: LL("导入 DJ"))
             .scrollDismissesKeyboard(.interactively)
     }
@@ -3182,8 +3182,8 @@ struct DJDetailView: View {
     }
 
     private var djEditSheet: some View {
-        Form {
-                Section(LL("基础信息")) {
+        SwiftUI.Form(content: {
+                SwiftUI.Section(LL("基础信息")) {
                     TextField(LL("DJ 名称"), text: $editDJName)
                     TextField(LL("别名（英文逗号分隔）"), text: $editDJAliases)
                     TextField(LL("简介"), text: $editDJBio, axis: .vertical)
@@ -3191,7 +3191,7 @@ struct DJDetailView: View {
                     Toggle(LL("认证 DJ"), isOn: $editDJVerified)
                 }
 
-                Section(LL("平台信息")) {
+                SwiftUI.Section(LL("平台信息")) {
                     TextField(L("Spotify ID", "Spotify ID"), text: $editDJSpotifyID)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
@@ -3209,7 +3209,7 @@ struct DJDetailView: View {
                         .autocorrectionDisabled(true)
                 }
 
-                Section(LL("图片")) {
+                SwiftUI.Section(LL("图片")) {
                     HStack(spacing: 12) {
                         PhotosPicker(selection: $editAvatarItem, matching: .images) {
                             Label(LL("更换头像"), systemImage: "person.crop.circle")
@@ -3253,13 +3253,13 @@ struct DJDetailView: View {
                     }
                 }
 
-                Section {
+                SwiftUI.Section {
                     Button(isSavingDJProfile ? L("保存中...", "Saving...") : "保存 DJ 信息") {
                         Task { await saveDJProfileEdits() }
                     }
                     .disabled(isSavingDJProfile || editDJName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-            }
+            })
             .raverSystemNavigation(title: LL("编辑 DJ"))
             .scrollDismissesKeyboard(.interactively)
     }
@@ -3292,8 +3292,8 @@ struct DJDetailView: View {
     }
 
     private var spotifyImportSheet: some View {
-        Form {
-                Section(LL("搜索 Spotify DJ")) {
+        SwiftUI.Form(content: {
+                SwiftUI.Section(LL("搜索 Spotify DJ")) {
                     HStack(spacing: 8) {
                         TextField(LL("输入 DJ 名称"), text: $spotifySearchKeyword)
                             .textInputAutocapitalization(.words)
@@ -3319,7 +3319,7 @@ struct DJDetailView: View {
                     }
                 }
 
-                Section(LL("候选结果")) {
+                SwiftUI.Section(LL("候选结果")) {
                     if spotifyCandidates.isEmpty {
                         Text(LL("暂无候选，输入名称后点击搜索。"))
                             .font(.subheadline)
@@ -3337,7 +3337,7 @@ struct DJDetailView: View {
                 }
 
                 if let selected = selectedSpotifyCandidate {
-                    Section(LL("确认导入信息")) {
+                    SwiftUI.Section(LL("确认导入信息")) {
                         Text(L("Spotify ID: \(selected.spotifyId)", "Spotify ID: \(selected.spotifyId)"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
@@ -3359,7 +3359,7 @@ struct DJDetailView: View {
                         .disabled(isImportingSpotifyDJ || spotifyDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
-            }
+            })
             .raverSystemNavigation(title: LL("Spotify 导入"))
             .scrollDismissesKeyboard(.interactively)
     }

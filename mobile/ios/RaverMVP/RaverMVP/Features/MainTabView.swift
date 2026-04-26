@@ -3075,8 +3075,8 @@ struct CreateRatingEventSheet: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        Form {
-                Section(LL("基础信息")) {
+        SwiftUI.Form(content: {
+                SwiftUI.Section(LL("基础信息")) {
                     TextField(LL("事件名称"), text: $name)
                     TextField(LL("事件描述（选填）"), text: $description, axis: .vertical)
                         .lineLimit(2...4)
@@ -3102,13 +3102,13 @@ struct CreateRatingEventSheet: View {
                     }
                 }
                 if let errorMessage {
-                    Section {
+                    SwiftUI.Section {
                         Text(errorMessage)
                             .font(.caption)
                             .foregroundStyle(.red.opacity(0.9))
                     }
                 }
-            }
+            })
             .raverSystemNavigation(title: L("发布打分事件", "Publish Rating Event"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -3336,8 +3336,8 @@ struct CreateRatingUnitSheet: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        Form {
-                Section(LL("单位信息")) {
+        SwiftUI.Form(content: {
+                SwiftUI.Section(LL("单位信息")) {
                     TextField(LL("单位名称"), text: $name)
                     TextField(LL("单位描述（选填）"), text: $description, axis: .vertical)
                         .lineLimit(2...4)
@@ -3363,13 +3363,13 @@ struct CreateRatingUnitSheet: View {
                     }
                 }
                 if let errorMessage {
-                    Section {
+                    SwiftUI.Section {
                         Text(errorMessage)
                             .font(.caption)
                             .foregroundStyle(.red.opacity(0.9))
                     }
                 }
-            }
+            })
             .raverSystemNavigation(title: L("发布打分单位", "Publish Rating Unit"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

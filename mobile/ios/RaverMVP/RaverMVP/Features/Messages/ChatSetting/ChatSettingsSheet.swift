@@ -1,4 +1,5 @@
 import SwiftUI
+import OUICore
 
 struct ChatSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -23,13 +24,13 @@ struct ChatSettingsSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
+            SwiftUI.List {
+                SwiftUI.Section {
                     Toggle(L("消息免打扰", "Mute Notifications"), isOn: $notificationsMuted)
                         .disabled(isMuting)
                 }
 
-                Section {
+                SwiftUI.Section {
                     if conversation.type == .direct {
                         DirectChatSettingsSection(peer: conversation.peer) { peer in
                             dismiss()
@@ -89,7 +90,7 @@ struct ChatSettingsSheet: View {
                     }
                 }
 
-                Section {
+                SwiftUI.Section {
                     Button(role: .destructive) {
                         Task { await clearHistory() }
                     } label: {
@@ -250,6 +251,8 @@ struct ChatSettingsSheet: View {
         do {
             try await service.clearConversationHistory(conversationID: conversation.id)
             chatStore.clearMessages(for: conversation)
+            let event = EventRecordClear(conversationId: conversation.id)
+            JNNotificationCenter.shared.post(event)
         } catch {
             errorMessage = error.userFacingMessage ?? L("清空聊天记录失败", "Failed to clear chat history")
         }

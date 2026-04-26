@@ -41,8 +41,8 @@ struct DiscoverNewsPublishSheet: View {
     }
 
     var body: some View {
-        Form {
-            Section(LL("基础信息")) {
+        SwiftUI.Form(content: {
+            SwiftUI.Section(LL("基础信息")) {
                 Picker(LL("分类"), selection: $category) {
                     ForEach(DiscoverNewsCategory.allCases.filter { $0 != .all }) { item in
                         Text(item.title).tag(item)
@@ -57,7 +57,7 @@ struct DiscoverNewsPublishSheet: View {
                     .lineLimit(3...8)
             }
 
-            Section(LL("封面图")) {
+            SwiftUI.Section(LL("封面图")) {
                 TextField(LL("封面图 URL（选填）"), text: $coverURL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -82,13 +82,13 @@ struct DiscoverNewsPublishSheet: View {
                 }
             }
 
-            Section(LL("外链（选填）")) {
+            SwiftUI.Section(LL("外链（选填）")) {
                 TextField(LL("原文链接"), text: $linkText)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
 
-            Section(LL("关联实体（选填）")) {
+            SwiftUI.Section(LL("关联实体（选填）")) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
                         TextField(LL("搜索 DJ"), text: $djSearchText)
@@ -277,13 +277,13 @@ struct DiscoverNewsPublishSheet: View {
             }
 
             if let errorMessage {
-                Section {
+                SwiftUI.Section {
                     Text(errorMessage)
                         .font(.caption)
                         .foregroundStyle(.red.opacity(0.9))
                 }
             }
-        }
+        })
         .raverSystemNavigation(title: LL("发布资讯"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

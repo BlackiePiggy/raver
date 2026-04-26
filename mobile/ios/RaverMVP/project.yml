@@ -10,6 +10,7 @@ settings:
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: 1.0
     DEVELOPMENT_TEAM: LB3FUV334Z
+    ENABLE_DEBUG_DYLIB: NO
 packages:
   SDWebImage:
     url: https://github.com/SDWebImage/SDWebImage.git
@@ -24,6 +25,16 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: RaverMVP
+        excludes:
+          - Features/Messages/OpenIMDemoBaseline/Vendor/**
+          - Features/Messages/OpenIMDemoBaseline/Chat/OpenIMDemoBaselineBuilderConstruction.swift
+          - Features/Messages/OpenIMDemoBaseline/Chat/OpenIMDemoBaselineChatViewControllerBuilder.swift
+          - Features/Messages/OpenIMDemoBaseline/Chat/OpenIMDemoBaselineSetActor.swift
+          - Features/Messages/UIKitChat/**
+      - path: RaverMVP/Features/Messages/OpenIMDemoBaseline/Vendor/OpenIMIOSDemo/OUIIM/Classes/OIMUIChat
+      - path: RaverMVP/Features/Messages/OpenIMDemoBaseline/Vendor/OpenIMIOSDemo/OUIIM/Classes/OIMUIConversation/ChatSetting
+      - path: RaverMVP/Features/Messages/OpenIMDemoBaseline/Vendor/OpenIMIOSDemo/OUIIM/Classes/OIMUIContact
+      - path: RaverMVP/Features/Messages/UIKitChat/Support/ChatMediaTempFileStore.swift
     info:
       path: RaverMVP/Info.plist
       properties:

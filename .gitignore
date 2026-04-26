@@ -53,3 +53,6 @@ logs/
 # scrapeRave
 scrapRave/
 cached_dj_profile/
+
+# Third-party baselines / local vendor source drops
+thirdparty/openimApp/

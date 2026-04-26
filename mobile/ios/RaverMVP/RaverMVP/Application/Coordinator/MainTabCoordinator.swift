@@ -610,7 +610,6 @@ private struct MessagesAlertDetailContainerView: View {
 private struct ConversationLoaderView: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject private var chatStore = OpenIMChatStore.shared
-    @StateObject private var navigationBridge = DemoAlignedChatNavigationBridge()
 
     let conversationID: String
     let service: SocialService
@@ -622,30 +621,12 @@ private struct ConversationLoaderView: View {
     var body: some View {
         Group {
             if let conversation {
-                DemoAlignedChatView(
-                    conversation: conversation,
-                    service: service,
-                    navigationBridge: navigationBridge
-                )
-                .navigationTitle(conversation.title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItemGroup(placement: .topBarTrailing) {
-                        Button {
-                            navigationBridge.presentConversationSearch()
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                        }
-                        .accessibilityLabel(L("会话内搜索", "Search in Conversation"))
-
-                        Button {
-                            navigationBridge.presentChatSettings()
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                        }
-                        .accessibilityLabel(L("聊天设置", "Chat Settings"))
+                OpenIMDemoBaselineChatContainerView(conversation: conversation)
+                    .onAppear {
+                        debug(
+                            "render baseline route conversationID=\(conversation.id) title=\(conversation.title)"
+                        )
                     }
-                }
             } else if isLoading {
                 ProgressView(L("加载会话中...", "Loading conversation..."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -670,6 +651,11 @@ private struct ConversationLoaderView: View {
         }
         .task {
             await loadConversation(force: false)
+        }
+        .onAppear {
+            debug(
+                "body appear useBaseline=true conversationID=\(conversationID)"
+            )
         }
         .onChange(of: appState.openIMConnectionState) { oldValue, newValue in
             debug("openim state changed \(oldValue) -> \(newValue) conversationID=\(conversationID)")
@@ -784,6 +770,30 @@ private struct ConversationLoaderView: View {
         print("[ConversationLoader] \(message)")
         OpenIMProbeLogger.log("[ConversationLoader] \(message)")
         #endif
+    }
+}
+
+private struct OpenIMDemoBaselineChatContainerView: UIViewControllerRepresentable {
+    let conversation: Conversation
+
+    func makeUIViewController(context _: Context) -> UIViewController {
+        OpenIMProbeLogger.log(
+            "[OpenIMDemoBaselineRoute] container=makeUIViewController conversationID=\(conversation.id) title=\(conversation.title)"
+        )
+        return OpenIMDemoBaselineFactory.makeBuilderEntryViewController(
+            conversation: conversation,
+            latestMessages: [],
+            hiddenInputBar: false
+        )
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context _: Context) {
+        OpenIMProbeLogger.log(
+            "[OpenIMDemoBaselineRoute] container=updateUIViewController conversationID=\(conversation.id) title=\(conversation.title)"
+        )
+        if uiViewController.title?.isEmpty != false {
+            uiViewController.title = conversation.title
+        }
     }
 }
 

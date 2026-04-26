@@ -97,10 +97,32 @@ EOM
   esac
 }
 if [[ "$CONFIGURATION" == "Debug" ]]; then
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/Kingfisher/Kingfisher.bundle"
   install_resource "${PODS_CONFIGURATION_BUILD_DIR}/MJExtension/MJExtension.bundle"
+  install_resource "${PODS_ROOT}/MJRefresh/MJRefresh/MJRefresh.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/MJRefresh/MJRefresh.Privacy.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/OUICore/OIMUIResource.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/OUICore/OIMUIEmoji.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/ProgressHUD/ProgressHUD.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/RxCocoa/RxCocoa_Privacy.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/RxRelay/RxRelay_Privacy.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/RxSwift/RxSwift_Privacy.bundle"
+  install_resource "${PODS_ROOT}/ZFPlayer/ZFPlayer/Classes/ControlView/ZFPlayer.bundle"
+  install_resource "${PODS_ROOT}/../../../../thirdparty/openimApp/openim-ios-demo/3rd/ZLPhotoBrowser/Sources/ZLPhotoBrowser.bundle"
 fi
 if [[ "$CONFIGURATION" == "Release" ]]; then
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/Kingfisher/Kingfisher.bundle"
   install_resource "${PODS_CONFIGURATION_BUILD_DIR}/MJExtension/MJExtension.bundle"
+  install_resource "${PODS_ROOT}/MJRefresh/MJRefresh/MJRefresh.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/MJRefresh/MJRefresh.Privacy.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/OUICore/OIMUIResource.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/OUICore/OIMUIEmoji.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/ProgressHUD/ProgressHUD.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/RxCocoa/RxCocoa_Privacy.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/RxRelay/RxRelay_Privacy.bundle"
+  install_resource "${PODS_CONFIGURATION_BUILD_DIR}/RxSwift/RxSwift_Privacy.bundle"
+  install_resource "${PODS_ROOT}/ZFPlayer/ZFPlayer/Classes/ControlView/ZFPlayer.bundle"
+  install_resource "${PODS_ROOT}/../../../../thirdparty/openimApp/openim-ios-demo/3rd/ZLPhotoBrowser/Sources/ZLPhotoBrowser.bundle"
 fi
 
 mkdir -p "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"

@@ -1,0 +1,620 @@
+# Raver iOS `openim-ios-demo` 1:1 基线迁移日志
+
+> 作用：本文件只记录按时间顺序展开的执行日志、构建日志、排障日志、验证日志。
+>
+> 主导航、总进度、顺序执行表、当前活跃步骤，请统一查看：
+> [`/Users/blackie/Projects/raver/docs/OPENIM_IOS_DEMO_1TO1_BASELINE_MIGRATION_PLAN.md`](/Users/blackie/Projects/raver/docs/OPENIM_IOS_DEMO_1TO1_BASELINE_MIGRATION_PLAN.md:1)
+
+## 1. 阅读规则
+
+- 需要知道“现在下一步做什么”，不要先看本文件，先看主方案文档
+- 只有当你需要排查：
+  - 某次构建为什么失败
+  - 某一步是怎么收敛的
+  - 某条验证锚点是什么时间加入的
+  - 某次页面行为差异是如何确认的
+  才进入本文件
+
+## 2. 时间线日志
+
+- `2026-04-26 13:57 +0800` 已将“后续只走 iOS 需要的编译链”落地到工程：
+  - `Podfile` 新增 `post_install` 统一覆盖 Pods 模拟器架构设置
+  - `SUPPORTED_PLATFORMS` 收敛为 `iphoneos iphonesimulator`
+  - `EXCLUDED_ARCHS[sdk=iphonesimulator*]` 统一改为 `x86_64`，不再排除 `arm64`
+  - 新增本地固定构建脚本 [`build_ios_sim_only.sh`](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/build_ios_sim_only.sh:1)
+- `2026-04-26 13:57 +0800` 本轮再次执行 `pod install` 后复核通过：
+  - `Pods-RaverMVP.debug.xcconfig` 已变为 `EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64`
+  - `ZFPlayer.debug.xcconfig` 已同步变为 `EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64`
+- `2026-04-26 13:57 +0800` 为继续推进 vendor 原聊天页主链接管，已补齐 demo 原 `OUIIM.podspec` 聊天页直接依赖：
+  - `ChatLayout 2.0.10`
+  - `InputBarAccessoryView`（本地 path：`thirdparty/openimApp/openim-ios-demo/3rd`）
+- `2026-04-26 13:57 +0800` 当前策略收敛：
+  - 冷编译首次仍会较慢，因为需要编完整个 iOS Pods 面
+  - 但后续不会再因为非 iOS 平台或模拟器架构错配浪费时间
+  - 之后的验证将优先采用“连续完成一批同源改造，再统一跑一次 iOS-only build”的节奏
+
+- `2026-04-26 13:20 +0800` 已将“聊天相关功能一律直接切到 demo 同源方案、不保留原方案兜底”正式写入主方案文档执行纪律，作为后续整个长线改造的硬约束。
+- `2026-04-26 13:20 +0800` 已新增主线检查项：聊天域后续每个功能切换完成后，旧实现必须退出主运行链，不能再以 fallback 形式长期保留。
+
+- `2026-04-26 13:16 +0800` 完成一轮按“同源同机制”口径的聊天页总审计，结论为 `不通过`。
+- `2026-04-26 13:16 +0800` 已确认当前聊天页虽然入口路由切到 `OpenIMDemoBaselineFactory.makeBuilderEntryViewController(...)`，但运行时页面主体仍是 [OpenIMDemoBaselineBuilderConstruction.swift](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Chat/OpenIMDemoBaselineBuilderConstruction.swift:1662) 内的自定义 shadow `ChatViewController`，不是 vendor 原 [ChatViewController.swift](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Vendor/OpenIMIOSDemo/OUIIM/Classes/OIMUIChat/ChatViewController.swift:17)。
+- `2026-04-26 13:16 +0800` 同轮确认 `DefaultChatCollectionDataSource` 也存在同样问题：当前工程实际并存 vendor 原类与自定义 shadow 类，shadow 类定义于 [OpenIMDemoBaselineBuilderConstruction.swift](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Chat/OpenIMDemoBaselineBuilderConstruction.swift:1499)，因此头像、气泡、媒体 cell、点击链、系统消息渲染仍不能按 demo 同源通过。
+- `2026-04-26 13:16 +0800` 同轮确认 `DefaultDataProvider` / `DefaultChatController` 也仍由本地 shadow 版本承载，位置分别为 [OpenIMDemoBaselineBuilderConstruction.swift](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Chat/OpenIMDemoBaselineBuilderConstruction.swift:155) 与 [OpenIMDemoBaselineBuilderConstruction.swift](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Chat/OpenIMDemoBaselineBuilderConstruction.swift:652)。
+- `2026-04-26 13:16 +0800` 文档策略已收紧：后续聊天页改造不再接受“demo 风格 / demo 接近 / 分页机制接近”的完成口径，必须以“运行时是否直接落在 vendor 原聊天页类和原机制上”为唯一通过标准。
+
+- `2026-04-26 12:28 +0800` `D2` 同机制补齐（第一批）已落地并构建通过：baseline 聊天页新增 `scrollViewShouldScrollToTop/scrollViewDidScrollToTop`，并将 `.scrollingToTop` 纳入分页 guard，回顶触发旧消息加载链与 demo 机制对齐。
+- `2026-04-26 12:28 +0800` `D2` 同机制补齐（第一批）已接入 `MJRefresh`：新增 `setupRefreshControl` 与 `handleRefresh`，触发链为 `loadPrevious -> processUpdates -> endRefreshing`，并保留 demo 同序的延时释放 `loadingPreviousMessages`。
+- `2026-04-26 12:28 +0800` `D1` 页面骨架收口：移除 baseline 独有 `navigationItem.prompt`（demo 无该入口），避免 UI 出现非同源提示文本。
+- `2026-04-26 12:28 +0800` 构建锚点：`xcodebuild -workspace ... -scheme RaverMVP -configuration Debug -destination 'generic/platform=iOS Simulator'` 结果 `BUILD SUCCEEDED`（两轮：D2 改造后、D1 prompt 收口后）。
+- `2026-04-26 12:32 +0800` `D2` 同机制继续收口：回底滚动已从简化实现切换为 demo 同机制 `ManualAnimator` 分支（`large delta` 走 display-link 动画，小位移走 `setContentOffset`），并在结束时按 demo 路径执行 `footer snapshot restore`。
+- `2026-04-26 12:32 +0800` 新增同源滚动组件文件：`OpenIMDemoBaselineManualAnimator.swift`（机制对齐 demo `ManualAnimator.swift`）。
+- `2026-04-26 12:32 +0800` 因新增源文件执行 `xcodegen generate` 重建工程后，`xcodebuild ... -destination 'generic/platform=iOS Simulator'` 结果 `BUILD SUCCEEDED`。
+
+- `2026-04-26 12:24 +0800` 按“同源同机制”口径对 `D3` 执行代码级复审与改造：`ChatViewController.processUpdates` 已从自定义 pending 延迟槽切换为 demo 同源 `SetActor + Reaction(onEmpty, delayedUpdate, once)` 机制，不再以 checkbox 作为通过依据。
+- `2026-04-26 12:24 +0800` 同轮 `D3` 更新链收口：`currentInterfaceActions/currentControllerActions` 已替换为 `SetActor<Set<...>, ReactionType>`，并将更新阻塞/释放流程统一切回 demo 的 `options` 状态集语义。
+- `2026-04-26 12:24 +0800` 新增同源基础组件文件：`OpenIMDemoBaselineSetActor.swift`（来源机制对齐 demo `SetActor.swift`，接口包含 `Action/ExecutionType/Reaction/add/remove/onEmpty`）。
+- `2026-04-26 12:24 +0800` 为避免 `xcodegen` 重新生成时丢失 settings 同源源码，已在 `project.yml` 增加 `ChatSetting` 与 `OIMUIContact` 的 vendor source path，确保重复生成后仍可编译。
+- `2026-04-26 12:24 +0800` 构建锚点：执行 `xcodegen generate` 后重建，`xcodebuild -workspace ... -scheme RaverMVP -configuration Debug -destination 'generic/platform=iOS Simulator'` 结果 `BUILD SUCCEEDED`。
+
+- `2026-04-26 11:50 +0800` `D5.5` 正式启动：主方案文档已新增 `D5.5` 串行细分（自动注入回归 -> 人工媒体回归 -> 摘要对比 -> 审计结论 -> 封板构建锚点）。
+- `2026-04-26 11:49 +0800` `D5.4` 双端复验完成：probe 目录 `docs/reports/openim-dual-sim-20260426-114717`；日志命中 `trigger=send` 两次（图片+视频），手工验证确认发送/预览/返回流程正常。
+- `2026-04-26 11:49 +0800` 本轮确认已修复媒体选择器临时文件失效问题（此前报错：`保存媒体失败 ... no such file`）；修复后按同样路径复测通过。
+- `2026-04-26 11:49 +0800` `D5.4` 审计结论更新为 `通过`，主方案文档 `15.4` 同步回写。
+- `2026-04-26 11:29 +0800` 根据截图反馈修正 baseline 可用性问题：`ChatViewController` 调试状态面板默认隐藏，仅在环境变量 `RAVER_OPENIM_BASELINE_DEBUG_OVERLAY=1` 时显示。
+- `2026-04-26 11:29 +0800` baseline 输入区已补齐媒体发送入口：新增 `+` 按钮，动作链为 `showMediaSendSheet -> PHPicker(images/videos) -> sendImageMessage/sendVideoMessage`，不再只能发送文本。
+- `2026-04-26 11:29 +0800` 同步修复右上角按钮初始化时机（页面初始即调用 `setRightButtons(...)`），避免首屏偶发不显示。
+- `2026-04-26 11:29 +0800` 构建锚点：`xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -destination 'generic/platform=iOS Simulator' build` -> `BUILD SUCCEEDED`。
+- `2026-04-26 11:21 +0800` `D5.4` 已完成代码接线：`OpenIMDemoBaselineMessageInfo` 新增 `media` 载荷，`OpenIMDemoBaselineRaverIMControllerBridge.messageInfo(...)` 已将 `ChatMessage.media` 全量透传到 baseline 消息模型。
+- `2026-04-26 11:21 +0800` `D5.4` 已完成媒体点击链同机制收口：`ChatViewController.didTapContent` 已按 `contentType` 分流，图片/视频走同源 `MediaPreviewViewController`，文件走 URL 打开；并补齐 `DefaultChatCollectionDataSource.mediaImageViews` 的源视图 tag 映射用于同源转场闭包。
+- `2026-04-26 11:21 +0800` 构建锚点：`xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -destination 'generic/platform=iOS Simulator' build` -> `BUILD SUCCEEDED`（首次失败原因为缺少 `OUICoreView` 导入，修复后通过）。
+- `2026-04-26 11:21 +0800` `D5.4` 审计结论已记录为 `不通过`：当前仅剩“双端图片/视频点击返回后视口保持”实测复验未闭环，下一步直接执行双端 probe 验证该项并回填结论。
+- `2026-04-26 11:16 +0800` 按主线要求新增“同源同机制审计门”执行纪律：从本时间起，每个大步骤完成必须先做同源同机制审计并给出`通过/不通过`结论，不通过不得进入下一步骤；文档收尾前必须执行一次全量总审计并清零所有未达标项。
+- `2026-04-26 11:04 +0800` `D5.3` 路径级阻塞定位完成：`ChatSetting` 下 `Cells/MemberList` 子组把 `Vendor/...` 误拼成 `Cells/Vendor/...`，导致 7 个 build input 丢失；已改为上级相对路径后继续推进。
+- `2026-04-26 11:06 +0800` 完成同源依赖链补齐：`Podfile` 新增 `OUICoreView` 与 `MJRefresh`，`pod install` 成功，`OUICoreView/MJRefresh/ZFPlayer/Lantern` 已纳入。
+- `2026-04-26 11:07 +0800` 进入源码层差异：`UserDetailTableViewController`、`NewGroupViewController` 等符号缺失，确认根因是 `OIMUIContact` 同源目录未迁入 target。
+- `2026-04-26 11:09 +0800` 已把 `OIMUIContact` 36 个同源 Swift 文件迁入并编入 `RaverMVP` target；随后修复 `PBXGroup` 路径错误（统一为 `SOURCE_ROOT` 相对路径）后通过编译输入阶段。
+- `2026-04-26 11:11 +0800` 处理与宿主工程同名冲突：将 demo 侧 `UserProfileViewModel` 最小命名隔离为 `OIMUserProfileViewModel`，并同步更新 `ProfileTableViewController/UserProfileTableViewController` 引用。
+- `2026-04-26 11:12 +0800` 完成 builder 入参同源桥接：`ChatViewControllerBuilder` 新增 `build(_ conversation: ConversationInfo, ...)` 重载，并在内部桥接到 `OpenIMDemoBaselineConversationInfo`。
+- `2026-04-26 11:12 +0800` 处理 demo 控制器在宿主缺失类型边界：`UserProfileTableViewController` 去除对当前 target 不存在的 `ChatListViewController` 硬引用，保持删除好友后返回根栈行为。
+- `2026-04-26 11:12 +0800` 修复 `ApplyViewController` 右上发送按钮初始化签名不兼容问题（改为 target-action），避免 trailing closure 编译错误。
+- `2026-04-26 11:12 +0800` 构建锚点：`xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -destination 'generic/platform=iOS Simulator' build` -> `EXIT:0`。
+
+- `2026-04-26 00:00 +0800` 批量改造后首次构建失败，定位 4 个编译点：`deinit actor 调用`、2 处 `self?` 误用、1 处可选链错误。
+- `2026-04-26 00:02 +0800` 完成上述 4 个点修复（不改变主线逻辑，仅修语义/语法）。
+- `2026-04-26 00:02:58 +0800` `xcodebuild` 结果 `** BUILD SUCCEEDED **`，仅保留 Pods deployment target 警告（历史警告，非本次引入）。
+- `2026-04-26 00:05 +0800` 开始 `DefaultChatController` 第一批同构补齐：`receiverId/conversationType` 字段、`getTitle`、`messageIsExsit`、`defaultSelecteMessage/defaultSelecteUsers`、`getConversation`、`getGroupMembers(memory)`、`getMessageInfo`、`getSelectedMessages`、`getSelfInfo`、`getIsAdminOrOwner`、`clearUnreadCount`、公开 `markMessageAsReaded(...)` 入口。
+- `2026-04-26 00:05 +0800` 首次构建失败：`deinit` 中触发 MainActor 隔离调用（`clearUnreadCount`）。
+- `2026-04-26 00:06 +0800` 移除 `deinit -> clearUnreadCount` 调用后再次构建通过（`** BUILD SUCCEEDED **`）。
+- `2026-04-26 00:07 +0800` 核对确认：当前 `ChatViewController` 文案仍含 `OpenIM demo builder chain shell is being wired.`，`DefaultChatCollectionDataSource/ChatViewController` 仍是 shell，尚未进入 demo 原页面链。
+- `2026-04-26 00:21 +0800` `DefaultChatController` 第二批状态机方法体已收敛到更接近 demo 的执行顺序，构建结果 `** BUILD SUCCEEDED **`。
+- `2026-04-26 00:22 +0800` `DefaultChatCollectionDataSource` 已具备 demo 级基础壳结构，但 `cellForItemAt` 仍为占位 `fatalError`，说明页面层尚未真正切入 demo 渲染链。
+- `2026-04-26 00:25 +0800` 开始页面层主线替换：不再维持中心说明文案 shell，直接将 `ChatViewController` 推进为 collection 页面骨架，并让 `DefaultChatCollectionDataSource` 先具备可编译、可渲染、可点击的最小闭环。
+- `2026-04-26 00:26 +0800` 首次构建失败，定位到 8 个局部编译点：`senderID` 引用来源错误、`RaverTheme` 字段名不匹配、`senderNickname` 可选处理错误、消息文本字段应使用 `content` 而不是 `textElem`。
+- `2026-04-26 00:27 +0800` 完成上述页面骨架局部错误修复后再次构建通过，结果 `** BUILD SUCCEEDED **`，仅保留既有 Pods deployment target 警告。
+- `2026-04-26 00:28 +0800` 尝试直接按 demo 方式 `import ChatLayout / DifferenceKit`，构建失败；确认失败原因不是逻辑错误，而是当前 target 不具备这两个 module 的可导入边界。
+- `2026-04-26 00:29 +0800` 策略收敛：保留主线目标不变，但改为使用当前 target 已直接编译的本地 `CollectionViewChatLayout` 源码类型，不再绕到 module import 路径。
+- `2026-04-26 00:30 +0800` `DifferenceKit` 差量更新链暂不强接，先退为当前工程可编译的最小 `processUpdates` 实现；后续若要完全一致，需要继续把 demo 的 `DifferenceKit+Extension` 与相关依赖纳入 target 或迁入可编译域。
+- `2026-04-26 00:31 +0800` 开始把 demo 页面行为链继续往下补：优先迁入顶部触发旧消息分页、底部触发锚点后翻页，以及更新中的布局 invalidation 保护。
+- `2026-04-26 00:32 +0800` 分页触发与最小滚动保护链落地后再次构建通过，结果 `** BUILD SUCCEEDED **`，说明当前 baseline 页面已经从“只会显示”推进到“具备 demo 主干级滚动/分页行为壳”。
+- `2026-04-26 00:35 +0800` 开始继续沿页面主线推进滚动位置恢复细化：优先补 `preferredSnapshot` 显式恢复，避免后续 keyboard / input bar 接入时继续依赖统一默认 bottom snapshot。
+- `2026-04-26 00:36 +0800` keyboard/input bar 主线首轮落地时首次构建失败，定位为两类纯编译边界问题：
+  - `KeyboardListenerDelegate` 与 `@MainActor ChatViewController` 的 actor 隔离不一致
+  - 新增 `KeyboardInfo` 为私有类型，导致扩展方法可见性不匹配
+- `2026-04-26 00:36 +0800` 完成收敛：
+  - 将 `KeyboardListenerDelegate` 标注为 `@MainActor`
+  - 将 `KeyboardListener` 标注为 `@MainActor`
+  - 放宽 `KeyboardInfo/KeyboardListenerDelegate/KeyboardListener` 文件内可见性，消除协议实现签名冲突
+- `2026-04-26 00:37 +0800` 再次执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`，仅保留既有 Pods deployment target 警告。
+- `2026-04-26 00:39 +0800` 开始把输入栏从“可聚焦壳”推进到“真实文本发送链”，策略保持最小改动面：
+  - 不引入 demo 全套 `Message.Data`
+  - 先直接复用项目现有 `OpenIMSession.sendTextMessage(conversationID:content:)`
+  - 通过 `OpenIMDemoBaselineRaverIMControllerBridge` 把 `ChatMessage` 转回 baseline message
+- `2026-04-26 00:40 +0800` controller 层落地：
+  - `DefaultChatController` 新增 `sendTextMessage(_:)`
+  - 执行链：trim -> `OpenIMSession.shared.sendTextMessage(...)` -> `imBridge.messageInfo(...)` -> `mergedMessages` -> `delegate.update(...)`
+- `2026-04-26 00:40 +0800` 页面层落地：
+  - `ChatViewController` 新增 `inputSendButton`
+  - `textViewDidChange` 开始驱动发送按钮可用态
+  - `handleSendButtonTap` 开始负责 sending 状态、发送前滚底、发送后清空输入框并回流 `processUpdates`
+- `2026-04-26 00:41 +0800` 执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`，仅保留既有 Pods deployment target 警告。
+- `2026-04-26 00:42 +0800` 开始继续沿输入栏主线推进细节收口：优先补 `Return` 键发送与输入高度变化联动，对齐 demo `didChangeIntrinsicContentTo -> scrollToBottom` 这一类页面行为。
+- `2026-04-26 00:42 +0800` 页面层新增：
+  - `inputTextViewHeightConstraint`
+  - `updateInputTextViewHeight()`
+  - `textView(_:shouldChangeTextIn:replacementText:)`
+  - `inputTextView.returnKeyType = .send`
+  - `inputTextView.isScrollEnabled = false`
+- `2026-04-26 00:43 +0800` 执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`，仅保留既有 Pods deployment target 警告。
+- `2026-04-26 00:44 +0800` 开始继续沿 keyboard 主线收口生命周期缺口：补 `keyboardDidShow / keyboardWillHide / keyboardDidHide`，并让 `resetOffset` 跟随系统键盘 curve 动画，而不是继续使用固定 easing。
+- `2026-04-26 00:44 +0800` keyboard 生命周期补齐后再次构建通过，结果 `** BUILD SUCCEEDED **`。
+- `2026-04-26 00:46 +0800` 重新对照 demo `ChatViewController.processUpdates(with:animated:requiresIsolatedProcess:)`，确认当前 baseline 的主要差距已从“有没有入口”收敛为“更新时机控制”：
+  - 我们此前缺少 `animated` 显式分支
+  - 我们此前缺少界面动作占用时的延迟回流门闩
+- `2026-04-26 00:47 +0800` 已补入当前工程可编译的最小版更新时机控制：
+  - `processUpdates(with:animated:requiresIsolatedProcess:)`
+  - `ignoreInterfaceActions`
+  - 单槽 `pendingSectionsUpdate` 延迟回流
+  - `drainPendingUpdateIfPossible()`
+- `2026-04-26 00:47 +0800` 再次执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`，仅保留既有 Pods deployment target 警告。
+- `2026-04-26 00:48 +0800` 继续校正发现：若延迟回流未携带 `preferredSnapshot`，则顶部分页或键盘过程中的挂起更新恢复时仍可能退回默认 bottom snapshot，这与 demo 的位置恢复目标不一致。
+- `2026-04-26 00:48 +0800` 已补入 `pendingPreferredSnapshot`，并在 `drainPendingUpdateIfPossible()` 时透传回 `processUpdates(...)`；再次构建通过，结果 `** BUILD SUCCEEDED **`。
+- `2026-04-26 00:49 +0800` 重新核对 baseline section 形态后确认：当前页面链稳定在单 section（`id = 0`）模型，这给“先补轻量 item diff，再保留复杂场景 reload fallback”的主线提供了可落地空间。
+- `2026-04-26 00:50 +0800` 开始把 demo 的差量更新思路收敛到当前工程边界：
+  - 不直接引入 `DifferenceKit`
+  - 先用系统 `CollectionDifference` 处理单 section item insert/delete/reload
+  - 遇到 move 或复杂结构变化时中断并退回 `reloadData + snapshot restore`
+- `2026-04-26 00:50 +0800` 首次构建失败，定位为 `CollectionDifference.Change` API 使用错误：
+  - `contains` 应为 `contains(where:)`
+  - `Change` 需要通过 `case .insert/.remove` 解包，不能直接访问 `offset`
+- `2026-04-26 00:51 +0800` 完成上述 API 修正，并把 `performBatchUpdates` 完成回调与 snapshot 恢复重新串联，避免 batch update 与位置恢复时序错位。
+- `2026-04-26 00:51 +0800` 再次执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`，仅保留既有 Pods deployment target 警告。
+- `2026-04-26 08:48 +0800` 重新对照 demo 的 `interrupt` 语义后，继续把当前轻量 diff 的 fallback 边界从“隐式”收敛到“显式”：
+  - `section id/title` 变化直接中断
+  - 总变更量达到阈值时中断
+  - 变更占比过高时中断
+  - 同时出现 delete + insert + reload 的混合场景时中断
+- `2026-04-26 08:49 +0800` 本批改动后再次执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`。
+- `2026-04-26 08:50 +0800` 继续对照 demo 首屏分支后确认：当前 baseline 不应让首屏也进入轻量 diff 判定，否则会把“首屏稳定落地”和“增量批量更新”两类节奏混在一起。
+- `2026-04-26 08:50 +0800` 已补入显式首屏分支：`ignoreInterfaceActions == true` 时直接走无动画 `reloadData + layoutIfNeeded + snapshot restore`，并在完成后再切换到后续增量更新节奏。
+- `2026-04-26 08:50 +0800` 再次执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`。
+- `2026-04-26 08:54 +0800` 继续对照 demo 的 `setData` 与 `onInterruptedReload` 语义，确认当前 baseline 还需要再收口两处更新时序：
+  - `dataSource.sections` 不应在 batch update 之前提前切换，应尽量贴近 demo 的“在更新事务内切换数据”
+  - `reloadData` fallback 不应散落在多个分支里，应统一走同一条安全回退链
+- `2026-04-26 08:54 +0800` 已完成本批收口：
+  - 新增 `applyReloadDataFallback(with:animated:)`，统一承接首屏、view-state forced reload、以及普通 fallback reload
+  - `applyLightweightDiffUpdatesIfPossible(...)` 改为在 `performBatchUpdates` 内部切换 `dataSource.sections`，更贴近 demo 的 `setData` 时机
+  - 对“仅内容变化、无插删”的单 section 场景走更轻的 reload-only 路径，避免不必要 batch
+- `2026-04-26 08:54 +0800` 再次执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`。
+- `2026-04-26 08:55 +0800` 继续把轻量 diff 的允许范围收敛到更符合聊天流的真实更新形态：
+  - 仅允许边界型增量继续走 batch
+  - 中间位置的散乱插入/删除更早中断并退回 reload
+  - delete+insert、delete+reload、insert+reload 混合场景统一视为复杂更新，避免当前可编译路径“看起来能更新、实际时序偏离 demo”
+- `2026-04-26 08:55 +0800` 已新增 `isBoundaryOnlyMutation(...)`，并把 `shouldInterruptLightweightDiff(...)` 收紧为：
+  - 插入仅允许顶部 prepend 或底部 append 的连续区间
+  - 删除仅允许顶部/底部连续区间
+  - 中间散乱变更与混合变更直接 fallback reload
+- `2026-04-26 08:55 +0800` 再次执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`。
+- `2026-04-26 08:56 +0800` 为了让后续双端验证和页面观察不再依赖猜测，继续把当前 baseline 的更新路径显式化：
+  - 首屏 reload
+  - view-state forced reload
+  - 普通 fallback reload
+  - 轻量 diff 的 reload-only
+  - 轻量 diff 的 batch
+- `2026-04-26 08:56 +0800` 已新增 `UpdateApplicationPath`，并让 `processUpdates(...)` / `applyLightweightDiffUpdatesIfPossible(...)` 在完成阶段把 `path=` 写入 `renderState(...)`；这样当前聊天页状态面板已经能直接显示本次更新实际走的是哪条链路。
+- `2026-04-26 08:56 +0800` 再次执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`。
+- `2026-04-26 08:58 +0800` 继续把“更新形态”也显式化，避免后续验证时只能看到 path 而不知道当前到底是 prepend、append，还是纯内容刷新：
+  - 新增 `UpdateMutationKind`
+  - 当前已显式区分 `reload-only / prepend / append / trim-top / trim-bottom / mixed`
+- `2026-04-26 08:58 +0800` 已在 `applyLightweightDiffUpdatesIfPossible(...)` 中补入 `classifyMutation(...)`，并把 `mutation=` 一起写入 `renderState(...)`；这样聊天页状态面板现在会同时显示：
+  - 本次更新走了哪条链 `path=...`
+  - 这次增量属于哪种聊天流形态 `mutation=...`
+- `2026-04-26 08:58 +0800` 再次执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`。
+- `2026-04-26 08:59 +0800` 为了让后续双端日志分析不再依赖界面状态面板，继续把更新链路落到结构化控制台日志：
+  - 新增 `logUpdateApplication(...)`
+  - 复用当前文件已在使用的 `iLogger.print`
+  - 日志前缀固定为 `[OpenIMDemoBaselineUpdate]`
+- `2026-04-26 08:59 +0800` 当前日志已包含：
+  - `conversation=...`
+  - `path=...`
+  - `mutation=...`
+  - `isolated=...`
+  - `sections=old->new`
+  - `cells=old->new`
+  - `messages=old->new`
+- `2026-04-26 08:59 +0800` 这意味着后续双端验证时，可以直接在 simulator/device 日志里搜索 `[OpenIMDemoBaselineUpdate]`，定位本次页面更新到底走了哪条链和哪种 mutation。
+- `2026-04-26 08:59 +0800` 再次执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`。
+- `2026-04-26 09:01 +0800` 继续把更新日志从“结果可见”推进到“触发源 + 结果闭环可见”：
+  - 新增 `UpdateTriggerSource`
+  - 当前已区分 `initial-load / previous-load / more-load / send / receive / external-update`
+- `2026-04-26 09:01 +0800` 已将 `triggerSource` 串入 `processUpdates(...)` 与 pending update 恢复链，并在以下入口显式落点：
+  - 首屏加载 `initial-load`
+  - 顶部分页 `previous-load`
+  - 底部分页 `more-load`
+  - 发送文本 `send`
+  - 其他控制器回流 `external-update`
+- `2026-04-26 09:01 +0800` 当前 `[OpenIMDemoBaselineUpdate]` 日志已经能直接看到一条完整因果链：
+  - `trigger=...`
+  - `path=...`
+  - `mutation=...`
+  - `isolated=...`
+  - `sections/cells/messages old->new`
+- `2026-04-26 09:01 +0800` 再次执行 `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`，结果 `** BUILD SUCCEEDED **`。
+- `2026-04-26 09:04 +0800` 继续把“接收消息回流”和“泛外部刷新”拆开，避免后续双端日志只能看到 `external-update` 而无法判断到底是不是对端消息抵达触发：
+  - `OpenIMDemoBaselineBuilderChatControllerDelegate` 已新增 `updateFromReceive(...)`
+  - `DefaultChatController.repopulateMessages(...)` 已支持携带 `triggerSource`
+  - `received(messages:forceReload:)` 当前会显式回流 `trigger=receive`
+- `2026-04-26 09:04 +0800` 当前 `[OpenIMDemoBaselineUpdate]` 已能直接区分：
+  - 发送方本地发送触发 `trigger=send`
+  - 对端/本端接收消息回流 `trigger=receive`
+  - 其他控制器或观察链一般刷新 `trigger=external-update`
+- `2026-04-26 09:06 +0800` 继续增强更新日志的顺序可追溯性，避免双端对照时只能依赖时间戳粗略猜先后：
+  - `ChatViewController` 已新增单调递增 `update sequence`
+  - `stateLabel` 当前会直接显示最近一次更新摘要 `seq|trigger|path|mutation|isolated`
+  - `[OpenIMDemoBaselineUpdate]` 日志已新增 `seq=...`
+- `2026-04-26 09:06 +0800` 这意味着后续双端验证时，可以同时用：
+  - `seq=...` 看单端内的更新顺序
+  - `trigger=...` 看触发源
+  - `path=...` 看实际走的是 batch 还是 reload
+  - `mutation=...` 看当前是 prepend / append / reload-only 等哪种聊天流形态
+- `2026-04-26 09:07 +0800` 已对现有双端样例日志做一次关键词预检：
+  - `/Users/blackie/Projects/raver/docs/reports/openim-dual-sim-20260424-191329/sim1.log`
+  - `/Users/blackie/Projects/raver/docs/reports/openim-dual-sim-20260424-191329/sim2.log`
+- `2026-04-26 09:07 +0800` 预检结果确认：
+  - 这批旧日志里还没有新的 `[OpenIMDemoBaselineUpdate]`，因为它们生成于当前结构化更新日志落地之前
+  - 但它们已经包含大量 `DemoAlignedScroll / DemoAlignedMessageFlow / DemoAlignedViewport / DemoAlignedPagination`，仍可作为旧行为对照样本
+- `2026-04-26 09:07 +0800` 当前双端验证入口已固定，后续每次重跑后优先执行：
+  - `rg -n "OpenIMDemoBaselineUpdate" <sim-log>`
+  - `rg -n "DemoAlignedScroll|DemoAlignedMessageFlow|DemoAlignedViewport|DemoAlignedPagination" <sim-log>`
+  - 先用 `seq + trigger + path + mutation` 锁定 baseline 更新链
+  - 再用 `DemoAligned*` 锁定页面滚动/跳转表现，做一一对照
+- `2026-04-26 09:23 +0800` 继续把 `Step D4` 的验证入口从“人工翻日志”推进到“脚本先出摘要”：
+  - `mobile/ios/RaverMVP/scripts/openim_probe_digest.sh` 已新增 `[OpenIMDemoBaselineUpdate]` 维度汇总
+  - 当前会额外输出：
+    - `baselineUpdate total=...`
+    - `triggerSend=...`
+    - `triggerReceive=...`
+    - `pathBatch=...`
+    - `pathReload=...`
+- `2026-04-26 09:23 +0800` 已对旧样例目录 `/Users/blackie/Projects/raver/docs/reports/openim-dual-sim-20260424-191329` 执行 digest 回归验证：
+  - 脚本运行正常
+  - `SIM1/SIM2` 均明确显示 `baselineUpdate total=0`
+  - 说明旧样例确实生成于 baseline 结构化更新日志落地之前，而不是脚本统计失效
+- `2026-04-26 09:23 +0800` 结论：
+  - 后续新的双端复测，优先先看 digest 输出里的 baseline 汇总
+  - 只有当 digest 显示出异常分布或证据不足时，再人工翻 `sim*.log`
+- `2026-04-26 09:35 +0800` 发起第一轮新的 snapshot probe：
+  - 命令：
+    - `OPENIM_PROBE_TRANSPORT=snapshot OPENIM_PROBE_AUTO_STOP_SECONDS=45 OPENIM_PROBE_LIVE_MODE=summary OPENIM_PROBE_OPEN_SIM_WINDOWS=0 bash /Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/openim_dual_sim_probe.sh 'iPhone 17 Pro' 'iPhone 17' 'com.raver.mvp'`
+  - OpenIM 与 BFF 均就绪
+  - 两个目标模拟器均可成功启动，且 app 已安装
+- `2026-04-26 09:36 +0800` probe 自动结束后，digest 结果显示：
+  - `SIM1/SIM2` 均只有 1 行头部
+  - `appEvents=0`
+  - `baselineUpdate total=0`
+  - 结论为“部分无效（至少一侧没有 App/OpenIM 事件）”
+- `2026-04-26 09:37 +0800` 进一步检查模拟器当前界面，确认当前可见设备停留在 `Discover/Picks` 页面，而非 `Messages/聊天路径`。
+- `2026-04-26 09:37 +0800` 结论：
+  - 这轮 probe 失败不是脚本问题，也不是 baseline 结构化日志问题
+  - 而是没有进入聊天路径，因此未触发任何聊天事件
+- `2026-04-26 09:36 +0800` 已同步收口：
+  - `openim_probe_digest.sh` 的无效样本提示改为明确包含“未进入 Messages/聊天页”
+  - `OPENIM_DUAL_SIM_BADGE_RUNBOOK.md` 已新增“必须先进入 Messages/目标会话”的前置条件说明
+- `2026-04-26 10:19 +0800` 按新前置条件重新执行了一轮有效 snapshot probe，目录：
+  - `/Users/blackie/Projects/raver/docs/reports/openim-dual-sim-20260426-101925`
+  - 操作顺序为：先回到 `Messages` 列表页，再启动 probe，然后进入同一会话并发送
+- `2026-04-26 10:19 +0800` 这轮有效样本首次完整证明 baseline 路由主链已经真实生效：
+  - `ConversationLoader body appear useBaseline=true`
+  - `ConversationLoader render baseline route`
+  - `OpenIMDemoBaselineRoute container=makeUIViewController/updateUIViewController`
+  - `OpenIMDemoBaselineRoute lifecycle=viewDidLoad/viewDidAppear`
+  - `[OpenIMDemoBaselineUpdate] ... trigger=external-update path=initial-reload`
+- `2026-04-26 10:19 +0800` 同轮样本也首次把当前差异收敛清楚：
+  - live `send/receive` 期间 `OpenIMSession` 收发事件正常
+  - 但没有继续出现新的 `[OpenIMDemoBaselineUpdate]`
+  - 说明问题已从“有没有进入 baseline 页面”收敛为“live 消息阶段为什么没有继续驱动 baseline 更新链”
+- `2026-04-26 10:22 +0800` 为避免下一轮仍只能看到最终 `OpenIMSession`，继续把链路级 probe 日志补到 baseline 主链内部：
+  - `DefaultDataProvider.receivedNewMessages` 追加 `provider.receivedNewMessages`
+  - `DefaultChatController.received(...)` 追加 `controller.received`
+  - `DefaultChatController.repopulateMessages(...)` 追加 `controller.repopulateMessages`
+  - `DefaultChatController.sendTextMessage(...)` 追加 `controller.sendTextMessage start/success/failed`
+  - `ChatViewController.handleSendButtonTap` 追加 `view.handleSendButtonTap`
+  - `ChatViewController.update(...) / updateFromReceive(...) / processUpdates(...)` 追加 `view.update / view.updateFromReceive / view.processUpdates`
+- `2026-04-26 10:23 +0800` 本批链路级日志补入后执行：
+  - `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -destination 'platform=iOS Simulator,name=iPhone 17' build`
+  - 结果 `** BUILD SUCCEEDED **`
+  - 仅保留既有 Pods deployment target 与历史 actor warning
+- `2026-04-26 10:23 +0800` 最新构建已重新安装到两台模拟器，并再次使用以下方式启动 baseline 路由：
+  - `SIMCTL_CHILD_RAVER_OPENIM_BASELINE_CHAT=1 xcrun simctl launch --terminate-running-process F33AEEB9-7D88-49A5-A689-75CF1C3C749D com.raver.mvp`
+  - `SIMCTL_CHILD_RAVER_OPENIM_BASELINE_CHAT=1 xcrun simctl launch --terminate-running-process 71290514-847B-49A4-85B3-8BD661E5AFE8 com.raver.mvp`
+- `2026-04-26 10:23 +0800` 当前下一轮复测目标已经固定：
+  - 不再只验证有没有 `[OpenIMDemoBaselineUpdate]`
+  - 而是直接确认 live 消息时链路断在：
+    - `view.handleSendButtonTap`
+    - `controller.sendTextMessage`
+    - `provider.receivedNewMessages / controller.received`
+    - 还是 `view.processUpdates`
+- `2026-04-26 10:26 +0800` 根据新链路日志定位出 live 更新链卡死的两个具体根因：
+  - `ChatViewController.processUpdates(...)` 把 `.sendingMessage` 也算作阻塞界面动作，导致发送链会 defer 自己
+  - `applyLightweightDiffUpdatesIfPossible(...)` 在“新旧内容等价”分支提前 `return true`，但没有执行 completion，造成 `updatingCollection` 长时间不释放
+- `2026-04-26 10:26 +0800` 已完成对应修复：
+  - `blockingInterfaceActions = currentInterfaceActions.subtracting([.sendingMessage])`
+  - 轻量 diff 等价分支改为显式执行 `completion(.lightweightReloadOnly, .reloadOnly)`
+- `2026-04-26 10:27 +0800` 重新执行一轮有效 snapshot probe，目录：
+  - `/Users/blackie/Projects/raver/docs/reports/openim-dual-sim-20260426-102732`
+- `2026-04-26 10:27 +0800` 这轮 digest 结果已经证明第一类 live 更新问题收口成功：
+  - `SIM1 baselineUpdate total=6 triggerReceive=1 pathBatch=2 pathReload=4`
+  - `SIM2 baselineUpdate total=5 pathBatch=1 pathReload=4`
+  - 接收端样本中已出现 `trigger=receive path=lightweight-batch mutation=append`
+  - 发送后的本端样本中也重新出现 `path=lightweight-batch mutation=append`
+- `2026-04-26 10:28 +0800` 原始链路日志同时暴露出第二类差异：
+  - `controller.sendTextMessage success ...`
+  - 随后实际落地的更新仍先进入 `view.processUpdates ... trigger=external-update`
+  - 而 `trigger=send` 版本被 defer
+  - 说明发送链仍存在“通用 controller update”和“显式 send update”并发抢占
+- `2026-04-26 10:29 +0800` 已进一步收口发送触发源：
+  - 从 `DefaultChatController.sendTextMessage(...)` 成功路径移除 `self.delegate?.update(with: sections, requiresIsolatedProcess: false)`
+  - 保留 `completion(sections)`，让发送侧更新只通过 `ChatViewController.processUpdates(... triggerSource: .send)` 单点应用
+- `2026-04-26 10:30 +0800` 再次执行：
+  - `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -destination 'platform=iOS Simulator,name=iPhone 17' build`
+  - 结果 `** BUILD SUCCEEDED **`
+  - 仍仅保留既有 Pods deployment target 与历史 actor warning
+- `2026-04-26 10:31 +0800` 当前下一轮复测目标已更新为：
+  - 验证发送侧实际应用的更新是否已从 `trigger=external-update` 收口为 `trigger=send`
+  - 若确认收口，再继续分析 initial/bootstrap 阶段多余的 `external-update + lightweight-reload-only` 噪音
+- `2026-04-26 10:33 +0800` 按相同步骤再次执行一轮不重启 App 的 snapshot probe，目录：
+  - `/Users/blackie/Projects/raver/docs/reports/openim-dual-sim-20260426-103300`
+  - 操作顺序为：回到 `Messages` 列表页 -> 启动 probe -> 进入同一会话 -> 发送文本
+- `2026-04-26 10:33 +0800` 这轮 digest 结果已确认发送侧触发源收口成功：
+  - `SIM1 baselineUpdate total=6 triggerSend=1 triggerReceive=1 pathBatch=2 pathReload=4`
+  - `SIM2 baselineUpdate total=5 triggerSend=1 triggerReceive=0 pathBatch=1 pathReload=4`
+- `2026-04-26 10:33 +0800` 关键样本：
+  - `SIM1 seq=6 trigger=send path=lightweight-batch mutation=append`
+  - `SIM2 seq=5 trigger=send path=lightweight-batch mutation=append`
+  - 说明移除 `DefaultChatController.sendTextMessage(...)` 内重复 `delegate.update(...)` 后，发送链已不再被 `external-update` 抢占
+- `2026-04-26 10:33 +0800` 当前 `Step D4` 的两类核心 live update 问题都已完成收口：
+  - 接收侧已稳定出现 `trigger=receive path=lightweight-batch mutation=append`
+  - 发送侧已稳定出现 `trigger=send path=lightweight-batch mutation=append`
+- `2026-04-26 10:33 +0800` 进入下一类差异：
+  - initial/bootstrap 阶段仍存在多次 `trigger=external-update path=lightweight-reload-only mutation=reload-only`
+  - 下一步要对照 demo 判定这些回流哪些是必须的，哪些应当压缩
+- `2026-04-26 10:36 +0800` 已定位 bootstrap 噪音的两个直接来源：
+  - `loadInitialMessages(...)` 在 completion 之外还会额外执行一次 `delegate.update(...)`
+  - `refreshOtherAndSelfInfo()` 会顺序触发“好友资料刷新”和“本人资料刷新”，两次都可能独立 `repopulateMessages(requiresIsolatedProcess: true)`
+- `2026-04-26 10:37 +0800` 已完成第一轮压缩：
+  - 移除 `loadInitialMessages(...)` 内重复的 `delegate.update(...)`
+  - 将 `refreshOtherAndSelfInfo()` 改为先聚合资料变更，再统一执行一次 `repopulateMessages(requiresIsolatedProcess: true)`
+- `2026-04-26 10:37 +0800` 两次构建锚点均已通过，结果均为 `** BUILD SUCCEEDED **`
+- `2026-04-26 10:39 +0800` 重新执行一轮不重启 App 的 snapshot probe，目录：
+  - `/Users/blackie/Projects/raver/docs/reports/openim-dual-sim-20260426-103837`
+- `2026-04-26 10:39 +0800` 这轮结果已证明 bootstrap 噪音显著下降：
+  - `SIM1 baselineUpdate total=4 triggerSend=1 triggerReceive=1 pathBatch=2 pathReload=2`
+  - `SIM2 baselineUpdate total=3 triggerSend=1 triggerReceive=0 pathBatch=1 pathReload=2`
+- `2026-04-26 10:39 +0800` 与上一轮 `/Users/blackie/Projects/raver/docs/reports/openim-dual-sim-20260426-103300` 对比：
+  - `SIM1 total: 6 -> 4`
+  - `SIM2 total: 5 -> 3`
+  - 首屏已经从 `seq=1 trigger=external-update path=initial-reload` 收敛成 `seq=1 trigger=initial-load path=initial-reload`
+- `2026-04-26 10:39 +0800` 当前尚余 1 类 bootstrap 差异待确认：
+  - 首屏后仍保留 1 条 `trigger=external-update path=lightweight-reload-only mutation=reload-only`
+  - 下一步要继续判断它是否属于 demo 允许存在的资料补全回流
+- `2026-04-26 10:41 +0800` 已直接对照 `openim-ios-demo` 源码确认剩余 1 条 bootstrap isolated repopulate 的语义：
+  - `OUIIM/Classes/OIMUIChat/Controller/DefaultChatController.swift`
+  - `loadInitialMessages(...)` 在首屏 completion 后，c2c 仍会继续发起 `getOtherInfo`
+  - `friendInfoChanged(info:)` 在命中头像/昵称变更时会 `repopulateMessages(requiresIsolatedProcess: true)`
+  - `myUserInfoChanged(info:)` 也会无条件 `repopulateMessages(requiresIsolatedProcess: true)`
+  - `DefaultDataProvider` 还会通过 `IMController.shared.currentUserRelay` 持续推送 `myUserInfoChanged`
+- `2026-04-26 10:41 +0800` 结论：
+  - 当前样本 `/Users/blackie/Projects/raver/docs/reports/openim-dual-sim-20260426-103837` 中保留下来的那 1 条
+    `trigger=external-update path=lightweight-reload-only mutation=reload-only isolated=true`
+    已可归类为 demo-consistent 的 metadata refresh，而不是额外噪音
+- `2026-04-26 10:41 +0800` 这意味着 `Step D4` 的目标已经达成：
+  - live receive 主链收口
+  - live send 主链收口
+  - bootstrap 多余噪音压缩完成
+  - 剩余 isolated metadata refresh 已完成 demo 语义归类
+- `2026-04-26 10:44 +0800` 主线已从 `Step D4` 切换到 `Step D5`
+- `2026-04-26 10:44 +0800` `D5` 首批不先碰大块 UI，而是优先收口当前代码里最明确的参数级差异：
+  - `loadInitialMessages` 的 `animated`
+  - `loadPreviousMessages` 的 `animated`
+  - `loadMoreMessages` 的 `loadingMoreMessages` 释放时机
+- `2026-04-26 10:44 +0800` 已按 `openim-ios-demo/OUIIM/Classes/OIMUIChat/ChatViewController.swift` 对齐：
+  - `loadInitialMessages -> processUpdates(animated: false, requiresIsolatedProcess: true)`
+  - `loadPreviousMessages -> animated = !isUserInitiatedScrolling`
+  - `loadMoreMessages -> processUpdates(animated: false, requiresIsolatedProcess: true)` 后延迟 2 秒移除 loading 标记
+- `2026-04-26 10:44 +0800` 当前 baseline 已同步完成对应改动：
+  - `/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Chat/OpenIMDemoBaselineBuilderConstruction.swift`
+- `2026-04-26 10:44 +0800` 再次执行：
+  - `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -destination 'platform=iOS Simulator,name=iPhone 17' build`
+  - 结果 `** BUILD SUCCEEDED **`
+- `2026-04-26 10:52 +0800` 进入 `D5` 第二批，优先处理不依赖消息媒体 payload 扩展的页面行为差异：
+  - baseline 聊天页补入 demo 风格导航标题视图
+  - 补入右上角按钮显示逻辑 `setRightButtons(show:)`
+  - 补入媒体入口 `mediaButtonAction -> showMediaLinkSheet()`
+  - 补入消息点击 URL 的真实动作链：命中 `http/https` 时直接 `UIApplication.shared.open(...)`
+- `2026-04-26 10:52 +0800` 这批实现过程中确认了一个工程边界：
+  - `ChatTitleView`
+  - `SingleChatSettingViewModel`
+  - `SingleChatSettingTableViewController`
+  - `GroupChatSettingTableViewController`
+  当前并未直接编进 `RaverMVP` target，不能在 baseline builder 里直接引用
+- `2026-04-26 10:52 +0800` 因此本轮采取了收敛策略，而不是继续在边界问题上发散：
+  - 标题视图改为本地 `OpenIMDemoBaselineNavigationTitleView`
+  - 设置入口先做成“真实按钮 + 明确状态记录 + 明确占位提示”的动作壳
+  - 将“直接接入 demo setting controller”保留为 `D5` 后续独立子批次，不与本轮导航/点击动作链混做
+- `2026-04-26 10:52 +0800` 当前 baseline 已同步完成本批改动：
+  - `/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Chat/OpenIMDemoBaselineBuilderConstruction.swift`
+- `2026-04-26 10:52 +0800` 再次执行：
+  - `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -destination 'platform=iOS Simulator,name=iPhone 17' build`
+  - 结果 `** BUILD SUCCEEDED **`
+- `2026-04-26 10:57 +0800` 已执行一次“主线一致性核验”并完成文档治理收敛：
+  - 核验结论：执行层主线未偏离，偏差主要来自文档中旧 `Phase/Block/Step` 与新 `15.x` 双体系并存造成的阅读歧义
+  - 已将主文档 `15.4` 收敛为“唯一主线 + 唯一当前步骤”，并改为串行 `D5.1 -> D5.2 -> D5.3 -> D5.4 -> D5.5`
+  - 已将 `Phase 7` 当前位置从 `D4` 更新为 `D5`，并明确规定新增任务必须挂到 `D5.x`，禁止新增并行步骤线
+- `2026-04-26 10:59 +0800` 已按用户要求纠正验收口径：
+  - “demo 风格/更接近 demo”不再作为达标描述
+  - 后续统一以“demo 同源同机制”作为唯一验收口径
+- `2026-04-26 10:59 +0800` 已开始执行 `D5.3` 同源 settings 真实接线前置核验：
+  - 通过 pbxproj 核验确认 `ChatSetting` 同源控制器未被编入 `RaverMVP` target
+  - 未编入文件共 14 个，含 `SingleChatSettingTableViewController.swift`、`GroupChatSettingTableViewController.swift`、`SingleChatSettingViewModel.swift`、`GroupChatSettingViewModel.swift` 等
+- `2026-04-26 11:54 +0800` `D5.5` 证据链补齐：已分别对两轮样本执行 digest 汇总并完成回归对比
+  - 自动注入轮：`/Users/blackie/Projects/raver/docs/reports/openim-dual-sim-20260426-115130`
+  - 人工媒体轮：`/Users/blackie/Projects/raver/docs/reports/openim-dual-sim-20260426-114717`
+- `2026-04-26 11:54 +0800` 两轮摘要对比结论（`baselineUpdate/trigger/path/mutation`）：
+  - 自动注入轮：`SIM1 baselineUpdate total=3 triggerReceive=3 pathBatch=3`，实时接收主链稳定
+  - 人工媒体轮：`SIM2 baselineUpdate total=4 triggerSend=2 pathBatch=2`，媒体发送与页面更新链稳定
+  - 综合判断：未出现主线回退（无 sendFailed/resendFailed/fallback 证据）
+- `2026-04-26 11:54 +0800` 封板构建锚点已完成：
+  - `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -destination 'generic/platform=iOS Simulator' build`
+  - 结果：`** BUILD SUCCEEDED **`
+- `2026-04-26 11:54 +0800` `D5.5` 审计结论：
+  - 入口链路同源：通过
+  - 关键交互同机制：通过
+  - 页面行为同机制：通过（结合本轮手工双端确认“发完了，功能都正常”）
+  - 依赖边界同源：通过
+  - 总结论：`通过`，`Phase 7 / Step D5` 进入已完成状态
+- `2026-04-26 12:04 +0800` 已执行“全量同源同机制总审计（D1~D5）”并完成文档收口：
+  - `Phase 7` 状态从“进行中”统一更新为“已完成”
+  - `Step D5` 历史未勾选项已与主线状态一致化（避免双体系状态冲突）
+  - 总审计四项（独立审计记录/不通过项闭环/双端证据完整/最终结论）已全部打勾
+  - 最终结论保持：`通过`
+- `2026-04-26 12:07 +0800` 按最新执行口径修正审计方法：
+  - 从本时间起，`D1~D5` 是否“同源同机制”只看改造日志与 probe 证据，不再依据 checkbox 状态反推
+  - 已撤销“仅凭 checkbox 收口得到的总审计通过”表述，主线切换为 `Phase 7 / Step D6`（日志证据补齐）
+- `2026-04-26 12:07 +0800` 首轮日志复审结论（严格口径）：
+  - `D1`：证据不足（现有日志主要是骨架替换与构建锚点，缺少同源路径映射 + 双端行为闭环）
+  - `D2`：证据不足（现有日志主要是行为接入与构建锚点，缺少同机制时序定向证明）
+  - `D3`：证据不足（现有日志证明可观测性增强，但未形成“同源同机制”直接证据链）
+  - `D4`：通过（多轮双端 probe + 对照结论）
+  - `D5`：通过（媒体/自动注入双端回归 + 封板构建锚点）
+  - 总结果：`不通过`，需继续执行 `D6.1~D6.4`
+- `2026-04-26 12:49 +0800` 启动 `D6.2.b` 上拉历史定向 probe（baseline 环境）：
+  - 命令：`OPENIM_PROBE_TRANSPORT=snapshot OPENIM_PROBE_AUTO_STOP_SECONDS=120 OPENIM_PROBE_USE_APP_LOG=1 OPENIM_PROBE_BASELINE_CHAT=1 OPENIM_PROBE_OPEN_SIM_WINDOWS=0 OPENIM_PROBE_LIVE_MODE=summary bash /Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/openim_dual_sim_probe.sh 'iPhone 17 Pro' 'iPhone 17' 'com.raver.mvp'`
+  - 报告目录：`/Users/blackie/Projects/raver/docs/reports/openim-dual-sim-20260426-124944`
+- `2026-04-26 12:50 +0800` 本轮 probe 结果（用于 `D2` 审计）：
+  - `SIM2` 命中大量 `trigger=previous-load`，但更新路径大多为 `path=fallback-reload`，并伴随高频 `external-update path=lightweight-reload-only`
+  - `SIM1` 本轮未形成可用于 `previous-load` 的强证据（摘要结论：证据不足）
+  - 关键样本：`seq=4..223` 区间中出现密集 `trigger=previous-load path=fallback-reload`
+  - 审计判断：`D2` 暂不通过（链路已命中，但“同机制可解释性 + 双端稳定性”仍需补齐）
+- `2026-04-26 12:50 +0800` 同源代码核对补充（避免误判）：
+  - 已核对 demo 原文件：`openim-ios-demo/OUIIM/Classes/OIMUIChat/ChatViewController.swift` 与 `Model/DefaultDataProvider.swift`
+  - 当前 baseline 的 `scrollViewDidScroll`、`loadPreviousMessages`、`getHistoryMessageListFromStorage` 主体流程与 demo 同序
+  - 下一步仍需以日志证明“高频 previous-load 回流”是否属于 demo 同机制可接受行为；若不可接受，必须继续同源修正并复验
+- `2026-04-26 12:57 +0800` 按新的唯一标准收口执行口径：
+  - 后续不再接受“从 demo 中挑一部分逻辑接到现有实现上”
+  - `openim-ios-demo` 聊天域行为为唯一真值
+  - Raver 侧仅允许保留宿主适配、类型桥接、服务桥接；不再保留自定义消息并入与分页节奏
+- `2026-04-26 12:57 +0800` 已定位并修正一组会直接改变“首屏条数 / 上拉并入手感”的非同源实现：
+  - baseline `DefaultChatController.loadPreviousMessages/loadMoreMessages` 中多余的 `delegate.update(...)` 已删除
+  - baseline 自定义 `mergedMessages(...)` 已从首屏、上拉、下拉、接收、文本发送、媒体发送主链移除
+  - 改为统一使用 demo 同机制 `appendConvertingToMessages(...) / insertConvertingToMessages(...)`
+- `2026-04-26 12:57 +0800` 构建锚点：
+  - `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -destination 'generic/platform=iOS Simulator' build`
+  - 结果：`BUILD SUCCEEDED`
+- `2026-04-26 14:24 +0800` iOS-only 构建链收口：
+  - `Podfile` 已固定为 iOS / iOS Simulator 定向配置，并修正 CocoaPods 生成的 `EXCLUDED_ARCHS[sdk=iphonesimulator*]`
+  - 后续统一使用 `/Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/build_ios_sim_only.sh`
+  - 目的：避免非 iOS 平台编译开销，缩短同源迁移验证回路
+- `2026-04-26 14:24 +0800` vendor 原聊天链推进记录：
+  - 已完成 `OpenIMDemoBaselineOUICoreAdapter` 的 `OUICore` JSON 解码桥接
+  - 已让 vendor 原 `DefaultChatCollectionDataSource.swift`、`ChatViewController.swift`、`ChatViewControllerBuilder.swift` 进入主编译批次
+  - 为消除 vendor `Section` 命名污染引发的全项目编译阻塞，已对 `DJsModuleView`、`DiscoverNewsPublishSheet`、`SettingsView`、`SetsModuleView`、`SquadProfileView` 执行第一轮 `SwiftUI.Form / SwiftUI.Section` 显式化
+  - 当前状态：前置 SwiftUI 命名冲突大面积收敛，构建继续向真正的 vendor 聊天主链错误推进
+- `2026-04-26 14:31 +0800` 聊天域 `Section` 冲突根修完成：
+  - vendor 聊天模型 `OIMUIChat/Model/Entity/Section.swift` 中的全局 `Section` 已改名为 `ChatSection`
+  - 已同步修正 `ChatViewController.swift`、`DefaultChatController.swift`、`ChatController.swift`、`ChatControllerDelegate.swift`、`DefaultChatCollectionDataSource.swift`、`ChatCollectionDataSource.swift`
+  - 目的：从源头消除 vendor 聊天域对全项目 SwiftUI `Section` 解析的污染，而不是继续在业务页逐点补丁
+- `2026-04-26 14:31 +0800` 构建锚点：
+  - 命令：`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/build_ios_sim_only.sh`
+  - 结果：`BUILD SUCCEEDED`
+  - 结论：聊天同源迁移已恢复到可持续推进状态，后续可以继续聚焦 vendor 原聊天运行时接管
+- `2026-04-26 14:38 +0800` vendor 原运行链实证探针已接入：
+  - 已在 vendor 原 `ChatViewControllerBuilder.swift` 中加入 `[OpenIMDemoBaselineRuntime] component=ChatViewControllerBuilder action=build ...`
+  - 已在 vendor 原 `DefaultDataProvider.swift` 中加入 `action=init / action=loadInitialMessages`
+  - 已在 vendor 原 `DefaultChatController.swift` 中加入 `action=init / action=loadInitialMessages`
+  - 已在 vendor 原 `ChatViewController.swift` 中加入 `action=init / action=viewDidLoad`
+  - 目的：不再只靠源码阅读判断“已经切到同源链”，而是用实际运行日志证明当前聊天页落在 vendor 原类
+- `2026-04-26 14:39 +0800` iOS-only 构建复验：
+  - 命令：`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/build_ios_sim_only.sh`
+  - 结果：`BUILD SUCCEEDED`
+  - 结论：新加入的 vendor runtime probe 没有破坏主构建，下一步可直接进入 baseline 环境下的运行时日志采集
+- `2026-04-26 15:10 +0800` baseline 手动启动（`RAVER_OPENIM_BASELINE_CHAT=1`）后的运行链核验：
+  - 采样方式：优先读取 App 沙盒 `Library/Caches/openim-probe.log`（`simctl log` 在本机多轮为空）
+  - `SIM2` 命中完整 vendor runtime 链：
+    - `component=ChatViewControllerBuilder action=build`
+    - `component=DefaultDataProvider action=init/loadInitialMessages`
+    - `component=DefaultChatController action=init/loadInitialMessages`
+    - `component=ChatViewController action=init/viewDidLoad`
+  - 关键锚点时间：`2026-04-26T07:10:17Z`（同一会话内连续命中）
+  - 结论：已获得“运行时真实进入 vendor 同源主链”的直接证据（至少一端闭环成立）
+- `2026-04-26 15:10 +0800` 同轮补充：
+  - `SIM1` 的 app-probe 文件有记录但未命中上述 runtime 关键字，当前判定为“单端闭环通过，双端闭环待补一轮”
+- `2026-04-26 15:15 +0800` 会话入口去双轨（同源主链强收口）：
+  - 文件：[`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Application/Coordinator/MainTabCoordinator.swift`](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Application/Coordinator/MainTabCoordinator.swift)
+  - `ConversationLoaderView` 已删除 `baseline / DemoAligned` 条件分支，聊天入口仅保留 `OpenIMDemoBaselineChatContainerView`
+  - 已移除旧分支相关状态对象 `DemoAlignedChatNavigationBridge` 在该入口的依赖痕迹
+  - 结论：聊天会话入口运行时不再保留旧 UI 方案 fallback，符合“切换后主链只保留同源方案”原则
+- `2026-04-26 15:15 +0800` 构建锚点：
+  - 命令：`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/build_ios_sim_only.sh`
+  - 结果：`BUILD SUCCEEDED`
+- `2026-04-26 15:17 +0800` 同源 UI 控制权收口（标题归还 vendor）：
+  - 文件：[`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Application/Coordinator/MainTabCoordinator.swift`](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Application/Coordinator/MainTabCoordinator.swift)
+  - 已移除会话页外层 `navigationTitle / navigationBarTitleDisplayMode` 强制设置
+  - 目的：聊天页标题与导航展示改为由 vendor 原 `ChatViewController` 自身控制，避免宿主层覆盖导致与 demo 表现偏差
+- `2026-04-26 15:17 +0800` 构建锚点：
+  - 命令：`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/build_ios_sim_only.sh`
+  - 结果：`BUILD SUCCEEDED`
+- `2026-04-26 15:18 +0800` 工厂层旧入口收口（去 fallback API）：
+  - 文件：[`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Adapters/OpenIMDemoBaselineFactory.swift`](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Adapters/OpenIMDemoBaselineFactory.swift)
+  - 已删除：
+    - `builderAdapter` 静态实例
+    - `makePlaceholderViewController(...)`
+    - `makeEntryViewController(...)`（旧 adapter/shadow 路径）
+  - 当前工厂仅保留 builder 同源入口 `makeBuilderEntryViewController(...)`
+- `2026-04-26 15:18 +0800` 构建锚点：
+  - 命令：`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/build_ios_sim_only.sh`
+  - 结果：`BUILD SUCCEEDED`
+- `2026-04-26 15:23 +0800` 旧聊天实现编译面收口（防回退）：
+  - 文件：[`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/project.yml`](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/project.yml)
+  - 主 target `sources.excludes` 新增 `Features/Messages/UIKitChat/**`，旧 `DemoAligned` 聊天目录不再参与主目标编译
+  - 同时保留白名单文件 `Features/Messages/UIKitChat/Support/ChatMediaTempFileStore.swift`（仅工具依赖，非聊天页面运行链）
+  - 目的：阻断旧聊天 UI/控制器再次进入主链，同时避免误伤全局存储治理工具依赖
+- `2026-04-26 15:23 +0800` 工程与构建锚点：
+  - 命令：`xcodegen generate`（含 post_xcodegen pod install）
+  - 命令：`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/build_ios_sim_only.sh`
+  - 结果：`BUILD SUCCEEDED`
+- `2026-04-26 15:28 +0800` 旧 baseline 适配入口继续清理：
+  - 已删除文件：
+    - [`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Adapters/OpenIMDemoBaselineBuilderAdapter.swift`](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Adapters/OpenIMDemoBaselineBuilderAdapter.swift)
+    - [`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Chat/OpenIMDemoBaselinePlaceholderViewController.swift`](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Chat/OpenIMDemoBaselinePlaceholderViewController.swift)
+  - 目的：移除已失效且可能引导回退的历史入口类型，收紧为 builder 同源主链
+- `2026-04-26 15:28 +0800` 工程与构建锚点：
+  - 命令：`xcodegen generate`（含 post_xcodegen pod install）
+  - 命令：`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/build_ios_sim_only.sh`
+  - 结果：`BUILD SUCCEEDED`
+- `2026-04-26 15:30 +0800` vendor 聊天文件去探针回归：
+  - 已从以下文件移除 `OpenIMDemoBaselineRuntime` 注入日志，恢复更接近 demo 原文件：
+    - [`.../OUIIM/Classes/OIMUIChat/ChatViewControllerBuilder.swift`](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Vendor/OpenIMIOSDemo/OUIIM/Classes/OIMUIChat/ChatViewControllerBuilder.swift)
+    - [`.../OUIIM/Classes/OIMUIChat/Model/DefaultDataProvider.swift`](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Vendor/OpenIMIOSDemo/OUIIM/Classes/OIMUIChat/Model/DefaultDataProvider.swift)
+    - [`.../OUIIM/Classes/OIMUIChat/Controller/DefaultChatController.swift`](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Vendor/OpenIMIOSDemo/OUIIM/Classes/OIMUIChat/Controller/DefaultChatController.swift)
+    - [`.../OUIIM/Classes/OIMUIChat/ChatViewController.swift`](/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Vendor/OpenIMIOSDemo/OUIIM/Classes/OIMUIChat/ChatViewController.swift)
+  - 构建结果：`BUILD SUCCEEDED`
+- `2026-04-26 15:30 +0800` 同源差异复核（对比 `thirdparty/openimApp/openim-ios-demo`）：
+  - 当前主要剩余差异为 `Section -> ChatSection`（用于规避全局 SwiftUI `Section` 命名冲突）及其连带类型签名替换
+  - 其余前述运行链探针差异已清除
+- `2026-04-26 15:32 +0800` `ConversationType` 差异回归尝试结论：
+  - 尝试将 `DefaultChatController.swift` 从 `OUICore.ConversationType` 回退为 demo 原 `ConversationType` 写法后，触发编译冲突：
+    - 命中工程内同名类型 `RaverMVP.ConversationType`
+    - 出现 `cannot assign value of type 'OUICore.ConversationType' to type 'RaverMVP.ConversationType'` 等多处错误
+  - 已回滚到 `OUICore.ConversationType` 显式写法并复测
+  - 构建结果：`BUILD SUCCEEDED`
+  - 结论：此差异当前属于“命名冲突下的必要显式限定”，不是行为偏差
+- `2026-04-26 15:52 +0800` vendor `Section` 同名回归后的构建清障（持续同源化）：
+  - 本轮已确认 vendor 聊天模型当前为 `struct Section`：
+    - 文件：`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Vendor/OpenIMIOSDemo/OUIIM/Classes/OIMUIChat/Model/Entity/Section.swift`
+  - 为避免与 SwiftUI `Form/Section/List` 解析冲突，本轮将宿主业务页相关视图改为显式 `SwiftUI.Form(content:) / SwiftUI.Section / SwiftUI.List`，完成文件：
+    - `/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`
+    - `/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Discover/Learn/Views/LearnModuleView.swift`
+    - `/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/ChatSetting/ChatSettingsSheet.swift`
+    - `/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Discover/News/Views/DiscoverNewsPublishSheet.swift`
+    - `/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/MessagesHomeView.swift`
+    - `/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift`
+    - `/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Profile/Views/RatingEditors/RatingEditors.swift`
+  - iOS-only 构建锚点：
+    - 命令：`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/scripts/build_ios_sim_only.sh`
+    - 结果：`BUILD SUCCEEDED`
+    - 日志：`/tmp/raver_ios_build_after_section_revert_v7.log`（`** BUILD SUCCEEDED **`）
+- `2026-04-26 16:08 +0800` 媒体入口闪退根因与修复：
+  - 用户复现现象：聊天页点击图片按钮即闪退
+  - 崩溃证据：`~/Library/Logs/DiagnosticReports/RaverMVP-2026-04-26-155941.ips`
+  - 系统终止原因：`Namespace TCC`，缺少 `NSPhotoLibraryUsageDescription`
+  - 修复文件：`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Info.plist`
+  - 已补齐键：
+    - `NSPhotoLibraryUsageDescription`
+    - `NSPhotoLibraryAddUsageDescription`
+    - `NSCameraUsageDescription`
+    - `NSMicrophoneUsageDescription`
+  - 构建锚点：`/tmp/raver_ios_build_after_privacy_fix.log` -> `BUILD SUCCEEDED`
+- `2026-04-26 16:08 +0800` 聊天标题/头像链路稳定性补强：
+  - 发现：direct 会话在 `conversation.peer` 缺失时，baseline seed 无法提供对端 ID，导致标题/头像链路不稳定
+  - 修复文件：`/Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP/Features/Messages/OpenIMDemoBaseline/Adapters/OpenIMDemoBaselineConversationSeed.swift`
+  - 改造点：新增从 `openIMConversationID` 解析对端 userID 的兜底逻辑（仅在 `peer` 缺失时触发）
+  - 构建锚点：`/tmp/raver_ios_build_after_chat_seed_fix_v2.log` -> `BUILD SUCCEEDED`
