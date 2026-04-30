@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appPush) private var appPush
+    @FocusState private var isRemarkFieldFocused: Bool
 
     let conversation: Conversation
     let service: SocialService
@@ -23,16 +24,32 @@ struct ChatSettingsSheet: View {
     @State private var showDisbandConfirm = false
     @State private var showLeaderLeaveGuide = false
     @State private var showGroupMembers = false
+    @State private var showBlacklistConfirm = false
+    @State private var isSavingRemark = false
+    @State private var isUpdatingBlacklist = false
+    @State private var isLoadingDirectSettings = false
+    @State private var hasLoadedDirectSettings = false
+    @State private var isBlacklisted = false
+    @State private var directRemarkName = ""
+    @State private var committedDirectRemarkName = ""
+    @State private var directBaseDisplayName = ""
+    @State private var directDisplayNameOverride: String?
 
     private var platformSquadID: String {
         TencentIMIdentity.normalizePlatformSquadID(conversation.id)
+    }
+
+    private var directChatUserID: String? {
+        conversation.peer?.id.nilIfBlank ?? conversation.id.nilIfBlank
     }
 
     private var displayTitle: String {
         if conversation.type == .group {
             return conversation.title
         }
-        return conversation.peer?.displayName.nilIfBlank ?? conversation.title
+        return directDisplayNameOverride?.nilIfBlank
+            ?? conversation.peer?.displayName.nilIfBlank
+            ?? conversation.title
     }
 
     var body: some View {
@@ -94,6 +111,29 @@ struct ChatSettingsSheet: View {
         } message: {
             Text(L("当前你是队长，需先在“管理小队”中转让队长后再退出。", "You're the squad leader. Transfer ownership in Manage Squad before leaving."))
         }
+        .confirmationDialog(
+            isBlacklisted
+                ? L("确认将对方移出黑名单？", "Remove this user from blacklist?")
+                : L("确认将对方加入黑名单？", "Add this user to blacklist?"),
+            isPresented: $showBlacklistConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(
+                isBlacklisted
+                    ? L("移出黑名单", "Remove from Blacklist")
+                    : L("加入黑名单", "Add to Blacklist"),
+                role: .destructive
+            ) {
+                Task { await updateBlacklistStatus(!isBlacklisted) }
+            }
+            Button(L("取消", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(
+                isBlacklisted
+                    ? L("移出黑名单后，对方将恢复正常聊天权限。", "Removing from blacklist restores normal chat access.")
+                    : L("加入黑名单后，你将不会再接收对方的消息。", "After adding to blacklist, you won't receive this user's messages.")
+            )
+        }
         .onChange(of: notificationsMuted) { oldValue, newValue in
             guard hasLoadedConversationSettings else { return }
             guard oldValue != newValue else { return }
@@ -102,59 +142,66 @@ struct ChatSettingsSheet: View {
         .task(id: conversation.id) {
             notificationsMuted = conversation.isMuted
             topPinned = conversation.isPinned
+            directDisplayNameOverride = conversation.peer?.displayName.nilIfBlank ?? conversation.title
             hasLoadedConversationSettings = true
-            guard conversation.type == .group else { return }
-            await loadSquadProfile(force: false)
+            if conversation.type == .group {
+                await loadSquadProfile(force: false)
+            } else {
+                await loadDirectConversationSettings(force: false)
+            }
         }
         .onChange(of: topPinned) { oldValue, newValue in
             guard hasLoadedConversationSettings else { return }
             guard oldValue != newValue else { return }
             Task { await updatePinnedStatus(newValue, rollbackTo: oldValue) }
         }
+        .onChange(of: isRemarkFieldFocused) { oldValue, newValue in
+            guard oldValue, !newValue else { return }
+            Task { await commitInlineRemarkIfNeeded() }
+        }
     }
 
     private var headerSection: some View {
         Section {
-            HStack(spacing: 12) {
-                avatarView(size: 52)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(displayTitle)
-                        .font(.headline)
-                    if conversation.type == .group {
-                        Text(L("群聊", "Group Chat"))
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    } else {
-                        Text(L("个人聊天", "Direct Chat"))
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    }
+            if conversation.type == .direct {
+                Button {
+                    openDirectProfile()
+                } label: {
+                    headerRow(showChevron: true)
                 }
-
-                Spacer(minLength: 0)
+                .buttonStyle(.plain)
+            } else {
+                headerRow(showChevron: false)
             }
-            .padding(.vertical, 4)
         }
     }
 
     private var directSections: some View {
         Group {
             Section {
-                Button {
-                    if let peerID = conversation.peer?.id {
-                        let resolved = TencentIMIdentity.normalizePlatformUserIDForProfile(peerID)
-                        appPush(.userProfile(userID: resolved))
-                    }
-                } label: {
-                    Label(L("个人主页", "Profile"), systemImage: "person.crop.circle")
-                }
-
                 placeholderRow(titleCN: "聊天历史搜索", titleEN: "Search Chat History", icon: "magnifyingglass") {
                     dismissThenOpenConversationSearch()
                 }
-                placeholderRow(titleCN: "设置聊天背景", titleEN: "Set Chat Background", icon: "photo")
-                placeholderRow(titleCN: "设置备注名", titleEN: "Set Remark Name", icon: "pencil")
+                HStack(spacing: 12) {
+                    Label(L("设置备注名", "Set Remark Name"), systemImage: "pencil")
+                    Spacer(minLength: 12)
+                    TextField(
+                        L("输入备注名", "Enter remark"),
+                        text: Binding(
+                            get: { directRemarkName },
+                            set: { directRemarkName = String($0.prefix(Self.remarkNameLimit)) }
+                        )
+                    )
+                    .focused($isRemarkFieldFocused)
+                    .submitLabel(.done)
+                    .multilineTextAlignment(.trailing)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .frame(maxWidth: 160)
+                    .disabled(isSavingRemark)
+                    .onSubmit {
+                        Task { await commitInlineRemarkIfNeeded() }
+                    }
+                }
             }
 
             Section {
@@ -164,7 +211,17 @@ struct ChatSettingsSheet: View {
             }
 
             Section {
-                placeholderRow(titleCN: "加入黑名单", titleEN: "Add to Blacklist", icon: "hand.raised")
+                Button(role: .destructive) {
+                    showBlacklistConfirm = true
+                } label: {
+                    Label(
+                        isBlacklisted
+                            ? L("移出黑名单", "Remove from Blacklist")
+                            : L("加入黑名单", "Add to Blacklist"),
+                        systemImage: isBlacklisted ? "person.crop.circle.badge.checkmark" : "hand.raised"
+                    )
+                }
+                .disabled(isUpdatingBlacklist || isLoadingDirectSettings)
                 placeholderRow(titleCN: "举报", titleEN: "Report", icon: "exclamationmark.bubble")
             }
 
@@ -306,6 +363,33 @@ struct ChatSettingsSheet: View {
         }
     }
 
+    private func headerRow(showChevron: Bool) -> some View {
+        HStack(spacing: 12) {
+            avatarView(size: 52)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(displayTitle)
+                    .font(.headline)
+                    .foregroundStyle(Color.primary)
+                if conversation.type == .group {
+                    Text(L("群聊", "Group Chat"))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if showChevron {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+
     private func placeholderRow(
         titleCN: String,
         titleEN: String,
@@ -331,11 +415,21 @@ struct ChatSettingsSheet: View {
         return squadProfile.myRole == "leader"
     }
 
+    private static let remarkNameLimit = 24
+
     private func dismissThenNavigate(_ route: AppRoute) {
         dismiss()
         DispatchQueue.main.async {
             appPush(route)
         }
+    }
+
+    private func openDirectProfile() {
+        guard conversation.type == .direct else { return }
+        let resolved = TencentIMIdentity.normalizePlatformUserIDForProfile(
+            directChatUserID ?? conversation.id
+        )
+        dismissThenNavigate(.userProfile(userID: resolved))
     }
 
     private func dismissThenOpenConversationSearch() {
@@ -367,6 +461,51 @@ struct ChatSettingsSheet: View {
     }
 
     @MainActor
+    private func loadDirectConversationSettings(force: Bool) async {
+        guard conversation.type == .direct else { return }
+        guard !isLoadingDirectSettings else { return }
+        if hasLoadedDirectSettings && !force { return }
+        guard let peerID = directChatUserID else { return }
+
+        isLoadingDirectSettings = true
+        defer { isLoadingDirectSettings = false }
+
+        do {
+            async let loadedRemark = service.fetchFriendRemark(userID: peerID)
+            async let loadedBlacklistState = service.isUserBlacklisted(userID: peerID)
+            let (remark, blacklisted) = try await (loadedRemark, loadedBlacklistState)
+            let baseDisplayName = await resolveDirectBaseDisplayName(peerID: peerID)
+            let resolvedRemark = remark ?? chatStore.directConversationRemarkOverride(
+                conversationID: conversation.id,
+                peerUserID: peerID
+            ) ?? ""
+            directRemarkName = resolvedRemark
+            committedDirectRemarkName = resolvedRemark
+            isBlacklisted = blacklisted
+            directBaseDisplayName = baseDisplayName
+            if let remarkDisplay = resolvedRemark.nilIfBlank {
+                directDisplayNameOverride = remarkDisplay
+            } else if !baseDisplayName.isEmpty {
+                directDisplayNameOverride = baseDisplayName
+            }
+            hasLoadedDirectSettings = true
+        } catch {
+            let baseDisplayName = await resolveDirectBaseDisplayName(peerID: peerID)
+            let localRemark = chatStore.directConversationRemarkOverride(
+                conversationID: conversation.id,
+                peerUserID: peerID
+            ) ?? ""
+            directRemarkName = localRemark
+            committedDirectRemarkName = localRemark
+            directBaseDisplayName = baseDisplayName
+            if localRemark.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !baseDisplayName.isEmpty {
+                directDisplayNameOverride = baseDisplayName
+            }
+            hasLoadedDirectSettings = true
+        }
+    }
+
+    @MainActor
     private func updateMuteStatus(_ muted: Bool, rollbackTo oldValue: Bool) async {
         guard !isMuting else { return }
         isMuting = true
@@ -391,6 +530,172 @@ struct ChatSettingsSheet: View {
         } catch {
             topPinned = oldValue
             errorMessage = error.userFacingMessage ?? L("更新置顶状态失败", "Failed to update pin status")
+        }
+    }
+
+    @MainActor
+    private func updateRemarkName() async {
+        guard conversation.type == .direct else { return }
+        guard !isSavingRemark else { return }
+        guard let peerID = directChatUserID else { return }
+
+        isSavingRemark = true
+        defer { isSavingRemark = false }
+
+        let trimmedRemark = String(
+            directRemarkName
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(Self.remarkNameLimit)
+        )
+        let remarkValue = trimmedRemark.isEmpty ? nil : trimmedRemark
+
+        do {
+            try await service.setFriendRemark(userID: peerID, remark: remarkValue)
+
+            let resolvedDisplayName: String
+            if let remarkValue {
+                resolvedDisplayName = remarkValue
+            } else {
+                resolvedDisplayName = await resolveDirectBaseDisplayName(peerID: peerID)
+            }
+
+            directRemarkName = remarkValue ?? ""
+            committedDirectRemarkName = remarkValue ?? ""
+            directDisplayNameOverride = resolvedDisplayName
+            chatStore.setDirectConversationRemarkOverride(
+                conversationID: conversation.id,
+                peerUserID: peerID,
+                displayName: remarkValue
+            )
+            chatStore.updateDirectConversationDisplayName(
+                conversationID: conversation.id,
+                displayName: resolvedDisplayName
+            )
+            NotificationCenter.default.post(
+                name: .raverConversationIdentityUpdated,
+                object: nil,
+                userInfo: [
+                    "conversationID": conversation.id,
+                    "sdkConversationID": conversation.sdkConversationID ?? "",
+                    "displayName": resolvedDisplayName
+                ]
+            )
+        } catch {
+            if shouldFallbackToLocalRemark(error) {
+                let fallbackDisplayName: String
+                if let remarkValue {
+                    fallbackDisplayName = remarkValue
+                } else {
+                    fallbackDisplayName = await resolveDirectBaseDisplayName(peerID: peerID)
+                }
+                directRemarkName = remarkValue ?? ""
+                committedDirectRemarkName = remarkValue ?? ""
+                directDisplayNameOverride = fallbackDisplayName
+                chatStore.setDirectConversationRemarkOverride(
+                    conversationID: conversation.id,
+                    peerUserID: peerID,
+                    displayName: remarkValue
+                )
+                chatStore.updateDirectConversationDisplayName(
+                    conversationID: conversation.id,
+                    displayName: fallbackDisplayName
+                )
+                NotificationCenter.default.post(
+                    name: .raverConversationIdentityUpdated,
+                    object: nil,
+                    userInfo: [
+                        "conversationID": conversation.id,
+                        "sdkConversationID": conversation.sdkConversationID ?? "",
+                        "displayName": fallbackDisplayName
+                    ]
+                )
+            } else {
+                directRemarkName = committedDirectRemarkName
+                errorMessage = error.userFacingMessage ?? L("设置备注名失败", "Failed to update remark name")
+            }
+        }
+    }
+
+    @MainActor
+    private func commitInlineRemarkIfNeeded() async {
+        let normalizedCurrent = String(
+            directRemarkName
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(Self.remarkNameLimit)
+        )
+        let normalizedCommitted = committedDirectRemarkName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedCurrent != normalizedCommitted else { return }
+        directRemarkName = normalizedCurrent
+        await updateRemarkName()
+    }
+
+    private func shouldFallbackToLocalRemark(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        let text = [
+            error.localizedDescription,
+            error.userFacingMessage,
+            nsError.localizedFailureReason,
+            nsError.localizedRecoverySuggestion
+        ]
+        .compactMap { $0?.lowercased() }
+        .joined(separator: " ")
+        return text.contains("friend_not_exist")
+            || text.contains("friend not exist")
+            || text.contains("err_sns_friendup")
+    }
+
+    private func resolveDirectBaseDisplayName(peerID: String) async -> String {
+        if !directBaseDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return directBaseDisplayName
+        }
+
+        let platformUserID = TencentIMIdentity.normalizePlatformUserIDForProfile(peerID)
+        if let profile = try? await service.fetchUserProfile(userID: platformUserID),
+           let displayName = profile.displayName.nilIfBlank {
+            return displayName
+        }
+
+        if let refreshed = try? await service.fetchConversations(type: .direct).first(where: {
+            $0.id == conversation.id
+                || $0.sdkConversationID == conversation.sdkConversationID
+                || $0.id == conversation.sdkConversationID
+                || $0.sdkConversationID == conversation.id
+        }) {
+            if let displayName = refreshed.peer?.displayName.nilIfBlank {
+                return displayName
+            }
+            if let title = refreshed.title.nilIfBlank, !TencentIMIdentity.isTencentIMUserID(title) {
+                return title
+            }
+        }
+
+        if let displayName = conversation.peer?.displayName.nilIfBlank,
+           !TencentIMIdentity.isTencentIMUserID(displayName) {
+            return displayName
+        }
+        if let title = conversation.title.nilIfBlank,
+           !TencentIMIdentity.isTencentIMUserID(title) {
+            return title
+        }
+        return conversation.peer?.username.nilIfBlank
+            ?? conversation.peer?.displayName.nilIfBlank
+            ?? conversation.title
+    }
+
+    @MainActor
+    private func updateBlacklistStatus(_ shouldBlacklist: Bool) async {
+        guard conversation.type == .direct else { return }
+        guard !isUpdatingBlacklist else { return }
+        guard let peerID = directChatUserID else { return }
+
+        isUpdatingBlacklist = true
+        defer { isUpdatingBlacklist = false }
+
+        do {
+            try await service.setUserBlacklisted(userID: peerID, blacklisted: shouldBlacklist)
+            isBlacklisted = shouldBlacklist
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("更新黑名单状态失败", "Failed to update blacklist status")
         }
     }
 

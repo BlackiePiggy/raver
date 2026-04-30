@@ -30,6 +30,7 @@ final class IMChatStore: ObservableObject {
 
     private let tencentSession = TencentIMSession.shared
     private let conversationSnapshotStore = ConversationSnapshotStore()
+    private let directRemarkStore = DirectConversationRemarkStore()
     private var cancellables = Set<AnyCancellable>()
     private var hydratedSnapshotUserID: String?
     private var messageSearchIndex = ChatMessageSearchIndex()
@@ -235,6 +236,50 @@ final class IMChatStore: ObservableObject {
         conversations[index].isMuted = muted
     }
 
+    func updateDirectConversationDisplayName(conversationID: String, displayName: String) {
+        guard let index = conversations.firstIndex(where: { matchesConversation($0, id: conversationID) }) else {
+            return
+        }
+
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        conversations[index].title = trimmedName
+        if var peer = conversations[index].peer {
+            peer.displayName = trimmedName
+            conversations[index].peer = peer
+        }
+        replaceConversations(conversations)
+    }
+
+    func directConversationRemarkOverride(conversationID: String, peerUserID: String?) -> String? {
+        directRemarkStore.loadRemark(
+            currentUserID: currentSnapshotUserID(),
+            conversationID: conversationID,
+            peerUserID: peerUserID
+        )
+    }
+
+    func setDirectConversationRemarkOverride(
+        conversationID: String,
+        peerUserID: String?,
+        displayName: String?
+    ) {
+        directRemarkStore.saveRemark(
+            displayName,
+            currentUserID: currentSnapshotUserID(),
+            conversationID: conversationID,
+            peerUserID: peerUserID
+        )
+
+        if let displayName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !displayName.isEmpty {
+            updateDirectConversationDisplayName(conversationID: conversationID, displayName: displayName)
+        } else {
+            replaceConversations(conversations)
+        }
+    }
+
     func clearMessages(for conversation: Conversation) {
         let keys = resolvedConversationKeys(conversation: conversation, fallbackID: conversation.id)
         for key in keys {
@@ -342,6 +387,7 @@ final class IMChatStore: ObservableObject {
 
     private func replaceConversations(_ items: [Conversation]) {
         var normalized = items
+        applyDirectRemarkOverrides(to: &normalized)
         normalizeActiveConversationUnreadCounts(in: &normalized)
         conversations = Self.sortConversations(normalized)
         unreadTotal = normalized.reduce(0) { $0 + max(0, $1.unreadCount) }
@@ -903,6 +949,26 @@ final class IMChatStore: ObservableObject {
         return userID
     }
 
+    private func applyDirectRemarkOverrides(to items: inout [Conversation]) {
+        let currentUserID = currentSnapshotUserID()
+        for index in items.indices where items[index].type == .direct {
+            let peerUserID = items[index].peer?.id ?? items[index].id
+            guard let override = directRemarkStore.loadRemark(
+                currentUserID: currentUserID,
+                conversationID: items[index].id,
+                peerUserID: peerUserID
+            )?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !override.isEmpty else {
+                continue
+            }
+            items[index].title = override
+            if var peer = items[index].peer {
+                peer.displayName = override
+                items[index].peer = peer
+            }
+        }
+    }
+
 }
 
 private extension Array where Element == String {
@@ -944,5 +1010,89 @@ private struct ConversationSnapshotStore {
 
     private func storageKey(for userID: String) -> String {
         storageKeyPrefix + userID
+    }
+}
+
+private struct DirectConversationRemarkStore {
+    private let defaults: UserDefaults
+    private let storageKeyPrefix = "raver.im.direct.remark."
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func loadRemark(
+        currentUserID: String?,
+        conversationID: String,
+        peerUserID: String?
+    ) -> String? {
+        let map = loadMap(currentUserID: currentUserID)
+        for key in candidateKeys(conversationID: conversationID, peerUserID: peerUserID) {
+            guard let value = map[key]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else { continue }
+            return value
+        }
+        return nil
+    }
+
+    func saveRemark(
+        _ displayName: String?,
+        currentUserID: String?,
+        conversationID: String,
+        peerUserID: String?
+    ) {
+        let keys = candidateKeys(conversationID: conversationID, peerUserID: peerUserID)
+        guard !keys.isEmpty else { return }
+
+        var map = loadMap(currentUserID: currentUserID)
+        let trimmed = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, !trimmed.isEmpty {
+            for key in keys {
+                map[key] = trimmed
+            }
+        } else {
+            for key in keys {
+                map.removeValue(forKey: key)
+            }
+        }
+        persistMap(map, currentUserID: currentUserID)
+    }
+
+    private func loadMap(currentUserID: String?) -> [String: String] {
+        guard let data = defaults.data(forKey: storageKey(for: currentUserID)),
+              let map = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return [:]
+        }
+        return map
+    }
+
+    private func persistMap(_ map: [String: String], currentUserID: String?) {
+        if map.isEmpty {
+            defaults.removeObject(forKey: storageKey(for: currentUserID))
+            return
+        }
+        guard let data = try? JSONEncoder().encode(map) else { return }
+        defaults.set(data, forKey: storageKey(for: currentUserID))
+    }
+
+    private func candidateKeys(conversationID: String, peerUserID: String?) -> [String] {
+        var keys: [String] = []
+        let trimmedConversationID = conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedConversationID.isEmpty {
+            keys.append("conversation:\(trimmedConversationID)")
+        }
+        if let peerUserID {
+            let normalizedPeerID = TencentIMIdentity.toTencentIMUserID(peerUserID)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !normalizedPeerID.isEmpty {
+                keys.append("peer:\(normalizedPeerID)")
+            }
+        }
+        return keys.uniqued()
+    }
+
+    private func storageKey(for currentUserID: String?) -> String {
+        let userID = currentUserID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "anonymous"
+        return storageKeyPrefix + userID
     }
 }

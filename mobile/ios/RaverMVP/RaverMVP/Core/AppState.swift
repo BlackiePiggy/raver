@@ -1068,6 +1068,93 @@ final class TencentIMSession: NSObject {
         return true
     }
 
+    func fetchFriendRemark(userID: String) async throws -> String? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let targetUserID = TencentIMIdentity.toTencentIMUserID(userID)
+        let results: [V2TIMFriendInfoResult] = try await withCheckedThrowingContinuation { continuation in
+            manager.getFriendsInfo([targetUserID]) { infoResults in
+                continuation.resume(returning: infoResults ?? [])
+            } fail: { code, desc in
+                continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Fetch friend remark failed"))
+            }
+        }
+
+        let match = results.first {
+            $0.friendInfo.userID == targetUserID
+        } ?? results.first
+        return normalizedText(match?.friendInfo.friendRemark)
+    }
+
+    func setFriendRemark(userID: String, remark: String?) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let info = V2TIMFriendInfo()
+        info.userID = TencentIMIdentity.toTencentIMUserID(userID)
+        let trimmedRemark = normalizedText(remark)
+        info.friendRemark = trimmedRemark
+        try await withCheckedThrowingContinuation { continuation in
+            manager.setFriendInfo(info: info) {
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Set friend remark failed"))
+            }
+        }
+        return true
+    }
+
+    func isUserBlacklisted(userID: String) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let targetUserID = TencentIMIdentity.toTencentIMUserID(userID)
+        let list: [V2TIMFriendInfo] = try await withCheckedThrowingContinuation { continuation in
+            manager.getBlackList { infoList in
+                continuation.resume(returning: infoList ?? [])
+            } fail: { code, desc in
+                continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Fetch blacklist failed"))
+            }
+        }
+        return list.contains { $0.userID == targetUserID }
+    }
+
+    func setUserBlacklisted(userID: String, blacklisted: Bool) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let targetUserID = TencentIMIdentity.toTencentIMUserID(userID)
+
+        if blacklisted {
+            let _: [V2TIMFriendOperationResult] = try await withCheckedThrowingContinuation { continuation in
+                manager.addToBlackList(userIDList: [targetUserID]) { results in
+                    continuation.resume(returning: results ?? [])
+                } fail: { code, desc in
+                    continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Add to blacklist failed"))
+                }
+            }
+        } else {
+            let _: [V2TIMFriendOperationResult] = try await withCheckedThrowingContinuation { continuation in
+                manager.deleteFromBlackList(userIDList: [targetUserID]) { results in
+                    continuation.resume(returning: results ?? [])
+                } fail: { code, desc in
+                    continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Remove from blacklist failed"))
+                }
+            }
+        }
+
+        return true
+    }
+
     func fetchMessages(conversationID: String, count: Int = 50) async throws -> [ChatMessage]? {
         let page = try await fetchMessagesPage(
             conversationID: conversationID,
@@ -2443,6 +2530,28 @@ extension TencentIMSession {
 
     func clearConversationHistory(conversationID: String) async throws -> Bool {
         _ = conversationID
+        return false
+    }
+
+    func fetchFriendRemark(userID: String) async throws -> String? {
+        _ = userID
+        return nil
+    }
+
+    func setFriendRemark(userID: String, remark: String?) async throws -> Bool {
+        _ = userID
+        _ = remark
+        return false
+    }
+
+    func isUserBlacklisted(userID: String) async throws -> Bool {
+        _ = userID
+        return false
+    }
+
+    func setUserBlacklisted(userID: String, blacklisted: Bool) async throws -> Bool {
+        _ = userID
+        _ = blacklisted
         return false
     }
 

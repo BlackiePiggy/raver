@@ -73,6 +73,10 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func hideConversation(conversationID: String) async throws
     func setConversationMuted(conversationID: String, muted: Bool) async throws
     func clearConversationHistory(conversationID: String) async throws
+    func fetchFriendRemark(userID: String) async throws -> String?
+    func setFriendRemark(userID: String, remark: String?) async throws
+    func isUserBlacklisted(userID: String) async throws -> Bool
+    func setUserBlacklisted(userID: String, blacklisted: Bool) async throws
     func startDirectConversation(identifier: String) async throws -> Conversation
     func fetchRecommendedSquads() async throws -> [SquadSummary]
     func fetchMySquads() async throws -> [SquadSummary]
@@ -175,6 +179,28 @@ extension SocialService {
     }
 
     func clearConversationHistory(conversationID: String) async throws {
+        throw ServiceError.message("Not supported")
+    }
+
+    func fetchFriendRemark(userID: String) async throws -> String? {
+        _ = userID
+        throw ServiceError.message("Not supported")
+    }
+
+    func setFriendRemark(userID: String, remark: String?) async throws {
+        _ = userID
+        _ = remark
+        throw ServiceError.message("Not supported")
+    }
+
+    func isUserBlacklisted(userID: String) async throws -> Bool {
+        _ = userID
+        throw ServiceError.message("Not supported")
+    }
+
+    func setUserBlacklisted(userID: String, blacklisted: Bool) async throws {
+        _ = userID
+        _ = blacklisted
         throw ServiceError.message("Not supported")
     }
 

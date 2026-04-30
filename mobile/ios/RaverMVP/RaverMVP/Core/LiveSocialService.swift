@@ -308,6 +308,31 @@ final class LiveSocialService: SocialService {
         throw await tencentIMUnavailableError(for: "clear conversation history")
     }
 
+    func fetchFriendRemark(userID: String) async throws -> String? {
+        if let remark = try await imSession.fetchFriendRemark(userID: userID) {
+            return remark
+        }
+        return nil
+    }
+
+    func setFriendRemark(userID: String, remark: String?) async throws {
+        if try await imSession.setFriendRemark(userID: userID, remark: remark) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "set friend remark")
+    }
+
+    func isUserBlacklisted(userID: String) async throws -> Bool {
+        try await imSession.isUserBlacklisted(userID: userID)
+    }
+
+    func setUserBlacklisted(userID: String, blacklisted: Bool) async throws {
+        if try await imSession.setUserBlacklisted(userID: userID, blacklisted: blacklisted) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "set user blacklisted")
+    }
+
     func startDirectConversation(identifier: String) async throws -> Conversation {
         let raw: Conversation = try await request(
             path: "/v1/chat/direct/start",

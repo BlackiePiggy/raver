@@ -7,6 +7,7 @@ import UIKit
 
 extension Notification.Name {
     static let raverOpenConversationSearch = Notification.Name("raverOpenConversationSearch")
+    static let raverConversationIdentityUpdated = Notification.Name("raverConversationIdentityUpdated")
 }
 
 private enum RaverMessageMenuAction: MessageMenuAction, Sendable {
@@ -108,7 +109,6 @@ struct TencentUIKitChatView: View {
         }
         .tint(RaverTheme.accent)
         .toolbar(.hidden, for: .navigationBar)
-        .background(colorScheme == .dark ? Color.black : Color.white)
         .sheet(isPresented: $isShowingConversationSearch) {
             ConversationMessageSearchSheet(
                 conversation: conversation,
@@ -180,6 +180,12 @@ struct TencentUIKitChatView: View {
             let matchesSDKID = requestedConversationID == conversation.sdkConversationID
             guard matchesBusinessID || matchesSDKID else { return }
             isShowingConversationSearch = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .raverConversationIdentityUpdated)) { notification in
+            guard notificationMatchesConversation(notification) else { return }
+            let displayName = (notification.userInfo?["displayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let displayName, !displayName.isEmpty else { return }
+            viewModel.overrideDirectConversationDisplayName(displayName)
         }
     }
 
@@ -473,6 +479,16 @@ struct TencentUIKitChatView: View {
                 recordDot: RaverTheme.accent
             )
         )
+    }
+
+    private func notificationMatchesConversation(_ notification: Notification) -> Bool {
+        let requestedConversationID = notification.userInfo?["conversationID"] as? String
+        let requestedSDKConversationID = notification.userInfo?["sdkConversationID"] as? String
+        let matchesBusinessID = requestedConversationID == conversation.id
+        let matchesSDKID = requestedConversationID == conversation.sdkConversationID
+        let matchesPostedSDKID = requestedSDKConversationID == conversation.sdkConversationID
+        let matchesPostedSDKToBusiness = requestedSDKConversationID == conversation.id
+        return matchesBusinessID || matchesSDKID || matchesPostedSDKID || matchesPostedSDKToBusiness
     }
 
     private func handleConversationSearchSelection(_ result: ChatMessageSearchResult) {
@@ -1437,6 +1453,18 @@ private final class ExyteChatConversationViewModel: ObservableObject {
         lastRequestedReadMessageID = nil
         refreshConversationIdentity()
         rebuildMessages()
+    }
+
+    func overrideDirectConversationDisplayName(_ displayName: String) {
+        guard conversation.type == .direct else { return }
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        conversation.title = trimmed
+        if var peer = conversation.peer {
+            peer.displayName = trimmed
+            conversation.peer = peer
+        }
+        refreshConversationIdentity()
     }
 
     func avatarPresentation(for user: User) -> ExyteAvatarPresentation {
