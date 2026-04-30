@@ -199,7 +199,7 @@ struct MainTabCoordinatorView: View {
         NavigationStack(path: $router.path) {
             MainTabView()
                 .toolbar(
-                    shouldShowNavigationBar ? .visible : .hidden,
+                    router.selectedTab == .profile ? .visible : .hidden,
                     for: .navigationBar
                 )
                 .navigationDestination(for: AppRoute.self) { route in
@@ -237,16 +237,6 @@ struct MainTabCoordinatorView: View {
             handledSystemDeepLinkEventID = event.id
             handleSystemDeepLink(event.deeplink)
         }
-    }
-
-    private var shouldShowNavigationBar: Bool {
-        if router.selectedTab == .profile {
-            return true
-        }
-        if router.selectedTab == .messages {
-            return !router.path.isEmpty
-        }
-        return !router.path.isEmpty
     }
 
     @ViewBuilder
