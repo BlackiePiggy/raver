@@ -20,6 +20,7 @@ private struct UserProfileScreen: View {
     @Environment(\.appPush) private var appPush
     @Environment(\.profilePush) private var profilePush
     @StateObject private var viewModel: UserProfileViewModel
+    @State private var isStartingDirectChat = false
 
     init(viewModel: UserProfileViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -61,17 +62,29 @@ private struct UserProfileScreen: View {
 
                                 Button {
                                     Task {
+                                        guard !isStartingDirectChat else { return }
+                                        isStartingDirectChat = true
+                                        defer { isStartingDirectChat = false }
                                         do {
-                                            let conversation = try await appContainer.socialService.startDirectConversation(identifier: profile.username)
-                                            appPush(.conversation(conversationID: conversation.id))
+                                            let identifier = profile.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                                ? profile.username
+                                                : profile.id
+                                            let conversation = try await appContainer.socialService.startDirectConversation(identifier: identifier)
+                                            IMChatStore.shared.stageConversation(conversation)
+                                            appPush(.conversation(target: .fromConversation(conversation)))
                                         } catch {
                                             viewModel.error = error.userFacingMessage
                                         }
                                     }
                                 } label: {
-                                    Label(LL("私信"), systemImage: "paperplane")
+                                    if isStartingDirectChat {
+                                        ProgressView()
+                                    } else {
+                                        Label(LL("私信"), systemImage: "paperplane")
+                                    }
                                 }
                                 .buttonStyle(.bordered)
+                                .disabled(isStartingDirectChat)
                             }
                         }
                     }

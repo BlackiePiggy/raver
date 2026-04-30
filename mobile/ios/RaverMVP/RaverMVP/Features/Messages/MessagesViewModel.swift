@@ -1,7 +1,8 @@
 import Foundation
 import Combine
+import SwiftUI
 
-protocol MessagesRepository: OpenIMChatConversationDataSource {
+protocol MessagesRepository: IMChatConversationDataSource {
     func fetchNotifications(limit: Int) async throws -> NotificationInbox
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
     func markNotificationRead(notificationID: String) async throws
@@ -21,6 +22,18 @@ struct MessagesRepositoryAdapter: MessagesRepository {
 
     func markConversationRead(conversationID: String) async throws {
         try await service.markConversationRead(conversationID: conversationID)
+    }
+
+    func setConversationPinned(conversationID: String, pinned: Bool) async throws {
+        try await service.setConversationPinned(conversationID: conversationID, pinned: pinned)
+    }
+
+    func markConversationUnread(conversationID: String, unread: Bool) async throws {
+        try await service.markConversationUnread(conversationID: conversationID, unread: unread)
+    }
+
+    func hideConversation(conversationID: String) async throws {
+        try await service.hideConversation(conversationID: conversationID)
     }
 
     func fetchNotifications(limit: Int) async throws -> NotificationInbox {
@@ -56,9 +69,11 @@ final class MessagesViewModel: ObservableObject {
     @Published var globalSearchSections: [GlobalSearchSection] = []
     @Published var isGlobalSearching = false
     @Published var globalSearchError: String?
+    @Published var isEditingConversations = false
+    @Published var selectedConversationIDs: Set<String> = []
 
     private let repository: MessagesRepository
-    private let chatStore = OpenIMChatStore.shared
+    private let chatStore = IMChatStore.shared
     private var cancellables = Set<AnyCancellable>()
 
     init(repository: MessagesRepository) {
@@ -88,18 +103,111 @@ final class MessagesViewModel: ObservableObject {
         }
     }
 
+    func setConversationPinned(conversationID: String, pinned: Bool) async {
+        do {
+            try await chatStore.setConversationPinned(
+                conversationID: conversationID,
+                pinned: pinned,
+                using: repository
+            )
+            error = nil
+        } catch {
+            self.error = error.userFacingMessage
+        }
+    }
+
+    func markConversationUnread(conversationID: String, unread: Bool) async {
+        do {
+            try await chatStore.markConversationUnread(
+                conversationID: conversationID,
+                unread: unread,
+                using: repository
+            )
+            error = nil
+        } catch {
+            self.error = error.userFacingMessage
+        }
+    }
+
+    func hideConversation(conversationID: String) async {
+        do {
+            try await chatStore.hideConversation(conversationID: conversationID, using: repository)
+            selectedConversationIDs.remove(conversationID)
+            error = nil
+        } catch {
+            self.error = error.userFacingMessage
+        }
+    }
+
+    func toggleConversationEditing() {
+        isEditingConversations.toggle()
+        if !isEditingConversations {
+            selectedConversationIDs.removeAll()
+        }
+    }
+
+    func exitConversationEditing() {
+        isEditingConversations = false
+        selectedConversationIDs.removeAll()
+    }
+
+    func toggleConversationSelection(_ conversationID: String) {
+        if selectedConversationIDs.contains(conversationID) {
+            selectedConversationIDs.remove(conversationID)
+        } else {
+            selectedConversationIDs.insert(conversationID)
+        }
+    }
+
+    func setConversationSelection(_ conversationID: String, selected: Bool) {
+        if selected {
+            selectedConversationIDs.insert(conversationID)
+        } else {
+            selectedConversationIDs.remove(conversationID)
+        }
+    }
+
+    func isConversationSelected(_ conversationID: String) -> Bool {
+        selectedConversationIDs.contains(conversationID)
+    }
+
+    func selectAllConversations() {
+        selectedConversationIDs = Set(conversations.map(\.id))
+    }
+
+    func clearConversationSelection() {
+        selectedConversationIDs.removeAll()
+    }
+
+    func markSelectedConversationsRead() async {
+        let ids = Array(selectedConversationIDs)
+        guard !ids.isEmpty else { return }
+        for id in ids {
+            await markConversationRead(conversationID: id)
+        }
+    }
+
+    func hideSelectedConversations() async {
+        let ids = Array(selectedConversationIDs)
+        guard !ids.isEmpty else { return }
+        for id in ids {
+            await hideConversation(conversationID: id)
+        }
+        exitConversationEditing()
+    }
+
     func searchGlobally(query: String, limit: Int = 120) async {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedQuery.isEmpty else {
             globalSearchSections = []
             globalSearchError = nil
             isGlobalSearching = false
-            OpenIMProbeLogger.log("[GlobalSearch] cleared-empty-query")
+            IMProbeLogger.log("[GlobalSearch] cleared-empty-query")
             return
         }
 
         isGlobalSearching = true
-        OpenIMProbeLogger.log(
+        IMProbeLogger.log(
             "[GlobalSearch] submit query=\(normalizedQuery) limit=\(max(1, limit))"
         )
         defer { isGlobalSearching = false }
@@ -113,13 +221,13 @@ final class MessagesViewModel: ObservableObject {
             globalSearchSections = buildGlobalSearchSections(from: hits)
             globalSearchError = nil
             error = nil
-            OpenIMProbeLogger.log(
+            IMProbeLogger.log(
                 "[GlobalSearch] result query=\(normalizedQuery) sectionCount=\(globalSearchSections.count) hitCount=\(hits.count)"
             )
         } catch {
             globalSearchSections = []
             globalSearchError = error.userFacingMessage
-            OpenIMProbeLogger.log(
+            IMProbeLogger.log(
                 "[GlobalSearch] failed query=\(normalizedQuery) error=\(error.localizedDescription)"
             )
         }
@@ -129,7 +237,7 @@ final class MessagesViewModel: ObservableObject {
         globalSearchSections = []
         globalSearchError = nil
         isGlobalSearching = false
-        OpenIMProbeLogger.log("[GlobalSearch] state-cleared")
+        IMProbeLogger.log("[GlobalSearch] state-cleared")
     }
 
     private func buildGlobalSearchSections(from hits: [ChatMessageSearchResult]) -> [GlobalSearchSection] {
@@ -138,9 +246,6 @@ final class MessagesViewModel: ObservableObject {
         var conversationByKey: [String: Conversation] = [:]
         for conversation in conversations {
             conversationByKey[conversation.id] = conversation
-            if let openIMConversationID = conversation.openIMConversationID, !openIMConversationID.isEmpty {
-                conversationByKey[openIMConversationID] = conversation
-            }
         }
 
         var groupedHits: [String: [ChatMessageSearchResult]] = [:]
@@ -183,7 +288,7 @@ final class MessagesViewModel: ObservableObject {
             type: .direct,
             title: L("未知会话", "Unknown Conversation"),
             avatarURL: nil,
-            openIMConversationID: nil,
+            sdkConversationID: nil,
             lastMessage: "",
             lastMessageSenderID: nil,
             unreadCount: 0,
@@ -197,7 +302,11 @@ final class MessagesViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] conversations in
                 Task { @MainActor in
-                    self?.conversations = conversations
+                    withAnimation(.snappy(duration: 0.24, extraBounce: 0.0)) {
+                        self?.conversations = conversations
+                    }
+                    let validIDs = Set(conversations.map(\.id))
+                    self?.selectedConversationIDs = self?.selectedConversationIDs.filter { validIDs.contains($0) } ?? []
                 }
             }
             .store(in: &cancellables)

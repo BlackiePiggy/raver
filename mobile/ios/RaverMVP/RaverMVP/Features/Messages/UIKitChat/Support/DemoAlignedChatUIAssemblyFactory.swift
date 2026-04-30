@@ -146,7 +146,16 @@ enum DemoAlignedChatUIAssemblyFactory {
 
         dependencies.inputField.translatesAutoresizingMaskIntoConstraints = false
         dependencies.inputField.placeholder = dependencies.inputPlaceholder
-        dependencies.inputField.borderStyle = .roundedRect
+        dependencies.inputField.borderStyle = .none
+        dependencies.inputField.backgroundColor = dependencies.dividerColor.withAlphaComponent(0.28)
+        dependencies.inputField.layer.cornerRadius = 18
+        dependencies.inputField.layer.borderWidth = 1
+        dependencies.inputField.layer.borderColor = dependencies.dividerColor.withAlphaComponent(0.7).cgColor
+        dependencies.inputField.font = .systemFont(ofSize: 16)
+        dependencies.inputField.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 14, height: 36))
+        dependencies.inputField.leftViewMode = .always
+        dependencies.inputField.rightView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 36))
+        dependencies.inputField.rightViewMode = .always
         dependencies.inputField.returnKeyType = .send
         dependencies.inputField.delegate = dependencies.inputFieldDelegate
         dependencies.inputField.addTarget(
@@ -157,8 +166,11 @@ enum DemoAlignedChatUIAssemblyFactory {
         dependencies.composerContainer.addSubview(dependencies.inputField)
 
         dependencies.imageButton.translatesAutoresizingMaskIntoConstraints = false
-        dependencies.imageButton.setImage(UIImage(systemName: "photo"), for: .normal)
-        dependencies.imageButton.tintColor = dependencies.secondaryTextColor
+        var mediaEntryConfig = UIButton.Configuration.plain()
+        mediaEntryConfig.image = UIImage(systemName: "plus.circle.fill")
+        mediaEntryConfig.baseForegroundColor = dependencies.accentColor
+        mediaEntryConfig.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 2, bottom: 2, trailing: 2)
+        dependencies.imageButton.configuration = mediaEntryConfig
         dependencies.imageButton.addTarget(
             dependencies.actionTarget,
             action: dependencies.imageTappedAction,
@@ -167,8 +179,11 @@ enum DemoAlignedChatUIAssemblyFactory {
         dependencies.composerContainer.addSubview(dependencies.imageButton)
 
         dependencies.videoButton.translatesAutoresizingMaskIntoConstraints = false
-        dependencies.videoButton.setImage(UIImage(systemName: "video"), for: .normal)
-        dependencies.videoButton.tintColor = dependencies.secondaryTextColor
+        var quickVideoConfig = UIButton.Configuration.plain()
+        quickVideoConfig.image = UIImage(systemName: "video.circle")
+        quickVideoConfig.baseForegroundColor = dependencies.secondaryTextColor
+        quickVideoConfig.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 2, bottom: 2, trailing: 2)
+        dependencies.videoButton.configuration = quickVideoConfig
         dependencies.videoButton.addTarget(
             dependencies.actionTarget,
             action: dependencies.videoTappedAction,
@@ -177,7 +192,13 @@ enum DemoAlignedChatUIAssemblyFactory {
         dependencies.composerContainer.addSubview(dependencies.videoButton)
 
         dependencies.sendButton.translatesAutoresizingMaskIntoConstraints = false
-        dependencies.sendButton.setTitle(dependencies.sendButtonTitle, for: .normal)
+        var sendConfig = UIButton.Configuration.filled()
+        sendConfig.title = dependencies.sendButtonTitle
+        sendConfig.baseBackgroundColor = dependencies.accentColor
+        sendConfig.baseForegroundColor = .white
+        sendConfig.cornerStyle = .capsule
+        sendConfig.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 14)
+        dependencies.sendButton.configuration = sendConfig
         dependencies.sendButton.addTarget(
             dependencies.actionTarget,
             action: dependencies.sendTappedAction,
@@ -204,24 +225,26 @@ enum DemoAlignedChatUIAssemblyFactory {
             mediaProgressStack.topAnchor.constraint(equalTo: dependencies.mediaProgressContainer.topAnchor),
             mediaProgressStack.bottomAnchor.constraint(equalTo: dependencies.mediaProgressContainer.bottomAnchor),
 
-            dependencies.imageButton.leadingAnchor.constraint(equalTo: dependencies.composerContainer.leadingAnchor, constant: 10),
+            dependencies.imageButton.leadingAnchor.constraint(equalTo: dependencies.composerContainer.leadingAnchor, constant: 12),
             dependencies.imageButton.centerYAnchor.constraint(equalTo: dependencies.inputField.centerYAnchor),
-            dependencies.imageButton.widthAnchor.constraint(equalToConstant: 30),
-            dependencies.imageButton.heightAnchor.constraint(equalToConstant: 30),
+            dependencies.imageButton.widthAnchor.constraint(equalToConstant: 32),
+            dependencies.imageButton.heightAnchor.constraint(equalToConstant: 32),
 
-            dependencies.videoButton.leadingAnchor.constraint(equalTo: dependencies.imageButton.trailingAnchor, constant: 4),
+            dependencies.videoButton.leadingAnchor.constraint(equalTo: dependencies.imageButton.trailingAnchor, constant: 6),
             dependencies.videoButton.centerYAnchor.constraint(equalTo: dependencies.inputField.centerYAnchor),
-            dependencies.videoButton.widthAnchor.constraint(equalToConstant: 30),
-            dependencies.videoButton.heightAnchor.constraint(equalToConstant: 30),
+            dependencies.videoButton.widthAnchor.constraint(equalToConstant: 32),
+            dependencies.videoButton.heightAnchor.constraint(equalToConstant: 32),
 
             dependencies.inputField.leadingAnchor.constraint(equalTo: dependencies.videoButton.trailingAnchor, constant: 8),
-            dependencies.inputField.topAnchor.constraint(equalTo: dependencies.mediaProgressContainer.bottomAnchor, constant: 10),
-            dependencies.inputField.bottomAnchor.constraint(equalTo: dependencies.composerContainer.safeAreaLayoutGuide.bottomAnchor, constant: -10),
+            dependencies.inputField.topAnchor.constraint(equalTo: dependencies.mediaProgressContainer.bottomAnchor, constant: 8),
+            dependencies.inputField.bottomAnchor.constraint(equalTo: dependencies.composerContainer.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+            dependencies.inputField.heightAnchor.constraint(equalToConstant: 36),
 
             dependencies.sendButton.leadingAnchor.constraint(equalTo: dependencies.inputField.trailingAnchor, constant: 8),
             dependencies.sendButton.trailingAnchor.constraint(equalTo: dependencies.composerContainer.trailingAnchor, constant: -12),
             dependencies.sendButton.centerYAnchor.constraint(equalTo: dependencies.inputField.centerYAnchor),
-            dependencies.sendButton.widthAnchor.constraint(equalToConstant: 54),
+            dependencies.sendButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 56),
+            dependencies.sendButton.heightAnchor.constraint(equalToConstant: 32),
 
             dependencies.collectionView.leadingAnchor.constraint(equalTo: dependencies.hostView.leadingAnchor),
             dependencies.collectionView.trailingAnchor.constraint(equalTo: dependencies.hostView.trailingAnchor),

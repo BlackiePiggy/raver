@@ -46,7 +46,7 @@ struct SquadProfileView: View {
                     Button {
                         Task {
                             if await viewModel.joinIfNeeded(), let conversation = viewModel.buildConversation() {
-                                appPush(.conversation(conversationID: conversation.id))
+                                appPush(.conversation(target: .fromConversation(conversation)))
                             }
                         }
                     } label: {

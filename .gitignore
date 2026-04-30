@@ -53,3 +53,15 @@ logs/
 # scrapeRave
 scrapRave/
 cached_dj_profile/
+
+# Third-party local demos
+thirdparty/Chat_UIKit-main/
+thirdparty/chatUIkitdemo/
+thirdparty/chat/
+thirdparty/MediaPicker/
+thirdparty/ActivityIndicatorView/
+thirdparty/AnchoredPopup/
+thirdparty/giphy-ios-sdk/
+thirdparty/libwebp-Xcode/
+thirdparty/Kingfisher/
+thirdparty/SnapKit-5.7.1/

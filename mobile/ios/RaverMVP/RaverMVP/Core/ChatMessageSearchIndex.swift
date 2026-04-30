@@ -2,7 +2,6 @@ import Foundation
 
 enum ChatMessageSearchSource: String, Hashable, Codable {
     case localIndex
-    case remoteFallback
 }
 
 struct ChatMessageSearchResult: Hashable {
@@ -10,10 +9,6 @@ struct ChatMessageSearchResult: Hashable {
     let conversationID: String
     let source: ChatMessageSearchSource
     let matchScore: Int
-}
-
-protocol ChatMessageSearchRemoteDataSource {
-    func searchMessages(query: String, conversationID: String?, limit: Int) async throws -> [ChatMessage]
 }
 
 struct ChatMessageSearchIndex {
@@ -72,6 +67,7 @@ struct ChatMessageSearchIndex {
         guard !normalizedQuery.isEmpty else { return [] }
         let queryTokens = tokenize(normalizedQuery)
         guard !queryTokens.isEmpty else { return [] }
+        let normalizedNeedle = normalize(normalizedQuery)
 
         let targetBuckets: [(String, Bucket)]
         if let conversationID {
@@ -89,14 +85,28 @@ struct ChatMessageSearchIndex {
             var scoreByMessageID: [String: Int] = [:]
 
             for token in queryTokens {
-                guard let messageIDs = bucket.tokenToMessageIDs[token] else { continue }
-                for messageID in messageIDs {
-                    scoreByMessageID[messageID, default: 0] += 1
+                if let messageIDs = bucket.tokenToMessageIDs[token] {
+                    for messageID in messageIDs {
+                        scoreByMessageID[messageID, default: 0] += 2
+                    }
                 }
             }
 
-            for (messageID, score) in scoreByMessageID where score >= queryTokens.count {
-                guard let message = bucket.messagesByID[messageID] else { continue }
+            for (messageID, message) in bucket.messagesByID {
+                let searchableText = normalizedSearchableText(for: message)
+                guard !searchableText.isEmpty else { continue }
+
+                var score = scoreByMessageID[messageID, default: 0]
+                let tokenSubstringMatches = queryTokens.filter { searchableText.contains($0) }.count
+                guard tokenSubstringMatches >= queryTokens.count || searchableText.contains(normalizedNeedle) else {
+                    continue
+                }
+
+                score += tokenSubstringMatches
+                if searchableText.contains(normalizedNeedle) {
+                    score += 1
+                }
+
                 hits.append(Hit(conversationID: bucketConversationID, message: message, score: score))
             }
         }
@@ -157,11 +167,23 @@ struct ChatMessageSearchIndex {
         return tokenize(components.joined(separator: " "))
     }
 
-    private func tokenize(_ raw: String) -> [String] {
-        let normalized = raw
+    private func normalizedSearchableText(for message: ChatMessage) -> String {
+        var components: [String] = [message.content]
+        if let fileName = message.media?.fileName, !fileName.isEmpty {
+            components.append(fileName)
+        }
+        return normalize(components.joined(separator: " "))
+    }
+
+    private func normalize(_ raw: String) -> String {
+        raw
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
             .lowercased()
+    }
+
+    private func tokenize(_ raw: String) -> [String] {
+        let normalized = normalize(raw)
         guard !normalized.isEmpty else { return [] }
 
         var tokens: [String] = []

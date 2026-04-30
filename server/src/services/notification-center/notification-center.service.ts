@@ -227,7 +227,6 @@ const DEFAULT_GLOBAL_CONFIG: NotificationAdminGlobalConfig = {
   channelSwitches: {
     in_app: true,
     apns: true,
-    openim: true,
   },
   grayRelease: {
     enabled: false,
@@ -434,7 +433,7 @@ const normalizeNotificationChannelList = (raw: unknown, fallback: NotificationCh
       raw
         .filter((item): item is string => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns' || item === 'openim')
+        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
     )
   );
   return normalized.length > 0 ? normalized : [...fallback];
@@ -529,7 +528,7 @@ const normalizeGlobalConfig = (raw: unknown): NotificationAdminGlobalConfig => {
   }
 
   const channelSwitches = { ...DEFAULT_GLOBAL_CONFIG.channelSwitches };
-  for (const channel of ['in_app', 'apns', 'openim'] as const) {
+  for (const channel of ['in_app', 'apns'] as const) {
     if (typeof channelSwitchesRaw[channel] === 'boolean') {
       channelSwitches[channel] = Boolean(channelSwitchesRaw[channel]);
     }
@@ -680,7 +679,7 @@ const normalizeEventCountdownPreference = (raw: unknown): EventCountdownPreferen
       channelsRaw
         .filter((item): item is string => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns' || item === 'openim')
+        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
     )
   );
 
@@ -728,7 +727,7 @@ const normalizeEventDailyDigestPreference = (raw: unknown): EventDailyDigestPref
       channelsRaw
         .filter((item): item is string => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns' || item === 'openim')
+        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
     )
   );
 
@@ -777,7 +776,7 @@ const normalizeRouteDJReminderPreference = (raw: unknown): RouteDJReminderPrefer
       channelsRaw
         .filter((item): item is string => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns' || item === 'openim')
+        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
     )
   );
   const timezoneRaw = typeof payload.timezone === 'string' ? payload.timezone : undefined;
@@ -848,7 +847,7 @@ const normalizeFollowedDJUpdatePreference = (raw: unknown): FollowedDJUpdatePref
       channelsRaw
         .filter((item): item is string => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns' || item === 'openim')
+        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
     )
   );
   const timezoneRaw = typeof payload.timezone === 'string' ? payload.timezone : undefined;
@@ -906,7 +905,7 @@ const normalizeFollowedBrandUpdatePreference = (raw: unknown): FollowedBrandUpda
       channelsRaw
         .filter((item): item is string => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns' || item === 'openim')
+        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
     )
   );
   const timezoneRaw = typeof payload.timezone === 'string' ? payload.timezone : undefined;
@@ -1350,7 +1349,7 @@ export const notificationCenterService = {
           new Set(
             queuedDeliveries
               .map((item) => item.channel.trim().toLowerCase())
-              .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns' || item === 'openim')
+              .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
           )
         );
         if (channels.length === 0) {
@@ -1536,7 +1535,7 @@ export const notificationCenterService = {
     const limit = normalizePositiveLimit(Number(input?.limit ?? 50), 50, 200);
     const where: Prisma.NotificationDeliveryWhereInput = {};
     const channel = input?.channel?.trim();
-    if (channel === 'in_app' || channel === 'apns' || channel === 'openim') {
+    if (channel === 'in_app' || channel === 'apns') {
       where.channel = channel;
     }
     const status = input?.status?.trim();
@@ -1832,7 +1831,7 @@ export const notificationCenterService = {
       where.locale = locale;
     }
     const channel = input?.channel?.trim();
-    if (channel === 'in_app' || channel === 'apns' || channel === 'openim') {
+    if (channel === 'in_app' || channel === 'apns') {
       where.channel = channel;
     }
     if (typeof input?.isActive === 'boolean') {
@@ -1882,7 +1881,7 @@ export const notificationCenterService = {
     if (!isNotificationCategory(category)) {
       throw new Error(`unsupported notification category: ${category}`);
     }
-    if (channel !== 'in_app' && channel !== 'apns' && channel !== 'openim') {
+    if (channel !== 'in_app' && channel !== 'apns') {
       throw new Error(`unsupported notification channel: ${channel}`);
     }
 

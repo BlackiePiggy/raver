@@ -564,7 +564,7 @@ router.post('/admin/major-news/publish', authenticate, authorize('admin'), async
       ? body.channels.filter((item): item is string => typeof item === 'string').map((item) => item.trim().toLowerCase())
       : [];
     const channels = (channelsRaw.length > 0 ? channelsRaw : ['in_app', 'apns']).filter(
-      (channel): channel is 'in_app' | 'apns' | 'openim' => channel === 'in_app' || channel === 'apns' || channel === 'openim'
+      (channel): channel is 'in_app' | 'apns' => channel === 'in_app' || channel === 'apns'
     );
     if (channels.length === 0) {
       res.status(400).json({ error: 'channels are invalid' });
@@ -680,7 +680,7 @@ router.post('/admin/publish-test', authenticate, authorize('admin'), async (req:
         | 'followed_brand_update'
         | 'major_news',
       targets: (targetUserIds.length > 0 ? targetUserIds : [actorUserId]).map((userId) => ({ userId })),
-      channels: channels as Array<'in_app' | 'apns' | 'openim'>,
+      channels: channels as Array<'in_app' | 'apns'>,
       payload: {
         title,
         body: message,
@@ -718,7 +718,7 @@ router.get('/admin/deliveries', authenticate, authorize('admin'), async (req: Au
   try {
     const query = req.query as Request['query'];
     const channelRaw = typeof query.channel === 'string' ? query.channel.trim().toLowerCase() : '';
-    const channel = channelRaw === 'in_app' || channelRaw === 'apns' || channelRaw === 'openim' ? channelRaw : undefined;
+    const channel = channelRaw === 'in_app' || channelRaw === 'apns' ? channelRaw : undefined;
     const status = typeof query.status === 'string' ? query.status.trim() : undefined;
     const userId = typeof query.userId === 'string' ? query.userId.trim() : undefined;
     const eventId = typeof query.eventId === 'string' ? query.eventId.trim() : undefined;
@@ -769,7 +769,7 @@ router.get('/admin/templates', authenticate, authorize('admin'), async (req: Aut
   try {
     const query = req.query as Request['query'];
     const channelRaw = typeof query.channel === 'string' ? query.channel.trim().toLowerCase() : '';
-    const channel = channelRaw === 'in_app' || channelRaw === 'apns' || channelRaw === 'openim' ? channelRaw : undefined;
+    const channel = channelRaw === 'in_app' || channelRaw === 'apns' ? channelRaw : undefined;
     const items = await notificationCenterService.fetchAdminTemplates({
       limit: parseLimit(query.limit, 50, 200),
       category: typeof query.category === 'string' ? query.category.trim() : undefined,
@@ -806,15 +806,15 @@ router.put('/admin/templates', authenticate, authorize('admin'), async (req: Aut
       res.status(400).json({ error: 'category/titleTemplate/bodyTemplate are required' });
       return;
     }
-    if (channelRaw !== 'in_app' && channelRaw !== 'apns' && channelRaw !== 'openim') {
-      res.status(400).json({ error: 'channel must be one of in_app/apns/openim' });
+    if (channelRaw !== 'in_app' && channelRaw !== 'apns') {
+      res.status(400).json({ error: 'channel must be one of in_app/apns' });
       return;
     }
 
     const item = await notificationCenterService.upsertAdminTemplate({
       category,
       locale,
-      channel: channelRaw as 'in_app' | 'apns' | 'openim',
+      channel: channelRaw as 'in_app' | 'apns',
       titleTemplate,
       bodyTemplate,
       deeplinkTemplate: typeof body.deeplinkTemplate === 'string' ? body.deeplinkTemplate.trim() : null,

@@ -1,16 +1,16 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { hashPassword, comparePassword, generateToken } from '../utils/auth';
-import { openIMSyncJobService } from '../services/openim/openim-sync-job.service';
+import { tencentIMUserService } from '../services/tencent-im/tencent-im-user.service';
 
 const prisma = new PrismaClient();
 
-const syncOpenIMUserBestEffort = async (userId: string, reason: string): Promise<void> => {
+const syncTencentIMUserBestEffort = async (userId: string, reason: string): Promise<void> => {
   try {
-    await openIMSyncJobService.queueUserProfileSync(userId, { reason });
+    await tencentIMUserService.ensureUsersByIds([userId]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[openim] user sync skipped during ${reason}: ${message}`, { userId });
+    console.warn(`[tencent-im] user sync skipped during ${reason}: ${message}`, { userId });
   }
 };
 
@@ -64,7 +64,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       role: 'user',
     });
 
-    await syncOpenIMUserBestEffort(user.id, 'auth-register');
+    await syncTencentIMUserBestEffort(user.id, 'auth-register');
 
     res.status(201).json({
       user,
@@ -119,7 +119,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       data: { lastLoginAt: new Date() },
     });
 
-    await syncOpenIMUserBestEffort(user.id, 'auth-login');
+    await syncTencentIMUserBestEffort(user.id, 'auth-login');
 
     const token = generateToken({
       userId: user.id,
@@ -261,7 +261,7 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       },
     });
 
-    await syncOpenIMUserBestEffort(userId, 'auth-update-profile');
+    await syncTencentIMUserBestEffort(userId, 'auth-update-profile');
 
     res.json(updatedUser);
   } catch (error) {
@@ -305,7 +305,7 @@ export const uploadAvatar = async (req: Request, res: Response): Promise<void> =
       },
     });
 
-    await syncOpenIMUserBestEffort(userId, 'auth-upload-avatar');
+    await syncTencentIMUserBestEffort(userId, 'auth-upload-avatar');
 
     res.status(201).json(updatedUser);
   } catch (error) {

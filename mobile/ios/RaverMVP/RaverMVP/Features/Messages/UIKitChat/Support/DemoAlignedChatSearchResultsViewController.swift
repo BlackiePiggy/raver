@@ -56,7 +56,7 @@ final class DemoAlignedChatSearchResultsViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         let result = results[indexPath.row]
-        OpenIMProbeLogger.log(
+        IMProbeLogger.log(
             "[DemoAlignedSearch] result-selected query=\(query) message=\(result.message.id) source=\(result.source.rawValue)"
         )
         onSelectResult(result)
@@ -66,9 +66,7 @@ final class DemoAlignedChatSearchResultsViewController: UITableViewController {
     private func secondaryLine(for result: ChatMessageSearchResult) -> String {
         let timeText = Self.timeFormatter.string(from: result.message.createdAt)
         let sender = result.message.isMine ? L("我", "Me") : result.message.sender.displayName
-        let source = result.source == .remoteFallback
-            ? L("远端补偿", "Remote")
-            : L("本地索引", "Local")
+        let source = L("本地索引", "Local")
         return "\(sender) · \(timeText) · \(source)"
     }
 

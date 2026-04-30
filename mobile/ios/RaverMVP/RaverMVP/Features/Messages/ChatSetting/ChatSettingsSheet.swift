@@ -6,108 +6,49 @@ struct ChatSettingsSheet: View {
 
     let conversation: Conversation
     let service: SocialService
-    let chatStore: OpenIMChatStore
+    let chatStore: IMChatStore
     var onLeaveConversation: (() -> Void)? = nil
 
     @State private var notificationsMuted = false
+    @State private var topPinned = false
     @State private var isMuting = false
     @State private var isClearing = false
     @State private var isLeaving = false
     @State private var isDisbanding = false
     @State private var isLoadingSquadProfile = false
+    @State private var hasLoadedConversationSettings = false
     @State private var errorMessage: String?
     @State private var squadProfile: SquadProfile?
     @State private var showLeaveConfirm = false
     @State private var showDisbandConfirm = false
     @State private var showLeaderLeaveGuide = false
+    @State private var showGroupMembers = false
+
+    private var platformSquadID: String {
+        TencentIMIdentity.normalizePlatformSquadID(conversation.id)
+    }
+
+    private var displayTitle: String {
+        if conversation.type == .group {
+            return conversation.title
+        }
+        return conversation.peer?.displayName.nilIfBlank ?? conversation.title
+    }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Toggle(L("消息免打扰", "Mute Notifications"), isOn: $notificationsMuted)
-                        .disabled(isMuting)
-                }
+        List {
+            headerSection
 
-                Section {
-                    if conversation.type == .direct {
-                        DirectChatSettingsSection(peer: conversation.peer) { peer in
-                            dismiss()
-                            appPush(.userProfile(userID: peer.id))
-                        }
-                    } else {
-                        if isLoadingSquadProfile && squadProfile == nil {
-                            HStack(spacing: 10) {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text(L("同步小队权限中...", "Syncing squad permissions..."))
-                                    .font(.footnote)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                        }
-
-                        if let squadProfile {
-                            LabeledContent {
-                                Text(roleLabel(for: squadProfile.myRole))
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(roleColor(for: squadProfile.myRole))
-                            } label: {
-                                Label(L("我的身份", "My Role"), systemImage: "person.badge.key")
-                            }
-                        }
-
-                        GroupChatSettingsSection(
-                            canManageSquad: canManageSquad,
-                            canDisbandSquad: canDisbandSquad,
-                            onOpenSquadProfile: {
-                                dismiss()
-                                appPush(.squadProfile(squadID: conversation.id))
-                            },
-                            onOpenSquadManage: {
-                                dismiss()
-                                appPush(.squadManage(squadID: conversation.id))
-                            },
-                            onOpenInviteApprovals: {
-                                dismiss()
-                                appPush(.messages(.alertCategory(.squadInvite)))
-                            },
-                            onDisbandSquad: {
-                                showDisbandConfirm = true
-                            },
-                            onLeaveSquad: {
-                                showLeaveConfirm = true
-                            },
-                            isDisbanding: isDisbanding,
-                            isLeaving: isLeaving
-                        )
-
-                        if !canManageSquad {
-                            Text(L("管理员相关操作需队长/管理员权限", "Admin actions require leader/admin permissions."))
-                                .font(.footnote)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        }
-                    }
-                }
-
-                Section {
-                    Button(role: .destructive) {
-                        Task { await clearHistory() }
-                    } label: {
-                        Label(L("清空聊天记录", "Clear Chat History"), systemImage: "trash")
-                    }
-                    .disabled(isClearing)
-                }
+            if conversation.type == .direct {
+                directSections
+            } else {
+                groupSections
             }
-            .listStyle(.insetGrouped)
-            .navigationTitle(L("聊天设置", "Chat Settings"))
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(L("完成", "Done")) {
-                        dismiss()
-                    }
-                }
-            }
+
+            sharedSections
         }
+        .listStyle(.insetGrouped)
+        .raverSystemNavigation(title: L("聊天详情", "Chat Details"))
         .overlay {
             if isClearing || isLeaving || isDisbanding {
                 ProgressView(LL("同步中..."))
@@ -122,11 +63,11 @@ struct ChatSettingsSheet: View {
             Text(errorMessage ?? "")
         }
         .confirmationDialog(
-            L("确认退出小队？", "Leave this squad?"),
+            L("确认退出群聊？", "Leave this group?"),
             isPresented: $showLeaveConfirm,
             titleVisibility: .visible
         ) {
-            Button(L("退出小队", "Leave Squad"), role: .destructive) {
+            Button(L("删除并退出", "Delete and Leave"), role: .destructive) {
                 Task { await leaveSquad() }
             }
             Button(L("取消", "Cancel"), role: .cancel) {}
@@ -143,44 +84,245 @@ struct ChatSettingsSheet: View {
             }
             Button(L("取消", "Cancel"), role: .cancel) {}
         } message: {
-            Text(
-                L(
-                    "解散后小队成员与群聊将被移除，且无法恢复。",
-                    "Disbanding removes members and group chat and cannot be undone."
-                )
-            )
+            Text(L("解散后小队成员与群聊将被移除，且无法恢复。", "Disbanding removes members and group chat and cannot be undone."))
         }
         .alert(L("需要先转让队长", "Transfer Leader First"), isPresented: $showLeaderLeaveGuide) {
             Button(L("去管理小队", "Open Squad Manage")) {
-                dismiss()
-                appPush(.squadManage(squadID: conversation.id))
+                dismissThenNavigate(.squadManage(squadID: platformSquadID))
             }
             Button(L("我知道了", "Got It"), role: .cancel) {}
         } message: {
-            Text(
-                L(
-                    "当前你是队长，需先在“管理小队”中转让队长后再退出。",
-                    "You're the squad leader. Transfer ownership in Manage Squad before leaving."
-                )
-            )
+            Text(L("当前你是队长，需先在“管理小队”中转让队长后再退出。", "You're the squad leader. Transfer ownership in Manage Squad before leaving."))
         }
         .onChange(of: notificationsMuted) { oldValue, newValue in
+            guard hasLoadedConversationSettings else { return }
             guard oldValue != newValue else { return }
             Task { await updateMuteStatus(newValue, rollbackTo: oldValue) }
         }
         .task(id: conversation.id) {
+            notificationsMuted = conversation.isMuted
+            topPinned = conversation.isPinned
+            hasLoadedConversationSettings = true
             guard conversation.type == .group else { return }
             await loadSquadProfile(force: false)
         }
+        .onChange(of: topPinned) { oldValue, newValue in
+            guard hasLoadedConversationSettings else { return }
+            guard oldValue != newValue else { return }
+            Task { await updatePinnedStatus(newValue, rollbackTo: oldValue) }
+        }
     }
 
-    private var canManageSquad: Bool {
-        guard conversation.type == .group else { return false }
-        guard let squadProfile else { return false }
-        if squadProfile.canEditGroup {
-            return true
+    private var headerSection: some View {
+        Section {
+            HStack(spacing: 12) {
+                avatarView(size: 52)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(displayTitle)
+                        .font(.headline)
+                    if conversation.type == .group {
+                        Text(L("群聊", "Group Chat"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    } else {
+                        Text(L("个人聊天", "Direct Chat"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 4)
         }
-        return squadProfile.myRole == "leader" || squadProfile.myRole == "admin"
+    }
+
+    private var directSections: some View {
+        Group {
+            Section {
+                Button {
+                    if let peerID = conversation.peer?.id {
+                        let resolved = TencentIMIdentity.normalizePlatformUserIDForProfile(peerID)
+                        appPush(.userProfile(userID: resolved))
+                    }
+                } label: {
+                    Label(L("个人主页", "Profile"), systemImage: "person.crop.circle")
+                }
+
+                placeholderRow(titleCN: "聊天历史搜索", titleEN: "Search Chat History", icon: "magnifyingglass") {
+                    dismissThenOpenConversationSearch()
+                }
+                placeholderRow(titleCN: "设置聊天背景", titleEN: "Set Chat Background", icon: "photo")
+                placeholderRow(titleCN: "设置备注名", titleEN: "Set Remark Name", icon: "pencil")
+            }
+
+            Section {
+                Toggle(L("消息免打扰", "Mute Notifications"), isOn: $notificationsMuted)
+                    .disabled(isMuting)
+                Toggle(L("置顶聊天", "Pin Chat"), isOn: $topPinned)
+            }
+
+            Section {
+                placeholderRow(titleCN: "加入黑名单", titleEN: "Add to Blacklist", icon: "hand.raised")
+                placeholderRow(titleCN: "举报", titleEN: "Report", icon: "exclamationmark.bubble")
+            }
+
+            Section {
+                Button(role: .destructive) {
+                    Task { await clearHistory() }
+                } label: {
+                    Label(L("清空聊天记录", "Clear Chat History"), systemImage: "trash")
+                }
+                .disabled(isClearing)
+
+                placeholderRow(titleCN: "删除好友", titleEN: "Delete Friend", icon: "person.crop.circle.badge.xmark", destructive: true)
+            }
+        }
+    }
+
+    private var groupSections: some View {
+        Group {
+            Section {
+                if isLoadingSquadProfile && squadProfile == nil {
+                    HStack(spacing: 10) {
+                        ProgressView().controlSize(.small)
+                        Text(L("同步群信息中...", "Syncing group info..."))
+                            .font(.footnote)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+
+                if let profile = squadProfile {
+                    ZStack {
+                        NavigationLink(
+                            destination: GroupMemberListView(profile: profile),
+                            isActive: $showGroupMembers
+                        ) {
+                            EmptyView()
+                        }
+                        .hidden()
+
+                        Button {
+                            showGroupMembers = true
+                        } label: {
+                            GroupMembersPreviewView(profile: profile)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else {
+                    placeholderRow(titleCN: "群成员", titleEN: "Group Members", icon: "person.3")
+                }
+            }
+
+            Section {
+                placeholderRow(titleCN: "分享群邀请", titleEN: "Share Group Invite", icon: "square.and.arrow.up")
+                placeholderRow(titleCN: "群公告", titleEN: "Group Notice", icon: "megaphone")
+                placeholderRow(titleCN: "我在本群的昵称", titleEN: "My Group Nickname", icon: "person.text.rectangle")
+                placeholderRow(titleCN: "群备注", titleEN: "Group Remark", icon: "text.bubble")
+                placeholderRow(titleCN: "查找聊天记录", titleEN: "Search Chat History", icon: "magnifyingglass") {
+                    dismissThenOpenConversationSearch()
+                }
+            }
+
+            Section {
+                Toggle(L("消息免打扰", "Mute Notifications"), isOn: $notificationsMuted)
+                    .disabled(isMuting)
+                Toggle(L("置顶聊天", "Pin Chat"), isOn: $topPinned)
+                placeholderRow(titleCN: "举报", titleEN: "Report", icon: "exclamationmark.bubble")
+            }
+
+            Section {
+                Button(role: .destructive) {
+                    Task { await clearHistory() }
+                } label: {
+                    Label(L("清空聊天记录", "Clear Chat History"), systemImage: "trash")
+                }
+                .disabled(isClearing)
+
+                if canDisbandSquad {
+                    Button(role: .destructive) {
+                        showDisbandConfirm = true
+                    } label: {
+                        Label(L("解散群聊", "Disband Group"), systemImage: "xmark.circle")
+                    }
+                    .disabled(isDisbanding || isLeaving)
+                }
+
+                Button(role: .destructive) {
+                    showLeaveConfirm = true
+                } label: {
+                    Label(L("删除并退出", "Delete and Leave"), systemImage: "rectangle.portrait.and.arrow.right")
+                }
+                .disabled(isLeaving || isDisbanding)
+            }
+        }
+    }
+
+    private var sharedSections: some View {
+        Section {
+            if conversation.type == .group {
+                Button {
+                    dismissThenNavigate(.squadProfile(squadID: squadProfile?.id ?? platformSquadID))
+                } label: {
+                    Label(L("查看小队主页", "View Squad Profile"), systemImage: "person.3.fill")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func avatarView(size: CGFloat) -> some View {
+        let avatarURL: String? = conversation.type == .group
+            ? conversation.avatarURL
+            : (conversation.peer?.avatarURL ?? conversation.avatarURL)
+
+        if let resolved = AppConfig.resolvedURLString(avatarURL),
+           (resolved.hasPrefix("http://") || resolved.hasPrefix("https://")) {
+            ImageLoaderView(urlString: resolved)
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+        } else {
+            let assetName: String = {
+                if conversation.type == .group {
+                    return AppConfig.resolvedGroupAvatarAssetName(
+                        groupID: conversation.id,
+                        groupName: conversation.title,
+                        avatarURL: avatarURL
+                    )
+                }
+                return AppConfig.resolvedUserAvatarAssetName(
+                    userID: conversation.peer?.id,
+                    username: conversation.peer?.username,
+                    avatarURL: avatarURL
+                )
+            }()
+
+            Image(assetName)
+                .resizable()
+                .scaledToFill()
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+        }
+    }
+
+    private func placeholderRow(
+        titleCN: String,
+        titleEN: String,
+        icon: String,
+        destructive: Bool = false,
+        action: (() -> Void)? = nil
+    ) -> some View {
+        Button {
+            if let action {
+                action()
+            } else {
+                errorMessage = L("该功能暂未接入，先保留入口。", "This feature is not wired yet. Placeholder for now.")
+            }
+        } label: {
+            Label(L(titleCN, titleEN), systemImage: icon)
+                .foregroundStyle(destructive ? Color.red : Color.primary)
+        }
     }
 
     private var canDisbandSquad: Bool {
@@ -189,27 +331,22 @@ struct ChatSettingsSheet: View {
         return squadProfile.myRole == "leader"
     }
 
-    private func roleLabel(for role: String?) -> String {
-        switch role {
-        case "leader":
-            return L("队长", "Leader")
-        case "admin":
-            return L("管理员", "Admin")
-        case "member":
-            return L("成员", "Member")
-        default:
-            return L("未知", "Unknown")
+    private func dismissThenNavigate(_ route: AppRoute) {
+        dismiss()
+        DispatchQueue.main.async {
+            appPush(route)
         }
     }
 
-    private func roleColor(for role: String?) -> Color {
-        switch role {
-        case "leader":
-            return .orange
-        case "admin":
-            return .blue
-        default:
-            return RaverTheme.secondaryText
+    private func dismissThenOpenConversationSearch() {
+        let targetConversationID = conversation.sdkConversationID ?? conversation.id
+        dismiss()
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: .raverOpenConversationSearch,
+                object: nil,
+                userInfo: ["conversationID": targetConversationID]
+            )
         }
     }
 
@@ -223,9 +360,9 @@ struct ChatSettingsSheet: View {
         defer { isLoadingSquadProfile = false }
 
         do {
-            squadProfile = try await service.fetchSquadProfile(squadID: conversation.id)
+            squadProfile = try await service.fetchSquadProfile(squadID: platformSquadID)
         } catch {
-            // Keep chat settings usable even when profile fetch fails.
+            // Keep detail page usable even when profile fetch fails.
         }
     }
 
@@ -236,9 +373,24 @@ struct ChatSettingsSheet: View {
         defer { isMuting = false }
         do {
             try await service.setConversationMuted(conversationID: conversation.id, muted: muted)
+            chatStore.updateConversationMuteState(conversationID: conversation.id, muted: muted)
         } catch {
             notificationsMuted = oldValue
             errorMessage = error.userFacingMessage ?? L("更新免打扰失败", "Failed to update mute status")
+        }
+    }
+
+    @MainActor
+    private func updatePinnedStatus(_ pinned: Bool, rollbackTo oldValue: Bool) async {
+        do {
+            try await chatStore.setConversationPinned(
+                conversationID: conversation.id,
+                pinned: pinned,
+                using: service
+            )
+        } catch {
+            topPinned = oldValue
+            errorMessage = error.userFacingMessage ?? L("更新置顶状态失败", "Failed to update pin status")
         }
     }
 
@@ -263,7 +415,7 @@ struct ChatSettingsSheet: View {
         defer { isLeaving = false }
 
         do {
-            try await service.leaveSquad(squadID: conversation.id)
+            try await service.leaveSquad(squadID: platformSquadID)
             chatStore.removeConversation(conversationID: conversation.id)
             dismiss()
             onLeaveConversation?()
@@ -286,7 +438,7 @@ struct ChatSettingsSheet: View {
         defer { isDisbanding = false }
 
         do {
-            try await service.disbandSquad(squadID: conversation.id)
+            try await service.disbandSquad(squadID: platformSquadID)
             chatStore.removeConversation(conversationID: conversation.id)
             dismiss()
             onLeaveConversation?()
@@ -300,5 +452,148 @@ struct ChatSettingsSheet: View {
         return normalized.contains("leader cannot leave squad")
             || normalized.contains("transfer ownership")
             || message.contains("队长")
+    }
+}
+
+private struct GroupMembersPreviewView: View {
+    let profile: SquadProfile
+
+    private var previewMembers: [SquadMemberProfile] {
+        Array(profile.members.prefix(8))
+    }
+
+    private var gridColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(minimum: 48, maximum: 72), spacing: 12), count: 5)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(L("群成员（\(profile.memberCount)）", "Members (\(profile.memberCount))"))
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                HStack(spacing: 4) {
+                    Text(L("全部", "All"))
+                        .font(.footnote)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                }
+                .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 10) {
+                ForEach(previewMembers) { member in
+                    memberPreviewCell(member)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func memberPreviewCell(_ member: SquadMemberProfile) -> some View {
+        VStack(spacing: 6) {
+            memberAvatar(member, size: 40)
+            Text(member.shownName)
+                .font(.caption2)
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func memberAvatar(_ member: SquadMemberProfile, size: CGFloat) -> some View {
+        if let resolved = AppConfig.resolvedURLString(member.avatarURL),
+           (resolved.hasPrefix("http://") || resolved.hasPrefix("https://")) {
+            ImageLoaderView(urlString: resolved)
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+        } else {
+            Image(
+                AppConfig.resolvedUserAvatarAssetName(
+                    userID: member.id,
+                    username: member.username,
+                    avatarURL: member.avatarURL
+                )
+            )
+            .resizable()
+            .scaledToFill()
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+        }
+    }
+}
+
+private struct GroupMemberListView: View {
+    @Environment(\.appPush) private var appPush
+
+    let profile: SquadProfile
+
+    private var leaders: [SquadMemberProfile] {
+        profile.members.filter { $0.role == "leader" }
+    }
+
+    private var admins: [SquadMemberProfile] {
+        profile.members.filter { $0.role == "admin" }
+            .sorted { $0.shownName.localizedCaseInsensitiveCompare($1.shownName) == .orderedAscending }
+    }
+
+    private var members: [SquadMemberProfile] {
+        profile.members.filter { $0.role != "leader" && $0.role != "admin" }
+            .sorted { $0.shownName.localizedCaseInsensitiveCompare($1.shownName) == .orderedAscending }
+    }
+
+    var body: some View {
+        List {
+            memberSection(title: L("群主", "Owner"), data: leaders)
+            memberSection(title: L("管理员", "Admins"), data: admins)
+            memberSection(title: L("成员", "Members"), data: members)
+        }
+        .listStyle(.insetGrouped)
+        .raverSystemNavigation(title: L("群成员", "Group Members"))
+    }
+
+    @ViewBuilder
+    private func memberSection(title: String, data: [SquadMemberProfile]) -> some View {
+        if !data.isEmpty {
+            Section(title) {
+                ForEach(data) { member in
+                    Button {
+                        appPush(.userProfile(userID: member.id))
+                    } label: {
+                        HStack(spacing: 10) {
+                            memberAvatar(member, size: 34)
+                            Text(member.shownName)
+                                .foregroundStyle(Color.primary)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func memberAvatar(_ member: SquadMemberProfile, size: CGFloat) -> some View {
+        if let resolved = AppConfig.resolvedURLString(member.avatarURL),
+           (resolved.hasPrefix("http://") || resolved.hasPrefix("https://")) {
+            ImageLoaderView(urlString: resolved)
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+        } else {
+            Image(
+                AppConfig.resolvedUserAvatarAssetName(
+                    userID: member.id,
+                    username: member.username,
+                    avatarURL: member.avatarURL
+                )
+            )
+            .resizable()
+            .scaledToFill()
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+        }
     }
 }

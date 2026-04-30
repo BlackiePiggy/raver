@@ -1,0 +1,310 @@
+[
+  {
+    "platformUserID": "57a7a381-2b5e-4886-ab30-2e1ca5961c5f",
+    "username": "testuser",
+    "displayName": "大大",
+    "tencentIMUserID": "tu_V6ejgSteSIarMC4cpZYcXw",
+    "active": true
+  },
+  {
+    "platformUserID": "d3ff9c78-f9ff-445b-8df9-2ad0039dcd7b",
+    "username": "leshanlijiayu",
+    "displayName": "王教瘦",
+    "tencentIMUserID": "tu_0_-cePn_RFuN-SrQA53New",
+    "active": true
+  },
+  {
+    "platformUserID": "1f4cafda-6d46-4dcf-8e98-7d4892d09425",
+    "username": "uploadtester",
+    "displayName": "RaverHub Official",
+    "tencentIMUserID": "tu_H0yv2m1GTc-OmH1IktCUJQ",
+    "active": true
+  },
+  {
+    "platformUserID": "6bfc3214-0709-4cba-b77e-1f21781bee33",
+    "username": "blackie",
+    "displayName": "小黑",
+    "tencentIMUserID": "tu_a_wyFAcJTLq3fh8heBvuMw",
+    "active": true
+  },
+  {
+    "platformUserID": "a33be950-b802-4df5-9a36-358b9f2b0522",
+    "username": "midnight_dancer_066",
+    "displayName": "小妍",
+    "tencentIMUserID": "tu_ozvpULgCTfWaNjWLnysFIg",
+    "active": true
+  },
+  {
+    "platformUserID": "9e549a45-fe98-4614-8a29-be0d668f0872",
+    "username": "strobe_floor_779",
+    "displayName": "小泽",
+    "tencentIMUserID": "tu_nlSaRf6YRhSKKb4NZo8Icg",
+    "active": true
+  },
+  {
+    "platformUserID": "91402b9a-7f51-4be5-a874-1354dc93a15e",
+    "username": "ios_dm_a",
+    "displayName": "苏苏",
+    "tencentIMUserID": "tu_kUArmn9RS-WodBNU3JOhXg",
+    "active": true
+  },
+  {
+    "platformUserID": "c77c1b51-c401-44c5-a923-a1e168f2191b",
+    "username": "ios_dm_b",
+    "displayName": "王桑",
+    "tencentIMUserID": "tu_x3wbUcQBRMWpI6HhaPIZGw",
+    "active": true
+  },
+  {
+    "platformUserID": "30acef14-61a6-4e5e-8087-64ff089fb9b8",
+    "username": "next_a",
+    "displayName": "小布",
+    "tencentIMUserID": "tu_MKzvFGGmTl6Ah2T_CJ-5uA",
+    "active": true
+  },
+  {
+    "platformUserID": "3784870a-7d33-4fec-a57c-698f9505a78f",
+    "username": "next_b",
+    "displayName": "卡卡",
+    "tencentIMUserID": "tu_N4SHCn0zT-ylfGmPlQWnjw",
+    "active": true
+  },
+  {
+    "platformUserID": "3c3d38f1-63bc-442f-82e8-e5ef143def8d",
+    "username": "profile_a",
+    "displayName": "腻腻子",
+    "tencentIMUserID": "tu_PD048WO8RC-C6OXvFD3vjQ",
+    "active": true
+  },
+  {
+    "platformUserID": "0fcba61a-6bf3-4010-8e33-981ed7a2b0e0",
+    "username": "profile_b",
+    "displayName": "Allen",
+    "tencentIMUserID": "tu_D8umGmvzQBCOM5ge16Kw4A",
+    "active": true
+  },
+  {
+    "platformUserID": "6a367a3c-9c5e-437a-b5fd-5cdca84d8a35",
+    "username": "squad_a",
+    "displayName": "小小",
+    "tencentIMUserID": "tu_ajZ6PJxeQ3q1_VzcqE2KNQ",
+    "active": true
+  },
+  {
+    "platformUserID": "84c6bd4b-de06-4ae6-84ca-f71ad163e909",
+    "username": "squad_b",
+    "displayName": "中中",
+    "tencentIMUserID": "tu_hMa9S94GSuaEyvca0WPpCQ",
+    "active": true
+  },
+  {
+    "platformUserID": "e9bfb9c2-479b-4cd3-b4b4-a4dd0c81e070",
+    "username": "shanghai_walker_743",
+    "displayName": "酸巨人",
+    "tencentIMUserID": "tu_6b-5wkebTNO0tKTdDIHgcA",
+    "active": true
+  },
+  {
+    "platformUserID": "d42c121b-1253-4b92-a88c-efccd08922c4",
+    "username": "groove_echo_912",
+    "displayName": "蓝天",
+    "tencentIMUserID": "tu_1CwSGxJTS5KojO_M0IkixA",
+    "active": true
+  },
+  {
+    "platformUserID": "322a63f9-85ba-43df-8594-552ad532968c",
+    "username": "tmp_u_5579",
+    "displayName": "曼曼",
+    "tencentIMUserID": "tu_Mipj-YW6Q9-FlFUq1TKWjA",
+    "active": true
+  },
+  {
+    "platformUserID": "c224e90c-0c2e-4e67-bcb8-cb788b27fc3d",
+    "username": "platform_admin",
+    "displayName": "管理员帐号",
+    "tencentIMUserID": "tu_wiTpDAwuTme8uMt4iyf8PQ",
+    "active": true
+  },
+  {
+    "platformUserID": "6280da49-8b97-473e-aaa4-56c575e09594",
+    "username": "h3y2",
+    "displayName": "H3y2",
+    "tencentIMUserID": "tu_YoDaSYuXRz6qpFbFdeCVlA",
+    "active": true
+  },
+  {
+    "platformUserID": "fd31dd55-f1ad-4247-a746-7aaddcdec0bb",
+    "username": "bff_u_05186459",
+    "displayName": "bff_u_05186459",
+    "tencentIMUserID": "tu__THdVfGtQkenRnqt3N7Auw",
+    "active": true
+  },
+  {
+    "platformUserID": "6e157a80-4095-4ea7-be28-eea075e194e9",
+    "username": "bff_p_05197827",
+    "displayName": "bff_p_05197827_v2",
+    "tencentIMUserID": "tu_bhV6gECVTqe-KO6gdeGU6Q",
+    "active": true
+  },
+  {
+    "platformUserID": "57d7fac4-f980-4957-bafc-9de4811a1e07",
+    "username": "pviewa_232947765",
+    "displayName": "pviewa_232947765",
+    "tencentIMUserID": "tu_V9f6xPmASVe6_J3kgRoeBw",
+    "active": true
+  },
+  {
+    "platformUserID": "04fb4f40-c5d5-4c4b-9578-f119ed1440ba",
+    "username": "pviewb_233089988",
+    "displayName": "pviewb_233089988",
+    "tencentIMUserID": "tu_BPtPQMXVTEuVePEZ7RRAug",
+    "active": true
+  },
+  {
+    "platformUserID": "d19643e0-044b-4b8a-854d-7778d5a920df",
+    "username": "postp_5249146",
+    "displayName": "postp_5249146",
+    "tencentIMUserID": "tu_0ZZD4ARLS4qFTXd41akg3w",
+    "active": true
+  },
+  {
+    "platformUserID": "d4d2cded-48aa-4cfb-a690-b0c719658948",
+    "username": "report_u_06405467",
+    "displayName": "report_u_06405467",
+    "tencentIMUserID": "tu_1NLN7UiqTPumkLDHGWWJSA",
+    "active": true
+  },
+  {
+    "platformUserID": "19e72996-dac0-469c-b0bc-83260ffcdb1a",
+    "username": "admrep_06739091488",
+    "displayName": "admrep_06739091488",
+    "tencentIMUserID": "tu_GecpltrARpywvIMmD_zbGg",
+    "active": true
+  },
+  {
+    "platformUserID": "04631f61-0c73-4117-856e-6d46c7988c0e",
+    "username": "admuser_067392267",
+    "displayName": "admuser_067392267",
+    "tencentIMUserID": "tu_BGMfYQxzQReFbm1Gx5iMDg",
+    "active": true
+  },
+  {
+    "platformUserID": "dbdce219-6127-4a6a-9401-787c0e51ee81",
+    "username": "auditrep_07010379619",
+    "displayName": "auditrep_07010379619",
+    "tencentIMUserID": "tu_29ziGWEnSmqUAXh8DlHugQ",
+    "active": true
+  },
+  {
+    "platformUserID": "c8707e5a-3429-4503-bc1c-3b24cb094b80",
+    "username": "auditadm_07010518212",
+    "displayName": "auditadm_07010518212",
+    "tencentIMUserID": "tu_yHB-WjQpRQO8HDskywlLgA",
+    "active": true
+  },
+  {
+    "platformUserID": "6ab3c372-3ebd-4469-8ac5-c530e550f59e",
+    "username": "authsmoke_1776764027",
+    "displayName": "authsmoke_1776764027",
+    "tencentIMUserID": "tu_arPDcj69RGmKxcUw5VD1ng",
+    "active": true
+  },
+  {
+    "platformUserID": "29ec6347-43ca-4fe1-93a6-038c2bae81da",
+    "username": "ttlcheck_1776764103",
+    "displayName": "ttlcheck_1776764103",
+    "tencentIMUserID": "tu_KexjR0PKT-GTpgOMK66B2g",
+    "active": true
+  },
+  {
+    "platformUserID": "2bf47aaf-f849-4ec2-80ed-41f1c6599427",
+    "username": "ratelimit_1776764297",
+    "displayName": "ratelimit_1776764297",
+    "tencentIMUserID": "tu_K_R6r_hJTsKA7UHxxlmUJw",
+    "active": true
+  },
+  {
+    "platformUserID": "998151b6-04ca-4de2-9874-8a11ff3581b1",
+    "username": "authreg_1776764317",
+    "displayName": "authreg_1776764317",
+    "tencentIMUserID": "tu_mYFRtgTKTeKYdIoR_zWBsQ",
+    "active": true
+  },
+  {
+    "platformUserID": "c662a0dc-682e-473c-8d98-d7334efefa09",
+    "username": "regrate_1776764392",
+    "displayName": "regrate_1776764392",
+    "tencentIMUserID": "tu_xmKg3GguRzyNmNczTv76CQ",
+    "active": true
+  },
+  {
+    "platformUserID": "f04a79b4-c67b-45fa-84da-a25ab8bb937c",
+    "username": "auth_smoke_1776781784222_2713",
+    "displayName": "auth_smoke_1776781784222_2713",
+    "tencentIMUserID": "tu_8Ep5tMZ7RfqE2qJauLuTfA",
+    "active": true
+  },
+  {
+    "platformUserID": "75e697ef-7cc0-4834-b3ba-8406ab5aa938",
+    "username": "auth_smoke_1776781815341_5499",
+    "displayName": "auth_smoke_1776781815341_5499",
+    "tencentIMUserID": "tu_deaX73zASDSzuoQGq1qpOA",
+    "active": true
+  },
+  {
+    "platformUserID": "659bf2c0-737b-4983-9bca-010e13e02ad4",
+    "username": "auth_smoke_1776781890188_6316",
+    "displayName": "auth_smoke_1776781890188_6316",
+    "tencentIMUserID": "tu_ZZvywHN7SYObygEOE-Aq1A",
+    "active": true
+  },
+  {
+    "platformUserID": "10306f5c-7e25-492e-ae2c-c1044f67991e",
+    "username": "auth_smoke_1776783604363_4153",
+    "displayName": "auth_smoke_1776783604363_4153",
+    "tencentIMUserID": "tu_EDBvXH4lSS6uLMEET2eZHg",
+    "active": true
+  },
+  {
+    "platformUserID": "efd6ada0-b0ce-4219-8578-cd2506f7c281",
+    "username": "auth_smoke_1776784838387_6661",
+    "displayName": "auth_smoke_1776784838387_6661",
+    "tencentIMUserID": "tu_79atoLDOQhmFeM0lBvfCgQ",
+    "active": true
+  },
+  {
+    "platformUserID": "196fb287-9d15-402d-a890-2f3ea31a3aef",
+    "username": "auth_it_1776789020727_9432",
+    "displayName": "auth_it_1776789020727_9432",
+    "tencentIMUserID": "tu_GW-yh50VQC2okC8-oxo67w",
+    "active": true
+  },
+  {
+    "platformUserID": "a66d4898-92ef-41b6-a17e-340b69605454",
+    "username": "auth_it_rl_1776789020921_2362",
+    "displayName": "auth_it_rl_1776789020921_2362",
+    "tencentIMUserID": "tu_pm1ImJLvQbahfjQLaWBUVA",
+    "active": true
+  },
+  {
+    "platformUserID": "9b84a3f7-064c-45f0-bae7-868c47ddd77e",
+    "username": "auth_it_rr_1776789021551_5619",
+    "displayName": "auth_it_rr_1776789021551_5619",
+    "tencentIMUserID": "tu_m4Sj9wZMRfC654aMR93Xfg",
+    "active": true
+  },
+  {
+    "platformUserID": "bc037f8a-cf07-4fdf-930b-de5ac27f835d",
+    "username": "phone_021627_2962",
+    "displayName": "Raver 021627",
+    "tencentIMUserID": "tu_vAN_is8HT9-TC95awn-DXQ",
+    "active": true
+  },
+  {
+    "platformUserID": "3421a805-d50d-4607-9c54-4318a6fa0973",
+    "username": "phase0_admin",
+    "displayName": "Phase0 Admin",
+    "tencentIMUserID": "tu_NCGoBdUNRgecVEMYpvoJcw",
+    "active": true
+  }
+]

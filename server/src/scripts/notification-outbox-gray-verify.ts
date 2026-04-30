@@ -20,7 +20,7 @@ type PublishResultTarget = {
 };
 
 type PublishResultChannel = {
-  channel: 'in_app' | 'apns' | 'openim' | string;
+  channel: 'in_app' | 'apns' | string;
   success: boolean;
   detail?: string;
   targetResults?: PublishResultTarget[];
@@ -35,7 +35,7 @@ type DeliveryItem = {
   id: string;
   eventId: string;
   userId: string;
-  channel: 'in_app' | 'apns' | 'openim' | string;
+  channel: 'in_app' | 'apns' | string;
   status: 'queued' | 'sent' | 'failed' | string;
   error: string | null;
   attempts: number;
@@ -75,7 +75,7 @@ type VerifyConfig = {
   username: string;
   password: string;
   targetUserId?: string;
-  channels: Array<'in_app' | 'apns' | 'openim'>;
+  channels: Array<'in_app' | 'apns'>;
   rounds: number;
   timeoutMs: number;
   pollIntervalMs: number;
@@ -116,11 +116,11 @@ const buildConfig = (): VerifyConfig => {
   const password = process.env.NOTIFICATION_GRAY_ADMIN_PASSWORD || '123456';
   const targetUserId = process.env.NOTIFICATION_GRAY_TARGET_USER_ID?.trim() || undefined;
 
-  const channelsRaw: Array<'in_app' | 'apns' | 'openim'> = (process.env.NOTIFICATION_GRAY_CHANNELS || 'in_app,apns')
+  const channelsRaw: Array<'in_app' | 'apns'> = (process.env.NOTIFICATION_GRAY_CHANNELS || 'in_app,apns')
     .split(',')
     .map((item) => item.trim().toLowerCase())
-    .filter((item): item is 'in_app' | 'apns' | 'openim' => item === 'in_app' || item === 'apns' || item === 'openim');
-  const channels: Array<'in_app' | 'apns' | 'openim'> = channelsRaw.length > 0 ? channelsRaw : ['in_app', 'apns'];
+    .filter((item): item is 'in_app' | 'apns' => item === 'in_app' || item === 'apns');
+  const channels: Array<'in_app' | 'apns'> = channelsRaw.length > 0 ? channelsRaw : ['in_app', 'apns'];
 
   return {
     baseUrl,
@@ -253,7 +253,7 @@ const checkQueuedDetail = (publish: PublishTestResponse, config: VerifyConfig): 
 
 const evaluateRoundDeliveries = (input: {
   deliveries: DeliveryItem[];
-  channels: Array<'in_app' | 'apns' | 'openim'>;
+  channels: Array<'in_app' | 'apns'>;
   roundStartMs: number;
 }): {
   done: boolean;
@@ -261,7 +261,7 @@ const evaluateRoundDeliveries = (input: {
   byChannel: Record<string, { total: number; queued: number; sent: number; failed: number; failedWithoutError: number }>;
 } => {
   const relevant = input.deliveries.filter((item) => {
-    if (!input.channels.includes(item.channel as 'in_app' | 'apns' | 'openim')) return false;
+    if (!input.channels.includes(item.channel as 'in_app' | 'apns')) return false;
     return toMs(item.createdAt) >= input.roundStartMs - 2000;
   });
 

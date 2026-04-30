@@ -11,6 +11,7 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
     private let senderAvatarView = UIImageView()
     private let senderNameLabel = UILabel()
     private let messageLabel = UILabel()
+    private let replyPreviewLabel = UILabel()
     private let timeLabel = UILabel()
     private let statusRow = UIStackView()
     private let statusPillView = UIView()
@@ -18,6 +19,11 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
     private let statusPillIconView = UIImageView()
     private let statusPillLabel = UILabel()
     private let contentStack = UIStackView()
+    private var onReplyPreviewTapped: (() -> Void)?
+    private var senderMetaLeadingConstraint: NSLayoutConstraint!
+    private var senderMetaTrailingConstraint: NSLayoutConstraint!
+    private var senderMetaLeadingLimitConstraint: NSLayoutConstraint!
+    private var senderMetaTrailingLimitConstraint: NSLayoutConstraint!
     private var bubbleMaxWidthConstraint: NSLayoutConstraint!
     private var bubbleTopToContentConstraint: NSLayoutConstraint!
     private var bubbleTopToSenderConstraint: NSLayoutConstraint!
@@ -46,30 +52,35 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
         stopSendingIconAnimation()
         statusPillIconView.image = nil
         statusPillIconView.isHidden = true
+        replyPreviewLabel.isHidden = true
+        replyPreviewLabel.text = nil
+        replyPreviewLabel.attributedText = nil
+        replyPreviewLabel.backgroundColor = .clear
+        onReplyPreviewTapped = nil
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        bubbleMaxWidthConstraint?.constant = bounds.width * 0.72
+        bubbleMaxWidthConstraint?.constant = bounds.width * 0.64
     }
 
     private func configureUI() {
-        contentView.layoutMargins = UIEdgeInsets(top: 2, left: 8, bottom: 2, right: 8)
+        contentView.layoutMargins = UIEdgeInsets(top: 2, left: 12, bottom: 2, right: 12)
 
         senderMetaRow.translatesAutoresizingMaskIntoConstraints = false
         senderMetaRow.axis = .horizontal
         senderMetaRow.alignment = .center
-        senderMetaRow.spacing = 6
+        senderMetaRow.spacing = 8
         contentView.addSubview(senderMetaRow)
 
         senderAvatarView.translatesAutoresizingMaskIntoConstraints = false
         senderAvatarView.contentMode = .scaleAspectFill
         senderAvatarView.clipsToBounds = true
-        senderAvatarView.layer.cornerRadius = 10
+        senderAvatarView.layer.cornerRadius = 14
         senderAvatarView.tintColor = UIColor(RaverTheme.secondaryText)
         senderAvatarView.image = UIImage(systemName: "person.crop.circle.fill")
-        senderAvatarView.widthAnchor.constraint(equalToConstant: 20).isActive = true
-        senderAvatarView.heightAnchor.constraint(equalToConstant: 20).isActive = true
+        senderAvatarView.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        senderAvatarView.heightAnchor.constraint(equalToConstant: 28).isActive = true
         senderMetaRow.addArrangedSubview(senderAvatarView)
 
         senderNameLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -78,18 +89,29 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
         senderMetaRow.addArrangedSubview(senderNameLabel)
 
         bubbleView.translatesAutoresizingMaskIntoConstraints = false
-        bubbleView.layer.cornerRadius = 14
+        bubbleView.layer.cornerRadius = 16
         bubbleView.layer.masksToBounds = true
         contentView.addSubview(bubbleView)
 
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         contentStack.axis = .vertical
-        contentStack.spacing = 4
+        contentStack.spacing = 5
         bubbleView.addSubview(contentStack)
 
         messageLabel.translatesAutoresizingMaskIntoConstraints = false
         messageLabel.numberOfLines = 0
         messageLabel.font = .systemFont(ofSize: 16)
+
+        replyPreviewLabel.translatesAutoresizingMaskIntoConstraints = false
+        replyPreviewLabel.numberOfLines = 2
+        replyPreviewLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        replyPreviewLabel.layer.cornerRadius = 6
+        replyPreviewLabel.layer.masksToBounds = true
+        replyPreviewLabel.isHidden = true
+        replyPreviewLabel.isUserInteractionEnabled = true
+        replyPreviewLabel.addGestureRecognizer(
+            UITapGestureRecognizer(target: self, action: #selector(handleReplyPreviewTapped))
+        )
 
         timeLabel.translatesAutoresizingMaskIntoConstraints = false
         timeLabel.font = .systemFont(ofSize: 11)
@@ -134,6 +156,7 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
             statusPillStack.bottomAnchor.constraint(equalTo: statusPillView.bottomAnchor, constant: -2)
         ])
 
+        contentStack.addArrangedSubview(replyPreviewLabel)
         contentStack.addArrangedSubview(messageLabel)
         statusRow.addArrangedSubview(timeLabel)
         statusRow.addArrangedSubview(statusPillView)
@@ -146,10 +169,12 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
         mineLeadingConstraint = bubbleView.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.layoutMarginsGuide.leadingAnchor)
         otherLeadingConstraint = bubbleView.leadingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.leadingAnchor)
         otherTrailingConstraint = bubbleView.trailingAnchor.constraint(lessThanOrEqualTo: contentView.layoutMarginsGuide.trailingAnchor)
+        senderMetaLeadingConstraint = senderMetaRow.leadingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.leadingAnchor)
+        senderMetaTrailingConstraint = senderMetaRow.trailingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.trailingAnchor)
+        senderMetaLeadingLimitConstraint = senderMetaRow.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.layoutMarginsGuide.leadingAnchor)
+        senderMetaTrailingLimitConstraint = senderMetaRow.trailingAnchor.constraint(lessThanOrEqualTo: contentView.layoutMarginsGuide.trailingAnchor)
 
         NSLayoutConstraint.activate([
-            senderMetaRow.leadingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.leadingAnchor),
-            senderMetaRow.trailingAnchor.constraint(lessThanOrEqualTo: contentView.layoutMarginsGuide.trailingAnchor),
             senderMetaRow.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 2),
 
             bubbleMaxWidthConstraint,
@@ -163,6 +188,8 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
         ])
 
         senderMetaRow.isHidden = true
+        senderMetaLeadingConstraint.isActive = true
+        senderMetaTrailingLimitConstraint.isActive = true
         otherLeadingConstraint.isActive = true
         otherTrailingConstraint.isActive = true
     }
@@ -172,11 +199,26 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
         maxBubbleWidthRatio: CGFloat,
         showSenderMeta: Bool,
         isClusterStart: Bool,
-        isClusterEnd: Bool
+        isClusterEnd: Bool,
+        onReplyPreviewTapped: ((ChatMessage) -> Void)?
     ) {
         guard bubbleMaxWidthConstraint != nil else { return }
+        self.onReplyPreviewTapped = { onReplyPreviewTapped?(message) }
         bubbleMaxWidthConstraint.constant = max(180, bounds.width * maxBubbleWidthRatio)
-        messageLabel.text = message.content
+        applyMessageTextStyle(message)
+        if let replyPreview = message.replyPreview?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !replyPreview.isEmpty {
+            replyPreviewLabel.isHidden = false
+            replyPreviewLabel.attributedText = styledReplyPreview("↪︎ \(replyPreview)", isMine: message.isMine)
+            replyPreviewLabel.backgroundColor = message.isMine
+                ? UIColor.white.withAlphaComponent(0.18)
+                : UIColor(RaverTheme.background)
+        } else {
+            replyPreviewLabel.isHidden = true
+            replyPreviewLabel.text = nil
+            replyPreviewLabel.attributedText = nil
+            replyPreviewLabel.backgroundColor = .clear
+        }
         timeLabel.text = message.createdAt.chatTimeText
         applyClusterLayout(
             isMine: message.isMine,
@@ -184,12 +226,12 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
             isClusterEnd: isClusterEnd
         )
 
-        let shouldShowSenderMeta = showSenderMeta && !message.isMine
+        let shouldShowSenderMeta = showSenderMeta
         senderMetaRow.isHidden = !shouldShowSenderMeta
         bubbleTopToContentConstraint.isActive = !shouldShowSenderMeta
         bubbleTopToSenderConstraint.isActive = shouldShowSenderMeta
         if shouldShowSenderMeta {
-            configureSenderMeta(for: message.sender)
+            configureSenderMeta(for: message.sender, isMine: message.isMine)
         }
 
         setBubbleAlignment(isMine: message.isMine)
@@ -197,17 +239,84 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
             bubbleView.backgroundColor = UIColor(RaverTheme.accent)
             messageLabel.textColor = .white
             timeLabel.textColor = UIColor.white.withAlphaComponent(0.85)
-            configureDeliveryStatus(message.deliveryStatus, isMine: true)
+            configureDeliveryStatus(message.deliveryStatus, isMine: true, message: message)
         } else {
             bubbleView.backgroundColor = UIColor(RaverTheme.card)
             messageLabel.textColor = UIColor(RaverTheme.primaryText)
             timeLabel.textColor = UIColor(RaverTheme.secondaryText)
-            configureDeliveryStatus(message.deliveryStatus, isMine: false)
+            configureDeliveryStatus(message.deliveryStatus, isMine: false, message: message)
         }
     }
 
-    private func configureSenderMeta(for sender: UserSummary) {
-        senderNameLabel.text = sender.displayName.isEmpty ? sender.username : sender.displayName
+    @objc
+    private func handleReplyPreviewTapped() {
+        guard !replyPreviewLabel.isHidden else { return }
+        onReplyPreviewTapped?()
+    }
+
+    private func applyMessageTextStyle(_ message: ChatMessage) {
+        let baseColor = message.isMine ? UIColor.white : UIColor(RaverTheme.primaryText)
+        let attributed = NSMutableAttributedString(
+            string: message.content,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 16),
+                .foregroundColor: baseColor
+            ]
+        )
+
+        for mention in message.mentionedUserIDs where !mention.isEmpty {
+            let marker = "@\(mention)"
+            let escaped = NSRegularExpression.escapedPattern(for: marker)
+            guard let regex = try? NSRegularExpression(pattern: "(^|\\s)(\(escaped))") else {
+                continue
+            }
+            let fullRange = NSRange(message.content.startIndex..<message.content.endIndex, in: message.content)
+            for match in regex.matches(in: message.content, options: [], range: fullRange) {
+                guard match.numberOfRanges > 2 else { continue }
+                let mentionRange = match.range(at: 2)
+                attributed.addAttributes([
+                    .font: UIFont.systemFont(ofSize: 16, weight: .semibold),
+                    .foregroundColor: message.isMine
+                        ? UIColor.white
+                        : UIColor(RaverTheme.accent)
+                ], range: mentionRange)
+            }
+        }
+
+        messageLabel.attributedText = attributed
+    }
+
+    private func styledReplyPreview(_ text: String, isMine: Bool) -> NSAttributedString {
+        let baseColor = isMine ? UIColor.white.withAlphaComponent(0.88) : UIColor(RaverTheme.secondaryText)
+        let senderColor = isMine ? UIColor.white : UIColor(RaverTheme.accent)
+        let attributed = NSMutableAttributedString(
+            string: text,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 12, weight: .medium),
+                .foregroundColor: baseColor
+            ]
+        )
+
+        guard let colonIndex = text.firstIndex(of: ":") else {
+            return attributed
+        }
+        let nameStart = text.index(text.startIndex, offsetBy: min(2, text.count))
+        if nameStart < colonIndex,
+           let range = NSRange(nameStart..<colonIndex, in: text) as NSRange? {
+            attributed.addAttributes([
+                .font: UIFont.systemFont(ofSize: 12, weight: .semibold),
+                .foregroundColor: senderColor
+            ], range: range)
+        }
+        return attributed
+    }
+
+    private func configureSenderMeta(for sender: UserSummary, isMine: Bool) {
+        if isMine {
+            senderNameLabel.text = L("我", "Me")
+        } else {
+            senderNameLabel.text = sender.displayName.isEmpty ? sender.username : sender.displayName
+        }
 
         let fallback = UIImage(systemName: "person.crop.circle.fill")
         senderAvatarView.image = fallback
@@ -219,7 +328,7 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
         senderAvatarView.sd_setImage(with: url, placeholderImage: fallback)
     }
 
-    private func configureDeliveryStatus(_ status: ChatMessageDeliveryStatus, isMine: Bool) {
+    private func configureDeliveryStatus(_ status: ChatMessageDeliveryStatus, isMine: Bool, message: ChatMessage) {
         guard isMine else {
             stopSendingIconAnimation()
             statusPillView.isHidden = true
@@ -228,9 +337,25 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
         switch status {
         case .sent:
             stopSendingIconAnimation()
-            statusPillView.isHidden = true
-            statusPillIconView.image = nil
-            statusPillIconView.isHidden = true
+            if let readCount = message.readReceiptReadCount, readCount > 0 {
+                if let unreadCount = message.readReceiptUnreadCount {
+                    statusPillLabel.text = "\(L("已读", "Read")) \(readCount)\(L("人", "")) · \(L("未读", "Unread")) \(max(unreadCount, 0))"
+                } else {
+                    statusPillLabel.text = "\(L("已读", "Read")) \(readCount)\(L("人", ""))"
+                }
+            } else if let peerRead = message.peerRead {
+                statusPillLabel.text = peerRead ? L("已读", "Read") : L("未读", "Unread")
+            } else {
+                statusPillLabel.text = L("已发送", "Sent")
+            }
+            statusPillView.backgroundColor = isMine
+                ? UIColor.white.withAlphaComponent(0.2)
+                : UIColor(RaverTheme.cardBorder).withAlphaComponent(0.6)
+            statusPillLabel.textColor = isMine ? .white : UIColor(RaverTheme.secondaryText)
+            statusPillIconView.image = UIImage(systemName: "checkmark")
+            statusPillIconView.tintColor = statusPillLabel.textColor
+            statusPillIconView.isHidden = false
+            statusPillView.isHidden = false
         case .sending:
             statusPillLabel.text = L("发送中", "Sending")
             statusPillView.backgroundColor = isMine
@@ -278,19 +403,29 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
             mineTrailingConstraint,
             mineLeadingConstraint,
             otherLeadingConstraint,
-            otherTrailingConstraint
+            otherTrailingConstraint,
+            senderMetaLeadingConstraint,
+            senderMetaTrailingConstraint,
+            senderMetaLeadingLimitConstraint,
+            senderMetaTrailingLimitConstraint
         ])
 
         if isMine {
             NSLayoutConstraint.activate([
                 mineTrailingConstraint,
-                mineLeadingConstraint
+                mineLeadingConstraint,
+                senderMetaTrailingConstraint,
+                senderMetaLeadingLimitConstraint
             ])
+            senderMetaRow.alignment = .trailing
         } else {
             NSLayoutConstraint.activate([
                 otherLeadingConstraint,
-                otherTrailingConstraint
+                otherTrailingConstraint,
+                senderMetaLeadingConstraint,
+                senderMetaTrailingLimitConstraint
             ])
+            senderMetaRow.alignment = .leading
         }
     }
 
@@ -301,7 +436,7 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
     ) {
         let topInset: CGFloat = isClusterStart ? 4 : 1
         let bottomInset: CGFloat = isClusterEnd ? 4 : 1
-        contentView.layoutMargins = UIEdgeInsets(top: topInset, left: 8, bottom: bottomInset, right: 8)
+        contentView.layoutMargins = UIEdgeInsets(top: topInset, left: 12, bottom: bottomInset, right: 12)
 
         var corners: CACornerMask
         if isMine {
@@ -313,7 +448,7 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
             if isClusterStart { corners.insert(.layerMinXMinYCorner) }
             if isClusterEnd { corners.insert(.layerMinXMaxYCorner) }
         }
-        bubbleView.layer.cornerRadius = 14
+        bubbleView.layer.cornerRadius = 16
         bubbleView.layer.maskedCorners = corners
     }
 }

@@ -30,6 +30,7 @@ final class DemoAlignedMessageApplyCoordinator {
     func apply(
         currentMessages: [ChatMessage],
         nextMessages: [ChatMessage],
+        playingVoiceMessageID: String?,
         forceScrollToBottom: Bool,
         isLoadingOlder: Bool,
         hasCompletedInitialLoad: Bool
@@ -49,9 +50,16 @@ final class DemoAlignedMessageApplyCoordinator {
             threshold: nearBottomThreshold
         )
 
-        collectionDataSource.updateMessages(nextMessages)
+        collectionDataSource.updateMessages(nextMessages, playingVoiceMessageID: playingVoiceMessageID)
+        let hasIncomingTailMessage = previousLastID != nextMessages.last?.id && !(nextMessages.last?.isMine ?? false)
         collectionView.reloadData()
         collectionView.layoutIfNeeded()
+        if hasIncomingTailMessage {
+            collectionView.alpha = 0.985
+            UIView.animate(withDuration: 0.16, delay: 0, options: [.curveEaseOut]) {
+                collectionView.alpha = 1
+            }
+        }
 
         let lastIDChanged = previousLastID != nextMessages.last?.id
         let shouldAutoScroll = viewportScrollCoordinator.shouldAutoScroll(

@@ -1,0 +1,6 @@
+framework module TUIChat {
+  umbrella header "TUIChat_Swift-umbrella.h"
+
+  export *
+  module * { export * }
+}

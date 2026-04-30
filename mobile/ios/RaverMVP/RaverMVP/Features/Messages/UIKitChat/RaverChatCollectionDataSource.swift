@@ -6,6 +6,7 @@ struct RaverChatMessagePresentation {
     let showSenderMeta: Bool
     let isClusterStart: Bool
     let isClusterEnd: Bool
+    let isVoicePlaying: Bool
 }
 
 enum RaverChatListItem {
@@ -17,10 +18,12 @@ final class RaverChatCollectionDataSource: NSObject, UICollectionViewDataSource 
     private var conversationType: ConversationType
     private var items: [RaverChatListItem] = []
     private let cellFactory: RaverChatMessageCellFactory
+    private var playingVoiceMessageID: String?
+    var onReplyPreviewTapped: ((ChatMessage) -> Void)?
 
     init(
         conversationType: ConversationType,
-        maxBubbleWidthRatio: CGFloat = 0.72
+        maxBubbleWidthRatio: CGFloat = 0.64
     ) {
         self.conversationType = conversationType
         self.cellFactory = RaverChatMessageCellFactory(maxBubbleWidthRatio: maxBubbleWidthRatio)
@@ -35,7 +38,8 @@ final class RaverChatCollectionDataSource: NSObject, UICollectionViewDataSource 
         conversationType = type
     }
 
-    func updateMessages(_ messages: [ChatMessage]) {
+    func updateMessages(_ messages: [ChatMessage], playingVoiceMessageID: String?) {
+        self.playingVoiceMessageID = playingVoiceMessageID
         let renderMessages = messages.filter { $0.kind != .typing }
         var builtItems: [RaverChatListItem] = []
         for index in renderMessages.indices {
@@ -59,7 +63,8 @@ final class RaverChatCollectionDataSource: NSObject, UICollectionViewDataSource 
                             isClusterStart: clusterStart
                         ),
                         isClusterStart: clusterStart,
-                        isClusterEnd: clusterEnd
+                        isClusterEnd: clusterEnd,
+                        isVoicePlaying: message.kind == .voice && message.id == playingVoiceMessageID
                     )
                 )
             )
@@ -67,6 +72,7 @@ final class RaverChatCollectionDataSource: NSObject, UICollectionViewDataSource 
 
         items = builtItems
     }
+
 
     func message(at indexPath: IndexPath) -> ChatMessage? {
         guard indexPath.section == 0 else { return nil }
@@ -98,7 +104,8 @@ final class RaverChatCollectionDataSource: NSObject, UICollectionViewDataSource 
         cellFactory.dequeueConfiguredCell(
             in: collectionView,
             at: indexPath,
-            item: items[indexPath.item]
+            item: items[indexPath.item],
+            onReplyPreviewTapped: onReplyPreviewTapped
         )
     }
 
@@ -112,10 +119,9 @@ final class RaverChatCollectionDataSource: NSObject, UICollectionViewDataSource 
     }
 
     private func shouldShowSenderMeta(for message: ChatMessage, isClusterStart: Bool) -> Bool {
-        guard conversationType == .group else { return false }
-        guard !message.isMine else { return false }
+        _ = isClusterStart
         guard supportsClustering(message) else { return false }
-        return isClusterStart
+        return true
     }
 
     private func timeSeparatorText(for date: Date) -> String {

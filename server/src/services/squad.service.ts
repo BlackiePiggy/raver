@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { openIMGroupService } from './openim/openim-group.service';
+import { tencentIMGroupService } from './tencent-im/tencent-im-group.service';
 import { notificationCenterService } from './notification-center';
 
 const prisma = new PrismaClient();
@@ -86,15 +86,7 @@ export const squadService = {
     });
 
     try {
-      await openIMGroupService.createSquadGroup({
-        squadId: squad.id,
-        name: squad.name,
-        ownerUserId: data.leaderId,
-        memberUserIds: memberIds,
-        avatarUrl: squad.avatarUrl,
-        description: squad.description,
-        verified: false,
-      });
+      await tencentIMGroupService.ensureSquadGroupById(squad.id);
     } catch (error) {
       await prisma.$transaction(async (tx) => {
         await tx.squadMember.deleteMany({
@@ -409,7 +401,7 @@ export const squadService = {
     });
 
     try {
-      await openIMGroupService.addGroupMembers(invite.squad.leaderId, invite.squadId, [userId], 'invite accepted');
+      await tencentIMGroupService.ensureSquadGroupById(invite.squadId);
     } catch (error) {
       await prisma.$transaction(async (tx) => {
         await tx.squadMessage.delete({
@@ -645,7 +637,7 @@ export const squadService = {
     });
 
     try {
-      await openIMGroupService.removeGroupMembers(squadId, [userId], 'member left squad');
+      await tencentIMGroupService.removeGroupMembers(squadId, [userId], 'member left squad');
     } catch (error) {
       await prisma.$transaction(async (tx) => {
         await tx.squadMessage.delete({

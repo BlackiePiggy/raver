@@ -2,14 +2,14 @@ import Foundation
 
 @MainActor
 final class RaverChatDataProvider {
-    private let chatStore: OpenIMChatStore
+    private let chatStore: IMChatStore
     private var conversation: Conversation
     private var service: SocialService
 
     init(
         conversation: Conversation,
         service: SocialService,
-        chatStore: OpenIMChatStore? = nil
+        chatStore: IMChatStore? = nil
     ) {
         self.conversation = conversation
         self.service = service
@@ -31,14 +31,12 @@ final class RaverChatDataProvider {
 
     func searchMessages(
         query: String,
-        limit: Int = 30,
-        remoteDataSource: ChatMessageSearchRemoteDataSource? = nil
+        limit: Int = 30
     ) async throws -> [ChatMessageSearchResult] {
-        try await chatStore.searchMessages(
+        return try await chatStore.searchMessages(
             query: query,
             conversationID: conversation.id,
-            limit: limit,
-            remoteDataSource: remoteDataSource
+            limit: limit
         )
     }
 }

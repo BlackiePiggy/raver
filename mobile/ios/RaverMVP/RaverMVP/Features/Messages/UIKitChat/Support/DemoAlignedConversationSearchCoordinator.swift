@@ -52,12 +52,12 @@ final class DemoAlignedConversationSearchCoordinator {
         guard let presenter else { return }
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedQuery.isEmpty else { return }
-        OpenIMProbeLogger.log("[DemoAlignedSearch] submit query=\(normalizedQuery)")
+        IMProbeLogger.log("[DemoAlignedSearch] submit query=\(normalizedQuery)")
 
         do {
             let results = try await searchExecutor(normalizedQuery)
             guard !results.isEmpty else {
-                OpenIMProbeLogger.log("[DemoAlignedSearch] result-empty query=\(normalizedQuery)")
+                IMProbeLogger.log("[DemoAlignedSearch] result-empty query=\(normalizedQuery)")
                 let emptyAlert = UIAlertController(
                     title: L("无搜索结果", "No Results"),
                     message: L("请尝试更换关键词。", "Try a different keyword."),
@@ -68,12 +68,12 @@ final class DemoAlignedConversationSearchCoordinator {
                 return
             }
 
-            OpenIMProbeLogger.log(
+            IMProbeLogger.log(
                 "[DemoAlignedSearch] result query=\(normalizedQuery) count=\(results.count)"
             )
             onSearchCompleted(normalizedQuery, results)
         } catch {
-            OpenIMProbeLogger.log(
+            IMProbeLogger.log(
                 "[DemoAlignedSearch] failed query=\(normalizedQuery) error=\(error.localizedDescription)"
             )
             let message = error.userFacingMessage

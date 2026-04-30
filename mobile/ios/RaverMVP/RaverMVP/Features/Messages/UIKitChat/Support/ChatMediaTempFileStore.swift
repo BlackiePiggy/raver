@@ -114,7 +114,7 @@ enum ChatMediaTempFileStore {
         )
         #if DEBUG
         logger.debug("[ChatMediaCache] hit path=\(normalized.path, privacy: .public)")
-        OpenIMProbeLogger.log("[ChatMediaCache] hit path=\(normalized.path)")
+        IMProbeLogger.log("[ChatMediaCache] hit path=\(normalized.path)")
         #endif
     }
 
@@ -160,7 +160,7 @@ enum ChatMediaTempFileStore {
         } catch {
             #if DEBUG
             logger.error("[ChatMediaCache] cleanup failed error=\(error.localizedDescription, privacy: .public)")
-            OpenIMProbeLogger.log("[ChatMediaCache] cleanup failed error=\(error.localizedDescription)")
+            IMProbeLogger.log("[ChatMediaCache] cleanup failed error=\(error.localizedDescription)")
             #endif
         }
     }
@@ -213,21 +213,21 @@ enum ChatMediaTempFileStore {
     private static func markWrite(url: URL, kind: MediaKind) {
         #if DEBUG
         logger.debug("[ChatMediaCache] write kind=\(kind.rawValue, privacy: .public) path=\(url.path, privacy: .public)")
-        OpenIMProbeLogger.log("[ChatMediaCache] write kind=\(kind.rawValue) path=\(url.path)")
+        IMProbeLogger.log("[ChatMediaCache] write kind=\(kind.rawValue) path=\(url.path)")
         #endif
     }
 
     private static func markMiss(reason: String) {
         #if DEBUG
         logger.debug("[ChatMediaCache] miss reason=\(reason, privacy: .public)")
-        OpenIMProbeLogger.log("[ChatMediaCache] miss reason=\(reason)")
+        IMProbeLogger.log("[ChatMediaCache] miss reason=\(reason)")
         #endif
     }
 
     private static func markEviction(reason: String, file: URL) {
         #if DEBUG
         logger.debug("[ChatMediaCache] evict reason=\(reason, privacy: .public) path=\(file.path, privacy: .public)")
-        OpenIMProbeLogger.log("[ChatMediaCache] evict reason=\(reason) path=\(file.path)")
+        IMProbeLogger.log("[ChatMediaCache] evict reason=\(reason) path=\(file.path)")
         #endif
     }
 

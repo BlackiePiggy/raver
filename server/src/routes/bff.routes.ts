@@ -17,8 +17,8 @@ import {
   verifyToken,
   type JWTPayload,
 } from '../utils/auth';
-import { openIMGroupService } from '../services/openim/openim-group.service';
-import { openIMSyncJobService } from '../services/openim/openim-sync-job.service';
+import { tencentIMGroupService } from '../services/tencent-im/tencent-im-group.service';
+import { tencentIMUserService } from '../services/tencent-im/tencent-im-user.service';
 import { smsService } from '../services/sms/sms-provider';
 import { notificationCenterService } from '../services/notification-center';
 
@@ -170,12 +170,12 @@ const requireAuth = (req: BFFAuthRequest, res: Response): string | null => {
   return userId;
 };
 
-const syncOpenIMUserBestEffort = async (userId: string, reason: string): Promise<void> => {
+const syncTencentIMUserBestEffort = async (userId: string, reason: string): Promise<void> => {
   try {
-    await openIMSyncJobService.queueUserProfileSync(userId, { reason });
+    await tencentIMUserService.ensureUsersByIds([userId]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[openim] user sync skipped during ${reason}: ${message}`, { userId });
+    console.warn(`[tencent-im] user sync skipped during ${reason}: ${message}`, { userId });
   }
 };
 
@@ -884,20 +884,10 @@ const syncSquadGroupInfo = async (squadId: string): Promise<void> => {
   });
 
   if (!squad) {
-    throw new Error('Squad not found during OpenIM profile sync');
+    throw new Error('Squad not found during Tencent IM profile sync');
   }
 
-  await openIMGroupService.syncSquadGroupProfile({
-    squadId: squad.id,
-    name: squad.name,
-    avatarUrl: squad.avatarUrl,
-    description: squad.description,
-    notice: squad.notice,
-    bannerUrl: squad.bannerUrl,
-    qrCodeUrl: squad.qrCodeUrl,
-    isPublic: squad.isPublic,
-    verified: false,
-  });
+  await tencentIMGroupService.ensureSquadGroupById(squad.id);
 };
 
 const MIN_SQUAD_INITIAL_MEMBERS = 3;
@@ -1659,7 +1649,7 @@ router.post('/auth/login', async (req: Request, res: Response): Promise<void> =>
       data: { lastLoginAt: new Date() },
     });
 
-    await syncOpenIMUserBestEffort(user.id, 'bff-auth-login');
+    await syncTencentIMUserBestEffort(user.id, 'bff-auth-login');
     writeAuthAuditLog(req, {
       action: 'auth.login',
       outcome: 'success',
@@ -1782,7 +1772,7 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
       },
     });
 
-    await syncOpenIMUserBestEffort(user.id, 'bff-auth-register');
+    await syncTencentIMUserBestEffort(user.id, 'bff-auth-register');
     writeAuthAuditLog(req, {
       action: 'auth.register',
       outcome: 'success',
@@ -2016,7 +2006,7 @@ router.post('/auth/sms/login', async (req: Request, res: Response): Promise<void
       select: { id: true },
     });
 
-    await syncOpenIMUserBestEffort(user.id, 'bff-auth-sms-login');
+    await syncTencentIMUserBestEffort(user.id, 'bff-auth-sms-login');
     await issueAuthSuccessResponse(req, res, user);
   } catch (error) {
     console.error('BFF sms login error:', error);
@@ -3919,18 +3909,7 @@ router.post('/squads/:id/join', optionalAuth, async (req: Request, res: Response
     });
 
     try {
-      const squadOwner = await prisma.squad.findUnique({
-        where: { id: squadId },
-        select: {
-          leaderId: true,
-        },
-      });
-
-      if (!squadOwner) {
-        throw new Error('Squad not found during OpenIM sync');
-      }
-
-      await openIMGroupService.addGroupMembers(squadOwner.leaderId, squadId, [userId], 'public squad join');
+      await tencentIMGroupService.addGroupMembers(squadId, [userId], 'public squad join');
     } catch (error) {
       await prisma.squadMember.delete({
         where: { id: membership.id },
@@ -4010,7 +3989,7 @@ router.post('/squads/:id/leave', optionalAuth, async (req: Request, res: Respons
     });
 
     try {
-      await openIMGroupService.removeGroupMembers(squadId, [userId], 'member left squad');
+      await tencentIMGroupService.removeGroupMembers(squadId, [userId], 'member left squad');
     } catch (error) {
       await prisma.$transaction(async (tx) => {
         await tx.squadMessage.delete({
@@ -4069,7 +4048,7 @@ router.post('/squads/:id/disband', optionalAuth, async (req: Request, res: Respo
       return;
     }
 
-    await openIMGroupService.dismissSquadGroup(squadId);
+    await tencentIMGroupService.dismissSquadGroup(squadId);
 
     await prisma.squad.delete({
       where: { id: squadId },
@@ -4170,15 +4149,7 @@ router.post('/squads', optionalAuth, async (req: Request, res: Response): Promis
     });
 
     try {
-      await openIMGroupService.createSquadGroup({
-        squadId: created.id,
-        name: created.name,
-        ownerUserId: userId,
-        memberUserIds: normalizedMemberIds,
-        avatarUrl: created.avatarUrl,
-        description: requestedDescription || null,
-        verified: false,
-      });
+      await tencentIMGroupService.ensureSquadGroupById(created.id);
     } catch (error) {
       await prisma.$transaction(async (tx) => {
         await tx.squadMember.deleteMany({
@@ -4578,7 +4549,7 @@ router.patch('/squads/:id/members/:memberUserId/role', optionalAuth, async (req:
       });
 
       try {
-        await openIMGroupService.transferGroupOwner(squadId, userId, memberUserId);
+        await tencentIMGroupService.transferSquadGroupOwner(squadId, memberUserId);
       } catch (error) {
         await prisma.$transaction(async (tx) => {
           await tx.squad.update({
@@ -4638,7 +4609,7 @@ router.patch('/squads/:id/members/:memberUserId/role', optionalAuth, async (req:
     });
 
     try {
-      await openIMGroupService.updateGroupMemberRole(squadId, memberUserId, nextRole as 'admin' | 'member');
+      await tencentIMGroupService.updateGroupMemberRole(squadId, memberUserId, nextRole as 'admin' | 'member');
     } catch (error) {
       await prisma.squadMember.update({
         where: {
@@ -4743,7 +4714,7 @@ router.post('/squads/:id/members/:memberUserId/remove', optionalAuth, async (req
     });
 
     try {
-      await openIMGroupService.removeGroupMembers(squadId, [memberUserId], 'removed by squad manager');
+      await tencentIMGroupService.removeGroupMembers(squadId, [memberUserId], 'removed by squad manager');
     } catch (error) {
       await prisma.$transaction(async (tx) => {
         await tx.squadMessage.delete({
@@ -6643,7 +6614,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
         select: { id: true },
       });
 
-      await syncOpenIMUserBestEffort(userId, 'bff-profile-update');
+      await syncTencentIMUserBestEffort(userId, 'bff-profile-update');
     }
 
     const [user, followersCount, followingCount, postsCount, friendIds] = await Promise.all([
@@ -6729,7 +6700,7 @@ router.post(
         select: { id: true },
       });
 
-      await syncOpenIMUserBestEffort(userId, 'bff-profile-avatar');
+      await syncTencentIMUserBestEffort(userId, 'bff-profile-avatar');
 
       res.status(201).json({ avatarURL: avatarUrl });
     } catch (error) {

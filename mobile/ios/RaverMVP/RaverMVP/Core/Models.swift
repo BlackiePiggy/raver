@@ -51,7 +51,7 @@ struct Session: Codable {
     }
 }
 
-struct OpenIMBootstrap: Codable {
+struct IMBootstrap: Codable {
     let enabled: Bool
     let userID: String
     let token: String?
@@ -60,6 +60,15 @@ struct OpenIMBootstrap: Codable {
     let platformID: Int
     let systemUserID: String
     let expiresAt: String?
+}
+struct TencentIMBootstrap: Codable {
+    let enabled: Bool
+    let sdkAppID: Int
+    let userID: String
+    let userSig: String?
+    let expiresAt: String?
+    let region: String
+    let adminIdentifier: String
 }
 
 struct UserSummary: Codable, Identifiable, Hashable {
@@ -287,18 +296,95 @@ struct Conversation: Codable, Identifiable, Hashable {
     var type: ConversationType
     var title: String
     var avatarURL: String?
-    var openIMConversationID: String? = nil
+    var sdkConversationID: String? = nil
     var lastMessage: String
     var lastMessageSenderID: String?
     var unreadCount: Int
     var updatedAt: Date
     var peer: UserSummary?
+    var isPinned: Bool
+    var isMuted: Bool
 
     var previewText: String {
-        if let sender = lastMessageSenderID, !sender.isEmpty {
+        if type == .group, let sender = lastMessageSenderID, !sender.isEmpty {
             return "\(sender): \(lastMessage)"
         }
         return lastMessage
+    }
+
+    init(
+        id: String,
+        type: ConversationType,
+        title: String,
+        avatarURL: String?,
+        sdkConversationID: String? = nil,
+        lastMessage: String,
+        lastMessageSenderID: String?,
+        unreadCount: Int,
+        updatedAt: Date,
+        peer: UserSummary?,
+        isPinned: Bool = false,
+        isMuted: Bool = false
+    ) {
+        self.id = id
+        self.type = type
+        self.title = title
+        self.avatarURL = avatarURL
+        self.sdkConversationID = sdkConversationID
+        self.lastMessage = lastMessage
+        self.lastMessageSenderID = lastMessageSenderID
+        self.unreadCount = unreadCount
+        self.updatedAt = updatedAt
+        self.peer = peer
+        self.isPinned = isPinned
+        self.isMuted = isMuted
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case type
+        case title
+        case avatarURL
+        case sdkConversationID
+        case lastMessage
+        case lastMessageSenderID
+        case unreadCount
+        case updatedAt
+        case peer
+        case isPinned
+        case isMuted
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decode(ConversationType.self, forKey: .type)
+        title = try container.decode(String.self, forKey: .title)
+        avatarURL = try container.decodeIfPresent(String.self, forKey: .avatarURL)
+        sdkConversationID = try container.decodeIfPresent(String.self, forKey: .sdkConversationID)
+        lastMessage = try container.decode(String.self, forKey: .lastMessage)
+        lastMessageSenderID = try container.decodeIfPresent(String.self, forKey: .lastMessageSenderID)
+        unreadCount = try container.decode(Int.self, forKey: .unreadCount)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        peer = try container.decodeIfPresent(UserSummary.self, forKey: .peer)
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        isMuted = try container.decodeIfPresent(Bool.self, forKey: .isMuted) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(type, forKey: .type)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(avatarURL, forKey: .avatarURL)
+        try container.encodeIfPresent(sdkConversationID, forKey: .sdkConversationID)
+        try container.encode(lastMessage, forKey: .lastMessage)
+        try container.encodeIfPresent(lastMessageSenderID, forKey: .lastMessageSenderID)
+        try container.encode(unreadCount, forKey: .unreadCount)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encodeIfPresent(peer, forKey: .peer)
+        try container.encode(isPinned, forKey: .isPinned)
+        try container.encode(isMuted, forKey: .isMuted)
     }
 }
 
@@ -344,6 +430,12 @@ struct ChatMessage: Codable, Identifiable, Hashable {
     var media: ChatMessageMediaPayload? = nil
     var deliveryStatus: ChatMessageDeliveryStatus = .sent
     var deliveryError: String? = nil
+    var replyToMessageID: String? = nil
+    var replyPreview: String? = nil
+    var mentionedUserIDs: [String] = []
+    var peerRead: Bool? = nil
+    var readReceiptReadCount: Int? = nil
+    var readReceiptUnreadCount: Int? = nil
 
     init(
         id: String,
@@ -355,7 +447,13 @@ struct ChatMessage: Codable, Identifiable, Hashable {
         kind: ChatMessageKind = .text,
         media: ChatMessageMediaPayload? = nil,
         deliveryStatus: ChatMessageDeliveryStatus = .sent,
-        deliveryError: String? = nil
+        deliveryError: String? = nil,
+        replyToMessageID: String? = nil,
+        replyPreview: String? = nil,
+        mentionedUserIDs: [String] = [],
+        peerRead: Bool? = nil,
+        readReceiptReadCount: Int? = nil,
+        readReceiptUnreadCount: Int? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -367,6 +465,12 @@ struct ChatMessage: Codable, Identifiable, Hashable {
         self.media = media
         self.deliveryStatus = deliveryStatus
         self.deliveryError = deliveryError
+        self.replyToMessageID = replyToMessageID
+        self.replyPreview = replyPreview
+        self.mentionedUserIDs = mentionedUserIDs
+        self.peerRead = peerRead
+        self.readReceiptReadCount = readReceiptReadCount
+        self.readReceiptUnreadCount = readReceiptUnreadCount
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -380,6 +484,12 @@ struct ChatMessage: Codable, Identifiable, Hashable {
         case media
         case deliveryStatus
         case deliveryError
+        case replyToMessageID
+        case replyPreview
+        case mentionedUserIDs
+        case peerRead
+        case readReceiptReadCount
+        case readReceiptUnreadCount
     }
 
     init(from decoder: Decoder) throws {
@@ -394,6 +504,12 @@ struct ChatMessage: Codable, Identifiable, Hashable {
         media = try container.decodeIfPresent(ChatMessageMediaPayload.self, forKey: .media)
         deliveryStatus = try container.decodeIfPresent(ChatMessageDeliveryStatus.self, forKey: .deliveryStatus) ?? .sent
         deliveryError = try container.decodeIfPresent(String.self, forKey: .deliveryError)
+        replyToMessageID = try container.decodeIfPresent(String.self, forKey: .replyToMessageID)
+        replyPreview = try container.decodeIfPresent(String.self, forKey: .replyPreview)
+        mentionedUserIDs = try container.decodeIfPresent([String].self, forKey: .mentionedUserIDs) ?? []
+        peerRead = try container.decodeIfPresent(Bool.self, forKey: .peerRead)
+        readReceiptReadCount = try container.decodeIfPresent(Int.self, forKey: .readReceiptReadCount)
+        readReceiptUnreadCount = try container.decodeIfPresent(Int.self, forKey: .readReceiptUnreadCount)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -408,6 +524,12 @@ struct ChatMessage: Codable, Identifiable, Hashable {
         try container.encodeIfPresent(media, forKey: .media)
         try container.encode(deliveryStatus, forKey: .deliveryStatus)
         try container.encodeIfPresent(deliveryError, forKey: .deliveryError)
+        try container.encodeIfPresent(replyToMessageID, forKey: .replyToMessageID)
+        try container.encodeIfPresent(replyPreview, forKey: .replyPreview)
+        try container.encode(mentionedUserIDs, forKey: .mentionedUserIDs)
+        try container.encodeIfPresent(peerRead, forKey: .peerRead)
+        try container.encodeIfPresent(readReceiptReadCount, forKey: .readReceiptReadCount)
+        try container.encodeIfPresent(readReceiptUnreadCount, forKey: .readReceiptUnreadCount)
     }
 }
 

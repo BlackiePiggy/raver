@@ -30,7 +30,8 @@ final class RaverChatMessageCellFactory {
     func dequeueConfiguredCell(
         in collectionView: UICollectionView,
         at indexPath: IndexPath,
-        item: RaverChatListItem
+        item: RaverChatListItem,
+        onReplyPreviewTapped: ((ChatMessage) -> Void)?
     ) -> UICollectionViewCell {
         switch item {
         case let .timeSeparator(text):
@@ -66,7 +67,9 @@ final class RaverChatMessageCellFactory {
                     maxBubbleWidthRatio: maxBubbleWidthRatio,
                     showSenderMeta: presentation.showSenderMeta,
                     isClusterStart: presentation.isClusterStart,
-                    isClusterEnd: presentation.isClusterEnd
+                    isClusterEnd: presentation.isClusterEnd,
+                    isVoicePlaying: presentation.isVoicePlaying,
+                    onReplyPreviewTapped: onReplyPreviewTapped
                 )
                 return cell
 
@@ -82,7 +85,8 @@ final class RaverChatMessageCellFactory {
                     maxBubbleWidthRatio: maxBubbleWidthRatio,
                     showSenderMeta: presentation.showSenderMeta,
                     isClusterStart: presentation.isClusterStart,
-                    isClusterEnd: presentation.isClusterEnd
+                    isClusterEnd: presentation.isClusterEnd,
+                    onReplyPreviewTapped: onReplyPreviewTapped
                 )
                 return cell
             }

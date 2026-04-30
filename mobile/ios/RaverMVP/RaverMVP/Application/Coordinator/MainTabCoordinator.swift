@@ -12,7 +12,7 @@ enum AppRoute: Hashable {
     case circle(CircleRoute)
     case messages(MessagesRoute)
     case profile(ProfileRoute)
-    case conversation(conversationID: String)
+    case conversation(target: ChatRouteTarget)
     case postDetail(postID: String)
     case eventDetail(eventID: String)
     case eventSchedule(eventID: String)
@@ -240,8 +240,11 @@ struct MainTabCoordinatorView: View {
     }
 
     private var shouldShowNavigationBar: Bool {
-        if router.selectedTab == .messages || router.selectedTab == .profile {
+        if router.selectedTab == .profile {
             return true
+        }
+        if router.selectedTab == .messages {
+            return !router.path.isEmpty
         }
         return !router.path.isEmpty
     }
@@ -330,6 +333,12 @@ struct MainTabCoordinatorView: View {
                         await appState.refreshUnreadMessages()
                     }
                 }
+            case let .chatSettings(conversation):
+                ChatSettingsSheet(
+                    conversation: conversation,
+                    service: appContainer.socialService,
+                    chatStore: IMChatStore.shared
+                )
             }
 
         case .profile(let profileRoute):
@@ -383,9 +392,9 @@ struct MainTabCoordinatorView: View {
                 ProfileRatingUnitEditorLoaderView(unitID: unitID, service: appContainer.webService)
             }
 
-        case let .conversation(conversationID):
+        case let .conversation(target):
             ConversationLoaderView(
-                conversationID: conversationID,
+                target: target,
                 service: appContainer.socialService
             )
 
@@ -406,18 +415,18 @@ struct MainTabCoordinatorView: View {
             RankingBoardDetailView(board: board)
 
         case .userProfile(let userID):
-            UserProfileView(userID: userID)
+            UserProfileView(userID: TencentIMIdentity.normalizePlatformUserIDForProfile(userID))
 
         case .squadProfile(let squadID):
             SquadProfileView(
-                squadID: squadID,
+                squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
                 service: appContainer.socialService
             )
                 .environmentObject(appState)
 
         case .squadManage(let squadID):
             SquadManageRouteView(
-                squadID: squadID,
+                squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
                 service: appContainer.socialService,
                 webService: appContainer.webService
             )
@@ -443,7 +452,7 @@ struct MainTabCoordinatorView: View {
         case .squadProfile(let squadID):
             NavigationStack {
                 SquadProfileView(
-                    squadID: squadID,
+                    squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
                     service: appContainer.socialService
                 )
                     .environmentObject(appState)
@@ -481,7 +490,7 @@ struct MainTabCoordinatorView: View {
 
     private func pushMessagesRoute(_ route: MessagesRoute) {
         switch route {
-        case .alertCategory:
+        case .alertCategory, .chatSettings:
             router.push(.messages(route))
         }
     }
@@ -532,7 +541,7 @@ struct MainTabCoordinatorView: View {
         let pathParts = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
 
         if host == "messages", pathParts.count >= 2, pathParts[0].lowercased() == "conversation" {
-            return .conversation(conversationID: pathParts[1])
+            return .conversation(target: .conversationReference(pathParts[1]))
         }
 
         if host == "community", pathParts.count >= 2, pathParts[0].lowercased() == "post" {
@@ -557,7 +566,7 @@ struct MainTabCoordinatorView: View {
 
         let normalizedParts = ([host] + pathParts).filter { !$0.isEmpty }
         if normalizedParts.count >= 3, normalizedParts[0] == "messages", normalizedParts[1] == "conversation" {
-            return .conversation(conversationID: normalizedParts[2])
+            return .conversation(target: .conversationReference(normalizedParts[2]))
         }
         if normalizedParts.count >= 3, normalizedParts[0] == "community", normalizedParts[1] == "post" {
             return .postDetail(postID: normalizedParts[2])
@@ -609,10 +618,9 @@ private struct MessagesAlertDetailContainerView: View {
 
 private struct ConversationLoaderView: View {
     @EnvironmentObject private var appState: AppState
-    @ObservedObject private var chatStore = OpenIMChatStore.shared
-    @StateObject private var navigationBridge = DemoAlignedChatNavigationBridge()
+    @ObservedObject private var chatStore = IMChatStore.shared
 
-    let conversationID: String
+    let target: ChatRouteTarget
     let service: SocialService
 
     @State private var conversation: Conversation?
@@ -622,30 +630,8 @@ private struct ConversationLoaderView: View {
     var body: some View {
         Group {
             if let conversation {
-                DemoAlignedChatView(
-                    conversation: conversation,
-                    service: service,
-                    navigationBridge: navigationBridge
-                )
-                .navigationTitle(conversation.title)
+                TencentUIKitChatView(conversation: conversation, service: service)
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItemGroup(placement: .topBarTrailing) {
-                        Button {
-                            navigationBridge.presentConversationSearch()
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                        }
-                        .accessibilityLabel(L("会话内搜索", "Search in Conversation"))
-
-                        Button {
-                            navigationBridge.presentChatSettings()
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                        }
-                        .accessibilityLabel(L("聊天设置", "Chat Settings"))
-                    }
-                }
             } else if isLoading {
                 ProgressView(L("加载会话中...", "Loading conversation..."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -669,19 +655,21 @@ private struct ConversationLoaderView: View {
             }
         }
         .task {
+            if let stagedConversation = target.stagedConversation {
+                chatStore.stageConversation(stagedConversation)
+            }
             await loadConversation(force: false)
         }
-        .onChange(of: appState.openIMConnectionState) { oldValue, newValue in
-            debug("openim state changed \(oldValue) -> \(newValue) conversationID=\(conversationID)")
+        .onChange(of: appState.tencentIMConnectionState) { oldValue, newValue in
+            debug("tencent im state changed \(oldValue) -> \(newValue) conversationID=\(target.preferredConversationID)")
             guard conversation == nil else { return }
             guard case .connected = newValue else { return }
             Task {
                 await loadConversation(force: true)
             }
         }
-        .onChange(of: chatStore.conversations.count) { _, newCount in
-            guard conversation == nil else { return }
-            debug("chatStore conversations changed count=\(newCount) try resolve cache")
+        .onChange(of: chatStore.conversations) { _, updatedConversations in
+            debug("chatStore conversations changed count=\(updatedConversations.count) try resolve cache")
             _ = resolveConversationFromCache()
         }
     }
@@ -701,7 +689,7 @@ private struct ConversationLoaderView: View {
         isLoading = true
         defer { isLoading = false }
         debug(
-            "load start force=\(force) conversationID=\(conversationID) openIMState=\(appState.openIMConnectionState) cachedCount=\(chatStore.conversations.count)"
+            "load start force=\(force) conversationID=\(target.preferredConversationID) tencentState=\(appState.tencentIMConnectionState) cachedCount=\(chatStore.conversations.count)"
         )
 
         do {
@@ -713,11 +701,16 @@ private struct ConversationLoaderView: View {
             debug("remote fetch success total=\(allConversations.count)")
 
             if let found = allConversations.first(where: {
-                $0.id == conversationID || $0.openIMConversationID == conversationID
+                matchesRouteTarget($0, target: target)
             }) {
-                conversation = found
-                errorMessage = nil
-                debug("resolved from remote id=\(found.id) openIM=\(found.openIMConversationID ?? "-")")
+                chatStore.stageConversation(found)
+                if resolveConversationFromCache() {
+                    debug("resolved from staged+store after remote id=\(found.id)")
+                } else {
+                    conversation = found
+                    errorMessage = nil
+                    debug("resolved from remote fallback id=\(found.id)")
+                }
             } else {
                 errorMessage = L("会话不存在或已被移除", "Conversation not found")
                 debug("remote fetch completed but conversation not found")
@@ -744,15 +737,116 @@ private struct ConversationLoaderView: View {
 
     @MainActor
     private func resolveConversationFromCache() -> Bool {
-        if let found = chatStore.conversations.first(where: {
-            $0.id == conversationID || $0.openIMConversationID == conversationID
-        }) {
-            conversation = found
+        let storeMatch = chatStore.conversations.first(where: {
+            matchesRouteTarget($0, target: target)
+        })
+        let candidate = preferredConversationCandidate(
+            target.stagedConversation,
+            storeMatch
+        )
+
+        if let candidate {
+            let previousConversation = conversation
+            conversation = candidate
             errorMessage = nil
-            debug("cache hit id=\(found.id) openIM=\(found.openIMConversationID ?? "-")")
+            if let previousConversation, previousConversation != candidate {
+                debug("cache updated id=\(candidate.id)")
+            } else {
+                debug("cache hit id=\(candidate.id)")
+            }
             return true
         }
         return false
+    }
+
+    private func preferredConversationCandidate(
+        _ lhs: Conversation?,
+        _ rhs: Conversation?
+    ) -> Conversation? {
+        switch (lhs, rhs) {
+        case let (.some(lhs), .some(rhs)):
+            let lhsScore = conversationIdentityScore(lhs)
+            let rhsScore = conversationIdentityScore(rhs)
+            if rhsScore != lhsScore {
+                return rhsScore > lhsScore ? rhs : lhs
+            }
+            return rhs.updatedAt >= lhs.updatedAt ? rhs : lhs
+        case let (.some(lhs), .none):
+            return lhs
+        case let (.none, .some(rhs)):
+            return rhs
+        case (.none, .none):
+            return nil
+        }
+    }
+
+    private func conversationIdentityScore(_ conversation: Conversation) -> Int {
+        var score = 0
+        if let title = normalizedText(conversation.title) {
+            score += 1
+            if !isFallbackConversationTitle(title, conversation: conversation) {
+                score += 3
+            }
+        }
+        if normalizedText(conversation.avatarURL) != nil {
+            score += 2
+        }
+        if let peer = conversation.peer {
+            score += userIdentityScore(peer)
+        }
+        return score
+    }
+
+    private func userIdentityScore(_ user: UserSummary) -> Int {
+        var score = 0
+        if normalizedText(user.id) != nil {
+            score += 1
+        }
+        if let username = normalizedText(user.username), !username.isEmpty {
+            score += 1
+        }
+        if let displayName = normalizedText(user.displayName),
+           displayName.lowercased() != normalizedText(user.id)?.lowercased(),
+           displayName.lowercased() != normalizedText(user.username)?.lowercased() {
+            score += 3
+        }
+        if normalizedText(user.avatarURL) != nil {
+            score += 2
+        }
+        return score
+    }
+
+    private func isFallbackConversationTitle(_ title: String, conversation: Conversation) -> Bool {
+        let normalizedTitle = normalizedIdentifier(title)
+        let fallbackValues = Set([
+            conversation.id,
+            conversation.sdkConversationID,
+            conversation.peer?.id,
+            conversation.peer?.username
+        ]
+        .compactMap { $0 }
+        .map(normalizedIdentifier))
+
+        if fallbackValues.contains(normalizedTitle) {
+            return true
+        }
+
+        let genericTitles = [
+            normalizedIdentifier(L("私信", "Direct")),
+            normalizedIdentifier(L("群聊", "Group chat")),
+            normalizedIdentifier(L("小队", "Squad"))
+        ]
+        return genericTitles.contains(normalizedTitle)
+    }
+
+    private func normalizedIdentifier(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func normalizedText(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func withTimeout<T>(
@@ -782,8 +876,30 @@ private struct ConversationLoaderView: View {
     private func debug(_ message: String) {
         #if DEBUG
         print("[ConversationLoader] \(message)")
-        OpenIMProbeLogger.log("[ConversationLoader] \(message)")
+        IMProbeLogger.log("[ConversationLoader] \(message)")
         #endif
+    }
+
+    private func matchesRouteTarget(_ conversation: Conversation, target: ChatRouteTarget) -> Bool {
+        if conversation.id == target.preferredConversationID || conversation.sdkConversationID == target.preferredConversationID {
+            return true
+        }
+
+        guard let kind = target.kind else { return false }
+        switch kind {
+        case .direct(let userID):
+            guard conversation.type == .direct else { return false }
+            let candidates = [
+                conversation.peer?.id,
+                conversation.peer?.username,
+                conversation.id,
+                conversation.sdkConversationID
+            ]
+            return candidates.contains(userID)
+        case .group(let groupID):
+            guard conversation.type == .group else { return false }
+            return conversation.id == groupID || conversation.sdkConversationID == groupID
+        }
     }
 }
 

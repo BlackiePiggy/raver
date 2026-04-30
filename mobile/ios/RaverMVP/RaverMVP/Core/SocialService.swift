@@ -1,45 +1,22 @@
 import Foundation
 import Combine
 
-#if canImport(OpenIMSDK)
-import OpenIMSDK
-
-@MainActor
-protocol OpenIMRawChatService: AnyObject {
-    var rawMessagePublisher: AnyPublisher<OIMMessageInfo, Never> { get }
-
-    @discardableResult
-    func markConversationRead(conversationID: String) async throws -> Bool
-
-    func fetchRawMessagesPage(
+// Temporary compatibility zone for surfaces that still return `ChatMessage`.
+protocol IMChatCompatibilityService: AnyObject {
+    func fetchMessages(conversationID: String) async throws -> [ChatMessage]
+    func fetchMessages(
         conversationID: String,
         startClientMsgID: String?,
         count: Int
-    ) async throws -> OpenIMRawMessagePage?
-
-    func createRawTextMessage(content: String) -> OIMMessageInfo
-    func createRawImageMessage(fileURL: URL) throws -> OIMMessageInfo
-    func createRawVideoMessage(fileURL: URL) throws -> OIMMessageInfo
-
-    func sendPreparedRawMessage(
-        _ message: OIMMessageInfo,
-        conversationID: String,
-        failurePrefix: String,
-        onProgress: ((Int) -> Void)?
-    ) async throws -> OIMMessageInfo?
-
-    func businessConversationIDSnapshot(for message: OIMMessageInfo) -> String?
-    func chatMessageSnapshot(from message: OIMMessageInfo, conversationID: String) -> ChatMessage
-}
-#endif
-
-// Temporary compatibility zone for surfaces that still return `ChatMessage`.
-// New demo-style chat code should prefer `OpenIMRawChatService`.
-protocol OpenIMChatCompatibilityService: AnyObject {
-    func fetchMessages(conversationID: String) async throws -> [ChatMessage]
+    ) async throws -> ChatMessageHistoryPage
     func sendMessage(conversationID: String, content: String) async throws -> ChatMessage
     func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
     func sendVideoMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
+    func sendVoiceMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
+    func sendFileMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
+    func sendTypingStatus(conversationID: String, isTyping: Bool) async throws
+    func revokeMessage(conversationID: String, messageID: String) async throws -> String
+    func deleteMessage(conversationID: String, messageID: String) async throws
 }
 
 enum FeedMode: String, Codable, CaseIterable, Identifiable {
@@ -58,14 +35,14 @@ enum FeedMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-protocol SocialService: OpenIMChatConversationDataSource, OpenIMChatCompatibilityService {
+protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService {
     func restoreSession() async -> Session?
     func login(username: String, password: String) async throws -> Session
     func loginWithSms(phoneNumber: String, code: String) async throws -> Session
     func sendLoginSmsCode(phoneNumber: String) async throws -> Int
     func register(username: String, email: String, password: String, displayName: String) async throws -> Session
     func logout() async
-    func fetchOpenIMBootstrap() async throws -> OpenIMBootstrap
+    func fetchTencentIMBootstrap() async throws -> TencentIMBootstrap
 
     func fetchFeed(cursor: String?, mode: FeedMode?) async throws -> FeedPage
     func searchFeed(query: String) async throws -> FeedPage
@@ -91,6 +68,9 @@ protocol SocialService: OpenIMChatConversationDataSource, OpenIMChatCompatibilit
 
     func fetchConversations(type: ConversationType) async throws -> [Conversation]
     func markConversationRead(conversationID: String) async throws
+    func setConversationPinned(conversationID: String, pinned: Bool) async throws
+    func markConversationUnread(conversationID: String, unread: Bool) async throws
+    func hideConversation(conversationID: String) async throws
     func setConversationMuted(conversationID: String, muted: Bool) async throws
     func clearConversationHistory(conversationID: String) async throws
     func startDirectConversation(identifier: String) async throws -> Conversation
@@ -129,7 +109,7 @@ protocol SocialService: OpenIMChatConversationDataSource, OpenIMChatCompatibilit
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post
 }
 
-extension OpenIMChatCompatibilityService {
+extension IMChatCompatibilityService {
     func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
         _ = fileURL
         throw ServiceError.message("Not supported")
@@ -139,9 +119,57 @@ extension OpenIMChatCompatibilityService {
         _ = fileURL
         throw ServiceError.message("Not supported")
     }
+
+    func sendVoiceMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        _ = fileURL
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendFileMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        _ = fileURL
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendTypingStatus(conversationID: String, isTyping: Bool) async throws {
+        _ = conversationID
+        _ = isTyping
+    }
+
+    func revokeMessage(conversationID: String, messageID: String) async throws -> String {
+        _ = conversationID
+        _ = messageID
+        throw ServiceError.message("Not supported")
+    }
+
+    func deleteMessage(conversationID: String, messageID: String) async throws {
+        _ = conversationID
+        _ = messageID
+        throw ServiceError.message("Not supported")
+    }
 }
 
 extension SocialService {
+    func setConversationPinned(conversationID: String, pinned: Bool) async throws {
+        _ = conversationID
+        _ = pinned
+        throw ServiceError.message("Not supported")
+    }
+
+    func markConversationUnread(conversationID: String, unread: Bool) async throws {
+        _ = conversationID
+        _ = unread
+        throw ServiceError.message("Not supported")
+    }
+
+    func hideConversation(conversationID: String) async throws {
+        _ = conversationID
+        throw ServiceError.message("Not supported")
+    }
+
+    func fetchTencentIMBootstrap() async throws -> TencentIMBootstrap {
+        throw ServiceError.message("Not supported")
+    }
+
     func setConversationMuted(conversationID: String, muted: Bool) async throws {
         throw ServiceError.message("Not supported")
     }

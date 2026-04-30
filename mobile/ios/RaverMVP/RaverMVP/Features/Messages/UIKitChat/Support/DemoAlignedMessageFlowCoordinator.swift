@@ -68,6 +68,7 @@ final class DemoAlignedMessageFlowCoordinator {
         let outcome = messageApplyCoordinator.apply(
             currentMessages: previousMessages,
             nextMessages: next,
+            playingVoiceMessageID: chatController.playingVoiceMessageID,
             forceScrollToBottom: forceScrollToBottom,
             isLoadingOlder: chatController.isLoadingOlder,
             hasCompletedInitialLoad: chatController.hasCompletedInitialLoad

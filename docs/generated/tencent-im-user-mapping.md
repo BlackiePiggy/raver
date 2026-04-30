@@ -1,0 +1,52 @@
+# Tencent IM User Mapping
+
+Generated at: 2026-04-30T00:56:16.670Z
+
+Total rows: 44
+
+| Platform User ID | Username | Display Name | Tencent IM User ID | Active |
+| --- | --- | --- | --- | --- |
+| 57a7a381-2b5e-4886-ab30-2e1ca5961c5f | testuser | 大大 | tu_V6ejgSteSIarMC4cpZYcXw | yes |
+| d3ff9c78-f9ff-445b-8df9-2ad0039dcd7b | leshanlijiayu | 王教瘦 | tu_0_-cePn_RFuN-SrQA53New | yes |
+| 1f4cafda-6d46-4dcf-8e98-7d4892d09425 | uploadtester | RaverHub Official | tu_H0yv2m1GTc-OmH1IktCUJQ | yes |
+| 6bfc3214-0709-4cba-b77e-1f21781bee33 | blackie | 小黑 | tu_a_wyFAcJTLq3fh8heBvuMw | yes |
+| a33be950-b802-4df5-9a36-358b9f2b0522 | midnight_dancer_066 | 小妍 | tu_ozvpULgCTfWaNjWLnysFIg | yes |
+| 9e549a45-fe98-4614-8a29-be0d668f0872 | strobe_floor_779 | 小泽 | tu_nlSaRf6YRhSKKb4NZo8Icg | yes |
+| 91402b9a-7f51-4be5-a874-1354dc93a15e | ios_dm_a | 苏苏 | tu_kUArmn9RS-WodBNU3JOhXg | yes |
+| c77c1b51-c401-44c5-a923-a1e168f2191b | ios_dm_b | 王桑 | tu_x3wbUcQBRMWpI6HhaPIZGw | yes |
+| 30acef14-61a6-4e5e-8087-64ff089fb9b8 | next_a | 小布 | tu_MKzvFGGmTl6Ah2T_CJ-5uA | yes |
+| 3784870a-7d33-4fec-a57c-698f9505a78f | next_b | 卡卡 | tu_N4SHCn0zT-ylfGmPlQWnjw | yes |
+| 3c3d38f1-63bc-442f-82e8-e5ef143def8d | profile_a | 腻腻子 | tu_PD048WO8RC-C6OXvFD3vjQ | yes |
+| 0fcba61a-6bf3-4010-8e33-981ed7a2b0e0 | profile_b | Allen | tu_D8umGmvzQBCOM5ge16Kw4A | yes |
+| 6a367a3c-9c5e-437a-b5fd-5cdca84d8a35 | squad_a | 小小 | tu_ajZ6PJxeQ3q1_VzcqE2KNQ | yes |
+| 84c6bd4b-de06-4ae6-84ca-f71ad163e909 | squad_b | 中中 | tu_hMa9S94GSuaEyvca0WPpCQ | yes |
+| e9bfb9c2-479b-4cd3-b4b4-a4dd0c81e070 | shanghai_walker_743 | 酸巨人 | tu_6b-5wkebTNO0tKTdDIHgcA | yes |
+| d42c121b-1253-4b92-a88c-efccd08922c4 | groove_echo_912 | 蓝天 | tu_1CwSGxJTS5KojO_M0IkixA | yes |
+| 322a63f9-85ba-43df-8594-552ad532968c | tmp_u_5579 | 曼曼 | tu_Mipj-YW6Q9-FlFUq1TKWjA | yes |
+| c224e90c-0c2e-4e67-bcb8-cb788b27fc3d | platform_admin | 管理员帐号 | tu_wiTpDAwuTme8uMt4iyf8PQ | yes |
+| 6280da49-8b97-473e-aaa4-56c575e09594 | h3y2 | H3y2 | tu_YoDaSYuXRz6qpFbFdeCVlA | yes |
+| fd31dd55-f1ad-4247-a746-7aaddcdec0bb | bff_u_05186459 | bff_u_05186459 | tu__THdVfGtQkenRnqt3N7Auw | yes |
+| 6e157a80-4095-4ea7-be28-eea075e194e9 | bff_p_05197827 | bff_p_05197827_v2 | tu_bhV6gECVTqe-KO6gdeGU6Q | yes |
+| 57d7fac4-f980-4957-bafc-9de4811a1e07 | pviewa_232947765 | pviewa_232947765 | tu_V9f6xPmASVe6_J3kgRoeBw | yes |
+| 04fb4f40-c5d5-4c4b-9578-f119ed1440ba | pviewb_233089988 | pviewb_233089988 | tu_BPtPQMXVTEuVePEZ7RRAug | yes |
+| d19643e0-044b-4b8a-854d-7778d5a920df | postp_5249146 | postp_5249146 | tu_0ZZD4ARLS4qFTXd41akg3w | yes |
+| d4d2cded-48aa-4cfb-a690-b0c719658948 | report_u_06405467 | report_u_06405467 | tu_1NLN7UiqTPumkLDHGWWJSA | yes |
+| 19e72996-dac0-469c-b0bc-83260ffcdb1a | admrep_06739091488 | admrep_06739091488 | tu_GecpltrARpywvIMmD_zbGg | yes |
+| 04631f61-0c73-4117-856e-6d46c7988c0e | admuser_067392267 | admuser_067392267 | tu_BGMfYQxzQReFbm1Gx5iMDg | yes |
+| dbdce219-6127-4a6a-9401-787c0e51ee81 | auditrep_07010379619 | auditrep_07010379619 | tu_29ziGWEnSmqUAXh8DlHugQ | yes |
+| c8707e5a-3429-4503-bc1c-3b24cb094b80 | auditadm_07010518212 | auditadm_07010518212 | tu_yHB-WjQpRQO8HDskywlLgA | yes |
+| 6ab3c372-3ebd-4469-8ac5-c530e550f59e | authsmoke_1776764027 | authsmoke_1776764027 | tu_arPDcj69RGmKxcUw5VD1ng | yes |
+| 29ec6347-43ca-4fe1-93a6-038c2bae81da | ttlcheck_1776764103 | ttlcheck_1776764103 | tu_KexjR0PKT-GTpgOMK66B2g | yes |
+| 2bf47aaf-f849-4ec2-80ed-41f1c6599427 | ratelimit_1776764297 | ratelimit_1776764297 | tu_K_R6r_hJTsKA7UHxxlmUJw | yes |
+| 998151b6-04ca-4de2-9874-8a11ff3581b1 | authreg_1776764317 | authreg_1776764317 | tu_mYFRtgTKTeKYdIoR_zWBsQ | yes |
+| c662a0dc-682e-473c-8d98-d7334efefa09 | regrate_1776764392 | regrate_1776764392 | tu_xmKg3GguRzyNmNczTv76CQ | yes |
+| f04a79b4-c67b-45fa-84da-a25ab8bb937c | auth_smoke_1776781784222_2713 | auth_smoke_1776781784222_2713 | tu_8Ep5tMZ7RfqE2qJauLuTfA | yes |
+| 75e697ef-7cc0-4834-b3ba-8406ab5aa938 | auth_smoke_1776781815341_5499 | auth_smoke_1776781815341_5499 | tu_deaX73zASDSzuoQGq1qpOA | yes |
+| 659bf2c0-737b-4983-9bca-010e13e02ad4 | auth_smoke_1776781890188_6316 | auth_smoke_1776781890188_6316 | tu_ZZvywHN7SYObygEOE-Aq1A | yes |
+| 10306f5c-7e25-492e-ae2c-c1044f67991e | auth_smoke_1776783604363_4153 | auth_smoke_1776783604363_4153 | tu_EDBvXH4lSS6uLMEET2eZHg | yes |
+| efd6ada0-b0ce-4219-8578-cd2506f7c281 | auth_smoke_1776784838387_6661 | auth_smoke_1776784838387_6661 | tu_79atoLDOQhmFeM0lBvfCgQ | yes |
+| 196fb287-9d15-402d-a890-2f3ea31a3aef | auth_it_1776789020727_9432 | auth_it_1776789020727_9432 | tu_GW-yh50VQC2okC8-oxo67w | yes |
+| a66d4898-92ef-41b6-a17e-340b69605454 | auth_it_rl_1776789020921_2362 | auth_it_rl_1776789020921_2362 | tu_pm1ImJLvQbahfjQLaWBUVA | yes |
+| 9b84a3f7-064c-45f0-bae7-868c47ddd77e | auth_it_rr_1776789021551_5619 | auth_it_rr_1776789021551_5619 | tu_m4Sj9wZMRfC654aMR93Xfg | yes |
+| bc037f8a-cf07-4fdf-930b-de5ac27f835d | phone_021627_2962 | Raver 021627 | tu_vAN_is8HT9-TC95awn-DXQ | yes |
+| 3421a805-d50d-4607-9c54-4318a6fa0973 | phase0_admin | Phase0 Admin | tu_NCGoBdUNRgecVEMYpvoJcw | yes |

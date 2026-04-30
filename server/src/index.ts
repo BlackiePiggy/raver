@@ -18,10 +18,9 @@ import notificationRoutes from './routes/notification.routes';
 import labelRoutes from './routes/label.routes';
 import bffRoutes from './routes/bff.routes';
 import bffWebRoutes from './routes/bff.web.routes';
-import openIMRoutes from './routes/openim.routes';
+import tencentIMRoutes from './routes/tencent-im.routes';
 import preRegistrationRoutes from './routes/pre-registration.routes';
 import notificationCenterRoutes from './routes/notification-center.routes';
-import { openIMSyncJobService } from './services/openim/openim-sync-job.service';
 import {
   registerNotificationCenterAPNSHandler,
   startNotificationEventCountdownScheduler,
@@ -99,7 +98,7 @@ app.use('/api/labels', labelRoutes);
 app.use('/api', preRegistrationRoutes);
 app.use('/v1', bffRoutes);
 app.use('/v1', bffWebRoutes);
-app.use('/v1/openim', openIMRoutes);
+app.use('/v1/im/tencent', tencentIMRoutes);
 app.use('/v1/notification-center', notificationCenterRoutes);
 registerNotificationCenterAPNSHandler();
 
@@ -148,7 +147,6 @@ app.listen(port, () => {
     }
   }
   console.log(`🎵 RaveHub API Server running on http://localhost:${port}`);
-  openIMSyncJobService.startWorker();
   startNotificationEventCountdownScheduler();
   startNotificationEventDailyDigestScheduler();
   startNotificationRouteDJReminderScheduler();

@@ -1,0 +1,43 @@
+{
+  "name": "TUICore",
+  "version": "8.7.7201",
+  "platforms": {
+    "ios": "9.0"
+  },
+  "license": {
+    "type": "Proprietary",
+    "text": "        copyright 2017 tencent Ltd. All rights reserved.\n"
+  },
+  "homepage": "https://cloud.tencent.com/document/product/269/3794",
+  "source": {
+    "git": "https://git.woa.com/lynxzhang/tui-components.git",
+    "tag": "8.7.7201"
+  },
+  "documentation_url": "https://cloud.tencent.com/document/product/269/9147",
+  "authors": "tencent video cloud",
+  "summary": "TUICore",
+  "dependencies": {
+    "SDWebImage": []
+  },
+  "requires_arc": true,
+  "default_subspecs": "ImSDK_Plus",
+  "resource_bundles": {
+    "TUICore_Privacy": "Resources/PrivacyInfo.xcprivacy"
+  },
+  "subspecs": [
+    {
+      "name": "ImSDK_Plus",
+      "dependencies": {
+        "TXIMSDK_Plus_iOS_XCFramework": [],
+        "TUICore/Base": []
+      }
+    },
+    {
+      "name": "Base",
+      "source_files": "*.{h,m,mm,c}",
+      "resources": [
+        "Resources/*.bundle"
+      ]
+    }
+  ]
+}

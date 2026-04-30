@@ -31,7 +31,7 @@ enum DemoAlignedChatLogEvent {
 
 enum DemoAlignedChatLogger {
     static func log(_ event: DemoAlignedChatLogEvent) {
-        OpenIMProbeLogger.log(event.line)
+        IMProbeLogger.log(event.line)
     }
 
     static func sendFailed(kind: String, conversationID: String, error: Error) {

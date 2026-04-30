@@ -2,6 +2,7 @@ import SwiftUI
 
 enum MessagesRoute: Hashable {
     case alertCategory(MessageAlertCategory)
+    case chatSettings(Conversation)
 }
 
 enum MessagesModalRoute: Hashable {

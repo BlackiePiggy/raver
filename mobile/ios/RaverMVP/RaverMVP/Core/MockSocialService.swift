@@ -132,16 +132,15 @@ actor MockSocialService: SocialService {
         return Session(token: mockAccessToken, refreshToken: mockRefreshToken, user: currentUser)
     }
 
-    func fetchOpenIMBootstrap() async throws -> OpenIMBootstrap {
-        OpenIMBootstrap(
+    func fetchTencentIMBootstrap() async throws -> TencentIMBootstrap {
+        TencentIMBootstrap(
             enabled: false,
-            userID: "u_mock_me",
-            token: nil,
-            apiURL: AppConfig.bffBaseURL.absoluteString,
-            wsURL: "ws://localhost:10001",
-            platformID: 1,
-            systemUserID: "raver_system",
-            expiresAt: nil
+            sdkAppID: 0,
+            userID: "tu_mock_me",
+            userSig: nil,
+            expiresAt: nil,
+            region: "shanghai",
+            adminIdentifier: "administrator"
         )
     }
 
@@ -512,6 +511,21 @@ actor MockSocialService: SocialService {
         conversations[index].unreadCount = 0
     }
 
+    func setConversationPinned(conversationID: String, pinned: Bool) async throws {
+        guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else { return }
+        conversations[index].isPinned = pinned
+    }
+
+    func markConversationUnread(conversationID: String, unread: Bool) async throws {
+        guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else { return }
+        conversations[index].unreadCount = unread ? max(1, conversations[index].unreadCount) : 0
+    }
+
+    func hideConversation(conversationID: String) async throws {
+        conversations.removeAll { $0.id == conversationID }
+        messagesByConversation.removeValue(forKey: conversationID)
+    }
+
     func startDirectConversation(identifier: String) async throws -> Conversation {
         let normalized = identifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if normalized.isEmpty {
@@ -615,6 +629,19 @@ actor MockSocialService: SocialService {
             kind: .video,
             media: ChatMessageMediaPayload(
                 mediaURL: fileURL.absoluteString
+            )
+        )
+    }
+
+    func sendVoiceMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        appendOutgoingMessage(
+            conversationID: conversationID,
+            content: L("[语音]", "[Voice]"),
+            kind: .voice,
+            media: ChatMessageMediaPayload(
+                mediaURL: fileURL.absoluteString,
+                durationSeconds: nil,
+                fileName: fileURL.lastPathComponent
             )
         )
     }

@@ -1,51 +1,71 @@
 PODS:
-  - MJExtension (3.4.2)
-  - OpenIMSDK (3.8.3-hotfix.12):
-    - MJExtension
-    - OpenIMSDK/Callbacker (= 3.8.3-hotfix.12)
-    - OpenIMSDK/CallbackProxy (= 3.8.3-hotfix.12)
-    - OpenIMSDK/Interface (= 3.8.3-hotfix.12)
-    - OpenIMSDK/Model (= 3.8.3-hotfix.12)
-    - OpenIMSDK/Utils (= 3.8.3-hotfix.12)
-    - OpenIMSDKCore (= 3.8.3-hotfix.12)
-  - OpenIMSDK/Callbacker (3.8.3-hotfix.12):
-    - MJExtension
-    - OpenIMSDK/Model
-    - OpenIMSDK/Utils
-    - OpenIMSDKCore (= 3.8.3-hotfix.12)
-  - OpenIMSDK/CallbackProxy (3.8.3-hotfix.12):
-    - MJExtension
-    - OpenIMSDK/Utils
-    - OpenIMSDKCore (= 3.8.3-hotfix.12)
-  - OpenIMSDK/Interface (3.8.3-hotfix.12):
-    - MJExtension
-    - OpenIMSDK/Callbacker
-    - OpenIMSDK/CallbackProxy
-    - OpenIMSDK/Model
-    - OpenIMSDKCore (= 3.8.3-hotfix.12)
-  - OpenIMSDK/Model (3.8.3-hotfix.12):
-    - MJExtension
-    - OpenIMSDK/Utils
-    - OpenIMSDKCore (= 3.8.3-hotfix.12)
-  - OpenIMSDK/Utils (3.8.3-hotfix.12):
-    - MJExtension
-    - OpenIMSDKCore (= 3.8.3-hotfix.12)
-  - OpenIMSDKCore (3.8.3-hotfix.12)
+  - SDWebImage (5.21.7):
+    - SDWebImage/Core (= 5.21.7)
+  - SDWebImage/Core (5.21.7)
+  - SDWebImageSwiftUI (3.1.4):
+    - SDWebImage (~> 5.21.1)
+  - SnapKit (5.7.1)
+  - TIMCommon_Swift (8.9.7511):
+    - SDWebImage
+    - SnapKit
+    - TUICore
+  - TUIChat_Swift (8.9.7511):
+    - SDWebImage
+    - SnapKit
+    - TIMCommon_Swift
+    - TUICore
+  - TUIConversation_Swift (8.9.7511):
+    - SnapKit
+    - TIMCommon_Swift
+    - TUICore
+  - TUICore (8.7.7201):
+    - SDWebImage
+    - TUICore/ImSDK_Plus (= 8.7.7201)
+  - TUICore/Base (8.7.7201):
+    - SDWebImage
+  - TUICore/ImSDK_Plus (8.7.7201):
+    - SDWebImage
+    - TUICore/Base
+    - TXIMSDK_Plus_iOS_XCFramework
+  - TXIMSDK_Plus_iOS_XCFramework (8.9.7511)
 
 DEPENDENCIES:
-  - OpenIMSDK (= 3.8.3-hotfix.12)
+  - SDWebImageSwiftUI (= 3.1.4)
+  - SnapKit (from `../../../thirdparty/SnapKit-5.7.1`)
+  - TIMCommon_Swift (from `../../../thirdparty/Chat_UIKit-main/Swift/TUIKit/TIMCommon`)
+  - TUIChat_Swift (from `../../../thirdparty/Chat_UIKit-main/Swift/TUIKit/TUIChat`)
+  - TUIConversation_Swift (from `../../../thirdparty/Chat_UIKit-main/Swift/TUIKit/TUIConversation`)
+  - TUICore (from `../../../thirdparty/Chat_UIKit-main/Swift/TUIKit/TUICore`)
+  - TXIMSDK_Plus_iOS_XCFramework (= 8.9.7511)
 
 SPEC REPOS:
   trunk:
-    - MJExtension
-    - OpenIMSDK
-    - OpenIMSDKCore
+    - SDWebImage
+    - SDWebImageSwiftUI
+    - TXIMSDK_Plus_iOS_XCFramework
+
+EXTERNAL SOURCES:
+  SnapKit:
+    :path: "../../../thirdparty/SnapKit-5.7.1"
+  TIMCommon_Swift:
+    :path: "../../../thirdparty/Chat_UIKit-main/Swift/TUIKit/TIMCommon"
+  TUIChat_Swift:
+    :path: "../../../thirdparty/Chat_UIKit-main/Swift/TUIKit/TUIChat"
+  TUIConversation_Swift:
+    :path: "../../../thirdparty/Chat_UIKit-main/Swift/TUIKit/TUIConversation"
+  TUICore:
+    :path: "../../../thirdparty/Chat_UIKit-main/Swift/TUIKit/TUICore"
 
 SPEC CHECKSUMS:
-  MJExtension: e97d164cb411aa9795cf576093a1fa208b4a8dd8
-  OpenIMSDK: 539858326b8046531c413011ac7693b0408f8cd9
-  OpenIMSDKCore: 02383b2a3f989a1fff29ad5f83c1dac1ee5bfb36
+  SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
+  SDWebImageSwiftUI: 965cdad5a7210b7ec06aaa1a3d17180d0a152250
+  SnapKit: d612e99e678a2d3b95bf60b0705ed0a35c03484a
+  TIMCommon_Swift: 5d642e14e9bd9e4af42b2a59a00e687cc86999f5
+  TUIChat_Swift: a127d25726b87f347f5ad96dadd6b0da2df1f488
+  TUIConversation_Swift: 0d6b1d9a47444d962643b6c2c40603e2aa8e03bc
+  TUICore: 7c576e9317fd13c52036edec6b7078fddf21aa21
+  TXIMSDK_Plus_iOS_XCFramework: 10893791aa5c27b2b689ae3547878d10aeea9b7b
 
-PODFILE CHECKSUM: 54dbf1355405d54b60f46369f167fccb393c295b
+PODFILE CHECKSUM: ebab438e3c4859d8b492986a0449386a07abb6f8
 
 COCOAPODS: 1.16.2

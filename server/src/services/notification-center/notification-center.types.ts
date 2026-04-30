@@ -1,4 +1,4 @@
-export type NotificationChannel = 'in_app' | 'apns' | 'openim';
+export type NotificationChannel = 'in_app' | 'apns';
 
 export type NotificationCategory =
   | 'chat_message'

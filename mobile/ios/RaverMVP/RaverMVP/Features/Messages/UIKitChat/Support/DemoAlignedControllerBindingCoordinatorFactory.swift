@@ -4,6 +4,7 @@ struct DemoAlignedControllerBindingCoordinatorFactoryDependencies {
     let chatController: RaverChatController
     let messageFlowCoordinator: DemoAlignedMessageFlowCoordinator?
     let paginationCoordinator: DemoAlignedPaginationCoordinator?
+    let onReplyDraftChanged: (ChatMessage?) -> Void
 }
 
 enum DemoAlignedControllerBindingCoordinatorFactory {
@@ -18,7 +19,8 @@ enum DemoAlignedControllerBindingCoordinatorFactory {
             },
             onLoadingOlderChanged: { [weak paginationCoordinator = dependencies.paginationCoordinator] isLoading in
                 paginationCoordinator?.updateLoadingState(isLoading)
-            }
+            },
+            onReplyDraftChanged: dependencies.onReplyDraftChanged
         )
     }
 }

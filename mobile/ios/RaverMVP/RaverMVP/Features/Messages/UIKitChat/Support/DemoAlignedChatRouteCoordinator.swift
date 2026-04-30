@@ -44,7 +44,7 @@ final class DemoAlignedChatRouteCoordinator {
         let settingsView = ChatSettingsSheet(
             conversation: conversation,
             service: service,
-            chatStore: OpenIMChatStore.shared,
+            chatStore: IMChatStore.shared,
             onLeaveConversation: { [weak self] in
                 self?.handleLeaveConversation()
             }

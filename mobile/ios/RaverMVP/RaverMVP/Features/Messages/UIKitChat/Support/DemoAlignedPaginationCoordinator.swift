@@ -22,17 +22,17 @@ final class DemoAlignedPaginationCoordinator {
     func reset() {
         topTriggerArmed = true
         loadingIndicator?.stopAnimating()
-        OpenIMProbeLogger.log("[DemoAlignedPagination] reset armed=1 loading=0")
+        IMProbeLogger.log("[DemoAlignedPagination] reset armed=1 loading=0")
     }
 
     func updateLoadingState(_ isLoading: Bool) {
         if isLoading {
             loadingIndicator?.startAnimating()
-            OpenIMProbeLogger.log("[DemoAlignedPagination] loading state=1")
+            IMProbeLogger.log("[DemoAlignedPagination] loading state=1")
             return
         }
         loadingIndicator?.stopAnimating()
-        OpenIMProbeLogger.log("[DemoAlignedPagination] loading state=0")
+        IMProbeLogger.log("[DemoAlignedPagination] loading state=0")
     }
 
     func handleScrollDidScroll(_ scrollView: UIScrollView) {
@@ -41,7 +41,7 @@ final class DemoAlignedPaginationCoordinator {
 
         guard isAtTopTrigger else {
             if !topTriggerArmed {
-                OpenIMProbeLogger.log(
+                IMProbeLogger.log(
                     "[DemoAlignedPagination] rearm offsetY=\(String(format: "%.1f", scrollView.contentOffset.y)) threshold=\(String(format: "%.1f", topThreshold))"
                 )
             }
@@ -51,7 +51,7 @@ final class DemoAlignedPaginationCoordinator {
 
         guard topTriggerArmed else { return }
         topTriggerArmed = false
-        OpenIMProbeLogger.log(
+        IMProbeLogger.log(
             "[DemoAlignedPagination] trigger load-older offsetY=\(String(format: "%.1f", scrollView.contentOffset.y)) threshold=\(String(format: "%.1f", topThreshold))"
         )
 

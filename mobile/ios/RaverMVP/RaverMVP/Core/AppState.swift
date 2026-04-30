@@ -2,6 +2,129 @@ import Foundation
 import Combine
 import OSLog
 import UIKit
+import AVFoundation
+import CryptoKit
+#if canImport(ImSDK_Plus)
+import ImSDK_Plus
+#endif
+
+struct TencentC2CReadReceiptEvent: Equatable {
+    let conversationID: String
+    let messageID: String?
+    let peerRead: Bool
+    let readAt: Date?
+}
+
+struct TencentMessageRevocationEvent: Equatable {
+    let conversationID: String
+    let messageID: String
+    let displayText: String
+}
+
+enum TencentIMIdentity {
+    static func normalizePlatformUserIDForProfile(_ raw: String) -> String {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return raw }
+        return decodePlatformUserID(fromTencentIMUserID: normalized) ?? normalized
+    }
+
+    static func normalizePlatformSquadID(_ raw: String) -> String {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return raw }
+        return decodePlatformSquadID(fromTencentIMGroupID: normalized) ?? normalized
+    }
+
+    static func isTencentIMUserID(_ value: String) -> Bool {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.hasPrefix("tu_") || normalized.hasPrefix("c2c_tu_")
+    }
+
+    static func isTencentIMSquadGroupID(_ value: String) -> Bool {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.hasPrefix("sg_") || normalized.hasPrefix("group_sg_")
+    }
+
+    static func decodePlatformUserID(fromTencentIMUserID value: String) -> String? {
+        decodeUUID(fromPrefixedValue: value, acceptedPrefixes: ["c2c_tu_", "tu_"])
+    }
+
+    static func decodePlatformSquadID(fromTencentIMGroupID value: String) -> String? {
+        decodeUUID(fromPrefixedValue: value, acceptedPrefixes: ["group_sg_", "sg_"])
+    }
+
+    static func toTencentIMUserID(_ raw: String) -> String {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.hasPrefix("tu_") {
+            return normalized
+        }
+        if normalized.hasPrefix("c2c_") {
+            let stripped = String(normalized.dropFirst(4))
+            return stripped.hasPrefix("tu_") ? stripped : "tu_\(stripped)"
+        }
+        return "tu_\(toStableShortID(normalized))"
+    }
+
+    private static func toStableShortID(_ value: String) -> String {
+        if let uuidData = toCompactUUIDData(value) {
+            return base64URLEncodedString(uuidData)
+        }
+        let digest = SHA256.hash(data: Data(value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().utf8))
+        let hashData = Data(digest)
+        return String(base64URLEncodedString(hashData).prefix(22))
+    }
+
+    private static func toCompactUUIDData(_ value: String) -> Data? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let parsed = UUID(uuidString: trimmed) {
+            return withUnsafeBytes(of: parsed.uuid) { Data($0) }
+        }
+        let compact = trimmed.replacingOccurrences(of: "-", with: "")
+        guard compact.count == 32,
+              compact.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "0123456789abcdef").contains($0) }) else {
+            return nil
+        }
+        var data = Data(capacity: 16)
+        var index = compact.startIndex
+        for _ in 0..<16 {
+            let next = compact.index(index, offsetBy: 2)
+            let byteString = compact[index..<next]
+            guard let byte = UInt8(byteString, radix: 16) else { return nil }
+            data.append(byte)
+            index = next
+        }
+        return data
+    }
+
+    private static func base64URLEncodedString(_ data: Data) -> String {
+        data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    private static func decodeUUID(fromPrefixedValue value: String, acceptedPrefixes: [String]) -> String? {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let prefix = acceptedPrefixes.first(where: { normalized.hasPrefix($0) }) else { return nil }
+        let compact = String(normalized.dropFirst(prefix.count))
+        guard compact.count == 22 || compact.count == 24 else { return nil }
+
+        var base64 = compact
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+
+        let remainder = base64.count % 4
+        if remainder != 0 {
+            base64.append(String(repeating: "=", count: 4 - remainder))
+        }
+
+        guard let data = Data(base64Encoded: base64), data.count == 16 else { return nil }
+        let bytes = [UInt8](data)
+        let hex = bytes.map { String(format: "%02x", $0) }.joined()
+        guard hex.count == 32 else { return nil }
+
+        return "\(hex.prefix(8))-\(hex.dropFirst(8).prefix(4))-\(hex.dropFirst(12).prefix(4))-\(hex.dropFirst(16).prefix(4))-\(hex.dropFirst(20).prefix(12))"
+    }
+}
 
 enum AppLanguage: String, CaseIterable, Codable, Hashable, Identifiable {
     case system
@@ -547,6 +670,1847 @@ struct SystemDeepLinkEvent: Identifiable, Equatable {
     let source: String
 }
 
+enum TencentIMConnectionState: Equatable {
+    case idle
+    case disabled
+    case unavailable
+    case initializing
+    case connecting
+    case connected(userID: String)
+    case userSigExpired
+    case kickedOffline
+    case failed(String)
+}
+
+@MainActor
+final class TencentIMSession: NSObject {
+    static let shared = TencentIMSession()
+    private static let loggedInStatusRawValue = 1
+    private static let loggedOutStatusRawValue = 3
+    private static let infoLogLevelRawValue = 4
+    private static let messageStatusSendingRawValue = 1
+    private static let messageStatusSentRawValue = 2
+    private static let messageStatusFailedRawValue = 3
+    private static let messageStatusLocalRevokedRawValue = 6
+    private static let elemTypeTextRawValue = 1
+    private static let elemTypeCustomRawValue = 2
+    private static let elemTypeImageRawValue = 3
+    private static let elemTypeSoundRawValue = 4
+    private static let elemTypeVideoRawValue = 5
+    private static let elemTypeFileRawValue = 6
+    private static let elemTypeLocationRawValue = 7
+    private static let elemTypeFaceRawValue = 8
+    private static let elemTypeGroupTipsRawValue = 9
+    private static let elemTypeMergerRawValue = 10
+    private static let elemTypeStreamRawValue = 11
+    private static let conversationTypeDirectRawValue = 1
+    private static let conversationTypeGroupRawValue = 2
+    private static let receiveMessageOptRawValue = 0
+    private static let receiveNoNotifyRawValue = 2
+    private static let typingBusinessID = "user_typing_status"
+
+    var onStateChange: ((TencentIMConnectionState) -> Void)?
+    var onUnreadCountChange: ((Int) -> Void)?
+    let messageSubject = PassthroughSubject<ChatMessage, Never>()
+    let conversationSubject = PassthroughSubject<[Conversation], Never>()
+    let totalUnreadSubject = PassthroughSubject<Int, Never>()
+    let c2cReadReceiptSubject = PassthroughSubject<[TencentC2CReadReceiptEvent], Never>()
+    let messageRevocationSubject = PassthroughSubject<TencentMessageRevocationEvent, Never>()
+    var messagePublisher: AnyPublisher<ChatMessage, Never> {
+        messageSubject.eraseToAnyPublisher()
+    }
+    var conversationPublisher: AnyPublisher<[Conversation], Never> {
+        conversationSubject.eraseToAnyPublisher()
+    }
+    var totalUnreadPublisher: AnyPublisher<Int, Never> {
+        totalUnreadSubject.eraseToAnyPublisher()
+    }
+    var c2cReadReceiptPublisher: AnyPublisher<[TencentC2CReadReceiptEvent], Never> {
+        c2cReadReceiptSubject.eraseToAnyPublisher()
+    }
+    var messageRevocationPublisher: AnyPublisher<TencentMessageRevocationEvent, Never> {
+        messageRevocationSubject.eraseToAnyPublisher()
+    }
+
+    private(set) var state: TencentIMConnectionState = .idle {
+        didSet {
+            onStateChange?(state)
+        }
+    }
+    private(set) var unreadCount: Int = 0 {
+        didSet {
+            guard oldValue != unreadCount else { return }
+            onUnreadCountChange?(unreadCount)
+        }
+    }
+
+    private var hasInitializedSDK = false
+    private var hasRegisteredListeners = false
+    private var currentBootstrap: TencentIMBootstrap?
+    private var currentUserID: String?
+
+    private override init() {
+        super.init()
+    }
+
+    func connectionStateSnapshot() -> TencentIMConnectionState {
+        state
+    }
+
+    func totalUnreadCountSnapshot() -> Int {
+        unreadCount
+    }
+
+    func currentBusinessUserIDSnapshot() -> String? {
+        currentUserID
+    }
+
+    func isBootstrapEnabledSnapshot() -> Bool {
+        currentBootstrap?.enabled == true
+    }
+
+    func recoverSessionAfterAppBecameActive() async -> Bool {
+#if canImport(ImSDK_Plus)
+        guard hasInitializedSDK,
+              let manager = V2TIMManager.sharedInstance() else { return false }
+        guard manager.getLoginStatus().rawValue == Self.loggedInStatusRawValue,
+              let userID = manager.getLoginUser(),
+              !userID.isEmpty else {
+            return false
+        }
+
+        currentUserID = userID
+        state = .connected(userID: userID)
+        await refreshTotalUnreadCount()
+        return true
+#else
+        false
+#endif
+    }
+
+    func reset() {
+#if canImport(ImSDK_Plus)
+        if let manager = V2TIMManager.sharedInstance() {
+            if hasRegisteredListeners {
+                manager.removeIMSDKListener(listener: self)
+                manager.removeConversationListener(listener: self)
+                manager.removeAdvancedMsgListener(listener: self)
+                hasRegisteredListeners = false
+            }
+            if hasInitializedSDK {
+                manager.unInitSDK()
+            }
+        }
+#endif
+        hasInitializedSDK = false
+        hasRegisteredListeners = false
+        currentBootstrap = nil
+        currentUserID = nil
+        unreadCount = 0
+        state = .idle
+    }
+
+    func sync(with bootstrap: TencentIMBootstrap?) async {
+        guard let bootstrap else {
+            reset()
+            return
+        }
+
+        currentBootstrap = bootstrap
+
+        guard bootstrap.enabled else {
+            reset()
+            state = .disabled
+            return
+        }
+
+        guard bootstrap.sdkAppID > 0 else {
+            reset()
+            state = .failed("Tencent IM bootstrap missing sdkAppID")
+            return
+        }
+
+        guard let userSig = bootstrap.userSig, !userSig.isEmpty else {
+            reset()
+            state = .failed("Tencent IM bootstrap missing userSig")
+            return
+        }
+
+#if canImport(ImSDK_Plus)
+        guard let manager = V2TIMManager.sharedInstance() else {
+            state = .unavailable
+            return
+        }
+        state = .initializing
+
+        if !hasInitializedSDK {
+            let config = V2TIMSDKConfig()
+            config.logLevel = V2TIMLogLevel(rawValue: Self.infoLogLevelRawValue) ?? config.logLevel
+            let initialized = manager.initSDK(Int32(bootstrap.sdkAppID), config: config)
+            guard initialized else {
+                state = .failed("Tencent IM initSDK failed")
+                return
+            }
+            hasInitializedSDK = true
+        }
+
+        if !hasRegisteredListeners {
+            manager.addIMSDKListener(listener: self)
+            manager.addConversationListener(listener: self)
+            manager.addAdvancedMsgListener(listener: self)
+            hasRegisteredListeners = true
+        }
+
+        let loginStatus = manager.getLoginStatus()
+        let loginUserID = manager.getLoginUser()
+        if loginStatus.rawValue == Self.loggedInStatusRawValue, loginUserID == bootstrap.userID {
+            currentUserID = bootstrap.userID
+            state = .connected(userID: bootstrap.userID)
+            await refreshTotalUnreadCount()
+            return
+        }
+
+        if loginStatus.rawValue != Self.loggedOutStatusRawValue {
+            do {
+                try await logout(manager: manager)
+            } catch {
+                // Continue attempting a clean login with the latest bootstrap.
+            }
+        }
+
+        state = .connecting
+        do {
+            try await login(manager: manager, userID: bootstrap.userID, userSig: userSig)
+            currentUserID = bootstrap.userID
+            state = .connected(userID: bootstrap.userID)
+            await refreshTotalUnreadCount()
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+#else
+        state = .unavailable
+#endif
+    }
+
+#if canImport(ImSDK_Plus)
+    func fetchConversations(type: ConversationType) async throws -> [Conversation]? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let remote = try await fetchAllConversations(manager: manager)
+        return remote.compactMap(mapConversation(_:)).filter { $0.type == type }
+    }
+
+    func markConversationRead(conversationID: String) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        try await withCheckedThrowingContinuation { continuation in
+            manager.cleanConversationUnreadMessageCount(
+                conversationID: target.rawConversationID,
+                cleanTimestamp: 0,
+                cleanSequence: 0
+            ) {
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Mark conversation read failed"))
+            }
+        }
+        await refreshTotalUnreadCount()
+        return true
+    }
+
+    func setConversationPinned(conversationID: String, pinned: Bool) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        try await withCheckedThrowingContinuation { continuation in
+            manager.pinConversation(conversationID: target.rawConversationID, isPinned: pinned) {
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Set conversation pinned failed"))
+            }
+        }
+        return true
+    }
+
+    func markConversationUnread(conversationID: String, unread: Bool) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let markType = NSNumber(value: V2TIMConversationMarkType.CONVERSATION_MARK_TYPE_UNREAD.rawValue)
+        try await withCheckedThrowingContinuation { continuation in
+            manager.markConversation(
+                conversationIDList: [target.rawConversationID],
+                markType: markType,
+                enableMark: unread
+            ) { _ in
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Mark conversation unread failed"))
+            }
+        }
+        await refreshTotalUnreadCount()
+        return true
+    }
+
+    func hideConversation(conversationID: String) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let markType = NSNumber(value: V2TIMConversationMarkType.CONVERSATION_MARK_TYPE_HIDE.rawValue)
+        try await withCheckedThrowingContinuation { continuation in
+            manager.markConversation(
+                conversationIDList: [target.rawConversationID],
+                markType: markType,
+                enableMark: true
+            ) { _ in
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Hide conversation failed"))
+            }
+        }
+        await refreshTotalUnreadCount()
+        return true
+    }
+
+    func setConversationMuted(conversationID: String, muted: Bool) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let receiveOpt = V2TIMReceiveMessageOpt(
+            rawValue: muted ? Self.receiveNoNotifyRawValue : Self.receiveMessageOptRawValue
+        ) ?? V2TIMReceiveMessageOpt(rawValue: Self.receiveMessageOptRawValue)
+
+        guard let opt = receiveOpt else {
+            throw ServiceError.message("Tencent IM receive option unavailable")
+        }
+
+        switch target.type {
+        case .direct:
+            guard let userID = target.userID else {
+                throw ServiceError.message("Tencent IM direct conversation missing userID")
+            }
+            try await withCheckedThrowingContinuation { continuation in
+                manager.setC2CReceiveMessageOpt(userIDList: [userID], opt: opt) {
+                    continuation.resume()
+                } fail: { code, desc in
+                    continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Set direct conversation mute failed"))
+                }
+            }
+        case .group:
+            guard let groupID = target.groupID else {
+                throw ServiceError.message("Tencent IM group conversation missing groupID")
+            }
+            try await withCheckedThrowingContinuation { continuation in
+                manager.setGroupReceiveMessageOpt(groupID: groupID, opt: opt) {
+                    continuation.resume()
+                } fail: { code, desc in
+                    continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Set group conversation mute failed"))
+                }
+            }
+        }
+
+        return true
+    }
+
+    func clearConversationHistory(conversationID: String) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+
+        switch target.type {
+        case .direct:
+            guard let userID = target.userID else {
+                throw ServiceError.message("Tencent IM direct conversation missing userID")
+            }
+            try await withCheckedThrowingContinuation { continuation in
+                manager.clearC2CHistoryMessage(userID: userID) {
+                    continuation.resume()
+                } fail: { code, desc in
+                    continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Clear direct conversation history failed"))
+                }
+            }
+        case .group:
+            guard let groupID = target.groupID else {
+                throw ServiceError.message("Tencent IM group conversation missing groupID")
+            }
+            try await withCheckedThrowingContinuation { continuation in
+                manager.clearGroupHistoryMessage(groupID: groupID) {
+                    continuation.resume()
+                } fail: { code, desc in
+                    continuation.resume(throwing: self.buildTencentIMError(code: code, desc: desc, fallback: "Clear group conversation history failed"))
+                }
+            }
+        }
+
+        await refreshTotalUnreadCount()
+        return true
+    }
+
+    func fetchMessages(conversationID: String, count: Int = 50) async throws -> [ChatMessage]? {
+        let page = try await fetchMessagesPage(
+            conversationID: conversationID,
+            startClientMsgID: nil,
+            count: count
+        )
+        return page?.messages
+    }
+
+    func fetchMessagesPage(
+        conversationID: String,
+        startClientMsgID: String?,
+        count: Int = 50
+    ) async throws -> ChatMessageHistoryPage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let anchorMessage = try await resolveHistoryAnchorMessage(
+            manager: manager,
+            target: target,
+            startClientMsgID: startClientMsgID
+        )
+        let remoteMessages = try await fetchHistoryMessages(
+            manager: manager,
+            target: target,
+            count: max(1, count),
+            lastMessage: anchorMessage
+        )
+
+        var mapped: [ChatMessage] = []
+        mapped.reserveCapacity(remoteMessages.count)
+        for message in remoteMessages {
+            mapped.append(await mapMessage(message, conversationID: target.businessConversationID))
+        }
+
+        let sorted = mapped.sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.id < rhs.id
+        }
+        return ChatMessageHistoryPage(messages: sorted, isEnd: remoteMessages.count < max(1, count))
+    }
+
+    func sendTextMessage(conversationID: String, content: String) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        guard let message = manager.createTextMessage(text: content) else {
+            throw ServiceError.message("Tencent IM create text message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        return try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            progress: nil
+        )
+    }
+
+    func sendImageMessage(
+        conversationID: String,
+        fileURL: URL,
+        onProgress: ((Int) -> Void)?
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        guard let message = manager.createImageMessage(imagePath: fileURL.path) else {
+            throw ServiceError.message("Tencent IM create image message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        return try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            progress: onProgress
+        )
+    }
+
+    func sendVideoMessage(
+        conversationID: String,
+        fileURL: URL,
+        onProgress: ((Int) -> Void)?
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let snapshotURL = try makeVideoSnapshotURL(for: fileURL)
+        guard let message = manager.createVideoMessage(
+            videoFilePath: fileURL.path,
+            type: fileURL.pathExtension.isEmpty ? "mp4" : fileURL.pathExtension,
+            duration: 0,
+            snapshotPath: snapshotURL.path
+        ) else {
+            throw ServiceError.message("Tencent IM create video message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        return try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            progress: onProgress
+        )
+    }
+
+    func sendVoiceMessage(
+        conversationID: String,
+        fileURL: URL
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let duration = try audioDurationSeconds(for: fileURL)
+        guard let message = manager.createSoundMessage(audioFilePath: fileURL.path, duration: duration) else {
+            throw ServiceError.message("Tencent IM create voice message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        return try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            progress: nil
+        )
+    }
+
+    func sendFileMessage(
+        conversationID: String,
+        fileURL: URL
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let fileName = fileURL.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let audioDuration = audioFileDurationSecondsIfSupported(for: fileURL)
+        let fileSizeBytes = fileSizeInBytes(for: fileURL)
+        guard let message = manager.createFileMessage(
+            filePath: fileURL.path,
+            fileName: fileName.isEmpty ? fileURL.lastPathComponent : fileName
+        ) else {
+            throw ServiceError.message("Tencent IM create file message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        var sentMessage = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            progress: nil
+        )
+        if audioDuration != nil || fileSizeBytes != nil {
+            var media = sentMessage.media ?? ChatMessageMediaPayload()
+            if media.mediaURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+                media.mediaURL = fileURL.path
+            }
+            if media.fileName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+                media.fileName = fileName.isEmpty ? fileURL.lastPathComponent : fileName
+            }
+            if media.fileSizeBytes == nil {
+                media.fileSizeBytes = fileSizeBytes
+            }
+            if media.durationSeconds == nil {
+                media.durationSeconds = audioDuration
+            }
+            sentMessage.media = media
+        }
+        return sentMessage
+    }
+
+    func sendTypingStatus(
+        conversationID: String,
+        isTyping: Bool
+    ) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        guard target.type == .direct else {
+            return false
+        }
+
+        let payload: [String: Any] = [
+            "businessID": Self.typingBusinessID,
+            "typingStatus": isTyping ? 1 : 0,
+            "version": 1,
+            "userAction": 14,
+            "actionParam": isTyping ? "EIMAMSG_InputStatus_Ing" : "EIMAMSG_InputStatus_End"
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [])
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create typing message failed")
+        }
+
+        guard let priority = V2TIMMessagePriority(rawValue: 2) else {
+            throw ServiceError.message("Tencent IM message priority unavailable")
+        }
+
+        try await withCheckedThrowingContinuation { continuation in
+            _ = manager.sendMessage(
+                message: message,
+                receiver: target.userID,
+                groupID: target.groupID,
+                priority: priority,
+                onlineUserOnly: true,
+                offlinePushInfo: nil,
+                progress: nil,
+                succ: {
+                    continuation.resume()
+                },
+                fail: { code, desc in
+                    continuation.resume(
+                        throwing: self.buildTencentIMError(
+                            code: code,
+                            desc: desc,
+                            fallback: "Send Tencent IM typing status failed"
+                        )
+                    )
+                }
+            )
+        }
+
+        return true
+    }
+
+    func revokeMessage(
+        conversationID: String,
+        messageID: String
+    ) async throws -> String? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let message = try await findMessage(
+            manager: manager,
+            messageID: messageID,
+            conversationID: target.businessConversationID
+        )
+        let displayText = revokeDisplayText(for: message, operateUser: nil)
+
+        try await withCheckedThrowingContinuation { continuation in
+            manager.revokeMessage(msg: message) {
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Revoke Tencent IM message failed"
+                    )
+                )
+            }
+        }
+
+        return displayText
+    }
+
+    func deleteMessage(
+        conversationID: String,
+        messageID: String
+    ) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let message = try await findMessage(
+            manager: manager,
+            messageID: messageID,
+            conversationID: target.businessConversationID
+        )
+
+        try await withCheckedThrowingContinuation { continuation in
+            manager.deleteMessages(msgList: [message]) {
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Delete Tencent IM message failed"
+                    )
+                )
+            }
+        }
+
+        return true
+    }
+
+    func fetchTotalUnreadCount() async -> Int? {
+        guard currentBootstrap?.enabled == true, hasInitializedSDK else {
+            return nil
+        }
+
+        guard let manager = V2TIMManager.sharedInstance(),
+              manager.getLoginStatus().rawValue == Self.loggedInStatusRawValue else {
+            return nil
+        }
+
+        return await requestTotalUnreadCount(manager: manager)
+    }
+
+    private func login(manager: V2TIMManager, userID: String, userSig: String) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            manager.login(userID: userID, userSig: userSig) {
+                continuation.resume()
+            } fail: { code, desc in
+                let message = desc?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let resolved = message.isEmpty ? "Tencent IM login failed (\(code))" : message
+                continuation.resume(throwing: ServiceError.message(resolved))
+            }
+        }
+    }
+
+    private func logout(manager: V2TIMManager) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            manager.logout {
+                continuation.resume()
+            } fail: { code, desc in
+                let message = desc?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let resolved = message.isEmpty ? "Tencent IM logout failed (\(code))" : message
+                continuation.resume(throwing: ServiceError.message(resolved))
+            }
+        }
+    }
+
+    private func refreshTotalUnreadCount() async {
+        guard let manager = V2TIMManager.sharedInstance() else {
+            unreadCount = 0
+            return
+        }
+        unreadCount = await requestTotalUnreadCount(manager: manager) ?? 0
+    }
+
+    private func requestTotalUnreadCount(manager: V2TIMManager) async -> Int? {
+        await withCheckedContinuation { continuation in
+            manager.getTotalUnreadMessageCount { totalUnreadCount in
+                continuation.resume(returning: Int(totalUnreadCount))
+            } fail: { _, _ in
+                continuation.resume(returning: nil)
+            }
+        }
+    }
+
+    private struct TencentConversationTarget {
+        let businessConversationID: String
+        let rawConversationID: String
+        let type: ConversationType
+        let userID: String?
+        let groupID: String?
+    }
+
+    private struct TencentConversationPage {
+        let list: [V2TIMConversation]
+        let nextSeq: UInt64
+        let isFinished: Bool
+    }
+
+    private func requireReadyManager() throws -> V2TIMManager {
+        guard let manager = V2TIMManager.sharedInstance(), hasInitializedSDK else {
+            throw ServiceError.message("Tencent IM SDK not initialized")
+        }
+
+        guard manager.getLoginStatus().rawValue == Self.loggedInStatusRawValue else {
+            throw ServiceError.message("Tencent IM not connected")
+        }
+
+        return manager
+    }
+
+    private func shouldRequestReadReceipt(for target: TencentConversationTarget) -> Bool {
+        target.type == .direct || target.type == .group
+    }
+
+    private func fetchAllConversations(manager: V2TIMManager) async throws -> [V2TIMConversation] {
+        var nextSeq: UInt64 = 0
+        var merged: [V2TIMConversation] = []
+        var isFinished = false
+
+        repeat {
+            let page = try await fetchConversationPage(
+                manager: manager,
+                nextSeq: nextSeq,
+                count: 100
+            )
+            merged.append(contentsOf: page.list)
+            nextSeq = page.nextSeq
+            isFinished = page.isFinished
+        } while !isFinished
+
+        return merged
+    }
+
+    private func fetchConversationPage(
+        manager: V2TIMManager,
+        nextSeq: UInt64,
+        count: Int
+    ) async throws -> TencentConversationPage {
+        try await withCheckedThrowingContinuation { continuation in
+            manager.getConversationList(nextSeq: nextSeq, count: Int32(max(1, count))) { list, nextSeq, isFinished in
+                continuation.resume(
+                    returning: TencentConversationPage(
+                        list: list ?? [],
+                        nextSeq: nextSeq,
+                        isFinished: isFinished
+                    )
+                )
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Fetch Tencent IM conversations failed"
+                    )
+                )
+            }
+        }
+    }
+
+    private func resolveConversationTarget(
+        conversationID: String,
+        manager: V2TIMManager
+    ) async throws -> TencentConversationTarget {
+        let trimmed = conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw ServiceError.message("Conversation ID is empty")
+        }
+
+        if trimmed.hasPrefix("c2c_") {
+            let userID = String(trimmed.dropFirst(4))
+            return TencentConversationTarget(
+                businessConversationID: userID,
+                rawConversationID: trimmed,
+                type: .direct,
+                userID: userID,
+                groupID: nil
+            )
+        }
+
+        if trimmed.hasPrefix("tu_") {
+            return TencentConversationTarget(
+                businessConversationID: trimmed,
+                rawConversationID: "c2c_\(trimmed)",
+                type: .direct,
+                userID: trimmed,
+                groupID: nil
+            )
+        }
+
+        if trimmed.hasPrefix("group_") {
+            let groupID = String(trimmed.dropFirst(6))
+            return TencentConversationTarget(
+                businessConversationID: groupID,
+                rawConversationID: trimmed,
+                type: .group,
+                userID: nil,
+                groupID: groupID
+            )
+        }
+
+        let conversations = try await fetchAllConversations(manager: manager)
+        for item in conversations {
+            guard let mapped = mapConversation(item) else { continue }
+            if mapped.id == trimmed || mapped.sdkConversationID == trimmed {
+                return TencentConversationTarget(
+                    businessConversationID: mapped.id,
+                    rawConversationID: mapped.sdkConversationID ?? mapped.id,
+                    type: mapped.type,
+                    userID: mapped.type == .direct ? mapped.id : nil,
+                    groupID: mapped.type == .group ? mapped.id : nil
+                )
+            }
+        }
+
+        throw ServiceError.message("Tencent IM conversation not found")
+    }
+
+    private func fetchHistoryMessages(
+        manager: V2TIMManager,
+        target: TencentConversationTarget,
+        count: Int,
+        lastMessage: V2TIMMessage?
+    ) async throws -> [V2TIMMessage] {
+        try await withCheckedThrowingContinuation { continuation in
+            let success: V2TIMMessageListSucc = { messages in
+                continuation.resume(returning: messages ?? [])
+            }
+            let failure: V2TIMFail = { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Fetch Tencent IM history messages failed"
+                    )
+                )
+            }
+
+            switch target.type {
+            case .direct:
+                guard let userID = target.userID else {
+                    continuation.resume(throwing: ServiceError.message("Tencent IM direct conversation missing userID"))
+                    return
+                }
+                manager.getC2CHistoryMessageList(
+                    userID: userID,
+                    count: Int32(max(1, count)),
+                    lastMsg: lastMessage,
+                    succ: success,
+                    fail: failure
+                )
+            case .group:
+                guard let groupID = target.groupID else {
+                    continuation.resume(throwing: ServiceError.message("Tencent IM group conversation missing groupID"))
+                    return
+                }
+                manager.getGroupHistoryMessageList(
+                    groupID: groupID,
+                    count: Int32(max(1, count)),
+                    lastMsg: lastMessage,
+                    succ: success,
+                    fail: failure
+                )
+            }
+        }
+    }
+
+    private func searchLocalMessages(
+        manager: V2TIMManager,
+        target: TencentConversationTarget,
+        query: String,
+        limit: Int
+    ) async throws -> [V2TIMMessage] {
+        try await withCheckedThrowingContinuation { continuation in
+            let searchParam = V2TIMMessageSearchParam()
+            searchParam.keywordList = [query]
+            searchParam.messageTypeList = nil
+            searchParam.conversationID = target.rawConversationID
+            searchParam.searchTimePosition = 0
+            searchParam.searchTimePeriod = 0
+            searchParam.pageIndex = 0
+            searchParam.pageSize = UInt(max(1, limit))
+
+            manager.searchLocalMessages(param: searchParam) { searchResult in
+                guard let searchResult else {
+                    continuation.resume(returning: [])
+                    return
+                }
+
+                let items = searchResult.messageSearchResultItems ?? []
+                let flattened = items.flatMap { $0.messageList ?? [] }
+                continuation.resume(returning: flattened)
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Search Tencent IM local messages failed"
+                    )
+                )
+            }
+        }
+    }
+
+    private func resolveHistoryAnchorMessage(
+        manager: V2TIMManager,
+        target: TencentConversationTarget,
+        startClientMsgID: String?
+    ) async throws -> V2TIMMessage? {
+        guard let startClientMsgID = normalizedText(startClientMsgID) else {
+            return nil
+        }
+
+        let messages = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[V2TIMMessage], Error>) in
+            manager.findMessages(messageIDList: [startClientMsgID], succ: { messages in
+                continuation.resume(returning: messages ?? [])
+            }, fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Resolve Tencent IM history anchor failed"
+                    )
+                )
+            })
+        }
+
+        return messages.first(where: { [weak self] message in
+            guard let self else { return false }
+            return self.resolveBusinessConversationID(for: message) == target.businessConversationID
+        }) ?? messages.first
+    }
+
+    private func findMessage(
+        manager: V2TIMManager,
+        messageID: String,
+        conversationID: String? = nil
+    ) async throws -> V2TIMMessage {
+        let trimmedMessageID = messageID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedMessageID.isEmpty else {
+            throw ServiceError.message("Tencent IM message ID is empty")
+        }
+
+        let messages = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[V2TIMMessage], Error>) in
+            manager.findMessages(messageIDList: [trimmedMessageID], succ: { messages in
+                continuation.resume(returning: messages ?? [])
+            }, fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Find Tencent IM message failed"
+                    )
+                )
+            })
+        }
+
+        if let conversationID,
+           let matched = messages.first(where: { [weak self] message in
+               guard let self else { return false }
+               return self.resolveBusinessConversationID(for: message) == conversationID
+           }) {
+            return matched
+        }
+
+        if let first = messages.first {
+            return first
+        }
+
+        throw ServiceError.message("Tencent IM message not found")
+    }
+
+    private func sendMessage(
+        manager: V2TIMManager,
+        message: V2TIMMessage,
+        target: TencentConversationTarget,
+        progress: ((Int) -> Void)?
+    ) async throws -> ChatMessage {
+        guard let priority = V2TIMMessagePriority(rawValue: 2) else {
+            throw ServiceError.message("Tencent IM message priority unavailable")
+        }
+
+        let sentMessage = try await withCheckedThrowingContinuation { continuation in
+            _ = manager.sendMessage(
+                message: message,
+                receiver: target.userID,
+                groupID: target.groupID,
+                priority: priority,
+                onlineUserOnly: false,
+                offlinePushInfo: nil,
+                progress: { percent in
+                    progress?(Int(percent))
+                },
+                succ: {
+                    continuation.resume(returning: message)
+                },
+                fail: { code, desc in
+                    continuation.resume(
+                        throwing: self.buildTencentIMError(
+                            code: code,
+                            desc: desc,
+                            fallback: "Send Tencent IM message failed"
+                        )
+                    )
+                }
+            )
+        }
+
+        await refreshTotalUnreadCount()
+        return await mapMessage(sentMessage, conversationID: target.businessConversationID)
+    }
+
+    private func mapConversation(_ item: V2TIMConversation) -> Conversation? {
+        let rawType = item.type.rawValue
+        let conversationType: ConversationType
+        let businessID: String
+
+        switch rawType {
+        case Self.conversationTypeDirectRawValue:
+            guard let userID = normalizedText(item.userID) else { return nil }
+            conversationType = .direct
+            businessID = userID
+        case Self.conversationTypeGroupRawValue:
+            guard let groupID = normalizedText(item.groupID) else { return nil }
+            conversationType = .group
+            businessID = groupID
+        default:
+            return nil
+        }
+
+        let title = normalizedText(item.showName) ?? businessID
+        let avatarURL = normalizedText(item.faceUrl)
+        let senderID = previewSenderLabel(for: item.lastMessage, conversationType: conversationType)
+        let updatedAt = item.lastMessage?.timestamp ?? item.draftTimestamp ?? .distantPast
+        let peer: UserSummary?
+        if conversationType == .direct {
+            peer = UserSummary(
+                id: businessID,
+                username: businessID,
+                displayName: title,
+                avatarURL: avatarURL,
+                isFollowing: false
+            )
+        } else {
+            peer = nil
+        }
+
+#if DEBUG
+        print(
+            """
+            [IMProfile][ConversationMap] \
+            type=\(conversationType == .direct ? "direct" : "group") \
+            businessID=\(businessID) \
+            showName=\(title) \
+            faceUrl=\(avatarURL ?? "nil") \
+            userID=\(normalizedText(item.userID) ?? "nil") \
+            groupID=\(normalizedText(item.groupID) ?? "nil") \
+            sdkConversationID=\(normalizedText(item.conversationID) ?? "nil")
+            """
+        )
+#endif
+
+        return Conversation(
+            id: businessID,
+            type: conversationType,
+            title: title,
+            avatarURL: avatarURL,
+            sdkConversationID: normalizedText(item.conversationID),
+            lastMessage: previewText(for: item.lastMessage),
+            lastMessageSenderID: senderID,
+            unreadCount: max(0, Int(item.unreadCount)),
+            updatedAt: updatedAt,
+            peer: peer,
+            isPinned: item.isPinned,
+            isMuted: item.recvOpt.rawValue == Self.receiveNoNotifyRawValue
+        )
+    }
+
+    private func previewSenderLabel(
+        for message: V2TIMMessage?,
+        conversationType: ConversationType
+    ) -> String? {
+        guard let message else { return nil }
+
+        let senderID = normalizedText(message.sender)
+        let resolvedIsMine = senderID == currentUserID || message.isSelf
+        if resolvedIsMine {
+            return L("我", "Me")
+        }
+
+        let displayName = normalizedText(message.friendRemark)
+            ?? normalizedText(message.nameCard)
+            ?? normalizedText(message.nickName)
+        if let displayName {
+            return displayName
+        }
+
+        // Direct chats should stay visually stable even when the SDK only returns a raw sender id.
+        // Falling back to nil avoids "username: content" replacing an already-correct display name preview.
+        if conversationType == .direct {
+            return nil
+        }
+
+        return senderID
+    }
+
+    private func previewText(for message: V2TIMMessage?) -> String {
+        guard let message else {
+            return L("暂无消息", "No messages yet")
+        }
+
+        switch message.elemType.rawValue {
+        case Self.elemTypeTextRawValue:
+            return normalizedText(message.textElem?.text) ?? ""
+        case Self.elemTypeImageRawValue:
+            return L("[图片]", "[Image]")
+        case Self.elemTypeSoundRawValue:
+            return L("[语音]", "[Voice]")
+        case Self.elemTypeVideoRawValue:
+            return L("[视频]", "[Video]")
+        case Self.elemTypeFileRawValue:
+            return normalizedText(message.fileElem?.filename) ?? L("[文件]", "[File]")
+        case Self.elemTypeLocationRawValue:
+            return normalizedText(message.locationElem?.desc) ?? L("[位置]", "[Location]")
+        case Self.elemTypeFaceRawValue:
+            return L("[表情]", "[Sticker]")
+        case Self.elemTypeCustomRawValue:
+            if let typingStatus = typingStatusPayload(from: message.customElem?.data) {
+                return typingStatus == 1
+                    ? L("正在输入...", "Typing...")
+                    : L("停止输入", "Typing ended")
+            }
+            return normalizedText(message.customElem?.desc) ?? L("[自定义消息]", "[Custom Message]")
+        case Self.elemTypeGroupTipsRawValue:
+            return L("[群提示]", "[Group Notice]")
+        case Self.elemTypeMergerRawValue:
+            return L("[聊天记录]", "[Merged Messages]")
+        case Self.elemTypeStreamRawValue:
+            return L("[流式消息]", "[Stream Message]")
+        default:
+            return L("[消息]", "[Message]")
+        }
+    }
+
+    private func mapMessage(_ message: V2TIMMessage, conversationID: String) async -> ChatMessage {
+        let senderID = normalizedText(message.sender) ?? "unknown"
+        let senderDisplayName = normalizedText(message.friendRemark)
+            ?? normalizedText(message.nameCard)
+            ?? normalizedText(message.nickName)
+            ?? senderID
+        let resolvedIsMine = (currentUserID == senderID) || message.isSelf
+        let sender = UserSummary(
+            id: senderID,
+            username: senderID,
+            displayName: senderDisplayName,
+            avatarURL: normalizedText(message.faceURL),
+            isFollowing: false
+        )
+
+        if message.status.rawValue == Self.messageStatusLocalRevokedRawValue {
+            return ChatMessage(
+                id: normalizedText(message.msgID) ?? fallbackMessageID(for: message, conversationID: conversationID),
+                conversationID: conversationID,
+                sender: sender,
+                content: revokeDisplayText(for: message, operateUser: nil),
+                createdAt: message.timestamp ?? Date(),
+                isMine: resolvedIsMine,
+                kind: .system,
+                media: nil,
+                deliveryStatus: .sent,
+                deliveryError: nil,
+                peerRead: nil,
+                readReceiptReadCount: nil,
+                readReceiptUnreadCount: nil
+            )
+        }
+
+        var kind: ChatMessageKind = .unknown
+        var content = previewText(for: message)
+        var media: ChatMessageMediaPayload?
+
+        switch message.elemType.rawValue {
+        case Self.elemTypeTextRawValue:
+            kind = .text
+            content = normalizedText(message.textElem?.text) ?? ""
+        case Self.elemTypeImageRawValue:
+            kind = .image
+            content = L("[图片]", "[Image]")
+            media = mapImagePayload(from: message.imageElem)
+        case Self.elemTypeSoundRawValue:
+            kind = .voice
+            content = L("[语音]", "[Voice]")
+            media = await mapSoundPayload(from: message.soundElem)
+        case Self.elemTypeVideoRawValue:
+            kind = .video
+            content = L("[视频]", "[Video]")
+            media = await mapVideoPayload(from: message.videoElem)
+        case Self.elemTypeFileRawValue:
+            kind = .file
+            content = normalizedText(message.fileElem?.filename) ?? L("[文件]", "[File]")
+            media = await mapFilePayload(from: message.fileElem)
+        case Self.elemTypeLocationRawValue:
+            kind = .location
+            content = normalizedText(message.locationElem?.desc) ?? L("[位置]", "[Location]")
+        case Self.elemTypeFaceRawValue:
+            kind = .emoji
+            content = L("[表情]", "[Sticker]")
+        case Self.elemTypeCustomRawValue:
+            if let typingStatus = typingStatusPayload(from: message.customElem?.data) {
+                kind = .typing
+                content = typingStatus == 1
+                    ? L("正在输入...", "Typing...")
+                    : L("停止输入", "Typing ended")
+            } else {
+                kind = .custom
+                content = normalizedText(message.customElem?.desc) ?? L("[自定义消息]", "[Custom Message]")
+            }
+        case Self.elemTypeGroupTipsRawValue:
+            kind = .system
+            content = L("[群提示]", "[Group Notice]")
+        case Self.elemTypeMergerRawValue:
+            kind = .card
+            content = L("[聊天记录]", "[Merged Messages]")
+        case Self.elemTypeStreamRawValue:
+            kind = .custom
+            content = L("[流式消息]", "[Stream Message]")
+        default:
+            break
+        }
+
+        let deliveryStatus: ChatMessageDeliveryStatus
+        switch message.status.rawValue {
+        case Self.messageStatusSendingRawValue:
+            deliveryStatus = .sending
+        case Self.messageStatusFailedRawValue:
+            deliveryStatus = .failed
+        case Self.messageStatusSentRawValue:
+            deliveryStatus = .sent
+        default:
+            deliveryStatus = resolvedIsMine ? .sending : .sent
+        }
+
+#if DEBUG
+        print(
+            """
+            [IMProfile][MessageMap] \
+            conversationID=\(conversationID) \
+            msgID=\(normalizedText(message.msgID) ?? "nil") \
+            senderID=\(senderID) \
+            senderName=\(senderDisplayName) \
+            senderFace=\(normalizedText(message.faceURL) ?? "nil") \
+            sdk_isSelf=\(message.isSelf) \
+            resolved_isMine=\(resolvedIsMine) \
+            currentUserID=\(currentUserID ?? "nil")
+            """
+        )
+#endif
+
+        return ChatMessage(
+            id: normalizedText(message.msgID) ?? fallbackMessageID(for: message, conversationID: conversationID),
+            conversationID: conversationID,
+            sender: sender,
+            content: content,
+            createdAt: message.timestamp ?? Date(),
+            isMine: resolvedIsMine,
+            kind: kind,
+            media: media,
+            deliveryStatus: deliveryStatus,
+            deliveryError: deliveryStatus == .failed ? L("发送失败", "Send failed") : nil,
+            peerRead: dynamicBoolValue("isPeerRead", from: message),
+            readReceiptReadCount: dynamicIntValue("groupReadCount", from: message)
+                ?? dynamicIntValue("readCount", from: message)
+                ?? dynamicIntValue("readReceiptCount", from: message),
+            readReceiptUnreadCount: dynamicIntValue("groupUnreadCount", from: message)
+                ?? dynamicIntValue("unreadCount", from: message)
+                ?? dynamicIntValue("unreadReceiptCount", from: message)
+        )
+    }
+
+    private func mapImagePayload(from elem: V2TIMImageElem?) -> ChatMessageMediaPayload? {
+        guard let elem else { return nil }
+        let images = elem.imageList ?? []
+        let thumbnail = images.min { lhs, rhs in
+            let lhsArea = max(1, lhs.width) * max(1, lhs.height)
+            let rhsArea = max(1, rhs.width) * max(1, rhs.height)
+            return lhsArea < rhsArea
+        }
+        let original = images.max { lhs, rhs in
+            let lhsScore = max(lhs.size, lhs.width * lhs.height)
+            let rhsScore = max(rhs.size, rhs.width * rhs.height)
+            return lhsScore < rhsScore
+        }
+
+        return ChatMessageMediaPayload(
+            mediaURL: normalizedText(original?.url) ?? normalizedText(thumbnail?.url),
+            thumbnailURL: normalizedText(thumbnail?.url) ?? normalizedText(original?.url),
+            width: {
+                guard let value = original?.width ?? thumbnail?.width, value > 0 else { return nil }
+                return Double(value)
+            }(),
+            height: {
+                guard let value = original?.height ?? thumbnail?.height, value > 0 else { return nil }
+                return Double(value)
+            }(),
+            durationSeconds: nil,
+            fileName: nil,
+            fileSizeBytes: {
+                let value = original?.size ?? 0
+                return value > 0 ? Int(value) : nil
+            }()
+        )
+    }
+
+    private func typingStatusPayload(from data: Data?) -> Int? {
+        guard let data,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let businessID = object["businessID"] as? String,
+              businessID == Self.typingBusinessID else {
+            return nil
+        }
+
+        if let typingStatus = object["typingStatus"] as? Int {
+            return typingStatus
+        }
+        if let typingStatus = object["typingStatus"] as? NSNumber {
+            return typingStatus.intValue
+        }
+        return nil
+    }
+
+    private func mapSoundPayload(from elem: V2TIMSoundElem?) async -> ChatMessageMediaPayload? {
+        guard let elem else { return nil }
+        let remoteURL = await resolveSoundURL(elem)
+        return ChatMessageMediaPayload(
+            mediaURL: remoteURL ?? normalizedText(elem.path),
+            thumbnailURL: nil,
+            width: nil,
+            height: nil,
+            durationSeconds: elem.duration > 0 ? Int(elem.duration) : nil,
+            fileName: normalizedText(elem.uuid),
+            fileSizeBytes: elem.dataSize > 0 ? Int(elem.dataSize) : nil
+        )
+    }
+
+    private func mapVideoPayload(from elem: V2TIMVideoElem?) async -> ChatMessageMediaPayload? {
+        guard let elem else { return nil }
+        async let videoURL = resolveVideoURL(elem)
+        async let snapshotURL = resolveVideoSnapshotURL(elem)
+        let resolvedVideoURL = await videoURL
+        let resolvedSnapshotURL = await snapshotURL
+        return ChatMessageMediaPayload(
+            mediaURL: resolvedVideoURL ?? normalizedText(elem.videoPath),
+            thumbnailURL: resolvedSnapshotURL ?? normalizedText(elem.snapshotPath),
+            width: elem.snapshotWidth > 0 ? Double(elem.snapshotWidth) : nil,
+            height: elem.snapshotHeight > 0 ? Double(elem.snapshotHeight) : nil,
+            durationSeconds: elem.duration > 0 ? Int(elem.duration) : nil,
+            fileName: normalizedText(elem.videoUUID),
+            fileSizeBytes: elem.videoSize > 0 ? Int(elem.videoSize) : nil
+        )
+    }
+
+    private func mapFilePayload(from elem: V2TIMFileElem?) async -> ChatMessageMediaPayload? {
+        guard let elem else { return nil }
+        let remoteURL = await resolveFileURL(elem)
+        return ChatMessageMediaPayload(
+            mediaURL: remoteURL ?? normalizedText(elem.path),
+            thumbnailURL: nil,
+            width: nil,
+            height: nil,
+            durationSeconds: nil,
+            fileName: normalizedText(elem.filename),
+            fileSizeBytes: elem.fileSize > 0 ? Int(elem.fileSize) : nil
+        )
+    }
+
+    private func fallbackMessageID(for message: V2TIMMessage, conversationID: String) -> String {
+        "\(conversationID)-\(message.seq)-\(message.random)"
+    }
+
+    private func buildTencentIMError(code: Int32, desc: String?, fallback: String) -> ServiceError {
+        let message = desc?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if message.isEmpty {
+            return .message("\(fallback) (\(code))")
+        }
+        return .message(message)
+    }
+
+    private func normalizedText(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private func dynamicBoolValue(_ key: String, from object: NSObject) -> Bool? {
+        guard object.responds(to: NSSelectorFromString(key)) else { return nil }
+        if let value = object.value(forKey: key) as? NSNumber {
+            return value.boolValue
+        }
+        return object.value(forKey: key) as? Bool
+    }
+
+    private func dynamicIntValue(_ key: String, from object: NSObject) -> Int? {
+        guard object.responds(to: NSSelectorFromString(key)) else { return nil }
+        if let value = object.value(forKey: key) as? NSNumber {
+            return value.intValue
+        }
+        return object.value(forKey: key) as? Int
+    }
+
+    private func resolveSoundURL(_ elem: V2TIMSoundElem) async -> String? {
+        await withCheckedContinuation { continuation in
+            elem.getUrl { url in
+                continuation.resume(returning: self.normalizedText(url))
+            }
+        }
+    }
+
+    private func resolveVideoURL(_ elem: V2TIMVideoElem) async -> String? {
+        await withCheckedContinuation { continuation in
+            elem.getVideoUrl { url in
+                continuation.resume(returning: self.normalizedText(url))
+            }
+        }
+    }
+
+    private func resolveVideoSnapshotURL(_ elem: V2TIMVideoElem) async -> String? {
+        await withCheckedContinuation { continuation in
+            elem.getSnapshotUrl { url in
+                continuation.resume(returning: self.normalizedText(url))
+            }
+        }
+    }
+
+    private func resolveFileURL(_ elem: V2TIMFileElem) async -> String? {
+        await withCheckedContinuation { continuation in
+            elem.getUrl { url in
+                continuation.resume(returning: self.normalizedText(url))
+            }
+        }
+    }
+
+    private func makeVideoSnapshotURL(for fileURL: URL) throws -> URL {
+        let asset = AVURLAsset(url: fileURL)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        let time = CMTime(seconds: 0.1, preferredTimescale: 600)
+        guard let imageRef = try? generator.copyCGImage(at: time, actualTime: nil) else {
+            throw ServiceError.message("Failed to create Tencent IM video snapshot")
+        }
+
+        let image = UIImage(cgImage: imageRef)
+        guard let data = image.jpegData(compressionQuality: 0.82) else {
+            throw ServiceError.message("Failed to encode Tencent IM video snapshot")
+        }
+
+        let snapshotURL = URL(
+            fileURLWithPath: NSTemporaryDirectory(),
+            isDirectory: true
+        ).appendingPathComponent("tencent-im-video-\(UUID().uuidString).jpg")
+        try data.write(to: snapshotURL, options: .atomic)
+        return snapshotURL
+    }
+
+    private func audioDurationSeconds(for fileURL: URL) throws -> Int32 {
+        let asset = AVURLAsset(url: fileURL)
+        let durationSeconds = CMTimeGetSeconds(asset.duration)
+        if durationSeconds.isFinite, durationSeconds > 0 {
+            let clamped = max(1, min(Int(durationSeconds.rounded()), 600))
+            return Int32(clamped)
+        }
+        return 1
+    }
+
+    private func audioFileDurationSecondsIfSupported(for fileURL: URL) -> Int? {
+        guard isSupportedAudioFile(fileURL) else { return nil }
+        guard let duration = try? audioDurationSeconds(for: fileURL) else { return nil }
+        let resolved = Int(duration)
+        return resolved > 0 ? resolved : nil
+    }
+
+    private func isSupportedAudioFile(_ fileURL: URL) -> Bool {
+        let ext = fileURL.pathExtension.lowercased()
+        return ["mp3", "m4a", "aac", "wav", "caf"].contains(ext)
+    }
+
+    private func fileSizeInBytes(for fileURL: URL) -> Int? {
+        let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey])
+        return values?.fileSize
+    }
+
+    private func resolveBusinessConversationID(for message: V2TIMMessage) -> String? {
+        if let groupID = normalizedText(message.groupID) {
+            return groupID
+        }
+        if let userID = normalizedText(message.userID) {
+            return userID
+        }
+        if let senderID = normalizedText(message.sender), message.isSelf {
+            // Fallback for some SDK edge cases where userID is empty.
+            return senderID
+        }
+        return nil
+    }
+
+    private func revokeDisplayText(
+        for message: V2TIMMessage,
+        operateUser: V2TIMUserFullInfo?
+    ) -> String {
+        let revokerID = normalizedText(operateUser?.userID)
+            ?? normalizedText(message.revokerInfo?.userID)
+            ?? normalizedText(message.sender)
+        let messageSenderID = normalizedText(message.sender)
+        let senderDisplayName = normalizedText(message.friendRemark)
+            ?? normalizedText(message.nameCard)
+            ?? normalizedText(message.nickName)
+            ?? messageSenderID
+            ?? L("用户", "User")
+        let revokerDisplayName = normalizedText(operateUser?.nickName)
+            ?? normalizedText(message.revokerInfo?.nickName)
+            ?? senderDisplayName
+
+        if revokerID == messageSenderID {
+            if message.isSelf {
+                return L("你撤回了一条消息", "You recalled a message")
+            }
+            if normalizedText(message.userID) != nil {
+                return L("对方撤回了一条消息", "The other user recalled a message")
+            }
+            return String(format: L("%@ 撤回了一条消息", "%@ recalled a message"), senderDisplayName)
+        }
+
+        return String(format: L("%@ 撤回了一条消息", "%@ recalled a message"), revokerDisplayName)
+    }
+#endif
+}
+
+#if canImport(ImSDK_Plus)
+extension TencentIMSession: V2TIMSDKListener {
+    nonisolated func onConnecting() {
+        Task { @MainActor [weak self] in
+            self?.state = .connecting
+        }
+    }
+
+    nonisolated func onConnectSuccess() {
+        Task { @MainActor [weak self] in
+            guard let self, let currentUserID = self.currentUserID else { return }
+            self.state = .connected(userID: currentUserID)
+        }
+    }
+
+    nonisolated func onConnectFailed(_ code: Int32, err: String?) {
+        let message = err?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let resolved = message.isEmpty ? "Tencent IM connect failed (\(code))" : message
+        Task { @MainActor [weak self] in
+            self?.state = .failed(resolved)
+        }
+    }
+
+    nonisolated func onKickedOffline() {
+        Task { @MainActor [weak self] in
+            self?.unreadCount = 0
+            self?.state = .kickedOffline
+        }
+    }
+
+    nonisolated func onUserSigExpired() {
+        Task { @MainActor [weak self] in
+            self?.state = .userSigExpired
+        }
+    }
+}
+
+extension TencentIMSession: V2TIMConversationListener {
+    nonisolated func onNewConversation(conversationList: [V2TIMConversation]) {
+        Task { @MainActor [weak self] in
+            self?.publishConversationChanges(conversationList)
+        }
+    }
+
+    nonisolated func onConversationChanged(conversationList: [V2TIMConversation]) {
+        Task { @MainActor [weak self] in
+            self?.publishConversationChanges(conversationList)
+        }
+    }
+
+    nonisolated func onTotalUnreadMessageCountChanged(totalUnreadCount: UInt64) {
+        Task { @MainActor [weak self] in
+            let count = Int(totalUnreadCount)
+            self?.unreadCount = count
+            self?.totalUnreadSubject.send(max(0, count))
+        }
+    }
+}
+
+extension TencentIMSession: V2TIMAdvancedMsgListener {
+    nonisolated func onRecvNewMessage(msg: V2TIMMessage) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let conversationID = self.resolveBusinessConversationID(for: msg) else { return }
+            let mapped = await self.mapMessage(msg, conversationID: conversationID)
+            self.messageSubject.send(mapped)
+        }
+    }
+
+    nonisolated func onRecvMessageRevoked(msgID: String, operateUser: V2TIMUserFullInfo, reason: String?) {
+        _ = reason
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let manager = V2TIMManager.sharedInstance() else { return }
+            guard let revokedMessage = try? await self.findMessage(manager: manager, messageID: msgID) else { return }
+            guard let conversationID = self.resolveBusinessConversationID(for: revokedMessage) else { return }
+            let mapped = await self.mapMessage(revokedMessage, conversationID: conversationID)
+            self.messageSubject.send(mapped)
+            self.messageRevocationSubject.send(
+                TencentMessageRevocationEvent(
+                    conversationID: conversationID,
+                    messageID: mapped.id,
+                    displayText: self.revokeDisplayText(for: revokedMessage, operateUser: operateUser)
+                )
+            )
+        }
+    }
+
+    nonisolated func onRecvC2CReadReceipt(receiptList: [V2TIMMessageReceipt]) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let events = receiptList.compactMap { receipt -> TencentC2CReadReceiptEvent? in
+                guard let conversationID = self.normalizedText(receipt.userID) else { return nil }
+                let messageID = self.normalizedText(receipt.msgID)
+                let readAt = receipt.timestamp > 0 ? Date(timeIntervalSince1970: TimeInterval(receipt.timestamp)) : nil
+                return TencentC2CReadReceiptEvent(
+                    conversationID: conversationID,
+                    messageID: messageID,
+                    peerRead: receipt.isPeerRead,
+                    readAt: readAt
+                )
+            }
+            guard !events.isEmpty else { return }
+            self.c2cReadReceiptSubject.send(events)
+        }
+    }
+}
+
+#if canImport(ImSDK_Plus)
+@MainActor
+private extension TencentIMSession {
+    func publishConversationChanges(_ items: [V2TIMConversation]) {
+        let conversations = items.compactMap(mapConversation(_:))
+        guard !conversations.isEmpty else { return }
+        conversationSubject.send(conversations)
+    }
+}
+#endif
+#endif
+
+#if !canImport(ImSDK_Plus)
+@MainActor
+extension TencentIMSession {
+    func fetchConversations(type: ConversationType) async throws -> [Conversation]? {
+        _ = type
+        return nil
+    }
+
+    func markConversationRead(conversationID: String) async throws -> Bool {
+        _ = conversationID
+        return false
+    }
+
+    func setConversationPinned(conversationID: String, pinned: Bool) async throws -> Bool {
+        _ = conversationID
+        _ = pinned
+        return false
+    }
+
+    func markConversationUnread(conversationID: String, unread: Bool) async throws -> Bool {
+        _ = conversationID
+        _ = unread
+        return false
+    }
+
+    func hideConversation(conversationID: String) async throws -> Bool {
+        _ = conversationID
+        return false
+    }
+
+    func setConversationMuted(conversationID: String, muted: Bool) async throws -> Bool {
+        _ = conversationID
+        _ = muted
+        return false
+    }
+
+    func clearConversationHistory(conversationID: String) async throws -> Bool {
+        _ = conversationID
+        return false
+    }
+
+    func fetchMessages(conversationID: String, count: Int = 50) async throws -> [ChatMessage]? {
+        _ = conversationID
+        _ = count
+        return nil
+    }
+
+    func fetchMessagesPage(
+        conversationID: String,
+        startClientMsgID: String?,
+        count: Int = 50
+    ) async throws -> ChatMessageHistoryPage? {
+        _ = conversationID
+        _ = startClientMsgID
+        _ = count
+        return nil
+    }
+
+    func sendTextMessage(conversationID: String, content: String) async throws -> ChatMessage? {
+        _ = conversationID
+        _ = content
+        return nil
+    }
+
+    func sendImageMessage(
+        conversationID: String,
+        fileURL: URL,
+        onProgress: ((Int) -> Void)?
+    ) async throws -> ChatMessage? {
+        _ = conversationID
+        _ = fileURL
+        _ = onProgress
+        return nil
+    }
+
+    func sendVideoMessage(
+        conversationID: String,
+        fileURL: URL,
+        onProgress: ((Int) -> Void)?
+    ) async throws -> ChatMessage? {
+        _ = conversationID
+        _ = fileURL
+        _ = onProgress
+        return nil
+    }
+
+    func sendVoiceMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage? {
+        _ = conversationID
+        _ = fileURL
+        return nil
+    }
+
+    func revokeMessage(conversationID: String, messageID: String) async throws -> String? {
+        _ = conversationID
+        _ = messageID
+        return nil
+    }
+
+    func deleteMessage(conversationID: String, messageID: String) async throws -> Bool {
+        _ = conversationID
+        _ = messageID
+        return false
+    }
+}
+#endif
+
 @MainActor
 final class AppState: ObservableObject {
     private static let logger = Logger(
@@ -557,23 +2521,21 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published var isAuthBootstrapping: Bool = true
     @Published var unreadMessagesCount: Int = 0
-    @Published var openIMBootstrap: OpenIMBootstrap?
-    @Published var openIMConnectionState: OpenIMConnectionState = .idle
+    @Published var tencentIMBootstrap: TencentIMBootstrap?
+    @Published var tencentIMConnectionState: TencentIMConnectionState = .idle
     @Published var systemDeepLinkEvent: SystemDeepLinkEvent?
     @Published var preferredLanguage: AppLanguage = AppLanguagePreference.current
     @Published var preferredAppearance: AppAppearance = AppAppearancePreference.current
 
     let service: SocialService
     private var cancellables: Set<AnyCancellable> = []
-    private let openIMSession = OpenIMSession.shared
-    private let openIMChatStore = OpenIMChatStore.shared
+    private let tencentIMSession = TencentIMSession.shared
     private let uiTestForceSessionExpiredOnBootstrap: Bool
     private var hasAppliedUITestForcedExpiry = false
-    private var openIMRecoveryTask: Task<Void, Never>?
-    private var openIMBootstrapRefreshTask: Task<Void, Never>?
+    private var tencentIMBootstrapRefreshTask: Task<Void, Never>?
     private var cachedCommunityUnread = 0
     private var latestPushToken: String?
-    private var lastOpenIMBootstrapRefreshAt: Date?
+    private var lastTencentIMBootstrapRefreshAt: Date?
 
     init(service: SocialService) {
         self.service = service
@@ -581,35 +2543,25 @@ final class AppState: ObservableObject {
             ProcessInfo.processInfo.environment["RAVER_UI_TEST_FORCE_SESSION_EXPIRED_ON_BOOT"],
             fallback: false
         )
-        OpenIMProbeLogger.resetForCurrentProcessIfNeeded()
-        OpenIMStorageGovernance.runAuditIfNeeded(trigger: "app-init", force: true)
-        openIMSession.onStateChange = { [weak self] state in
-            self?.handleOpenIMStateChange(state)
+        tencentIMSession.onStateChange = { [weak self] state in
+            self?.handleTencentIMStateChange(state)
         }
-
-        openIMChatStore.$unreadTotal
-            .receive(on: DispatchQueue.main)
-            .dropFirst()
-            .sink { [weak self] count in
-                guard let self, self.session != nil else { return }
-                self.recomputeUnreadMessagesCount(chatsUnread: count, source: "openim-realtime")
-            }
-            .store(in: &cancellables)
+        tencentIMSession.onUnreadCountChange = { [weak self] count in
+            guard let self, self.session != nil else { return }
+            self.recomputeUnreadMessagesCount(chatsUnread: count, source: "tencent-im-realtime")
+        }
 
         NotificationCenter.default.publisher(for: .raverSessionExpired)
             .sink { [weak self] _ in
                 guard let self else { return }
                 self.session = nil
                 self.resetUnreadCounts()
-                self.openIMBootstrap = nil
-                self.openIMSession.reset()
-                self.openIMChatStore.reset()
-                self.openIMRecoveryTask?.cancel()
-                self.openIMRecoveryTask = nil
-                self.openIMBootstrapRefreshTask?.cancel()
-                self.openIMBootstrapRefreshTask = nil
                 SessionTokenStore.shared.clear()
                 self.errorMessage = L("登录状态已失效，请重新登录", "Session expired. Please log in again.")
+                self.tencentIMBootstrap = nil
+                self.tencentIMSession.reset()
+                self.tencentIMBootstrapRefreshTask?.cancel()
+                self.tencentIMBootstrapRefreshTask = nil
             }
             .store(in: &cancellables)
 
@@ -617,15 +2569,9 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 guard let self, self.session != nil else { return }
                 Task {
-                    let recovered = await self.openIMSession.recoverSessionAfterAppBecameActive()
-                    OpenIMStorageGovernance.runAuditIfNeeded(trigger: "didBecomeActive")
-                    let shouldRefreshBootstrap = !recovered && self.shouldRefreshOpenIMBootstrapOnActive()
-                    if shouldRefreshBootstrap {
-                        await self.refreshOpenIMBootstrap(source: "didBecomeActive")
-                    } else if recovered {
-                        self.debug("skip OpenIM bootstrap refresh on active: recovered from sdk state")
-                    } else {
-                        self.debug("skip OpenIM bootstrap refresh on active: connection healthy")
+                    let shouldRefreshTencentBootstrap = self.shouldRefreshTencentIMBootstrapOnActive()
+                    if shouldRefreshTencentBootstrap {
+                        await self.refreshTencentIMBootstrap(source: "didBecomeActive")
                     }
                     await self.refreshUnreadMessages()
                 }
@@ -651,7 +2597,7 @@ final class AppState: ObservableObject {
                 let userInfo = notification.userInfo ?? [:]
                 self.handleSystemNotificationPayload(userInfo, source: "notification-center")
                 Task {
-                    await self.refreshOpenIMBootstrap(source: "system-notification-open")
+                    await self.refreshTencentIMBootstrap(source: "system-notification-open")
                     await self.refreshUnreadMessages()
                 }
             }
@@ -688,7 +2634,7 @@ final class AppState: ObservableObject {
         }
 
         session = restored
-        await refreshOpenIMBootstrap(source: "bootstrap-restore-session")
+        await refreshTencentIMBootstrap(source: "bootstrap-restore-session")
         await refreshUnreadMessages()
         await uploadPushTokenIfPossible()
         errorMessage = nil
@@ -714,7 +2660,7 @@ final class AppState: ObservableObject {
     func login(username: String, password: String) async {
         do {
             session = try await service.login(username: username, password: password)
-            await refreshOpenIMBootstrap(source: "login-password")
+            await refreshTencentIMBootstrap(source: "login-password")
             await refreshUnreadMessages()
             await uploadPushTokenIfPossible()
             errorMessage = nil
@@ -726,7 +2672,7 @@ final class AppState: ObservableObject {
     func loginWithSms(phoneNumber: String, code: String) async {
         do {
             session = try await service.loginWithSms(phoneNumber: phoneNumber, code: code)
-            await refreshOpenIMBootstrap(source: "login-sms")
+            await refreshTencentIMBootstrap(source: "login-sms")
             await refreshUnreadMessages()
             await uploadPushTokenIfPossible()
             errorMessage = nil
@@ -754,7 +2700,7 @@ final class AppState: ObservableObject {
                 password: password,
                 displayName: displayName
             )
-            await refreshOpenIMBootstrap(source: "register")
+            await refreshTencentIMBootstrap(source: "register")
             await refreshUnreadMessages()
             await uploadPushTokenIfPossible()
             errorMessage = nil
@@ -780,13 +2726,10 @@ final class AppState: ObservableObject {
         }
         session = nil
         resetUnreadCounts()
-        openIMBootstrap = nil
-        openIMSession.reset()
-        openIMChatStore.reset()
-        openIMRecoveryTask?.cancel()
-        openIMRecoveryTask = nil
-        openIMBootstrapRefreshTask?.cancel()
-        openIMBootstrapRefreshTask = nil
+        tencentIMBootstrap = nil
+        tencentIMSession.reset()
+        tencentIMBootstrapRefreshTask?.cancel()
+        tencentIMBootstrapRefreshTask = nil
     }
 
     func setPreferredLanguage(_ language: AppLanguage) {
@@ -804,13 +2747,12 @@ final class AppState: ObservableObject {
     func refreshUnreadMessages() async {
         guard session != nil else {
             resetUnreadCounts()
-            openIMChatStore.reset()
             return
         }
 
         do {
             async let notificationsUnreadTask = service.fetchNotificationUnreadCount()
-            let chatsUnread = try await openIMSession.fetchTotalUnreadCount() ?? openIMChatStore.unreadTotal
+            let chatsUnread = try await fetchChatUnreadCount()
             let socialUnread = try await notificationsUnreadTask
             cachedCommunityUnread = Self.communityUnreadCount(from: socialUnread)
             recomputeUnreadMessagesCount(chatsUnread: chatsUnread, source: "refresh-success")
@@ -847,13 +2789,21 @@ final class AppState: ObservableObject {
 
     private func recomputeUnreadMessagesCount(chatsUnread: Int? = nil, source: String = "unspecified") {
         let previous = unreadMessagesCount
-        let chatUnread = max(0, chatsUnread ?? openIMChatStore.unreadTotal)
+        let chatUnread = max(0, chatsUnread ?? localChatUnreadSnapshot())
         let communityUnread = max(0, cachedCommunityUnread)
         let next = chatUnread + communityUnread
         unreadMessagesCount = next
         if previous != next {
             debug("badge recompute source=\(source) from=\(previous) to=\(next) chat=\(chatUnread) community=\(communityUnread)")
         }
+    }
+
+    private func localChatUnreadSnapshot() -> Int {
+        max(0, tencentIMSession.totalUnreadCountSnapshot())
+    }
+
+    private func fetchChatUnreadCount() async throws -> Int {
+        max(0, tencentIMSession.totalUnreadCountSnapshot())
     }
 
     private static func communityUnreadCount(from count: NotificationUnreadCount) -> Int {
@@ -875,9 +2825,9 @@ final class AppState: ObservableObject {
     }
 
     @MainActor
-    func refreshOpenIMBootstrap(source: String = "unspecified") async {
-        if let inFlight = openIMBootstrapRefreshTask {
-            debug("refreshOpenIMBootstrap join in-flight source=\(source)")
+    func refreshTencentIMBootstrap(source: String = "unspecified") async {
+        if let inFlight = tencentIMBootstrapRefreshTask {
+            debug("refreshTencentIMBootstrap join in-flight source=\(source)")
             await inFlight.value
             return
         }
@@ -885,176 +2835,74 @@ final class AppState: ObservableObject {
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             defer {
-                self.openIMBootstrapRefreshTask = nil
+                self.tencentIMBootstrapRefreshTask = nil
             }
-            await self.performRefreshOpenIMBootstrap(source: source)
+            await self.performRefreshTencentIMBootstrap(source: source)
         }
-        openIMBootstrapRefreshTask = task
+        tencentIMBootstrapRefreshTask = task
         await task.value
     }
 
     @MainActor
-    private func performRefreshOpenIMBootstrap(source: String) async {
+    private func performRefreshTencentIMBootstrap(source: String) async {
         guard session != nil else {
-            openIMBootstrap = nil
-            openIMSession.reset()
-            openIMChatStore.reset()
-            openIMRecoveryTask?.cancel()
-            openIMRecoveryTask = nil
+            tencentIMBootstrap = nil
+            tencentIMSession.reset()
             return
         }
 
         do {
-            let fetchedBootstrap = try await service.fetchOpenIMBootstrap()
-            let bootstrap = normalizeOpenIMBootstrapForCurrentRuntime(fetchedBootstrap)
-            debug("refreshOpenIMBootstrap success source=\(source) enabled=\(bootstrap.enabled) userID=\(bootstrap.userID)")
-            openIMBootstrap = bootstrap
-            await openIMSession.sync(with: bootstrap)
-            lastOpenIMBootstrapRefreshAt = Date()
+            let bootstrap = try await service.fetchTencentIMBootstrap()
+            debug(
+                "refreshTencentIMBootstrap success source=\(source) enabled=\(bootstrap.enabled) userID=\(bootstrap.userID)"
+            )
+            tencentIMBootstrap = bootstrap
+            await tencentIMSession.sync(with: bootstrap)
+            lastTencentIMBootstrapRefreshAt = Date()
         } catch {
-            debug("refreshOpenIMBootstrap failed source=\(source): \(error.localizedDescription)")
-            if openIMBootstrap == nil {
-                openIMSession.reset()
+            debug("refreshTencentIMBootstrap failed source=\(source): \(error.localizedDescription)")
+            if tencentIMBootstrap == nil {
+                tencentIMSession.reset()
             }
         }
     }
 
-    private func normalizeOpenIMBootstrapForCurrentRuntime(_ bootstrap: OpenIMBootstrap) -> OpenIMBootstrap {
-#if targetEnvironment(simulator)
-        guard shouldForceSimulatorOpenIMLocalhost else { return bootstrap }
-
-        let normalizedApiURL = normalizeOpenIMEndpointForSimulator(
-            bootstrap.apiURL,
-            defaultScheme: "http",
-            defaultPort: 10002
-        )
-        let normalizedWsURL = normalizeOpenIMEndpointForSimulator(
-            bootstrap.wsURL,
-            defaultScheme: "ws",
-            defaultPort: 10001
-        )
-
-        guard normalizedApiURL != bootstrap.apiURL || normalizedWsURL != bootstrap.wsURL else {
-            return bootstrap
-        }
-
-        debug(
-            "simulator OpenIM endpoint normalized api=\(bootstrap.apiURL)->\(normalizedApiURL) ws=\(bootstrap.wsURL)->\(normalizedWsURL)"
-        )
-
-        return OpenIMBootstrap(
-            enabled: bootstrap.enabled,
-            userID: bootstrap.userID,
-            token: bootstrap.token,
-            apiURL: normalizedApiURL,
-            wsURL: normalizedWsURL,
-            platformID: bootstrap.platformID,
-            systemUserID: bootstrap.systemUserID,
-            expiresAt: bootstrap.expiresAt
-        )
-#else
-        return bootstrap
-#endif
-    }
-
-    private var shouldForceSimulatorOpenIMLocalhost: Bool {
-#if targetEnvironment(simulator)
-        guard let raw = ProcessInfo.processInfo.environment["RAVER_OPENIM_SIMULATOR_FORCE_LOCALHOST"]?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty else {
-            return true
-        }
-
-        switch raw.lowercased() {
-        case "0", "false", "no", "off":
-            return false
-        default:
-            return true
-        }
-#else
-        return false
-#endif
-    }
-
-    private func normalizeOpenIMEndpointForSimulator(
-        _ endpoint: String,
-        defaultScheme: String,
-        defaultPort: Int
-    ) -> String {
-        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return endpoint }
-
-        guard var components = URLComponents(string: trimmed),
-              let host = components.host?.lowercased() else {
-            return "\(defaultScheme)://127.0.0.1:\(defaultPort)"
-        }
-
-        guard host != "localhost", host != "127.0.0.1" else {
-            return trimmed
-        }
-
-        components.host = "127.0.0.1"
-        if components.port == nil {
-            components.port = defaultPort
-        }
-        return components.string ?? trimmed
-    }
-
-    private func shouldRefreshOpenIMBootstrapOnActive() -> Bool {
-        switch openIMConnectionState {
+    private func shouldRefreshTencentIMBootstrapOnActive() -> Bool {
+        switch tencentIMConnectionState {
         case .connected:
             break
-        case .idle, .disabled, .unavailable, .initializing, .connecting, .tokenExpired, .kickedOffline, .failed:
+        case .idle, .disabled, .unavailable, .initializing, .connecting, .userSigExpired, .kickedOffline, .failed:
             return true
         }
 
-        guard let last = lastOpenIMBootstrapRefreshAt else {
+        guard let last = lastTencentIMBootstrapRefreshAt else {
             return true
         }
 
-        // Avoid repeated bootstrap/login churn when app quickly switches foreground/background.
         return Date().timeIntervalSince(last) >= 90
     }
 
-    private func handleOpenIMStateChange(_ state: OpenIMConnectionState) {
-        if openIMConnectionState == state {
+    private func handleTencentIMStateChange(_ state: TencentIMConnectionState) {
+        if tencentIMConnectionState == state {
             return
         }
-        openIMConnectionState = state
-        debug("OpenIM state -> \(state)")
+        tencentIMConnectionState = state
+        debug("TencentIM state -> \(state)")
 
         guard session != nil else { return }
         switch state {
-        case .tokenExpired:
-            scheduleOpenIMRecovery(reason: "state=\(state)")
-        case .kickedOffline:
-            // Kicked-offline usually means same account logged in elsewhere.
-            // Do not auto-retry in a loop; surface an actionable message instead.
-            openIMRecoveryTask?.cancel()
-            openIMRecoveryTask = nil
-            errorMessage = L(
-                "聊天连接已在其他设备登录，请重新进入或重新登录",
-                "Chat connection was logged in on another device. Please re-enter or sign in again."
-            )
-        case .failed(let message):
-            if !message.isEmpty {
-                scheduleOpenIMRecovery(reason: "state=failed")
+        case .userSigExpired:
+            Task { @MainActor [weak self] in
+                await self?.refreshTencentIMBootstrap(source: "usersig-expired")
+                await self?.refreshUnreadMessages()
             }
-        case .idle, .disabled, .unavailable, .initializing, .connecting, .connected:
+        case .kickedOffline:
+            errorMessage = L(
+                "腾讯云 IM 已在其他设备登录，请重新进入或重新登录",
+                "Tencent Cloud IM was logged in on another device. Please re-enter or sign in again."
+            )
+        case .idle, .disabled, .unavailable, .initializing, .connecting, .connected, .failed:
             break
-        }
-    }
-
-    private func scheduleOpenIMRecovery(reason: String) {
-        guard openIMRecoveryTask == nil else { return }
-        debug("schedule OpenIM recovery reason=\(reason)")
-        openIMRecoveryTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer { self.openIMRecoveryTask = nil }
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            if Task.isCancelled { return }
-            await self.refreshOpenIMBootstrap(source: "recovery-\(reason)")
-            await self.refreshUnreadMessages()
         }
     }
 
@@ -1062,7 +2910,7 @@ final class AppState: ObservableObject {
         #if DEBUG
         Self.logger.debug("[AppState] \(message, privacy: .public)")
         print("[AppState] \(message)")
-        OpenIMProbeLogger.log("[AppState] \(message)")
+        IMProbeLogger.log("[AppState] \(message)")
         #endif
     }
 

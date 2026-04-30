@@ -1,10 +1,6 @@
 import Foundation
 import Combine
 
-#if canImport(OpenIMSDK)
-import OpenIMSDK
-#endif
-
 private actor AuthRefreshGate {
     private var inFlightTask: Task<Session, Error>?
 
@@ -23,6 +19,7 @@ private actor AuthRefreshGate {
 final class LiveSocialService: SocialService {
     private let baseURL: URL
     private let session: URLSession
+    private let imSession = TencentIMSession.shared
     private let refreshGate = AuthRefreshGate()
     private var token: String? {
         get { SessionTokenStore.shared.token }
@@ -139,8 +136,8 @@ final class LiveSocialService: SocialService {
         refreshToken = nil
     }
 
-    func fetchOpenIMBootstrap() async throws -> OpenIMBootstrap {
-        try await request(path: "/v1/openim/bootstrap", method: "GET")
+    func fetchTencentIMBootstrap() async throws -> TencentIMBootstrap {
+        try await request(path: "/v1/im/tencent/bootstrap", method: "GET")
     }
 
     func fetchFeed(cursor: String?, mode: FeedMode?) async throws -> FeedPage {
@@ -263,39 +260,61 @@ final class LiveSocialService: SocialService {
     }
 
     func fetchConversations(type: ConversationType) async throws -> [Conversation] {
-        if let conversations = try await OpenIMSession.shared.fetchConversations(type: type) {
+        if let conversations = try await imSession.fetchConversations(type: type) {
             return conversations
         }
-        throw await openIMUnavailableError(for: "fetch conversations")
+        throw await tencentIMUnavailableError(for: "fetch conversations")
     }
 
     func markConversationRead(conversationID: String) async throws {
-        if try await OpenIMSession.shared.markConversationRead(conversationID: conversationID) {
+        if try await imSession.markConversationRead(conversationID: conversationID) {
             return
         }
-        throw await openIMUnavailableError(for: "mark conversation read")
+        throw await tencentIMUnavailableError(for: "mark conversation read")
+    }
+
+    func setConversationPinned(conversationID: String, pinned: Bool) async throws {
+        if try await imSession.setConversationPinned(conversationID: conversationID, pinned: pinned) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "set conversation pinned")
+    }
+
+    func markConversationUnread(conversationID: String, unread: Bool) async throws {
+        if try await imSession.markConversationUnread(conversationID: conversationID, unread: unread) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "mark conversation unread")
+    }
+
+    func hideConversation(conversationID: String) async throws {
+        if try await imSession.hideConversation(conversationID: conversationID) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "hide conversation")
     }
 
     func setConversationMuted(conversationID: String, muted: Bool) async throws {
-        if try await OpenIMSession.shared.setConversationMuted(conversationID: conversationID, muted: muted) {
+        if try await imSession.setConversationMuted(conversationID: conversationID, muted: muted) {
             return
         }
-        throw await openIMUnavailableError(for: "set conversation muted")
+        throw await tencentIMUnavailableError(for: "set conversation muted")
     }
 
     func clearConversationHistory(conversationID: String) async throws {
-        if try await OpenIMSession.shared.clearConversationHistory(conversationID: conversationID) {
+        if try await imSession.clearConversationHistory(conversationID: conversationID) {
             return
         }
-        throw await openIMUnavailableError(for: "clear conversation history")
+        throw await tencentIMUnavailableError(for: "clear conversation history")
     }
 
     func startDirectConversation(identifier: String) async throws -> Conversation {
-        try await request(
+        let raw: Conversation = try await request(
             path: "/v1/chat/direct/start",
             method: "POST",
             body: ["identifier": identifier]
         )
+        return normalizeTencentDirectConversation(raw, fallbackIdentifier: identifier)
     }
 
     func fetchMessages(conversationID: String) async throws -> [ChatMessage] {
@@ -312,48 +331,24 @@ final class LiveSocialService: SocialService {
         startClientMsgID: String?,
         count: Int
     ) async throws -> ChatMessageHistoryPage {
-        #if canImport(OpenIMSDK)
-        if let page = try await fetchRawMessagesPage(
+        if let page = try await imSession.fetchMessagesPage(
             conversationID: conversationID,
             startClientMsgID: startClientMsgID,
             count: count
         ) {
-            var messages: [ChatMessage] = []
-            messages.reserveCapacity(page.messages.count)
-            for message in page.messages {
-                messages.append(await compatibilityChatMessageSnapshot(from: message, conversationID: conversationID))
-            }
-            return ChatMessageHistoryPage(messages: messages, isEnd: page.isEnd)
+            return page
         }
-        #else
-        if let page = try await OpenIMSession.shared.fetchMessagesPage(
-            conversationID: conversationID,
-            startClientMsgID: startClientMsgID,
-            count: count
-        ) {
-            return ChatMessageHistoryPage(messages: page.messages, isEnd: page.isEnd)
-        }
-        #endif
-        throw await openIMUnavailableError(for: "fetch messages")
+        throw await tencentIMUnavailableError(for: "fetch messages")
     }
 
     func sendMessage(conversationID: String, content: String) async throws -> ChatMessage {
-        #if canImport(OpenIMSDK)
-        let prepared = await createRawTextMessage(content: content)
-        if let message = try await sendPreparedRawMessage(
-            prepared,
+        if let message = try await imSession.sendTextMessage(
             conversationID: conversationID,
-            failurePrefix: "OpenIM send text message failed",
-            onProgress: nil
+            content: content
         ) {
-            return await compatibilityChatMessageSnapshot(from: message, conversationID: conversationID)
-        }
-        #else
-        if let message = try await OpenIMSession.shared.sendTextMessage(conversationID: conversationID, content: content) {
             return message
         }
-        #endif
-        throw await openIMUnavailableError(for: "send message")
+        throw await tencentIMUnavailableError(for: "send message")
     }
 
     func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
@@ -365,26 +360,14 @@ final class LiveSocialService: SocialService {
         fileURL: URL,
         onProgress: ((Int) -> Void)?
     ) async throws -> ChatMessage {
-        #if canImport(OpenIMSDK)
-        let prepared = try await createRawImageMessage(fileURL: fileURL)
-        if let message = try await sendPreparedRawMessage(
-            prepared,
-            conversationID: conversationID,
-            failurePrefix: "OpenIM send image message failed",
-            onProgress: onProgress
-        ) {
-            return await compatibilityChatMessageSnapshot(from: message, conversationID: conversationID)
-        }
-        #else
-        if let message = try await OpenIMSession.shared.sendImageMessage(
+        if let message = try await imSession.sendImageMessage(
             conversationID: conversationID,
             fileURL: fileURL,
             onProgress: onProgress
         ) {
             return message
         }
-        #endif
-        throw await openIMUnavailableError(for: "send image message")
+        throw await tencentIMUnavailableError(for: "send image message")
     }
 
     func sendVideoMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
@@ -396,38 +379,65 @@ final class LiveSocialService: SocialService {
         fileURL: URL,
         onProgress: ((Int) -> Void)?
     ) async throws -> ChatMessage {
-        #if canImport(OpenIMSDK)
-        let prepared = try await createRawVideoMessage(fileURL: fileURL)
-        if let message = try await sendPreparedRawMessage(
-            prepared,
-            conversationID: conversationID,
-            failurePrefix: "OpenIM send video message failed",
-            onProgress: onProgress
-        ) {
-            return await compatibilityChatMessageSnapshot(from: message, conversationID: conversationID)
-        }
-        #else
-        if let message = try await OpenIMSession.shared.sendVideoMessage(
+        if let message = try await imSession.sendVideoMessage(
             conversationID: conversationID,
             fileURL: fileURL,
             onProgress: onProgress
         ) {
             return message
         }
-        #endif
-        throw await openIMUnavailableError(for: "send video message")
+        throw await tencentIMUnavailableError(for: "send video message")
     }
 
-    #if canImport(OpenIMSDK)
-    private func compatibilityChatMessageSnapshot(from message: OIMMessageInfo, conversationID: String) async -> ChatMessage {
-        let resolvedConversationID = await businessConversationIDSnapshot(for: message)
-            ?? conversationID
-        return await chatMessageSnapshot(
-            from: message,
-            conversationID: resolvedConversationID
-        )
+    func sendVoiceMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        if let message = try await imSession.sendVoiceMessage(
+            conversationID: conversationID,
+            fileURL: fileURL
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send voice message")
     }
-    #endif
+
+    func sendFileMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        if let message = try await imSession.sendFileMessage(
+            conversationID: conversationID,
+            fileURL: fileURL
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send file message")
+    }
+
+    func sendTypingStatus(conversationID: String, isTyping: Bool) async throws {
+        if try await imSession.sendTypingStatus(
+            conversationID: conversationID,
+            isTyping: isTyping
+        ) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "send typing status")
+    }
+
+    func revokeMessage(conversationID: String, messageID: String) async throws -> String {
+        if let displayText = try await imSession.revokeMessage(
+            conversationID: conversationID,
+            messageID: messageID
+        ) {
+            return displayText
+        }
+        throw await tencentIMUnavailableError(for: "revoke message")
+    }
+
+    func deleteMessage(conversationID: String, messageID: String) async throws {
+        if try await imSession.deleteMessage(
+            conversationID: conversationID,
+            messageID: messageID
+        ) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "delete message")
+    }
 
     func fetchRecommendedSquads() async throws -> [SquadSummary] {
         try await request(path: "/v1/squads/recommended", method: "GET")
@@ -798,28 +808,28 @@ final class LiveSocialService: SocialService {
         }
     }
 
-    private func openIMUnavailableError(for action: String) async -> ServiceError {
-        let state = await OpenIMSession.shared.connectionStateSnapshot()
+    private func tencentIMUnavailableError(for action: String) async -> ServiceError {
+        let state = await imSession.connectionStateSnapshot()
         switch state {
         case .unavailable:
-            return .message("OpenIM SDK 未加载，请使用 RaverMVP.xcworkspace 运行并确认 CocoaPods 已安装")
+            return .message("腾讯云 IM SDK 未加载，请使用 RaverMVP.xcworkspace 运行并确认 CocoaPods 已安装")
         case .disabled:
-            return .message("OpenIM 当前被禁用，请检查服务端 /v1/openim/bootstrap 返回 enabled=true")
+            return .message("腾讯云 IM 当前被禁用，请检查服务端 /v1/im/tencent/bootstrap 返回 enabled=true")
         case .initializing, .connecting:
-            return .message("OpenIM 正在连接，请稍后重试")
+            return .message("腾讯云 IM 正在连接，请稍后重试")
         case .failed(let message):
             if message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return .message("OpenIM \(action)失败，请检查 OpenIM 服务和 token")
+                return .message("腾讯云 IM \(action)失败，请检查 SDKAppID、UserSig 和网络")
             }
-            return .message("OpenIM \(action)失败：\(message)")
-        case .tokenExpired:
-            return .message("OpenIM token 已过期，请重新登录")
+            return .message("腾讯云 IM \(action)失败：\(message)")
+        case .userSigExpired:
+            return .message("腾讯云 IM UserSig 已过期，请重新登录")
         case .kickedOffline:
-            return .message("OpenIM 会话已在其他设备登录，请重新进入")
+            return .message("腾讯云 IM 会话已在其他设备登录，请重新进入")
         case .idle:
-            return .message("OpenIM 尚未初始化，请稍后重试")
+            return .message("腾讯云 IM 尚未初始化，请稍后重试")
         case .connected:
-            return .message("OpenIM 会话暂不可用，请稍后重试")
+            return .message("腾讯云 IM 会话暂不可用，请稍后重试")
         }
     }
 
@@ -894,66 +904,44 @@ final class LiveSocialService: SocialService {
             return nil
         }
     }
-}
 
-#if canImport(OpenIMSDK)
-@MainActor
-extension LiveSocialService: OpenIMRawChatService {
-    var rawMessagePublisher: AnyPublisher<OIMMessageInfo, Never> {
-        OpenIMSession.shared.rawMessagePublisher
-    }
-
-    func markConversationRead(conversationID: String) async throws -> Bool {
-        try await OpenIMSession.shared.markConversationRead(conversationID: conversationID)
-    }
-
-    func fetchRawMessagesPage(
-        conversationID: String,
-        startClientMsgID: String?,
-        count: Int
-    ) async throws -> OpenIMRawMessagePage? {
-        try await OpenIMSession.shared.fetchRawMessagesPage(
-            conversationID: conversationID,
-            startClientMsgID: startClientMsgID,
-            count: count
+    private func normalizeTencentDirectConversation(
+        _ raw: Conversation,
+        fallbackIdentifier: String
+    ) -> Conversation {
+        let fallback = fallbackIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let peerID = raw.peer?.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceID = (peerID?.isEmpty == false ? peerID : nil) ?? fallback
+        let tencentUserID = toTencentIMUserID(sourceID)
+        let sdkConversationID = "c2c_\(tencentUserID)"
+        let peer = raw.peer.map {
+            UserSummary(
+                id: $0.id,
+                username: $0.username,
+                displayName: $0.displayName,
+                avatarURL: $0.avatarURL,
+                isFollowing: $0.isFollowing
+            )
+        }
+        return Conversation(
+            id: tencentUserID,
+            type: .direct,
+            title: raw.title,
+            avatarURL: raw.avatarURL,
+            sdkConversationID: sdkConversationID,
+            lastMessage: raw.lastMessage,
+            lastMessageSenderID: raw.lastMessageSenderID,
+            unreadCount: raw.unreadCount,
+            updatedAt: raw.updatedAt,
+            peer: peer,
+            isPinned: raw.isPinned
         )
     }
 
-    func createRawTextMessage(content: String) -> OIMMessageInfo {
-        OpenIMSession.shared.createRawTextMessage(content: content)
-    }
-
-    func createRawImageMessage(fileURL: URL) throws -> OIMMessageInfo {
-        try OpenIMSession.shared.createRawImageMessage(fileURL: fileURL)
-    }
-
-    func createRawVideoMessage(fileURL: URL) throws -> OIMMessageInfo {
-        try OpenIMSession.shared.createRawVideoMessage(fileURL: fileURL)
-    }
-
-    func sendPreparedRawMessage(
-        _ message: OIMMessageInfo,
-        conversationID: String,
-        failurePrefix: String,
-        onProgress: ((Int) -> Void)?
-    ) async throws -> OIMMessageInfo? {
-        try await OpenIMSession.shared.sendPreparedRawMessage(
-            message,
-            conversationID: conversationID,
-            failurePrefix: failurePrefix,
-            onProgress: onProgress
-        )
-    }
-
-    func businessConversationIDSnapshot(for message: OIMMessageInfo) -> String? {
-        OpenIMSession.shared.businessConversationIDSnapshot(for: message)
-    }
-
-    func chatMessageSnapshot(from message: OIMMessageInfo, conversationID: String) -> ChatMessage {
-        OpenIMSession.shared.chatMessageSnapshot(from: message, conversationID: conversationID)
+    private func toTencentIMUserID(_ raw: String) -> String {
+        TencentIMIdentity.toTencentIMUserID(raw)
     }
 }
-#endif
 
 private struct JoinSquadResponse: Decodable {
     let success: Bool

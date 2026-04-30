@@ -562,7 +562,6 @@ struct MessagesHomeView: View {
     @ObservedObject var chatViewModel: MessagesViewModel
     @ObservedObject var alertViewModel: MessageNotificationsViewModel
     let onUnreadStateChanged: () -> Void
-    @State private var isGlobalSearchPresented = false
 
     init(
         chatViewModel: MessagesViewModel,
@@ -576,10 +575,16 @@ struct MessagesHomeView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 16) {
-                alertsRow
+            HStack(spacing: 0) {
+                HStack(spacing: 16) {
+                    alertsRow
+                }
+                Spacer(minLength: 12)
+                HStack(spacing: 12) {
+                    editConversationsButton
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.top, 8)
 
@@ -598,10 +603,14 @@ struct MessagesHomeView: View {
             } else {
                 List(chatViewModel.conversations) { conversation in
                     Button {
-                        appPush(.conversation(conversationID: conversation.id))
-                        Task {
-                            await chatViewModel.markConversationRead(conversationID: conversation.id)
-                            onUnreadStateChanged()
+                        if chatViewModel.isEditingConversations {
+                            chatViewModel.toggleConversationSelection(conversation.id)
+                        } else {
+                            appPush(.conversation(target: .fromConversation(conversation)))
+                            Task {
+                                await chatViewModel.markConversationRead(conversationID: conversation.id)
+                                onUnreadStateChanged()
+                            }
                         }
                     } label: {
                         conversationRow(conversation)
@@ -609,46 +618,89 @@ struct MessagesHomeView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .listRowBackground(RaverTheme.card)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if !chatViewModel.isEditingConversations {
+                            Button(conversation.isPinned ? L("取消置顶", "Unpin") : L("置顶", "Pin")) {
+                                Task {
+                                    await chatViewModel.setConversationPinned(
+                                        conversationID: conversation.id,
+                                        pinned: !conversation.isPinned
+                                    )
+                                }
+                            }
+                            .tint(RaverTheme.accent)
+
+                            Button(conversation.unreadCount > 0 ? L("已读", "Read") : L("未读", "Unread")) {
+                                Task {
+                                    if conversation.unreadCount > 0 {
+                                        await chatViewModel.markConversationRead(conversationID: conversation.id)
+                                    } else {
+                                        await chatViewModel.markConversationUnread(
+                                            conversationID: conversation.id,
+                                            unread: true
+                                        )
+                                    }
+                                    onUnreadStateChanged()
+                                }
+                            }
+                            .tint(.blue)
+
+                            Button(L("隐藏", "Hide"), role: .destructive) {
+                                Task {
+                                    await chatViewModel.hideConversation(conversationID: conversation.id)
+                                    onUnreadStateChanged()
+                                }
+                            }
+                        }
+                    }
+                    .contextMenu {
+                        Button(conversation.isPinned ? L("取消置顶", "Unpin") : L("置顶", "Pin")) {
+                            Task {
+                                await chatViewModel.setConversationPinned(
+                                    conversationID: conversation.id,
+                                    pinned: !conversation.isPinned
+                                )
+                            }
+                        }
+
+                        Button(conversation.unreadCount > 0 ? L("标记已读", "Mark Read") : L("标记未读", "Mark Unread")) {
+                            Task {
+                                if conversation.unreadCount > 0 {
+                                    await chatViewModel.markConversationRead(conversationID: conversation.id)
+                                } else {
+                                    await chatViewModel.markConversationUnread(
+                                        conversationID: conversation.id,
+                                        unread: true
+                                    )
+                                }
+                                onUnreadStateChanged()
+                            }
+                        }
+
+                        Button(L("隐藏会话", "Hide Conversation"), role: .destructive) {
+                            Task {
+                                await chatViewModel.hideConversation(conversationID: conversation.id)
+                                onUnreadStateChanged()
+                            }
+                        }
+                    }
+                    .listRowBackground(
+                        chatViewModel.isConversationSelected(conversation.id)
+                            ? RaverTheme.accent.opacity(0.10)
+                            : RaverTheme.card
+                    )
                 }
                 .scrollContentBackground(.hidden)
             }
         }
         .background(RaverTheme.background)
+        .safeAreaInset(edge: .bottom) {
+            if chatViewModel.isEditingConversations {
+                conversationBatchBar
+            }
+        }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    isGlobalSearchPresented = true
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                }
-                .accessibilityLabel(L("全局聊天搜索", "Global Chat Search"))
-            }
-        }
-        .sheet(isPresented: $isGlobalSearchPresented) {
-            MessageGlobalSearchSheet(chatViewModel: chatViewModel) { section, result in
-                OpenIMProbeLogger.log(
-                    "[GlobalSearch] result-selected conversation=\(section.conversation.id) message=\(result.message.id) source=\(result.source.rawValue)"
-                )
-                OpenIMChatStore.shared.setPendingMessageFocus(
-                    messageID: result.message.id,
-                    conversationID: section.conversation.id
-                )
-                if result.conversationID != section.conversation.id {
-                    OpenIMChatStore.shared.setPendingMessageFocus(
-                        messageID: result.message.id,
-                        conversationID: result.conversationID
-                    )
-                }
-                appPush(.conversation(conversationID: section.conversation.id))
-                Task {
-                    await chatViewModel.markConversationRead(conversationID: section.conversation.id)
-                    onUnreadStateChanged()
-                }
-            }
-        }
         .task {
             await refreshAll()
         }
@@ -717,22 +769,55 @@ struct MessagesHomeView: View {
         }
     }
 
+    private var editConversationsButton: some View {
+        Button {
+            if chatViewModel.isEditingConversations {
+                chatViewModel.exitConversationEditing()
+            } else {
+                chatViewModel.toggleConversationEditing()
+            }
+        } label: {
+            Circle()
+                .fill(chatViewModel.isEditingConversations ? RaverTheme.accent : RaverTheme.card)
+                .frame(width: 48, height: 48)
+                .overlay(
+                    Image(systemName: chatViewModel.isEditingConversations ? "checkmark" : "square.and.pencil")
+                        .font(.system(size: chatViewModel.isEditingConversations ? 18 : 17, weight: .semibold))
+                        .foregroundStyle(chatViewModel.isEditingConversations ? Color.white : RaverTheme.secondaryText)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(chatViewModel.isEditingConversations ? L("完成编辑", "Finish Editing") : L("编辑会话", "Edit Conversations"))
+    }
+
     @ViewBuilder
     private func conversationRow(_ conversation: Conversation) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
+            if chatViewModel.isEditingConversations {
+                Image(systemName: chatViewModel.isConversationSelected(conversation.id) ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(chatViewModel.isConversationSelected(conversation.id) ? RaverTheme.accent : RaverTheme.secondaryText)
+            }
+
             // 头像
             conversationAvatar(conversation)
-                .frame(width: 48, height: 48)
+                .frame(width: 40, height: 40)
                 .background(RaverTheme.card)
                 .clipShape(Circle())
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
                     HStack(spacing: 6) {
                         Text(conversation.title)
-                            .font(.subheadline.bold())
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(RaverTheme.primaryText)
                             .lineLimit(1)
+
+                        if conversation.isPinned {
+                            Image(systemName: "pin.fill")
+                                .font(.caption2)
+                                .foregroundStyle(RaverTheme.accent)
+                        }
 
                         if conversation.type == .group {
                             Text(LL("小队"))
@@ -747,13 +832,13 @@ struct MessagesHomeView: View {
                     Spacer()
 
                     Text(conversation.updatedAt.chatTimeText)
-                        .font(.caption)
+                        .font(.system(size: 12))
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
 
                 HStack(spacing: 8) {
                     Text(conversation.previewText)
-                        .font(.caption)
+                        .font(.system(size: 13))
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -762,9 +847,9 @@ struct MessagesHomeView: View {
 
                     if conversation.unreadCount > 0 {
                         Text(unreadBadgeText(for: conversation.unreadCount))
-                            .font(.caption2.bold())
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                            .font(.system(size: 11, weight: .semibold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
                             .background(Color.red)
                             .clipShape(Capsule())
                             .foregroundStyle(Color.white)
@@ -772,9 +857,69 @@ struct MessagesHomeView: View {
                 }
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+    }
+
+    private var conversationBatchBar: some View {
+        VStack(spacing: 10) {
+            Divider()
+            HStack(spacing: 12) {
+                Button {
+                    if chatViewModel.selectedConversationIDs.count == chatViewModel.conversations.count {
+                        chatViewModel.clearConversationSelection()
+                    } else {
+                        chatViewModel.selectAllConversations()
+                    }
+                } label: {
+                    Text(
+                        chatViewModel.selectedConversationIDs.count == chatViewModel.conversations.count
+                            ? L("取消全选", "Clear All")
+                            : L("全选", "Select All")
+                    )
+                    .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 12)
+
+                Text(
+                    L("已选 \(chatViewModel.selectedConversationIDs.count) 项", "Selected \(chatViewModel.selectedConversationIDs.count)")
+                )
+                .font(.caption)
+                .foregroundStyle(RaverTheme.secondaryText)
+
+                Spacer(minLength: 12)
+
+                Button {
+                    Task {
+                        await chatViewModel.markSelectedConversationsRead()
+                        onUnreadStateChanged()
+                    }
+                } label: {
+                    Text(L("标为已读", "Mark Read"))
+                        .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .disabled(chatViewModel.selectedConversationIDs.isEmpty)
+
+                Button(role: .destructive) {
+                    Task {
+                        await chatViewModel.hideSelectedConversations()
+                        onUnreadStateChanged()
+                    }
+                } label: {
+                    Text(L("隐藏", "Hide"))
+                        .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .disabled(chatViewModel.selectedConversationIDs.isEmpty)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+        }
+        .background(.ultraThinMaterial)
     }
 
     private func unreadBadgeText(for count: Int) -> String {
@@ -957,7 +1102,7 @@ private struct MessageGlobalSearchSheet: View {
         let pendingQuery = query
         let normalizedQuery = pendingQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalizedQuery.isEmpty {
-            OpenIMProbeLogger.log(
+            IMProbeLogger.log(
                 "[GlobalSearch] trigger query=\(normalizedQuery) immediate=\(immediate ? 1 : 0)"
             )
         }
