@@ -56,9 +56,7 @@ struct MainTabView: View {
     }
 
     private var isTabBarHidden: Bool {
-        guard currentTab != .discover else { return false }
-        guard let topRoute = router.path.last else { return false }
-        return topRoute.hidesTabBar
+        false
     }
 
     private var bottomSafeAreaInset: CGFloat {
