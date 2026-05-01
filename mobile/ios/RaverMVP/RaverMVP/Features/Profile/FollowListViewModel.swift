@@ -3,8 +3,11 @@ import Foundation
 @MainActor
 final class FollowListViewModel: ObservableObject {
     @Published var users: [UserSummary] = []
+    @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
+    @Published var isRefreshing = false
     @Published var isLoadingMore = false
+    @Published var bannerMessage: String?
     @Published var error: String?
 
     let userID: String
@@ -23,16 +26,31 @@ final class FollowListViewModel: ObservableObject {
     func load() async {
         if isLoading { return }
         isLoading = true
+        let hadContent = !users.isEmpty
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             let page = try await fetchPage(cursor: nil)
             users = page.users
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil
+            phase = users.isEmpty ? .empty : .success
+            bannerMessage = nil
             error = nil
         } catch {
-            self.error = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("列表加载失败，请稍后重试", "Failed to load the list. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 
@@ -54,9 +72,10 @@ final class FollowListViewModel: ObservableObject {
             users.append(contentsOf: page.users.filter { !existing.contains($0.id) })
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil
+            bannerMessage = nil
             error = nil
         } catch {
-            self.error = error.userFacingMessage
+            bannerMessage = error.userFacingMessage
         }
     }
 

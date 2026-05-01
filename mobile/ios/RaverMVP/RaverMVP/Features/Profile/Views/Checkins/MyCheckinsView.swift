@@ -9,7 +9,10 @@ final class MyCheckinsViewModel: ObservableObject {
     @Published var page = 1
     @Published var totalPages = 1
     @Published var items: [WebCheckin] = []
+    @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
+    @Published var isRefreshing = false
+    @Published var bannerMessage: String?
     @Published var errorMessage: String?
     @Published var timelineDJIdentityByName: [String: CheckinDJLite] = [:]
     @Published var timelineDJIdentityByID: [String: CheckinDJLite] = [:]
@@ -20,12 +23,19 @@ final class MyCheckinsViewModel: ObservableObject {
     }
 
     func reload(service: WebFeatureService) async {
-        page = 1
-        totalPages = 1
-        items = []
-        timelineDJIdentityByName = [:]
-        timelineDJIdentityByID = [:]
-        timelineLocalizedEventByID = [:]
+        let hadContent = !items.isEmpty
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+            page = 1
+            totalPages = 1
+            items = []
+            timelineDJIdentityByName = [:]
+            timelineDJIdentityByID = [:]
+            timelineLocalizedEventByID = [:]
+        }
+        defer { isRefreshing = false }
         await loadMore(service: service, reset: true)
     }
 
@@ -36,10 +46,11 @@ final class MyCheckinsViewModel: ObservableObject {
 
         do {
             let result: CheckinListPage
+            let requestedPage = reset ? 1 : page
             if let targetUserID {
-                result = try await service.fetchUserCheckins(userID: targetUserID, page: page, limit: 20, type: nil)
+                result = try await service.fetchUserCheckins(userID: targetUserID, page: requestedPage, limit: 20, type: nil)
             } else {
-                result = try await service.fetchMyCheckins(page: page, limit: 20, type: nil)
+                result = try await service.fetchMyCheckins(page: requestedPage, limit: 20, type: nil)
             }
 
             let eventOnlyResult: CheckinListPage?
@@ -54,16 +65,28 @@ final class MyCheckinsViewModel: ObservableObject {
             }
 
             if reset {
+                timelineDJIdentityByName = [:]
+                timelineDJIdentityByID = [:]
+                timelineLocalizedEventByID = [:]
                 items = mergeUniqueCheckins(result.items, with: eventOnlyResult?.items ?? [])
             } else {
                 items = mergeUniqueCheckins(items + result.items, with: [])
             }
             totalPages = result.pagination?.totalPages ?? 1
-            page += 1
+            page = requestedPage + 1
             await hydrateTimelineEventLocalizationMap(from: items, service: service)
             await hydrateTimelineDJIdentityMap(from: items, service: service)
+            phase = items.isEmpty ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("打卡记录加载失败，请稍后重试", "Failed to load check-ins. Please try again later.")
+            if reset {
+                phase = .failure(message: message)
+            } else if !items.isEmpty {
+                bannerMessage = message
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 
@@ -468,6 +491,24 @@ struct MyCheckinsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
+                if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if viewModel.isRefreshing {
+                            InlineLoadingBadge(title: L("正在更新打卡记录", "Updating check-ins"))
+                        }
+                        if let bannerMessage = viewModel.bannerMessage {
+                            ScreenStatusBanner(
+                                message: bannerMessage,
+                                style: .error,
+                                actionTitle: L("重试", "Retry")
+                            ) {
+                                Task { await viewModel.reload(service: service) }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 Picker(L("视图", "View"), selection: $displayMode) {
                     Text(L("时间轴视图", "Timeline")).tag(DisplayMode.timeline)
                     Text(L("画廊视图", "Gallery")).tag(DisplayMode.gallery)
@@ -482,9 +523,25 @@ struct MyCheckinsView: View {
                     .pickerStyle(.segmented)
                 }
 
-                if viewModel.isLoading && isCurrentViewEmpty {
-                    ProgressView(L("加载打卡记录...", "Loading check-ins..."))
-                        .frame(maxWidth: .infinity, minHeight: 220)
+                if viewModel.phase == .idle || viewModel.phase == .initialLoading {
+                    FeedSkeletonView(count: 3)
+                        .frame(maxWidth: .infinity)
+                } else if case .failure(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("打卡记录加载失败", "Check-ins Failed to Load"),
+                        message: message
+                    ) {
+                        Task { await viewModel.reload(service: service) }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 260)
+                } else if case .offline(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await viewModel.reload(service: service) }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 260)
                 } else if isCurrentViewEmpty {
                     VStack(spacing: 12) {
                         ContentUnavailableView(LL("还没有观演记录"), systemImage: "sparkles.tv")
@@ -510,6 +567,8 @@ struct MyCheckinsView: View {
                     }
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
         }
         .background(RaverTheme.background)
         .scrollIndicators(.hidden)

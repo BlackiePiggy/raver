@@ -1,6 +1,28 @@
 import Foundation
 import Combine
 
+enum GroupInviteOption: String, Codable, CaseIterable {
+    case forbid
+    case auth
+    case any
+
+    var title: String {
+        switch self {
+        case .forbid:
+            return L("禁止邀请", "Invite Disabled")
+        case .auth:
+            return L("管理员审批", "Admin Approval")
+        case .any:
+            return L("自动通过", "Auto Approval")
+        }
+    }
+}
+
+struct GroupMemberDirectory: Codable, Hashable {
+    var members: [SquadMemberProfile]
+    var myRole: String?
+}
+
 // Temporary compatibility zone for surfaces that still return `ChatMessage`.
 protocol IMChatCompatibilityService: AnyObject {
     func fetchMessages(conversationID: String) async throws -> [ChatMessage]
@@ -73,6 +95,7 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func hideConversation(conversationID: String) async throws
     func setConversationMuted(conversationID: String, muted: Bool) async throws
     func clearConversationHistory(conversationID: String) async throws
+    func isTencentFriend(userID: String) async throws -> Bool
     func fetchFriendRemark(userID: String) async throws -> String?
     func setFriendRemark(userID: String, remark: String?) async throws
     func isUserBlacklisted(userID: String) async throws -> Bool
@@ -84,12 +107,16 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func joinSquad(squadID: String) async throws
     func leaveSquad(squadID: String) async throws
     func disbandSquad(squadID: String) async throws
+    func inviteUserToSquad(squadID: String, inviteeUserID: String) async throws
     func createSquad(input: CreateSquadInput) async throws -> Conversation
     func uploadSquadAvatar(squadID: String, imageData: Data, fileName: String, mimeType: String) async throws -> AvatarUploadResponse
     func updateSquadMySettings(squadID: String, input: UpdateSquadMySettingsInput) async throws
     func updateSquadInfo(squadID: String, input: UpdateSquadInfoInput) async throws
     func updateSquadMemberRole(squadID: String, memberUserID: String, role: String) async throws
     func removeSquadMember(squadID: String, memberUserID: String) async throws
+    func fetchSquadInviteOption(squadID: String) async throws -> GroupInviteOption
+    func setSquadInviteOption(squadID: String, option: GroupInviteOption) async throws
+    func fetchSquadMemberDirectory(squadID: String) async throws -> GroupMemberDirectory
     func fetchNotifications(limit: Int) async throws -> NotificationInbox
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
     func markNotificationRead(notificationID: String) async throws
@@ -182,6 +209,11 @@ extension SocialService {
         throw ServiceError.message("Not supported")
     }
 
+    func isTencentFriend(userID: String) async throws -> Bool {
+        _ = userID
+        throw ServiceError.message("Not supported")
+    }
+
     func fetchFriendRemark(userID: String) async throws -> String? {
         _ = userID
         throw ServiceError.message("Not supported")
@@ -213,6 +245,12 @@ extension SocialService {
         throw ServiceError.message("Not supported")
     }
 
+    func inviteUserToSquad(squadID: String, inviteeUserID: String) async throws {
+        _ = squadID
+        _ = inviteeUserID
+        throw ServiceError.message("Not supported")
+    }
+
     func updateSquadMemberRole(squadID: String, memberUserID: String, role: String) async throws {
         _ = squadID
         _ = memberUserID
@@ -223,6 +261,22 @@ extension SocialService {
     func removeSquadMember(squadID: String, memberUserID: String) async throws {
         _ = squadID
         _ = memberUserID
+        throw ServiceError.message("Not supported")
+    }
+
+    func fetchSquadInviteOption(squadID: String) async throws -> GroupInviteOption {
+        _ = squadID
+        throw ServiceError.message("Not supported")
+    }
+
+    func setSquadInviteOption(squadID: String, option: GroupInviteOption) async throws {
+        _ = squadID
+        _ = option
+        throw ServiceError.message("Not supported")
+    }
+
+    func fetchSquadMemberDirectory(squadID: String) async throws -> GroupMemberDirectory {
+        _ = squadID
         throw ServiceError.message("Not supported")
     }
 }

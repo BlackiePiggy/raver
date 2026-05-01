@@ -1619,6 +1619,7 @@ private struct CircleIDEventPickerSheet: View {
 
     @State private var events: [WebEvent] = []
     @State private var searchText = ""
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
     @State private var errorMessage: String?
 
@@ -1645,15 +1646,29 @@ private struct CircleIDEventPickerSheet: View {
                     .padding(.horizontal, 14)
                     .padding(.top, 10)
 
-                if isLoading && events.isEmpty {
+                if phase == .idle || phase == .initialLoading {
                     Spacer()
-                    ProgressView(LL("加载活动中..."))
+                    SearchResultsSkeletonView()
                     Spacer()
-                } else if let errorMessage, events.isEmpty {
+                } else if case .failure(let message) = phase {
                     Spacer()
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.9))
+                    ScreenErrorCard(
+                        title: L("活动加载失败", "Events Failed to Load"),
+                        message: message
+                    ) {
+                        Task { await loadEvents() }
+                    }
+                    .padding(.horizontal, 14)
+                    Spacer()
+                } else if case .offline(let message) = phase {
+                    Spacer()
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await loadEvents() }
+                    }
+                    .padding(.horizontal, 14)
                     Spacer()
                 } else if filteredEvents.isEmpty {
                     Spacer()
@@ -1698,6 +1713,7 @@ private struct CircleIDEventPickerSheet: View {
     private func loadEvents() async {
         if isLoading { return }
         isLoading = true
+        phase = .initialLoading
         defer { isLoading = false }
 
         do {
@@ -1723,9 +1739,12 @@ private struct CircleIDEventPickerSheet: View {
             events = unique.values.sorted { lhs, rhs in
                 lhs.startDate > rhs.startDate
             }
+            phase = events.isEmpty ? .empty : .success
             errorMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("活动加载失败，请稍后重试", "Failed to load events. Please try again later.")
+            phase = .failure(message: message)
+            errorMessage = message
         }
     }
 }
@@ -1741,6 +1760,7 @@ private struct CircleIDDJPickerSheet: View {
     @State private var djs: [WebDJ] = []
     @State private var selectedIDs: Set<String> = []
     @State private var searchText = ""
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
     @State private var errorMessage: String?
 
@@ -1766,15 +1786,29 @@ private struct CircleIDDJPickerSheet: View {
                     .padding(.horizontal, 14)
                     .padding(.top, 10)
 
-                if isLoading && djs.isEmpty {
+                if phase == .idle || phase == .initialLoading {
                     Spacer()
-                    ProgressView(LL("加载 DJ 中..."))
+                    SearchResultsSkeletonView()
                     Spacer()
-                } else if let errorMessage, djs.isEmpty {
+                } else if case .failure(let message) = phase {
                     Spacer()
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.9))
+                    ScreenErrorCard(
+                        title: L("DJ 加载失败", "DJs Failed to Load"),
+                        message: message
+                    ) {
+                        Task { await loadDJs() }
+                    }
+                    .padding(.horizontal, 14)
+                    Spacer()
+                } else if case .offline(let message) = phase {
+                    Spacer()
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await loadDJs() }
+                    }
+                    .padding(.horizontal, 14)
                     Spacer()
                 } else if filteredDJs.isEmpty {
                     Spacer()
@@ -1892,6 +1926,7 @@ private struct CircleIDDJPickerSheet: View {
     private func loadDJs() async {
         if isLoading { return }
         isLoading = true
+        phase = .initialLoading
         defer { isLoading = false }
 
         do {
@@ -1916,9 +1951,12 @@ private struct CircleIDDJPickerSheet: View {
             djs = unique.values.sorted { lhs, rhs in
                 lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
+            phase = djs.isEmpty ? .empty : .success
             errorMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("DJ 加载失败，请稍后重试", "Failed to load DJs. Please try again later.")
+            phase = .failure(message: message)
+            errorMessage = message
         }
     }
 }
@@ -1997,9 +2035,12 @@ private struct SquadHallView: View {
     @State private var squads: [SquadSummary] = []
     @State private var mySquads: [SquadSummary] = []
     @State private var squadProfilesByID: [String: SquadProfile] = [:]
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
+    @State private var isRefreshing = false
     @State private var showCreateSquad = false
     @State private var selectedMode: SquadListMode = .plaza
+    @State private var bannerMessage: String?
     @State private var errorMessage: String?
     private let cardColumns = [
         GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 12),
@@ -2059,11 +2100,38 @@ private struct SquadHallView: View {
             }
             .padding(.horizontal, 16)
 
-            if isLoading && displayedSquads.isEmpty {
+            if isRefreshing || bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if isRefreshing {
+                        InlineLoadingBadge(title: L("正在更新小队", "Updating squads"))
+                    }
+                    if let bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task { await loadSquads() }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            switch phase {
+            case .idle, .initialLoading:
+                DiscoverGridSkeletonView()
+            case .failure(let message), .offline(let message):
                 Spacer()
-                ProgressView(L("加载小队中...", "Loading squads..."))
+                ScreenErrorCard(
+                    title: L("小队加载失败", "Squads Failed to Load"),
+                    message: message
+                ) {
+                    Task { await loadSquads() }
+                }
+                .padding(.horizontal, 16)
                 Spacer()
-            } else if displayedSquads.isEmpty {
+            case .empty:
                 Spacer()
                 ContentUnavailableView(
                     selectedMode == .mine ? L("还没有加入小队", "Not Joined Any Squad Yet") : L("暂无小队", "No Squads Yet"),
@@ -2071,7 +2139,7 @@ private struct SquadHallView: View {
                     description: Text(selectedMode == .mine ? L("去小队广场逛逛，加入你感兴趣的小队。", "Visit the squad square and join squads you like.") : L("创建一个小队，和朋友一起记录活动。", "Create a squad and record events with friends."))
                 )
                 Spacer()
-            } else {
+            case .success:
                 ScrollView {
                     LazyVGrid(columns: cardColumns, spacing: 14) {
                         ForEach(displayedSquads) { squad in
@@ -2277,8 +2345,15 @@ private struct SquadHallView: View {
     @MainActor
     private func loadSquads() async {
         if isLoading { return }
+        let hadContent = !displayedSquads.isEmpty
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             let snapshot = try await LoadSquadHallDataUseCase(service: appContainer.socialService)
@@ -2287,9 +2362,17 @@ private struct SquadHallView: View {
             squads = snapshot.squads
             mySquads = snapshot.mySquads
             squadProfilesByID = snapshot.squadProfilesByID
+            phase = displayedSquads.isEmpty ? .empty : .success
+            bannerMessage = nil
             errorMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("小队加载失败，请稍后重试", "Failed to load squads. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 }
@@ -2342,7 +2425,10 @@ private struct CircleRatingHubView: View {
     private var service: WebFeatureService { appContainer.webService }
 
     @State private var events: [WebRatingEvent] = []
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
+    @State private var isRefreshing = false
+    @State private var bannerMessage: String?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -2379,18 +2465,45 @@ private struct CircleRatingHubView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
 
-                if isLoading && events.isEmpty {
-                    ProgressView(LL("正在加载打分事件…"))
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                        .padding(.horizontal, 16)
+                if isRefreshing || bannerMessage != nil {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if isRefreshing {
+                            InlineLoadingBadge(title: L("正在更新打分事件", "Updating rating events"))
+                        }
+                        if let bannerMessage {
+                            ScreenStatusBanner(
+                                message: bannerMessage,
+                                style: .error,
+                                actionTitle: L("重试", "Retry")
+                            ) {
+                                Task { await loadEvents() }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                if phase == .idle || phase == .initialLoading {
+                    FeedSkeletonView(count: 3)
                         .padding(.top, 8)
-                } else if let errorMessage, events.isEmpty {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.9))
-                        .padding(.horizontal, 16)
-                        .padding(.top, 4)
+                } else if case .failure(let message) = phase {
+                    ScreenErrorCard(
+                        title: L("打分事件加载失败", "Rating Events Failed to Load"),
+                        message: message
+                    ) {
+                        Task { await loadEvents() }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
+                } else if case .offline(let message) = phase {
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await loadEvents() }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
                 } else if events.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(LL("还没有打分事件"))
@@ -2500,13 +2613,29 @@ private struct CircleRatingHubView: View {
 
     @MainActor
     private func loadEvents() async {
+        if isLoading { return }
+        let hadContent = !events.isEmpty
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
         do {
             events = try await service.fetchRatingEvents()
+            phase = events.isEmpty ? .empty : .success
+            bannerMessage = nil
             errorMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("打分事件加载失败，请稍后重试", "Failed to load rating events. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 }
@@ -2523,13 +2652,32 @@ struct CircleRatingEventDetailView: View {
     let onUpdated: () -> Void
 
     @State private var event: WebRatingEvent?
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
-    @State private var errorMessage: String?
+    @State private var isRefreshing = false
+    @State private var bannerMessage: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                if let event {
+                if isRefreshing || bannerMessage != nil {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if isRefreshing {
+                            InlineLoadingBadge(title: L("正在更新事件详情", "Updating event details"))
+                        }
+                        if let bannerMessage {
+                            ScreenStatusBanner(
+                                message: bannerMessage,
+                                style: .error,
+                                actionTitle: L("重试", "Retry")
+                            ) {
+                                Task { await loadEvent() }
+                            }
+                        }
+                    }
+                }
+
+                if let event, phase == .success {
                     ratingEventHeaderCard(event)
 
                     if event.units.isEmpty {
@@ -2554,14 +2702,29 @@ struct CircleRatingEventDetailView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                } else if isLoading {
-                    ProgressView(LL("正在加载事件…"))
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
+                } else if phase == .idle || phase == .initialLoading {
+                    EventDetailSkeletonView()
+                } else if case .failure(let message) = phase {
+                    ScreenErrorCard(
+                        title: L("事件加载失败", "Event Failed to Load"),
+                        message: message
+                    ) {
+                        Task { await loadEvent() }
+                    }
+                } else if case .offline(let message) = phase {
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await loadEvent() }
+                    }
+                } else if phase == .empty {
+                    ContentUnavailableView(
+                        L("事件不存在", "Event Not Found"),
+                        systemImage: "sparkles.rectangle.stack"
+                    )
                 } else {
-                    Text(errorMessage ?? L("事件不存在", "Event not found"))
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.9))
+                    EventDetailSkeletonView()
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2728,13 +2891,28 @@ struct CircleRatingEventDetailView: View {
 
     @MainActor
     private func loadEvent() async {
+        if isLoading { return }
+        let hadContent = event != nil
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
         do {
             event = try await service.fetchRatingEvent(id: eventID)
-            errorMessage = nil
+            phase = event == nil ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("事件加载失败，请稍后重试", "Failed to load event. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 }
@@ -2750,16 +2928,37 @@ struct CircleRatingUnitDetailView: View {
     let onSubmitted: () -> Void
 
     @State private var unit: WebRatingUnit?
+    @State private var phase: LoadPhase = .idle
     @State private var commentDraft = ""
     @State private var draftScore: Double = 0
     @State private var myProfile: UserProfile?
-    @State private var errorMessage: String?
+    @State private var loadBannerMessage: String?
+    @State private var actionErrorMessage: String?
+    @State private var isLoading = false
+    @State private var isRefreshing = false
     @State private var isSubmitting = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                if let unit {
+                if isRefreshing || loadBannerMessage != nil {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if isRefreshing {
+                            InlineLoadingBadge(title: L("正在更新评分单位", "Updating rating unit"))
+                        }
+                        if let loadBannerMessage {
+                            ScreenStatusBanner(
+                                message: loadBannerMessage,
+                                style: .error,
+                                actionTitle: L("重试", "Retry")
+                            ) {
+                                Task { await loadUnit() }
+                            }
+                        }
+                    }
+                }
+
+                if let unit, phase == .success {
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(alignment: .top, spacing: 10) {
                             RatingSquareImage(
@@ -2917,8 +3116,8 @@ struct CircleRatingUnitDetailView: View {
                             .opacity(canSendComment ? 1 : 0.45)
                         }
 
-                        if let errorMessage {
-                            Text(errorMessage)
+                        if let actionErrorMessage {
+                            Text(actionErrorMessage)
                                 .font(.caption2)
                                 .foregroundStyle(.red.opacity(0.9))
                         }
@@ -2927,10 +3126,35 @@ struct CircleRatingUnitDetailView: View {
                     .background(RaverTheme.card)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .leading)
+                } else if phase == .idle || phase == .initialLoading {
+                    VStack(spacing: 12) {
+                        EventDetailSkeletonView()
+                        CommentSectionSkeletonView(count: 3)
+                    }
+                } else if case .failure(let message) = phase {
+                    ScreenErrorCard(
+                        title: L("评分单位加载失败", "Rating Unit Failed to Load"),
+                        message: message
+                    ) {
+                        Task { await loadUnit() }
+                    }
+                } else if case .offline(let message) = phase {
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await loadUnit() }
+                    }
+                } else if phase == .empty {
+                    ContentUnavailableView(
+                        L("评分单位不存在", "Rating Unit Not Found"),
+                        systemImage: "music.mic"
+                    )
                 } else {
-                    ProgressView(LL("正在加载评分单位…"))
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
+                    VStack(spacing: 12) {
+                        EventDetailSkeletonView()
+                        CommentSectionSkeletonView(count: 3)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -3015,11 +3239,28 @@ struct CircleRatingUnitDetailView: View {
 
     @MainActor
     private func loadUnit() async {
+        if isLoading { return }
+        let hadContent = unit != nil
+        isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
+        defer { isLoading = false }
+        defer { isRefreshing = false }
         do {
             unit = try await webService.fetchRatingUnit(id: unitID)
-            errorMessage = nil
+            phase = unit == nil ? .empty : .success
+            loadBannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("评分单位加载失败，请稍后重试", "Failed to load rating unit. Please try again later.")
+            if hadContent {
+                loadBannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 
@@ -3049,10 +3290,10 @@ struct CircleRatingUnitDetailView: View {
 
             commentDraft = ""
             draftScore = 0
-            errorMessage = nil
+            actionErrorMessage = nil
             onSubmitted()
         } catch {
-            errorMessage = error.userFacingMessage
+            actionErrorMessage = error.userFacingMessage
         }
     }
 }
@@ -3101,9 +3342,9 @@ struct CreateRatingEventSheet: View {
                 }
                 if let errorMessage {
                     Section {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red.opacity(0.9))
+                        FormStatusMessage(message: errorMessage)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
                     }
                 }
             }
@@ -3188,19 +3429,34 @@ struct CreateRatingEventFromEventSheet: View {
     @State private var searchKeyword = ""
     @State private var events: [WebEvent] = []
     @State private var selectedEventID: String?
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
     @State private var isSubmitting = false
     @State private var errorMessage: String?
 
     var body: some View {
         List {
-                if isLoading {
+                if phase == .idle || phase == .initialLoading {
                     HStack {
                         Spacer()
-                        ProgressView(L("正在加载活动…", "Loading events..."))
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
+                        SearchResultsSkeletonView()
                         Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                } else if case .failure(let message) = phase {
+                    ScreenErrorCard(
+                        title: L("活动加载失败", "Events Failed to Load"),
+                        message: message
+                    ) {
+                        Task { await loadEvents() }
+                    }
+                    .listRowBackground(Color.clear)
+                } else if case .offline(let message) = phase {
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await loadEvents() }
                     }
                     .listRowBackground(Color.clear)
                 } else if events.isEmpty {
@@ -3254,9 +3510,7 @@ struct CreateRatingEventFromEventSheet: View {
                 }
 
                 if let errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.92))
+                    FormStatusMessage(message: errorMessage)
                         .listRowBackground(Color.clear)
                 }
             }
@@ -3282,7 +3536,9 @@ struct CreateRatingEventFromEventSheet: View {
 
     @MainActor
     private func loadEvents() async {
+        if isLoading { return }
         isLoading = true
+        phase = .initialLoading
         defer { isLoading = false }
         do {
             let response = try await webService.fetchEvents(
@@ -3296,10 +3552,13 @@ struct CreateRatingEventFromEventSheet: View {
             if let selectedEventID, !events.contains(where: { $0.id == selectedEventID }) {
                 self.selectedEventID = nil
             }
+            phase = events.isEmpty ? .empty : .success
             errorMessage = nil
         } catch {
             events = []
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("活动加载失败，请稍后重试", "Failed to load events. Please try again later.")
+            phase = .failure(message: message)
+            errorMessage = message
         }
     }
 
@@ -3362,9 +3621,9 @@ struct CreateRatingUnitSheet: View {
                 }
                 if let errorMessage {
                     Section {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red.opacity(0.9))
+                        FormStatusMessage(message: errorMessage)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
                     }
                 }
             }

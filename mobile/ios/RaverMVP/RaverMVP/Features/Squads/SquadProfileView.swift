@@ -17,52 +17,94 @@ struct SquadProfileView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                if viewModel.isLoading && viewModel.profile == nil {
-                    ProgressView(L("加载小队中...", "Loading squads..."))
-                        .padding(.top, 80)
-                } else if let profile = viewModel.profile {
-                    headerCard(profile)
-                    membersCard(profile)
-                    groupDetailsCard(profile)
-                    activitiesCard(profile)
-                    chatHistoryCard(profile)
-
-                    if profile.isMember {
-                        mySettingsCard(profile)
+        VStack(spacing: 12) {
+            if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if viewModel.isRefreshing {
+                        InlineLoadingBadge(title: L("正在更新小队", "Updating squad"))
                     }
-
-                    if canManageSquad(profile) {
-                        Button {
-                            appPush(.squadManage(squadID: profile.id))
-                        } label: {
-                            Label(L("编辑小队信息", "Edit Squad"), systemImage: "square.and.pencil")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                    }
-
-                    Button {
-                        Task {
-                            if await viewModel.joinIfNeeded(), let conversation = viewModel.buildConversation() {
-                                appPush(.conversation(target: .fromConversation(conversation)))
+                    if let bannerMessage = viewModel.bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task {
+                                await viewModel.load()
+                                syncMySettingsFromProfile()
                             }
                         }
-                    } label: {
-                        if viewModel.isProcessingJoin {
-                            ProgressView().tint(.white)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            switch viewModel.phase {
+            case .idle, .initialLoading:
+                SquadProfileSkeletonView()
+            case .failure(let message), .offline(let message):
+                Spacer()
+                ScreenErrorCard(message: message) {
+                    Task {
+                        await viewModel.load()
+                        syncMySettingsFromProfile()
+                    }
+                }
+                .padding(.horizontal, 16)
+                Spacer()
+            case .empty:
+                ContentUnavailableView(LL("小队不存在"), systemImage: "person.3.sequence")
+                    .padding(.top, 80)
+            case .success:
+                ScrollView {
+                    VStack(spacing: 14) {
+                        if let profile = viewModel.profile {
+                            headerCard(profile)
+                            membersCard(profile)
+                            groupDetailsCard(profile)
+                            activitiesCard(profile)
+                            chatHistoryCard(profile)
+
+                            if profile.isMember {
+                                mySettingsCard(profile)
+                            }
+
+                            if canManageSquad(profile) {
+                                Button {
+                                    appPush(.squadManage(squadID: profile.id))
+                                } label: {
+                                    Label(L("编辑小队信息", "Edit Squad"), systemImage: "square.and.pencil")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+
+                            Button {
+                                Task {
+                                    if await viewModel.joinIfNeeded(), let conversation = viewModel.buildConversation() {
+                                        appPush(.conversation(target: .fromConversation(conversation)))
+                                    }
+                                }
+                            } label: {
+                                if viewModel.isProcessingJoin {
+                                    ProgressView().tint(.white)
+                                } else {
+                                    Text(profile.isMember ? L("进入小队", "Enter Squad") : L("加入并进入小队", "Join & Enter Squad"))
+                                }
+                            }
+                            .buttonStyle(PrimaryButtonStyle())
                         } else {
-                            Text(profile.isMember ? L("进入小队", "Enter Squad") : L("加入并进入小队", "Join & Enter Squad"))
+                            ContentUnavailableView(LL("小队不存在"), systemImage: "person.3.sequence")
+                                .padding(.top, 80)
                         }
                     }
-                    .buttonStyle(PrimaryButtonStyle())
-                } else {
-                    ContentUnavailableView(LL("小队不存在"), systemImage: "person.3.sequence")
-                        .padding(.top, 80)
+                    .padding(16)
+                }
+                .refreshable {
+                    await viewModel.load()
+                    syncMySettingsFromProfile()
                 }
             }
-            .padding(16)
         }
         .background(RaverTheme.background)
         .scrollDismissesKeyboard(.interactively)
@@ -78,10 +120,6 @@ struct SquadProfileView: View {
             dismiss()
         }
         .task {
-            await viewModel.load()
-            syncMySettingsFromProfile()
-        }
-        .refreshable {
             await viewModel.load()
             syncMySettingsFromProfile()
         }

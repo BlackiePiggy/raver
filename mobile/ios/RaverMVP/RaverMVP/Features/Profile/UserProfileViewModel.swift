@@ -6,8 +6,11 @@ final class UserProfileViewModel: ObservableObject {
     @Published var profile: UserProfile?
     @Published var posts: [Post] = []
     @Published var recentCheckins: [WebCheckin] = []
+    @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
+    @Published var isRefreshing = false
     @Published var isLoadingMore = false
+    @Published var bannerMessage: String?
     @Published var error: String?
 
     private let userID: String
@@ -23,7 +26,14 @@ final class UserProfileViewModel: ObservableObject {
     func load() async {
         if isLoading { return }
         isLoading = true
+        let hadContent = profile != nil || !posts.isEmpty
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             async let profileTask = repository.fetchUserProfile(userID: userID)
@@ -39,9 +49,17 @@ final class UserProfileViewModel: ObservableObject {
             }
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil
+            phase = .success
+            bannerMessage = nil
             error = nil
         } catch {
-            self.error = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("用户主页加载失败，请稍后重试", "Failed to load profile. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 
@@ -63,9 +81,10 @@ final class UserProfileViewModel: ObservableObject {
             posts.append(contentsOf: page.posts.filter { !existing.contains($0.id) && !$0.isRaverNews })
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil
+            bannerMessage = nil
             error = nil
         } catch {
-            self.error = error.userFacingMessage
+            bannerMessage = error.userFacingMessage
         }
     }
 

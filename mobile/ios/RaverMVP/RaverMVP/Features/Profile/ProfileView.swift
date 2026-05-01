@@ -11,57 +11,40 @@ struct ProfileView: View {
     }
 
     var body: some View {
-        Group {
-            if viewModel.isLoading && viewModel.profile == nil {
-                ProgressView(L("加载中...", "Loading..."))
-            } else if let profile = viewModel.profile {
+        VStack(spacing: 12) {
+            if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if viewModel.isRefreshing {
+                        InlineLoadingBadge(title: L("正在更新个人主页", "Updating profile"))
+                    }
+                    if let bannerMessage = viewModel.bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task { await viewModel.load() }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            switch viewModel.phase {
+            case .idle, .initialLoading:
+                ProfileSkeletonView()
+            case .failure(let message), .offline(let message):
                 ScrollView {
                     VStack(spacing: 14) {
-                        ProfileHeaderCard(
-                            profile: profile,
-                            onAvatarTap: {
-                                profilePush(.avatarFullscreen)
-                            },
-                            onFollowersTap: {
-                                profilePush(.followList(userID: currentUserID, kind: .followers))
-                            },
-                            onFollowingTap: {
-                                profilePush(.followList(userID: currentUserID, kind: .following))
-                            },
-                            onFriendsTap: {
-                                profilePush(.followList(userID: currentUserID, kind: .friends))
-                            }
-                        )
-
-                        ProfileRecentCheckinsCard(
-                            title: L("我的近期打卡", "My Recent Check-ins"),
-                            checkins: viewModel.recentCheckins,
-                            emptyText: L("去发现页完成活动或 DJ 打卡，记录会显示在这里。", "Complete event or DJ check-ins from Discover. Records will appear here.")
-                        ) {
-                            profilePush(.myCheckins(
-                                targetUserID: nil,
-                                title: L("我的打卡", "My Check-ins")
-                            ))
+                        ScreenErrorCard(message: message) {
+                            Task { await viewModel.load() }
                         }
-
                         profileQuickActions
-
-                        Picker(LL("内容"), selection: $viewModel.selectedSection) {
-                            ForEach(ProfileViewModel.Section.allCases) { section in
-                                Text(section.title).tag(section)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .padding(.horizontal, 2)
-
-                        sectionContent
                     }
                     .padding(16)
+                    .padding(.top, 40)
                 }
-                .refreshable {
-                    await viewModel.refreshSection()
-                }
-            } else {
+            case .empty:
                 ScrollView {
                     VStack(spacing: 14) {
                         ContentUnavailableView(
@@ -73,6 +56,57 @@ struct ProfileView: View {
                         profileQuickActions
                     }
                     .padding(16)
+                }
+            case .success:
+                if let profile = viewModel.profile {
+                    ScrollView {
+                        VStack(spacing: 14) {
+                            ProfileHeaderCard(
+                                profile: profile,
+                                onAvatarTap: {
+                                    profilePush(.avatarFullscreen)
+                                },
+                                onFollowersTap: {
+                                    profilePush(.followList(userID: currentUserID, kind: .followers))
+                                },
+                                onFollowingTap: {
+                                    profilePush(.followList(userID: currentUserID, kind: .following))
+                                },
+                                onFriendsTap: {
+                                    profilePush(.followList(userID: currentUserID, kind: .friends))
+                                }
+                            )
+
+                            ProfileRecentCheckinsCard(
+                                title: L("我的近期打卡", "My Recent Check-ins"),
+                                checkins: viewModel.recentCheckins,
+                                emptyText: L("去发现页完成活动或 DJ 打卡，记录会显示在这里。", "Complete event or DJ check-ins from Discover. Records will appear here.")
+                            ) {
+                                profilePush(.myCheckins(
+                                    targetUserID: nil,
+                                    title: L("我的打卡", "My Check-ins")
+                                ))
+                            }
+
+                            profileQuickActions
+
+                            Picker(LL("内容"), selection: $viewModel.selectedSection) {
+                                ForEach(ProfileViewModel.Section.allCases) { section in
+                                    Text(section.title).tag(section)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .padding(.horizontal, 2)
+
+                            sectionContent
+                        }
+                        .padding(16)
+                    }
+                    .refreshable {
+                        await viewModel.refreshSection()
+                    }
+                } else {
+                    ProfileSkeletonView()
                 }
             }
         }

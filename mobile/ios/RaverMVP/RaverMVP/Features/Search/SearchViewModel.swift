@@ -23,7 +23,10 @@ final class SearchViewModel: ObservableObject {
     @Published var users: [UserSummary] = []
     @Published var posts: [Post] = []
     @Published var squads: [SquadSummary] = []
+    @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
+    @Published var isRefreshing = false
+    @Published var bannerMessage: String?
     @Published var error: String?
 
     private let service: SocialService
@@ -37,14 +40,24 @@ final class SearchViewModel: ObservableObject {
         if trimmed.isEmpty {
             users = []
             posts = []
+            squads = []
+            bannerMessage = nil
+            phase = .idle
             if scope != .squads {
                 return
             }
         }
 
+        let hadContent = hasContentForCurrentScope
         if scope == .squads {
             isLoading = true
+            if hadContent {
+                isRefreshing = true
+            } else {
+                phase = .initialLoading
+            }
             defer { isLoading = false }
+            defer { isRefreshing = false }
             do {
                 var recommended = try await service.fetchRecommendedSquads()
                 if !trimmed.isEmpty {
@@ -56,15 +69,29 @@ final class SearchViewModel: ObservableObject {
                 squads = recommended
                 users = []
                 posts = []
+                phase = squads.isEmpty ? .empty : .success
+                bannerMessage = nil
                 error = nil
             } catch {
-                self.error = error.userFacingMessage
+                let message = error.userFacingMessage ?? L("搜索失败，请稍后重试", "Search failed. Please try again later.")
+                if hadContent {
+                    bannerMessage = message
+                    phase = .success
+                } else {
+                    phase = .failure(message: message)
+                }
             }
             return
         }
 
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             switch scope {
@@ -81,9 +108,17 @@ final class SearchViewModel: ObservableObject {
                 users = []
                 posts = []
             }
+            phase = hasContentForCurrentScope ? .success : .empty
+            bannerMessage = nil
             self.error = nil
         } catch {
-            self.error = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("搜索失败，请稍后重试", "Search failed. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 
@@ -120,6 +155,17 @@ final class SearchViewModel: ObservableObject {
             }
         } catch {
             self.error = error.userFacingMessage
+        }
+    }
+
+    private var hasContentForCurrentScope: Bool {
+        switch scope {
+        case .users:
+            return !users.isEmpty
+        case .posts:
+            return !posts.isEmpty
+        case .squads:
+            return !squads.isEmpty
         }
     }
 }

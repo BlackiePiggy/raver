@@ -181,6 +181,30 @@ struct DiscoverSearchResultHeader: View {
     }
 }
 
+private struct SearchResultsFeedbackBanner: View {
+    let isRefreshing: Bool
+    let bannerMessage: String?
+    let retry: () -> Void
+
+    var body: some View {
+        if isRefreshing || bannerMessage != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                if isRefreshing {
+                    InlineLoadingBadge(title: L("正在更新搜索结果", "Updating search results"))
+                }
+                if let bannerMessage {
+                    ScreenStatusBanner(
+                        message: bannerMessage,
+                        style: .error,
+                        actionTitle: L("重试", "Retry"),
+                        action: retry
+                    )
+                }
+            }
+        }
+    }
+}
+
 struct EventsSearchResultsView: View {
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
@@ -198,10 +222,31 @@ struct EventsSearchResultsView: View {
                 resultCount: viewModel.events.isEmpty ? nil : viewModel.events.count
             )
 
+            SearchResultsFeedbackBanner(
+                isRefreshing: viewModel.isRefreshing,
+                bannerMessage: viewModel.bannerMessage
+            ) {
+                Task { await viewModel.refresh() }
+            }
+
             Group {
-                if viewModel.isLoading && viewModel.events.isEmpty {
-                    ProgressView(L("搜索中...", "Searching..."))
+                if viewModel.phase == .idle || viewModel.phase == .initialLoading {
+                    SearchResultsSkeletonView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if case .failure(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("活动搜索失败", "Event Search Failed"),
+                        message: message
+                    ) {
+                        Task { await viewModel.refresh() }
+                    }
+                } else if case .offline(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await viewModel.refresh() }
+                    }
                 } else if viewModel.events.isEmpty {
                     ContentUnavailableView(
                         L("未找到活动", "No events found"),
@@ -223,8 +268,12 @@ struct EventsSearchResultsView: View {
                             if viewModel.canLoadMore {
                                 HStack {
                                     Spacer()
-                                    ProgressView()
-                                        .padding(.vertical, 10)
+                                    if viewModel.isLoadingMore {
+                                        ProgressView()
+                                            .padding(.vertical, 10)
+                                    } else {
+                                        Color.clear.frame(height: 1)
+                                    }
                                     Spacer()
                                 }
                                 .onAppear {
@@ -251,14 +300,6 @@ struct EventsSearchResultsView: View {
         .refreshable {
             await viewModel.refresh()
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
-        )) {
-            Button(L("确定", "OK"), role: .cancel) {}
-        } message: {
-            Text(viewModel.errorMessage ?? "")
-        }
     }
 }
 
@@ -279,10 +320,31 @@ struct NewsSearchResultsView: View {
                 resultCount: viewModel.articles.isEmpty ? nil : viewModel.articles.count
             )
 
+            SearchResultsFeedbackBanner(
+                isRefreshing: viewModel.isRefreshing,
+                bannerMessage: viewModel.bannerMessage
+            ) {
+                Task { await viewModel.refresh() }
+            }
+
             Group {
-                if viewModel.isLoading && viewModel.articles.isEmpty {
-                    ProgressView(L("搜索中...", "Searching..."))
+                if viewModel.phase == .idle || viewModel.phase == .initialLoading {
+                    SearchResultsSkeletonView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if case .failure(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("资讯搜索失败", "News Search Failed"),
+                        message: message
+                    ) {
+                        Task { await viewModel.refresh() }
+                    }
+                } else if case .offline(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await viewModel.refresh() }
+                    }
                 } else if viewModel.articles.isEmpty {
                     ContentUnavailableView(
                         L("未找到资讯", "No news found"),
@@ -321,14 +383,6 @@ struct NewsSearchResultsView: View {
         .refreshable {
             await viewModel.refresh()
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
-        )) {
-            Button(L("确定", "OK"), role: .cancel) {}
-        } message: {
-            Text(viewModel.errorMessage ?? "")
-        }
     }
 }
 
@@ -352,10 +406,31 @@ struct DJsSearchResultsView: View {
                 }()
             )
 
+            SearchResultsFeedbackBanner(
+                isRefreshing: viewModel.isRefreshing,
+                bannerMessage: viewModel.bannerMessage
+            ) {
+                Task { await viewModel.refresh() }
+            }
+
             Group {
-                if viewModel.isLoading && viewModel.djs.isEmpty && viewModel.rankingBoards.isEmpty {
-                    ProgressView(L("搜索中...", "Searching..."))
+                if viewModel.phase == .idle || viewModel.phase == .initialLoading {
+                    SearchResultsSkeletonView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if case .failure(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("DJ 搜索失败", "DJ Search Failed"),
+                        message: message
+                    ) {
+                        Task { await viewModel.refresh() }
+                    }
+                } else if case .offline(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await viewModel.refresh() }
+                    }
                 } else if viewModel.djs.isEmpty && viewModel.rankingBoards.isEmpty {
                     ContentUnavailableView(
                         L("未找到 DJ 或榜单", "No DJs or rankings found"),
@@ -424,14 +499,6 @@ struct DJsSearchResultsView: View {
         .refreshable {
             await viewModel.refresh()
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
-        )) {
-            Button(L("确定", "OK"), role: .cancel) {}
-        } message: {
-            Text(viewModel.errorMessage ?? "")
-        }
     }
 }
 
@@ -457,10 +524,31 @@ struct SetsSearchResultsView: View {
                 resultCount: viewModel.sets.isEmpty ? nil : viewModel.sets.count
             )
 
+            SearchResultsFeedbackBanner(
+                isRefreshing: viewModel.isRefreshing,
+                bannerMessage: viewModel.bannerMessage
+            ) {
+                Task { await viewModel.refresh() }
+            }
+
             Group {
-                if viewModel.isLoading && viewModel.sets.isEmpty {
-                    ProgressView(L("搜索中...", "Searching..."))
+                if viewModel.phase == .idle || viewModel.phase == .initialLoading {
+                    SearchResultsSkeletonView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if case .failure(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("Sets 搜索失败", "Sets Search Failed"),
+                        message: message
+                    ) {
+                        Task { await viewModel.refresh() }
+                    }
+                } else if case .offline(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await viewModel.refresh() }
+                    }
                 } else if viewModel.sets.isEmpty {
                     ContentUnavailableView(
                         L("未找到 Sets", "No sets found"),
@@ -495,14 +583,6 @@ struct SetsSearchResultsView: View {
         }
         .refreshable {
             await viewModel.refresh()
-        }
-        .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
-        )) {
-            Button(L("确定", "OK"), role: .cancel) {}
-        } message: {
-            Text(viewModel.errorMessage ?? "")
         }
     }
 }
@@ -553,10 +633,31 @@ struct WikiSearchResultsView: View {
             .pickerStyle(.segmented)
             .padding(.horizontal, 2)
 
+            SearchResultsFeedbackBanner(
+                isRefreshing: viewModel.isRefreshing,
+                bannerMessage: viewModel.bannerMessage
+            ) {
+                Task { await viewModel.refresh() }
+            }
+
             Group {
-                if viewModel.isLoading && viewModel.labels.isEmpty && viewModel.festivals.isEmpty {
-                    ProgressView(L("搜索中...", "Searching..."))
+                if viewModel.phase == .idle || viewModel.phase == .initialLoading {
+                    SearchResultsSkeletonView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if case .failure(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("Wiki 搜索失败", "Wiki Search Failed"),
+                        message: message
+                    ) {
+                        Task { await viewModel.refresh() }
+                    }
+                } else if case .offline(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await viewModel.refresh() }
+                    }
                 } else if selectedTab == .labels {
                     labelsSection
                 } else {
@@ -574,14 +675,6 @@ struct WikiSearchResultsView: View {
         }
         .refreshable {
             await viewModel.refresh()
-        }
-        .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
-        )) {
-            Button(L("确定", "OK"), role: .cancel) {}
-        } message: {
-            Text(viewModel.errorMessage ?? "")
         }
     }
 

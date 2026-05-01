@@ -41,7 +41,7 @@ final class DemoAlignedChatRouteCoordinator {
         guard let presenter else { return }
         guard presenter.presentedViewController == nil else { return }
 
-        let settingsView = ChatSettingsSheet(
+        let settingsView = ChatSettingsView(
             conversation: conversation,
             service: service,
             chatStore: IMChatStore.shared,

@@ -10,7 +10,10 @@ struct PostDetailView: View {
 
     @State private var comments: [Comment] = []
     @State private var commentInput = ""
+    @State private var commentsPhase: LoadPhase = .idle
     @State private var isLoading = false
+    @State private var isRefreshing = false
+    @State private var bannerMessage: String?
     @State private var error: String?
     @State private var sharePayload: PostSharePayload?
     @State private var isShowingHideReasonDialog = false
@@ -34,6 +37,23 @@ struct PostDetailView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    if isRefreshing || bannerMessage != nil {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if isRefreshing {
+                                InlineLoadingBadge(title: L("正在更新动态详情", "Updating post details"))
+                            }
+                            if let bannerMessage {
+                                ScreenStatusBanner(
+                                    message: bannerMessage,
+                                    style: .error,
+                                    actionTitle: L("重试", "Retry")
+                                ) {
+                                    Task { await loadComments() }
+                                }
+                            }
+                        }
+                    }
+
                     PostCardView(
                         post: post,
                         currentUserId: appState.session?.user.id,
@@ -116,13 +136,21 @@ struct PostDetailView: View {
                                 }
                             }
 
-                            if isLoading {
-                                ProgressView()
-                            } else if comments.isEmpty {
+                            switch commentsPhase {
+                            case .idle, .initialLoading:
+                                CommentSectionSkeletonView()
+                            case .failure(let message), .offline(let message):
+                                ScreenErrorCard(
+                                    title: L("评论加载失败", "Comments Failed to Load"),
+                                    message: message
+                                ) {
+                                    Task { await loadComments() }
+                                }
+                            case .empty:
                                 Text(LL("还没有评论，来抢沙发吧。"))
                                     .font(.subheadline)
                                     .foregroundStyle(RaverTheme.secondaryText)
-                            } else {
+                            case .success:
                                 LazyVStack(alignment: .leading, spacing: 12) {
                                     ForEach(visibleCommentThreads) { thread in
                                         commentThreadView(thread)
@@ -138,6 +166,9 @@ struct PostDetailView: View {
                 .padding(16)
             }
             .scrollDismissesKeyboard(.interactively)
+            .refreshable {
+                await loadComments()
+            }
 
             Divider()
 
@@ -241,14 +272,34 @@ struct PostDetailView: View {
 
     @MainActor
     private func loadComments() async {
+        if isLoading { return }
         isLoading = true
+        let hadComments = !comments.isEmpty
+        if hadComments {
+            isRefreshing = true
+        } else {
+            commentsPhase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
-            comments = try await service.fetchComments(postID: post.id)
+            async let postTask = service.fetchPost(postID: post.id)
+            async let commentsTask = service.fetchComments(postID: post.id)
+            let (loadedPost, loadedComments) = try await (postTask, commentsTask)
+            post = loadedPost
+            comments = loadedComments
             resetCommentPresentationState()
+            commentsPhase = comments.isEmpty ? .empty : .success
+            bannerMessage = nil
         } catch {
-            self.error = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("评论加载失败，请稍后重试", "Failed to load comments. Please try again later.")
+            if hadComments {
+                bannerMessage = message
+                commentsPhase = .success
+            } else {
+                commentsPhase = .failure(message: message)
+            }
         }
     }
 
@@ -297,6 +348,7 @@ struct PostDetailView: View {
                 )
                 comments.append(comment)
                 updatePresentationStateAfterAppending(comment: comment)
+                commentsPhase = .success
                 commentInput = ""
                 replyTargetComment = nil
                 dismissKeyboard()

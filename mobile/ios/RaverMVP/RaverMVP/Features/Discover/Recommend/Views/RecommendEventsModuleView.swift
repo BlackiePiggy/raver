@@ -42,9 +42,25 @@ struct RecommendEventsModuleView: View {
     var body: some View {
         ZStack(alignment: .top) {
             Group {
-                if viewModel.isLoading && viewModel.events.isEmpty {
-                    ProgressView(L("正在生成推荐...", "Generating recommendations..."))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if viewModel.phase == .idle || viewModel.phase == .initialLoading {
+                    FeedSkeletonView(count: 4)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                } else if case .failure(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("推荐活动加载失败", "Recommended Events Failed to Load"),
+                        message: message
+                    ) {
+                        Task { await viewModel.reload(isLoggedIn: appState.session != nil) }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if case .offline(let message) = viewModel.phase {
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await viewModel.reload(isLoggedIn: appState.session != nil) }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.events.isEmpty {
                     ContentUnavailableView(
                         L("暂无可推荐活动", "No Recommended Events"),
@@ -53,6 +69,26 @@ struct RecommendEventsModuleView: View {
                 } else {
                     recommendationPager
                 }
+            }
+
+            if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if viewModel.isRefreshing {
+                        InlineLoadingBadge(title: L("正在更新推荐", "Updating recommendations"))
+                    }
+                    if let bannerMessage = viewModel.bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task { await viewModel.reload(isLoggedIn: appState.session != nil) }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, topSearchContentInset + 46)
+                .zIndex(9)
             }
 
             topSearchRow
@@ -71,14 +107,6 @@ struct RecommendEventsModuleView: View {
         }
         .onDisappear {
             notifyHorizontalDragging(false)
-        }
-        .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
-        )) {
-            Button(L("确定", "OK"), role: .cancel) {}
-        } message: {
-            Text(viewModel.errorMessage ?? "")
         }
     }
 

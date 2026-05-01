@@ -4,11 +4,14 @@ import Combine
 @MainActor
 final class SquadProfileViewModel: ObservableObject {
     @Published var profile: SquadProfile?
+    @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
+    @Published var isRefreshing = false
     @Published var isProcessingJoin = false
     @Published var isSavingMySettings = false
     @Published var isSavingGroupInfo = false
     @Published var memberActionInFlightUserID: String?
+    @Published var bannerMessage: String?
     @Published var error: String?
 
     private let squadID: String
@@ -22,13 +25,28 @@ final class SquadProfileViewModel: ObservableObject {
     func load() async {
         if isLoading { return }
         isLoading = true
+        let hadContent = profile != nil
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             profile = try await service.fetchSquadProfile(squadID: squadID)
+            phase = profile == nil ? .empty : .success
+            bannerMessage = nil
             error = nil
         } catch {
-            self.error = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("小队加载失败，请稍后重试", "Failed to load squad. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 
@@ -42,6 +60,8 @@ final class SquadProfileViewModel: ObservableObject {
         do {
             try await service.joinSquad(squadID: profile.id)
             self.profile = try await service.fetchSquadProfile(squadID: profile.id)
+            phase = .success
+            bannerMessage = nil
             return true
         } catch {
             self.error = error.userFacingMessage
@@ -80,6 +100,8 @@ final class SquadProfileViewModel: ObservableObject {
                 )
             )
             self.profile = try await service.fetchSquadProfile(squadID: profile.id)
+            phase = .success
+            bannerMessage = nil
             error = nil
             return true
         } catch {
@@ -98,6 +120,8 @@ final class SquadProfileViewModel: ObservableObject {
         do {
             try await service.updateSquadInfo(squadID: profile.id, input: input)
             self.profile = try await service.fetchSquadProfile(squadID: profile.id)
+            phase = .success
+            bannerMessage = nil
             error = nil
             return true
         } catch {
@@ -116,6 +140,8 @@ final class SquadProfileViewModel: ObservableObject {
         do {
             try await service.updateSquadMemberRole(squadID: profile.id, memberUserID: memberUserID, role: role)
             self.profile = try await service.fetchSquadProfile(squadID: profile.id)
+            phase = .success
+            bannerMessage = nil
             error = nil
             return true
         } catch {
@@ -134,6 +160,8 @@ final class SquadProfileViewModel: ObservableObject {
         do {
             try await service.removeSquadMember(squadID: profile.id, memberUserID: memberUserID)
             self.profile = try await service.fetchSquadProfile(squadID: profile.id)
+            phase = .success
+            bannerMessage = nil
             error = nil
             return true
         } catch {

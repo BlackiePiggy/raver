@@ -203,9 +203,16 @@ struct TencentUIKitChatView: View {
 
                 Button {
                     Task {
-                        guard let userID = await viewModel.resolveHeaderProfileTargetUserID() else { return }
-                        await MainActor.run {
-                            appNavigate(.userProfile(userID: userID))
+                        if conversation.type == .group {
+                            let squadID = TencentIMIdentity.normalizePlatformSquadID(conversation.id)
+                            await MainActor.run {
+                                appNavigate(.squadProfile(squadID: squadID))
+                            }
+                        } else {
+                            guard let userID = await viewModel.resolveHeaderProfileTargetUserID() else { return }
+                            await MainActor.run {
+                                appNavigate(.userProfile(userID: userID))
+                            }
                         }
                     }
                 } label: {
@@ -215,7 +222,7 @@ struct TencentUIKitChatView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .disabled(!viewModel.canOpenHeaderProfile)
+                .disabled(conversation.type == .direct && !viewModel.canOpenHeaderProfile)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(viewModel.chatTitle)

@@ -5,8 +5,11 @@ import Combine
 final class DJsModuleViewModel: ObservableObject {
     @Published private(set) var djs: [WebDJ] = []
     @Published private(set) var spotlightDJs: [WebDJ] = []
+    @Published private(set) var phase: LoadPhase = .idle
     @Published private(set) var isLoading = false
+    @Published private(set) var isRefreshing = false
     @Published private(set) var isRefreshingHotBatch = false
+    @Published var bannerMessage: String?
     @Published var errorMessage: String?
 
     private let repository: DiscoverDJsRepository
@@ -38,7 +41,14 @@ final class DJsModuleViewModel: ObservableObject {
     func reload() async {
         guard !isLoading else { return }
         isLoading = true
+        let hadContent = !djs.isEmpty || !spotlightDJs.isEmpty
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             errorMessage = nil
@@ -56,9 +66,17 @@ final class DJsModuleViewModel: ObservableObject {
             if spotlightDJs.isEmpty {
                 spotlightDJs = sanitizeSpotlightDJs(djs.sorted { ($0.followerCount ?? 0) > ($1.followerCount ?? 0) })
             }
+            phase = spotlightCarouselDJs.isEmpty ? .empty : .success
+            bannerMessage = nil
             hasLoadedInitial = true
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("DJ 列表加载失败，请稍后重试", "Failed to load DJs. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 

@@ -500,6 +500,10 @@ actor MockSocialService: SocialService {
         return FollowListPage(users: users, nextCursor: nil)
     }
 
+    func isTencentFriend(userID: String) async throws -> Bool {
+        friendIDs(for: currentUser.id).contains(userID)
+    }
+
     func fetchConversations(type: ConversationType) async throws -> [Conversation] {
         conversations
             .filter { $0.type == type }
@@ -788,6 +792,11 @@ actor MockSocialService: SocialService {
         }
     }
 
+    func fetchSquadMemberDirectory(squadID: String) async throws -> GroupMemberDirectory {
+        let profile = try await fetchSquadProfile(squadID: squadID)
+        return GroupMemberDirectory(members: profile.members, myRole: profile.myRole)
+    }
+
     func leaveSquad(squadID: String) async throws {
         guard let index = squads.firstIndex(where: { $0.id == squadID }) else {
             throw ServiceError.message("小队不存在")
@@ -825,6 +834,45 @@ actor MockSocialService: SocialService {
         squads.remove(at: index)
         conversations.removeAll(where: { $0.id == squadID })
         messagesByConversation.removeValue(forKey: squadID)
+    }
+
+    func inviteUserToSquad(squadID: String, inviteeUserID: String) async throws {
+        guard let squadIndex = squads.firstIndex(where: { $0.id == squadID }) else {
+            throw ServiceError.message("小队不存在")
+        }
+        guard squads[squadIndex].isMember else {
+            throw ServiceError.message("你还不是小队成员")
+        }
+        guard usersByID[inviteeUserID] != nil else {
+            throw ServiceError.message("用户不存在")
+        }
+        guard !squads[squadIndex].members.contains(where: { $0.id == inviteeUserID }) else {
+            throw ServiceError.message("该用户已经是小队成员")
+        }
+        let myFriendIds = friendIDs(for: currentUser.id)
+        guard myFriendIds.contains(inviteeUserID) else {
+            throw ServiceError.message("只能邀请好友加入")
+        }
+
+        guard let invitee = usersByID[inviteeUserID] else {
+            throw ServiceError.message("用户不存在")
+        }
+
+        squads[squadIndex].members.append(
+            SquadMemberProfile(
+                id: invitee.id,
+                username: invitee.username,
+                displayName: invitee.displayName,
+                avatarURL: invitee.avatarURL,
+                isFollowing: false,
+                role: "member",
+                nickname: nil,
+                isCaptain: false,
+                isAdmin: false
+            )
+        )
+        squads[squadIndex].memberCount += 1
+        squads[squadIndex].updatedAt = Date()
     }
 
     func createSquad(input: CreateSquadInput) async throws -> Conversation {
@@ -1100,6 +1148,20 @@ actor MockSocialService: SocialService {
         squads[squadIndex].members.remove(at: targetIndex)
         squads[squadIndex].memberCount = max(0, squads[squadIndex].memberCount - 1)
         squads[squadIndex].updatedAt = Date()
+    }
+
+    func fetchSquadInviteOption(squadID: String) async throws -> GroupInviteOption {
+        guard squads.contains(where: { $0.id == squadID }) else {
+            throw ServiceError.message("小队不存在")
+        }
+        return .any
+    }
+
+    func setSquadInviteOption(squadID: String, option: GroupInviteOption) async throws {
+        guard squads.contains(where: { $0.id == squadID }) else {
+            throw ServiceError.message("小队不存在")
+        }
+        _ = option
     }
 
     func fetchNotifications(limit: Int) async throws -> NotificationInbox {

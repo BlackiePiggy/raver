@@ -14,10 +14,10 @@ struct DiscoverNewsDetailView: View {
     @State private var isLoadingBindings = false
     @State private var comments: [Comment] = []
     @State private var visibleCommentCount = 20
-    @State private var isLoadingComments = false
+    @State private var commentsPhase: LoadPhase = .idle
     @State private var isSendingComment = false
     @State private var commentInput = ""
-    @State private var errorMessage: String?
+    @State private var commentActionMessage: String?
     @State private var coverImageSize: CGSize = .zero
 
     private var newsRepository: DiscoverNewsRepository {
@@ -107,14 +107,6 @@ struct DiscoverNewsDetailView: View {
         .task(id: article.id) {
             await loadBoundEntities()
             await loadComments(reset: true)
-        }
-        .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button(L("确定", "OK"), role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
         }
     }
 
@@ -304,8 +296,26 @@ struct DiscoverNewsDetailView: View {
                 .font(.headline)
                 .foregroundStyle(RaverTheme.primaryText)
 
-            if isLoadingComments && comments.isEmpty {
-                ProgressView()
+            if let commentActionMessage {
+                ScreenStatusBanner(message: commentActionMessage, style: .error)
+            }
+
+            if commentsPhase == .idle || commentsPhase == .initialLoading {
+                CommentSectionSkeletonView(count: 3)
+            } else if case .failure(let message) = commentsPhase {
+                ScreenErrorCard(
+                    title: L("评论加载失败", "Comments Failed to Load"),
+                    message: message
+                ) {
+                    Task { await loadComments(reset: true) }
+                }
+            } else if case .offline(let message) = commentsPhase {
+                ScreenErrorCard(
+                    title: L("网络不可用", "Network Unavailable"),
+                    message: message
+                ) {
+                    Task { await loadComments(reset: true) }
+                }
             } else if comments.isEmpty {
                 Text(LL("还没有评论，来抢沙发吧。"))
                     .font(.subheadline)
@@ -447,13 +457,15 @@ struct DiscoverNewsDetailView: View {
             visibleCommentCount = 20
             comments = []
         }
-        isLoadingComments = true
-        defer { isLoadingComments = false }
+        commentsPhase = .initialLoading
         do {
             comments = try await newsRepository.fetchComments(postID: article.id)
             visibleCommentCount = min(max(visibleCommentCount, 20), comments.count)
+            commentsPhase = comments.isEmpty ? .empty : .success
         } catch {
-            errorMessage = error.userFacingMessage
+            commentsPhase = .failure(
+                message: error.userFacingMessage ?? L("评论加载失败，请稍后重试", "Failed to load comments. Please try again later.")
+            )
         }
     }
 
@@ -470,8 +482,10 @@ struct DiscoverNewsDetailView: View {
             comments.append(comment)
             visibleCommentCount = comments.count
             commentInput = ""
+            commentsPhase = .success
+            commentActionMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            commentActionMessage = error.userFacingMessage ?? L("评论发送失败，请稍后重试", "Failed to send comment. Please try again later.")
         }
     }
 

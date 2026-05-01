@@ -41,6 +41,14 @@ struct LearnModuleView: View {
     @State private var isLoadingGenres = false
     @State private var isLoadingLabels = false
     @State private var isLoadingFestivals = false
+    @State private var rankingsPhase: LoadPhase = .idle
+    @State private var genresPhase: LoadPhase = .idle
+    @State private var labelsPhase: LoadPhase = .idle
+    @State private var festivalsPhase: LoadPhase = .idle
+    @State private var isRefreshingRankings = false
+    @State private var isRefreshingGenres = false
+    @State private var isRefreshingLabels = false
+    @State private var isRefreshingFestivals = false
     @State private var selectedFestivalRankingBoard: LearnFestivalRankingBoard?
     @State private var showFestivalCreateSheet = false
     @State private var isCreatingFestival = false
@@ -57,6 +65,7 @@ struct LearnModuleView: View {
     @State private var createFestivalBackgroundItem: PhotosPickerItem?
     @State private var createFestivalAvatarData: Data?
     @State private var createFestivalBackgroundData: Data?
+    @State private var bannerMessage: String?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -89,6 +98,25 @@ struct LearnModuleView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if selectedSectionIsRefreshing || bannerMessage != nil {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if selectedSectionIsRefreshing {
+                            InlineLoadingBadge(title: L("正在更新内容", "Updating content"))
+                        }
+                        if let bannerMessage {
+                            ScreenStatusBanner(
+                                message: bannerMessage,
+                                style: .error,
+                                actionTitle: L("重试", "Retry")
+                            ) {
+                                Task { await refreshSelectedSection() }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                }
             }
             .background(RaverTheme.background)
             .navigationTitle("")
@@ -420,9 +448,27 @@ struct LearnModuleView: View {
 
     @ViewBuilder
     private var rankingsContent: some View {
-        if isLoadingRankings && rankingBoards.isEmpty {
-            ProgressView(L("加载榜单中...", "Loading rankings..."))
+        if rankingsPhase == .idle || rankingsPhase == .initialLoading {
+            DiscoverGridSkeletonView()
                 .frame(maxWidth: .infinity, minHeight: 220)
+        } else if case .failure(let message) = rankingsPhase {
+            ScreenErrorCard(
+                title: L("榜单加载失败", "Rankings Failed to Load"),
+                message: message
+            ) {
+                Task { await loadRankingBoards() }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
+        } else if case .offline(let message) = rankingsPhase {
+            ScreenErrorCard(
+                title: L("网络不可用", "Network Unavailable"),
+                message: message
+            ) {
+                Task { await loadRankingBoards() }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
         } else if rankingBoards.isEmpty {
             ContentUnavailableView(LL("暂无榜单"), systemImage: "list.number")
                 .frame(maxWidth: .infinity, minHeight: 220)
@@ -454,8 +500,30 @@ struct LearnModuleView: View {
 
     @ViewBuilder
     private var genresContent: some View {
-        if isLoadingGenres && genres.isEmpty {
-            ProgressView(LL("学习内容加载中..."))
+        if genresPhase == .idle || genresPhase == .initialLoading {
+            FeedSkeletonView(count: 4)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+        } else if case .failure(let message) = genresPhase {
+            ScreenErrorCard(
+                title: L("学习内容加载失败", "Learn Content Failed to Load"),
+                message: message
+            ) {
+                Task { await loadGenres() }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
+        } else if case .offline(let message) = genresPhase {
+            ScreenErrorCard(
+                title: L("网络不可用", "Network Unavailable"),
+                message: message
+            ) {
+                Task { await loadGenres() }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
+        } else if genres.isEmpty {
+            ContentUnavailableView(LL("暂无学习内容"), systemImage: "book")
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -486,8 +554,28 @@ struct LearnModuleView: View {
 
     @ViewBuilder
     private var labelsContent: some View {
-        if isLoadingLabels && labels.isEmpty {
-            ProgressView(LL("厂牌加载中..."))
+        if labelsPhase == .idle || labelsPhase == .initialLoading {
+            FeedSkeletonView(count: 4)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+        } else if case .failure(let message) = labelsPhase {
+            ScreenErrorCard(
+                title: L("厂牌加载失败", "Labels Failed to Load"),
+                message: message
+            ) {
+                Task { await loadLabels() }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
+        } else if case .offline(let message) = labelsPhase {
+            ScreenErrorCard(
+                title: L("网络不可用", "Network Unavailable"),
+                message: message
+            ) {
+                Task { await loadLabels() }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
         } else if labels.isEmpty {
             ContentUnavailableView(LL("暂无厂牌"), systemImage: "building.2")
         } else {
@@ -522,8 +610,28 @@ struct LearnModuleView: View {
 
     @ViewBuilder
     private var festivalsContent: some View {
-        if isLoadingFestivals && allFestivals.isEmpty {
-            ProgressView(LL("电音节加载中..."))
+        if festivalsPhase == .idle || festivalsPhase == .initialLoading {
+            FeedSkeletonView(count: 4)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+        } else if case .failure(let message) = festivalsPhase {
+            ScreenErrorCard(
+                title: L("电音节加载失败", "Festivals Failed to Load"),
+                message: message
+            ) {
+                Task { await loadFestivals() }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
+        } else if case .offline(let message) = festivalsPhase {
+            ScreenErrorCard(
+                title: L("网络不可用", "Network Unavailable"),
+                message: message
+            ) {
+                Task { await loadFestivals() }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -568,30 +676,80 @@ struct LearnModuleView: View {
         _ = await (rankingsTask, genresTask, labelsTask, festivalsTask)
     }
 
+    private func refreshSelectedSection() async {
+        switch selectedSection {
+        case .rankings:
+            await loadRankingBoards()
+        case .genres:
+            await loadGenres()
+        case .labels:
+            await loadLabels()
+        case .festivals:
+            await loadFestivals()
+        }
+    }
+
     private func loadRankingBoards() async {
+        let hadContent = !rankingBoards.isEmpty
         isLoadingRankings = true
+        if hadContent {
+            isRefreshingRankings = true
+        } else {
+            rankingsPhase = .initialLoading
+        }
         defer { isLoadingRankings = false }
+        defer { isRefreshingRankings = false }
 
         do {
             rankingBoards = try await djsRepository.fetchRankingBoards()
+            rankingsPhase = rankingBoards.isEmpty ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("榜单加载失败，请稍后重试", "Failed to load rankings. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                rankingsPhase = .success
+            } else {
+                rankingsPhase = .failure(message: message)
+            }
         }
     }
 
     private func loadGenres() async {
+        let hadContent = !genres.isEmpty
         isLoadingGenres = true
+        if hadContent {
+            isRefreshingGenres = true
+        } else {
+            genresPhase = .initialLoading
+        }
         defer { isLoadingGenres = false }
+        defer { isRefreshingGenres = false }
         do {
             genres = try await wikiRepository.fetchLearnGenres()
+            genresPhase = genres.isEmpty ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("学习内容加载失败，请稍后重试", "Failed to load learn content. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                genresPhase = .success
+            } else {
+                genresPhase = .failure(message: message)
+            }
         }
     }
 
     private func loadLabels() async {
+        let hadContent = !labels.isEmpty
         isLoadingLabels = true
+        if hadContent {
+            isRefreshingLabels = true
+        } else {
+            labelsPhase = .initialLoading
+        }
         defer { isLoadingLabels = false }
+        defer { isRefreshingLabels = false }
 
         do {
             let page = try await wikiRepository.fetchLearnLabels(
@@ -606,21 +764,57 @@ struct LearnModuleView: View {
             allLabels = page.items
             applyLabelFilters()
             labelsPagination = page.pagination
+            labelsPhase = labels.isEmpty ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("厂牌加载失败，请稍后重试", "Failed to load labels. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                labelsPhase = .success
+            } else {
+                labelsPhase = .failure(message: message)
+            }
         }
     }
 
     private func loadFestivals() async {
+        let hadContent = !allFestivals.isEmpty
         isLoadingFestivals = true
+        if hadContent {
+            isRefreshingFestivals = true
+        } else {
+            festivalsPhase = .initialLoading
+        }
         defer { isLoadingFestivals = false }
+        defer { isRefreshingFestivals = false }
 
         do {
             let fetched = try await wikiRepository.fetchLearnFestivals(search: nil)
             allFestivals = fetched.map { LearnFestival(web: $0) }
             applyFestivalFilters()
+            festivalsPhase = festivals.isEmpty ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("电音节加载失败，请稍后重试", "Failed to load festivals. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                festivalsPhase = .success
+            } else {
+                festivalsPhase = .failure(message: message)
+            }
+        }
+    }
+
+    private var selectedSectionIsRefreshing: Bool {
+        switch selectedSection {
+        case .rankings:
+            return isRefreshingRankings
+        case .genres:
+            return isRefreshingGenres
+        case .labels:
+            return isRefreshingLabels
+        case .festivals:
+            return isRefreshingFestivals
         }
     }
 

@@ -10,9 +10,11 @@ struct NewsModuleView: View {
     @State private var articles: [DiscoverNewsArticle] = []
     @State private var nextCursor: String?
     @State private var selectedCategory: DiscoverNewsCategory = .all
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
+    @State private var isRefreshing = false
     @State private var searchKeyword = ""
-    @State private var errorMessage: String?
+    @State private var bannerMessage: String?
     @State private var isSelectorDragging = false
 
     init(onHorizontalDragStateChanged: ((Bool) -> Void)? = nil) {
@@ -39,14 +41,6 @@ struct NewsModuleView: View {
         }
         .onDisappear {
             notifySelectorDragging(false)
-        }
-        .alert(L("提示", "Notice"), isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button(L("确定", "OK"), role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
         }
     }
 
@@ -128,10 +122,46 @@ struct NewsModuleView: View {
     private var newsContentScrollView: some View {
         ScrollView {
             VStack(spacing: 0) {
-                if isLoading && articles.isEmpty {
-                    ProgressView(LL("资讯加载中..."))
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 32)
+                if isRefreshing || bannerMessage != nil {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if isRefreshing {
+                            InlineLoadingBadge(title: L("正在更新资讯", "Updating news"))
+                        }
+                        if let bannerMessage {
+                            ScreenStatusBanner(
+                                message: bannerMessage,
+                                style: .error,
+                                actionTitle: L("重试", "Retry")
+                            ) {
+                                Task { await reload() }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                }
+
+                if phase == .idle || phase == .initialLoading {
+                    FeedSkeletonView(count: 4)
+                        .padding(.top, 16)
+                } else if case .failure(let message) = phase {
+                    ScreenErrorCard(
+                        title: L("资讯加载失败", "News Failed to Load"),
+                        message: message
+                    ) {
+                        Task { await reload() }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 24)
+                } else if case .offline(let message) = phase {
+                    ScreenErrorCard(
+                        title: L("网络不可用", "Network Unavailable"),
+                        message: message
+                    ) {
+                        Task { await reload() }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 24)
                 } else if displayedArticles.isEmpty {
                     VStack(spacing: 12) {
                         ContentUnavailableView(LL("暂无资讯"), systemImage: "newspaper")
@@ -198,8 +228,15 @@ struct NewsModuleView: View {
     @MainActor
     private func reload() async {
         guard !isLoading else { return }
+        let hadContent = !articles.isEmpty
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             let targetCount = max(articles.count, 1)
@@ -219,9 +256,16 @@ struct NewsModuleView: View {
             let deduped = deduplicatedArticles(parsed)
             articles = sortedArticles(deduped)
             nextCursor = fetchedPageCursor
-            errorMessage = nil
+            phase = articles.isEmpty ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("资讯加载失败，请稍后重试", "Failed to load news. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 
@@ -251,7 +295,7 @@ struct NewsModuleView: View {
             articles = sortedArticles(deduplicatedArticles(articles))
             nextCursor = fetchedPageCursor
         } catch {
-            errorMessage = error.userFacingMessage
+            bannerMessage = error.userFacingMessage ?? L("更多资讯加载失败，请稍后重试", "Failed to load more news. Please try again later.")
         }
     }
 

@@ -81,8 +81,11 @@ struct CircleFeedRepositoryAdapter: CircleFeedRepository {
 final class FeedViewModel: ObservableObject {
     @Published var posts: [Post] = []
     @Published var selectedMode: FeedMode = .recommended
+    @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
+    @Published var isRefreshing = false
     @Published var isLoadingMore = false
+    @Published var bannerMessage: String?
     @Published var error: String?
 
     private let repository: CircleFeedRepository
@@ -105,16 +108,31 @@ final class FeedViewModel: ObservableObject {
     func load() async {
         if isLoading { return }
         isLoading = true
+        let hadContent = !posts.isEmpty
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             let page = try await repository.fetchFeed(cursor: nil, mode: selectedMode)
             posts = page.posts.filter { !$0.isRaverNews && !localHiddenPostIDs.contains($0.id) }
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil
+            phase = posts.isEmpty ? .empty : .success
+            bannerMessage = nil
             self.error = nil
         } catch {
-            self.error = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("动态加载失败，请稍后重试", "Failed to load posts. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = posts.isEmpty ? .empty : .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 
@@ -140,9 +158,11 @@ final class FeedViewModel: ObservableObject {
             })
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil
+            phase = posts.isEmpty ? .empty : .success
+            bannerMessage = nil
             self.error = nil
         } catch {
-            self.error = error.userFacingMessage
+            bannerMessage = error.userFacingMessage
         }
     }
 
@@ -270,6 +290,7 @@ final class FeedViewModel: ObservableObject {
 
     func mergeNewPost(_ post: Post) {
         posts.insert(post, at: 0)
+        phase = .success
     }
 
     func mergeUpdatedPost(_ post: Post) {
@@ -278,6 +299,7 @@ final class FeedViewModel: ObservableObject {
 
     func removePost(_ postID: String) {
         posts.removeAll { $0.id == postID }
+        phase = posts.isEmpty ? .empty : .success
     }
 
     func switchMode(_ mode: FeedMode) async {
@@ -287,6 +309,7 @@ final class FeedViewModel: ObservableObject {
         nextCursor = nil
         hasMore = true
         posts = []
+        bannerMessage = nil
         await load()
     }
 

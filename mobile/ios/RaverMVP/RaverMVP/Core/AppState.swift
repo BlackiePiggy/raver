@@ -64,6 +64,18 @@ enum TencentIMIdentity {
         return "tu_\(toStableShortID(normalized))"
     }
 
+    static func toTencentIMSquadGroupID(_ raw: String) -> String {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.hasPrefix("sg_") {
+            return normalized
+        }
+        if normalized.hasPrefix("group_") {
+            let stripped = String(normalized.dropFirst(6))
+            return stripped.hasPrefix("sg_") ? stripped : "sg_\(stripped)"
+        }
+        return "sg_\(toStableShortID(normalized))"
+    }
+
     private static func toStableShortID(_ value: String) -> String {
         if let uuidData = toCompactUUIDData(value) {
             return base64URLEncodedString(uuidData)
@@ -1068,6 +1080,501 @@ final class TencentIMSession: NSObject {
         return true
     }
 
+    func inviteUsersToSquad(squadID: String, userIDs: [String]) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let normalizedSquadID = TencentIMIdentity.toTencentIMSquadGroupID(squadID)
+        let targetUserIDs = Array(
+            Set(
+                userIDs
+                    .map { TencentIMIdentity.toTencentIMUserID($0) }
+                    .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            )
+        ).sorted()
+
+        guard !normalizedSquadID.isEmpty else {
+            throw ServiceError.message("Tencent IM groupID is empty")
+        }
+
+        guard !targetUserIDs.isEmpty else {
+            return true
+        }
+
+        let manager = try requireReadyManager()
+        let _: [V2TIMGroupMemberOperationResult] = try await withCheckedThrowingContinuation { continuation in
+            manager.inviteUserToGroup(groupID: normalizedSquadID, userList: targetUserIDs) { results in
+                continuation.resume(returning: results ?? [])
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Invite users to Tencent IM group failed"
+                    )
+                )
+            }
+        }
+        return true
+    }
+
+    func fetchSquadInviteOption(squadID: String) async throws -> GroupInviteOption {
+        guard currentBootstrap?.enabled == true else {
+            return .forbid
+        }
+
+        let manager = try requireReadyManager()
+        let groupInfo = try await fetchGroupInfo(
+            groupID: TencentIMIdentity.toTencentIMSquadGroupID(squadID),
+            manager: manager
+        )
+
+        switch groupInfo.groupApproveOpt {
+        case .GROUP_ADD_ANY:
+            return .any
+        case .GROUP_ADD_AUTH:
+            return .auth
+        case .GROUP_ADD_FORBID:
+            return .forbid
+        default:
+            return .forbid
+        }
+    }
+
+    func setSquadInviteOption(squadID: String, option: GroupInviteOption) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let info = V2TIMGroupInfo()
+        info.groupID = TencentIMIdentity.toTencentIMSquadGroupID(squadID)
+        switch option {
+        case .forbid:
+            info.groupApproveOpt = .GROUP_ADD_FORBID
+        case .auth:
+            info.groupApproveOpt = .GROUP_ADD_AUTH
+        case .any:
+            info.groupApproveOpt = .GROUP_ADD_ANY
+        }
+
+        try await withCheckedThrowingContinuation { continuation in
+            manager.setGroupInfo(info: info) {
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Set Tencent IM group invite option failed"
+                    )
+                )
+            }
+        }
+        return true
+    }
+
+    func fetchSquadMemberDirectory(squadID: String) async throws -> GroupMemberDirectory {
+        guard currentBootstrap?.enabled == true else {
+            return GroupMemberDirectory(members: [], myRole: nil)
+        }
+
+        let manager = try requireReadyManager()
+        let groupID = TencentIMIdentity.toTencentIMSquadGroupID(squadID)
+        let loginUserID = manager.getLoginUser()
+        var nextSeq: UInt64 = 0
+        var aggregatedMembers: [V2TIMGroupMemberFullInfo] = []
+
+        repeat {
+            let page: (nextSeq: UInt64, members: [V2TIMGroupMemberFullInfo]) = try await withCheckedThrowingContinuation { continuation in
+                manager.getGroupMemberList(
+                    groupID,
+                    filter: UInt32(V2TIMGroupMemberFilter.GROUP_MEMBER_FILTER_ALL.rawValue),
+                    nextSeq: nextSeq
+                ) { fetchedNextSeq, memberList in
+                    continuation.resume(returning: (fetchedNextSeq, memberList ?? []))
+                } fail: { code, desc in
+                    continuation.resume(
+                        throwing: self.buildTencentIMError(
+                            code: code,
+                            desc: desc,
+                            fallback: "Fetch Tencent IM group member list failed"
+                        )
+                    )
+                }
+            }
+
+            aggregatedMembers.append(contentsOf: page.members)
+            nextSeq = page.nextSeq
+        } while nextSeq != 0
+
+        let members = aggregatedMembers.map { mapSquadMemberProfile(from: $0) }
+        let myRole = aggregatedMembers.first(where: { normalizedText($0.userID) == normalizedText(loginUserID) }).map {
+            mapSquadMemberRole(rawValue: $0.role)
+        }
+        return GroupMemberDirectory(members: members, myRole: myRole)
+    }
+
+    func fetchSquadProfile(squadID: String) async throws -> SquadProfile {
+        guard currentBootstrap?.enabled == true else {
+            throw ServiceError.message("Tencent IM unavailable")
+        }
+
+        let manager = try requireReadyManager()
+        let groupID = TencentIMIdentity.toTencentIMSquadGroupID(squadID)
+        let groupInfo = try await fetchGroupInfo(groupID: groupID, manager: manager)
+        let memberDirectory = try await fetchSquadMemberDirectory(squadID: squadID)
+        let loginUserID = normalizedText(manager.getLoginUser()) ?? ""
+        let myMember = memberDirectory.members.first {
+            TencentIMIdentity.toTencentIMUserID($0.id) == loginUserID
+        }
+
+        let ownerTencentUserID = normalizedText(groupInfo.owner) ?? ""
+        let ownerMember = memberDirectory.members.first {
+            TencentIMIdentity.toTencentIMUserID($0.id) == ownerTencentUserID
+        }
+        let leader = ownerMember.map { member in
+            UserSummary(
+                id: member.id,
+                username: member.username,
+                displayName: member.displayName,
+                avatarURL: member.avatarURL,
+                isFollowing: member.isFollowing
+            )
+        } ?? UserSummary(
+            id: TencentIMIdentity.normalizePlatformUserIDForProfile(ownerTencentUserID),
+            username: TencentIMIdentity.normalizePlatformUserIDForProfile(ownerTencentUserID),
+            displayName: ownerTencentUserID.isEmpty ? (normalizedText(groupInfo.groupName) ?? squadID) : ownerTencentUserID,
+            avatarURL: nil,
+            isFollowing: false
+        )
+
+        let myRole = memberDirectory.myRole ?? mapSquadMemberRole(rawValue: groupInfo.role)
+        let updatedTimestamp = max(groupInfo.lastInfoTime, groupInfo.lastMessageTime, groupInfo.createTime)
+
+        return SquadProfile(
+            id: TencentIMIdentity.normalizePlatformSquadID(groupID),
+            name: normalizedText(groupInfo.groupName) ?? TencentIMIdentity.normalizePlatformSquadID(groupID),
+            description: normalizedText(groupInfo.introduction),
+            avatarURL: normalizedText(groupInfo.faceURL),
+            bannerURL: nil,
+            notice: normalizedText(groupInfo.notification) ?? "",
+            qrCodeURL: nil,
+            isPublic: isTencentPublicGroupType(groupInfo.groupType),
+            maxMembers: max(0, Int(groupInfo.memberMaxCount)),
+            memberCount: max(memberDirectory.members.count, Int(groupInfo.memberCount)),
+            isMember: true,
+            canEditGroup: myRole == "leader" || myRole == "admin",
+            myRole: myRole,
+            myNickname: myMember?.nickname,
+            myNotificationsEnabled: isGroupNotificationsEnabled(groupInfo.recvOpt),
+            leader: leader,
+            members: memberDirectory.members,
+            lastMessage: nil,
+            updatedAt: Date(timeIntervalSince1970: TimeInterval(updatedTimestamp)),
+            recentMessages: [],
+            activities: []
+        )
+    }
+
+    func joinSquad(squadID: String) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let groupID = TencentIMIdentity.toTencentIMSquadGroupID(squadID)
+        try await withCheckedThrowingContinuation { continuation in
+            manager.joinGroup(groupID: groupID, msg: nil) {
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Join Tencent IM group failed"
+                    )
+                )
+            }
+        }
+        return true
+    }
+
+    func leaveSquad(squadID: String) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let groupID = TencentIMIdentity.toTencentIMSquadGroupID(squadID)
+        try await withCheckedThrowingContinuation { continuation in
+            manager.quitGroup(groupID: groupID) {
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Leave Tencent IM group failed"
+                    )
+                )
+            }
+        }
+        return true
+    }
+
+    func disbandSquad(squadID: String) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let groupID = TencentIMIdentity.toTencentIMSquadGroupID(squadID)
+        try await withCheckedThrowingContinuation { continuation in
+            manager.dismissGroup(groupID: groupID) {
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Dismiss Tencent IM group failed"
+                    )
+                )
+            }
+        }
+        return true
+    }
+
+    func createSquad(input: CreateSquadInput) async throws -> Conversation? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let platformGroupUUID = UUID().uuidString.lowercased()
+        let groupID = TencentIMIdentity.toTencentIMSquadGroupID(platformGroupUUID)
+        let groupInfo = V2TIMGroupInfo()
+        groupInfo.groupID = groupID
+        groupInfo.groupType = input.isPublic ? "Public" : "Work"
+        let groupName = input.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        groupInfo.groupName = (groupName?.isEmpty == false ? groupName : L("新建群聊", "New Group"))!
+        groupInfo.introduction = input.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let memberList: [V2TIMCreateGroupMemberInfo] = Array(Set(input.memberIds)).map { rawUserID in
+            let info = V2TIMCreateGroupMemberInfo()
+            info.userID = TencentIMIdentity.toTencentIMUserID(rawUserID)
+            return info
+        }
+
+        let createdGroupID: String = try await withCheckedThrowingContinuation { continuation in
+            manager.createGroup(info: groupInfo, memberList: memberList) { createdGroupID in
+                continuation.resume(returning: createdGroupID ?? groupID)
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Create Tencent IM group failed"
+                    )
+                )
+            }
+        }
+
+        return Conversation(
+            id: TencentIMIdentity.normalizePlatformSquadID(createdGroupID),
+            type: .group,
+            title: groupInfo.groupName ?? L("新建群聊", "New Group"),
+            avatarURL: normalizedText(groupInfo.faceURL),
+            sdkConversationID: "group_\(createdGroupID)",
+            lastMessage: L("暂无消息", "No messages yet"),
+            lastMessageSenderID: nil,
+            unreadCount: 0,
+            updatedAt: Date(),
+            peer: nil
+        )
+    }
+
+    func updateSquadMySettings(squadID: String, input: UpdateSquadMySettingsInput) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let groupID = TencentIMIdentity.toTencentIMSquadGroupID(squadID)
+
+        let memberInfo = V2TIMGroupMemberFullInfo()
+        memberInfo.userID = manager.getLoginUser()
+        let trimmedNameCard = normalizedText(input.nickname)
+        memberInfo.nameCard = trimmedNameCard
+        try await withCheckedThrowingContinuation { continuation in
+            manager.setGroupMemberInfo(groupID: groupID, info: memberInfo) {
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Update Tencent IM group nickname failed"
+                    )
+                )
+            }
+        }
+
+        let opt = V2TIMReceiveMessageOpt(
+            rawValue: input.notificationsEnabled ? Self.receiveMessageOptRawValue : Self.receiveNoNotifyRawValue
+        ) ?? V2TIMReceiveMessageOpt(rawValue: Self.receiveMessageOptRawValue)
+        guard let opt else {
+            throw ServiceError.message("Tencent IM group receive option unavailable")
+        }
+        try await withCheckedThrowingContinuation { continuation in
+            manager.setGroupReceiveMessageOpt(groupID: groupID, opt: opt) {
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Update Tencent IM group receive option failed"
+                    )
+                )
+            }
+        }
+        return true
+    }
+
+    func updateSquadInfo(squadID: String, input: UpdateSquadInfoInput) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let info = V2TIMGroupInfo()
+        info.groupID = TencentIMIdentity.toTencentIMSquadGroupID(squadID)
+        info.groupName = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        info.introduction = input.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        info.notification = input.notice.trimmingCharacters(in: .whitespacesAndNewlines)
+        info.faceURL = normalizedText(input.avatarURL)
+        try await withCheckedThrowingContinuation { continuation in
+            manager.setGroupInfo(info: info) {
+                continuation.resume()
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Update Tencent IM group info failed"
+                    )
+                )
+            }
+        }
+        return true
+    }
+
+    func updateSquadMemberRole(squadID: String, memberUserID: String, role: String) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let groupID = TencentIMIdentity.toTencentIMSquadGroupID(squadID)
+        let targetUserID = TencentIMIdentity.toTencentIMUserID(memberUserID)
+
+        switch role {
+        case "leader":
+            try await withCheckedThrowingContinuation { continuation in
+                manager.transferGroupOwner(groupID: groupID, memberUserID: targetUserID) {
+                    continuation.resume()
+                } fail: { code, desc in
+                    continuation.resume(
+                        throwing: self.buildTencentIMError(
+                            code: code,
+                            desc: desc,
+                            fallback: "Transfer Tencent IM group owner failed"
+                        )
+                    )
+                }
+            }
+        case "admin":
+            try await withCheckedThrowingContinuation { continuation in
+                manager.setGroupMemberRole(
+                    groupID: groupID,
+                    memberUserID: targetUserID,
+                    newRole: UInt32(V2TIMGroupMemberRole.GROUP_MEMBER_ROLE_ADMIN.rawValue)
+                ) {
+                    continuation.resume()
+                } fail: { code, desc in
+                    continuation.resume(
+                        throwing: self.buildTencentIMError(
+                            code: code,
+                            desc: desc,
+                            fallback: "Promote Tencent IM admin failed"
+                        )
+                    )
+                }
+            }
+        default:
+            try await withCheckedThrowingContinuation { continuation in
+                manager.setGroupMemberRole(
+                    groupID: groupID,
+                    memberUserID: targetUserID,
+                    newRole: UInt32(V2TIMGroupMemberRole.GROUP_MEMBER_ROLE_MEMBER.rawValue)
+                ) {
+                    continuation.resume()
+                } fail: { code, desc in
+                    continuation.resume(
+                        throwing: self.buildTencentIMError(
+                            code: code,
+                            desc: desc,
+                            fallback: "Demote Tencent IM member failed"
+                        )
+                    )
+                }
+            }
+        }
+        return true
+    }
+
+    func removeUsersFromSquad(squadID: String, userIDs: [String]) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let normalizedSquadID = TencentIMIdentity.toTencentIMSquadGroupID(squadID)
+        let targetUserIDs = Array(
+            Set(
+                userIDs
+                    .map { TencentIMIdentity.toTencentIMUserID($0) }
+                    .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            )
+        ).sorted()
+
+        guard !normalizedSquadID.isEmpty else {
+            throw ServiceError.message("Tencent IM groupID is empty")
+        }
+
+        guard !targetUserIDs.isEmpty else {
+            return true
+        }
+
+        let manager = try requireReadyManager()
+        let _: [V2TIMGroupMemberOperationResult] = try await withCheckedThrowingContinuation { continuation in
+            manager.kickGroupMember(normalizedSquadID, memberList: targetUserIDs, reason: "") { results in
+                continuation.resume(returning: results ?? [])
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Remove users from Tencent IM group failed"
+                    )
+                )
+            }
+        }
+        return true
+    }
+
     func fetchFriendRemark(userID: String) async throws -> String? {
         guard currentBootstrap?.enabled == true else {
             return nil
@@ -1087,6 +1594,36 @@ final class TencentIMSession: NSObject {
             $0.friendInfo.userID == targetUserID
         } ?? results.first
         return normalizedText(match?.friendInfo.friendRemark)
+    }
+
+    func isTencentFriend(userID: String) async throws -> Bool {
+        guard currentBootstrap?.enabled == true else {
+            return false
+        }
+
+        let manager = try requireReadyManager()
+        let targetUserID = TencentIMIdentity.toTencentIMUserID(userID)
+        let results: [V2TIMFriendCheckResult] = try await withCheckedThrowingContinuation { continuation in
+            manager.checkFriend(userIDList: [targetUserID], checkType: .FRIEND_TYPE_BOTH) { resultList in
+                continuation.resume(returning: resultList ?? [])
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Check Tencent friend relation failed"
+                    )
+                )
+            }
+        }
+
+        guard let result = results.first else { return false }
+        switch result.relationType {
+        case .FRIEND_RELATION_TYPE_IN_MY_FRIEND_LIST, .FRIEND_RELATION_TYPE_BOTH_WAY:
+            return true
+        default:
+            return false
+        }
     }
 
     func setFriendRemark(userID: String, remark: String?) async throws -> Bool {
@@ -1593,6 +2130,69 @@ final class TencentIMSession: NSObject {
                 )
             }
         }
+    }
+
+    private func fetchGroupInfo(groupID: String, manager: V2TIMManager) async throws -> V2TIMGroupInfo {
+        let results: [V2TIMGroupInfoResult] = try await withCheckedThrowingContinuation { continuation in
+            manager.getGroupsInfo([groupID]) { resultList in
+                continuation.resume(returning: resultList ?? [])
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Fetch Tencent IM group info failed"
+                    )
+                )
+            }
+        }
+
+        guard let info = results.first?.info else {
+            throw ServiceError.message("Tencent IM group info unavailable")
+        }
+        return info
+    }
+
+    private func mapSquadMemberProfile(from info: V2TIMGroupMemberFullInfo) -> SquadMemberProfile {
+        let rawTencentUserID = normalizedText(info.userID) ?? ""
+        let platformUserID = TencentIMIdentity.normalizePlatformUserIDForProfile(rawTencentUserID)
+        let resolvedDisplayName = normalizedText(info.nameCard)
+            ?? normalizedText(info.friendRemark)
+            ?? normalizedText(info.nickName)
+            ?? (platformUserID.isEmpty ? rawTencentUserID : platformUserID)
+        let role = mapSquadMemberRole(rawValue: info.role)
+
+        return SquadMemberProfile(
+            id: platformUserID.isEmpty ? rawTencentUserID : platformUserID,
+            username: platformUserID.isEmpty ? rawTencentUserID : platformUserID,
+            displayName: resolvedDisplayName,
+            avatarURL: normalizedText(info.faceURL),
+            isFollowing: false,
+            role: role,
+            nickname: normalizedText(info.nameCard),
+            isCaptain: role == "leader",
+            isAdmin: role == "admin"
+        )
+    }
+
+    private func mapSquadMemberRole(rawValue: UInt32) -> String {
+        switch rawValue {
+        case UInt32(V2TIMGroupMemberRole.GROUP_MEMBER_ROLE_SUPER.rawValue):
+            return "leader"
+        case UInt32(V2TIMGroupMemberRole.GROUP_MEMBER_ROLE_ADMIN.rawValue):
+            return "admin"
+        default:
+            return "member"
+        }
+    }
+
+    private func isTencentPublicGroupType(_ rawType: String?) -> Bool {
+        let normalized = rawType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        return normalized != "work"
+    }
+
+    private func isGroupNotificationsEnabled(_ opt: V2TIMReceiveMessageOpt) -> Bool {
+        opt.rawValue == Self.receiveMessageOptRawValue
     }
 
     private func resolveConversationTarget(

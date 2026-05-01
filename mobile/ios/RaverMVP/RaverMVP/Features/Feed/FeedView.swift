@@ -39,18 +39,46 @@ private struct FeedScreen: View {
             .padding(.top, 12)
             .padding(.bottom, 8)
 
+            if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if viewModel.isRefreshing {
+                        InlineLoadingBadge(title: L("正在更新动态", "Updating feed"))
+                    }
+                    if let bannerMessage = viewModel.bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task { await viewModel.load() }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
+
             Group {
-                if viewModel.isLoading && viewModel.posts.isEmpty {
-                    ProgressView(L("加载中...", "Loading..."))
+                switch viewModel.phase {
+                case .idle, .initialLoading:
+                    FeedSkeletonView()
+                case .failure(let message), .offline(let message):
+                    VStack {
+                        ScreenErrorCard(message: message) {
+                            Task { await viewModel.load() }
+                        }
+                        .padding(.horizontal, 16)
                         .padding(.top, 12)
-                } else if viewModel.posts.isEmpty {
+                        Spacer()
+                    }
+                case .empty:
                     ContentUnavailableView(
                         L("还没有动态", "No Posts Yet"),
                         systemImage: "square.and.pencil",
                         description: Text(LL("成为第一个发帖的人，开始你的社群互动。"))
                     )
                     .padding(.top, 12)
-                } else {
+                case .success:
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             ForEach(Array(viewModel.posts.enumerated()), id: \.element.id) { index, post in

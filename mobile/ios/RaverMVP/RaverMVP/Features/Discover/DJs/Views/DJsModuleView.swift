@@ -150,17 +150,47 @@ struct DJsModuleView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            if viewModel.isLoading && filteredDJs.isEmpty && spotlightCarouselDJs.isEmpty {
-                ProgressView(L("加载中...", "Loading..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
+            switch viewModel.phase {
+            case .idle, .initialLoading:
+                DiscoverGridSkeletonView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            case .failure(let message), .offline(let message):
+                ScrollView {
+                    ScreenErrorCard(
+                        title: L("DJ 列表加载失败", "DJs Failed to Load"),
+                        message: message
+                    ) {
+                        Task { await viewModel.reload() }
+                    }
+                    .padding(16)
+                    .padding(.top, 96)
+                }
+            case .empty:
+                ContentUnavailableView(LL("暂无 DJ"), systemImage: "music.mic")
+                    .frame(maxWidth: .infinity, minHeight: 220)
+            case .success:
                 sectionContent
             }
 
             VStack(alignment: .leading, spacing: 12) {
                 spotlightSearchRow
 
-                if let activeErrorMessage {
+                if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if viewModel.isRefreshing {
+                            InlineLoadingBadge(title: L("正在更新 DJ 列表", "Updating DJs"))
+                        }
+                        if let bannerMessage = viewModel.bannerMessage {
+                            ScreenStatusBanner(
+                                message: bannerMessage,
+                                style: .error,
+                                actionTitle: L("重试", "Retry")
+                            ) {
+                                Task { await viewModel.reload() }
+                            }
+                        }
+                    }
+                } else if let activeErrorMessage {
                     Text(activeErrorMessage)
                         .font(.subheadline)
                         .foregroundStyle(.red)
@@ -2382,7 +2412,10 @@ struct DJDetailView: View {
     @State private var djEvents: [WebEvent] = []
     @State private var ratingUnits: [WebRatingUnit] = []
     @State private var watchedSetCount = 0
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
+    @State private var isRefreshing = false
+    @State private var bannerMessage: String?
     @State private var errorMessage: String?
     @State private var selectedTab: DJDetailTab = .intro
     @State private var pageProgress: CGFloat = 0
@@ -2477,29 +2510,63 @@ struct DJDetailView: View {
 
     var body: some View {
         Group {
-            if isLoading, dj == nil {
-                ProgressView(L("加载 DJ 详情...", "Loading DJ details..."))
-            } else if let dj {
-                GeometryReader { proxy in
-                    let cardWidth = max(proxy.size.width - 32, 0)
-                    RaverImmersiveDetailPagerChrome(
-                        title: dj.name,
-                        tabs: DJDetailTab.allCases,
-                        selectedTab: selectedTab,
-                        pageProgress: $pageProgress,
-                        namespace: "dj-detail",
-                        configuration: detailChromeConfiguration
-                    ) {
-                        heroSection(dj)
-                    } tabBar: {
-                        tabBar
-                    } content: { chrome in
-                        tabPager(dj, cardWidth: cardWidth, chrome: chrome)
+            switch phase {
+            case .idle, .initialLoading:
+                DJDetailSkeletonView()
+            case .failure(let message), .offline(let message):
+                ScrollView {
+                    ScreenErrorCard(message: message) {
+                        Task { await load() }
                     }
                 }
-                .ignoresSafeArea(edges: .top)
-            } else {
+                .padding(16)
+                .padding(.top, 96)
+            case .empty:
                 ContentUnavailableView(LL("DJ 不存在"), systemImage: "person.crop.circle.badge.exclamationmark")
+            case .success:
+                if let dj {
+                    ZStack(alignment: .top) {
+                        GeometryReader { proxy in
+                            let cardWidth = max(proxy.size.width - 32, 0)
+                            RaverImmersiveDetailPagerChrome(
+                                title: dj.name,
+                                tabs: DJDetailTab.allCases,
+                                selectedTab: selectedTab,
+                                pageProgress: $pageProgress,
+                                namespace: "dj-detail",
+                                configuration: detailChromeConfiguration
+                            ) {
+                                heroSection(dj)
+                            } tabBar: {
+                                tabBar
+                            } content: { chrome in
+                                tabPager(dj, cardWidth: cardWidth, chrome: chrome)
+                            }
+                        }
+
+                        if isRefreshing || bannerMessage != nil {
+                            VStack(alignment: .leading, spacing: 10) {
+                                if isRefreshing {
+                                    InlineLoadingBadge(title: L("正在更新 DJ 详情", "Updating DJ details"))
+                                }
+                                if let bannerMessage {
+                                    ScreenStatusBanner(
+                                        message: bannerMessage,
+                                        style: .error,
+                                        actionTitle: L("重试", "Retry")
+                                    ) {
+                                        Task { await load() }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.top, 68)
+                        }
+                    }
+                    .ignoresSafeArea(edges: .top)
+                } else {
+                    ContentUnavailableView(LL("DJ 不存在"), systemImage: "person.crop.circle.badge.exclamationmark")
+                }
             }
         }
         .ignoresSafeArea(edges: .top)
@@ -2539,8 +2606,17 @@ struct DJDetailView: View {
     }
 
     private func load() async {
+        guard !isLoading else { return }
+
+        let hadContent = dj != nil
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             isLoadingRelatedArticles = true
@@ -2565,6 +2641,8 @@ struct DJDetailView: View {
             watchedSetCount = loadedWatchedCount
             relatedArticles = loadedRelatedArticles
             isLoadingRelatedArticles = false
+            phase = .success
+            bannerMessage = nil
 
             let snapshot = makeDJManualCacheSnapshot(
                 dj: loadedDJ,
@@ -2578,14 +2656,20 @@ struct DJDetailView: View {
             let canFallback = isOfflineRecoverableError(error) || dj == nil
             if canFallback, let snapshot = await DJManualCacheStore.shared.loadSnapshot(djID: djID) {
                 applyDJManualCacheSnapshot(snapshot)
+                phase = .success
                 if isRequestTimeoutError(error) {
-                    errorMessage = L("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version.")
+                    bannerMessage = L("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version.")
                 } else {
-                    errorMessage = L("网络较弱，已展示 DJ 缓存数据。", "Network is weak. Showing cached DJ data.")
+                    bannerMessage = L("网络较弱，已展示 DJ 缓存数据。", "Network is weak. Showing cached DJ data.")
                 }
+            } else if hadContent {
+                isLoadingRelatedArticles = false
+                bannerMessage = error.userFacingMessage ?? L("DJ 详情更新失败，请稍后重试", "Failed to refresh DJ details. Please try again later.")
+                phase = .success
             } else {
                 isLoadingRelatedArticles = false
-                errorMessage = error.userFacingMessage
+                let message = error.userFacingMessage ?? L("DJ 详情加载失败，请稍后重试", "Failed to load DJ details. Please try again later.")
+                phase = .failure(message: message)
             }
         }
     }

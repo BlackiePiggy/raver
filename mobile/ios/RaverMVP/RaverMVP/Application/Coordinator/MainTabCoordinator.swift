@@ -324,7 +324,7 @@ struct MainTabCoordinatorView: View {
                     }
                 }
             case let .chatSettings(conversation):
-                ChatSettingsSheet(
+                ChatSettingsView(
                     conversation: conversation,
                     service: appContainer.socialService,
                     chatStore: IMChatStore.shared
@@ -606,6 +606,57 @@ private struct MessagesAlertDetailContainerView: View {
     }
 }
 
+private struct RouteLoaderScaffold<Content: View>: View {
+    let phase: LoadPhase
+    let title: String
+    let loadingView: AnyView
+    let retry: () -> Void
+    let content: () -> Content
+
+    init(
+        phase: LoadPhase,
+        title: String,
+        loadingView: AnyView,
+        retry: @escaping () -> Void,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.phase = phase
+        self.title = title
+        self.loadingView = loadingView
+        self.retry = retry
+        self.content = content
+    }
+
+    var body: some View {
+        Group {
+            switch phase {
+            case .idle, .initialLoading:
+                loadingView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(RaverTheme.background)
+            case .failure(let message):
+                ScreenErrorCard(title: title, message: message, retryAction: retry)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+            case .offline(let message):
+                ScreenErrorCard(
+                    title: L("网络不可用", "Network Unavailable"),
+                    message: message,
+                    retryAction: retry
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RaverTheme.background)
+            case .empty:
+                ContentUnavailableView(title, systemImage: "tray")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+            case .success:
+                content()
+            }
+        }
+    }
+}
+
 private struct ConversationLoaderView: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject private var chatStore = IMChatStore.shared
@@ -614,34 +665,23 @@ private struct ConversationLoaderView: View {
     let service: SocialService
 
     @State private var conversation: Conversation?
-    @State private var errorMessage: String?
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
 
     var body: some View {
-        Group {
+        RouteLoaderScaffold(
+            phase: phase,
+            title: L("会话加载失败", "Conversation Failed to Load"),
+            loadingView: AnyView(FeedSkeletonView(count: 4)),
+            retry: {
+                Task { await loadConversation(force: true) }
+            }
+        ) {
             if let conversation {
                 TencentUIKitChatView(conversation: conversation, service: service)
                 .navigationBarTitleDisplayMode(.inline)
-            } else if isLoading {
-                ProgressView(L("加载会话中...", "Loading conversation..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
-            } else if let errorMessage {
-                VStack(spacing: 10) {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.92))
-                    Button(L("重试", "Retry")) {
-                        Task { await loadConversation(force: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RaverTheme.background)
             } else {
-                ProgressView(L("加载会话中...", "Loading conversation..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
+                EmptyView()
             }
         }
         .task {
@@ -673,10 +713,12 @@ private struct ConversationLoaderView: View {
 
         if resolveConversationFromCache() {
             debug("resolved from cache before remote fetch")
+            phase = .success
             return
         }
 
         isLoading = true
+        phase = .initialLoading
         defer { isLoading = false }
         debug(
             "load start force=\(force) conversationID=\(target.preferredConversationID) tencentState=\(appState.tencentIMConnectionState) cachedCount=\(chatStore.conversations.count)"
@@ -698,11 +740,11 @@ private struct ConversationLoaderView: View {
                     debug("resolved from staged+store after remote id=\(found.id)")
                 } else {
                     conversation = found
-                    errorMessage = nil
+                    phase = .success
                     debug("resolved from remote fallback id=\(found.id)")
                 }
             } else {
-                errorMessage = L("会话不存在或已被移除", "Conversation not found")
+                phase = .empty
                 debug("remote fetch completed but conversation not found")
             }
         } catch {
@@ -710,18 +752,21 @@ private struct ConversationLoaderView: View {
 
             if resolveConversationFromCache() {
                 debug("resolved from cache after remote failure")
+                phase = .success
                 return
             }
 
             if let message = error.userFacingMessage, !message.isEmpty {
-                errorMessage = message
+                phase = .failure(message: message)
             } else {
-                errorMessage = L(
-                    "聊天连接恢复中，请稍后重试",
-                    "Chat connection is recovering. Please retry in a moment."
+                phase = .failure(
+                    message: L(
+                        "聊天连接恢复中，请稍后重试",
+                        "Chat connection is recovering. Please retry in a moment."
+                    )
                 )
             }
-            debug("set error message=\(errorMessage ?? "nil")")
+            debug("set loader phase failure")
         }
     }
 
@@ -738,7 +783,7 @@ private struct ConversationLoaderView: View {
         if let candidate {
             let previousConversation = conversation
             conversation = candidate
-            errorMessage = nil
+            phase = .success
             if let previousConversation, previousConversation != candidate {
                 debug("cache updated id=\(candidate.id)")
             } else {
@@ -898,33 +943,25 @@ private struct PostDetailLoaderView: View {
     let service: SocialService
 
     @State private var post: Post?
-    @State private var errorMessage: String?
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
 
     var body: some View {
-        Group {
+        RouteLoaderScaffold(
+            phase: phase,
+            title: L("动态加载失败", "Post Failed to Load"),
+            loadingView: AnyView(VStack(spacing: 12) {
+                EventDetailSkeletonView()
+                CommentSectionSkeletonView(count: 2)
+            }),
+            retry: {
+                Task { await loadPost(force: true) }
+            }
+        ) {
             if let post {
                 PostDetailView(post: post, service: service)
-            } else if isLoading {
-                ProgressView(L("加载动态中...", "Loading post..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
-            } else if let errorMessage {
-                VStack(spacing: 10) {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.92))
-                    Button(L("重试", "Retry")) {
-                        Task { await loadPost(force: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RaverTheme.background)
             } else {
-                ProgressView(L("加载动态中...", "Loading post..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
+                EmptyView()
             }
         }
         .task {
@@ -936,12 +973,15 @@ private struct PostDetailLoaderView: View {
     private func loadPost(force: Bool) async {
         if post != nil && !force { return }
         isLoading = true
+        phase = .initialLoading
         defer { isLoading = false }
         do {
             post = try await service.fetchPost(postID: postID)
-            errorMessage = nil
+            phase = post == nil ? .empty : .success
         } catch {
-            errorMessage = error.userFacingMessage
+            phase = .failure(
+                message: error.userFacingMessage ?? L("动态加载失败，请稍后重试", "Failed to load post. Please try again later.")
+            )
         }
     }
 }
@@ -952,11 +992,21 @@ private struct CirclePostEditorLoaderView: View {
     let webService: WebFeatureService
 
     @State private var post: Post?
-    @State private var errorMessage: String?
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
 
     var body: some View {
-        Group {
+        RouteLoaderScaffold(
+            phase: phase,
+            title: L("动态加载失败", "Post Failed to Load"),
+            loadingView: AnyView(VStack(spacing: 12) {
+                EventDetailSkeletonView()
+                CommentSectionSkeletonView(count: 2)
+            }),
+            retry: {
+                Task { await loadPost(force: true) }
+            }
+        ) {
             if let post {
                 ComposePostView(
                     service: service,
@@ -969,26 +1019,8 @@ private struct CirclePostEditorLoaderView: View {
                         NotificationCenter.default.post(name: .circlePostDidDelete, object: deletedPostID)
                     }
                 )
-            } else if isLoading {
-                ProgressView(L("加载动态中...", "Loading post..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
-            } else if let errorMessage {
-                VStack(spacing: 10) {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.92))
-                    Button(L("重试", "Retry")) {
-                        Task { await loadPost(force: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RaverTheme.background)
             } else {
-                ProgressView(L("加载动态中...", "Loading post..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
+                EmptyView()
             }
         }
         .task {
@@ -1000,12 +1032,15 @@ private struct CirclePostEditorLoaderView: View {
     private func loadPost(force: Bool) async {
         if post != nil && !force { return }
         isLoading = true
+        phase = .initialLoading
         defer { isLoading = false }
         do {
             post = try await service.fetchPost(postID: postID)
-            errorMessage = nil
+            phase = post == nil ? .empty : .success
         } catch {
-            errorMessage = error.userFacingMessage
+            phase = .failure(
+                message: error.userFacingMessage ?? L("动态加载失败，请稍后重试", "Failed to load post. Please try again later.")
+            )
         }
     }
 }
@@ -1016,33 +1051,22 @@ private struct ProfileResourceLoaderView<Resource, Content: View>: View {
     let content: (Resource) -> Content
 
     @State private var resource: Resource?
-    @State private var errorMessage: String?
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
 
     var body: some View {
-        Group {
+        RouteLoaderScaffold(
+            phase: phase,
+            title: loadingText,
+            loadingView: AnyView(EventDetailSkeletonView()),
+            retry: {
+                Task { await loadResource(force: true) }
+            }
+        ) {
             if let resource {
                 content(resource)
-            } else if isLoading {
-                ProgressView(loadingText)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
-            } else if let errorMessage {
-                VStack(spacing: 10) {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.92))
-                    Button(L("重试", "Retry")) {
-                        Task { await loadResource(force: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RaverTheme.background)
             } else {
-                ProgressView(loadingText)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
+                EmptyView()
             }
         }
         .task {
@@ -1054,12 +1078,15 @@ private struct ProfileResourceLoaderView<Resource, Content: View>: View {
     private func loadResource(force: Bool) async {
         if resource != nil && !force { return }
         isLoading = true
+        phase = .initialLoading
         defer { isLoading = false }
         do {
             resource = try await load()
-            errorMessage = nil
+            phase = resource == nil ? .empty : .success
         } catch {
-            errorMessage = error.userFacingMessage
+            phase = .failure(
+                message: error.userFacingMessage ?? L("资源加载失败，请稍后重试", "Failed to load resource. Please try again later.")
+            )
         }
     }
 }
@@ -1129,7 +1156,7 @@ private struct CurrentUserProfileLoaderView<Content: View>: View {
     let content: (UserProfile) -> Content
 
     @State private var profile: UserProfile?
-    @State private var errorMessage: String?
+    @State private var phase: LoadPhase = .idle
 
     init(
         repository: ProfileSocialRepository,
@@ -1140,25 +1167,18 @@ private struct CurrentUserProfileLoaderView<Content: View>: View {
     }
 
     var body: some View {
-        Group {
+        RouteLoaderScaffold(
+            phase: phase,
+            title: L("个人资料加载失败", "Profile Failed to Load"),
+            loadingView: AnyView(ProfileSkeletonView()),
+            retry: {
+                Task { await loadProfile(force: true) }
+            }
+        ) {
             if let profile {
                 content(profile)
-            } else if let errorMessage {
-                VStack(spacing: 10) {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.92))
-                    Button(L("重试", "Retry")) {
-                        Task { await loadProfile(force: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RaverTheme.background)
             } else {
-                ProgressView(L("加载中...", "Loading..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
+                EmptyView()
             }
         }
         .task {
@@ -1169,11 +1189,14 @@ private struct CurrentUserProfileLoaderView<Content: View>: View {
     @MainActor
     private func loadProfile(force: Bool) async {
         if profile != nil && !force { return }
+        phase = .initialLoading
         do {
             profile = try await repository.fetchMyProfile()
-            errorMessage = nil
+            phase = profile == nil ? .empty : .success
         } catch {
-            errorMessage = error.userFacingMessage
+            phase = .failure(
+                message: error.userFacingMessage ?? L("个人资料加载失败，请稍后重试", "Failed to load profile. Please try again later.")
+            )
         }
     }
 }

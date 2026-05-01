@@ -380,8 +380,11 @@ final class EventsSearchResultsViewModel: ObservableObject {
     let query: String
 
     @Published private(set) var events: [WebEvent] = []
+    @Published private(set) var phase: LoadPhase = .idle
     @Published private(set) var isLoading = false
-    @Published var errorMessage: String?
+    @Published private(set) var isRefreshing = false
+    @Published private(set) var isLoadingMore = false
+    @Published var bannerMessage: String?
 
     private let fetchEventsPageUseCase: FetchDiscoverEventsPageUseCase
     private var page = 1
@@ -404,10 +407,18 @@ final class EventsSearchResultsViewModel: ObservableObject {
     }
 
     func refresh() async {
+        let hadContent = !events.isEmpty
         page = 1
         totalPages = 1
-        events = []
-        errorMessage = nil
+        bannerMessage = nil
+        if !hadContent {
+            events = []
+        }
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         await loadMore()
     }
 
@@ -420,8 +431,12 @@ final class EventsSearchResultsViewModel: ObservableObject {
     private func loadMore() async {
         guard !isLoading else { return }
         guard canLoadMore else { return }
+        let hadContent = !events.isEmpty
         isLoading = true
+        isLoadingMore = hadContent && page > 1
         defer { isLoading = false }
+        defer { isRefreshing = false }
+        defer { isLoadingMore = false }
 
         do {
             let result = try await fetchEventsPageUseCase.execute(
@@ -442,9 +457,16 @@ final class EventsSearchResultsViewModel: ObservableObject {
             }
             totalPages = result.pagination?.totalPages ?? 1
             page += 1
-            errorMessage = nil
+            phase = events.isEmpty ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("活动搜索失败，请稍后重试", "Failed to search events. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 }
@@ -454,8 +476,10 @@ final class NewsSearchResultsViewModel: ObservableObject {
     let query: String
 
     @Published private(set) var articles: [DiscoverNewsArticle] = []
+    @Published private(set) var phase: LoadPhase = .idle
     @Published private(set) var isLoading = false
-    @Published var errorMessage: String?
+    @Published private(set) var isRefreshing = false
+    @Published var bannerMessage: String?
 
     private let searchDiscoverNewsUseCase: SearchDiscoverNewsUseCase
     private var hasLoaded = false
@@ -473,14 +497,28 @@ final class NewsSearchResultsViewModel: ObservableObject {
 
     func refresh() async {
         guard !isLoading else { return }
+        let hadContent = !articles.isEmpty
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             articles = try await searchDiscoverNewsUseCase.execute(query: query)
-            errorMessage = nil
+            phase = articles.isEmpty ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("资讯搜索失败，请稍后重试", "Failed to search news. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 }
@@ -491,8 +529,10 @@ final class DJsSearchResultsViewModel: ObservableObject {
 
     @Published private(set) var djs: [WebDJ] = []
     @Published private(set) var rankingBoards: [RankingBoard] = []
+    @Published private(set) var phase: LoadPhase = .idle
     @Published private(set) var isLoading = false
-    @Published var errorMessage: String?
+    @Published private(set) var isRefreshing = false
+    @Published var bannerMessage: String?
 
     private let searchDiscoverDJsUseCase: SearchDiscoverDJsUseCase
     private var hasLoaded = false
@@ -510,16 +550,30 @@ final class DJsSearchResultsViewModel: ObservableObject {
 
     func refresh() async {
         guard !isLoading else { return }
+        let hadContent = !djs.isEmpty || !rankingBoards.isEmpty
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             let result = try await searchDiscoverDJsUseCase.execute(query: query)
             djs = result.djs
             rankingBoards = result.rankingBoards
-            errorMessage = nil
+            phase = (djs.isEmpty && rankingBoards.isEmpty) ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("DJ 搜索失败，请稍后重试", "Failed to search DJs. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 }
@@ -529,8 +583,10 @@ final class SetsSearchResultsViewModel: ObservableObject {
     let query: String
 
     @Published private(set) var sets: [WebDJSet] = []
+    @Published private(set) var phase: LoadPhase = .idle
     @Published private(set) var isLoading = false
-    @Published var errorMessage: String?
+    @Published private(set) var isRefreshing = false
+    @Published var bannerMessage: String?
 
     private let searchDiscoverSetsUseCase: SearchDiscoverSetsUseCase
     private var hasLoaded = false
@@ -548,14 +604,28 @@ final class SetsSearchResultsViewModel: ObservableObject {
 
     func refresh() async {
         guard !isLoading else { return }
+        let hadContent = !sets.isEmpty
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             sets = try await searchDiscoverSetsUseCase.execute(query: query)
-            errorMessage = nil
+            phase = sets.isEmpty ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("Sets 搜索失败，请稍后重试", "Failed to search sets. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 }
@@ -566,8 +636,10 @@ final class WikiSearchResultsViewModel: ObservableObject {
 
     @Published private(set) var labels: [LearnLabel] = []
     @Published private(set) var festivals: [LearnFestival] = []
+    @Published private(set) var phase: LoadPhase = .idle
     @Published private(set) var isLoading = false
-    @Published var errorMessage: String?
+    @Published private(set) var isRefreshing = false
+    @Published var bannerMessage: String?
 
     private let searchDiscoverWikiUseCase: SearchDiscoverWikiUseCase
     private var hasLoaded = false
@@ -585,16 +657,30 @@ final class WikiSearchResultsViewModel: ObservableObject {
 
     func refresh() async {
         guard !isLoading else { return }
+        let hadContent = !labels.isEmpty || !festivals.isEmpty
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             let result = try await searchDiscoverWikiUseCase.execute(query: query)
             labels = result.labels
             festivals = result.festivals
-            errorMessage = nil
+            phase = (labels.isEmpty && festivals.isEmpty) ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("Wiki 搜索失败，请稍后重试", "Failed to search wiki. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 }

@@ -54,11 +54,47 @@ private struct SearchScreen: View {
                 Task { await performSearch() }
             }
 
-            if viewModel.isLoading {
-                Spacer()
-                ProgressView(L("搜索中...", "Searching..."))
-                Spacer()
-            } else {
+            if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if viewModel.isRefreshing {
+                        InlineLoadingBadge(title: L("正在搜索", "Searching"))
+                    }
+                    if let bannerMessage = viewModel.bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task { await performSearch() }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            switch viewModel.phase {
+            case .idle:
+                ContentUnavailableView(
+                    L("开始搜索", "Start Searching"),
+                    systemImage: "magnifyingglass",
+                    description: Text(LL("输入用户名、动态关键词或切换到小队推荐"))
+                )
+                .frame(maxHeight: .infinity)
+            case .initialLoading:
+                SearchResultsSkeletonView()
+                Spacer(minLength: 0)
+            case .failure(let message), .offline(let message):
+                VStack {
+                    ScreenErrorCard(message: message) {
+                        Task { await performSearch() }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    Spacer()
+                }
+            case .empty:
+                content
+            case .success:
                 content
             }
         }

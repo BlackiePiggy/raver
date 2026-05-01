@@ -19,16 +19,42 @@ private struct NotificationsScreen: View {
     }
 
     var body: some View {
-        Group {
-            if viewModel.isLoading && viewModel.notifications.isEmpty {
-                ProgressView(L("加载通知中...", "Loading notifications..."))
-            } else if viewModel.notifications.isEmpty {
+        VStack(spacing: 12) {
+            if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if viewModel.isRefreshing {
+                        InlineLoadingBadge(title: L("正在更新通知", "Updating notifications"))
+                    }
+                    if let bannerMessage = viewModel.bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task { await viewModel.load() }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            switch viewModel.phase {
+            case .idle, .initialLoading:
+                NotificationListSkeletonView()
+            case .failure(let message), .offline(let message):
+                Spacer()
+                ScreenErrorCard(message: message) {
+                    Task { await viewModel.load() }
+                }
+                .padding(.horizontal, 16)
+                Spacer()
+            case .empty:
                 ContentUnavailableView(
                     L("暂无通知", "No Notifications"),
                     systemImage: "bell.slash",
                     description: Text(LL("收到新的关注、点赞、评论或小队邀请后会显示在这里"))
                 )
-            } else {
+            case .success:
                 List(viewModel.notifications) { item in
                     Button {
                         Task {
@@ -62,6 +88,9 @@ private struct NotificationsScreen: View {
                     .listRowBackground(RaverTheme.card)
                 }
                 .scrollContentBackground(.hidden)
+                .refreshable {
+                    await viewModel.load()
+                }
             }
         }
         .background(RaverTheme.background)
@@ -74,9 +103,6 @@ private struct NotificationsScreen: View {
             }
         }
         .task {
-            await viewModel.load()
-        }
-        .refreshable {
             await viewModel.load()
         }
         .alert(L("通知加载失败", "Failed to Load Notifications"), isPresented: Binding(

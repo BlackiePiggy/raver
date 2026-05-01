@@ -278,9 +278,9 @@ struct DiscoverNewsPublishSheet: View {
 
             if let errorMessage {
                 Section {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.9))
+                    FormStatusMessage(message: errorMessage)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
                 }
             }
         }

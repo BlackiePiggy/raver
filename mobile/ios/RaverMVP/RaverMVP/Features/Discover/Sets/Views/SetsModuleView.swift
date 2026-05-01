@@ -28,19 +28,53 @@ struct SetsModuleView: View {
     @State private var totalPages = 1
     @State private var sortBy = "latest"
     @State private var searchKeyword = ""
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
+    @State private var isRefreshing = false
+    @State private var bannerMessage: String?
     @State private var errorMessage: String?
 
     var body: some View {
-        Group {
-                if isLoading && displayedSets.isEmpty {
-                    ProgressView(LL("Sets 加载中..."))
-                } else if displayedSets.isEmpty {
+        VStack(spacing: 12) {
+            if isRefreshing || bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if isRefreshing {
+                        InlineLoadingBadge(title: L("正在更新 Sets", "Updating sets"))
+                    }
+                    if let bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task { await reload() }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            Group {
+                switch phase {
+                case .idle, .initialLoading:
+                    DiscoverGridSkeletonView()
+                case .failure(let message), .offline(let message):
+                    ScrollView {
+                        ScreenErrorCard(
+                            title: L("Sets 加载失败", "Sets Failed to Load"),
+                            message: message
+                        ) {
+                            Task { await reload() }
+                        }
+                        .padding(16)
+                        .padding(.top, 72)
+                    }
+                case .empty:
                     ContentUnavailableView(
                         L("暂无 Sets", "No sets yet"),
                         systemImage: "waveform.path.ecg"
                     )
-                } else {
+                case .success:
                     ScrollView {
                         LazyVGrid(columns: columns, spacing: 14) {
                             ForEach(displayedSets) { set in
@@ -66,12 +100,16 @@ struct SetsModuleView: View {
                         .padding(.top, 8)
                         .padding(.bottom, max(0, tabBarReservedHeight) + 16)
                     }
+                    .refreshable {
+                        await reload()
+                    }
                 }
             }
-            .background(RaverTheme.background)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .safeAreaInset(edge: .top) {
+        }
+        .background(RaverTheme.background)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top) {
                 HStack(spacing: 8) {
                     Button {
                         discoverPush(
@@ -129,30 +167,34 @@ struct SetsModuleView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 4)
                 .background(RaverTheme.background)
-            }
-            .task {
-                await reload()
-            }
-            .refreshable {
-                await reload()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .discoverSetDidSave)) { _ in
-                Task { await reload() }
-            }
-            .alert(L("提示", "Notice"), isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(L("确定", "OK"), role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
+        }
+        .task {
+            await reload()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverSetDidSave)) { _ in
+            Task { await reload() }
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     private func reload() async {
-        page = 1
-        totalPages = 1
-        sets = []
+        let hadContent = !sets.isEmpty
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+            page = 1
+            totalPages = 1
+            sets = []
+        }
+        defer { isRefreshing = false }
         await loadMore(reset: true)
     }
 
@@ -162,16 +204,26 @@ struct SetsModuleView: View {
         defer { isLoading = false }
 
         do {
-            let result = try await repository.fetchDJSets(page: page, limit: 20, sortBy: sortBy, djID: nil)
+            let requestedPage = reset ? 1 : page
+            let result = try await repository.fetchDJSets(page: requestedPage, limit: 20, sortBy: sortBy, djID: nil)
             if reset {
                 sets = result.items
             } else {
                 sets.append(contentsOf: result.items)
             }
             totalPages = result.pagination?.totalPages ?? 1
-            page += 1
+            page = requestedPage + 1
+            phase = sets.isEmpty ? .empty : .success
+            bannerMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("Sets 加载失败，请稍后重试", "Failed to load sets. Please try again later.")
+            if reset {
+                phase = .failure(message: message)
+            } else if !sets.isEmpty {
+                bannerMessage = message
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 
@@ -277,8 +329,11 @@ struct DJSetDetailView: View {
     @State private var set: WebDJSet?
     @State private var comments: [WebSetComment] = []
     @State private var inputComment = ""
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
+    @State private var isRefreshing = false
     @State private var showTrackEditor = false
+    @State private var bannerMessage: String?
     @State private var errorMessage: String?
     @State private var playbackTime: Double = 0
     @State private var playbackDuration: Double = 0
@@ -341,36 +396,49 @@ struct DJSetDetailView: View {
     var body: some View {
         ZStack(alignment: .top) {
             Group {
-                if isLoading, set == nil {
-                    ProgressView(L("加载 Set 详情...", "Loading set details..."))
-                } else if let set {
-                    GeometryReader { proxy in
-                        if !isAudioOnlyMode, proxy.size.width > proxy.size.height {
-                            landscapePlayerContent(for: set, in: proxy.size)
-                        } else {
-                            portraitDetailContent(for: set)
+                switch phase {
+                case .idle, .initialLoading:
+                    SetDetailSkeletonView()
+                case .failure(let message), .offline(let message):
+                    ScrollView {
+                        ScreenErrorCard(message: message) {
+                            Task { await load() }
                         }
                     }
-                    .onChange(of: playbackTime) { _, newTime in
-                        syncActiveTrack(for: set, at: newTime)
-                    }
-                    .onDisappear {
-                        hideSeekIndicatorTask?.cancel()
-                        hideSeekIndicatorTask = nil
-                        hideVolumeIndicatorTask?.cancel()
-                        hideVolumeIndicatorTask = nil
-                        wheelAutoRecenterTask?.cancel()
-                        wheelAutoRecenterTask = nil
-                        controlsAutoHideTask?.cancel()
-                        controlsAutoHideTask = nil
-                        nativePlayerSession.pause()
-                        nativePlayerSession.reset()
-                        if !isAudioOnlyMode {
-                            forcePortraitOrientation()
-                        }
-                    }
-                } else {
+                    .padding(16)
+                    .padding(.top, 96)
+                case .empty:
                     ContentUnavailableView(LL("Set 不存在"), systemImage: "waveform.badge.exclamationmark")
+                case .success:
+                    if let set {
+                        GeometryReader { proxy in
+                            if !isAudioOnlyMode, proxy.size.width > proxy.size.height {
+                                landscapePlayerContent(for: set, in: proxy.size)
+                            } else {
+                                portraitDetailContent(for: set)
+                            }
+                        }
+                        .onChange(of: playbackTime) { _, newTime in
+                            syncActiveTrack(for: set, at: newTime)
+                        }
+                        .onDisappear {
+                            hideSeekIndicatorTask?.cancel()
+                            hideSeekIndicatorTask = nil
+                            hideVolumeIndicatorTask?.cancel()
+                            hideVolumeIndicatorTask = nil
+                            wheelAutoRecenterTask?.cancel()
+                            wheelAutoRecenterTask = nil
+                            controlsAutoHideTask?.cancel()
+                            controlsAutoHideTask = nil
+                            nativePlayerSession.pause()
+                            nativePlayerSession.reset()
+                            if !isAudioOnlyMode {
+                                forcePortraitOrientation()
+                            }
+                        }
+                    } else {
+                        ContentUnavailableView(LL("Set 不存在"), systemImage: "waveform.badge.exclamationmark")
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -381,6 +449,25 @@ struct DJSetDetailView: View {
                     .frame(height: topSafeAreaInset() + 8)
                     .ignoresSafeArea(edges: .top)
                     .allowsHitTesting(false)
+            }
+
+            if isRefreshing || bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if isRefreshing {
+                        InlineLoadingBadge(title: L("正在更新 Set 详情", "Updating set details"))
+                    }
+                    if let bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task { await load() }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, topSafeAreaInset() + 20)
             }
 
             if isAudioOnlyMode {
@@ -1742,8 +1829,17 @@ struct DJSetDetailView: View {
     }
 
     private func load() async {
+        guard !isLoading else { return }
+
+        let hadContent = set != nil
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             relatedEvent = nil
@@ -1772,10 +1868,18 @@ struct DJSetDetailView: View {
             controlsAutoHideTask?.cancel()
             controlsAutoHideTask = nil
             nativePlayerError = nil
+            phase = .success
+            bannerMessage = nil
             syncActiveTrack(for: loadedSet, at: 0)
             nativePlayerSession.reset()
         } catch {
-            errorMessage = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("Set 详情加载失败，请稍后重试", "Failed to load set details. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 

@@ -172,7 +172,10 @@ final class ProfileViewModel: ObservableObject {
     @Published var savedItems: [ActivityPostItem] = []
     @Published var recentCheckins: [WebCheckin] = []
     @Published var selectedSection: Section = .recent
+    @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
+    @Published var isRefreshing = false
+    @Published var bannerMessage: String?
     @Published var error: String?
 
     private let repository: ProfileSocialRepository
@@ -187,7 +190,14 @@ final class ProfileViewModel: ObservableObject {
     func load() async {
         if isLoading { return }
         isLoading = true
+        let hadContent = profile != nil
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             let dashboard = try await loadDashboardUseCase.execute()
@@ -198,12 +208,20 @@ final class ProfileViewModel: ObservableObject {
             savedItems = dashboard.savedItems
             recentCheckins = dashboard.recentCheckins
             persistOfflineSnapshot()
-            error = nil
+            phase = .success
+            bannerMessage = nil
+            self.error = nil
         } catch {
             if restoreOfflineSnapshot() {
-                self.error = L("当前离线，已显示上次同步的个人主页数据。", "You're offline. Showing your latest synced profile snapshot.")
+                phase = .success
+                bannerMessage = L("当前离线，已显示上次同步的个人主页数据。", "You're offline. Showing your latest synced profile snapshot.")
+                self.error = nil
+            } else if hadContent {
+                bannerMessage = error.userFacingMessage ?? L("个人主页更新失败，请稍后重试", "Failed to refresh profile. Please try again later.")
+                phase = .success
             } else {
-                self.error = error.userFacingMessage
+                let message = error.userFacingMessage ?? L("个人主页加载失败，请稍后重试", "Failed to load profile. Please try again later.")
+                phase = .failure(message: message)
             }
         }
     }
@@ -213,6 +231,9 @@ final class ProfileViewModel: ObservableObject {
             await load()
             return
         }
+
+        isRefreshing = true
+        defer { isRefreshing = false }
 
         do {
             switch selectedSection {
@@ -229,14 +250,17 @@ final class ProfileViewModel: ObservableObject {
                 recentCheckins = checkinPage.items
             }
             persistOfflineSnapshot()
-            error = nil
+            phase = .success
+            bannerMessage = nil
+            self.error = nil
         } catch {
-            self.error = error.userFacingMessage
+            bannerMessage = error.userFacingMessage ?? L("当前内容刷新失败，请稍后重试", "Failed to refresh this section. Please try again later.")
         }
     }
 
     func applyUpdatedProfile(_ profile: UserProfile) {
         self.profile = profile
+        phase = .success
         persistOfflineSnapshot()
     }
 

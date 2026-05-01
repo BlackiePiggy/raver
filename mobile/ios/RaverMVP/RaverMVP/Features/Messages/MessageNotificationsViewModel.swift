@@ -5,6 +5,7 @@ final class MessageNotificationsViewModel: ObservableObject {
     @Published var notifications: [AppNotification] = []
     @Published var unreadCounts = NotificationUnreadCount(total: 0, follows: 0, likes: 0, comments: 0, squadInvites: 0)
     @Published var isLoading = false
+    @Published var bannerMessage: String?
     @Published var error: String?
 
     private let repository: MessagesRepository
@@ -31,9 +32,16 @@ final class MessageNotificationsViewModel: ObservableObject {
                 + unreadCounts.comments
                 + unreadCounts.squadInvites
             publishCommunityUnreadDidChange()
-            error = nil
+            bannerMessage = nil
+            self.error = nil
         } catch {
-            self.error = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("消息提醒加载失败，请稍后重试", "Failed to load alerts. Please try again later.")
+            if !notifications.isEmpty {
+                bannerMessage = message
+                self.error = nil
+            } else {
+                self.error = message
+            }
         }
     }
 
@@ -46,7 +54,7 @@ final class MessageNotificationsViewModel: ObservableObject {
 
         do {
             try await repository.markNotificationRead(notificationID: item.id)
-            error = nil
+            self.error = nil
         } catch {
             notifications[index].isRead = false
             incrementUnread(for: item.type)
@@ -69,7 +77,7 @@ final class MessageNotificationsViewModel: ObservableObject {
 
         do {
             try await repository.markNotificationsRead(type: type)
-            error = nil
+            self.error = nil
         } catch {
             notifications = previousNotifications
             unreadCounts = previousUnreadCounts

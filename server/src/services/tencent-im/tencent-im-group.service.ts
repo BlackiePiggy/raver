@@ -185,6 +185,26 @@ export const tencentIMGroupService = {
     );
   },
 
+  async inviteGroupMembers(squadId: string, inviterUserId: string, inviteeUserIds: string[]): Promise<void> {
+    const normalized = Array.from(new Set(inviteeUserIds.map((item) => item.trim()).filter((item) => item.length > 0)));
+    if (normalized.length === 0) {
+      return;
+    }
+
+    await tencentIMUserService.ensureUsersByIds([inviterUserId, ...normalized]);
+    await tencentIMClient.post<{ Member_Account: string; Result: number; ResultMsg?: string }[]>(
+      'v4/group_open_http_svc/add_group_member',
+      {
+        GroupId: toTencentIMSquadGroupID(squadId),
+        Silence: 0,
+        Reason: `invited by ${toTencentIMUserID(inviterUserId)}`,
+        MemberList: normalized.map((userId) => ({
+          Member_Account: toTencentIMUserID(userId),
+        })),
+      }
+    );
+  },
+
   async dismissSquadGroup(squadId: string): Promise<void> {
     await tencentIMClient.post('v4/group_open_http_svc/destroy_group', {
       GroupId: toTencentIMSquadGroupID(squadId),

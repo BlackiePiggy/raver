@@ -74,11 +74,14 @@ struct EventDetailView: View {
     }
 
     @State private var event: WebEvent?
+    @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
+    @State private var isRefreshing = false
     @State private var showEventCheckinSheet = false
     @State private var selectedEventCheckinDayIDs: Set<String> = []
     @State private var selectedEventCheckinDJIDsByDayID: [String: Set<String>] = [:]
     @State private var relatedEventCheckins: [WebCheckin] = []
+    @State private var bannerMessage: String?
     @State private var errorMessage: String?
     @State private var selectedTab: EventDetailTab = .info
     @State private var pageProgress: CGFloat = 0
@@ -572,55 +575,89 @@ struct EventDetailView: View {
 
     var body: some View {
         Group {
-            if isLoading, event == nil {
-                ProgressView(L("加载活动详情...", "Loading event details..."))
-            } else if let event {
-                GeometryReader { proxy in
-                    let cardWidth = max(proxy.size.width - 32, 0)
-                    RaverImmersiveDetailPagerChrome(
-                        title: event.name,
-                        tabs: EventDetailTab.allCases,
-                        selectedTab: selectedTab,
-                        pageProgress: $pageProgress,
-                        namespace: "event-detail",
-                        configuration: detailChromeConfiguration
-                    ) {
-                        heroSection(event)
-                    } tabBar: {
-                        tabBar
-                    } content: { chrome in
-                        tabPager(event: event, cardWidth: cardWidth, chrome: chrome)
+            switch phase {
+            case .idle, .initialLoading:
+                EventDetailSkeletonView()
+            case .failure(let message), .offline(let message):
+                ScrollView {
+                    ScreenErrorCard(message: message) {
+                        Task { await load() }
                     }
                 }
-                .ignoresSafeArea(edges: .top)
-                .sheet(isPresented: $showEventCheckinSheet) {
-                    EventCheckinSelectionSheet(
-                        eventName: event.name,
-                        options: eventCheckinDayOptions(for: event),
-                        djOptionsByDayID: Dictionary(
-                            uniqueKeysWithValues: eventCheckinDayOptions(for: event).map { day in
-                                (day.id, eventCheckinDJOptions(for: event, selectedDayIDs: [day.id]))
-                            }
-                        ),
-                        initialSelectedDayIDs: selectedEventCheckinDayIDs,
-                        initialSelectedDJIDsByDayID: selectedEventCheckinDJIDsByDayID,
-                        confirmButtonTitle: activeAttendanceCheckin == nil ? L("确认打卡", "Confirm Check-in") : L("保存修改", "Save Changes"),
-                        destructiveButtonTitle: activeAttendanceCheckin == nil ? nil : L("取消打卡", "Cancel Check-in"),
-                        onDelete: activeAttendanceCheckin == nil ? nil : {
-                            Task { await cancelEventCheckin() }
-                        }
-                    ) { selectionsByDayID in
-                        selectedEventCheckinDayIDs = Set(selectionsByDayID.keys)
-                        selectedEventCheckinDJIDsByDayID = selectionsByDayID
-                        Task { await submitEventCheckinSelections(selectedDJIDsByDayID: selectionsByDayID) }
-                    }
-                    .presentationDetents([.fraction(0.78), .large])
-                }
-                .sheet(item: $venueMapContext) { context in
-                    EventVenueMapSheet(context: context)
-                }
-            } else {
+                .padding(16)
+                .padding(.top, 96)
+            case .empty:
                 ContentUnavailableView(LL("活动不存在"), systemImage: "calendar.badge.exclamationmark")
+            case .success:
+                if let event {
+                    ZStack(alignment: .top) {
+                        GeometryReader { proxy in
+                            let cardWidth = max(proxy.size.width - 32, 0)
+                            RaverImmersiveDetailPagerChrome(
+                                title: event.name,
+                                tabs: EventDetailTab.allCases,
+                                selectedTab: selectedTab,
+                                pageProgress: $pageProgress,
+                                namespace: "event-detail",
+                                configuration: detailChromeConfiguration
+                            ) {
+                                heroSection(event)
+                            } tabBar: {
+                                tabBar
+                            } content: { chrome in
+                                tabPager(event: event, cardWidth: cardWidth, chrome: chrome)
+                            }
+                        }
+
+                        if isRefreshing || bannerMessage != nil {
+                            VStack(alignment: .leading, spacing: 10) {
+                                if isRefreshing {
+                                    InlineLoadingBadge(title: L("正在更新活动详情", "Updating event details"))
+                                }
+                                if let bannerMessage {
+                                    ScreenStatusBanner(
+                                        message: bannerMessage,
+                                        style: .error,
+                                        actionTitle: L("重试", "Retry")
+                                    ) {
+                                        Task { await load() }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.top, 68)
+                        }
+                    }
+                    .ignoresSafeArea(edges: .top)
+                    .sheet(isPresented: $showEventCheckinSheet) {
+                        EventCheckinSelectionSheet(
+                            eventName: event.name,
+                            options: eventCheckinDayOptions(for: event),
+                            djOptionsByDayID: Dictionary(
+                                uniqueKeysWithValues: eventCheckinDayOptions(for: event).map { day in
+                                    (day.id, eventCheckinDJOptions(for: event, selectedDayIDs: [day.id]))
+                                }
+                            ),
+                            initialSelectedDayIDs: selectedEventCheckinDayIDs,
+                            initialSelectedDJIDsByDayID: selectedEventCheckinDJIDsByDayID,
+                            confirmButtonTitle: activeAttendanceCheckin == nil ? L("确认打卡", "Confirm Check-in") : L("保存修改", "Save Changes"),
+                            destructiveButtonTitle: activeAttendanceCheckin == nil ? nil : L("取消打卡", "Cancel Check-in"),
+                            onDelete: activeAttendanceCheckin == nil ? nil : {
+                                Task { await cancelEventCheckin() }
+                            }
+                        ) { selectionsByDayID in
+                            selectedEventCheckinDayIDs = Set(selectionsByDayID.keys)
+                            selectedEventCheckinDJIDsByDayID = selectionsByDayID
+                            Task { await submitEventCheckinSelections(selectedDJIDsByDayID: selectionsByDayID) }
+                        }
+                        .presentationDetents([.fraction(0.78), .large])
+                    }
+                    .sheet(item: $venueMapContext) { context in
+                        EventVenueMapSheet(context: context)
+                    }
+                } else {
+                    ContentUnavailableView(LL("活动不存在"), systemImage: "calendar.badge.exclamationmark")
+                }
             }
         }
         .ignoresSafeArea(edges: .top)
@@ -2163,8 +2200,17 @@ struct EventDetailView: View {
     }
 
     private func load() async {
+        guard !isLoading else { return }
+
+        let hadContent = event != nil
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             let hasSession = await MainActor.run { appState.session != nil }
@@ -2198,6 +2244,8 @@ struct EventDetailView: View {
             relatedEventSets = loadedEventSets
             relatedArticles = loadedArticles
             isLoadingRelatedArticles = false
+            phase = .success
+            bannerMessage = nil
 
             let snapshot = makeManualCacheSnapshot(
                 event: loadedEvent,
@@ -2210,14 +2258,22 @@ struct EventDetailView: View {
             let canFallback = isOfflineRecoverableError(error) || event == nil
             if canFallback, let snapshot = await EventManualCacheStore.shared.loadSnapshot(eventID: eventID) {
                 applyManualCacheSnapshot(snapshot)
+                phase = .success
                 if isRequestTimeoutError(error) {
-                    errorMessage = L("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version.")
+                    bannerMessage = L("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version.")
                 } else {
-                    errorMessage = L("网络较弱，已展示活动缓存数据。", "Network is weak. Showing cached event data.")
+                    bannerMessage = L("网络较弱，已展示活动缓存数据。", "Network is weak. Showing cached event data.")
                 }
+            } else if hadContent {
+                isLoadingRelatedArticles = false
+                bannerMessage = error.userFacingMessage ?? L("活动详情更新失败，请稍后重试", "Failed to refresh event details. Please try again later.")
+                phase = .success
             } else {
                 isLoadingRelatedArticles = false
-                errorMessage = error.userFacingMessage
+                let message = error.userFacingMessage ?? L("活动详情加载失败，请稍后重试", "Failed to load event details. Please try again later.")
+                phase = isOfflineRecoverableError(error)
+                    ? .offline(message: message)
+                    : .failure(message: message)
             }
         }
     }
@@ -3136,7 +3192,7 @@ private struct EventTimelineBoardView: View {
     }
 
     private var stageHeaderTextColor: Color {
-        Color.black.opacity(isDarkMode ? 0.72 : 0.76)
+        Color.black.opacity(0.78)
     }
 
     private var columnFillColor: Color {
@@ -3254,17 +3310,22 @@ private struct EventTimelineBoardView: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    stageColor,
-                                    stageColor.opacity(0.92),
-                                    stageColor.opacity(0.84)
+                                    stageColor.opacity(0.98),
+                                    stageColor.opacity(0.93),
+                                    stageColor.opacity(0.86)
                                 ],
-                                startPoint: .topLeading,
+                                startPoint: .top,
                                 endPoint: .bottomTrailing
                             )
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .stroke(stageHeaderStrokeColor, lineWidth: 1)
+                                .stroke(Color.white.opacity(0.92), lineWidth: 1.4)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9.5, style: .continuous)
+                                .inset(by: 2)
+                                .stroke(Color.white.opacity(0.22), lineWidth: 0.8)
                         )
                         .overlay(
                             Text(stageName)
@@ -3275,6 +3336,8 @@ private struct EventTimelineBoardView: View {
                                 .foregroundStyle(stageHeaderTextColor)
                                 .padding(.horizontal, 4)
                         )
+                        .shadow(color: stageColor.opacity(0.72), radius: 14, x: 0, y: 0)
+                        .shadow(color: stageColor.opacity(0.34), radius: 28, x: 0, y: 0)
                         .frame(width: layout.stageWidth, height: EventTimelineLayout.stageHeaderHeight)
                 }
             }
@@ -3344,20 +3407,47 @@ private struct EventTimelineBoardView: View {
     private func timelineCard(frame: EventTimelineCardFrame, stageColor: Color) -> some View {
         let isSelected = selectedSlotIDs.contains(frame.slot.id)
         let displayAct = EventLineupActCodec.parse(slot: frame.slot)
-        let cardFill = isSelected ? selectedCardFillColor : stageColor.opacity(0.92)
-        let textColor = isSelected ? stageColor : normalCardTextColor
+        let cardFill = isSelected ? selectedCardFillColor : stageColor.opacity(0.95)
+        let textColor = isSelected ? stageColor.opacity(0.98) : normalCardTextColor
         let nameTimeSpacing: CGFloat = 0.2
 
         let content = RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(cardFill)
+            .fill(
+                LinearGradient(
+                    colors: isSelected
+                        ? [
+                            Color.black.opacity(0.92),
+                            stageColor.opacity(0.10),
+                            Color.black.opacity(0.95)
+                        ]
+                        : [
+                            cardFill,
+                            stageColor.opacity(0.90),
+                            stageColor.opacity(0.82)
+                        ],
+                    startPoint: .top,
+                    endPoint: .bottomTrailing
+                )
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .stroke(
-                        isSelected ? stageColor.opacity(0.95) : Color.black.opacity(isDarkMode ? 0.42 : 0.22),
-                        lineWidth: isSelected ? 2.0 : 1.1
+                        isSelected ? stageColor.opacity(0.98) : Color.white.opacity(0.92),
+                        lineWidth: isSelected ? 2.2 : 1.4
                     )
             )
-            .shadow(color: stageColor.opacity(isSelected ? 0.58 : 0.30), radius: isSelected ? 12 : 8, x: 0, y: 2)
+            .overlay(
+                RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                    .inset(by: 2)
+                    .stroke(
+                        isSelected
+                            ? Color.white.opacity(0.10)
+                            : Color.white.opacity(0.24),
+                        lineWidth: 0.8
+                    )
+            )
+            .shadow(color: stageColor.opacity(isSelected ? 0.82 : 0.58), radius: isSelected ? 16 : 13, x: 0, y: 0)
+            .shadow(color: stageColor.opacity(isSelected ? 0.36 : 0.24), radius: isSelected ? 28 : 22, x: 0, y: 0)
             .overlay(alignment: .bottomTrailing) {
                 VStack(alignment: .trailing, spacing: nameTimeSpacing) {
                     Text(displayAct.displayName)
@@ -3372,7 +3462,7 @@ private struct EventTimelineBoardView: View {
                     Text(Self.cardTimeRangeText(for: frame.slot))
                         .font(EventScheduleTypography.heavy(12))
                         .monospacedDigit()
-                        .foregroundStyle(textColor.opacity(0.95))
+                        .foregroundStyle(isSelected ? stageColor.opacity(0.88) : textColor.opacity(0.95))
                         .lineLimit(1)
                 }
                 .padding(.horizontal, 3)

@@ -217,40 +217,54 @@ func makeDiscoverRouteDestination(
     }
 }
 
+private struct DiscoverRouteLoaderScaffold<Content: View>: View {
+    let phase: LoadPhase
+    let retry: () -> Void
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        Group {
+            switch phase {
+            case .idle, .initialLoading:
+                EventDetailSkeletonView()
+            case .failure(let message), .offline(let message):
+                ScrollView {
+                    ScreenErrorCard(message: message, retryAction: retry)
+                        .padding(16)
+                        .padding(.top, 72)
+                }
+                .background(RaverTheme.background)
+            case .empty:
+                ContentUnavailableView(
+                    L("内容不存在", "Content Unavailable"),
+                    systemImage: "exclamationmark.circle"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RaverTheme.background)
+            case .success:
+                content()
+            }
+        }
+    }
+}
+
 private struct DiscoverEventEditorLoaderView: View {
     let eventID: String
     let repository: DiscoverEventsRepository
 
     @State private var event: WebEvent?
-    @State private var errorMessage: String?
-    @State private var isLoading = false
+    @State private var phase: LoadPhase = .idle
 
     var body: some View {
-        Group {
+        DiscoverRouteLoaderScaffold(phase: phase) {
+            Task { await loadEvent(force: true) }
+        } content: {
             if let event {
                 EventEditorView(mode: .edit(event)) {
                     NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
                 }
-            } else if isLoading {
-                ProgressView(L("加载活动中...", "Loading event..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
-            } else if let errorMessage {
-                VStack(spacing: 10) {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.92))
-                    Button(L("重试", "Retry")) {
-                        Task { await loadEvent(force: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RaverTheme.background)
             } else {
-                ProgressView(L("加载活动中...", "Loading event..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
+                Color.clear
             }
         }
         .task {
@@ -261,13 +275,12 @@ private struct DiscoverEventEditorLoaderView: View {
     @MainActor
     private func loadEvent(force: Bool) async {
         if event != nil && !force { return }
-        isLoading = true
-        defer { isLoading = false }
+        phase = .initialLoading
         do {
             event = try await repository.fetchEvent(id: eventID)
-            errorMessage = nil
+            phase = .success
         } catch {
-            errorMessage = error.userFacingMessage
+            phase = .failure(message: error.userFacingMessage ?? L("活动加载失败，请稍后重试", "Failed to load event. Please try again later."))
         }
     }
 }
@@ -277,35 +290,18 @@ private struct DiscoverSetEditorLoaderView: View {
     let repository: DiscoverSetsRepository
 
     @State private var set: WebDJSet?
-    @State private var errorMessage: String?
-    @State private var isLoading = false
+    @State private var phase: LoadPhase = .idle
 
     var body: some View {
-        Group {
+        DiscoverRouteLoaderScaffold(phase: phase) {
+            Task { await loadSet(force: true) }
+        } content: {
             if let set {
                 DJSetEditorView(mode: .edit(set)) {
                     NotificationCenter.default.post(name: .discoverSetDidSave, object: set.id)
                 }
-            } else if isLoading {
-                ProgressView(L("加载 Set 中...", "Loading set..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
-            } else if let errorMessage {
-                VStack(spacing: 10) {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.92))
-                    Button(L("重试", "Retry")) {
-                        Task { await loadSet(force: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RaverTheme.background)
             } else {
-                ProgressView(L("加载 Set 中...", "Loading set..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
+                Color.clear
             }
         }
         .task {
@@ -316,13 +312,12 @@ private struct DiscoverSetEditorLoaderView: View {
     @MainActor
     private func loadSet(force: Bool) async {
         if set != nil && !force { return }
-        isLoading = true
-        defer { isLoading = false }
+        phase = .initialLoading
         do {
             set = try await repository.fetchDJSet(id: setID)
-            errorMessage = nil
+            phase = .success
         } catch {
-            errorMessage = error.userFacingMessage
+            phase = .failure(message: error.userFacingMessage ?? L("Set 加载失败，请稍后重试", "Failed to load set. Please try again later."))
         }
     }
 }
@@ -332,33 +327,16 @@ private struct DiscoverNewsDetailLoaderView: View {
     let repository: DiscoverNewsRepository
 
     @State private var article: DiscoverNewsArticle?
-    @State private var errorMessage: String?
-    @State private var isLoading = false
+    @State private var phase: LoadPhase = .idle
 
     var body: some View {
-        Group {
+        DiscoverRouteLoaderScaffold(phase: phase) {
+            Task { await loadArticle(force: true) }
+        } content: {
             if let article {
                 DiscoverNewsDetailView(article: article)
-            } else if isLoading {
-                ProgressView(L("加载资讯中...", "Loading article..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
-            } else if let errorMessage {
-                VStack(spacing: 10) {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.92))
-                    Button(L("重试", "Retry")) {
-                        Task { await loadArticle(force: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RaverTheme.background)
             } else {
-                ProgressView(L("加载资讯中...", "Loading article..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
+                Color.clear
             }
         }
         .task {
@@ -369,13 +347,12 @@ private struct DiscoverNewsDetailLoaderView: View {
     @MainActor
     private func loadArticle(force: Bool) async {
         if article != nil && !force { return }
-        isLoading = true
-        defer { isLoading = false }
+        phase = .initialLoading
         do {
             article = try await repository.fetchArticle(id: articleID)
-            errorMessage = nil
+            phase = .success
         } catch {
-            errorMessage = error.userFacingMessage
+            phase = .failure(message: error.userFacingMessage ?? L("资讯加载失败，请稍后重试", "Failed to load article. Please try again later."))
         }
     }
 }
@@ -385,33 +362,16 @@ private struct DiscoverLabelDetailLoaderView: View {
     let repository: DiscoverWikiRepository
 
     @State private var label: LearnLabel?
-    @State private var errorMessage: String?
-    @State private var isLoading = false
+    @State private var phase: LoadPhase = .idle
 
     var body: some View {
-        Group {
+        DiscoverRouteLoaderScaffold(phase: phase) {
+            Task { await loadLabel(force: true) }
+        } content: {
             if let label {
                 LearnLabelDetailView(label: label)
-            } else if isLoading {
-                ProgressView(L("加载厂牌中...", "Loading label..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
-            } else if let errorMessage {
-                VStack(spacing: 10) {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.92))
-                    Button(L("重试", "Retry")) {
-                        Task { await loadLabel(force: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RaverTheme.background)
             } else {
-                ProgressView(L("加载厂牌中...", "Loading label..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
+                Color.clear
             }
         }
         .task {
@@ -422,13 +382,12 @@ private struct DiscoverLabelDetailLoaderView: View {
     @MainActor
     private func loadLabel(force: Bool) async {
         if label != nil && !force { return }
-        isLoading = true
-        defer { isLoading = false }
+        phase = .initialLoading
         do {
             label = try await fetchLearnLabelByID(labelID, repository: repository)
-            errorMessage = nil
+            phase = .success
         } catch {
-            errorMessage = error.userFacingMessage
+            phase = .failure(message: error.userFacingMessage ?? L("厂牌加载失败，请稍后重试", "Failed to load label. Please try again later."))
         }
     }
 }
@@ -438,33 +397,16 @@ private struct DiscoverFestivalDetailLoaderView: View {
     let repository: DiscoverWikiRepository
 
     @State private var festival: LearnFestival?
-    @State private var errorMessage: String?
-    @State private var isLoading = false
+    @State private var phase: LoadPhase = .idle
 
     var body: some View {
-        Group {
+        DiscoverRouteLoaderScaffold(phase: phase) {
+            Task { await loadFestival(force: true) }
+        } content: {
             if let festival {
                 LearnFestivalDetailView(festival: festival)
-            } else if isLoading {
-                ProgressView(L("加载电音节中...", "Loading festival..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
-            } else if let errorMessage {
-                VStack(spacing: 10) {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.92))
-                    Button(L("重试", "Retry")) {
-                        Task { await loadFestival(force: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RaverTheme.background)
             } else {
-                ProgressView(L("加载电音节中...", "Loading festival..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
+                Color.clear
             }
         }
         .task {
@@ -475,13 +417,12 @@ private struct DiscoverFestivalDetailLoaderView: View {
     @MainActor
     private func loadFestival(force: Bool) async {
         if festival != nil && !force { return }
-        isLoading = true
-        defer { isLoading = false }
+        phase = .initialLoading
         do {
             festival = try await fetchLearnFestivalByID(festivalID, repository: repository)
-            errorMessage = nil
+            phase = .success
         } catch {
-            errorMessage = error.userFacingMessage
+            phase = .failure(message: error.userFacingMessage ?? L("电音节加载失败，请稍后重试", "Failed to load festival. Please try again later."))
         }
     }
 }
@@ -492,33 +433,16 @@ private struct DiscoverFestivalEditorLoaderView: View {
     let onSave: (LearnFestival) -> Void
 
     @State private var festival: LearnFestival?
-    @State private var errorMessage: String?
-    @State private var isLoading = false
+    @State private var phase: LoadPhase = .idle
 
     var body: some View {
-        Group {
+        DiscoverRouteLoaderScaffold(phase: phase) {
+            Task { await loadFestival(force: true) }
+        } content: {
             if let festival {
                 LearnFestivalEditorView(mode: .edit(festival), onSaved: onSave)
-            } else if isLoading {
-                ProgressView(L("加载电音节中...", "Loading festival..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
-            } else if let errorMessage {
-                VStack(spacing: 10) {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.92))
-                    Button(L("重试", "Retry")) {
-                        Task { await loadFestival(force: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RaverTheme.background)
             } else {
-                ProgressView(L("加载电音节中...", "Loading festival..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
+                Color.clear
             }
         }
         .task {
@@ -529,13 +453,12 @@ private struct DiscoverFestivalEditorLoaderView: View {
     @MainActor
     private func loadFestival(force: Bool) async {
         if festival != nil && !force { return }
-        isLoading = true
-        defer { isLoading = false }
+        phase = .initialLoading
         do {
             festival = try await fetchLearnFestivalByID(festivalID, repository: repository)
-            errorMessage = nil
+            phase = .success
         } catch {
-            errorMessage = error.userFacingMessage
+            phase = .failure(message: error.userFacingMessage ?? L("电音节加载失败，请稍后重试", "Failed to load festival. Please try again later."))
         }
     }
 }

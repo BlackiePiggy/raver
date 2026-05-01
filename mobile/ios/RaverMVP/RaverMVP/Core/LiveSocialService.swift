@@ -308,6 +308,13 @@ final class LiveSocialService: SocialService {
         throw await tencentIMUnavailableError(for: "clear conversation history")
     }
 
+    func isTencentFriend(userID: String) async throws -> Bool {
+        let myProfile = try await fetchMyProfile()
+        let friends = try await fetchFriends(userID: myProfile.id, cursor: nil)
+        let platformUserID = TencentIMIdentity.normalizePlatformUserIDForProfile(userID)
+        return friends.users.contains(where: { $0.id == platformUserID })
+    }
+
     func fetchFriendRemark(userID: String) async throws -> String? {
         if let remark = try await imSession.fetchFriendRemark(userID: userID) {
             return remark
@@ -473,23 +480,42 @@ final class LiveSocialService: SocialService {
     }
 
     func fetchSquadProfile(squadID: String) async throws -> SquadProfile {
-        try await request(path: "/v1/squads/\(squadID)/profile", method: "GET")
+        try await imSession.fetchSquadProfile(squadID: squadID)
     }
 
     func joinSquad(squadID: String) async throws {
-        let _: JoinSquadResponse = try await request(path: "/v1/squads/\(squadID)/join", method: "POST")
+        if try await imSession.joinSquad(squadID: squadID) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "join squad")
     }
 
     func leaveSquad(squadID: String) async throws {
-        let _: GenericSuccessResponse = try await request(path: "/v1/squads/\(squadID)/leave", method: "POST")
+        if try await imSession.leaveSquad(squadID: squadID) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "leave squad")
     }
 
     func disbandSquad(squadID: String) async throws {
-        let _: GenericSuccessResponse = try await request(path: "/v1/squads/\(squadID)/disband", method: "POST")
+        if try await imSession.disbandSquad(squadID: squadID) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "disband squad")
+    }
+
+    func inviteUserToSquad(squadID: String, inviteeUserID: String) async throws {
+        if try await imSession.inviteUsersToSquad(squadID: squadID, userIDs: [inviteeUserID]) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "invite users to squad")
     }
 
     func createSquad(input: CreateSquadInput) async throws -> Conversation {
-        try await request(path: "/v1/squads", method: "POST", body: input)
+        if let conversation = try await imSession.createSquad(input: input) {
+            return conversation
+        }
+        throw await tencentIMUnavailableError(for: "create squad")
     }
 
     func uploadSquadAvatar(
@@ -508,34 +534,46 @@ final class LiveSocialService: SocialService {
     }
 
     func updateSquadMySettings(squadID: String, input: UpdateSquadMySettingsInput) async throws {
-        let _: GenericSuccessResponse = try await request(
-            path: "/v1/squads/\(squadID)/my-settings",
-            method: "PATCH",
-            body: input
-        )
+        if try await imSession.updateSquadMySettings(squadID: squadID, input: input) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "update squad my settings")
     }
 
     func updateSquadInfo(squadID: String, input: UpdateSquadInfoInput) async throws {
-        let _: GenericSuccessResponse = try await request(
-            path: "/v1/squads/\(squadID)/manage",
-            method: "PATCH",
-            body: input
-        )
+        if try await imSession.updateSquadInfo(squadID: squadID, input: input) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "update squad info")
     }
 
     func updateSquadMemberRole(squadID: String, memberUserID: String, role: String) async throws {
-        let _: GenericSuccessResponse = try await request(
-            path: "/v1/squads/\(squadID)/members/\(memberUserID)/role",
-            method: "PATCH",
-            body: ["role": role]
-        )
+        if try await imSession.updateSquadMemberRole(squadID: squadID, memberUserID: memberUserID, role: role) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "update squad member role")
     }
 
     func removeSquadMember(squadID: String, memberUserID: String) async throws {
-        let _: GenericSuccessResponse = try await request(
-            path: "/v1/squads/\(squadID)/members/\(memberUserID)/remove",
-            method: "POST"
-        )
+        if try await imSession.removeUsersFromSquad(squadID: squadID, userIDs: [memberUserID]) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "remove squad member")
+    }
+
+    func fetchSquadInviteOption(squadID: String) async throws -> GroupInviteOption {
+        return try await imSession.fetchSquadInviteOption(squadID: squadID)
+    }
+
+    func setSquadInviteOption(squadID: String, option: GroupInviteOption) async throws {
+        if try await imSession.setSquadInviteOption(squadID: squadID, option: option) {
+            return
+        }
+        throw await tencentIMUnavailableError(for: "set squad invite option")
+    }
+
+    func fetchSquadMemberDirectory(squadID: String) async throws -> GroupMemberDirectory {
+        try await imSession.fetchSquadMemberDirectory(squadID: squadID)
     }
 
     func fetchNotifications(limit: Int) async throws -> NotificationInbox {

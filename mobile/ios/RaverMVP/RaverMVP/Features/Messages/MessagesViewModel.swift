@@ -64,7 +64,10 @@ final class MessagesViewModel: ObservableObject {
 
     @Published var conversations: [Conversation] = []
     @Published var unreadTotal = 0
+    @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
+    @Published var isRefreshing = false
+    @Published var bannerMessage: String?
     @Published var error: String?
     @Published var globalSearchSections: [GlobalSearchSection] = []
     @Published var isGlobalSearching = false
@@ -84,13 +87,28 @@ final class MessagesViewModel: ObservableObject {
     func load() async {
         if isLoading { return }
         isLoading = true
+        let hadContent = !conversations.isEmpty
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             try await chatStore.loadConversations(using: repository)
+            phase = conversations.isEmpty ? .empty : .success
+            bannerMessage = nil
             self.error = nil
         } catch {
-            self.error = error.userFacingMessage
+            let message = error.userFacingMessage ?? L("消息加载失败，请稍后重试", "Failed to load messages. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
         }
     }
 

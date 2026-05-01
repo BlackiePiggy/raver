@@ -4,8 +4,11 @@ import Combine
 @MainActor
 final class RecommendEventsViewModel: ObservableObject {
     @Published private(set) var events: [WebEvent] = []
+    @Published private(set) var phase: LoadPhase = .idle
     @Published private(set) var isLoading = false
+    @Published private(set) var isRefreshing = false
     @Published private(set) var markedCheckinIDsByEventID: [String: String] = [:]
+    @Published var bannerMessage: String?
     @Published var errorMessage: String?
 
     private let fetchRecommendedEventsUseCase: FetchRecommendedDiscoverEventsUseCase
@@ -34,13 +37,13 @@ final class RecommendEventsViewModel: ObservableObject {
         do {
             markedCheckinIDsByEventID = try await fetchMarkedEventCheckinsUseCase.execute()
         } catch {
-            errorMessage = error.userFacingMessage
+            bannerMessage = error.userFacingMessage
         }
     }
 
     func toggleMarked(event: WebEvent, isLoggedIn: Bool) async {
         guard isLoggedIn else {
-            errorMessage = L("请先登录再收藏活动", "Please log in before saving events.")
+            bannerMessage = L("请先登录再收藏活动", "Please log in before saving events.")
             return
         }
 
@@ -50,14 +53,21 @@ final class RecommendEventsViewModel: ObservableObject {
                 markedCheckinIDsByEventID: markedCheckinIDsByEventID
             )
         } catch {
-            errorMessage = error.userFacingMessage
+            bannerMessage = error.userFacingMessage
         }
     }
 
     private func loadRecommendations() async {
         guard !isLoading else { return }
+        let hadContent = !events.isEmpty
         isLoading = true
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
         defer { isLoading = false }
+        defer { isRefreshing = false }
 
         do {
             let recommended = try await fetchRecommendedEventsUseCase.execute(
@@ -66,16 +76,28 @@ final class RecommendEventsViewModel: ObservableObject {
             )
             if !recommended.isEmpty {
                 events = recommended
+                phase = .success
+                bannerMessage = nil
                 return
             }
 
             events = try await loadRecommendationsLegacy()
+            phase = events.isEmpty ? .empty : .success
+            bannerMessage = nil
         } catch {
             // Backward-compatible fallback for servers that have not deployed /v1/events/recommendations yet.
             do {
                 events = try await loadRecommendationsLegacy()
+                phase = events.isEmpty ? .empty : .success
+                bannerMessage = nil
             } catch {
-                errorMessage = error.userFacingMessage
+                let message = error.userFacingMessage ?? L("推荐活动加载失败，请稍后重试", "Failed to load recommended events. Please try again later.")
+                if hadContent {
+                    bannerMessage = message
+                    phase = .success
+                } else {
+                    phase = .failure(message: message)
+                }
             }
         }
     }

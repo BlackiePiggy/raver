@@ -123,6 +123,7 @@ Owner: iOS maintainers + Codex
 - `docs/MVVM_COORDINATOR_MIGRATION_PLAN.md`
 - 若新增/变更跳转链路：`docs/IOS_MANUAL_NAVIGATION_CLICKPATH_CHECKLIST.md`
 - 若影响发布冒烟路径：`docs/IOS_RELEASE_SMOKE_RUNBOOK.md`
+- 若新增或调整页面加载/刷新/错误/空态行为：`docs/IOS_LOADING_STATE_SYSTEM_GUIDE.md`
 
 ## Step 7: 质量闸门（必须全部通过）
 
@@ -210,6 +211,7 @@ scripts/check-modal-allowlist.sh
 - 架构主线与阶段状态：`docs/MVVM_COORDINATOR_MIGRATION_PLAN.md`
 - 手工点击路径回归：`docs/IOS_MANUAL_NAVIGATION_CLICKPATH_CHECKLIST.md`
 - 发布前冒烟执行：`docs/IOS_RELEASE_SMOKE_RUNBOOK.md`
+- 页面加载态标准：`docs/IOS_LOADING_STATE_SYSTEM_GUIDE.md`
 
 建议执行顺序：
 

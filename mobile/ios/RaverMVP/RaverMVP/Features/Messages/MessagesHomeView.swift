@@ -588,11 +588,35 @@ struct MessagesHomeView: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
 
-            if chatViewModel.isLoading && chatViewModel.conversations.isEmpty {
+            if chatViewModel.bannerMessage != nil || alertViewModel.bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let bannerMessage = chatViewModel.bannerMessage ?? alertViewModel.bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task { await refreshAll() }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            switch chatViewModel.phase {
+            case .idle, .initialLoading:
+                ConversationListSkeletonView()
+            case .failure(let message), .offline(let message):
                 Spacer()
-                ProgressView(L("加载消息中...", "Loading messages..."))
+                ScreenErrorCard(
+                    title: L("消息加载失败", "Messages Failed to Load"),
+                    message: message
+                ) {
+                    Task { await refreshAll() }
+                }
+                .padding(.horizontal, 16)
                 Spacer()
-            } else if chatViewModel.conversations.isEmpty {
+            case .empty:
                 Spacer()
                 ContentUnavailableView(
                     L("暂无会话", "No Conversations Yet"),
@@ -600,7 +624,7 @@ struct MessagesHomeView: View {
                     description: Text(LL("从用户主页发起私信或加入小队后会显示在这里"))
                 )
                 Spacer()
-            } else {
+            case .success:
                 List(chatViewModel.conversations) { conversation in
                     Button {
                         if chatViewModel.isEditingConversations {
@@ -691,6 +715,9 @@ struct MessagesHomeView: View {
                     )
                 }
                 .scrollContentBackground(.hidden)
+                .refreshable {
+                    await refreshAll()
+                }
             }
         }
         .background(RaverTheme.background)
@@ -702,9 +729,6 @@ struct MessagesHomeView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await refreshAll()
-        }
-        .refreshable {
             await refreshAll()
         }
         .onChange(of: chatViewModel.unreadTotal) { _, _ in
@@ -725,6 +749,7 @@ struct MessagesHomeView: View {
                 if !newValue {
                     chatViewModel.error = nil
                     alertViewModel.error = nil
+                    alertViewModel.bannerMessage = nil
                 }
             }
         )) {

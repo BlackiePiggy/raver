@@ -20,6 +20,7 @@ From this point on:
 For day-to-day incremental feature implementation after migration stabilization, follow:
 
 - `docs/IOS_INCREMENTAL_FEATURE_DEVELOPMENT_GUIDE.md`
+- `docs/IOS_LOADING_STATE_SYSTEM_GUIDE.md`
 
 ## Current Assessment
 

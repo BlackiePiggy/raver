@@ -227,101 +227,137 @@ export const squadService = {
     inviterId: string;
     inviteeId: string;
   }) {
-    // 检查邀请者是否是小队成员
-    const member = await prisma.squadMember.findUnique({
-      where: {
-        squadId_userId: {
-          squadId: data.squadId,
-          userId: data.inviterId,
+    const squad = await prisma.squad.findUnique({
+      where: { id: data.squadId },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
+          },
+          orderBy: {
+            joinedAt: 'asc',
+          },
         },
       },
     });
 
-    if (!member) {
+    if (!squad) {
+      throw new Error('小队不存在');
+    }
+
+    const inviterMembership = squad.members.find((member) => member.userId === data.inviterId);
+    if (!inviterMembership) {
       throw new Error('只有小队成员才能邀请其他用户');
     }
 
-    // 检查被邀请者是否已经是成员
-    const existingMember = await prisma.squadMember.findUnique({
-      where: {
-        squadId_userId: {
-          squadId: data.squadId,
-          userId: data.inviteeId,
-        },
-      },
-    });
-
+    const existingMember = squad.members.find((member) => member.userId === data.inviteeId);
     if (existingMember) {
       throw new Error('该用户已经是小队成员');
     }
 
-    // 检查是否已有待处理的邀请
-    const existingInvite = await prisma.squadInvite.findUnique({
-      where: {
-        squadId_inviteeId: {
-          squadId: data.squadId,
-          inviteeId: data.inviteeId,
-        },
-      },
-    });
-
-    if (existingInvite && existingInvite.status === 'pending') {
-      throw new Error('该用户已有待处理的邀请');
+    if (squad.members.length >= squad.maxMembers) {
+      throw new Error('小队已满');
     }
 
-    // 创建邀请（7天有效期）
-    const invite = await prisma.squadInvite.create({
-      data: {
-        squadId: data.squadId,
-        inviterId: data.inviterId,
-        inviteeId: data.inviteeId,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-      include: {
-        squad: {
-          select: {
-            id: true,
-            name: true,
-            avatarUrl: true,
-          },
-        },
-        inviter: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-          },
-        },
+    const invitee = await prisma.user.findUnique({
+      where: { id: data.inviteeId },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        avatarUrl: true,
       },
     });
 
-    if (invite.inviteeId !== invite.inviterId) {
+    if (!invitee) {
+      throw new Error('被邀请用户不存在');
+    }
+
+    await tencentIMGroupService.ensureSquadGroupById(data.squadId);
+
+    const added = await prisma.$transaction(async (tx) => {
+      const membership = await tx.squadMember.create({
+        data: {
+          squadId: data.squadId,
+          userId: data.inviteeId,
+          role: 'member',
+        },
+      });
+
+      const message = await tx.squadMessage.create({
+        data: {
+          squadId: data.squadId,
+          userId: data.inviteeId,
+          content: '加入了小队',
+          type: 'system',
+        },
+      });
+
+      await tx.squadInvite.deleteMany({
+        where: {
+          squadId: data.squadId,
+          inviteeId: data.inviteeId,
+          status: 'pending',
+        },
+      });
+
+      return {
+        membershipId: membership.id,
+        messageId: message.id,
+      };
+    });
+
+    try {
+      await tencentIMGroupService.inviteGroupMembers(data.squadId, data.inviterId, [data.inviteeId]);
+    } catch (error) {
+      await prisma.$transaction(async (tx) => {
+        await tx.squadMessage.delete({
+          where: { id: added.messageId },
+        });
+        await tx.squadMember.delete({
+          where: { id: added.membershipId },
+        });
+      });
+      throw error;
+    }
+
+    if (data.inviteeId !== data.inviterId) {
       void notificationCenterService
         .publish({
           category: 'community_interaction',
-          targets: [{ userId: invite.inviteeId }],
+          targets: [{ userId: data.inviteeId }],
           channels: ['in_app', 'apns'],
           payload: {
             title: '社区互动',
-            body: `你收到了加入小队「${invite.squad.name}」的邀请`,
-            deeplink: `raver://squad/${invite.squad.id}`,
+            body: `你已加入小队「${squad.name}」`,
+            deeplink: `raver://squad/${squad.id}`,
             metadata: {
               source: 'squad_invite',
-              inviteID: invite.id,
-              squadID: invite.squad.id,
-              inviterUserID: invite.inviter.id,
+              squadID: squad.id,
+              inviterUserID: data.inviterId,
             },
           },
-          dedupeKey: `community:squad_invite:${invite.id}`,
+          dedupeKey: `community:squad_invite_direct_add:${data.squadId}:${data.inviteeId}`,
         })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          console.error(`[notification-center] squad invite publish failed: ${message}`);
+        .catch((publishError) => {
+          const message = publishError instanceof Error ? publishError.message : String(publishError);
+          console.error(`[notification-center] squad direct invite publish failed: ${message}`);
         });
     }
 
-    return invite;
+    return {
+      success: true,
+      squadId: squad.id,
+      inviteeId: data.inviteeId,
+      inviteeDisplayName: invitee.displayName || invitee.username,
+    };
   },
 
   // 处理邀请（接受/拒绝）
