@@ -951,79 +951,94 @@ struct WidgetEventManagerView: View {
     @Environment(\.appPush) private var appPush
 
     @State private var events: [WidgetSelectableEvent] = []
+    @State private var selectedLayoutStyle: WidgetCountdownLayoutStyle = .original
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var editingEvent: WidgetSelectableEvent?
+    @State private var customNameDraft = ""
 
     var body: some View {
-        Group {
-            if isLoading && events.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RaverTheme.background)
-            } else if events.isEmpty {
-                ContentUnavailableView(
-                    L("还没有已添加的小组件活动", "No widget events yet"),
-                    systemImage: "apps.iphone",
-                    description: Text(
-                        L(
-                            "去活动详情页点击“添加到桌面倒计时”，这里就会集中显示。",
-                            "Add events from the event detail page and they will appear here."
+        VStack(spacing: 0) {
+            widgetLayoutStyleSection
+
+            Group {
+                if isLoading && events.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(RaverTheme.background)
+                } else if events.isEmpty {
+                    ContentUnavailableView(
+                        L("还没有已添加的小组件活动", "No widget events yet"),
+                        systemImage: "apps.iphone",
+                        description: Text(
+                            L(
+                                "去活动详情页点击“添加到桌面倒计时”，这里就会集中显示。",
+                                "Add events from the event detail page and they will appear here."
+                            )
                         )
                     )
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RaverTheme.background)
-            } else {
-                List {
-                    ForEach(events) { event in
-                        Button {
-                            appPush(.eventDetail(eventID: event.id))
-                        } label: {
-                            HStack(spacing: 12) {
-                                WidgetManagedEventThumbnail(event: event)
-
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(event.name)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(RaverTheme.primaryText)
-                                        .multilineTextAlignment(.leading)
-                                        .lineLimit(2)
-
-                                    if let meta = widgetEventMetaText(event), !meta.isEmpty {
-                                        Text(meta)
-                                            .font(.caption)
-                                            .foregroundStyle(RaverTheme.secondaryText)
-                                            .lineLimit(2)
-                                    }
-                                }
-
-                                Spacer(minLength: 8)
-
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        .buttonStyle(.plain)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                remove(event)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+                } else {
+                    List {
+                        ForEach(events) { event in
+                            Button {
+                                appPush(.eventDetail(eventID: event.id))
                             } label: {
-                                Label(L("移除", "Remove"), systemImage: "trash")
+                                HStack(spacing: 12) {
+                                    WidgetManagedEventThumbnail(event: event)
+
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(event.displayName)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(RaverTheme.primaryText)
+                                            .multilineTextAlignment(.leading)
+                                            .lineLimit(2)
+
+                                        if let meta = widgetEventMetaText(event), !meta.isEmpty {
+                                            Text(meta)
+                                                .font(.caption)
+                                                .foregroundStyle(RaverTheme.secondaryText)
+                                                .lineLimit(2)
+                                        }
+                                    }
+
+                                    Spacer(minLength: 8)
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                            .buttonStyle(.plain)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button {
+                                    startRenaming(event)
+                                } label: {
+                                    Label(L("命名", "Rename"), systemImage: "pencil")
+                                }
+                                .tint(.blue)
+
+                                Button(role: .destructive) {
+                                    remove(event)
+                                } label: {
+                                    Label(L("移除", "Remove"), systemImage: "trash")
+                                }
                             }
                         }
                     }
+                    .refreshable {
+                        await load()
+                    }
+                    .listStyle(.insetGrouped)
+                    .scrollContentBackground(.hidden)
+                    .background(RaverTheme.background)
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-                .background(RaverTheme.background)
             }
         }
+        .background(RaverTheme.background)
         .task {
-            await load()
-        }
-        .refreshable {
             await load()
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
@@ -1033,6 +1048,9 @@ struct WidgetEventManagerView: View {
             Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+        .sheet(item: $editingEvent) { event in
+            widgetRenameSheet(for: event)
         }
         .raverSystemNavigation(title: L("桌面倒计时", "Widget Countdown"))
     }
@@ -1045,10 +1063,24 @@ struct WidgetEventManagerView: View {
         do {
             let snapshot = try WidgetSelectableEventsStore.shared.loadSnapshot()
             events = snapshot.events
+            selectedLayoutStyle = snapshot.selectedLayoutStyle
         } catch {
             errorMessage = L(
                 "读取桌面倒计时列表失败，请稍后重试。",
                 "Failed to load widget countdown events. Please try again later."
+            )
+        }
+    }
+
+    private func selectLayoutStyle(_ layoutStyle: WidgetCountdownLayoutStyle) {
+        guard selectedLayoutStyle != layoutStyle else { return }
+        do {
+            try WidgetSelectableEventsSyncService.shared.updateLayoutStyle(layoutStyle)
+            selectedLayoutStyle = layoutStyle
+        } catch {
+            errorMessage = L(
+                "切换文字排版方案失败，请稍后重试。",
+                "Failed to switch the widget text layout. Please try again later."
             )
         }
     }
@@ -1065,13 +1097,137 @@ struct WidgetEventManagerView: View {
         }
     }
 
-    private func widgetEventMetaText(_ event: WidgetSelectableEvent) -> String? {
-        let parts = [event.city, event.venueName]
-            .compactMap { value -> String? in
-                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                return trimmed.isEmpty ? nil : trimmed
+    private func startRenaming(_ event: WidgetSelectableEvent) {
+        customNameDraft = event.customDisplayName ?? ""
+        editingEvent = event
+    }
+
+    private func saveCustomName(for event: WidgetSelectableEvent) {
+        do {
+            let trimmed = customNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = trimmed.isEmpty ? nil : trimmed
+            try WidgetSelectableEventsSyncService.shared.updateCustomDisplayName(
+                eventID: event.id,
+                customDisplayName: value
+            )
+
+            events = events.map { current in
+                guard current.id == event.id else { return current }
+                return WidgetSelectableEvent(
+                    id: current.id,
+                    name: current.name,
+                    customDisplayName: value,
+                    city: current.city,
+                    venueName: current.venueName,
+                    startDate: current.startDate,
+                    endDate: current.endDate,
+                    preferredBackgroundURL: current.preferredBackgroundURL,
+                    cachedBackgroundImageRelativePath: current.cachedBackgroundImageRelativePath,
+                    addedAt: current.addedAt
+                )
             }
+            editingEvent = nil
+        } catch {
+            errorMessage = L(
+                "保存自定义名称失败，请稍后重试。",
+                "Failed to save the custom widget name. Please try again later."
+            )
+        }
+    }
+
+    private func widgetEventMetaText(_ event: WidgetSelectableEvent) -> String? {
+        var parts: [String] = []
+        if event.customDisplayName != nil {
+            parts.append(event.name)
+        }
+        parts.append(contentsOf: [event.city, event.venueName].compactMap(widgetTrimmed))
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private func widgetRenameSheet(for event: WidgetSelectableEvent) -> some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(
+                        L("输入小组件名称", "Enter widget name"),
+                        text: $customNameDraft
+                    )
+                    .textInputAutocapitalization(.never)
+                    .disableAutocorrection(true)
+                } footer: {
+                    Text(
+                        L(
+                            "仅保存在当前设备，用于小组件展示和选择，不会同步到线上或其他设备。留空则恢复活动原名。",
+                            "Saved only on this device for widget display and selection. It will not sync online or to other devices. Leave blank to restore the original event name."
+                        )
+                    )
+                }
+
+                Section(L("原活动名称", "Original Event Name")) {
+                    Text(event.name)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(RaverTheme.background)
+            .navigationTitle(L("自定义名称", "Custom Name"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L("取消", "Cancel")) {
+                        editingEvent = nil
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L("保存", "Save")) {
+                        saveCustomName(for: event)
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private var widgetLayoutStyleSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(L("文字排版方案", "Text Layout Styles"))
+                .font(.headline)
+                .foregroundStyle(RaverTheme.primaryText)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 14) {
+                    ForEach(WidgetCountdownLayoutStyle.allCases) { layoutStyle in
+                        Button {
+                            selectLayoutStyle(layoutStyle)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 8) {
+                                WidgetLayoutStylePreviewCard(
+                                    layoutStyle: layoutStyle,
+                                    isSelected: selectedLayoutStyle == layoutStyle
+                                )
+
+                                Text(layoutStyle.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(
+                                        selectedLayoutStyle == layoutStyle
+                                        ? RaverTheme.primaryText
+                                        : RaverTheme.secondaryText
+                                    )
+                                    .lineLimit(1)
+                            }
+                            .frame(width: 128, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 14)
+            }
+        }
+        .background(RaverTheme.background)
     }
 }
 
@@ -1080,8 +1236,10 @@ private struct WidgetManagedEventThumbnail: View {
 
     var body: some View {
         Group {
-            if let data = WidgetBackgroundImageCache.loadImageData(relativePath: event.cachedBackgroundImageRelativePath),
-               let image = UIImage(data: data) {
+            if let image = WidgetBackgroundImageCache.loadDisplayImage(
+                relativePath: event.cachedBackgroundImageRelativePath,
+                maxPixelSize: 180
+            ) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -1095,6 +1253,89 @@ private struct WidgetManagedEventThumbnail: View {
                 .fill(RaverTheme.card)
         )
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct WidgetLayoutStylePreviewCard: View {
+    let layoutStyle: WidgetCountdownLayoutStyle
+    let isSelected: Bool
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.07, green: 0.08, blue: 0.12),
+                    Color(red: 0.45, green: 0.12, blue: 0.28),
+                    Color(red: 0.95, green: 0.46, blue: 0.20)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.08), location: 0),
+                    .init(color: .black.opacity(0.24), location: 0.45),
+                    .init(color: .black.opacity(0.76), location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            switch layoutStyle {
+            case .original:
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Rave City")
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+
+                    Text("还有 5 天")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .lineLimit(1)
+                }
+                .padding(10)
+            case .distance:
+                VStack(alignment: .leading, spacing: 0) {
+                    (
+                        Text("距离")
+                            .font(.system(size: 10, weight: .regular))
+                        + Text("Rave City")
+                            .font(.system(size: 10, weight: .bold))
+                    )
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+
+                    Spacer(minLength: 0)
+
+                    HStack(alignment: .firstTextBaseline, spacing: 1) {
+                        Text("5")
+                            .font(.system(size: 38, weight: .heavy))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+
+                        Text("天")
+                            .font(.system(size: 10, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .lineLimit(1)
+                    }
+                }
+                .padding(.top, 10)
+                .padding(.leading, 10)
+                .padding(.trailing, 10)
+                .padding(.bottom, 8)
+            }
+        }
+        .frame(width: 128, height: 128, alignment: .bottomLeading)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(
+                    isSelected ? RaverTheme.accent : Color.white.opacity(0.10),
+                    lineWidth: isSelected ? 2 : 1
+                )
+        }
     }
 }
 

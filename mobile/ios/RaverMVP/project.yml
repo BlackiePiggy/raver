@@ -33,6 +33,10 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.raver.mvp.deeplink
+            CFBundleURLSchemes:
+              - raver
     settings:
       base:
         CODE_SIGN_ENTITLEMENTS: RaverMVP/RaverMVP.entitlements
@@ -43,6 +47,28 @@ targets:
         product: ExyteChat
       - package: GiphyUISDK
         product: GiphyUISDK
+      - target: RaverCountdownWidgets
+        embed: true
+  RaverCountdownWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: RaverCountdownWidgets
+      - path: RaverMVP/Core/Widget/WidgetSelectableEvent.swift
+      - path: RaverMVP/Core/Widget/WidgetSelectableEventsStore.swift
+    info:
+      path: RaverCountdownWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Raver Countdown
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        APPLICATION_EXTENSION_API_ONLY: YES
+        CODE_SIGN_ENTITLEMENTS: RaverCountdownWidgets/RaverCountdownWidgets.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.raver.mvp.countdownwidgets
+        TARGETED_DEVICE_FAMILY: "1"
   RaverMVPUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -62,6 +88,7 @@ schemes:
         RaverMVP: all
     run:
       config: Debug
+      executable: RaverMVP
       environmentVariables:
         RAVER_USE_MOCK: "0"
         RAVER_BFF_BASE_URL: "http://localhost:3901"

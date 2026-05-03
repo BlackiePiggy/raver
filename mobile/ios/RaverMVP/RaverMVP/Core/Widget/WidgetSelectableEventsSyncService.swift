@@ -4,6 +4,10 @@ import Foundation
 import UIKit
 #endif
 
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
+
 enum WidgetEventAddResult {
     case added
     case refreshed
@@ -18,11 +22,11 @@ enum WidgetEventRemoveResult {
 final class WidgetSelectableEventsSyncService {
     static let shared = WidgetSelectableEventsSyncService()
 
-    private let store: WidgetSelectableEventsStore
+    private let store: WidgetCountdownStore
     private let session: URLSession
 
     init(
-        store: WidgetSelectableEventsStore = .shared,
+        store: WidgetCountdownStore = .shared,
         session: URLSession = .shared
     ) {
         self.store = store
@@ -34,11 +38,14 @@ final class WidgetSelectableEventsSyncService {
         let existing = snapshot.events.first(where: { $0.id == event.id })
         let imagePath = try await cacheImageIfNeeded(for: event)
 
-        let selectable = WidgetSelectableEvent(
+        let selectable = WidgetCountdownEvent(
             id: event.id,
             name: event.name,
+            customDisplayName: existing?.customDisplayName,
             city: widgetTrimmed(event.city),
             venueName: widgetTrimmed(event.summaryLocation),
+            startDate: event.startDate,
+            endDate: event.endDate,
             preferredBackgroundURL: preferredBackgroundURL(for: event),
             cachedBackgroundImageRelativePath: imagePath ?? existing?.cachedBackgroundImageRelativePath,
             addedAt: existing?.addedAt ?? Date()
@@ -53,8 +60,13 @@ final class WidgetSelectableEventsSyncService {
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
 
-        snapshot = WidgetSelectableEventsSnapshot(events: events, generatedAt: Date())
+        snapshot = WidgetSelectableEventsSnapshot(
+            selectedLayoutStyleID: snapshot.selectedLayoutStyleID,
+            events: events,
+            generatedAt: Date()
+        )
         try store.saveSnapshot(snapshot)
+        reloadWidgetTimelines()
         return existing == nil ? .added : .refreshed
     }
 
@@ -65,9 +77,52 @@ final class WidgetSelectableEventsSyncService {
         }
 
         let events = snapshot.events.filter { $0.id != eventID }
-        try store.saveSnapshot(.init(events: events, generatedAt: Date()))
+        try store.saveSnapshot(.init(
+            selectedLayoutStyleID: snapshot.selectedLayoutStyleID,
+            events: events,
+            generatedAt: Date()
+        ))
         store.removeImage(relativePath: existing.cachedBackgroundImageRelativePath)
+        reloadWidgetTimelines()
         return .removed
+    }
+
+    func updateCustomDisplayName(eventID: String, customDisplayName: String?) throws {
+        let snapshot = try store.loadSnapshot()
+        guard snapshot.events.contains(where: { $0.id == eventID }) else { return }
+
+        let events = snapshot.events.map { event in
+            guard event.id == eventID else { return event }
+            return WidgetCountdownEvent(
+                id: event.id,
+                name: event.name,
+                customDisplayName: customDisplayName,
+                city: event.city,
+                venueName: event.venueName,
+                startDate: event.startDate,
+                endDate: event.endDate,
+                preferredBackgroundURL: event.preferredBackgroundURL,
+                cachedBackgroundImageRelativePath: event.cachedBackgroundImageRelativePath,
+                addedAt: event.addedAt
+            )
+        }
+
+        try store.saveSnapshot(.init(
+            selectedLayoutStyleID: snapshot.selectedLayoutStyleID,
+            events: events,
+            generatedAt: Date()
+        ))
+        reloadWidgetTimelines()
+    }
+
+    func updateLayoutStyle(_ layoutStyle: WidgetCountdownLayoutStyle) throws {
+        let snapshot = try store.loadSnapshot()
+        try store.saveSnapshot(.init(
+            selectedLayoutStyleID: layoutStyle.rawValue,
+            events: snapshot.events,
+            generatedAt: Date()
+        ))
+        reloadWidgetTimelines()
     }
 
     func contains(eventID: String) -> Bool {
@@ -75,13 +130,19 @@ final class WidgetSelectableEventsSyncService {
     }
 
     private func preferredBackgroundURL(for event: WebEvent) -> String? {
-        if let cover = widgetTrimmed(AppConfig.resolvedURLString(event.coverAssetURL)) {
+        if let cover = widgetTrimmed(AppConfig.resolvedURLString(event.coverImageUrl)) {
             return cover
         }
-        if let lineup = widgetTrimmed(AppConfig.resolvedURLString(event.lineupAssetURLs.first)) {
+        if let lineup = widgetTrimmed(AppConfig.resolvedURLString(event.lineupImageUrl)) {
             return lineup
         }
         return nil
+    }
+
+    private func reloadWidgetTimelines() {
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
     }
 
     #if canImport(UIKit)

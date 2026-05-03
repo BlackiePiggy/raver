@@ -19,11 +19,13 @@
 		0DB33245697FDC2AB4233219 /* MockSocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E10177408B284AD6125716B /* MockSocialService.swift */; };
 		10AD1F9B4845E3F873B9D29E /* DemoAlignedMessageFlowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F93AFA6DFEABB5B10470BD73 /* DemoAlignedMessageFlowCoordinator.swift */; };
 		10D026B102432343F5463BE6 /* ChatRouteTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5700096FF41132CEC75846E /* ChatRouteTarget.swift */; };
+		115E18AA39FF1991F4EF0262 /* WidgetSelectableEventsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F910C0D3D02F4952CFF3E81C /* WidgetSelectableEventsStore.swift */; };
 		1300EAE9C13C3EB8C46AC6F7 /* RandomAccessCollection+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF4B82170DC1FBB7DF7E0F5E /* RandomAccessCollection+Extension.swift */; };
 		134D32AA14E2686E568C1956 /* WidgetSelectableEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 463A12852FFF3990B4365EF3 /* WidgetSelectableEvent.swift */; };
 		1588C0A2A97D36DD35D3A9E9 /* DemoAlignedMediaSendProgressPresenterFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D3071AD8377EE4C33A6A0A1 /* DemoAlignedMediaSendProgressPresenterFactory.swift */; };
 		178744701447AE633BED79EE /* CellLayoutContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35457D074679C6AA4ED63059 /* CellLayoutContainerView.swift */; };
 		18508B1A81F5037FBA65A4CC /* DemoAlignedMediaMessageSendCoordinatorFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14B8DEE5661D47AABAB7F519 /* DemoAlignedMediaMessageSendCoordinatorFactory.swift */; };
+		1878B0EE35DEC4F5052FD47D /* CountdownEventIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E13ABD9EE466C03068DACF1 /* CountdownEventIntent.swift */; };
 		1929ADB9FBFB4BE0E1C54F5A /* MessagesHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02D93C1E9013AE51657CE508 /* MessagesHomeView.swift */; };
 		1B6FE8F3F737A9810FB968FA /* ExyteChat in Frameworks */ = {isa = PBXBuildFile; productRef = 4CC6C573B274D9E0C26AC6D5 /* ExyteChat */; };
 		1C90A0077163435CBEB4F876 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 029F1F7A11F8D9328FC2637E /* AppEnvironment.swift */; };
@@ -55,6 +57,7 @@
 		3B7AF8D25BBC7664722974CB /* ImageLoaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 587F3AE5F94F3B906F641F5C /* ImageLoaderView.swift */; };
 		3EE83F344D1643C661625371 /* RecommendEventsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 203242BB1BD2E82C81729C2C /* RecommendEventsViewModel.swift */; };
 		3F4AB59901BAC2520B33161F /* RaverMVPApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09147CC250EE9B48A01FAA78 /* RaverMVPApp.swift */; };
+		3FB6D7FB113550B136FD8033 /* Pods_RaverMVP.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 30F364D1D4729E719807CC67 /* Pods_RaverMVP.framework */; };
 		40DF4B13976013D3C21275ED /* SkeletonViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA79F30AEFED7B93AA3310FB /* SkeletonViews.swift */; };
 		41CB9B3BAC790CF7BCF7CAF4 /* DemoAlignedChatViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E4DC2C3FBF429A857DE5513 /* DemoAlignedChatViewController.swift */; };
 		430044327A0BB460A375D3DE /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC843EFC9D73D6230383E286 /* AppConfig.swift */; };
@@ -75,6 +78,7 @@
 		4FB30EC965DE92BF0005EF17 /* UILayoutPriority+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01FAB0B1EF553BE023E2F914 /* UILayoutPriority+Extension.swift */; };
 		50B6DF916DBBBAF3F6DA0A5B /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A371BF5967BBE88E3F6D75C /* AppCoordinator.swift */; };
 		5198523BA938BE9A9A46F62D /* EventCalendarSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB9FDAB6A078D8DA5D4D4CA /* EventCalendarSupport.swift */; };
+		52C774537586654443FC053E /* WidgetSelectableEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 463A12852FFF3990B4365EF3 /* WidgetSelectableEvent.swift */; };
 		54EABF0CA767B2078DB9C57E /* AuthSessionPersistenceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03EA4F5C1D737CDBD1765A8E /* AuthSessionPersistenceUITests.swift */; };
 		565B0214E22C5749C21D9CFD /* DemoAlignedMessageActionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BD18A9B470F76904EAF6C7 /* DemoAlignedMessageActionCoordinator.swift */; };
 		574145A62A35EB2914B40B2F /* ScreenStatusBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F0EB5E9CFF5CEA0F744C752 /* ScreenStatusBanner.swift */; };
@@ -84,6 +88,7 @@
 		5CD0EB9A5ED9C7157AA06C4F /* DemoAlignedMessageViewportScrollCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3D08884B49923E0FAB5CA34 /* DemoAlignedMessageViewportScrollCoordinator.swift */; };
 		62115D0EDF76C42511C5D4A6 /* EventDetailPageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC8DD3C05315634E593F2511 /* EventDetailPageViewController.swift */; };
 		62B16A77B9B42A4668E95E96 /* SquadProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B72680D6A119DEDC285359 /* SquadProfileView.swift */; };
+		63661A8F6ADD0F77D126BC41 /* RaverCountdownWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 12681E3DE969D5F5A96950EC /* RaverCountdownWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		636BCEC3415AA5AA44456A24 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F434E041601C9F1BB795B02F /* SettingsView.swift */; };
 		643700CC4D94BC5699C456C9 /* DemoAlignedChatAssemblyDependencyResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24198B7A3409789A67778017 /* DemoAlignedChatAssemblyDependencyResolver.swift */; };
 		64FEBEA5E117D9B11260BC62 /* CircleCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 442FAF8659FBE3EF3FC44572 /* CircleCoordinator.swift */; };
@@ -144,11 +149,11 @@
 		A8CE9BB6FDA8307370E1B527 /* DemoAlignedChatRouteCoordinatorFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45495EB367ACAE08E7590873 /* DemoAlignedChatRouteCoordinatorFactory.swift */; };
 		AAA83B366A510205CEA6BBDF /* WidgetSelectableEventsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F910C0D3D02F4952CFF3E81C /* WidgetSelectableEventsStore.swift */; };
 		AB6FDB6A21C92F19BB1BC826 /* ChatMediaTempFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C194ABE02C3044FD290C8708 /* ChatMediaTempFileStore.swift */; };
+		ADA8DDB791FC23A6D2DA060E /* EventCountdownWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC145477582BF63B7F00131E /* EventCountdownWidget.swift */; };
 		ADAE94326EC43AA9F91E83B6 /* DemoAlignedMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9834E538364C5D951DD576C /* DemoAlignedMessageCell.swift */; };
 		AF0E424374051EC343E1672B /* DemoAlignedChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C62AC15B6C3AA3846D5F6847 /* DemoAlignedChatView.swift */; };
 		AF328858517D0933813BC5E2 /* DemoAlignedControllerBindingCoordinatorFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45BB13D7CD5AE0431E831600 /* DemoAlignedControllerBindingCoordinatorFactory.swift */; };
 		B4D8B916EDF6870E705F2BF2 /* WebFeatureModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D57C925824CC1F13459321 /* WebFeatureModels.swift */; };
-		B7028F68FD44EA80462E61D6 /* Pods_RaverMVP.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42E8BABAE7F65329217D653E /* Pods_RaverMVP.framework */; };
 		B7B6140D6FB5F0D1228262DA /* ImageMaskedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C43786D310669E3CF5E932A /* ImageMaskedView.swift */; };
 		B8B43ECC6B71FD11012E50DB /* DemoAlignedChatLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3513B73E2534B5D2196C4360 /* DemoAlignedChatLogger.swift */; };
 		B990589A6613CFFF99608794 /* DemoAlignedChatScreenAssemblyCoordinatorFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749948D0D4900193D160956A /* DemoAlignedChatScreenAssemblyCoordinatorFactory.swift */; };
@@ -214,12 +219,20 @@
 		F91E230E547F2E5E668FC311 /* DiscoverSharedUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14DC68E5584D5E28C1C326BB /* DiscoverSharedUI.swift */; };
 		F9FE40B714E0B6B8E37FF7FA /* MessagesCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71667048AFE9040BDC6E1D7 /* MessagesCoordinator.swift */; };
 		FA9899B15DB41CDE8229205C /* IndexPath+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEFF3D1B256AA3DD964CC0BD /* IndexPath+Extension.swift */; };
+		FA9EB243AC318CBA466C42AD /* RaverCountdownWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07D4EBEBADD9F1E279111DD4 /* RaverCountdownWidgetsBundle.swift */; };
 		FB5A18854CEFE99F1BB2D9AE /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED7D9D9CBAF6906AE336154 /* MainTabView.swift */; };
 		FED85BDCFF1296B7A86E015D /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 581792D7AA4E89244B39D8B2 /* Theme.swift */; };
 		FFB30D45B60919A6D8AD891F /* CGRect+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6C0124C1138D3F38384AA88 /* CGRect+Extension.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		6C36B11C27202F932D11FF7E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FA7E0A167FF858244BA32208 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B0803E54265F78B2A57966B9;
+			remoteInfo = RaverCountdownWidgets;
+		};
 		6EE735A8DABFBDE699462D3D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = FA7E0A167FF858244BA32208 /* Project object */;
@@ -229,12 +242,28 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		AD42A423DD8051850924DF93 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				63661A8F6ADD0F77D126BC41 /* RaverCountdownWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		008638FD3C32A26E387F10FC /* Pods-RaverMVP.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RaverMVP.debug.xcconfig"; path = "Target Support Files/Pods-RaverMVP/Pods-RaverMVP.debug.xcconfig"; sourceTree = "<group>"; };
 		00CB3404E61E2E6C8DAF084C /* SwappingContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwappingContainerView.swift; sourceTree = "<group>"; };
 		01FAB0B1EF553BE023E2F914 /* UILayoutPriority+Extension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UILayoutPriority+Extension.swift"; sourceTree = "<group>"; };
 		029F1F7A11F8D9328FC2637E /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		02D93C1E9013AE51657CE508 /* MessagesHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesHomeView.swift; sourceTree = "<group>"; };
 		03EA4F5C1D737CDBD1765A8E /* AuthSessionPersistenceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionPersistenceUITests.swift; sourceTree = "<group>"; };
+		07D4EBEBADD9F1E279111DD4 /* RaverCountdownWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverCountdownWidgetsBundle.swift; sourceTree = "<group>"; };
 		090609342528238FF0997BE8 /* giphy-ios-sdk */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "giphy-ios-sdk"; path = "../../../thirdparty/giphy-ios-sdk"; sourceTree = SOURCE_ROOT; };
 		09147CC250EE9B48A01FAA78 /* RaverMVPApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverMVPApp.swift; sourceTree = "<group>"; };
 		09ECB80F7DF153A96645ABEB /* ProfileCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileCoordinator.swift; sourceTree = "<group>"; };
@@ -248,6 +277,7 @@
 		107F667059BB4EB625E82D05 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 		114ED8D770D2BFD44A5EA67E /* DemoAlignedFailureFeedbackActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedFailureFeedbackActions.swift; sourceTree = "<group>"; };
 		11785751273F1910086A0B62 /* RaverChatCollectionDataSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverChatCollectionDataSource.swift; sourceTree = "<group>"; };
+		12681E3DE969D5F5A96950EC /* RaverCountdownWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = RaverCountdownWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		13D46D18F393E271B5237379 /* EventsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsModuleView.swift; sourceTree = "<group>"; };
 		14B8DEE5661D47AABAB7F519 /* DemoAlignedMediaMessageSendCoordinatorFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedMediaMessageSendCoordinatorFactory.swift; sourceTree = "<group>"; };
 		14DC68E5584D5E28C1C326BB /* DiscoverSharedUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverSharedUI.swift; sourceTree = "<group>"; };
@@ -276,9 +306,9 @@
 		2C8C9A375ED12CC536FE38C5 /* ChatSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSettingsSheet.swift; sourceTree = "<group>"; };
 		2E4DC2C3FBF429A857DE5513 /* DemoAlignedChatViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedChatViewController.swift; sourceTree = "<group>"; };
 		2E53D920BEA56DEAB7DC76E0 /* DemoAlignedTextSendCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedTextSendCoordinator.swift; sourceTree = "<group>"; };
-		2E81738F16F0DA61AFC79DB9 /* Pods-RaverMVP.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RaverMVP.release.xcconfig"; path = "Target Support Files/Pods-RaverMVP/Pods-RaverMVP.release.xcconfig"; sourceTree = "<group>"; };
 		2F04E2CDE718D11866A08F3F /* DemoAlignedTextSendCoordinatorFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedTextSendCoordinatorFactory.swift; sourceTree = "<group>"; };
 		2F5E2E00007745942E08E123 /* DemoAlignedMessageApplyCoordinatorFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedMessageApplyCoordinatorFactory.swift; sourceTree = "<group>"; };
+		30F364D1D4729E719807CC67 /* Pods_RaverMVP.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RaverMVP.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		31116F142B3B73557F38BE8A /* DemoAlignedMediaSendProgressPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedMediaSendProgressPresenter.swift; sourceTree = "<group>"; };
 		31A9B7E85CAFB475AA7F5B43 /* DiscoverNewsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverNewsModels.swift; sourceTree = "<group>"; };
 		31D57C925824CC1F13459321 /* WebFeatureModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFeatureModels.swift; sourceTree = "<group>"; };
@@ -299,7 +329,6 @@
 		4124234484FD0581DCF7236C /* SessionTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTokenStore.swift; sourceTree = "<group>"; };
 		41B7F3CDCA1F8AD6EF91AB34 /* DiscoverCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverCoordinator.swift; sourceTree = "<group>"; };
 		41BB79A0E49E147E1B6ECA03 /* WebFeatureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFeatureService.swift; sourceTree = "<group>"; };
-		42E8BABAE7F65329217D653E /* Pods_RaverMVP.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RaverMVP.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		442FAF8659FBE3EF3FC44572 /* CircleCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CircleCoordinator.swift; sourceTree = "<group>"; };
 		44D012A0BF065B3C163844A4 /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
 		45495EB367ACAE08E7590873 /* DemoAlignedChatRouteCoordinatorFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedChatRouteCoordinatorFactory.swift; sourceTree = "<group>"; };
@@ -346,6 +375,7 @@
 		7BABFFEFC4A5BA1D31A42A73 /* EventPresentationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventPresentationSupport.swift; sourceTree = "<group>"; };
 		7BB167312CD5C6B680C47039 /* IMSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IMSession.swift; sourceTree = "<group>"; };
 		7BB5FA65511E334820962494 /* IMStorageGovernance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IMStorageGovernance.swift; sourceTree = "<group>"; };
+		7E13ABD9EE466C03068DACF1 /* CountdownEventIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CountdownEventIntent.swift; sourceTree = "<group>"; };
 		7EB503129A9F0EC63082A268 /* DemoAlignedKeyboardLifecycleCoordinatorFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedKeyboardLifecycleCoordinatorFactory.swift; sourceTree = "<group>"; };
 		7EE330E87B3415432AE414B2 /* RaverMVPUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = RaverMVPUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		811754DF6FF08109699FCD1A /* DiscoverNewsCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverNewsCodec.swift; sourceTree = "<group>"; };
@@ -354,9 +384,10 @@
 		84540E055F40923DA674D94A /* ChatLayoutInvalidationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLayoutInvalidationContext.swift; sourceTree = "<group>"; };
 		855A650496A809A6AEE18A62 /* RecommendEventsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendEventsModuleView.swift; sourceTree = "<group>"; };
 		8908A33BF5418613152AA690 /* DemoAlignedChatScreenAssemblyDispatcherBundleDependenciesFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedChatScreenAssemblyDispatcherBundleDependenciesFactory.swift; sourceTree = "<group>"; };
+		8BE237ABFABC44C205357593 /* Pods-RaverMVP.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RaverMVP.release.xcconfig"; path = "Target Support Files/Pods-RaverMVP/Pods-RaverMVP.release.xcconfig"; sourceTree = "<group>"; };
 		9082B92B275897280A82BB28 /* altehaasgroteskbold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = altehaasgroteskbold.ttf; sourceTree = "<group>"; };
 		90ACB5B1A7433350223A079C /* DiscoverRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverRoute.swift; sourceTree = "<group>"; };
-		92F7E23F7CD8F8E6861045A7 /* Pods-RaverMVP.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RaverMVP.debug.xcconfig"; path = "Target Support Files/Pods-RaverMVP/Pods-RaverMVP.debug.xcconfig"; sourceTree = "<group>"; };
+		9108C5AE13CD02161DC903E2 /* RaverCountdownWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RaverCountdownWidgets.entitlements; sourceTree = "<group>"; };
 		9319E7C2ECCDC77451781C6B /* DemoAlignedChatScreenAssemblyCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedChatScreenAssemblyCoordinator.swift; sourceTree = "<group>"; };
 		93D5E00041C5689BD07853B7 /* PrimaryButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryButtonStyle.swift; sourceTree = "<group>"; };
 		93F03BC5D8661326C73E0C34 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -401,6 +432,7 @@
 		C9EDC9510607066D1DF18E8D /* DemoAlignedChatContextProviderFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedChatContextProviderFactory.swift; sourceTree = "<group>"; };
 		CA79F30AEFED7B93AA3310FB /* SkeletonViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonViews.swift; sourceTree = "<group>"; };
 		CBDA608BC22DE2C0A8ED43CF /* RaverChatDataProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverChatDataProvider.swift; sourceTree = "<group>"; };
+		CC145477582BF63B7F00131E /* EventCountdownWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCountdownWidget.swift; sourceTree = "<group>"; };
 		CCA2D38A478CCCAFD53B03D5 /* DemoAlignedViewportScrollCoordinatorFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedViewportScrollCoordinatorFactory.swift; sourceTree = "<group>"; };
 		CDAE4305CDA9462C39EE1DD6 /* DemoAlignedTimeSeparatorCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedTimeSeparatorCell.swift; sourceTree = "<group>"; };
 		D0B45B928FAA36BEC68A7B7E /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
@@ -446,6 +478,7 @@
 		FDD609D1C4FF6CBB52478F91 /* DemoAlignedChatScreenLifecycleCoordinatorFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedChatScreenLifecycleCoordinatorFactory.swift; sourceTree = "<group>"; };
 		FEFF3D1B256AA3DD964CC0BD /* IndexPath+Extension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IndexPath+Extension.swift"; sourceTree = "<group>"; };
 		FFA78BD25FB8C570DE219ACD /* RaverChatController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverChatController.swift; sourceTree = "<group>"; };
+		FFEADB71E1EC75E8AD5D6604 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -455,7 +488,7 @@
 			files = (
 				1B6FE8F3F737A9810FB968FA /* ExyteChat in Frameworks */,
 				82539F8140EA8B317AF8C6CC /* GiphyUISDK in Frameworks */,
-				B7028F68FD44EA80462E61D6 /* Pods_RaverMVP.framework in Frameworks */,
+				3FB6D7FB113550B136FD8033 /* Pods_RaverMVP.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -492,6 +525,7 @@
 		1CE0F5F922752E993342B22C /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				12681E3DE969D5F5A96950EC /* RaverCountdownWidgets.appex */,
 				AF5B0FC75B939A24178606E6 /* RaverMVP.app */,
 				7EE330E87B3415432AE414B2 /* RaverMVPUITests.xctest */,
 			);
@@ -546,14 +580,6 @@
 				31C75DE61C6FF292592463C3 /* Squads */,
 			);
 			path = Features;
-			sourceTree = "<group>";
-		};
-		31831D5C035A86D4B586B486 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				42E8BABAE7F65329217D653E /* Pods_RaverMVP.framework */,
-			);
-			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		31C75DE61C6FF292592463C3 /* Squads */ = {
@@ -722,6 +748,14 @@
 				41166C03AFCC092360B359AF /* LearnModuleView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		5C9EDE69BC00A59427AA920F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				30F364D1D4729E719807CC67 /* Pods_RaverMVP.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		5EE0C0C02379C49261662C42 /* Feed */ = {
@@ -899,11 +933,13 @@
 			isa = PBXGroup;
 			children = (
 				DF50F6082BF409D8463E9EBA /* Packages */,
+				DE83C05093F2297C1AEA2A37 /* RaverCountdownWidgets */,
 				CAB2EA925828AE23AE9BD5C9 /* RaverMVP */,
 				CC2FB6E17A30543424A4247A /* RaverMVPUITests */,
+				BC52FFFB3B7AC4DFF4F08D76 /* Widget */,
 				1CE0F5F922752E993342B22C /* Products */,
-				E4F893CE06C46DD34D6D64ED /* Pods */,
-				31831D5C035A86D4B586B486 /* Frameworks */,
+				AED6066CDFC97ED710509182 /* Pods */,
+				5C9EDE69BC00A59427AA920F /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -942,6 +978,16 @@
 			path = Recommend;
 			sourceTree = "<group>";
 		};
+		AED6066CDFC97ED710509182 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				008638FD3C32A26E387F10FC /* Pods-RaverMVP.debug.xcconfig */,
+				8BE237ABFABC44C205357593 /* Pods-RaverMVP.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
 		B130D9954339EE6A1F42C610 /* ChatSetting */ = {
 			isa = PBXGroup;
 			children = (
@@ -975,7 +1021,8 @@
 				F910C0D3D02F4952CFF3E81C /* WidgetSelectableEventsStore.swift */,
 				FD138B30B4561F608773687C /* WidgetSelectableEventsSyncService.swift */,
 			);
-			path = Widget;
+			name = Widget;
+			path = RaverMVP/Core/Widget;
 			sourceTree = "<group>";
 		};
 		BEFAB22D4AC9828D6C4E0C02 /* Models */ = {
@@ -1154,6 +1201,18 @@
 			path = Coordinator;
 			sourceTree = "<group>";
 		};
+		DE83C05093F2297C1AEA2A37 /* RaverCountdownWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				7E13ABD9EE466C03068DACF1 /* CountdownEventIntent.swift */,
+				CC145477582BF63B7F00131E /* EventCountdownWidget.swift */,
+				FFEADB71E1EC75E8AD5D6604 /* Info.plist */,
+				9108C5AE13CD02161DC903E2 /* RaverCountdownWidgets.entitlements */,
+				07D4EBEBADD9F1E279111DD4 /* RaverCountdownWidgetsBundle.swift */,
+			);
+			path = RaverCountdownWidgets;
+			sourceTree = "<group>";
+		};
 		DF50F6082BF409D8463E9EBA /* Packages */ = {
 			isa = PBXGroup;
 			children = (
@@ -1169,16 +1228,6 @@
 				ABD4906432AE2CC392AC3525 /* Coordinator */,
 			);
 			path = Circle;
-			sourceTree = "<group>";
-		};
-		E4F893CE06C46DD34D6D64ED /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				92F7E23F7CD8F8E6861045A7 /* Pods-RaverMVP.debug.xcconfig */,
-				2E81738F16F0DA61AFC79DB9 /* Pods-RaverMVP.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
 			sourceTree = "<group>";
 		};
 		E6C5019D9259AE2166B801B1 /* ViewModels */ = {
@@ -1244,16 +1293,18 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 3B51D85AD2FC63586C14F871 /* Build configuration list for PBXNativeTarget "RaverMVP" */;
 			buildPhases = (
-				629D6E206F0572BEC85D76E4 /* [CP] Check Pods Manifest.lock */,
+				0BD7720FF3BBCDC026243E6A /* [CP] Check Pods Manifest.lock */,
 				96EDEF8ECA7836CAC953BCFE /* Sources */,
 				89F123B614E34F2A62323530 /* Resources */,
 				DEA5B4FD8217483AE8DE15E8 /* Frameworks */,
-				F96937870D2C5C5AD0839D95 /* [CP] Embed Pods Frameworks */,
-				0A9686C1A7730789E426EB9F /* [CP] Copy Pods Resources */,
+				AD42A423DD8051850924DF93 /* Embed Foundation Extensions */,
+				A2E435BABC472574E294F12B /* [CP] Embed Pods Frameworks */,
+				C8DCC0E87B90FAC744786906 /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				601733E2A9DA0339079779E7 /* PBXTargetDependency */,
 			);
 			name = RaverMVP;
 			packageProductDependencies = (
@@ -1263,6 +1314,21 @@
 			productName = RaverMVP;
 			productReference = AF5B0FC75B939A24178606E6 /* RaverMVP.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B0803E54265F78B2A57966B9 /* RaverCountdownWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F4932F945E33F6E4A4741F67 /* Build configuration list for PBXNativeTarget "RaverCountdownWidgets" */;
+			buildPhases = (
+				77A256B6EB35268331AF8BE2 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RaverCountdownWidgets;
+			productName = RaverCountdownWidgets;
+			productReference = 12681E3DE969D5F5A96950EC /* RaverCountdownWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -1278,6 +1344,9 @@
 						TestTargetID = 56189630DAD342F274176A46;
 					};
 					56189630DAD342F274176A46 = {
+						DevelopmentTeam = LB3FUV334Z;
+					};
+					B0803E54265F78B2A57966B9 = {
 						DevelopmentTeam = LB3FUV334Z;
 					};
 				};
@@ -1300,6 +1369,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				B0803E54265F78B2A57966B9 /* RaverCountdownWidgets */,
 				56189630DAD342F274176A46 /* RaverMVP */,
 				04BBDDA62D906013E8909A71 /* RaverMVPUITests */,
 			);
@@ -1321,22 +1391,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		0A9686C1A7730789E426EB9F /* [CP] Copy Pods Resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			name = "[CP] Copy Pods Resources";
-			outputFileListPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-RaverMVP/Pods-RaverMVP-resources.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		629D6E206F0572BEC85D76E4 /* [CP] Check Pods Manifest.lock */ = {
+		0BD7720FF3BBCDC026243E6A /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1358,7 +1413,7 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		F96937870D2C5C5AD0839D95 /* [CP] Embed Pods Frameworks */ = {
+		A2E435BABC472574E294F12B /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1373,6 +1428,21 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-RaverMVP/Pods-RaverMVP-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
+		C8DCC0E87B90FAC744786906 /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-RaverMVP/Pods-RaverMVP-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -1381,6 +1451,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				54EABF0CA767B2078DB9C57E /* AuthSessionPersistenceUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		77A256B6EB35268331AF8BE2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1878B0EE35DEC4F5052FD47D /* CountdownEventIntent.swift in Sources */,
+				ADA8DDB791FC23A6D2DA060E /* EventCountdownWidget.swift in Sources */,
+				FA9EB243AC318CBA466C42AD /* RaverCountdownWidgetsBundle.swift in Sources */,
+				52C774537586654443FC053E /* WidgetSelectableEvent.swift in Sources */,
+				115E18AA39FF1991F4EF0262 /* WidgetSelectableEventsStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1596,6 +1678,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		601733E2A9DA0339079779E7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B0803E54265F78B2A57966B9 /* RaverCountdownWidgets */;
+			targetProxy = 6C36B11C27202F932D11FF7E /* PBXContainerItemProxy */;
+		};
 		CEB3AA037AFAA70F79611F5C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 56189630DAD342F274176A46 /* RaverMVP */;
@@ -1665,6 +1752,24 @@
 			};
 			name = Release;
 		};
+		56A6CBFF9C4C90D41BA4382E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = RaverCountdownWidgets/RaverCountdownWidgets.entitlements;
+				INFOPLIST_FILE = RaverCountdownWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.raver.mvp.countdownwidgets;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 		6B969124B8643A5CDEA473AB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1685,7 +1790,7 @@
 		};
 		896A4A476916FD78493C9D68 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 92F7E23F7CD8F8E6861045A7 /* Pods-RaverMVP.debug.xcconfig */;
+			baseConfigurationReference = 008638FD3C32A26E387F10FC /* Pods-RaverMVP.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = RaverMVP/RaverMVP.entitlements;
@@ -1770,6 +1875,24 @@
 			};
 			name = Debug;
 		};
+		8EDBA61A1FA9C9F9E26B817C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = RaverCountdownWidgets/RaverCountdownWidgets.entitlements;
+				INFOPLIST_FILE = RaverCountdownWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.raver.mvp.countdownwidgets;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
 		CF674CFDF99741795CFA4A27 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1790,7 +1913,7 @@
 		};
 		D8FAEACEF7BCB1B9041AF8C5 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 2E81738F16F0DA61AFC79DB9 /* Pods-RaverMVP.release.xcconfig */;
+			baseConfigurationReference = 8BE237ABFABC44C205357593 /* Pods-RaverMVP.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = RaverMVP/RaverMVP.entitlements;
@@ -1833,6 +1956,15 @@
 			buildConfigurations = (
 				896A4A476916FD78493C9D68 /* Debug */,
 				D8FAEACEF7BCB1B9041AF8C5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F4932F945E33F6E4A4741F67 /* Build configuration list for PBXNativeTarget "RaverCountdownWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8EDBA61A1FA9C9F9E26B817C /* Debug */,
+				56A6CBFF9C4C90D41BA4382E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
