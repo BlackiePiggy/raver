@@ -36,9 +36,30 @@ protocol IMChatCompatibilityService: AnyObject {
     func sendVideoMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
     func sendVoiceMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
     func sendFileMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
+    func sendEventCardMessage(conversationID: String, payload: EventShareCardPayload) async throws -> ChatMessage
+    func sendDJCardMessage(conversationID: String, payload: DJShareCardPayload) async throws -> ChatMessage
     func sendTypingStatus(conversationID: String, isTyping: Bool) async throws
     func revokeMessage(conversationID: String, messageID: String) async throws -> String
     func deleteMessage(conversationID: String, messageID: String) async throws
+}
+
+struct EventShareCardPayload: Codable, Hashable {
+    let eventID: String
+    let eventName: String
+    let venueName: String?
+    let city: String?
+    let startAtISO8601: String?
+    let coverImageURL: String?
+    let badgeText: String?
+}
+
+struct DJShareCardPayload: Codable, Hashable {
+    let djID: String
+    let djName: String
+    let country: String?
+    let genreText: String?
+    let coverImageURL: String?
+    let badgeText: String?
 }
 
 enum FeedMode: String, Codable, CaseIterable, Identifiable {
@@ -141,6 +162,18 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
 }
 
 extension IMChatCompatibilityService {
+    func sendEventCardMessage(conversationID: String, payload: EventShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendDJCardMessage(conversationID: String, payload: DJShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
     func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
         _ = fileURL
         throw ServiceError.message("Not supported")

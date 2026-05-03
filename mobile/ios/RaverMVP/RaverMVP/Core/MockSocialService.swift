@@ -650,6 +650,58 @@ actor MockSocialService: SocialService {
         )
     }
 
+    func sendEventCardMessage(conversationID: String, payload: EventShareCardPayload) async throws -> ChatMessage {
+        struct Envelope: Codable {
+            let businessID: String
+            let version: Int
+            let cardType: String
+            let payload: EventShareCardPayload
+        }
+        let data = try JSONEncoder().encode(
+            Envelope(
+                businessID: "raver_custom_card",
+                version: 1,
+                cardType: "event",
+                payload: payload
+            )
+        )
+        let content = String(data: data, encoding: .utf8) ?? payload.eventName
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .card,
+            media: ChatMessageMediaPayload(
+                thumbnailURL: payload.coverImageURL
+            )
+        )
+    }
+
+    func sendDJCardMessage(conversationID: String, payload: DJShareCardPayload) async throws -> ChatMessage {
+        struct Envelope: Codable {
+            let businessID: String
+            let version: Int
+            let cardType: String
+            let payload: DJShareCardPayload
+        }
+        let data = try JSONEncoder().encode(
+            Envelope(
+                businessID: "raver_custom_card",
+                version: 1,
+                cardType: "dj",
+                payload: payload
+            )
+        )
+        let content = String(data: data, encoding: .utf8) ?? payload.djName
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .card,
+            media: ChatMessageMediaPayload(
+                thumbnailURL: payload.coverImageURL
+            )
+        )
+    }
+
     private func appendOutgoingMessage(
         conversationID: String,
         content: String,

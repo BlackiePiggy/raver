@@ -19,6 +19,79 @@ private struct EventDetailTabFramePreferenceKey: PreferenceKey {
     }
 }
 
+private struct EventCardSharePresentation: Identifiable {
+    let id = UUID()
+    let payload: EventShareCardPayload
+}
+
+private struct EventSharePreviewCard: View {
+    let payload: EventShareCardPayload
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            previewImage
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 6) {
+                if let badge = payload.badgeText?.nilIfBlank {
+                    Text(badge)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                }
+
+                Text(payload.eventName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+
+                if let venue = payload.venueName?.nilIfBlank {
+                    Text(venue)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(RaverTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var previewImage: some View {
+        if let raw = payload.coverImageURL,
+           let url = URL(string: raw),
+           !raw.isEmpty {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    fallbackImage
+                }
+            }
+        } else {
+            fallbackImage
+        }
+    }
+
+    private var fallbackImage: some View {
+        LinearGradient(
+            colors: [RaverTheme.accent.opacity(0.95), Color(red: 0.19, green: 0.18, blue: 0.26)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(
+            Image(systemName: "ticket.fill")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.92))
+        )
+    }
+}
+
 struct EventDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -102,6 +175,14 @@ struct EventDetailView: View {
     @State private var selectedLineupMedia: FullscreenMediaSelection?
     @State private var isCachingManualSnapshot = false
     @State private var manualCachedAt: Date?
+    @State private var widgetStatusMessage: String?
+    @State private var widgetStatusConversation: Conversation?
+    @State private var widgetStatusDismissToken = UUID()
+    @State private var bannerDismissToken = UUID()
+    @State private var isInWidgetCountdownPool = false
+    @State private var shareMorePresentation: EventCardSharePresentation?
+    @State private var isShareMorePanelVisible = false
+    @State private var fullChatSharePresentation: EventCardSharePresentation?
 
     fileprivate enum EventDetailTab: String, CaseIterable, Identifiable {
         case info
@@ -609,10 +690,22 @@ struct EventDetailView: View {
                             }
                         }
 
-                        if isRefreshing || bannerMessage != nil {
+                        if isRefreshing || bannerMessage != nil || widgetStatusMessage != nil {
                             VStack(alignment: .leading, spacing: 10) {
                                 if isRefreshing {
                                     InlineLoadingBadge(title: L("正在更新活动详情", "Updating event details"))
+                                }
+                                if let widgetStatusMessage {
+                                    ScreenStatusBanner(
+                                        message: widgetStatusMessage,
+                                        style: .info,
+                                        actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
+                                    ) {
+                                        if let widgetStatusConversation {
+                                            appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
+                                        }
+                                    }
+                                    .transition(.opacity)
                                 }
                                 if let bannerMessage {
                                     ScreenStatusBanner(
@@ -622,10 +715,13 @@ struct EventDetailView: View {
                                     ) {
                                         Task { await load() }
                                     }
+                                    .transition(.opacity)
                                 }
                             }
                             .padding(.horizontal, 16)
-                            .padding(.top, 68)
+                            .padding(.top, 100)
+                            .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
+                            .animation(.easeOut(duration: 0.25), value: bannerMessage != nil)
                         }
                     }
                     .ignoresSafeArea(edges: .top)
@@ -685,8 +781,34 @@ struct EventDetailView: View {
                 )
             }
         }
+        .sheet(item: $fullChatSharePresentation) { presentation in
+            ChatShareSheet(
+                loadConversations: {
+                    try await loadSharePanelConversations()
+                },
+                onShareToConversation: { conversation in
+                    try await sendSharePayload(
+                        presentation.payload,
+                        to: conversation,
+                        note: nil
+                    )
+                }
+            ) { conversation in
+                showWidgetStatusBanner(
+                    message: L(
+                    "已分享到 \(conversation.title)",
+                    "Shared to \(conversation.title)"
+                    ),
+                    conversation: conversation
+                )
+            } preview: {
+                EventSharePreviewCard(payload: presentation.payload)
+            }
+            .presentationDetents([.fraction(0.76), .large])
+        }
         .task {
             await refreshManualCacheState()
+            await refreshWidgetCountdownState()
             if event == nil {
                 await load()
             }
@@ -704,6 +826,50 @@ struct EventDetailView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .overlay {
+            if let presentation = shareMorePresentation {
+                SharePanelOverlay(
+                    isVisible: isShareMorePanelVisible,
+                    onBackdropTap: { dismissShareMorePanel() }
+                ) {
+                    ShareActionPanel(
+                        primaryActions: sharePrimaryActions(),
+                        quickActions: shareMoreQuickActions(for: event),
+                        loadConversations: {
+                            try await loadSharePanelConversations()
+                        },
+                        onSendToConversation: { conversation, note in
+                            try await sendSharePayload(
+                                presentation.payload,
+                                to: conversation,
+                                note: note
+                            )
+                        },
+                        onDismiss: {
+                            dismissShareMorePanel()
+                        }
+                    ) { conversation in
+                        showWidgetStatusBanner(
+                            message: L(
+                            "已分享到 \(conversation.title)",
+                            "Shared to \(conversation.title)"
+                            ),
+                            conversation: conversation
+                        )
+                    } onMoreChats: {
+                        dismissShareMorePanel {
+                            fullChatSharePresentation = presentation
+                        }
+                    }
+                }
+                .onAppear {
+                    withAnimation(.sharePanelPresentSpring) {
+                        isShareMorePanelVisible = true
+                    }
+                }
+            }
+        }
+        .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
     }
 
     private func isMine(_ event: WebEvent) -> Bool {
@@ -1447,6 +1613,32 @@ struct EventDetailView: View {
         return components?.url
     }
 
+    private func makeEventShareCardPayload(from event: WebEvent) -> EventShareCardPayload {
+        let eventType = EventTypeOption.displayText(for: event.eventType, fallbackWhenEmpty: false)
+        let badgeText = eventType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? L("活动", "Event")
+            : eventType
+        let cityText = localizedPointText(event.cityI18n).nilIfBlank ?? event.city?.nilIfBlank
+        let venueText = hasEventVenueContent(event) ? eventVenueDisplayText(event).nilIfBlank : nil
+        let coverURL = AppConfig.resolvedURLString(event.coverAssetURL)
+
+        return EventShareCardPayload(
+            eventID: event.id,
+            eventName: event.name,
+            venueName: venueText,
+            city: cityText,
+            startAtISO8601: Self.eventCardISO8601Formatter.string(from: event.startDate),
+            coverImageURL: coverURL,
+            badgeText: badgeText
+        )
+    }
+
+    private static let eventCardISO8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
     private func eventVenueCoordinate(_ event: WebEvent) -> CLLocationCoordinate2D? {
         guard let point = eventBoundLocationPoint(event),
               let location = point.location else {
@@ -1579,35 +1771,12 @@ struct EventDetailView: View {
     private var immersiveTrailingAction: AnyView? {
         guard event != nil else { return nil }
         return AnyView(
-            Menu {
-                if let event, isMine(event) {
-                    Button {
-                        discoverPush(.eventEdit(eventID: event.id))
-                    } label: {
-                        Label(L("编辑", "Edit"), systemImage: "square.and.pencil")
-                    }
-                }
-
-                Button {
-                    Task { await cacheEventManually() }
-                } label: {
-                    Label(
-                        isCachingManualSnapshot ? L("缓存中", "Caching") : L("缓存", "Cache"),
-                        systemImage: "arrow.down.circle"
+            Button {
+                if let event {
+                    shareMorePresentation = EventCardSharePresentation(
+                        payload: makeEventShareCardPayload(from: event)
                     )
-                }
-                .disabled(isCachingManualSnapshot)
-
-                Button {
-                    openEventFeedbackEntry()
-                } label: {
-                    Label(L("贡献信息", "Incorrect Info"), systemImage: "info.circle")
-                }
-
-                Button {
-                    openEventReportEntry()
-                } label: {
-                    Label(L("举报", "Report"), systemImage: "flag")
+                    isShareMorePanelVisible = false
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -1617,13 +1786,208 @@ struct EventDetailView: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .menuStyle(.automatic)
         )
+    }
+
+    private func dismissShareMorePanel(after: (() -> Void)? = nil) {
+        withAnimation(.sharePanelDismissSpring) {
+            isShareMorePanelVisible = false
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
+            guard !isShareMorePanelVisible else { return }
+            shareMorePresentation = nil
+            after?()
+        }
+    }
+
+    private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
+        widgetStatusConversation = conversation
+        widgetStatusMessage = message
+        let token = UUID()
+        widgetStatusDismissToken = token
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            guard widgetStatusDismissToken == token else { return }
+            withAnimation(.easeOut(duration: 0.25)) {
+                widgetStatusMessage = nil
+                widgetStatusConversation = nil
+            }
+        }
+    }
+
+    private func showBannerMessageAutoDismiss(_ message: String) {
+        bannerMessage = message
+        let token = UUID()
+        bannerDismissToken = token
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            guard bannerDismissToken == token else { return }
+            withAnimation(.easeOut(duration: 0.25)) {
+                bannerMessage = nil
+            }
+        }
+    }
+
+    private func loadSharePanelConversations() async throws -> [Conversation] {
+        async let directs = appContainer.socialService.fetchConversations(type: .direct)
+        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        let merged = try await directs + groups
+        let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
+            partialResult[conversation.id] = conversation
+        }
+        return deduped.values.sorted {
+            if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
+            return $0.updatedAt > $1.updatedAt
+        }
+    }
+
+    private func sendSharePayload(
+        _ payload: EventShareCardPayload,
+        to conversation: Conversation,
+        note: String?
+    ) async throws {
+        _ = try await appContainer.socialService.sendEventCardMessage(
+            conversationID: conversation.id,
+            payload: payload
+        )
+
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedNote.isEmpty {
+            _ = try await appContainer.socialService.sendMessage(
+                conversationID: conversation.id,
+                content: trimmedNote
+            )
+        }
+    }
+
+    private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
+        [
+            SharePanelPrimaryAction(
+                title: "微信",
+                systemImage: "message.circle.fill",
+                accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
+            ) {
+                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+            },
+            SharePanelPrimaryAction(
+                title: "QQ",
+                systemImage: "paperplane.circle.fill",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+            }
+        ]
+    }
+
+    private func shareMoreQuickActions(for event: WebEvent?) -> [SharePanelQuickAction] {
+        var actions: [SharePanelQuickAction] = []
+
+        if let event, isMine(event) {
+            actions.append(
+                SharePanelQuickAction(
+                    title: L("编辑", "Edit"),
+                    systemImage: "square.and.pencil",
+                    accentColor: Color(red: 0.99, green: 0.65, blue: 0.20)
+                ) {
+                    discoverPush(.eventEdit(eventID: event.id))
+                }
+            )
+        }
+
+        actions.append(
+            SharePanelQuickAction(
+                title: isCachingManualSnapshot ? L("缓存中", "Caching") : L("缓存", "Cache"),
+                systemImage: "arrow.down.circle",
+                accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
+            ) {
+                Task { await cacheEventManually() }
+            }
+        )
+
+        if let event {
+            actions.append(
+                SharePanelQuickAction(
+                    title: isInWidgetCountdownPool ? L("移出倒计时", "Remove Countdown") : L("桌面倒计时", "Widget Countdown"),
+                    systemImage: isInWidgetCountdownPool ? "minus.circle" : "apps.iphone",
+                    accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
+                ) {
+                    Task { await toggleSelectedEventInWidgetPool(event) }
+                }
+            )
+        }
+
+        actions.append(
+            SharePanelQuickAction(
+                title: L("贡献信息", "Incorrect Info"),
+                systemImage: "info.circle",
+                accentColor: Color(red: 0.96, green: 0.47, blue: 0.26)
+            ) {
+                openEventFeedbackEntry()
+            }
+        )
+        actions.append(
+            SharePanelQuickAction(
+                title: L("举报", "Report"),
+                systemImage: "flag",
+                accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
+            ) {
+                openEventReportEntry()
+            }
+        )
+
+        return actions
     }
 
     private func openEventFeedbackEntry() {
         // TODO: Wire to dedicated feedback route/page when available.
         errorMessage = L("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.")
+    }
+
+    @MainActor
+    private func toggleSelectedEventInWidgetPool(_ event: WebEvent) async {
+        do {
+            if isInWidgetCountdownPool {
+                let result = try WidgetSelectableEventsSyncService.shared.remove(eventID: event.id)
+                switch result {
+                case .removed:
+                    isInWidgetCountdownPool = false
+                    showWidgetStatusBanner(message: L(
+                        "已从桌面倒计时候选活动移除。",
+                        "Removed from widget countdown candidates."
+                    ))
+                case .notFound:
+                    isInWidgetCountdownPool = false
+                    showWidgetStatusBanner(message: L(
+                        "该活动已不在桌面倒计时候选列表中。",
+                        "This event is no longer in widget countdown candidates."
+                    ))
+                }
+            } else {
+                let result = try await WidgetSelectableEventsSyncService.shared.add(event: event)
+                isInWidgetCountdownPool = true
+                switch result {
+                case .added:
+                    showWidgetStatusBanner(message: L(
+                        "已加入桌面倒计时候选活动，长按组件即可选择。",
+                        "Added to widget countdown candidates. Long-press the widget to choose it."
+                    ))
+                case .refreshed:
+                    showWidgetStatusBanner(message: L(
+                        "已更新桌面倒计时候选活动。",
+                        "Updated in widget countdown candidates."
+                    ))
+                }
+            }
+        } catch {
+            errorMessage = error.userFacingMessage ?? L(
+                "加入桌面倒计时失败，请稍后重试。",
+                "Failed to add to widget countdown. Please try again later."
+            )
+        }
+    }
+
+    @MainActor
+    private func refreshWidgetCountdownState() async {
+        isInWidgetCountdownPool = WidgetSelectableEventsSyncService.shared.contains(eventID: eventID)
     }
 
     private func openEventReportEntry() {
@@ -2260,13 +2624,13 @@ struct EventDetailView: View {
                 applyManualCacheSnapshot(snapshot)
                 phase = .success
                 if isRequestTimeoutError(error) {
-                    bannerMessage = L("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version.")
+                    showBannerMessageAutoDismiss(L("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version."))
                 } else {
-                    bannerMessage = L("网络较弱，已展示活动缓存数据。", "Network is weak. Showing cached event data.")
+                    showBannerMessageAutoDismiss(L("网络较弱，已展示活动缓存数据。", "Network is weak. Showing cached event data."))
                 }
             } else if hadContent {
                 isLoadingRelatedArticles = false
-                bannerMessage = error.userFacingMessage ?? L("活动详情更新失败，请稍后重试", "Failed to refresh event details. Please try again later.")
+                showBannerMessageAutoDismiss(error.userFacingMessage ?? L("活动详情更新失败，请稍后重试", "Failed to refresh event details. Please try again later."))
                 phase = .success
             } else {
                 isLoadingRelatedArticles = false

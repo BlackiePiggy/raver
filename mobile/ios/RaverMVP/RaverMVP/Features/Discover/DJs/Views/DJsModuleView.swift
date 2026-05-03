@@ -10,6 +10,79 @@ import CoreLocation
 import CoreText
 import SDWebImage
 
+private struct DJCardSharePresentation: Identifiable {
+    let id = UUID()
+    let payload: DJShareCardPayload
+}
+
+private struct DJSharePreviewCard: View {
+    let payload: DJShareCardPayload
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            previewImage
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 6) {
+                if let badge = payload.badgeText?.nilIfBlank {
+                    Text(badge)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                }
+
+                Text(payload.djName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+
+                if let genre = payload.genreText?.nilIfBlank {
+                    Text(genre)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(RaverTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var previewImage: some View {
+        if let raw = payload.coverImageURL,
+           let url = URL(string: raw),
+           !raw.isEmpty {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    fallbackImage
+                }
+            }
+        } else {
+            fallbackImage
+        }
+    }
+
+    private var fallbackImage: some View {
+        LinearGradient(
+            colors: [RaverTheme.accent.opacity(0.95), Color(red: 0.19, green: 0.18, blue: 0.26)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(
+            Image(systemName: "music.mic")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.92))
+        )
+    }
+}
+
 struct DiscoverDJsRootView: View {
     @EnvironmentObject private var appContainer: AppContainer
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
@@ -2458,6 +2531,9 @@ struct DJDetailView: View {
     @State private var historyEventEndDate: Date?
     @State private var isCachingManualSnapshot = false
     @State private var manualCachedAt: Date?
+    @State private var djCardSharePresentation: DJCardSharePresentation?
+    @State private var isShareMorePanelVisible = false
+    @State private var fullChatSharePresentation: DJCardSharePresentation?
 
     fileprivate enum DJDetailTab: String, CaseIterable, Identifiable {
         case intro
@@ -2576,6 +2652,28 @@ struct DJDetailView: View {
         ) {
             dismiss()
         }
+        .sheet(item: $fullChatSharePresentation) { presentation in
+            ChatShareSheet(
+                loadConversations: {
+                    try await loadSharePanelConversations()
+                },
+                onShareToConversation: { conversation in
+                    try await sendSharePayload(
+                        presentation.payload,
+                        to: conversation,
+                        note: nil
+                    )
+                }
+            ) { conversation in
+                bannerMessage = L(
+                    "已分享到 \(conversation.title)",
+                    "Shared to \(conversation.title)"
+                )
+            } preview: {
+                DJSharePreviewCard(payload: presentation.payload)
+            }
+            .presentationDetents([.fraction(0.76), .large])
+        }
         .task {
             await refreshManualCacheState()
             await load()
@@ -2588,6 +2686,47 @@ struct DJDetailView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .overlay {
+            if let presentation = djCardSharePresentation {
+                SharePanelOverlay(
+                    isVisible: isShareMorePanelVisible,
+                    onBackdropTap: { dismissShareMorePanel() }
+                ) {
+                    ShareActionPanel(
+                        primaryActions: sharePrimaryActions(),
+                        quickActions: shareMoreQuickActions(for: dj),
+                        loadConversations: {
+                            try await loadSharePanelConversations()
+                        },
+                        onSendToConversation: { conversation, note in
+                            try await sendSharePayload(
+                                presentation.payload,
+                                to: conversation,
+                                note: note
+                            )
+                        },
+                        onDismiss: {
+                            dismissShareMorePanel()
+                        }
+                    ) { conversation in
+                        bannerMessage = L(
+                            "已分享到 \(conversation.title)",
+                            "Shared to \(conversation.title)"
+                        )
+                    } onMoreChats: {
+                        dismissShareMorePanel {
+                            fullChatSharePresentation = presentation
+                        }
+                    }
+                }
+                .onAppear {
+                    withAnimation(.sharePanelPresentSpring) {
+                        isShareMorePanelVisible = true
+                    }
+                }
+            }
+        }
+        .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
         .navigationDestination(isPresented: $showDJEditSheet) {
             djEditSheet
         }
@@ -3211,37 +3350,12 @@ struct DJDetailView: View {
     private var immersiveTrailingAction: AnyView? {
         guard dj != nil else { return nil }
         return AnyView(
-            Menu {
-                if dj?.canEdit == true {
-                    Button {
-                        guard let currentDJ = dj else { return }
-                        prepareDJEditDraft(from: currentDJ)
-                        showDJEditSheet = true
-                    } label: {
-                        Label(L("编辑", "Edit"), systemImage: "square.and.pencil")
-                    }
-                }
-
-                Button {
-                    Task { await cacheDJManually() }
-                } label: {
-                    Label(
-                        isCachingManualSnapshot ? L("缓存中", "Caching") : L("缓存", "Cache"),
-                        systemImage: "arrow.down.circle"
+            Button {
+                if let dj {
+                    djCardSharePresentation = DJCardSharePresentation(
+                        payload: makeDJShareCardPayload(from: dj)
                     )
-                }
-                .disabled(isCachingManualSnapshot)
-
-                Button {
-                    openDJFeedbackEntry()
-                } label: {
-                    Label(L("贡献信息", "Incorrect Info"), systemImage: "info.circle")
-                }
-
-                Button {
-                    openDJReportEntry()
-                } label: {
-                    Label(L("举报", "Report"), systemImage: "flag")
+                    isShareMorePanelVisible = false
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -3251,8 +3365,119 @@ struct DJDetailView: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .menuStyle(.automatic)
         )
+    }
+
+    private func dismissShareMorePanel(after: (() -> Void)? = nil) {
+        withAnimation(.sharePanelDismissSpring) {
+            isShareMorePanelVisible = false
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
+            guard !isShareMorePanelVisible else { return }
+            djCardSharePresentation = nil
+            after?()
+        }
+    }
+
+    private func loadSharePanelConversations() async throws -> [Conversation] {
+        async let directs = appContainer.socialService.fetchConversations(type: .direct)
+        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        let merged = try await directs + groups
+        let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
+            partialResult[conversation.id] = conversation
+        }
+        return deduped.values.sorted {
+            if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
+            return $0.updatedAt > $1.updatedAt
+        }
+    }
+
+    private func sendSharePayload(
+        _ payload: DJShareCardPayload,
+        to conversation: Conversation,
+        note: String?
+    ) async throws {
+        _ = try await appContainer.socialService.sendDJCardMessage(
+            conversationID: conversation.id,
+            payload: payload
+        )
+
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedNote.isEmpty {
+            _ = try await appContainer.socialService.sendMessage(
+                conversationID: conversation.id,
+                content: trimmedNote
+            )
+        }
+    }
+
+    private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
+        [
+            SharePanelPrimaryAction(
+                title: "微信",
+                systemImage: "message.circle.fill",
+                accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
+            ) {
+                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+            },
+            SharePanelPrimaryAction(
+                title: "QQ",
+                systemImage: "paperplane.circle.fill",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+            }
+        ]
+    }
+
+    private func shareMoreQuickActions(for dj: WebDJ?) -> [SharePanelQuickAction] {
+        var actions: [SharePanelQuickAction] = []
+
+        if dj?.canEdit == true {
+            actions.append(
+                SharePanelQuickAction(
+                    title: L("编辑", "Edit"),
+                    systemImage: "square.and.pencil",
+                    accentColor: Color(red: 0.99, green: 0.65, blue: 0.20)
+                ) {
+                    guard let currentDJ = dj else { return }
+                    prepareDJEditDraft(from: currentDJ)
+                    showDJEditSheet = true
+                }
+            )
+        }
+
+        actions.append(
+            SharePanelQuickAction(
+                title: isCachingManualSnapshot ? L("缓存中", "Caching") : L("缓存", "Cache"),
+                systemImage: "arrow.down.circle",
+                accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
+            ) {
+                Task { await cacheDJManually() }
+            }
+        )
+
+        actions.append(
+            SharePanelQuickAction(
+                title: L("贡献信息", "Incorrect Info"),
+                systemImage: "info.circle",
+                accentColor: Color(red: 0.96, green: 0.47, blue: 0.26)
+            ) {
+                openDJFeedbackEntry()
+            }
+        )
+        actions.append(
+            SharePanelQuickAction(
+                title: L("举报", "Report"),
+                systemImage: "flag",
+                accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
+            ) {
+                openDJReportEntry()
+            }
+        )
+
+        return actions
     }
 
     private func openDJFeedbackEntry() {
@@ -3457,6 +3682,29 @@ struct DJDetailView: View {
             return highResAvatarURL(banner)
         }
         return nil
+    }
+
+    private func makeDJShareCardPayload(from dj: WebDJ) -> DJShareCardPayload {
+        let cleanedGenres = normalizedDJGenres(dj)
+        let genreText = cleanedGenres.first.flatMap { $0.nilIfBlank }
+        let countryText: String? = {
+            let localized = dj.countryI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
+            let normalizedLocalized = localized?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            if let normalizedLocalized, !normalizedLocalized.isEmpty {
+                return normalizedLocalized
+            }
+            return dj.country?.nilIfBlank
+        }()
+        let badgeText = genreText ?? L("DJ", "DJ")
+
+        return DJShareCardPayload(
+            djID: dj.id,
+            djName: dj.name,
+            country: countryText,
+            genreText: genreText,
+            coverImageURL: heroImageURL(for: dj),
+            badgeText: badgeText
+        )
     }
 
     private func infoPill(icon: String, text: String) -> some View {

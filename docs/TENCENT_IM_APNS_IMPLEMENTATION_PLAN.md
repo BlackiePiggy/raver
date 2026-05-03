@@ -80,7 +80,25 @@
 这意味着：
 
 - 聊天消息虽然能正常发到 Tencent IM
-- 但 Tencent IM 官方离线推送并没有真正启用
+- 但 Tencent IM 官方离线推送文案链路并没有真正启用
+
+当前已完成的基础接入：
+
+- iOS 已在 Tencent IM 会话层接入 `setAPNSListener(...)`
+- iOS 已在以下时机尝试调用 `setAPNS(config:succ:fail:)`
+  - APNs token 更新后
+  - Tencent IM 登录成功后
+  - App 回前台并恢复 Tencent IM 会话后
+- Tencent IM APNS `businessID` 现通过以下配置来源读取：
+  - 环境变量 `RAVER_TENCENT_IM_APNS_BUSINESS_ID`
+  - 或 iOS `Info.plist` 的 `TencentIMAPNSBusinessID`
+- iOS 已接入自定义 badge bridge，避免 Tencent SDK 在后台直接把角标改回“仅聊天未读”
+
+仍待完成：
+
+- 每类消息发送时的 `offlinePushInfo`
+- 系统通知点击后的 APN `ext` 深链解析
+- 群公告 / 邀请 / 角色变更类 APN
 
 ---
 
@@ -129,7 +147,7 @@
 2. 私聊图片 / 视频 / 语音 / 音频文件离线推送
 3. 群聊文本消息离线推送
 4. 群聊媒体消息离线推送
-5. 自定义消息是否推送
+5. 自定义消息是否推送。例如app内的转发卡片类型，是要做的，不过可以留在后面这部分做了之后再进行。
 
 ### 推荐默认值
 
@@ -149,9 +167,9 @@
   - 文本：原文
   - 图片：`[图片]`
   - 视频：`[视频]`
-  - 语音：`[语音]`
-  - 音频文件：`[音频]`
-  - 文件：`[文件]`
+  - 语音：`[语音]`，带语音时长信息
+  - 音频文件：`[音频]`，带文件名称
+  - 文件：`[文件]`，现在不支持文件类型不用做
 
 3. 群聊推送标题展示什么
 - 推荐：群名
@@ -162,7 +180,7 @@
 5. 是否支持“隐私模式”
 - 推荐：
   - 锁屏时仅显示“你收到一条新消息”
-  - App 内提供开关
+  - App 内提供开关，放在个人主页-更多里面，因为除了社交相关的apn还存在其他通知。
 
 ## 4.3 推送点击后的路由
 
@@ -177,7 +195,7 @@
 
 - 已登录：直接进对应会话
 - 未登录：先去登录，登录后恢复路由
-- 会话不存在：尝试按 `conversationID / peerID / groupID` 重建
+- 会话不存在：显示会话不存在的通知
 
 ## 4.4 badge 与未读数
 
@@ -214,6 +232,7 @@
 
 - 聊天列表里的会话未读数，不一定和桌面 badge 一致
 - 这是产品定义，不是 bug
+- 前台打开app后，如果没有查看相应的消息，那么退出到手机桌面后，app的badge仍然应该保持未读数量
 
 ### 推荐补充规则
 
@@ -237,13 +256,11 @@
 
 1. 私聊 `Mute Notifications` 是否应直接影响 APN
 2. 群聊 `Mute Notifications` 是否应直接影响 APN
-3. 是否支持全局 Quiet Hours
 
 ### 推荐默认值
 
 - 私聊 mute：不发 APN
 - 群聊 mute：不发 APN
-- 全局 quiet hours：后续做，第一期可以不做
 
 ## 4.6 特殊消息策略
 
@@ -566,8 +583,8 @@
 
 | ID | 任务 | 状态 | 负责人 | 验收标准 | 备注 |
 |---|---|---|---|---|---|
-| APN-01 | Tencent IM APNS token/config 接通 | Not Started |  | 真机登录后 Tencent APNS 设置成功 | |
-| APN-02 | 文本消息 offlinePushInfo | Not Started |  | 私聊/群聊文本锁屏可收 | |
+| APN-01 | Tencent IM APNS token/config 接通 | Done | iOS 已接入 `setAPNSListener`、token 更新/登录成功/回前台恢复三处 `setAPNS`；badge bridge 已改成全站总未读口径 | 真机登录后 Tencent APNS 设置成功 | 待你提供真实 `RAVER_TENCENT_IM_APNS_BUSINESS_ID` 并真机联调 |
+| APN-02 | 文本消息 offlinePushInfo | In Progress | iOS 文本消息已开始注入 `offlinePushInfo`，包含私聊/群聊 title、desc、`ext` 路由字段 | 私聊/群聊文本锁屏可收 | 待双账号真机后台验证 |
 | APN-03 | 媒体消息 offlinePushInfo | Not Started |  | 图片/视频/语音锁屏文案正确 | |
 | APN-04 | 文件消息 offlinePushInfo | Not Started |  | 音频文件/文件锁屏文案正确 | |
 | APN-05 | 通知点击直达私聊 | Not Started |  | 点私聊通知直达会话 | |

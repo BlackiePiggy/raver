@@ -85,6 +85,16 @@ final class RaverChatController: ObservableObject {
     }
 
     @discardableResult
+    func sendEventCardMessage(_ payload: EventShareCardPayload) async throws -> ChatMessage {
+        let sent = try await dataProvider.currentService.sendEventCardMessage(
+            conversationID: dataProvider.currentConversation.id,
+            payload: payload
+        )
+        applySentMessage(sent)
+        return sent
+    }
+
+    @discardableResult
     func sendImageMessage(
         fileURL: URL,
         onProgress: ((Double) -> Void)? = nil

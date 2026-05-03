@@ -694,6 +694,28 @@ enum TencentIMConnectionState: Equatable {
     case failed(String)
 }
 
+#if canImport(ImSDK_Plus)
+final class TencentIMAPNSBadgeBridge: NSObject, V2TIMAPNSListener {
+    static let shared = TencentIMAPNSBadgeBridge()
+
+    private let lock = NSLock()
+    private var unifiedUnreadCount: UInt32 = 0
+
+    func setUnifiedUnreadCount(_ count: Int) {
+        lock.lock()
+        unifiedUnreadCount = UInt32(max(0, count))
+        lock.unlock()
+    }
+
+    func onSetAPPUnreadCount() -> UInt32 {
+        lock.lock()
+        let count = unifiedUnreadCount
+        lock.unlock()
+        return count
+    }
+}
+#endif
+
 @MainActor
 final class TencentIMSession: NSObject {
     static let shared = TencentIMSession()
@@ -720,6 +742,21 @@ final class TencentIMSession: NSObject {
     private static let receiveMessageOptRawValue = 0
     private static let receiveNoNotifyRawValue = 2
     private static let typingBusinessID = "user_typing_status"
+    private static let customCardBusinessID = "raver_custom_card"
+
+    private struct TencentEventCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: EventShareCardPayload
+    }
+
+    private struct TencentDJCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: DJShareCardPayload
+    }
 
     var onStateChange: ((TencentIMConnectionState) -> Void)?
     var onUnreadCountChange: ((Int) -> Void)?
@@ -760,9 +797,15 @@ final class TencentIMSession: NSObject {
     private var hasRegisteredListeners = false
     private var currentBootstrap: TencentIMBootstrap?
     private var currentUserID: String?
+    private var latestAPNSTokenData: Data?
 
     private override init() {
         super.init()
+    }
+
+    func updateAPNSToken(hexToken: String) async {
+        latestAPNSTokenData = Self.decodeHexAPNSToken(hexToken)
+        await applyAPNSConfigurationIfPossible(reason: "token-updated")
     }
 
     func connectionStateSnapshot() -> TencentIMConnectionState {
@@ -793,6 +836,7 @@ final class TencentIMSession: NSObject {
 
         currentUserID = userID
         state = .connected(userID: userID)
+        await applyAPNSConfigurationIfPossible(reason: "recover-after-active")
         await refreshTotalUnreadCount()
         return true
 #else
@@ -878,6 +922,7 @@ final class TencentIMSession: NSObject {
         if loginStatus.rawValue == Self.loggedInStatusRawValue, loginUserID == bootstrap.userID {
             currentUserID = bootstrap.userID
             state = .connected(userID: bootstrap.userID)
+            await applyAPNSConfigurationIfPossible(reason: "reuse-existing-login")
             await refreshTotalUnreadCount()
             return
         }
@@ -895,6 +940,7 @@ final class TencentIMSession: NSObject {
             try await login(manager: manager, userID: bootstrap.userID, userSig: userSig)
             currentUserID = bootstrap.userID
             state = .connected(userID: bootstrap.userID)
+            await applyAPNSConfigurationIfPossible(reason: "fresh-login")
             await refreshTotalUnreadCount()
         } catch {
             state = .failed(error.localizedDescription)
@@ -1750,12 +1796,88 @@ final class TencentIMSession: NSObject {
             throw ServiceError.message("Tencent IM create text message failed")
         }
         message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildTextOfflinePushInfo(
+            manager: manager,
+            target: target,
+            content: content
+        )
         return try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            offlinePushInfo: offlinePushInfo,
+            progress: nil
+        )
+    }
+
+    func sendEventCardMessage(
+        conversationID: String,
+        payload: EventShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentEventCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "event",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create event card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        var sent = try await sendMessage(
             manager: manager,
             message: message,
             target: target,
             progress: nil
         )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.eventName
+        sent.media = ChatMessageMediaPayload(
+            thumbnailURL: payload.coverImageURL
+        )
+        return sent
+    }
+
+    func sendDJCardMessage(
+        conversationID: String,
+        payload: DJShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentDJCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "dj",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create dj card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        var sent = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            progress: nil
+        )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.djName
+        sent.media = ChatMessageMediaPayload(
+            thumbnailURL: payload.coverImageURL
+        )
+        return sent
     }
 
     func sendImageMessage(
@@ -2081,6 +2203,56 @@ final class TencentIMSession: NSObject {
         }
 
         return manager
+    }
+
+    private func applyAPNSConfigurationIfPossible(reason: String) async {
+#if canImport(ImSDK_Plus)
+        guard currentBootstrap?.enabled == true else { return }
+        guard AppConfig.tencentIMAPNSBusinessID > 0 else { return }
+        guard let token = latestAPNSTokenData, !token.isEmpty else { return }
+        guard let manager = V2TIMManager.sharedInstance(), hasInitializedSDK else { return }
+        guard manager.getLoginStatus().rawValue == Self.loggedInStatusRawValue else { return }
+
+        manager.setAPNSListener(apnsListener: TencentIMAPNSBadgeBridge.shared)
+        let config = V2TIMAPNSConfig()
+        config.token = token
+        config.businessID = Int32(AppConfig.tencentIMAPNSBusinessID)
+
+        await withCheckedContinuation { continuation in
+            manager.setAPNS(config: config) { [weak self] in
+                self?.debugAPNS("config applied reason=\(reason) businessID=\(AppConfig.tencentIMAPNSBusinessID)")
+                continuation.resume()
+            } fail: { [weak self] code, desc in
+                let message = desc?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let resolved = message.isEmpty ? "Tencent APNS config failed (\(code))" : message
+                self?.debugAPNS("config failed reason=\(reason): \(resolved)")
+                continuation.resume()
+            }
+        }
+#else
+        _ = reason
+#endif
+    }
+
+    private static func decodeHexAPNSToken(_ hexToken: String) -> Data? {
+        let normalized = hexToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty, normalized.count.isMultiple(of: 2) else { return nil }
+
+        var data = Data(capacity: normalized.count / 2)
+        var index = normalized.startIndex
+        while index < normalized.endIndex {
+            let next = normalized.index(index, offsetBy: 2)
+            guard let byte = UInt8(normalized[index..<next], radix: 16) else { return nil }
+            data.append(byte)
+            index = next
+        }
+        return data
+    }
+
+    private func debugAPNS(_ message: String) {
+#if DEBUG
+        print("[TencentIMAPNS] \(message)")
+#endif
     }
 
     private func shouldRequestReadReceipt(for target: TencentConversationTarget) -> Bool {
@@ -2411,6 +2583,7 @@ final class TencentIMSession: NSObject {
         manager: V2TIMManager,
         message: V2TIMMessage,
         target: TencentConversationTarget,
+        offlinePushInfo: V2TIMOfflinePushInfo? = nil,
         progress: ((Int) -> Void)?
     ) async throws -> ChatMessage {
         guard let priority = V2TIMMessagePriority(rawValue: 2) else {
@@ -2424,7 +2597,7 @@ final class TencentIMSession: NSObject {
                 groupID: target.groupID,
                 priority: priority,
                 onlineUserOnly: false,
-                offlinePushInfo: nil,
+                offlinePushInfo: offlinePushInfo,
                 progress: { percent in
                     progress?(Int(percent))
                 },
@@ -2445,6 +2618,129 @@ final class TencentIMSession: NSObject {
 
         await refreshTotalUnreadCount()
         return await mapMessage(sentMessage, conversationID: target.businessConversationID)
+    }
+
+    private func buildTextOfflinePushInfo(
+        manager: V2TIMManager,
+        target: TencentConversationTarget,
+        content: String
+    ) async -> V2TIMOfflinePushInfo? {
+        let trimmedContent = normalizedPushText(content)
+        guard !trimmedContent.isEmpty else { return nil }
+
+        let conversation = await fetchConversationIfPossible(
+            manager: manager,
+            conversationID: target.rawConversationID
+        )
+        let conversationTitle = normalizedText(conversation?.showName)
+        let receiveOpt = conversation?.recvOpt.rawValue
+
+        let info = V2TIMOfflinePushInfo()
+        switch target.type {
+        case .direct:
+            info.title = conversationTitle ?? target.businessConversationID
+            info.desc = trimmedContent
+        case .group:
+            let senderName = await resolveCurrentUserPushDisplayName(manager: manager)
+                ?? currentUserID
+                ?? L("成员", "Member")
+            info.title = conversationTitle ?? target.businessConversationID
+            info.desc = "\(senderName): \(trimmedContent)"
+        }
+
+        info.disablePush = false
+        info.ignoreIOSBadge = true
+        info.iOSSound = "default"
+        info.ext = buildPushRoutingExt(
+            target: target,
+            conversationTitle: conversationTitle,
+            previewText: trimmedContent,
+            receiveOpt: receiveOpt
+        )
+        return info
+    }
+
+    private func fetchConversationIfPossible(
+        manager: V2TIMManager,
+        conversationID: String
+    ) async -> V2TIMConversation? {
+        await withCheckedContinuation { continuation in
+            manager.getConversation(conversationID: conversationID) { conversation in
+                continuation.resume(returning: conversation)
+            } fail: { _, _ in
+                continuation.resume(returning: nil)
+            }
+        }
+    }
+
+    private func fetchUserFullInfo(
+        userID: String,
+        manager: V2TIMManager
+    ) async throws -> V2TIMUserFullInfo {
+        try await withCheckedThrowingContinuation { continuation in
+            manager.getUsersInfo([userID]) { infos in
+                guard let info = infos?.first else {
+                    continuation.resume(throwing: ServiceError.message("Tencent IM user info unavailable"))
+                    return
+                }
+                continuation.resume(returning: info)
+            } fail: { code, desc in
+                continuation.resume(
+                    throwing: self.buildTencentIMError(
+                        code: code,
+                        desc: desc,
+                        fallback: "Fetch Tencent IM user info failed"
+                    )
+                )
+            }
+        }
+    }
+
+    private func resolveCurrentUserPushDisplayName(manager: V2TIMManager) async -> String? {
+        guard let loginUserID = currentUserID, !loginUserID.isEmpty else { return nil }
+        guard let info = try? await fetchUserFullInfo(userID: loginUserID, manager: manager) else { return nil }
+        return normalizedText(info.nickName)
+            ?? normalizedText(info.userID)
+    }
+
+    private func buildPushRoutingExt(
+        target: TencentConversationTarget,
+        conversationTitle: String?,
+        previewText: String,
+        receiveOpt: Int?
+    ) -> String {
+        let payload: [String: Any] = [
+            "route": "chat",
+            "conversationType": target.type.rawValue,
+            "conversationID": target.businessConversationID,
+            "sdkConversationID": target.rawConversationID,
+            "peerID": target.userID ?? "",
+            "groupID": target.groupID ?? "",
+            "title": conversationTitle ?? "",
+            "preview": previewText,
+            "recvOpt": receiveOpt ?? Self.receiveMessageOptRawValue,
+            "version": 1
+        ]
+
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
+              let string = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+        return string
+    }
+
+    private func normalizedPushText(_ content: String) -> String {
+        let collapsed = content
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard !collapsed.isEmpty else { return "" }
+        let limit = 120
+        if collapsed.count <= limit {
+            return collapsed
+        }
+        let endIndex = collapsed.index(collapsed.startIndex, offsetBy: limit)
+        return String(collapsed[..<endIndex]) + "…"
     }
 
     private func mapConversation(_ item: V2TIMConversation) -> Conversation? {
@@ -2567,6 +2863,12 @@ final class TencentIMSession: NSObject {
                     ? L("正在输入...", "Typing...")
                     : L("停止输入", "Typing ended")
             }
+            if let eventCard = customEventCardPayload(from: message.customElem?.data) {
+                return "\(L("[活动卡片]", "[Event Card]")) \(eventCard.eventName)"
+            }
+            if let djCard = customDJCardPayload(from: message.customElem?.data) {
+                return "\(L("[DJ卡片]", "[DJ Card]")) \(djCard.djName)"
+            }
             return normalizedText(message.customElem?.desc) ?? L("[自定义消息]", "[Custom Message]")
         case Self.elemTypeGroupTipsRawValue:
             return L("[群提示]", "[Group Notice]")
@@ -2648,6 +2950,20 @@ final class TencentIMSession: NSObject {
                 content = typingStatus == 1
                     ? L("正在输入...", "Typing...")
                     : L("停止输入", "Typing ended")
+            } else if let eventCard = customEventCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = (try? String(data: JSONEncoder().encode(eventCard), encoding: .utf8))
+                    ?? eventCard.eventName
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: eventCard.coverImageURL
+                )
+            } else if let djCard = customDJCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = (try? String(data: JSONEncoder().encode(djCard), encoding: .utf8))
+                    ?? djCard.djName
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: djCard.coverImageURL
+                )
             } else {
                 kind = .custom
                 content = normalizedText(message.customElem?.desc) ?? L("[自定义消息]", "[Custom Message]")
@@ -2763,6 +3079,26 @@ final class TencentIMSession: NSObject {
             return typingStatus.intValue
         }
         return nil
+    }
+
+    private func customEventCardPayload(from data: Data?) -> EventShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentEventCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "event" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customDJCardPayload(from data: Data?) -> DJShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentDJCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "dj" else {
+            return nil
+        }
+        return envelope.payload
     }
 
     private func mapSoundPayload(from elem: V2TIMSoundElem?) async -> ChatMessageMediaPayload? {
@@ -3293,8 +3629,9 @@ final class AppState: ObservableObject {
                 let token = (notification.object as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 guard !token.isEmpty else { return }
                 self.latestPushToken = token
-                guard self.session != nil else { return }
                 Task {
+                    await self.tencentIMSession.updateAPNSToken(hexToken: token)
+                    guard self.session != nil else { return }
                     await self.uploadPushTokenIfPossible()
                 }
             }
@@ -3474,6 +3811,10 @@ final class AppState: ObservableObject {
     private func resetUnreadCounts() {
         cachedCommunityUnread = 0
         unreadMessagesCount = 0
+#if canImport(ImSDK_Plus)
+        TencentIMAPNSBadgeBridge.shared.setUnifiedUnreadCount(0)
+#endif
+        UIApplication.shared.applicationIconBadgeNumber = 0
     }
 
     private func uploadPushTokenIfPossible() async {
@@ -3502,6 +3843,10 @@ final class AppState: ObservableObject {
         let communityUnread = max(0, cachedCommunityUnread)
         let next = chatUnread + communityUnread
         unreadMessagesCount = next
+#if canImport(ImSDK_Plus)
+        TencentIMAPNSBadgeBridge.shared.setUnifiedUnreadCount(next)
+#endif
+        UIApplication.shared.applicationIconBadgeNumber = next
         if previous != next {
             debug("badge recompute source=\(source) from=\(previous) to=\(next) chat=\(chatUnread) community=\(communityUnread)")
         }

@@ -29,6 +29,9 @@ struct AppCoordinatorView: View {
             }
         }
         .environment(\.locale, Locale(identifier: appState.preferredLanguage.localeIdentifier))
+        .onOpenURL { url in
+            handleIncomingURL(url)
+        }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { appState.errorMessage != nil },
             set: { newValue in
@@ -43,5 +46,14 @@ struct AppCoordinatorView: View {
 
     private var currentFlow: AppFlow {
         appState.isLoggedIn ? .authenticated : .unauthenticated
+    }
+
+    private func handleIncomingURL(_ url: URL) {
+        let deeplink = url.absoluteString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !deeplink.isEmpty else { return }
+        appState.systemDeepLinkEvent = SystemDeepLinkEvent(
+            deeplink: deeplink,
+            source: "open-url"
+        )
     }
 }

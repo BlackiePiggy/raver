@@ -4,6 +4,7 @@ enum ProfileRoute: Hashable {
     case followList(userID: String, kind: FollowListKind)
     case settings
     case tools
+    case widgetManager
     case movieBanner
     case myPublishes
     case myRoutes

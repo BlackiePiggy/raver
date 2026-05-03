@@ -321,7 +321,11 @@ struct TencentUIKitChatView: View {
 
     @ViewBuilder
     private func groupMessageContent(_ params: MessageBuilderParameters) -> some View {
-        if let audioFile = audioFilePayload(from: params.message) {
+        if let eventCard = eventCardPayload(from: params.message) {
+            eventCardMessageContent(params, payload: eventCard)
+        } else if let djCard = djCardPayload(from: params.message) {
+            djCardMessageContent(params, payload: djCard)
+        } else if let audioFile = audioFilePayload(from: params.message) {
             audioFileMessageContent(params, payload: audioFile)
         } else if conversation.type == .group,
            params.message.user.type == .other,
@@ -384,6 +388,130 @@ struct TencentUIKitChatView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(payload.rawURL.isEmpty)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.35)
+                            .onEnded { _ in
+                                params.showContextMenuClosure()
+                            }
+                    )
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func eventCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatEventCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                Text(params.message.user.name)
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "AFB3B8"))
+                    .padding(.leading, 44)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    Button {
+                        appNavigate(.eventDetail(eventID: payload.eventID))
+                    } label: {
+                        ChatEventCardBubbleView(payload: payload)
+                    }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.35)
+                            .onEnded { _ in
+                                params.showContextMenuClosure()
+                            }
+                    )
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func djCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatDJCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                Text(params.message.user.name)
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "AFB3B8"))
+                    .padding(.leading, 44)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    Button {
+                        appNavigate(.djDetail(djID: payload.djID))
+                    } label: {
+                        ChatDJCardBubbleView(payload: payload)
+                    }
+                    .buttonStyle(.plain)
                     .simultaneousGesture(
                         LongPressGesture(minimumDuration: 0.35)
                             .onEnded { _ in
@@ -559,6 +687,51 @@ struct TencentUIKitChatView: View {
         )
     }
 
+    private func eventCardPayload(from message: Message) -> ChatEventCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "event",
+              let eventID = (message.customData["eventID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !eventID.isEmpty,
+              let eventName = (message.customData["eventName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !eventName.isEmpty else {
+            return nil
+        }
+
+        return ChatEventCardPayload(
+            eventID: eventID,
+            eventName: eventName,
+            venueName: (message.customData["venueName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            city: (message.customData["eventCity"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            startAtText: (message.customData["eventStartAtText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            coverImageURL: (message.customData["eventCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            badgeText: (message.customData["eventBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func djCardPayload(from message: Message) -> ChatDJCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "dj",
+              let djID = (message.customData["djID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !djID.isEmpty,
+              let djName = (message.customData["djName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !djName.isEmpty else {
+            return nil
+        }
+
+        return ChatDJCardPayload(
+            djID: djID,
+            djName: djName,
+            country: (message.customData["djCountry"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            genreText: (message.customData["djGenreText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            coverImageURL: (message.customData["djCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            badgeText: (message.customData["djBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
     private func shouldShowAvatar(for params: MessageBuilderParameters) -> Bool {
         params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .last)
@@ -676,6 +849,25 @@ private struct ChatAudioFilePayload {
     let rawURL: String
     let fileSizeBytes: Int?
     let durationSeconds: Int?
+}
+
+private struct ChatEventCardPayload {
+    let eventID: String
+    let eventName: String
+    let venueName: String?
+    let city: String?
+    let startAtText: String?
+    let coverImageURL: String?
+    let badgeText: String?
+}
+
+private struct ChatDJCardPayload {
+    let djID: String
+    let djName: String
+    let country: String?
+    let genreText: String?
+    let coverImageURL: String?
+    let badgeText: String?
 }
 
 private struct ChatAudioFilePresentation: Identifiable {
@@ -853,6 +1045,159 @@ private struct ChatAudioFileBubbleView: View {
     }
 }
 
+private struct ChatEventCardBubbleView: View {
+    let payload: ChatEventCardPayload
+
+    var body: some View {
+        ChatPosterCardBubble(
+            imageURL: payload.coverImageURL,
+            badgeText: payload.badgeText,
+            title: payload.eventName,
+            fallbackSystemImage: "ticket.fill"
+        )
+    }
+}
+
+private struct ChatDJCardBubbleView: View {
+    let payload: ChatDJCardPayload
+
+    var body: some View {
+        ChatPosterCardBubble(
+            imageURL: payload.coverImageURL,
+            badgeText: payload.badgeText,
+            title: payload.djName,
+            fallbackSystemImage: "music.mic"
+        )
+    }
+}
+
+private struct ChatPosterCardBubble: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let imageURL: String?
+    let badgeText: String?
+    let title: String
+    let fallbackSystemImage: String
+
+    private let cardWidth: CGFloat = 224
+    private let cardCornerRadius: CGFloat = 18
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            coverView
+                .frame(width: cardWidth, height: cardWidth)
+                .clipped()
+
+            VStack(alignment: .leading, spacing: 8) {
+                if let badgeText, !badgeText.isEmpty {
+                    Text(badgeText)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(badgeForegroundColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(badgeBackgroundColor, in: Capsule())
+                }
+
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(titleColor)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .multilineTextAlignment(.leading)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(width: cardWidth, alignment: .leading)
+            .background(infoBackground)
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+    }
+
+    private var infoBackground: some ShapeStyle {
+        LinearGradient(
+            colors: colorScheme == .dark ? darkInfoColors : lightInfoColors,
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var lightInfoColors: [Color] {
+        [
+            Color(red: 0.93, green: 0.93, blue: 0.95),
+            Color(red: 0.87, green: 0.87, blue: 0.90),
+            RaverTheme.accent.opacity(0.12)
+        ]
+    }
+
+    private var darkInfoColors: [Color] {
+        [
+            Color(red: 0.20, green: 0.20, blue: 0.23),
+            Color(red: 0.14, green: 0.14, blue: 0.17),
+            RaverTheme.accent.opacity(0.18)
+        ]
+    }
+
+    private var dividerColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.06)
+            : Color.black.opacity(0.06)
+    }
+
+    private var titleColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.96)
+            : Color.black.opacity(0.84)
+    }
+
+    private var badgeForegroundColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.94)
+            : RaverTheme.accent.opacity(0.95)
+    }
+
+    private var badgeBackgroundColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.10)
+            : RaverTheme.accent.opacity(0.10)
+    }
+
+    @ViewBuilder
+    private var coverView: some View {
+        if let imageURL,
+           let url = URL(string: imageURL),
+           !imageURL.isEmpty {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    fallbackCover
+                }
+            }
+        } else {
+            fallbackCover
+        }
+    }
+
+    private var fallbackCover: some View {
+        LinearGradient(
+            colors: [RaverTheme.accent.opacity(0.95), Color(red: 0.24, green: 0.20, blue: 0.58)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(
+            Image(systemName: fallbackSystemImage)
+                .font(.system(size: 42, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.92))
+        )
+    }
+}
+
 private struct ConversationMessageSearchSheet: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -1011,6 +1356,10 @@ private struct ConversationMessageSearchSheet: View {
 
     private func previewText(for message: ChatMessage) -> String {
         let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if message.kind == .card,
+           let cardPreview = cardPreviewText(from: text) {
+            return cardPreview
+        }
         if !text.isEmpty {
             return text
         }
@@ -1041,6 +1390,50 @@ private struct ConversationMessageSearchSheet: View {
         case .text:
             return L("[文本消息]", "[Text Message]")
         }
+    }
+
+    private func cardPreviewText(from rawText: String) -> String? {
+        if let payload = parseEventCardPayloadForPreview(from: rawText) {
+            return "\(L("[活动卡片]", "[Event Card]")) \(payload.eventName)"
+        }
+        if let payload = parseDJCardPayloadForPreview(from: rawText) {
+            return "\(L("[DJ卡片]", "[DJ Card]")) \(payload.djName)"
+        }
+        return nil
+    }
+
+    private func parseEventCardPayloadForPreview(from rawText: String) -> EventShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: EventShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "event",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(EventShareCardPayload.self, from: data)
+    }
+
+    private func parseDJCardPayloadForPreview(from rawText: String) -> DJShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: DJShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "dj",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(DJShareCardPayload.self, from: data)
     }
 }
 
@@ -1602,6 +1995,22 @@ private final class ExyteChatConversationViewModel: ObservableObject {
 
         do {
             let trimmedText = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedText == "/eventcarddemo" {
+                let payload = EventShareCardPayload(
+                    eventID: "demo-event-001",
+                    eventName: "Raver Demo Night",
+                    venueName: "Oil Club",
+                    city: "Shanghai",
+                    startAtISO8601: ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600 * 24 * 3)),
+                    coverImageURL: "https://images.unsplash.com/photo-1571266028243-d220c9f1db71?auto=format&fit=crop&w=1200&q=80",
+                    badgeText: L("活动", "Event")
+                )
+                try attachReplyIfNeeded(replyMessageID, shouldAttachReply: &shouldAttachReply)
+                _ = try await chatController.sendEventCardMessage(payload)
+                await sendTypingStatusIfNeeded(isTyping: false, force: true)
+                return
+            }
+
             if !trimmedText.isEmpty {
                 try attachReplyIfNeeded(replyMessageID, shouldAttachReply: &shouldAttachReply)
                 _ = try await chatController.sendTextMessage(trimmedText)
@@ -1786,7 +2195,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
     }
 
     private func makeCustomData(from source: ChatMessage) -> [String: any Sendable] {
-        [
+        var data: [String: any Sendable] = [
             "sourceKind": source.kind.rawValue,
             "canCopy": source.kind == .text,
             "canReply": source.kind != .system && source.deliveryStatus == .sent,
@@ -1800,6 +2209,76 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             "fileSizeBytes": source.media?.fileSizeBytes ?? 0,
             "fileDurationSeconds": source.media?.durationSeconds ?? 0
         ]
+
+        if source.kind == .card,
+           let payload = parseEventCardPayload(from: source.content) {
+            data["cardType"] = "event"
+            data["eventID"] = payload.eventID
+            data["eventName"] = payload.eventName
+            data["venueName"] = payload.venueName ?? ""
+            data["eventCity"] = payload.city ?? ""
+            data["eventStartAtText"] = eventCardDateText(payload.startAtISO8601)
+            data["eventCoverImageURL"] = payload.coverImageURL ?? ""
+            data["eventBadgeText"] = payload.badgeText ?? ""
+            data["canCopy"] = false
+        } else if source.kind == .card,
+                  let payload = parseDJCardPayload(from: source.content) {
+            data["cardType"] = "dj"
+            data["djID"] = payload.djID
+            data["djName"] = payload.djName
+            data["djCountry"] = payload.country ?? ""
+            data["djGenreText"] = payload.genreText ?? ""
+            data["djCoverImageURL"] = payload.coverImageURL ?? ""
+            data["djBadgeText"] = payload.badgeText ?? ""
+            data["canCopy"] = false
+        }
+
+        return data
+    }
+
+    private func parseEventCardPayload(from rawContent: String) -> EventShareCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: EventShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "event",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(EventShareCardPayload.self, from: data)
+    }
+
+    private func parseDJCardPayload(from rawContent: String) -> DJShareCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: DJShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "dj",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(DJShareCardPayload.self, from: data)
+    }
+
+    private func eventCardDateText(_ iso: String?) -> String {
+        guard let iso, !iso.isEmpty else { return "" }
+        let formatter = ISO8601DateFormatter()
+        guard let date = formatter.date(from: iso) else { return "" }
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 
     func handleComposerInputChanged(_ text: String) {

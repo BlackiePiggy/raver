@@ -1142,6 +1142,10 @@ private struct MessageGlobalSearchSheet: View {
 
     private func previewText(for message: ChatMessage) -> String {
         let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if message.kind == .card,
+           let cardPreview = cardPreviewText(from: text) {
+            return cardPreview
+        }
         if !text.isEmpty {
             return text
         }
@@ -1172,6 +1176,34 @@ private struct MessageGlobalSearchSheet: View {
         case .text:
             return L("[文本消息]", "[Text Message]")
         }
+    }
+
+    private func cardPreviewText(from rawText: String) -> String? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct EventEnvelope: Decodable {
+            let cardType: String?
+            let payload: EventShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(EventEnvelope.self, from: data),
+           envelope.cardType == "event",
+           let payload = envelope.payload {
+            return "\(L("[活动卡片]", "[Event Card]")) \(payload.eventName)"
+        }
+
+        struct DJEnvelope: Decodable {
+            let cardType: String?
+            let payload: DJShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(DJEnvelope.self, from: data),
+           envelope.cardType == "dj",
+           let payload = envelope.payload {
+            return "\(L("[DJ卡片]", "[DJ Card]")) \(payload.djName)"
+        }
+
+        return nil
     }
 
     @ViewBuilder

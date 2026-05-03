@@ -343,6 +343,8 @@ struct MainTabCoordinatorView: View {
                 SettingsView()
             case .tools:
                 ProfileToolsHubView()
+            case .widgetManager:
+                WidgetEventManagerView()
             case .movieBanner:
                 MovieBannerEditorView()
             case .myPublishes:
@@ -497,6 +499,7 @@ struct MainTabCoordinatorView: View {
         case .followList,
                 .settings,
                 .tools,
+                .widgetManager,
                 .movieBanner,
                 .myPublishes,
                 .myRoutes,

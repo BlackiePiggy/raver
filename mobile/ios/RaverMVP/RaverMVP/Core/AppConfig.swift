@@ -16,6 +16,7 @@ enum AppConfig {
     private static let localGroupAvatarAssets: [String] = (1...12).map { String(format: "LocalGroupAvatar%02d", $0) }
     private static let persistedRuntimeModeKey = "raver.persisted.runtimeMode"
     private static let persistedBFFBaseURLKey = "raver.persisted.bffBaseURL"
+    private static let tencentIMAPNSBusinessIDInfoPlistKey = "TencentIMAPNSBusinessID"
 
     static var runtimeMode: AppRuntimeMode {
         if let envMode = runtimeModeFromEnvironmentValue(ProcessInfo.processInfo.environment["RAVER_USE_MOCK"]) {
@@ -45,6 +46,27 @@ enum AppConfig {
         return URL(string: "http://localhost:8787")!
     }
 
+    static var tencentIMAPNSBusinessID: Int {
+        if let env = normalizedIntegerString(ProcessInfo.processInfo.environment["RAVER_TENCENT_IM_APNS_BUSINESS_ID"]),
+           let value = Int(env),
+           value > 0 {
+            return value
+        }
+
+        if let plistValue = Bundle.main.object(forInfoDictionaryKey: tencentIMAPNSBusinessIDInfoPlistKey) as? NSNumber {
+            let value = plistValue.intValue
+            return value > 0 ? Int(value) : 0
+        }
+
+        if let plistString = Bundle.main.object(forInfoDictionaryKey: tencentIMAPNSBusinessIDInfoPlistKey) as? String,
+           let value = Int(plistString.trimmingCharacters(in: .whitespacesAndNewlines)),
+           value > 0 {
+            return value
+        }
+
+        return 0
+    }
+
     private static func normalizedBaseURLString(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -57,6 +79,13 @@ enum AppConfig {
         let withDefaultScheme = "http://\(trimmed)"
         guard let url = URL(string: withDefaultScheme), url.host != nil else { return nil }
         return url.absoluteString
+    }
+
+    private static func normalizedIntegerString(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 
     private static func runtimeModeFromEnvironmentValue(_ raw: String?) -> AppRuntimeMode? {

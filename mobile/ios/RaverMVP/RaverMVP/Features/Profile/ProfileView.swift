@@ -897,6 +897,28 @@ struct ProfileToolsHubView: View {
                 }
 
                 Button {
+                    profilePush(.widgetManager)
+                } label: {
+                    GlassCard {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(L("桌面倒计时管理", "Widget Countdown Manager"))
+                                    .font(.headline.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                Text(L("集中管理已加入桌面小组件的活动。", "Manage all events added to your home screen widget in one place."))
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Button {
                     profilePush(.movieBanner)
                 } label: {
                     GlassCard {
@@ -922,6 +944,157 @@ struct ProfileToolsHubView: View {
         }
         .background(RaverTheme.background)
         .raverSystemNavigation(title: L("小工具", "Tools"))
+    }
+}
+
+struct WidgetEventManagerView: View {
+    @Environment(\.appPush) private var appPush
+
+    @State private var events: [WidgetSelectableEvent] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Group {
+            if isLoading && events.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+            } else if events.isEmpty {
+                ContentUnavailableView(
+                    L("还没有已添加的小组件活动", "No widget events yet"),
+                    systemImage: "apps.iphone",
+                    description: Text(
+                        L(
+                            "去活动详情页点击“添加到桌面倒计时”，这里就会集中显示。",
+                            "Add events from the event detail page and they will appear here."
+                        )
+                    )
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RaverTheme.background)
+            } else {
+                List {
+                    ForEach(events) { event in
+                        Button {
+                            appPush(.eventDetail(eventID: event.id))
+                        } label: {
+                            HStack(spacing: 12) {
+                                WidgetManagedEventThumbnail(event: event)
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(event.name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                        .multilineTextAlignment(.leading)
+                                        .lineLimit(2)
+
+                                    if let meta = widgetEventMetaText(event), !meta.isEmpty {
+                                        Text(meta)
+                                            .font(.caption)
+                                            .foregroundStyle(RaverTheme.secondaryText)
+                                            .lineLimit(2)
+                                    }
+                                }
+
+                                Spacer(minLength: 8)
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                remove(event)
+                            } label: {
+                                Label(L("移除", "Remove"), systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
+                .background(RaverTheme.background)
+            }
+        }
+        .task {
+            await load()
+        }
+        .refreshable {
+            await load()
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+        .raverSystemNavigation(title: L("桌面倒计时", "Widget Countdown"))
+    }
+
+    @MainActor
+    private func load() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let snapshot = try WidgetSelectableEventsStore.shared.loadSnapshot()
+            events = snapshot.events
+        } catch {
+            errorMessage = L(
+                "读取桌面倒计时列表失败，请稍后重试。",
+                "Failed to load widget countdown events. Please try again later."
+            )
+        }
+    }
+
+    private func remove(_ event: WidgetSelectableEvent) {
+        do {
+            _ = try WidgetSelectableEventsSyncService.shared.remove(eventID: event.id)
+            events.removeAll { $0.id == event.id }
+        } catch {
+            errorMessage = L(
+                "移除桌面倒计时活动失败，请稍后重试。",
+                "Failed to remove widget countdown event. Please try again later."
+            )
+        }
+    }
+
+    private func widgetEventMetaText(_ event: WidgetSelectableEvent) -> String? {
+        let parts = [event.city, event.venueName]
+            .compactMap { value -> String? in
+                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return trimmed.isEmpty ? nil : trimmed
+            }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+private struct WidgetManagedEventThumbnail: View {
+    let event: WidgetSelectableEvent
+
+    var body: some View {
+        Group {
+            if let data = WidgetBackgroundImageCache.loadImageData(relativePath: event.cachedBackgroundImageRelativePath),
+               let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ImageLoaderView(urlString: event.preferredBackgroundURL, resizingMode: .fill)
+            }
+        }
+        .frame(width: 58, height: 58)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(RaverTheme.card)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
