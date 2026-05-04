@@ -142,6 +142,9 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
     func markNotificationRead(notificationID: String) async throws
     func markNotificationsRead(type: AppNotificationType) async throws
+    func fetchFollowedEventsSummary() async throws -> FollowedEventsSummary
+    func fetchFollowedEventNotifications(limit: Int) async throws -> [FollowedEventNotificationItem]
+    func markFollowedEventNotificationRead(notificationID: String) async throws
     func registerDevicePushToken(
         deviceID: String,
         platform: String,

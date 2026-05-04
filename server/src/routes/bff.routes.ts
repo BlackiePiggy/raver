@@ -1249,6 +1249,62 @@ const truncateText = (value: string, maxLength = 28): string => {
   return `${normalized.slice(0, maxLength - 1)}…`;
 };
 
+const NEWS_MARKER = '#RAVER_NEWS';
+
+const newsSingleLine = (value: string): string => value.replace(/\s+/g, ' ').trim();
+
+const newsDecodeUtf8Base64 = (encoded: string): string => {
+  const source = encoded.trim();
+  if (!source) return '';
+  try {
+    return Buffer.from(source, 'base64').toString('utf8').trim();
+  } catch {
+    return '';
+  }
+};
+
+const readNewsValueAfterPrefix = (line: string, key: string): string => {
+  const prefixes = [`${key}：`, `${key}:`, `${key.toUpperCase()}：`, `${key.toUpperCase()}:`];
+  for (const prefix of prefixes) {
+    if (!line.startsWith(prefix)) continue;
+    const value = line.slice(prefix.length).trim();
+    if (value) return value;
+  }
+  return '';
+};
+
+const decodeRaverNewsDraft = (
+  content: string
+): { title: string; summary: string; body: string } | null => {
+  const lines = String(content || '')
+    .split(/\r?\n/g)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.includes(NEWS_MARKER)) {
+    return null;
+  }
+
+  const read = (keys: string[]): string => {
+    for (const line of lines) {
+      for (const key of keys) {
+        const value = readNewsValueAfterPrefix(line, key);
+        if (value) return value;
+      }
+    }
+    return '';
+  };
+
+  const title = read(['标题', 'title']) || '未命名资讯';
+  const summary = read(['摘要', 'summary']) || '';
+  const bodyEncoded = read(['正文MD64', 'content_md64', 'body_md64']);
+  const body = newsDecodeUtf8Base64(bodyEncoded) || read(['正文', 'content', 'body']) || '';
+  return {
+    title: newsSingleLine(title) || '未命名资讯',
+    summary: newsSingleLine(summary),
+    body,
+  };
+};
+
 const normalizeNotificationTargets = (targetUserIds: string[]): string[] => {
   return Array.from(new Set(targetUserIds.map((item) => item.trim()).filter((item) => item.length > 0)));
 };
@@ -1315,6 +1371,99 @@ const publishChatMessageSafely = (params: {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[notification-center] chat publish failed: ${message}`);
     });
+};
+
+const publishFavoritedEventNewsSafely = async (params: {
+  actorUserId: string;
+  postId: string;
+  content: string;
+  imageURLs: string[];
+  boundEventIDs: string[];
+  occurredAt: Date;
+}): Promise<void> => {
+  const normalizedEventIDs = Array.from(
+    new Set(params.boundEventIDs.map((item) => item.trim()).filter((item) => item.length > 0))
+  );
+  if (normalizedEventIDs.length === 0) {
+    return;
+  }
+
+  const decodedNews = decodeRaverNewsDraft(params.content);
+  if (!decodedNews) {
+    return;
+  }
+
+  const events = await prisma.event.findMany({
+    where: {
+      id: {
+        in: normalizedEventIDs,
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+  if (events.length === 0) {
+    return;
+  }
+
+  const eventNameByID = new Map(events.map((item) => [item.id, item.name.trim() || item.id]));
+  const coverImageURL = params.imageURLs.find((item) => item.trim().length > 0)?.trim() || null;
+  const fallbackSummary = newsSingleLine(decodedNews.body).slice(0, 140);
+  const newsSummary = decodedNews.summary || fallbackSummary || '你收藏的活动发布了新的资讯。';
+
+  for (const eventID of normalizedEventIDs) {
+    const eventName = eventNameByID.get(eventID);
+    if (!eventName) continue;
+
+    const rows = await prisma.checkin.findMany({
+      where: {
+        eventId: eventID,
+        type: 'event',
+        note: 'marked',
+      },
+      select: {
+        userId: true,
+      },
+    });
+
+    const targetUserIds = normalizeNotificationTargets(rows.map((item) => item.userId));
+    if (targetUserIds.length === 0) {
+      continue;
+    }
+
+    void notificationCenterService
+      .publish({
+        category: 'major_news',
+        targets: targetUserIds.map((userId) => ({ userId })),
+        channels: ['in_app', 'apns'],
+        payload: {
+          title: `${eventName} 发布了新资讯`,
+          body: decodedNews.title,
+          deeplink: `raver://news/${encodeURIComponent(params.postId)}`,
+          metadata: {
+            route: 'event_update',
+            primaryUpdateKind: 'news',
+            updateKind: 'news',
+            eventID,
+            eventName,
+            newsID: params.postId,
+            newsTitle: decodedNews.title,
+            newsSummary,
+            newsCoverImageURL: coverImageURL,
+            occurredAt: params.occurredAt.toISOString(),
+            source: 'event_news_publish',
+            sourceAudience: 'marked_event_users',
+          },
+        },
+        dedupeKey: `event-news:${eventID}:post:${params.postId}`,
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[notification-center] event news publish failed event=${eventID} post=${params.postId}: ${message}`);
+      });
+  }
 };
 
 type NotificationType = 'follow' | 'like' | 'comment' | 'squad_invite';
@@ -4848,6 +4997,16 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
 
     const followingSet = await buildFollowingMap(userId, [created.user.id]);
     const mapped = mapPost(created, followingSet, new Set<string>(), new Set<string>());
+
+    void publishFavoritedEventNewsSafely({
+      actorUserId: userId,
+      postId: created.id,
+      content: created.content,
+      imageURLs: Array.isArray(created.images) ? created.images : [],
+      boundEventIDs: Array.isArray((created as any).boundEventIds) ? ((created as any).boundEventIds as string[]) : [],
+      occurredAt: created.displayPublishedAt ?? created.createdAt,
+    });
+
     res.status(201).json(mapped);
   } catch (error) {
     console.error('BFF create post error:', error);

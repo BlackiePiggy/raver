@@ -7,6 +7,9 @@ protocol MessagesRepository: IMChatConversationDataSource {
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
     func markNotificationRead(notificationID: String) async throws
     func markNotificationsRead(type: AppNotificationType) async throws
+    func fetchFollowedEventsSummary() async throws -> FollowedEventsSummary
+    func fetchFollowedEventNotifications(limit: Int) async throws -> [FollowedEventNotificationItem]
+    func markFollowedEventNotificationRead(notificationID: String) async throws
 }
 
 struct MessagesRepositoryAdapter: MessagesRepository {
@@ -51,6 +54,18 @@ struct MessagesRepositoryAdapter: MessagesRepository {
     func markNotificationsRead(type: AppNotificationType) async throws {
         try await service.markNotificationsRead(type: type)
     }
+
+    func fetchFollowedEventsSummary() async throws -> FollowedEventsSummary {
+        try await service.fetchFollowedEventsSummary()
+    }
+
+    func fetchFollowedEventNotifications(limit: Int) async throws -> [FollowedEventNotificationItem] {
+        try await service.fetchFollowedEventNotifications(limit: limit)
+    }
+
+    func markFollowedEventNotificationRead(notificationID: String) async throws {
+        try await service.markFollowedEventNotificationRead(notificationID: notificationID)
+    }
 }
 
 @MainActor
@@ -74,6 +89,7 @@ final class MessagesViewModel: ObservableObject {
     @Published var globalSearchError: String?
     @Published var isEditingConversations = false
     @Published var selectedConversationIDs: Set<String> = []
+    @Published var followedEventsSummary: FollowedEventsSummary = .empty
 
     private let repository: MessagesRepository
     private let chatStore = IMChatStore.shared
@@ -98,6 +114,7 @@ final class MessagesViewModel: ObservableObject {
 
         do {
             try await chatStore.loadConversations(using: repository)
+            followedEventsSummary = (try? await repository.fetchFollowedEventsSummary()) ?? .empty
             phase = conversations.isEmpty ? .empty : .success
             bannerMessage = nil
             self.error = nil
@@ -110,6 +127,10 @@ final class MessagesViewModel: ObservableObject {
                 phase = .failure(message: message)
             }
         }
+    }
+
+    func refreshFollowedEventsSummary() async {
+        followedEventsSummary = (try? await repository.fetchFollowedEventsSummary()) ?? .empty
     }
 
     func markConversationRead(conversationID: String) async {

@@ -82,6 +82,118 @@ const toPositiveSafeInteger = (value: unknown): number => {
   return 0;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const readString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const readDate = (value: unknown): Date | null => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+type FollowedEventInboxProjection = {
+  id: string;
+  type: string;
+  eventID: string;
+  eventName: string;
+  newsID: string;
+  newsTitle: string;
+  newsSummary: string | null;
+  newsCoverImageURL: string | null;
+  isRead: boolean;
+  occurredAt: Date;
+};
+
+const mapFollowedEventInboxItem = (
+  row: {
+    id: string;
+    type: string;
+    title: string;
+    body: string;
+    deeplink: string | null;
+    metadata: Prisma.JsonValue | null;
+    isRead: boolean;
+    createdAt: Date;
+  }
+): FollowedEventInboxProjection | null => {
+  const metadata = isRecord(row.metadata) ? row.metadata : {};
+  const route =
+    readString(metadata.route) ??
+    readString(metadata.type) ??
+    readString(metadata.category) ??
+    null;
+  const normalizedRoute = route?.toLowerCase() ?? '';
+  if (normalizedRoute && normalizedRoute !== 'event_update') {
+    return null;
+  }
+
+  const updateKind =
+    readString(metadata.primaryUpdateKind) ??
+    readString(metadata.updateKind) ??
+    null;
+  if (updateKind && updateKind.toLowerCase() !== 'news') {
+    return null;
+  }
+
+  const eventID =
+    readString(metadata.eventID) ??
+    readString(metadata.eventId) ??
+    null;
+  const newsID =
+    readString(metadata.newsID) ??
+    readString(metadata.newsId) ??
+    null;
+
+  if (!eventID || !newsID) {
+    return null;
+  }
+
+  const occurredAt =
+    readDate(metadata.occurredAt) ??
+    readDate(metadata.createdAt) ??
+    row.createdAt;
+
+  return {
+    id: row.id,
+    type: readString(metadata.primaryUpdateKind) ?? readString(metadata.type) ?? 'news',
+    eventID,
+    eventName:
+      readString(metadata.eventName) ??
+      readString(metadata.title) ??
+      row.title,
+    newsID,
+    newsTitle:
+      readString(metadata.newsTitle) ??
+      readString(metadata.title) ??
+      row.title,
+    newsSummary:
+      readString(metadata.newsSummary) ??
+      readString(metadata.summary) ??
+      readString(metadata.body) ??
+      readString(row.body),
+    newsCoverImageURL:
+      readString(metadata.newsCoverImageURL) ??
+      readString(metadata.newsCoverImageUrl) ??
+      readString(metadata.coverImageURL) ??
+      readString(metadata.coverImageUrl),
+    isRead: row.isRead,
+    occurredAt,
+  };
+};
+
 const fetchCommunityUnreadBreakdown = async (
   userId: string
 ): Promise<{ follows: number; likes: number; comments: number; squadInvites: number; total: number }> => {
@@ -288,6 +400,130 @@ router.post('/inbox/read', authenticate, async (req: AuthRequest, res: Response)
   } catch (error) {
     console.error('Mark notification inbox read error:', error);
     res.status(500).json({ error: 'Failed to mark notification read' });
+  }
+});
+
+router.get('/followed-events/summary', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const rows = await prisma.notificationInboxItem.findMany({
+      where: {
+        userId,
+      },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        body: true,
+        deeplink: true,
+        metadata: true,
+        isRead: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 100,
+    });
+
+    const items = rows
+      .map(mapFollowedEventInboxItem)
+      .filter((item): item is FollowedEventInboxProjection => Boolean(item));
+
+    const latest = items[0] ?? null;
+    const unreadCount = items.reduce((sum, item) => sum + (item.isRead ? 0 : 1), 0);
+
+    res.json({
+      unreadCount,
+      latestItemPreview: latest?.newsSummary ?? latest?.newsTitle ?? null,
+      latestOccurredAt: latest?.occurredAt ?? null,
+    });
+  } catch (error) {
+    console.error('Fetch followed events summary error:', error);
+    res.status(500).json({ error: 'Failed to fetch followed events summary' });
+  }
+});
+
+router.get('/followed-events/items', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const limit = parseLimit((req.query as Request['query']).limit, 20, 100);
+    const rows = await prisma.notificationInboxItem.findMany({
+      where: {
+        userId,
+      },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        body: true,
+        deeplink: true,
+        metadata: true,
+        isRead: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: Math.max(limit * 3, 100),
+    });
+
+    const items = rows
+      .map(mapFollowedEventInboxItem)
+      .filter((item): item is FollowedEventInboxProjection => Boolean(item))
+      .slice(0, limit);
+
+    res.json({ items });
+  } catch (error) {
+    console.error('Fetch followed events inbox items error:', error);
+    res.status(500).json({ error: 'Failed to fetch followed event notifications' });
+  }
+});
+
+router.post('/followed-events/read', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as {
+      itemID?: unknown;
+      itemId?: unknown;
+    };
+    const itemID = readString(body.itemID) ?? readString(body.itemId);
+    if (!itemID) {
+      res.status(400).json({ error: 'itemID/itemId is required' });
+      return;
+    }
+
+    const updated = await prisma.notificationInboxItem.updateMany({
+      where: {
+        id: itemID,
+        userId,
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+        readAt: new Date(),
+      },
+    });
+
+    res.json({ success: true, updated: updated.count });
+  } catch (error) {
+    console.error('Mark followed event notification read error:', error);
+    res.status(500).json({ error: 'Failed to mark followed event notification read' });
   }
 });
 

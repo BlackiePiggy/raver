@@ -557,6 +557,20 @@ struct CreateSquadView: View {
 }
 
 struct MessagesHomeView: View {
+    private enum ConversationListEntry: Identifiable {
+        case followedEvents
+        case conversation(Conversation)
+
+        var id: String {
+            switch self {
+            case .followedEvents:
+                return "followed-events"
+            case .conversation(let conversation):
+                return conversation.id
+            }
+        }
+    }
+
     @Environment(\.appPush) private var appPush
     @Environment(\.messagesPush) private var messagesPush
     @ObservedObject var chatViewModel: MessagesViewModel
@@ -610,109 +624,121 @@ struct MessagesHomeView: View {
                 Spacer()
                 ScreenErrorCard(
                     title: L("消息加载失败", "Messages Failed to Load"),
-                    message: message
-                ) {
+                    message: message,
+                    retryAction: {
                     Task { await refreshAll() }
-                }
+                    }
+                )
                 .padding(.horizontal, 16)
                 Spacer()
             case .empty:
                 Spacer()
-                ContentUnavailableView(
-                    L("暂无会话", "No Conversations Yet"),
-                    systemImage: "bubble.left.and.bubble.right",
-                    description: Text(LL("从用户主页发起私信或加入小队后会显示在这里"))
-                )
+                VStack(spacing: 16) {
+                    followedEventsEntryCard
+                        .padding(.horizontal, 16)
+                    ContentUnavailableView(
+                        L("暂无会话", "No Conversations Yet"),
+                        systemImage: "bubble.left.and.bubble.right",
+                        description: Text(LL("从用户主页发起私信或加入小队后会显示在这里"))
+                    )
+                }
                 Spacer()
             case .success:
-                List(chatViewModel.conversations) { conversation in
-                    Button {
-                        if chatViewModel.isEditingConversations {
-                            chatViewModel.toggleConversationSelection(conversation.id)
-                        } else {
-                            appPush(.conversation(target: .fromConversation(conversation)))
-                            Task {
-                                await chatViewModel.markConversationRead(conversationID: conversation.id)
-                                onUnreadStateChanged()
+                List {
+                    ForEach(sortedConversationEntries) { entry in
+                        switch entry {
+                        case .followedEvents:
+                            followedEventsEntryRow
+                        case .conversation(let conversation):
+                            Button {
+                                if chatViewModel.isEditingConversations {
+                                    chatViewModel.toggleConversationSelection(conversation.id)
+                                } else {
+                                    appPush(.conversation(target: .fromConversation(conversation)))
+                                    Task {
+                                        await chatViewModel.markConversationRead(conversationID: conversation.id)
+                                        onUnreadStateChanged()
+                                    }
+                                }
+                            } label: {
+                                conversationRow(conversation)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
                             }
-                        }
-                    } label: {
-                        conversationRow(conversation)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        if !chatViewModel.isEditingConversations {
-                            Button(conversation.isPinned ? L("取消置顶", "Unpin") : L("置顶", "Pin")) {
-                                Task {
-                                    await chatViewModel.setConversationPinned(
-                                        conversationID: conversation.id,
-                                        pinned: !conversation.isPinned
-                                    )
+                            .buttonStyle(.plain)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                if !chatViewModel.isEditingConversations {
+                                    Button(conversation.isPinned ? L("取消置顶", "Unpin") : L("置顶", "Pin")) {
+                                        Task {
+                                            await chatViewModel.setConversationPinned(
+                                                conversationID: conversation.id,
+                                                pinned: !conversation.isPinned
+                                            )
+                                        }
+                                    }
+                                    .tint(RaverTheme.accent)
+
+                                    Button(conversation.unreadCount > 0 ? L("已读", "Read") : L("未读", "Unread")) {
+                                        Task {
+                                            if conversation.unreadCount > 0 {
+                                                await chatViewModel.markConversationRead(conversationID: conversation.id)
+                                            } else {
+                                                await chatViewModel.markConversationUnread(
+                                                    conversationID: conversation.id,
+                                                    unread: true
+                                                )
+                                            }
+                                            onUnreadStateChanged()
+                                        }
+                                    }
+                                    .tint(.blue)
+
+                                    Button(L("隐藏", "Hide"), role: .destructive) {
+                                        Task {
+                                            await chatViewModel.hideConversation(conversationID: conversation.id)
+                                            onUnreadStateChanged()
+                                        }
+                                    }
                                 }
                             }
-                            .tint(RaverTheme.accent)
-
-                            Button(conversation.unreadCount > 0 ? L("已读", "Read") : L("未读", "Unread")) {
-                                Task {
-                                    if conversation.unreadCount > 0 {
-                                        await chatViewModel.markConversationRead(conversationID: conversation.id)
-                                    } else {
-                                        await chatViewModel.markConversationUnread(
+                            .contextMenu {
+                                Button(conversation.isPinned ? L("取消置顶", "Unpin") : L("置顶", "Pin")) {
+                                    Task {
+                                        await chatViewModel.setConversationPinned(
                                             conversationID: conversation.id,
-                                            unread: true
+                                            pinned: !conversation.isPinned
                                         )
                                     }
-                                    onUnreadStateChanged()
                                 }
-                            }
-                            .tint(.blue)
 
-                            Button(L("隐藏", "Hide"), role: .destructive) {
-                                Task {
-                                    await chatViewModel.hideConversation(conversationID: conversation.id)
-                                    onUnreadStateChanged()
+                                Button(conversation.unreadCount > 0 ? L("标记已读", "Mark Read") : L("标记未读", "Mark Unread")) {
+                                    Task {
+                                        if conversation.unreadCount > 0 {
+                                            await chatViewModel.markConversationRead(conversationID: conversation.id)
+                                        } else {
+                                            await chatViewModel.markConversationUnread(
+                                                conversationID: conversation.id,
+                                                unread: true
+                                            )
+                                        }
+                                        onUnreadStateChanged()
+                                    }
+                                }
+
+                                Button(L("隐藏会话", "Hide Conversation"), role: .destructive) {
+                                    Task {
+                                        await chatViewModel.hideConversation(conversationID: conversation.id)
+                                        onUnreadStateChanged()
+                                    }
                                 }
                             }
+                            .listRowBackground(
+                                chatViewModel.isConversationSelected(conversation.id)
+                                    ? RaverTheme.accent.opacity(0.10)
+                                    : RaverTheme.card
+                            )
                         }
                     }
-                    .contextMenu {
-                        Button(conversation.isPinned ? L("取消置顶", "Unpin") : L("置顶", "Pin")) {
-                            Task {
-                                await chatViewModel.setConversationPinned(
-                                    conversationID: conversation.id,
-                                    pinned: !conversation.isPinned
-                                )
-                            }
-                        }
-
-                        Button(conversation.unreadCount > 0 ? L("标记已读", "Mark Read") : L("标记未读", "Mark Unread")) {
-                            Task {
-                                if conversation.unreadCount > 0 {
-                                    await chatViewModel.markConversationRead(conversationID: conversation.id)
-                                } else {
-                                    await chatViewModel.markConversationUnread(
-                                        conversationID: conversation.id,
-                                        unread: true
-                                    )
-                                }
-                                onUnreadStateChanged()
-                            }
-                        }
-
-                        Button(L("隐藏会话", "Hide Conversation"), role: .destructive) {
-                            Task {
-                                await chatViewModel.hideConversation(conversationID: conversation.id)
-                                onUnreadStateChanged()
-                            }
-                        }
-                    }
-                    .listRowBackground(
-                        chatViewModel.isConversationSelected(conversation.id)
-                            ? RaverTheme.accent.opacity(0.10)
-                            : RaverTheme.card
-                    )
                 }
                 .scrollContentBackground(.hidden)
                 .refreshable {
@@ -740,6 +766,12 @@ struct MessagesHomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .raverMessageAlertsDidMutate)) { _ in
             Task {
                 await alertViewModel.load()
+                onUnreadStateChanged()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .raverFollowedEventsDidMutate)) { _ in
+            Task {
+                await chatViewModel.refreshFollowedEventsSummary()
                 onUnreadStateChanged()
             }
         }
@@ -791,6 +823,130 @@ struct MessagesHomeView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(category.title)
+        }
+    }
+
+    private var followedEventsEntryCard: some View {
+        Button {
+            appPush(.followedEventsInbox)
+        } label: {
+            followedEventsRowContent
+                .padding(14)
+                .background(RaverTheme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var followedEventsEntryRow: some View {
+        Button {
+            appPush(.followedEventsInbox)
+        } label: {
+            followedEventsRowContent
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(RaverTheme.card)
+    }
+
+    private var sortedConversationEntries: [ConversationListEntry] {
+        var entries = chatViewModel.conversations.map { ConversationListEntry.conversation($0) }
+        entries.append(.followedEvents)
+        return entries.sorted(by: compareConversationEntries)
+    }
+
+    private func compareConversationEntries(_ lhs: ConversationListEntry, _ rhs: ConversationListEntry) -> Bool {
+        let lhsPinned = isPinnedEntry(lhs)
+        let rhsPinned = isPinnedEntry(rhs)
+        if lhsPinned != rhsPinned {
+            return lhsPinned && !rhsPinned
+        }
+
+        let lhsDate = updatedAt(for: lhs)
+        let rhsDate = updatedAt(for: rhs)
+        if lhsDate != rhsDate {
+            return lhsDate > rhsDate
+        }
+
+        return lhs.id < rhs.id
+    }
+
+    private func isPinnedEntry(_ entry: ConversationListEntry) -> Bool {
+        switch entry {
+        case .followedEvents:
+            return false
+        case .conversation(let conversation):
+            return conversation.isPinned
+        }
+    }
+
+    private func updatedAt(for entry: ConversationListEntry) -> Date {
+        switch entry {
+        case .followedEvents:
+            return chatViewModel.followedEventsSummary.latestOccurredAt ?? .distantPast
+        case .conversation(let conversation):
+            return conversation.updatedAt
+        }
+    }
+
+    private var followedEventsRowContent: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                RaverTheme.accent.opacity(0.22),
+                                Color.orange.opacity(0.22)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: "sparkles.rectangle.stack.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(RaverTheme.accent)
+            }
+            .frame(width: 40, height: 40)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(L("关注的活动", "Followed Events"))
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Spacer(minLength: 8)
+                    if let latestOccurredAt = chatViewModel.followedEventsSummary.latestOccurredAt {
+                        Text(latestOccurredAt.chatTimeText)
+                            .font(.system(size: 12))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Text(
+                        chatViewModel.followedEventsSummary.latestItemPreview
+                            ?? L("你关注的活动有新资讯时会显示在这里", "Updates from followed events will appear here.")
+                    )
+                    .font(.system(size: 13))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                    Spacer(minLength: 0)
+
+                    if chatViewModel.followedEventsSummary.unreadCount > 0 {
+                        Text(unreadBadgeText(for: chatViewModel.followedEventsSummary.unreadCount))
+                            .font(.system(size: 11, weight: .semibold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.red)
+                            .clipShape(Capsule())
+                            .foregroundStyle(Color.white)
+                    }
+                }
+            }
         }
     }
 
@@ -1350,3 +1506,223 @@ struct MessageAlertDetailView: View {
         .background(RaverTheme.cardBorder)
         .clipShape(Circle())
     }
+@MainActor
+final class FollowedEventsInboxViewModel: ObservableObject {
+    @Published var items: [FollowedEventNotificationItem] = []
+    @Published var summary: FollowedEventsSummary = .empty
+    @Published var phase: LoadPhase = .idle
+    @Published var isRefreshing = false
+    @Published var bannerMessage: String?
+    @Published var error: String?
+
+    private let repository: MessagesRepository
+
+    init(repository: MessagesRepository) {
+        self.repository = repository
+    }
+
+    func load() async {
+        let hadContent = !items.isEmpty
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
+        defer { isRefreshing = false }
+
+        do {
+            async let summaryTask = repository.fetchFollowedEventsSummary()
+            async let itemsTask = repository.fetchFollowedEventNotifications(limit: 50)
+            let (summary, items) = try await (summaryTask, itemsTask)
+            self.summary = summary
+            self.items = items
+            self.phase = items.isEmpty ? .empty : .success
+            self.bannerMessage = nil
+            self.error = nil
+        } catch {
+            let message = error.userFacingMessage ?? L("关注活动加载失败，请稍后重试", "Failed to load followed events. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
+            self.error = message
+        }
+    }
+
+    func markRead(_ item: FollowedEventNotificationItem) async {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        guard items[index].isRead == false else { return }
+        items[index].isRead = true
+        summary.unreadCount = max(0, summary.unreadCount - 1)
+        do {
+            try await repository.markFollowedEventNotificationRead(notificationID: item.id)
+            NotificationCenter.default.post(name: .raverFollowedEventsDidMutate, object: nil)
+        } catch {
+            items[index].isRead = false
+            summary.unreadCount += 1
+            self.error = error.userFacingMessage
+        }
+    }
+}
+
+struct FollowedEventsInboxView: View {
+    @Environment(\.appPush) private var appPush
+    @StateObject private var viewModel: FollowedEventsInboxViewModel
+
+    init(repository: MessagesRepository) {
+        _viewModel = StateObject(wrappedValue: FollowedEventsInboxViewModel(repository: repository))
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if viewModel.isRefreshing {
+                        InlineLoadingBadge(title: L("正在更新关注活动", "Updating followed events"))
+                    }
+                    if let bannerMessage = viewModel.bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task { await viewModel.load() }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            switch viewModel.phase {
+            case .idle, .initialLoading:
+                ProgressView(LL("正在加载关注活动..."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            case .failure(let message), .offline(let message):
+                Spacer()
+                ScreenErrorCard(
+                    title: L("关注活动加载失败", "Followed Events Failed to Load"),
+                    message: message,
+                    retryAction: {
+                    Task { await viewModel.load() }
+                    }
+                )
+                .padding(.horizontal, 16)
+                Spacer()
+            case .empty:
+                ContentUnavailableView(
+                    L("暂无活动更新", "No Event Updates"),
+                    systemImage: "sparkles.rectangle.stack",
+                    description: Text(LL("你关注的活动发布新资讯后，会显示在这里"))
+                )
+            case .success:
+                List(viewModel.items) { item in
+                    Button {
+                        Task {
+                            await viewModel.markRead(item)
+                            appPush(.newsDetail(articleID: item.newsID))
+                        }
+                    } label: {
+                        followedEventRow(item)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(RaverTheme.card)
+                }
+                .scrollContentBackground(.hidden)
+                .refreshable {
+                    await viewModel.load()
+                }
+            }
+        }
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: L("关注的活动", "Followed Events"))
+        .toolbar {
+            if viewModel.summary.unreadCount > 0 {
+                Text(L("未读", "Unread") + " \(viewModel.summary.unreadCount)")
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .task {
+            await viewModel.load()
+        }
+    }
+
+    private func followedEventRow(_ item: FollowedEventNotificationItem) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            followedEventArtwork(item)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(item.eventName)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 8)
+
+                    Text(item.occurredAt.feedTimeText)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+
+                Text(L("发布了新资讯", "Published a new article"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.accent)
+
+                Text(item.newsTitle)
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+
+                if let summary = item.newsSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !summary.isEmpty {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(2)
+                }
+            }
+
+            if !item.isRead {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, 8)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private func followedEventArtwork(_ item: FollowedEventNotificationItem) -> some View {
+        if let url = AppConfig.resolvedURLString(item.newsCoverImageURL),
+           (url.hasPrefix("http://") || url.hasPrefix("https://")),
+           URL(string: url) != nil {
+            ImageLoaderView(urlString: url)
+                .background(followedEventArtworkFallback)
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else {
+            followedEventArtworkFallback
+        }
+    }
+
+    private var followedEventArtworkFallback: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [RaverTheme.accent.opacity(0.18), Color.orange.opacity(0.18)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 52, height: 52)
+            .overlay(
+                Image(systemName: "newspaper.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(RaverTheme.accent)
+            )
+    }
+}

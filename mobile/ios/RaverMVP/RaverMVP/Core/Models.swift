@@ -789,6 +789,39 @@ enum AppNotificationType: String, Codable, Hashable {
     }
 }
 
+struct FollowedEventsSummary: Codable, Hashable {
+    var unreadCount: Int
+    var latestItemPreview: String?
+    var latestOccurredAt: Date?
+
+    static let empty = FollowedEventsSummary(
+        unreadCount: 0,
+        latestItemPreview: nil,
+        latestOccurredAt: nil
+    )
+}
+
+struct FollowedEventNotificationItem: Codable, Identifiable, Hashable {
+    let id: String
+    var type: String
+    var eventID: String
+    var eventName: String
+    var newsID: String
+    var newsTitle: String
+    var newsSummary: String?
+    var newsCoverImageURL: String?
+    var isRead: Bool
+    var occurredAt: Date
+
+    var previewText: String {
+        let trimmedSummary = newsSummary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedSummary.isEmpty {
+            return trimmedSummary
+        }
+        return newsTitle
+    }
+}
+
 struct AppNotificationTarget: Codable, Hashable {
     var type: String
     var id: String

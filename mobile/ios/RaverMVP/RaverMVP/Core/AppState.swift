@@ -3860,6 +3860,7 @@ final class AppState: ObservableObject {
     private var hasAppliedUITestForcedExpiry = false
     private var tencentIMBootstrapRefreshTask: Task<Void, Never>?
     private var cachedCommunityUnread = 0
+    private var cachedFollowedEventsUnread = 0
     private var latestPushToken: String?
     private var lastTencentIMBootstrapRefreshAt: Date?
     private var pendingSystemNotificationPayload: ([AnyHashable: Any], String)?
@@ -4110,9 +4111,12 @@ final class AppState: ObservableObject {
 
         do {
             async let notificationsUnreadTask = service.fetchNotificationUnreadCount()
+            async let followedEventsSummaryTask = service.fetchFollowedEventsSummary()
             let chatsUnread = try await fetchChatUnreadCount()
             let socialUnread = try await notificationsUnreadTask
+            let followedEventsSummary = try await followedEventsSummaryTask
             cachedCommunityUnread = Self.communityUnreadCount(from: socialUnread)
+            cachedFollowedEventsUnread = max(0, followedEventsSummary.unreadCount)
             recomputeUnreadMessagesCount(chatsUnread: chatsUnread, source: "refresh-success")
         } catch {
             // Keep current count when refresh fails.
@@ -4122,6 +4126,7 @@ final class AppState: ObservableObject {
 
     private func resetUnreadCounts() {
         cachedCommunityUnread = 0
+        cachedFollowedEventsUnread = 0
         unreadMessagesCount = 0
 #if canImport(ImSDK_Plus)
         TencentIMAPNSBadgeBridge.shared.setUnifiedUnreadCount(0)
@@ -4153,14 +4158,15 @@ final class AppState: ObservableObject {
         let previous = unreadMessagesCount
         let chatUnread = max(0, chatsUnread ?? localChatUnreadSnapshot())
         let communityUnread = max(0, cachedCommunityUnread)
-        let next = chatUnread + communityUnread
+        let followedEventsUnread = max(0, cachedFollowedEventsUnread)
+        let next = chatUnread + communityUnread + followedEventsUnread
         unreadMessagesCount = next
 #if canImport(ImSDK_Plus)
         TencentIMAPNSBadgeBridge.shared.setUnifiedUnreadCount(next)
 #endif
         UIApplication.shared.applicationIconBadgeNumber = next
         if previous != next {
-            debug("badge recompute source=\(source) from=\(previous) to=\(next) chat=\(chatUnread) community=\(communityUnread)")
+            debug("badge recompute source=\(source) from=\(previous) to=\(next) chat=\(chatUnread) community=\(communityUnread) followedEvents=\(followedEventsUnread)")
         }
     }
 
@@ -4284,6 +4290,7 @@ final class AppState: ObservableObject {
         Self.pushRouteLog("handle payload source=\(source) summary=\(Self.summarizeSystemNotificationPayload(payload))")
         if let extPayload = Self.extractPushExtPayload(from: payload) {
             Self.pushRouteLog("handle ext source=\(source) summary=\(Self.summarizePushExtPayload(extPayload))")
+            handleEventUpdatePushSideEffectsIfNeeded(extPayload, source: source)
         } else {
             Self.pushRouteLog("handle ext source=\(source) summary=nil")
         }
@@ -4308,6 +4315,45 @@ final class AppState: ObservableObject {
         pendingSystemNotificationPayload = nil
         Self.pushRouteLog("flush pending handling trigger=\(trigger) originalSource=\(source)")
         handleSystemNotificationPayload(payload, source: source)
+    }
+
+    private func handleEventUpdatePushSideEffectsIfNeeded(_ payload: [String: Any], source: String) {
+        let route = (payload["route"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard route == "event_update" else { return }
+
+        let itemID = [
+            payload["itemID"] as? String,
+            payload["itemId"] as? String,
+            payload["notificationID"] as? String,
+            payload["notificationId"] as? String,
+            payload["inboxID"] as? String,
+            payload["inboxId"] as? String
+        ]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty })
+
+        let newsID = (payload["newsID"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "nil"
+
+        guard let itemID else {
+            Self.pushRouteLog("event_update open no itemID source=\(source) newsID=\(newsID)")
+            return
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.service.markFollowedEventNotificationRead(notificationID: itemID)
+                self.cachedFollowedEventsUnread = max(0, self.cachedFollowedEventsUnread - 1)
+                self.recomputeUnreadMessagesCount(source: "event-update-open")
+                NotificationCenter.default.post(name: .raverFollowedEventsDidMutate, object: nil)
+                Self.pushRouteLog("event_update mark-read success itemID=\(itemID) source=\(source) newsID=\(newsID)")
+            } catch {
+                Self.pushRouteLog("event_update mark-read failed itemID=\(itemID) source=\(source) newsID=\(newsID) error=\(error.localizedDescription)")
+            }
+        }
     }
 
     private static func readSystemDeeplink(from payload: [AnyHashable: Any]) -> String? {
@@ -4400,6 +4446,29 @@ final class AppState: ObservableObject {
         let route = (payload["route"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+        if route == "event_update" {
+            if let explicitDeeplink = (payload["deeplink"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !explicitDeeplink.isEmpty {
+                return explicitDeeplink
+            }
+
+            if let newsID = (payload["newsID"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !newsID.isEmpty {
+                let encodedNewsID = newsID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? newsID
+                return "raver://news/\(encodedNewsID)"
+            }
+
+            if let eventID = (payload["eventID"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !eventID.isEmpty {
+                let encodedEventID = eventID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? eventID
+                return "raver://event/\(encodedEventID)"
+            }
+            return nil
+        }
+
         guard route == "chat" else { return nil }
 
         let conversationID = [
@@ -4467,7 +4536,19 @@ final class AppState: ObservableObject {
                 }
                 return nil
             } ?? []
-        return "route=\(route) type=\(conversationType) conversationID=\(conversationID) sdkConversationID=\(sdkConversationID) peerID=\(peerID) groupID=\(groupID) mentionAll=\(mentionAll) mentionedUserIDs=\(mentionedUserIDs)"
+        let itemID = (payload["itemID"] as? String)
+            ?? (payload["itemId"] as? String)
+            ?? (payload["notificationID"] as? String)
+            ?? (payload["notificationId"] as? String)
+            ?? (payload["inboxID"] as? String)
+            ?? (payload["inboxId"] as? String)
+        let eventID = (payload["eventID"] as? String) ?? "nil"
+        let eventName = (payload["eventName"] as? String) ?? "nil"
+        let newsID = (payload["newsID"] as? String) ?? "nil"
+        let newsTitle = (payload["newsTitle"] as? String) ?? "nil"
+        let updateKind = (payload["updateKind"] as? String) ?? "nil"
+        let deeplink = (payload["deeplink"] as? String) ?? "nil"
+        return "route=\(route) type=\(conversationType) conversationID=\(conversationID) sdkConversationID=\(sdkConversationID) peerID=\(peerID) groupID=\(groupID) mentionAll=\(mentionAll) mentionedUserIDs=\(mentionedUserIDs) itemID=\(itemID ?? "nil") eventID=\(eventID) eventName=\(eventName) newsID=\(newsID) newsTitle=\(newsTitle) updateKind=\(updateKind) deeplink=\(deeplink)"
     }
 
     private static func summarizeNotificationPayloadKeys(_ payload: [AnyHashable: Any]) -> String {

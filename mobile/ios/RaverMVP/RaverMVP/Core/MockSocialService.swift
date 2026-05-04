@@ -20,6 +20,7 @@ actor MockSocialService: SocialService {
     private var messagesByConversation: [String: [ChatMessage]] = [:]
     private var squads: [SquadProfile] = []
     private var notifications: [AppNotification] = []
+    private var followedEventNotifications: [FollowedEventNotificationItem] = []
 
     private var followersByUserID: [String: Set<String>] = [:]
     private var followingByUserID: [String: Set<String>] = [:]
@@ -39,6 +40,7 @@ actor MockSocialService: SocialService {
         messagesByConversation = seed.messagesByConversation
         squads = seed.squads
         notifications = seed.notifications
+        followedEventNotifications = seed.followedEventNotifications
         followersByUserID = seed.followersByUserID
         followingByUserID = seed.followingByUserID
         likeActionAtByPostID = seed.likeActionAtByPostID
@@ -1246,6 +1248,30 @@ actor MockSocialService: SocialService {
         }
     }
 
+    func fetchFollowedEventsSummary() async throws -> FollowedEventsSummary {
+        let unreadItems = followedEventNotifications.filter { !$0.isRead }
+        let latest = followedEventNotifications.sorted(by: { $0.occurredAt > $1.occurredAt }).first
+        return FollowedEventsSummary(
+            unreadCount: unreadItems.count,
+            latestItemPreview: latest?.previewText,
+            latestOccurredAt: latest?.occurredAt
+        )
+    }
+
+    func fetchFollowedEventNotifications(limit: Int) async throws -> [FollowedEventNotificationItem] {
+        let normalized = max(1, min(limit, 50))
+        return Array(
+            followedEventNotifications
+                .sorted(by: { $0.occurredAt > $1.occurredAt })
+                .prefix(normalized)
+        )
+    }
+
+    func markFollowedEventNotificationRead(notificationID: String) async throws {
+        guard let index = followedEventNotifications.firstIndex(where: { $0.id == notificationID }) else { return }
+        followedEventNotifications[index].isRead = true
+    }
+
     func registerDevicePushToken(
         deviceID: String,
         platform: String,
@@ -1472,6 +1498,7 @@ actor MockSocialService: SocialService {
         messagesByConversation: [String: [ChatMessage]],
         squads: [SquadProfile],
         notifications: [AppNotification],
+        followedEventNotifications: [FollowedEventNotificationItem],
         followersByUserID: [String: Set<String>],
         followingByUserID: [String: Set<String>],
         likeActionAtByPostID: [String: Date],
@@ -1710,6 +1737,33 @@ actor MockSocialService: SocialService {
             )
         ]
 
+        let followedEventNotifications: [FollowedEventNotificationItem] = [
+            FollowedEventNotificationItem(
+                id: "fen_1",
+                type: "event_update.news",
+                eventID: "event_shanghai_warehouse_01",
+                eventName: "Shanghai Warehouse Opening",
+                newsID: "news_event_shanghai_warehouse_01",
+                newsTitle: "Final warehouse floor plan and door policy released",
+                newsSummary: "入场动线、存包规则和开场时间已经更新，建议出发前先看完整资讯。",
+                newsCoverImageURL: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=600&q=80",
+                isRead: false,
+                occurredAt: now.addingTimeInterval(-180)
+            ),
+            FollowedEventNotificationItem(
+                id: "fen_2",
+                type: "event_update.news",
+                eventID: "event_shenzhen_rooftop_02",
+                eventName: "Shenzhen Rooftop Sunset Session",
+                newsID: "news_event_shenzhen_rooftop_02",
+                newsTitle: "Sunset session travel guide is now live",
+                newsSummary: "地铁出口、入场时间和现场拍照提示都整理成了一篇新的活动资讯。",
+                newsCoverImageURL: nil,
+                isRead: true,
+                occurredAt: now.addingTimeInterval(-5400)
+            )
+        ]
+
         let followersByUserID: [String: Set<String>] = [
             currentUser.id: [alice.id],
             alice.id: [currentUser.id],
@@ -1798,6 +1852,7 @@ actor MockSocialService: SocialService {
             messagesByConversation,
             squads,
             notifications,
+            followedEventNotifications,
             followersByUserID,
             followingByUserID,
             likeActionAtByPostID,

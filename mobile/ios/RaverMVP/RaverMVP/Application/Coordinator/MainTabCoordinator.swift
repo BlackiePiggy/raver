@@ -13,8 +13,10 @@ enum AppRoute: Hashable {
     case messages(MessagesRoute)
     case profile(ProfileRoute)
     case conversation(target: ChatRouteTarget)
+    case followedEventsInbox
     case postDetail(postID: String)
     case eventDetail(eventID: String)
+    case newsDetail(articleID: String)
     case eventSchedule(eventID: String)
     case djDetail(djID: String)
     case rankingBoardDetail(board: RankingBoard)
@@ -33,8 +35,10 @@ extension AppRoute {
         case .circle, .messages, .profile:
             return true
         case .conversation,
+             .followedEventsInbox,
              .postDetail,
              .eventDetail,
+             .newsDetail,
              .eventSchedule,
              .djDetail,
              .rankingBoardDetail,
@@ -58,10 +62,14 @@ extension AppRoute {
             return "profile.route"
         case .conversation:
             return "conversation.detail"
+        case .followedEventsInbox:
+            return "followed.events.inbox"
         case .postDetail:
             return "post.detail"
         case .eventDetail:
             return "event.detail"
+        case .newsDetail:
+            return "news.detail"
         case .eventSchedule:
             return "event.schedule"
         case .djDetail:
@@ -91,9 +99,11 @@ extension AppRoute {
             return .profile
         case .conversation:
             return .messages
+        case .followedEventsInbox:
+            return .messages
         case .postDetail, .squadProfile, .squadManage, .ratingUnitDetail:
             return .circle
-        case .eventDetail, .eventSchedule, .djDetail, .rankingBoardDetail:
+        case .eventDetail, .newsDetail, .eventSchedule, .djDetail, .rankingBoardDetail:
             return .discover
         case .userProfile:
             return .profile
@@ -404,12 +414,22 @@ struct MainTabCoordinatorView: View {
                 service: appContainer.socialService
             )
 
+        case .followedEventsInbox:
+            FollowedEventsInboxView(repository: appContainer.messagesRepository)
+
         case let .postDetail(postID):
             PostDetailLoaderView(postID: postID, service: appContainer.socialService)
                 .environmentObject(appState)
 
         case .eventDetail(let eventID):
             EventDetailView(eventID: eventID)
+
+        case .newsDetail(let articleID):
+            makeDiscoverRouteDestination(
+                .newsDetail(articleID: articleID),
+                push: pushDiscoverRoute,
+                appContainer: appContainer
+            )
 
         case .eventSchedule(let eventID):
             EventDetailView(eventID: eventID, initialTabRawValue: "schedule")
@@ -576,12 +596,20 @@ struct MainTabCoordinatorView: View {
             return .conversation(target: target)
         }
 
+        if host == "messages", pathParts.count >= 1, pathParts[0].lowercased() == "followed-events" {
+            return .followedEventsInbox
+        }
+
         if host == "community", pathParts.count >= 2, pathParts[0].lowercased() == "post" {
             return .postDetail(postID: pathParts[1])
         }
 
         if host == "event", let eventID = pathParts.first {
             return .eventDetail(eventID: eventID)
+        }
+
+        if host == "news", let articleID = pathParts.first {
+            return .newsDetail(articleID: articleID)
         }
 
         if host == "dj", let djID = pathParts.first {
@@ -608,11 +636,17 @@ struct MainTabCoordinatorView: View {
             debugSystemRoute("mapAppRoute resolved normalized chat target=\(target.debugSummary)")
             return .conversation(target: target)
         }
+        if normalizedParts.count >= 2, normalizedParts[0] == "messages", normalizedParts[1] == "followed-events" {
+            return .followedEventsInbox
+        }
         if normalizedParts.count >= 3, normalizedParts[0] == "community", normalizedParts[1] == "post" {
             return .postDetail(postID: normalizedParts[2])
         }
         if normalizedParts.count >= 2, normalizedParts[0] == "event" {
             return .eventDetail(eventID: normalizedParts[1])
+        }
+        if normalizedParts.count >= 2, normalizedParts[0] == "news" {
+            return .newsDetail(articleID: normalizedParts[1])
         }
         if normalizedParts.count >= 2, normalizedParts[0] == "dj" {
             return .djDetail(djID: normalizedParts[1])
@@ -632,8 +666,12 @@ struct MainTabCoordinatorView: View {
             return "conversation(\(target.debugSummary))"
         case .postDetail(let postID):
             return "postDetail(\(postID))"
+        case .followedEventsInbox:
+            return "followedEventsInbox"
         case .eventDetail(let eventID):
             return "eventDetail(\(eventID))"
+        case .newsDetail(let articleID):
+            return "newsDetail(\(articleID))"
         case .eventSchedule(let eventID):
             return "eventSchedule(\(eventID))"
         case .djDetail(let djID):

@@ -659,6 +659,48 @@ final class LiveSocialService: SocialService {
         )
     }
 
+    func fetchFollowedEventsSummary() async throws -> FollowedEventsSummary {
+        let response: FollowedEventsSummaryResponse = try await request(
+            path: "/v1/notification-center/followed-events/summary",
+            method: "GET"
+        )
+        return FollowedEventsSummary(
+            unreadCount: max(0, response.unreadCount),
+            latestItemPreview: response.latestItemPreview?.nilIfBlank,
+            latestOccurredAt: response.latestOccurredAt
+        )
+    }
+
+    func fetchFollowedEventNotifications(limit: Int) async throws -> [FollowedEventNotificationItem] {
+        let normalized = max(1, min(limit, 50))
+        let response: FollowedEventsInboxResponse = try await request(
+            path: "/v1/notification-center/followed-events/items?limit=\(normalized)",
+            method: "GET"
+        )
+        return response.items.map { item in
+            FollowedEventNotificationItem(
+                id: item.id,
+                type: item.type,
+                eventID: item.eventID,
+                eventName: item.eventName,
+                newsID: item.newsID,
+                newsTitle: item.newsTitle,
+                newsSummary: item.newsSummary?.nilIfBlank,
+                newsCoverImageURL: item.newsCoverImageURL?.nilIfBlank,
+                isRead: item.isRead,
+                occurredAt: item.occurredAt
+            )
+        }
+    }
+
+    func markFollowedEventNotificationRead(notificationID: String) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/notification-center/followed-events/read",
+            method: "POST",
+            body: ["itemId": notificationID]
+        )
+    }
+
     func registerDevicePushToken(
         deviceID: String,
         platform: String,
@@ -1092,6 +1134,29 @@ private struct NotificationCenterUnreadCountResponse: Decodable {
     let likes: Int?
     let comments: Int?
     let squadInvites: Int?
+}
+
+private struct FollowedEventsSummaryResponse: Decodable {
+    let unreadCount: Int
+    let latestItemPreview: String?
+    let latestOccurredAt: Date?
+}
+
+private struct FollowedEventsInboxResponse: Decodable {
+    let items: [FollowedEventsInboxItem]
+}
+
+private struct FollowedEventsInboxItem: Decodable {
+    let id: String
+    let type: String
+    let eventID: String
+    let eventName: String
+    let newsID: String
+    let newsTitle: String
+    let newsSummary: String?
+    let newsCoverImageURL: String?
+    let isRead: Bool
+    let occurredAt: Date
 }
 
 private struct AnyEncodable: Encodable {

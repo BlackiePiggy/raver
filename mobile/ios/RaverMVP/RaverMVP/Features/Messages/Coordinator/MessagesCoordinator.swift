@@ -11,6 +11,7 @@ enum MessagesModalRoute: Hashable {
 
 extension Notification.Name {
     static let raverMessageAlertsDidMutate = Notification.Name("raverMessageAlertsDidMutate")
+    static let raverFollowedEventsDidMutate = Notification.Name("raverFollowedEventsDidMutate")
 }
 
 private struct MessagesPushKey: EnvironmentKey {
