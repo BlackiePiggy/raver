@@ -36,6 +36,14 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Raver 需要使用相机来拍摄并发送照片或视频。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Raver 需要使用麦克风来录制并发送语音消息或视频声音。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Raver 需要访问你的相册以选择并发送照片或视频。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Raver 需要将媒体内容保存到你的相册。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

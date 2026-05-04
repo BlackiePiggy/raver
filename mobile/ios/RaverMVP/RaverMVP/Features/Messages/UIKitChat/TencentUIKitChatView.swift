@@ -12,16 +12,19 @@ extension Notification.Name {
 
 private enum RaverMessageMenuAction: MessageMenuAction, Sendable {
     case copy
+    case mention
     case reply
     case revoke
     case delete
 
-    static let allCases: [RaverMessageMenuAction] = [.copy, .reply, .revoke, .delete]
+    static let allCases: [RaverMessageMenuAction] = [.copy, .mention, .reply, .revoke, .delete]
 
     func title() -> String {
         switch self {
         case .copy:
             return L("复制", "Copy")
+        case .mention:
+            return L("@TA", "@Mention")
         case .reply:
             return L("回复", "Reply")
         case .revoke:
@@ -35,6 +38,8 @@ private enum RaverMessageMenuAction: MessageMenuAction, Sendable {
         switch self {
         case .copy:
             return Image(systemName: "doc.on.doc")
+        case .mention:
+            return Image(systemName: "at")
         case .reply:
             return Image(systemName: "arrowshape.turn.up.left")
         case .revoke:
@@ -53,6 +58,9 @@ private enum RaverMessageMenuAction: MessageMenuAction, Sendable {
         var items: [RaverMessageMenuAction] = []
         if (message.customData["canCopy"] as? Bool) == true {
             items.append(.copy)
+        }
+        if (message.customData["canMention"] as? Bool) == true {
+            items.append(.mention)
         }
         if (message.customData["canReply"] as? Bool) == true {
             items.append(.reply)
@@ -78,12 +86,13 @@ struct TencentUIKitChatView: View {
     let service: SocialService
 
     @StateObject private var viewModel: ExyteChatConversationViewModel
-    @State private var text = ""
     @State private var scrollToID: String?
     @State private var isShowingConversationSearch = false
     @State private var highlightedMessageID: String?
     @State private var conversationSearchLocateFailureMessage: String?
     @State private var presentedAudioFile: ChatAudioFilePresentation?
+    @State private var composerObservedText = ""
+    @State private var composerInjectedText: String?
 
     private let recorderSettings = RecorderSettings(
         sampleRate: 16000,
@@ -107,6 +116,7 @@ struct TencentUIKitChatView: View {
             chatHeader
             chatContent
         }
+        .background(chatLifecycleBridge)
         .tint(RaverTheme.accent)
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $isShowingConversationSearch) {
@@ -151,28 +161,19 @@ struct TencentUIKitChatView: View {
                 )
             )
         }
-        .onAppear {
-            IMChatStore.shared.activateConversation(conversation)
-            viewModel.updateCurrentSession(appState.session)
-            viewModel.handleViewDidAppear()
-            viewModel.onStart()
-        }
         .onChange(of: conversation) { oldConversation, updatedConversation in
-            IMChatStore.shared.deactivateConversation(oldConversation)
-            IMChatStore.shared.activateConversation(updatedConversation)
             viewModel.updateConversation(updatedConversation)
-            viewModel.handleViewDidAppear()
+            viewModel.updateCurrentSession(appState.session)
+
+            guard oldConversation.id != updatedConversation.id else { return }
+            DispatchQueue.main.async {
+                IMChatStore.shared.deactivateConversation(oldConversation)
+                IMChatStore.shared.activateConversation(updatedConversation)
+                viewModel.handleViewDidAppear()
+            }
         }
         .onChange(of: appState.session?.user.id) { _, _ in
             viewModel.updateCurrentSession(appState.session)
-        }
-        .onChange(of: text) { _, updatedText in
-            viewModel.handleComposerInputChanged(updatedText)
-        }
-        .onDisappear {
-            IMChatStore.shared.deactivateConversation(conversation)
-            viewModel.handleViewDidDisappear()
-            viewModel.onStop()
         }
         .onReceive(NotificationCenter.default.publisher(for: .raverOpenConversationSearch)) { notification in
             guard let requestedConversationID = notification.userInfo?["conversationID"] as? String else { return }
@@ -187,6 +188,26 @@ struct TencentUIKitChatView: View {
             guard let displayName, !displayName.isEmpty else { return }
             viewModel.overrideDirectConversationDisplayName(displayName)
         }
+    }
+
+    private var chatLifecycleBridge: some View {
+        TencentChatLifecycleBridge(
+            onViewDidLoad: {
+                viewModel.updateCurrentSession(appState.session)
+                viewModel.onStart()
+            },
+            onViewDidAppear: {
+                IMChatStore.shared.activateConversation(conversation)
+                viewModel.updateCurrentSession(appState.session)
+                viewModel.handleViewDidAppear()
+            },
+            onViewWillDisappear: {
+                IMChatStore.shared.deactivateConversation(conversation)
+                viewModel.handleViewDidDisappear()
+                viewModel.onStop()
+            }
+        )
+        .allowsHitTesting(false)
     }
 
     private var chatHeader: some View {
@@ -277,7 +298,11 @@ struct TencentUIKitChatView: View {
         .enableLoadMore(offset: 1) {
             viewModel.loadMoreMessages()
         }
-        .inputViewText($text)
+        .onInputViewTextChange { updatedText in
+            composerObservedText = updatedText
+            viewModel.handleComposerInputChanged(updatedText)
+        }
+        .setInputViewText(composerInjectedText, focus: true)
         .scrollToMessageID(scrollToID)
         .keyboardDismissMode(.interactive)
         .showUsername(false)
@@ -569,6 +594,8 @@ struct TencentUIKitChatView: View {
         switch action {
         case .copy:
             defaultActions(message, .copy)
+        case .mention:
+            insertMentionFromMessage(message)
         case .reply:
             defaultActions(message, .reply)
         case .revoke:
@@ -580,6 +607,66 @@ struct TencentUIKitChatView: View {
                 await viewModel.deleteMessage(messageID: message.id)
             }
         }
+    }
+
+    private var composerMentionCandidates: [RaverChatMentionCandidate] {
+        var ordered: [RaverChatMentionCandidate] = []
+        var seen = Set<String>()
+
+        func appendCandidate(username: String?, displayName: String?) {
+            guard let username else { return }
+            let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedUsername.isEmpty else { return }
+            let key = trimmedUsername.lowercased()
+            guard !seen.contains(key) else { return }
+
+            if let currentUsername = appState.session?.user.username.trimmingCharacters(in: .whitespacesAndNewlines),
+               currentUsername.caseInsensitiveCompare(trimmedUsername) == .orderedSame {
+                return
+            }
+
+            seen.insert(key)
+            let trimmedDisplayName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ordered.append(
+                RaverChatMentionCandidate(
+                    username: trimmedUsername,
+                    displayName: trimmedDisplayName
+                )
+            )
+        }
+
+        appendCandidate(
+            username: conversation.peer?.username,
+            displayName: conversation.peer?.displayName
+        )
+
+        for message in viewModel.messages {
+            appendCandidate(
+                username: message.customData["senderUsername"] as? String,
+                displayName: message.customData["senderDisplayName"] as? String
+            )
+        }
+
+        return ordered.sorted {
+            $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending
+        }
+    }
+
+    private func insertMentionFromMessage(_ message: Message) {
+        guard let username = (message.customData["senderUsername"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !username.isEmpty else {
+            return
+        }
+
+        let existing = composerObservedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if existing.isEmpty {
+            composerInjectedText = "@\(username) "
+            return
+        }
+
+        let separator = composerObservedText.last?.isWhitespace == true ? "" : " "
+        composerInjectedText = composerObservedText + separator + "@\(username) "
     }
 
     private var chatTheme: ChatTheme {
@@ -783,6 +870,10 @@ struct TencentUIKitChatView: View {
     private func fileMessageTimeView(for message: Message, isMine: Bool) -> some View {
         Text(message.createdAt.chatTimeText)
             .font(.caption)
+            .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(1)
             .foregroundStyle(isMine ? RaverTheme.secondaryText : RaverTheme.secondaryText)
             .padding(.horizontal, 2)
             .padding(.bottom, 8)
@@ -796,21 +887,13 @@ struct TencentUIKitChatView: View {
                 .controlSize(.small)
                 .frame(width: 14, height: 14)
                 .padding(.bottom, 8)
-        case .read:
-            Image(systemName: "checkmark.double")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(RaverTheme.accent)
-                .padding(.bottom, 8)
-        case .sent, .delivered:
-            Image(systemName: "checkmark")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(RaverTheme.secondaryText)
-                .padding(.bottom, 8)
         case .error:
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.red)
                 .padding(.bottom, 8)
+        case .read, .sent, .delivered:
+            EmptyView()
         case nil:
             EmptyView()
         }
@@ -2038,6 +2121,11 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             }
             await sendTypingStatusIfNeeded(isTyping: false, force: true)
         } catch {
+            if let replyMessageID,
+               chatController.replyDraftMessage?.id == replyMessageID {
+                chatController.clearReplyDraft()
+            }
+            await sendTypingStatusIfNeeded(isTyping: false, force: true)
             #if DEBUG
             print("[ExyteChatConversationViewModel] send failed: \(error.localizedDescription)")
             #endif
@@ -2187,17 +2275,17 @@ private final class ExyteChatConversationViewModel: ObservableObject {
                 )
             )
         case .sent:
-            if source.isMine, source.peerRead == true {
-                return .read
-            }
-            return .sent
+            return nil
         }
     }
 
     private func makeCustomData(from source: ChatMessage) -> [String: any Sendable] {
         var data: [String: any Sendable] = [
             "sourceKind": source.kind.rawValue,
+            "senderUsername": source.sender.username,
+            "senderDisplayName": source.sender.displayName,
             "canCopy": source.kind == .text,
+            "canMention": !source.isMine && source.kind != .system && !source.sender.username.isEmpty,
             "canReply": source.kind != .system && source.deliveryStatus == .sent,
             "canDelete": source.kind != .system && source.deliveryStatus != .sending,
             "canRevoke": source.isMine &&
@@ -2682,6 +2770,60 @@ private enum ExyteAvatarPresentation {
             return "local-avatar://\(name)"
         case .initials:
             return nil
+        }
+    }
+}
+
+private struct TencentChatLifecycleBridge: UIViewControllerRepresentable {
+    let onViewDidLoad: () -> Void
+    let onViewDidAppear: () -> Void
+    let onViewWillDisappear: () -> Void
+
+    func makeUIViewController(context: Context) -> Controller {
+        let controller = Controller()
+        controller.onViewDidLoad = onViewDidLoad
+        controller.onViewDidAppear = onViewDidAppear
+        controller.onViewWillDisappear = onViewWillDisappear
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: Controller, context: Context) {
+        uiViewController.onViewDidLoad = onViewDidLoad
+        uiViewController.onViewDidAppear = onViewDidAppear
+        uiViewController.onViewWillDisappear = onViewWillDisappear
+    }
+
+    final class Controller: UIViewController {
+        var onViewDidLoad: (() -> Void)?
+        var onViewDidAppear: (() -> Void)?
+        var onViewWillDisappear: (() -> Void)?
+
+        override func loadView() {
+            let view = UIView(frame: .zero)
+            view.backgroundColor = .clear
+            view.isUserInteractionEnabled = false
+            self.view = view
+        }
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            DispatchQueue.main.async { [weak self] in
+                self?.onViewDidLoad?()
+            }
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            DispatchQueue.main.async { [weak self] in
+                self?.onViewDidAppear?()
+            }
+        }
+
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            DispatchQueue.main.async { [weak self] in
+                self?.onViewWillDisappear?()
+            }
         }
     }
 }

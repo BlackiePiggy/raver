@@ -60,6 +60,10 @@
 		3FB6D7FB113550B136FD8033 /* Pods_RaverMVP.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 30F364D1D4729E719807CC67 /* Pods_RaverMVP.framework */; };
 		40DF4B13976013D3C21275ED /* SkeletonViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA79F30AEFED7B93AA3310FB /* SkeletonViews.swift */; };
 		41CB9B3BAC790CF7BCF7CAF4 /* DemoAlignedChatViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E4DC2C3FBF429A857DE5513 /* DemoAlignedChatViewController.swift */; };
+		41D0A9A10000000000000001 /* RaverChatComposerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41D0A9A20000000000000001 /* RaverChatComposerState.swift */; };
+		41D0A9A10000000000000002 /* RaverChatComposerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41D0A9A20000000000000002 /* RaverChatComposerCoordinator.swift */; };
+		41D0A9A10000000000000003 /* RaverChatComposerTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41D0A9A20000000000000003 /* RaverChatComposerTextView.swift */; };
+		41D0A9A10000000000000004 /* RaverChatComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41D0A9A20000000000000004 /* RaverChatComposerView.swift */; };
 		430044327A0BB460A375D3DE /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC843EFC9D73D6230383E286 /* AppConfig.swift */; };
 		45452C970F2DEDE67834FB2B /* DJsModuleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C424F23B1C4AAD37E21CA78 /* DJsModuleViewModel.swift */; };
 		46A1C2B9B370620A0364B6C9 /* ChatItemAlignment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 593206FEE83459667A0A3851 /* ChatItemAlignment.swift */; };
@@ -438,6 +442,10 @@
 		D0B45B928FAA36BEC68A7B7E /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		D22F64C28F795AFB1BDDB071 /* MessageNotificationsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageNotificationsViewModel.swift; sourceTree = "<group>"; };
 		D2DC784466A1D44E3F586DA3 /* TencentUIKitChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TencentUIKitChatView.swift; sourceTree = "<group>"; };
+		41D0A9A20000000000000001 /* RaverChatComposerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverChatComposerState.swift; sourceTree = "<group>"; };
+		41D0A9A20000000000000002 /* RaverChatComposerCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverChatComposerCoordinator.swift; sourceTree = "<group>"; };
+		41D0A9A20000000000000003 /* RaverChatComposerTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverChatComposerTextView.swift; sourceTree = "<group>"; };
+		41D0A9A20000000000000004 /* RaverChatComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverChatComposerView.swift; sourceTree = "<group>"; };
 		D56AF04FB84AE677A7937BAC /* DemoAlignedMessageActionCoordinatorFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedMessageActionCoordinatorFactory.swift; sourceTree = "<group>"; };
 		D6C0124C1138D3F38384AA88 /* CGRect+Extension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CGRect+Extension.swift"; sourceTree = "<group>"; };
 		D7E353A02AA123867DBF8214 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
@@ -594,6 +602,7 @@
 		33432F949456AEC2CC9F5087 /* UIKitChat */ = {
 			isa = PBXGroup;
 			children = (
+				41D0A9A30000000000000001 /* Composer */,
 				C62AC15B6C3AA3846D5F6847 /* DemoAlignedChatView.swift */,
 				2E4DC2C3FBF429A857DE5513 /* DemoAlignedChatViewController.swift */,
 				1DD043D6D7706F23E3EB672D /* DemoAlignedMediaMessageCell.swift */,
@@ -609,6 +618,17 @@
 				369A949439B72235482D21AF /* Support */,
 			);
 			path = UIKitChat;
+			sourceTree = "<group>";
+		};
+		41D0A9A30000000000000001 /* Composer */ = {
+			isa = PBXGroup;
+			children = (
+				41D0A9A20000000000000002 /* RaverChatComposerCoordinator.swift */,
+				41D0A9A20000000000000001 /* RaverChatComposerState.swift */,
+				41D0A9A20000000000000003 /* RaverChatComposerTextView.swift */,
+				41D0A9A20000000000000004 /* RaverChatComposerView.swift */,
+			);
+			path = Composer;
 			sourceTree = "<group>";
 		};
 		363A09259AB8E1EF37F49338 /* Preview Content */ = {
@@ -1659,6 +1679,10 @@
 				323F3D3FC83332EA80F230EA /* SocialService.swift in Sources */,
 				62B16A77B9B42A4668E95E96 /* SquadProfileView.swift in Sources */,
 				482D36CFDC412AE4D1D1D9CA /* SquadProfileViewModel.swift in Sources */,
+				41D0A9A10000000000000002 /* RaverChatComposerCoordinator.swift in Sources */,
+				41D0A9A10000000000000001 /* RaverChatComposerState.swift in Sources */,
+				41D0A9A10000000000000003 /* RaverChatComposerTextView.swift in Sources */,
+				41D0A9A10000000000000004 /* RaverChatComposerView.swift in Sources */,
 				8D87D2E16A2F5A3BA11A9495 /* StateController.swift in Sources */,
 				309CEBC13DDB36BD1A0AA69F /* StaticViewFactory.swift in Sources */,
 				8360A281187D3317D5EF87D3 /* SwappingContainerView.swift in Sources */,

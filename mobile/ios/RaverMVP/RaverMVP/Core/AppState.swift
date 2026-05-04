@@ -2256,7 +2256,7 @@ final class TencentIMSession: NSObject {
     }
 
     private func shouldRequestReadReceipt(for target: TencentConversationTarget) -> Bool {
-        target.type == .direct || target.type == .group
+        false
     }
 
     private func fetchAllConversations(manager: V2TIMManager) async throws -> [V2TIMConversation] {

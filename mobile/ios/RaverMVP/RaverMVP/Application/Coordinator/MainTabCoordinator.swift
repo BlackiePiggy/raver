@@ -662,7 +662,6 @@ private struct RouteLoaderScaffold<Content: View>: View {
 
 private struct ConversationLoaderView: View {
     @EnvironmentObject private var appState: AppState
-    @ObservedObject private var chatStore = IMChatStore.shared
 
     let target: ChatRouteTarget
     let service: SocialService
@@ -689,7 +688,10 @@ private struct ConversationLoaderView: View {
         }
         .task {
             if let stagedConversation = target.stagedConversation {
-                chatStore.stageConversation(stagedConversation)
+                applyResolvedConversation(stagedConversation, logPrefix: "resolved from staged route")
+                DispatchQueue.main.async {
+                    IMChatStore.shared.stageConversation(stagedConversation)
+                }
             }
             await loadConversation(force: false)
         }
@@ -700,10 +702,6 @@ private struct ConversationLoaderView: View {
             Task {
                 await loadConversation(force: true)
             }
-        }
-        .onChange(of: chatStore.conversations) { _, updatedConversations in
-            debug("chatStore conversations changed count=\(updatedConversations.count) try resolve cache")
-            _ = resolveConversationFromCache()
         }
     }
 
@@ -716,7 +714,6 @@ private struct ConversationLoaderView: View {
 
         if resolveConversationFromCache() {
             debug("resolved from cache before remote fetch")
-            phase = .success
             return
         }
 
@@ -724,7 +721,7 @@ private struct ConversationLoaderView: View {
         phase = .initialLoading
         defer { isLoading = false }
         debug(
-            "load start force=\(force) conversationID=\(target.preferredConversationID) tencentState=\(appState.tencentIMConnectionState) cachedCount=\(chatStore.conversations.count)"
+            "load start force=\(force) conversationID=\(target.preferredConversationID) tencentState=\(appState.tencentIMConnectionState) cachedCount=\(IMChatStore.shared.conversations.count)"
         )
 
         do {
@@ -738,13 +735,9 @@ private struct ConversationLoaderView: View {
             if let found = allConversations.first(where: {
                 matchesRouteTarget($0, target: target)
             }) {
-                chatStore.stageConversation(found)
-                if resolveConversationFromCache() {
-                    debug("resolved from staged+store after remote id=\(found.id)")
-                } else {
-                    conversation = found
-                    phase = .success
-                    debug("resolved from remote fallback id=\(found.id)")
+                applyResolvedConversation(found, logPrefix: "resolved from remote fetch")
+                DispatchQueue.main.async {
+                    IMChatStore.shared.stageConversation(found)
                 }
             } else {
                 phase = .empty
@@ -755,7 +748,6 @@ private struct ConversationLoaderView: View {
 
             if resolveConversationFromCache() {
                 debug("resolved from cache after remote failure")
-                phase = .success
                 return
             }
 
@@ -775,7 +767,7 @@ private struct ConversationLoaderView: View {
 
     @MainActor
     private func resolveConversationFromCache() -> Bool {
-        let storeMatch = chatStore.conversations.first(where: {
+        let storeMatch = IMChatStore.shared.conversations.first(where: {
             matchesRouteTarget($0, target: target)
         })
         let candidate = preferredConversationCandidate(
@@ -784,17 +776,22 @@ private struct ConversationLoaderView: View {
         )
 
         if let candidate {
-            let previousConversation = conversation
-            conversation = candidate
-            phase = .success
-            if let previousConversation, previousConversation != candidate {
-                debug("cache updated id=\(candidate.id)")
-            } else {
-                debug("cache hit id=\(candidate.id)")
-            }
+            applyResolvedConversation(candidate, logPrefix: "resolved from cache")
             return true
         }
         return false
+    }
+
+    @MainActor
+    private func applyResolvedConversation(_ candidate: Conversation, logPrefix: String) {
+        let previousConversation = conversation
+        conversation = candidate
+        phase = .success
+        if let previousConversation, previousConversation != candidate {
+            debug("\(logPrefix) updated id=\(candidate.id)")
+        } else {
+            debug("\(logPrefix) id=\(candidate.id)")
+        }
     }
 
     private func preferredConversationCandidate(
