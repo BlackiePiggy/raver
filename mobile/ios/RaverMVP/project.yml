@@ -49,6 +49,8 @@ targets:
         product: GiphyUISDK
       - target: RaverCountdownWidgets
         embed: true
+      - target: RaverNotificationService
+        embed: true
   RaverCountdownWidgets:
     type: app-extension
     platform: iOS
@@ -68,6 +70,25 @@ targets:
         APPLICATION_EXTENSION_API_ONLY: YES
         CODE_SIGN_ENTITLEMENTS: RaverCountdownWidgets/RaverCountdownWidgets.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.raver.mvp.countdownwidgets
+        TARGETED_DEVICE_FAMILY: "1"
+  RaverNotificationService:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: RaverNotificationService
+    info:
+      path: RaverNotificationService/Info.plist
+      properties:
+        CFBundleDisplayName: Raver Notification Service
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+    settings:
+      base:
+        APPLICATION_EXTENSION_API_ONLY: YES
+        CODE_SIGN_ENTITLEMENTS: RaverNotificationService/RaverNotificationService.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.raver.mvp.notificationservice
         TARGETED_DEVICE_FAMILY: "1"
   RaverMVPUITests:
     type: bundle.ui-testing

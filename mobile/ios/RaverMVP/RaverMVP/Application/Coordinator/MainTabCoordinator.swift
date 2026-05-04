@@ -194,6 +194,7 @@ struct MainTabCoordinatorView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var router = AppRouter()
     @State private var handledSystemDeepLinkEventID: UUID?
+    @State private var didReplayPushRouteTrace = false
 
     var body: some View {
         NavigationStack(path: $router.path) {
@@ -232,8 +233,21 @@ struct MainTabCoordinatorView: View {
         .environment(\.profilePush) { route in
             pushProfileRoute(route)
         }
+        .task {
+            if !didReplayPushRouteTrace {
+                PushRouteTrace.dumpToConsole()
+                didReplayPushRouteTrace = true
+            }
+            if let event = appState.systemDeepLinkEvent,
+               handledSystemDeepLinkEventID != event.id {
+                debugSystemRoute("consume pending systemDeepLinkEvent id=\(event.id) source=\(event.source) deeplink=\(event.deeplink)")
+                handledSystemDeepLinkEventID = event.id
+                handleSystemDeepLink(event.deeplink)
+            }
+        }
         .onReceive(appState.$systemDeepLinkEvent.compactMap { $0 }) { event in
             guard handledSystemDeepLinkEventID != event.id else { return }
+            debugSystemRoute("receive systemDeepLinkEvent id=\(event.id) source=\(event.source) deeplink=\(event.deeplink)")
             handledSystemDeepLinkEventID = event.id
             handleSystemDeepLink(event.deeplink)
         }
@@ -518,23 +532,48 @@ struct MainTabCoordinatorView: View {
     }
 
     private func handleSystemDeepLink(_ deeplink: String) {
-        guard let route = mapAppRoute(from: deeplink) else { return }
+        debugSystemRoute("handle deeplink start value=\(deeplink)")
+        guard let route = mapAppRoute(from: deeplink) else {
+            debugSystemRoute("handle deeplink failed to map value=\(deeplink)")
+            return
+        }
+        debugSystemRoute("handle deeplink mapped route=\(describeRoute(route))")
         if let tab = route.preferredTab {
+            debugSystemRoute("switch tab to \(describeTab(tab)) for route=\(describeRoute(route))")
             router.switchTab(tab)
         }
         if router.path.last == route {
+            debugSystemRoute("skip push because route already on top route=\(describeRoute(route))")
             return
         }
+        debugSystemRoute("push route=\(describeRoute(route)) pathDepthBefore=\(router.path.count)")
         router.push(route)
     }
 
     private func mapAppRoute(from deeplink: String) -> AppRoute? {
         guard let url = URL(string: deeplink) else { return nil }
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let queryItems = components?.queryItems ?? []
+        let conversationType = queryItems.first(where: { $0.name == "conversationType" })?.value
+        let businessConversationID = queryItems.first(where: { $0.name == "conversationID" })?.value
+        let peerID = queryItems.first(where: { $0.name == "peerID" })?.value
+        let groupID = queryItems.first(where: { $0.name == "groupID" })?.value
         let host = url.host?.lowercased() ?? ""
         let pathParts = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
+        debugSystemRoute(
+            "mapAppRoute deeplink=\(deeplink) host=\(host) pathParts=\(pathParts) query={conversationType=\(conversationType ?? "nil"),conversationID=\(businessConversationID ?? "nil"),peerID=\(peerID ?? "nil"),groupID=\(groupID ?? "nil")}"
+        )
 
         if host == "messages", pathParts.count >= 2, pathParts[0].lowercased() == "conversation" {
-            return .conversation(target: .conversationReference(pathParts[1]))
+            let target = ChatRouteTarget.pushReference(
+                preferredConversationID: pathParts[1],
+                businessConversationID: businessConversationID,
+                conversationType: conversationType,
+                peerID: peerID,
+                groupID: groupID
+            )
+            debugSystemRoute("mapAppRoute resolved chat target=\(target.debugSummary)")
+            return .conversation(target: target)
         }
 
         if host == "community", pathParts.count >= 2, pathParts[0].lowercased() == "post" {
@@ -559,7 +598,15 @@ struct MainTabCoordinatorView: View {
 
         let normalizedParts = ([host] + pathParts).filter { !$0.isEmpty }
         if normalizedParts.count >= 3, normalizedParts[0] == "messages", normalizedParts[1] == "conversation" {
-            return .conversation(target: .conversationReference(normalizedParts[2]))
+            let target = ChatRouteTarget.pushReference(
+                preferredConversationID: normalizedParts[2],
+                businessConversationID: businessConversationID,
+                conversationType: conversationType,
+                peerID: peerID,
+                groupID: groupID
+            )
+            debugSystemRoute("mapAppRoute resolved normalized chat target=\(target.debugSummary)")
+            return .conversation(target: target)
         }
         if normalizedParts.count >= 3, normalizedParts[0] == "community", normalizedParts[1] == "post" {
             return .postDetail(postID: normalizedParts[2])
@@ -577,6 +624,44 @@ struct MainTabCoordinatorView: View {
             return .userProfile(userID: normalizedParts[1])
         }
         return nil
+    }
+
+    private func describeRoute(_ route: AppRoute) -> String {
+        switch route {
+        case .conversation(let target):
+            return "conversation(\(target.debugSummary))"
+        case .postDetail(let postID):
+            return "postDetail(\(postID))"
+        case .eventDetail(let eventID):
+            return "eventDetail(\(eventID))"
+        case .eventSchedule(let eventID):
+            return "eventSchedule(\(eventID))"
+        case .djDetail(let djID):
+            return "djDetail(\(djID))"
+        case .squadProfile(let squadID):
+            return "squadProfile(\(squadID))"
+        case .userProfile(let userID):
+            return "userProfile(\(userID))"
+        default:
+            return String(describing: route)
+        }
+    }
+
+    private func describeTab(_ tab: MainTab) -> String {
+        switch tab {
+        case .discover:
+            return "discover"
+        case .circle:
+            return "circle"
+        case .messages:
+            return "messages"
+        case .profile:
+            return "profile"
+        }
+    }
+
+    private func debugSystemRoute(_ message: String) {
+        PushRouteTrace.log("SystemPushRoute", message)
     }
 }
 
@@ -687,6 +772,7 @@ private struct ConversationLoaderView: View {
             }
         }
         .task {
+            debug("view task start target=\(target.debugSummary)")
             if let stagedConversation = target.stagedConversation {
                 applyResolvedConversation(stagedConversation, logPrefix: "resolved from staged route")
                 DispatchQueue.main.async {
@@ -703,17 +789,33 @@ private struct ConversationLoaderView: View {
                 await loadConversation(force: true)
             }
         }
+        .onChange(of: appState.isAuthBootstrapping) { oldValue, newValue in
+            guard oldValue != newValue else { return }
+            guard conversation == nil else { return }
+            guard newValue == false else { return }
+            Task {
+                await loadConversation(force: true)
+            }
+        }
     }
 
     @MainActor
     private func loadConversation(force: Bool) async {
         if conversation != nil && !force {
-            debug("skip load conversation: already resolved")
+            debug("skip load conversation: already resolved target=\(target.debugSummary) current=\(describeConversation(conversation))")
             return
         }
 
         if resolveConversationFromCache() {
-            debug("resolved from cache before remote fetch")
+            debug("resolved from cache before remote fetch target=\(target.debugSummary)")
+            return
+        }
+
+        if shouldWaitForSessionRecovery {
+            phase = .initialLoading
+            debug(
+                "wait for session recovery target=\(target.debugSummary) authBootstrapping=\(appState.isAuthBootstrapping) tencentState=\(appState.tencentIMConnectionState)"
+            )
             return
         }
 
@@ -721,7 +823,7 @@ private struct ConversationLoaderView: View {
         phase = .initialLoading
         defer { isLoading = false }
         debug(
-            "load start force=\(force) conversationID=\(target.preferredConversationID) tencentState=\(appState.tencentIMConnectionState) cachedCount=\(IMChatStore.shared.conversations.count)"
+            "load start force=\(force) target=\(target.debugSummary) tencentState=\(appState.tencentIMConnectionState) cachedCount=\(IMChatStore.shared.conversations.count) cacheSnapshot=\(summarizeConversations(IMChatStore.shared.conversations))"
         )
 
         do {
@@ -730,7 +832,7 @@ private struct ConversationLoaderView: View {
                 async let groupConversations = service.fetchConversations(type: .group)
                 return try await directConversations + groupConversations
             }
-            debug("remote fetch success total=\(allConversations.count)")
+            debug("remote fetch success total=\(allConversations.count) snapshot=\(summarizeConversations(allConversations))")
 
             if let found = allConversations.first(where: {
                 matchesRouteTarget($0, target: target)
@@ -741,13 +843,13 @@ private struct ConversationLoaderView: View {
                 }
             } else {
                 phase = .empty
-                debug("remote fetch completed but conversation not found")
+                debug("remote fetch completed but conversation not found target=\(target.debugSummary) remoteMatches=\(summarizePotentialMatches(allConversations))")
             }
         } catch {
-            debug("remote fetch failed error=\(error.localizedDescription)")
+            debug("remote fetch failed target=\(target.debugSummary) error=\(error.localizedDescription)")
 
             if resolveConversationFromCache() {
-                debug("resolved from cache after remote failure")
+                debug("resolved from cache after remote failure target=\(target.debugSummary)")
                 return
             }
 
@@ -779,6 +881,7 @@ private struct ConversationLoaderView: View {
             applyResolvedConversation(candidate, logPrefix: "resolved from cache")
             return true
         }
+        debug("cache resolve miss target=\(target.debugSummary) cacheSnapshot=\(summarizeConversations(IMChatStore.shared.conversations)) potentialMatches=\(summarizePotentialMatches(IMChatStore.shared.conversations))")
         return false
     }
 
@@ -788,9 +891,9 @@ private struct ConversationLoaderView: View {
         conversation = candidate
         phase = .success
         if let previousConversation, previousConversation != candidate {
-            debug("\(logPrefix) updated id=\(candidate.id)")
+            debug("\(logPrefix) updated target=\(target.debugSummary) conversation=\(describeConversation(candidate))")
         } else {
-            debug("\(logPrefix) id=\(candidate.id)")
+            debug("\(logPrefix) target=\(target.debugSummary) conversation=\(describeConversation(candidate))")
         }
     }
 
@@ -909,14 +1012,72 @@ private struct ConversationLoaderView: View {
     }
 
     private func debug(_ message: String) {
-        #if DEBUG
         print("[ConversationLoader] \(message)")
         IMProbeLogger.log("[ConversationLoader] \(message)")
-        #endif
+        PushRouteTrace.log("ConversationLoader", message)
+    }
+
+    private func describeConversation(_ conversation: Conversation?) -> String {
+        guard let conversation else { return "nil" }
+        return "id=\(conversation.id),sdk=\(conversation.sdkConversationID ?? "nil"),type=\(conversation.type.rawValue),peerID=\(conversation.peer?.id ?? "nil"),peerUsername=\(conversation.peer?.username ?? "nil"),title=\(conversation.title)"
+    }
+
+    private func summarizeConversations(_ conversations: [Conversation], limit: Int = 12) -> String {
+        if conversations.isEmpty { return "[]" }
+        let prefix = conversations.prefix(limit).map { describeConversation($0) }
+        let suffix = conversations.count > limit ? " ... total=\(conversations.count)" : ""
+        return "[\(prefix.joined(separator: " | "))]\(suffix)"
+    }
+
+    private func summarizePotentialMatches(_ conversations: [Conversation], limit: Int = 12) -> String {
+        let normalizedTargetIDs = Set(([target.preferredConversationID] + target.fallbackConversationIDs).map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }.filter { !$0.isEmpty })
+
+        let candidates = conversations.filter { conversation in
+            let values = [
+                conversation.id,
+                conversation.sdkConversationID,
+                conversation.peer?.id,
+                conversation.peer?.username
+            ]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            if values.contains(where: { normalizedTargetIDs.contains($0) }) {
+                return true
+            }
+            switch target.kind {
+            case .direct(let userID):
+                let normalizedUserID = userID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                return values.contains(normalizedUserID)
+            case .group(let groupID):
+                let normalizedGroupID = groupID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                return values.contains(normalizedGroupID)
+            case .none:
+                return false
+            }
+        }
+
+        return summarizeConversations(Array(candidates.prefix(limit)), limit: limit)
+    }
+
+    private var shouldWaitForSessionRecovery: Bool {
+        if appState.isAuthBootstrapping {
+            return true
+        }
+        switch appState.tencentIMConnectionState {
+        case .idle, .initializing, .connecting:
+            return true
+        case .disabled, .unavailable, .connected, .userSigExpired, .kickedOffline, .failed:
+            return false
+        }
     }
 
     private func matchesRouteTarget(_ conversation: Conversation, target: ChatRouteTarget) -> Bool {
-        if conversation.id == target.preferredConversationID || conversation.sdkConversationID == target.preferredConversationID {
+        let targetIDs = Set(([target.preferredConversationID] + target.fallbackConversationIDs).map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty })
+
+        if targetIDs.contains(conversation.id) || targetIDs.contains(conversation.sdkConversationID ?? "") {
             return true
         }
 

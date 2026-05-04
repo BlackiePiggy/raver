@@ -56,12 +56,16 @@ private extension AppAppearance {
 final class RaverAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     private static var pendingSystemNotificationUserInfo: [AnyHashable: Any]?
     private static let pendingNotificationLock = NSLock()
+    private static func pushRouteLog(_ message: String) {
+        PushRouteTrace.log("SystemPushBootstrap", message)
+    }
 
     static func consumePendingSystemNotificationUserInfo() -> [AnyHashable: Any]? {
         pendingNotificationLock.lock()
         defer { pendingNotificationLock.unlock() }
         let payload = pendingSystemNotificationUserInfo
         pendingSystemNotificationUserInfo = nil
+        pushRouteLog("consume pending payload keys=\(summarizePayloadKeys(payload))")
         return payload
     }
 
@@ -69,12 +73,17 @@ final class RaverAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         pendingNotificationLock.lock()
         pendingSystemNotificationUserInfo = userInfo
         pendingNotificationLock.unlock()
+        pushRouteLog("cache pending payload keys=\(summarizePayloadKeys(userInfo))")
     }
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        if let logPath = PushRouteTrace.currentLogFilePath {
+            Self.pushRouteLog("log file path=\(logPath)")
+        }
+        Self.pushRouteLog("didFinishLaunching launchOptionsRemote=\((launchOptions?[.remoteNotification] as? [AnyHashable: Any]).map { Self.summarizePayloadKeys($0) } ?? "nil")")
         if let payload = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
             Self.cachePendingSystemNotificationUserInfo(payload)
             NotificationCenter.default.post(
@@ -99,14 +108,13 @@ final class RaverAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         _ = application
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
+        Self.pushRouteLog("didRegisterForRemoteNotifications tokenLength=\(token.count)")
         NotificationCenter.default.post(name: .raverDidRegisterPushToken, object: token)
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         _ = application
-        #if DEBUG
-        print("[Push] APNs register failed:", error.localizedDescription)
-        #endif
+        Self.pushRouteLog("didFailToRegisterForRemoteNotifications error=\(error.localizedDescription)")
     }
 
     func userNotificationCenter(
@@ -115,7 +123,7 @@ final class RaverAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         _ = center
-        _ = notification
+        Self.pushRouteLog("willPresent payload keys=\(Self.summarizePayloadKeys(notification.request.content.userInfo))")
         completionHandler([.banner, .sound, .badge])
     }
 
@@ -126,6 +134,7 @@ final class RaverAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
     ) {
         _ = center
         let payload = response.notification.request.content.userInfo
+        Self.pushRouteLog("didReceive response action=\(response.actionIdentifier) payload keys=\(Self.summarizePayloadKeys(payload))")
         Self.cachePendingSystemNotificationUserInfo(payload)
         NotificationCenter.default.post(
             name: .raverDidOpenSystemNotification,
@@ -140,24 +149,38 @@ final class RaverAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         center.delegate = self
 
         center.getNotificationSettings { settings in
+            Self.pushRouteLog("configureRemoteNotifications authStatus=\(settings.authorizationStatus.rawValue)")
             switch settings.authorizationStatus {
             case .authorized, .provisional, .ephemeral:
                 DispatchQueue.main.async {
+                    Self.pushRouteLog("registerForRemoteNotifications authorized")
                     application.registerForRemoteNotifications()
                 }
             case .notDetermined:
                 center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
+                    Self.pushRouteLog("requestAuthorization result granted=\(granted)")
                     guard granted else { return }
                     DispatchQueue.main.async {
+                        Self.pushRouteLog("registerForRemoteNotifications after prompt")
                         application.registerForRemoteNotifications()
                     }
                 }
             case .denied:
+                Self.pushRouteLog("notifications denied")
                 break
             @unknown default:
+                Self.pushRouteLog("notifications unknown auth status=\(settings.authorizationStatus.rawValue)")
                 break
             }
         }
+    }
+
+    private static func summarizePayloadKeys(_ payload: [AnyHashable: Any]?) -> String {
+        guard let payload else { return "nil" }
+        let keys = payload.keys.compactMap { $0 as? String }.sorted()
+        let apsKeys = (payload["aps"] as? [String: Any])?.keys.sorted() ?? []
+        let metadataKeys = (payload["metadata"] as? [String: Any])?.keys.sorted() ?? []
+        return "keys=\(keys) apsKeys=\(apsKeys) metadataKeys=\(metadataKeys)"
     }
 }
 

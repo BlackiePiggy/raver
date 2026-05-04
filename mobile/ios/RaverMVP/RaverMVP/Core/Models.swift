@@ -304,12 +304,21 @@ struct Conversation: Codable, Identifiable, Hashable {
     var peer: UserSummary?
     var isPinned: Bool
     var isMuted: Bool
+    var unreadMentionType: GroupMentionAlertType = .none
 
     var previewText: String {
+        let baseText: String
         if type == .group, let sender = lastMessageSenderID, !sender.isEmpty {
-            return "\(sender): \(lastMessage)"
+            baseText = "\(sender): \(lastMessage)"
+        } else {
+            baseText = lastMessage
         }
-        return lastMessage
+        guard unreadMentionType != .none else { return baseText }
+        return "\(unreadMentionType.previewPrefix) \(baseText)"
+    }
+
+    var hasUnreadMention: Bool {
+        unreadMentionType != .none
     }
 
     init(
@@ -324,7 +333,8 @@ struct Conversation: Codable, Identifiable, Hashable {
         updatedAt: Date,
         peer: UserSummary?,
         isPinned: Bool = false,
-        isMuted: Bool = false
+        isMuted: Bool = false,
+        unreadMentionType: GroupMentionAlertType = .none
     ) {
         self.id = id
         self.type = type
@@ -338,6 +348,7 @@ struct Conversation: Codable, Identifiable, Hashable {
         self.peer = peer
         self.isPinned = isPinned
         self.isMuted = isMuted
+        self.unreadMentionType = unreadMentionType
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -353,6 +364,7 @@ struct Conversation: Codable, Identifiable, Hashable {
         case peer
         case isPinned
         case isMuted
+        case unreadMentionType
     }
 
     init(from decoder: Decoder) throws {
@@ -369,6 +381,7 @@ struct Conversation: Codable, Identifiable, Hashable {
         peer = try container.decodeIfPresent(UserSummary.self, forKey: .peer)
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         isMuted = try container.decodeIfPresent(Bool.self, forKey: .isMuted) ?? false
+        unreadMentionType = try container.decodeIfPresent(GroupMentionAlertType.self, forKey: .unreadMentionType) ?? .none
     }
 
     func encode(to encoder: Encoder) throws {
@@ -385,6 +398,27 @@ struct Conversation: Codable, Identifiable, Hashable {
         try container.encodeIfPresent(peer, forKey: .peer)
         try container.encode(isPinned, forKey: .isPinned)
         try container.encode(isMuted, forKey: .isMuted)
+        try container.encode(unreadMentionType, forKey: .unreadMentionType)
+    }
+}
+
+enum GroupMentionAlertType: Int, Codable, Hashable {
+    case none = 0
+    case atMe = 1
+    case atAll = 2
+    case atAllAndMe = 3
+
+    var previewPrefix: String {
+        switch self {
+        case .none:
+            return ""
+        case .atMe:
+            return L("[@你]", "[@You]")
+        case .atAll:
+            return L("[@所有人]", "[@All]")
+        case .atAllAndMe:
+            return L("[@你][@所有人]", "[@You][@All]")
+        }
     }
 }
 

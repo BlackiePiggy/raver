@@ -864,7 +864,7 @@ struct MessagesHomeView: View {
                 HStack(spacing: 8) {
                     Text(conversation.previewText)
                         .font(.system(size: 13))
-                        .foregroundStyle(RaverTheme.secondaryText)
+                        .foregroundStyle(conversation.hasUnreadMention ? Color.red : RaverTheme.secondaryText)
                         .lineLimit(1)
                         .truncationMode(.tail)
 

@@ -162,6 +162,15 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
 }
 
 extension IMChatCompatibilityService {
+    func sendMessage(
+        conversationID: String,
+        content: String,
+        mentionedUserIDs: [String]
+    ) async throws -> ChatMessage {
+        _ = mentionedUserIDs
+        return try await sendMessage(conversationID: conversationID, content: content)
+    }
+
     func sendEventCardMessage(conversationID: String, payload: EventShareCardPayload) async throws -> ChatMessage {
         _ = conversationID
         _ = payload

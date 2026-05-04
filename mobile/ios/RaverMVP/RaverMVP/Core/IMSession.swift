@@ -418,6 +418,7 @@ final class IMSession {
             ?? decodeRaverID(fromIMUserID: normalizedText(item.latestMsg?.sendID), expectedPrefix: "u")
             ?? normalizedText(item.latestMsg?.sendID)
         let unreadCount = max(0, item.unreadCount)
+        let unreadMentionType = mentionAlertType(from: item)
         let updatedAt = dateFromIMTimestamp(item.latestMsgSendTime)
         let peer = makePeer(item: item, mappedType: mappedType)
 
@@ -426,12 +427,13 @@ final class IMSession {
             type: mappedType,
             title: title,
             avatarURL: normalizedText(item.faceURL),
-            imConversationID: imConversationID,
+            sdkConversationID: imConversationID,
             lastMessage: lastMessage,
             lastMessageSenderID: lastMessageSenderID,
             unreadCount: unreadCount,
             updatedAt: updatedAt,
-            peer: peer
+            peer: peer,
+            unreadMentionType: unreadMentionType
         )
     }
 
@@ -493,6 +495,7 @@ final class IMSession {
             ?? normalizedText(message.sendID)
             ?? "unknown_sender"
         let senderName = normalizedText(message.senderNickname) ?? senderID
+        let mentionedUserIDs = mentionedUserIDs(from: message)
 
         let sender = UserSummary(
             id: senderID,
@@ -513,12 +516,15 @@ final class IMSession {
             isMine: message.isSelf(),
             kind: messageKind(from: message),
             media: messageMediaPayload(from: message),
-            deliveryStatus: messageDeliveryStatus(from: message)
+            deliveryStatus: messageDeliveryStatus(from: message),
+            mentionedUserIDs: mentionedUserIDs
         )
     }
 
     private func messageKind(from message: OIMMessageInfo) -> ChatMessageKind {
-        if normalizedText(message.textElem?.content) != nil || normalizedText(message.advancedTextElem?.text) != nil {
+        if normalizedText(message.atTextElem?.text) != nil
+            || normalizedText(message.textElem?.content) != nil
+            || normalizedText(message.advancedTextElem?.text) != nil {
             return .text
         }
         if message.typingElem != nil {
@@ -650,6 +656,10 @@ final class IMSession {
             return L("暂无消息", "No messages yet")
         }
 
+        if let atText = normalizedText(message.atTextElem?.text) {
+            return atText
+        }
+
         if let text = normalizedText(message.textElem?.content) {
             return text
         }
@@ -698,6 +708,64 @@ final class IMSession {
         }
 
         return L("[消息]", "[Message]")
+    }
+
+    private func mentionAlertType(from item: OIMConversationInfo) -> GroupMentionAlertType {
+        let directMappedType = mentionAlertType(fromRawValue: item.groupAtType)
+        if directMappedType != .none {
+            return directMappedType
+        }
+
+        guard item.unreadCount > 0, let atTextElem = item.latestMsg?.atTextElem else {
+            return .none
+        }
+        if atTextElem.isAtSelf && atTextElem.isAtAll {
+            return .atAllAndMe
+        }
+        if atTextElem.isAtSelf {
+            return .atMe
+        }
+        if atTextElem.isAtAll {
+            return .atAll
+        }
+        return .none
+    }
+
+    private func mentionAlertType(fromRawValue rawValue: OIMGroupAtType) -> GroupMentionAlertType {
+        switch Int(rawValue.rawValue) {
+        case 1:
+            return .atMe
+        case 2:
+            return .atAll
+        case 3:
+            return .atAllAndMe
+        default:
+            return .none
+        }
+    }
+
+    private func mentionedUserIDs(from message: OIMMessageInfo) -> [String] {
+        guard let atTextElem = message.atTextElem else {
+            return []
+        }
+
+        var resolved: [String] = []
+        if atTextElem.isAtAll {
+            resolved.append("all")
+        }
+
+        for rawUserID in atTextElem.atUserList ?? [] {
+            let mappedUserID = decodeRaverID(fromIMUserID: normalizedText(rawUserID), expectedPrefix: "u")
+                ?? normalizedText(rawUserID)
+            guard let mappedUserID,
+                  !mappedUserID.isEmpty,
+                  !resolved.contains(mappedUserID) else {
+                continue
+            }
+            resolved.append(mappedUserID)
+        }
+
+        return resolved
     }
 
     private func systemNotificationPreviewText(from message: OIMMessageInfo) -> String {

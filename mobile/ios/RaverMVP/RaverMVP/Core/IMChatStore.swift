@@ -442,6 +442,10 @@ final class IMChatStore: ObservableObject {
                 conversations[index].unreadCount = 0
                 didChange = true
             }
+            if conversations[index].unreadMentionType != .none {
+                conversations[index].unreadMentionType = .none
+                didChange = true
+            }
         }
         guard didChange else { return }
         debug("active conversation zeroed unread conversations=\(changedKeys.joined(separator: ","))")
@@ -457,6 +461,7 @@ final class IMChatStore: ObservableObject {
                     debug("normalize active unread conversation=\(items[index].id) previousUnread=\(items[index].unreadCount)")
                 }
                 items[index].unreadCount = 0
+                items[index].unreadMentionType = .none
             }
         }
     }
@@ -530,7 +535,8 @@ final class IMChatStore: ObservableObject {
             updatedAt: max(activitySource.updatedAt, existing.updatedAt, incoming.updatedAt),
             peer: mergedPeer,
             isPinned: preferredPinnedState(existing: existing, incoming: incoming, source: source),
-            isMuted: preferredMutedState(existing: existing, incoming: incoming, source: source)
+            isMuted: preferredMutedState(existing: existing, incoming: incoming, source: source),
+            unreadMentionType: preferredUnreadMentionType(existing: existing, incoming: incoming, source: source)
         )
     }
 
@@ -606,6 +612,22 @@ final class IMChatStore: ObservableObject {
             return incoming.isMuted || existing.isMuted
         case .sdkRefresh:
             return incoming.isMuted
+        }
+    }
+
+    private func preferredUnreadMentionType(
+        existing: Conversation,
+        incoming: Conversation,
+        source: ConversationMergeSource
+    ) -> GroupMentionAlertType {
+        switch source {
+        case .staging:
+            return incoming.unreadMentionType != .none ? incoming.unreadMentionType : existing.unreadMentionType
+        case .sdkRefresh:
+            if incoming.unreadCount == 0 {
+                return .none
+            }
+            return incoming.unreadMentionType
         }
     }
 

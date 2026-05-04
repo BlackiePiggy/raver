@@ -682,6 +682,88 @@ struct SystemDeepLinkEvent: Identifiable, Equatable {
     let source: String
 }
 
+enum PushRouteTrace {
+    private static let queue = DispatchQueue(
+        label: "com.raver.mvp.push-route-trace",
+        qos: .utility
+    )
+    private static let maxFileSizeBytes: UInt64 = 1 * 1024 * 1024
+    private static let filename = "push-route.log"
+    private static let formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+    private static var resolvedURL: URL?
+
+    static func log(_ category: String, _ message: String) {
+        let entry = "[\(category)] \(formatter.string(from: Date())) \(message)"
+        print(entry)
+        IMProbeLogger.log(entry)
+        queue.async {
+            guard let url = logFileURL() else { return }
+            rotateIfNeeded(url: url)
+            append(line: entry, to: url)
+        }
+    }
+
+    static func dumpToConsole() {
+        guard let url = logFileURL(),
+              let contents = try? String(contentsOf: url, encoding: .utf8),
+              !contents.isEmpty else { return }
+        print("[PushRouteReplay] ---- begin ----")
+        for entry in contents.split(separator: "\n", omittingEmptySubsequences: true) {
+            print("[PushRouteReplay] \(entry)")
+        }
+        print("[PushRouteReplay] ---- end ----")
+    }
+
+    static func clear() {
+        guard let url = logFileURL() else { return }
+        try? Data().write(to: url, options: .atomic)
+    }
+
+    static var currentLogFilePath: String? {
+        logFileURL()?.path
+    }
+
+    private static func logFileURL() -> URL? {
+        if let resolvedURL {
+            return resolvedURL
+        }
+
+        guard let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+
+        let url = documentsDir.appendingPathComponent(filename, isDirectory: false)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        resolvedURL = url
+        return url
+    }
+
+    private static func rotateIfNeeded(url: URL) {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let size = attrs?[.size] as? UInt64 ?? 0
+        guard size > maxFileSizeBytes else { return }
+        try? Data().write(to: url, options: .atomic)
+    }
+
+    private static func append(line: String, to url: URL) {
+        let payload = "\(line)\n"
+        guard let data = payload.data(using: .utf8) else { return }
+        guard let handle = try? FileHandle(forWritingTo: url) else {
+            FileManager.default.createFile(atPath: url.path, contents: data)
+            return
+        }
+        defer { try? handle.close() }
+        handle.seekToEndOfFile()
+        handle.write(data)
+    }
+}
+
 enum TencentIMConnectionState: Equatable {
     case idle
     case disabled
@@ -1785,21 +1867,32 @@ final class TencentIMSession: NSObject {
         return ChatMessageHistoryPage(messages: sorted, isEnd: remoteMessages.count < max(1, count))
     }
 
-    func sendTextMessage(conversationID: String, content: String) async throws -> ChatMessage? {
+    func sendTextMessage(
+        conversationID: String,
+        content: String,
+        mentionedUserIDs: [String] = []
+    ) async throws -> ChatMessage? {
         guard currentBootstrap?.enabled == true else {
             return nil
         }
 
         let manager = try requireReadyManager()
         let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
-        guard let message = manager.createTextMessage(text: content) else {
+        guard let rawMessage = manager.createTextMessage(text: content) else {
             throw ServiceError.message("Tencent IM create text message failed")
         }
+        let message = try createMentionSignedTextMessageIfNeeded(
+            manager: manager,
+            message: rawMessage,
+            target: target,
+            mentionedUserIDs: mentionedUserIDs
+        )
         message.needReadReceipt = shouldRequestReadReceipt(for: target)
         let offlinePushInfo = await buildTextOfflinePushInfo(
             manager: manager,
             target: target,
-            content: content
+            content: content,
+            mentionedUserIDs: mentionedUserIDs
         )
         return try await sendMessage(
             manager: manager,
@@ -1808,6 +1901,35 @@ final class TencentIMSession: NSObject {
             offlinePushInfo: offlinePushInfo,
             progress: nil
         )
+    }
+
+    private func createMentionSignedTextMessageIfNeeded(
+        manager: V2TIMManager,
+        message: V2TIMMessage,
+        target: TencentConversationTarget,
+        mentionedUserIDs: [String]
+    ) throws -> V2TIMMessage {
+        guard target.type == .group else { return message }
+        let atUserList = buildTencentIMAtUserList(from: mentionedUserIDs)
+        guard atUserList.count > 0 else { return message }
+        guard let signedMessage = manager.createAtSignedGroupMessage(message: message, atUserList: atUserList) else {
+            throw ServiceError.message(L("腾讯 IM 群 @ 消息创建失败", "Tencent IM failed to create group @ message"))
+        }
+        return signedMessage
+    }
+
+    private func buildTencentIMAtUserList(from mentionedUserIDs: [String]) -> NSMutableArray {
+        let result = NSMutableArray()
+        for mentionedUserID in mentionedUserIDs {
+            let trimmed = mentionedUserID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if trimmed == "all" {
+                result.add(kImSDK_MesssageAtALL)
+                continue
+            }
+            result.add(TencentIMIdentity.toTencentIMUserID(trimmed))
+        }
+        return result
     }
 
     func sendEventCardMessage(
@@ -1831,10 +1953,16 @@ final class TencentIMSession: NSObject {
             throw ServiceError.message("Tencent IM create event card message failed")
         }
         message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[活动卡片]", "[Event Card]")) \(payload.eventName)"
+        )
         var sent = try await sendMessage(
             manager: manager,
             message: message,
             target: target,
+            offlinePushInfo: offlinePushInfo,
             progress: nil
         )
         sent.kind = .card
@@ -1866,10 +1994,16 @@ final class TencentIMSession: NSObject {
             throw ServiceError.message("Tencent IM create dj card message failed")
         }
         message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[DJ卡片]", "[DJ Card]")) \(payload.djName)"
+        )
         var sent = try await sendMessage(
             manager: manager,
             message: message,
             target: target,
+            offlinePushInfo: offlinePushInfo,
             progress: nil
         )
         sent.kind = .card
@@ -2207,11 +2341,26 @@ final class TencentIMSession: NSObject {
 
     private func applyAPNSConfigurationIfPossible(reason: String) async {
 #if canImport(ImSDK_Plus)
-        guard currentBootstrap?.enabled == true else { return }
-        guard AppConfig.tencentIMAPNSBusinessID > 0 else { return }
-        guard let token = latestAPNSTokenData, !token.isEmpty else { return }
-        guard let manager = V2TIMManager.sharedInstance(), hasInitializedSDK else { return }
-        guard manager.getLoginStatus().rawValue == Self.loggedInStatusRawValue else { return }
+        guard currentBootstrap?.enabled == true else {
+            debugAPNS("skip apply reason=\(reason): bootstrap disabled")
+            return
+        }
+        guard AppConfig.tencentIMAPNSBusinessID > 0 else {
+            debugAPNS("skip apply reason=\(reason): missing TencentIMAPNSBusinessID")
+            return
+        }
+        guard let token = latestAPNSTokenData, !token.isEmpty else {
+            debugAPNS("skip apply reason=\(reason): missing APNs token")
+            return
+        }
+        guard let manager = V2TIMManager.sharedInstance(), hasInitializedSDK else {
+            debugAPNS("skip apply reason=\(reason): SDK not initialized")
+            return
+        }
+        guard manager.getLoginStatus().rawValue == Self.loggedInStatusRawValue else {
+            debugAPNS("skip apply reason=\(reason): IM not logged in")
+            return
+        }
 
         manager.setAPNSListener(apnsListener: TencentIMAPNSBadgeBridge.shared)
         let config = V2TIMAPNSConfig()
@@ -2623,7 +2772,8 @@ final class TencentIMSession: NSObject {
     private func buildTextOfflinePushInfo(
         manager: V2TIMManager,
         target: TencentConversationTarget,
-        content: String
+        content: String,
+        mentionedUserIDs: [String]
     ) async -> V2TIMOfflinePushInfo? {
         let trimmedContent = normalizedPushText(content)
         guard !trimmedContent.isEmpty else { return nil }
@@ -2655,7 +2805,49 @@ final class TencentIMSession: NSObject {
             target: target,
             conversationTitle: conversationTitle,
             previewText: trimmedContent,
-            receiveOpt: receiveOpt
+            receiveOpt: receiveOpt,
+            mentionedUserIDs: mentionedUserIDs
+        )
+        return info
+    }
+
+    private func buildCardOfflinePushInfo(
+        manager: V2TIMManager,
+        target: TencentConversationTarget,
+        previewText: String
+    ) async -> V2TIMOfflinePushInfo? {
+        let normalizedPreview = normalizedPushText(previewText)
+        guard !normalizedPreview.isEmpty else { return nil }
+
+        let conversation = await fetchConversationIfPossible(
+            manager: manager,
+            conversationID: target.rawConversationID
+        )
+        let conversationTitle = normalizedText(conversation?.showName)
+        let receiveOpt = conversation?.recvOpt.rawValue
+
+        let info = V2TIMOfflinePushInfo()
+        switch target.type {
+        case .direct:
+            info.title = conversationTitle ?? target.businessConversationID
+            info.desc = normalizedPreview
+        case .group:
+            let senderName = await resolveCurrentUserPushDisplayName(manager: manager)
+                ?? currentUserID
+                ?? L("成员", "Member")
+            info.title = conversationTitle ?? target.businessConversationID
+            info.desc = "\(senderName): \(normalizedPreview)"
+        }
+
+        info.disablePush = false
+        info.ignoreIOSBadge = true
+        info.iOSSound = "default"
+        info.ext = buildPushRoutingExt(
+            target: target,
+            conversationTitle: conversationTitle,
+            previewText: normalizedPreview,
+            receiveOpt: receiveOpt,
+            mentionedUserIDs: []
         )
         return info
     }
@@ -2707,17 +2899,43 @@ final class TencentIMSession: NSObject {
         target: TencentConversationTarget,
         conversationTitle: String?,
         previewText: String,
-        receiveOpt: Int?
+        receiveOpt: Int?,
+        mentionedUserIDs: [String]
     ) -> String {
+        let normalizedMentionedUserIDs = mentionedUserIDs
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let senderUserID = currentUserID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let effectiveBusinessConversationID: String
+        let effectiveSDKConversationID: String
+        let effectivePeerID: String
+
+        switch target.type {
+        case .direct:
+            let fallbackPeerID = target.userID ?? target.businessConversationID
+            let routePeerID = senderUserID?.nilIfBlank ?? fallbackPeerID
+            effectiveBusinessConversationID = routePeerID
+            effectiveSDKConversationID = routePeerID.hasPrefix("c2c_") ? routePeerID : "c2c_\(routePeerID)"
+            effectivePeerID = routePeerID
+        case .group:
+            effectiveBusinessConversationID = target.businessConversationID
+            effectiveSDKConversationID = target.rawConversationID
+            effectivePeerID = ""
+        }
+
         let payload: [String: Any] = [
             "route": "chat",
             "conversationType": target.type.rawValue,
-            "conversationID": target.businessConversationID,
-            "sdkConversationID": target.rawConversationID,
-            "peerID": target.userID ?? "",
+            "conversationID": effectiveBusinessConversationID,
+            "sdkConversationID": effectiveSDKConversationID,
+            "peerID": effectivePeerID,
             "groupID": target.groupID ?? "",
+            "receiverUserID": target.userID ?? "",
+            "senderUserID": senderUserID ?? "",
             "title": conversationTitle ?? "",
             "preview": previewText,
+            "mentionedUserIDs": normalizedMentionedUserIDs,
+            "mentionAll": normalizedMentionedUserIDs.contains("all"),
             "recvOpt": receiveOpt ?? Self.receiveMessageOptRawValue,
             "version": 1
         ]
@@ -2741,6 +2959,35 @@ final class TencentIMSession: NSObject {
         }
         let endIndex = collapsed.index(collapsed.startIndex, offsetBy: limit)
         return String(collapsed[..<endIndex]) + "…"
+    }
+
+    private func mentionAlertType(from groupAtInfoList: [V2TIMGroupAtInfo]?) -> GroupMentionAlertType {
+        guard let groupAtInfoList, !groupAtInfoList.isEmpty else { return .none }
+        var hasAtMe = false
+        var hasAtAll = false
+        for info in groupAtInfoList {
+            switch info.atType {
+            case .AT_ME:
+                hasAtMe = true
+            case .AT_ALL:
+                hasAtAll = true
+            case .AT_ALL_AT_ME:
+                hasAtMe = true
+                hasAtAll = true
+            default:
+                break
+            }
+        }
+        switch (hasAtMe, hasAtAll) {
+        case (true, true):
+            return .atAllAndMe
+        case (true, false):
+            return .atMe
+        case (false, true):
+            return .atAll
+        case (false, false):
+            return .none
+        }
     }
 
     private func mapConversation(_ item: V2TIMConversation) -> Conversation? {
@@ -2805,7 +3052,8 @@ final class TencentIMSession: NSObject {
             updatedAt: updatedAt,
             peer: peer,
             isPinned: item.isPinned,
-            isMuted: item.recvOpt.rawValue == Self.receiveNoNotifyRawValue
+            isMuted: item.recvOpt.rawValue == Self.receiveNoNotifyRawValue,
+            unreadMentionType: mentionAlertType(from: item.groupAtInfolist)
         )
     }
 
@@ -3020,6 +3268,7 @@ final class TencentIMSession: NSObject {
             media: media,
             deliveryStatus: deliveryStatus,
             deliveryError: deliveryStatus == .failed ? L("发送失败", "Send failed") : nil,
+            mentionedUserIDs: mappedMentionedUserIDs(from: message),
             peerRead: dynamicBoolValue("isPeerRead", from: message),
             readReceiptReadCount: dynamicIntValue("groupReadCount", from: message)
                 ?? dynamicIntValue("readCount", from: message)
@@ -3028,6 +3277,26 @@ final class TencentIMSession: NSObject {
                 ?? dynamicIntValue("unreadCount", from: message)
                 ?? dynamicIntValue("unreadReceiptCount", from: message)
         )
+    }
+
+    private func mappedMentionedUserIDs(from message: V2TIMMessage) -> [String] {
+        let rawList = message.groupAtUserList as? [String] ?? []
+        var result: [String] = []
+        for rawEntry in rawList {
+            let trimmed = rawEntry.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if trimmed == kImSDK_MesssageAtALL {
+                if !result.contains("all") {
+                    result.append("all")
+                }
+                continue
+            }
+            let platformUserID = TencentIMIdentity.decodePlatformUserID(fromTencentIMUserID: trimmed) ?? trimmed
+            if !result.contains(platformUserID) {
+                result.append(platformUserID)
+            }
+        }
+        return result
     }
 
     private func mapImagePayload(from elem: V2TIMImageElem?) -> ChatMessageMediaPayload? {
@@ -3558,11 +3827,23 @@ extension TencentIMSession {
 
 @MainActor
 final class AppState: ObservableObject {
+    private enum SharedPushContext {
+        static let suiteName = "group.com.raver.mvp"
+        static let currentUserIDKey = "push.currentUserID"
+    }
+
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.raver.mvp",
         category: "AppState"
     )
-    @Published var session: Session?
+    private static func pushRouteLog(_ message: String) {
+        PushRouteTrace.log("SystemPushRoute", message)
+    }
+    @Published var session: Session? {
+        didSet {
+            syncSharedPushContext()
+        }
+    }
     @Published var errorMessage: String?
     @Published var isAuthBootstrapping: Bool = true
     @Published var unreadMessagesCount: Int = 0
@@ -3581,6 +3862,7 @@ final class AppState: ObservableObject {
     private var cachedCommunityUnread = 0
     private var latestPushToken: String?
     private var lastTencentIMBootstrapRefreshAt: Date?
+    private var pendingSystemNotificationPayload: ([AnyHashable: Any], String)?
 
     init(service: SocialService) {
         self.service = service
@@ -3639,8 +3921,14 @@ final class AppState: ObservableObject {
 
         NotificationCenter.default.publisher(for: .raverDidOpenSystemNotification)
             .sink { [weak self] notification in
-                guard let self, self.session != nil else { return }
+                Self.pushRouteLog("publisher didOpenSystemNotification received hasSession=\(self?.session != nil) keys=\(Self.summarizeNotificationPayloadKeys(notification.userInfo ?? [:]))")
+                guard let self else { return }
                 let userInfo = notification.userInfo ?? [:]
+                guard self.session != nil else {
+                    self.pendingSystemNotificationPayload = (userInfo, "notification-center")
+                    Self.pushRouteLog("publisher buffered payload because session is nil")
+                    return
+                }
                 self.handleSystemNotificationPayload(userInfo, source: "notification-center")
                 Task {
                     await self.refreshTencentIMBootstrap(source: "system-notification-open")
@@ -3660,8 +3948,18 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
 
         if let pendingPayload = RaverAppDelegate.consumePendingSystemNotificationUserInfo() {
-            handleSystemNotificationPayload(pendingPayload, source: "launch-options")
+            Self.pushRouteLog("init consumed pending payload keys=\(Self.summarizeNotificationPayloadKeys(pendingPayload))")
+            if session != nil {
+                handleSystemNotificationPayload(pendingPayload, source: "launch-options")
+            } else {
+                pendingSystemNotificationPayload = (pendingPayload, "launch-options")
+                Self.pushRouteLog("init buffered pending payload because session is nil")
+            }
+        } else {
+            Self.pushRouteLog("init found no pending payload")
         }
+
+        syncSharedPushContext()
 
         Task {
             await bootstrapSessionIfPossible()
@@ -3683,6 +3981,7 @@ final class AppState: ObservableObject {
         await refreshTencentIMBootstrap(source: "bootstrap-restore-session")
         await refreshUnreadMessages()
         await uploadPushTokenIfPossible()
+        flushPendingSystemNotificationPayloadIfPossible(trigger: "bootstrap-restore-session")
         errorMessage = nil
 
         if uiTestForceSessionExpiredOnBootstrap && !hasAppliedUITestForcedExpiry {
@@ -3709,6 +4008,7 @@ final class AppState: ObservableObject {
             await refreshTencentIMBootstrap(source: "login-password")
             await refreshUnreadMessages()
             await uploadPushTokenIfPossible()
+            flushPendingSystemNotificationPayloadIfPossible(trigger: "login-password")
             errorMessage = nil
         } catch {
             errorMessage = error.userFacingMessage
@@ -3721,6 +4021,7 @@ final class AppState: ObservableObject {
             await refreshTencentIMBootstrap(source: "login-sms")
             await refreshUnreadMessages()
             await uploadPushTokenIfPossible()
+            flushPendingSystemNotificationPayloadIfPossible(trigger: "login-sms")
             errorMessage = nil
         } catch {
             errorMessage = error.userFacingMessage
@@ -3749,6 +4050,7 @@ final class AppState: ObservableObject {
             await refreshTencentIMBootstrap(source: "register")
             await refreshUnreadMessages()
             await uploadPushTokenIfPossible()
+            flushPendingSystemNotificationPayloadIfPossible(trigger: "register")
             errorMessage = nil
         } catch {
             errorMessage = error.userFacingMessage
@@ -3776,6 +4078,16 @@ final class AppState: ObservableObject {
         tencentIMSession.reset()
         tencentIMBootstrapRefreshTask?.cancel()
         tencentIMBootstrapRefreshTask = nil
+    }
+
+    private func syncSharedPushContext() {
+        guard let defaults = UserDefaults(suiteName: SharedPushContext.suiteName) else { return }
+        let currentUserID = session?.user.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let currentUserID, !currentUserID.isEmpty {
+            defaults.set(currentUserID, forKey: SharedPushContext.currentUserIDKey)
+        } else {
+            defaults.removeObject(forKey: SharedPushContext.currentUserIDKey)
+        }
     }
 
     func setPreferredLanguage(_ language: AppLanguage) {
@@ -3969,10 +4281,33 @@ final class AppState: ObservableObject {
     }
 
     private func handleSystemNotificationPayload(_ payload: [AnyHashable: Any], source: String) {
+        Self.pushRouteLog("handle payload source=\(source) summary=\(Self.summarizeSystemNotificationPayload(payload))")
+        if let extPayload = Self.extractPushExtPayload(from: payload) {
+            Self.pushRouteLog("handle ext source=\(source) summary=\(Self.summarizePushExtPayload(extPayload))")
+        } else {
+            Self.pushRouteLog("handle ext source=\(source) summary=nil")
+        }
         let deeplink = Self.readSystemDeeplink(from: payload)
-        guard let deeplink else { return }
+        guard let deeplink else {
+            Self.pushRouteLog("handle deeplink source=\(source) resolved=nil")
+            return
+        }
         systemDeepLinkEvent = SystemDeepLinkEvent(deeplink: deeplink, source: source)
-        debug("system deeplink received source=\(source) deeplink=\(deeplink)")
+        Self.pushRouteLog("handle deeplink source=\(source) resolved=\(deeplink)")
+    }
+
+    private func flushPendingSystemNotificationPayloadIfPossible(trigger: String) {
+        guard session != nil else {
+            Self.pushRouteLog("flush pending skipped trigger=\(trigger) because session is nil")
+            return
+        }
+        guard let (payload, source) = pendingSystemNotificationPayload else {
+            Self.pushRouteLog("flush pending found no payload trigger=\(trigger)")
+            return
+        }
+        pendingSystemNotificationPayload = nil
+        Self.pushRouteLog("flush pending handling trigger=\(trigger) originalSource=\(source)")
+        handleSystemNotificationPayload(payload, source: source)
     }
 
     private static func readSystemDeeplink(from payload: [AnyHashable: Any]) -> String? {
@@ -3985,6 +4320,11 @@ final class AppState: ObservableObject {
                     return trimmed
                 }
             }
+        }
+
+        if let extPayload = extractPushExtPayload(from: payload),
+           let deeplink = buildSystemDeeplink(fromPushExt: extPayload) {
+            return deeplink
         }
 
         if let nested = payload["metadata"] as? [String: Any] {
@@ -4011,6 +4351,130 @@ final class AppState: ObservableObject {
         }
 
         return nil
+    }
+
+    private static func extractPushExtPayload(from payload: [AnyHashable: Any]) -> [String: Any]? {
+        if let ext = payload["ext"] as? [String: Any] {
+            return ext
+        }
+        if let ext = payload["entity"] as? [String: Any] {
+            return ext
+        }
+        if let ext = payload["ext"] as? String,
+           let decoded = decodePushJSONObject(from: ext) {
+            return decoded
+        }
+        if let ext = payload["entity"] as? String,
+           let decoded = decodePushJSONObject(from: ext) {
+            return decoded
+        }
+        if let metadata = payload["metadata"] as? [String: Any] {
+            if let ext = metadata["ext"] as? [String: Any] {
+                return ext
+            }
+            if let ext = metadata["entity"] as? [String: Any] {
+                return ext
+            }
+            if let ext = metadata["ext"] as? String,
+               let decoded = decodePushJSONObject(from: ext) {
+                return decoded
+            }
+            if let ext = metadata["entity"] as? String,
+               let decoded = decodePushJSONObject(from: ext) {
+                return decoded
+            }
+        }
+        return nil
+    }
+
+    private static func decodePushJSONObject(from string: String) -> [String: Any]? {
+        guard let data = string.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data, options: []),
+              let dictionary = object as? [String: Any] else {
+            return nil
+        }
+        return dictionary
+    }
+
+    private static func buildSystemDeeplink(fromPushExt payload: [String: Any]) -> String? {
+        let route = (payload["route"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard route == "chat" else { return nil }
+
+        let conversationID = [
+            payload["sdkConversationID"] as? String,
+            payload["conversationID"] as? String,
+            payload["groupID"] as? String,
+            payload["peerID"] as? String
+        ]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty })
+
+        guard let conversationID else { return nil }
+        let encodedID = conversationID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? conversationID
+        var components = URLComponents()
+        components.scheme = "raver"
+        components.host = "messages"
+        components.path = "/conversation/\(encodedID)"
+
+        var queryItems: [URLQueryItem] = []
+        if let conversationType = (payload["conversationType"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !conversationType.isEmpty {
+            queryItems.append(URLQueryItem(name: "conversationType", value: conversationType))
+        }
+        if let peerID = (payload["peerID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !peerID.isEmpty {
+            queryItems.append(URLQueryItem(name: "peerID", value: peerID))
+        }
+        if let groupID = (payload["groupID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !groupID.isEmpty {
+            queryItems.append(URLQueryItem(name: "groupID", value: groupID))
+        }
+        if let businessConversationID = (payload["conversationID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !businessConversationID.isEmpty {
+            queryItems.append(URLQueryItem(name: "conversationID", value: businessConversationID))
+        }
+        if !queryItems.isEmpty {
+            components.queryItems = queryItems
+        }
+
+        return components.url?.absoluteString ?? "raver://messages/conversation/\(encodedID)"
+    }
+
+    private static func summarizeSystemNotificationPayload(_ payload: [AnyHashable: Any]) -> String {
+        let keys = payload.keys
+            .compactMap { $0 as? String }
+            .sorted()
+        let apsKeys = (payload["aps"] as? [String: Any])?.keys.sorted() ?? []
+        let metadataKeys = (payload["metadata"] as? [String: Any])?.keys.sorted() ?? []
+        return "keys=\(keys) apsKeys=\(apsKeys) metadataKeys=\(metadataKeys)"
+    }
+
+    private static func summarizePushExtPayload(_ payload: [String: Any]) -> String {
+        let route = (payload["route"] as? String) ?? "nil"
+        let conversationType = (payload["conversationType"] as? String) ?? "nil"
+        let conversationID = (payload["conversationID"] as? String) ?? "nil"
+        let sdkConversationID = (payload["sdkConversationID"] as? String) ?? "nil"
+        let peerID = (payload["peerID"] as? String) ?? "nil"
+        let groupID = (payload["groupID"] as? String) ?? "nil"
+        let mentionAll = (payload["mentionAll"] as? Bool) ?? false
+        let mentionedUserIDs = (payload["mentionedUserIDs"] as? [Any])?
+            .compactMap { value -> String? in
+                if let string = value as? String {
+                    let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return trimmed.isEmpty ? nil : trimmed
+                }
+                return nil
+            } ?? []
+        return "route=\(route) type=\(conversationType) conversationID=\(conversationID) sdkConversationID=\(sdkConversationID) peerID=\(peerID) groupID=\(groupID) mentionAll=\(mentionAll) mentionedUserIDs=\(mentionedUserIDs)"
+    }
+
+    private static func summarizeNotificationPayloadKeys(_ payload: [AnyHashable: Any]) -> String {
+        let keys = payload.keys.compactMap { $0 as? String }.sorted()
+        let apsKeys = (payload["aps"] as? [String: Any])?.keys.sorted() ?? []
+        let metadataKeys = (payload["metadata"] as? [String: Any])?.keys.sorted() ?? []
+        return "keys=\(keys) apsKeys=\(apsKeys) metadataKeys=\(metadataKeys)"
     }
 }
 

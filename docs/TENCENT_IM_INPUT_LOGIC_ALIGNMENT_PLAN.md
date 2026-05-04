@@ -711,7 +711,7 @@ reply、mention、typing status 都依赖输入变化回调，改造过程中可
 
 ### 14.2 当前状态
 
-- 状态：`Phase 2 / Phase 3 核心输入内核收口中`
+- 状态：`Phase 2 / Phase 3 已基本收口，Phase 4 群聊 @mention sheet 接入中`
 - 当前负责人：`Codex`
 - 当前分支：`当前工作树`
 - 最近更新日期：`2026-05-04`
@@ -858,6 +858,22 @@ reply、mention、typing status 都依赖输入变化回调，改造过程中可
 - 已继续使用 workspace 构建链验证：
   `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build`
   构建成功。
+- 已开始将默认输入壳的 `@mention` 行为对齐到腾讯 Demo 的“输入 `@` 拉起成员选择面板”机制：
+  - 为 `ExyteChat` 输入定制参数新增 `InputMentionCandidate`
+  - 为默认 `ChatView` / `InputView` 接入 mention 候选和 `@所有人` 能力开关
+  - 在群聊页通过 `fetchSquadMemberDirectory(squadID:)` 拉取群成员目录并下发到输入壳
+  - 当用户在群聊输入框中键入 `@` 时，默认输入壳会按当前光标位置解析 mention 上下文并拉起 sheet
+  - sheet 支持按 username / displayName 搜索成员
+  - 群主与管理员可看到 `@所有人` 入口
+  - 选中成员后按当前选区原地替换为 `@username `
+- 本轮已修复默认输入壳 mention sheet 的编译问题，并通过 workspace 全量构建验证：
+  `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build`
+  构建成功。
+- 当前待回归项：
+  - 群聊输入 `@` 是否稳定拉起 sheet
+  - 成员搜索是否正确过滤
+  - 管理员 / 群主是否展示 `@所有人`
+  - 选中成员后是否正确插入并保持光标与焦点
 - 已将回车发送语义从外围字符串观察继续内聚到 `TextInputView.swift` 输入内核：
   - `returnKeyType` 统一为 `.send`
   - `shouldChangeTextIn` 已接入 `\n -> submit` 行为
@@ -887,11 +903,44 @@ reply、mention、typing status 都依赖输入变化回调，改造过程中可
   - `markedTextRange`
   - `textViewDidChange`
   - `textViewDidChangeSelection`
+- 已开始将群 `@` 从“本地 UI 元数据”升级为“腾讯 IM 官方群 @ 语义”：
+  - `RaverChatController.swift` 发送文本前会先解析 `mentionedUserIDs`
+  - `LiveSocialService.swift` / `TencentIMSession` 已新增带 `mentionedUserIDs` 的发送链
+  - `TencentIMSession.sendTextMessage(...)` 现会在群聊场景下调用腾讯 IM 的 `createAtSignedGroupMessage(message:atUserList:)`
+  - `@所有人` 已映射为腾讯 IM 常量 `kImSDK_MesssageAtALL`
+  - 群成员 mention 已映射为腾讯 IM 用户 ID，再由 SDK 作为官方群 `@` 消息发送
+  - 群文本消息发送时，`offlinePushInfo.ext` 现会附带 `mentionedUserIDs` 与 `mentionAll` 元数据，供接收端后续做 `@你` APN 特殊文案判断
+- 已新增接收端 `Notification Service Extension`：
+  - 新 target：`RaverNotificationService`
+  - 通过 App Group `group.com.raver.mvp` 共享当前登录用户 ID
+  - 在收到 APNs 后读取 `offlinePushInfo.ext` 中的 `mentionedUserIDs / mentionAll`
+  - 若当前登录用户命中 mention，则将系统通知正文前缀重写为 `[@你]` 或 `[@你][@所有人]`
+  - 若仅命中 `@所有人`，则将系统通知正文前缀重写为 `[@所有人]`
+  - 该能力已经接入工程并通过 workspace 全量构建验证
+- 已开始把腾讯 IM 官方 `@` 会话态映射回本地会话模型：
+  - `Conversation` 新增 `unreadMentionType`
+  - 会话列表预览文案现可基于 `groupAtInfolist` 显示 `[@你]` / `[@所有人]` 前缀
+  - 当前激活会话被标记已读时，会同步清空本地 `unreadMentionType`
+- 已继续把仍在实际运行的旧兼容会话链补齐到同一套 `@` 提醒模型：
+  - `IMSession.swift` 的 `OIMConversationInfo -> Conversation` 映射现已接入 `groupAtType -> unreadMentionType`
+  - `IMSession.swift` 的 `OIMMessageInfo -> ChatMessage` 映射现已接入 `atTextElem.text -> content preview`
+  - `IMSession.swift` 的 `OIMMessageInfo -> ChatMessage` 映射现已接入 `atTextElem.atUserList / isAtAll -> mentionedUserIDs`
+  - 这保证了当前实际会话列表主链与腾讯 IM 官方群 `@` 语义至少在本地模型层保持一致
+- 已开始把腾讯 IM 官方 `@` 消息态映射回本地消息模型：
+  - `V2TIMMessage.groupAtUserList` 现会映射为 `ChatMessage.mentionedUserIDs`
+  - `@所有人` 映射为本地 `"all"` 语义
+  - 群成员 Tencent IM UserID 会反解回平台 UserID
+- 已完成本轮 workspace 构建验证：
+  `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build`
+  构建成功。
 - 当前仍待继续收口的点：
   - 纯文本路径是否进一步统一走内核 replace 规则
   - attachment 方案下的光标边界行为是否已完全稳定
   - emoji 插入 / 删除与普通文本编辑是否完全统一到同一条编辑状态机
   - 中文输入法组合态与外层焦点 / 面板切换的最终边界
+  - APN 系统横幅中的“有人 @ 你”特殊文案是否由腾讯 IM 官方群 `@` 自动提供，仍需真机联调确认
+  - 若腾讯 IM 官方 APN 不自动区分 `@我`，由于群消息 `offlinePushInfo.desc` 对所有收件人共享，仍需要接收端 Notification Service Extension 或后端 / 推送网关按收件人重写文案
+  - 同名昵称成员的 mention 消歧仍需继续设计与实现
 
 ---
 

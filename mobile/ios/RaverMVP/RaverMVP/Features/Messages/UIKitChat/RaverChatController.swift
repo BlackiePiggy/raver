@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import ExyteChat
 
 @MainActor
 final class RaverChatController: ObservableObject {
@@ -71,14 +72,29 @@ final class RaverChatController: ObservableObject {
     }
 
     @discardableResult
-    func sendTextMessage(_ text: String) async throws -> ChatMessage {
+    func sendTextMessage(
+        _ text: String,
+        mentionCandidates: [InputMentionCandidate] = [],
+        allowMentionAll: Bool = false
+    ) async throws -> ChatMessage {
         let replyContext = replyDraftMessage
         let transportText = buildTransportText(text: text, replyDraft: replyContext)
+        let resolvedMentionedUserIDs = resolveMentionedUserIDs(
+            from: text,
+            candidates: mentionCandidates,
+            allowMentionAll: allowMentionAll
+        )
         let sent = try await dataProvider.currentService.sendMessage(
             conversationID: dataProvider.currentConversation.id,
-            content: transportText
+            content: transportText,
+            mentionedUserIDs: resolvedMentionedUserIDs
         )
-        let decorated = decorateMessageMetadata(sent, originalText: text, replyDraft: replyContext)
+        let decorated = decorateMessageMetadata(
+            sent,
+            originalText: text,
+            replyDraft: replyContext,
+            mentionedUserIDs: resolvedMentionedUserIDs
+        )
         replyDraftMessage = nil
         applySentMessage(decorated)
         return decorated
@@ -159,12 +175,14 @@ final class RaverChatController: ObservableObject {
             }
             let resent = try await dataProvider.currentService.sendMessage(
                 conversationID: dataProvider.currentConversation.id,
-                content: text
+                content: text,
+                mentionedUserIDs: message.mentionedUserIDs
             )
             let decorated = decorateMessageMetadata(
                 resent,
                 originalText: text,
-                replyDraft: repliedMessage(for: message)
+                replyDraft: repliedMessage(for: message),
+                mentionedUserIDs: message.mentionedUserIDs
             )
             replaceLocalFailedMessage(messageID: messageID, with: decorated)
             return decorated
@@ -548,7 +566,8 @@ final class RaverChatController: ObservableObject {
     private func decorateMessageMetadata(
         _ sent: ChatMessage,
         originalText: String,
-        replyDraft: ChatMessage?
+        replyDraft: ChatMessage?,
+        mentionedUserIDs: [String]? = nil
     ) -> ChatMessage {
         var next = sent
         next.content = originalText
@@ -556,7 +575,7 @@ final class RaverChatController: ObservableObject {
             next.replyToMessageID = replyDraft.id
             next.replyPreview = replyPreviewText(for: replyDraft, includeSender: true)
         }
-        next.mentionedUserIDs = parseMentionedUserIDs(from: originalText)
+        next.mentionedUserIDs = mentionedUserIDs ?? parseMentionedUserIDs(from: originalText)
         return next
     }
 
@@ -676,6 +695,42 @@ final class RaverChatController: ObservableObject {
                 result.append(value)
             }
         }
+        return result
+    }
+
+    private func resolveMentionedUserIDs(
+        from text: String,
+        candidates: [InputMentionCandidate],
+        allowMentionAll: Bool
+    ) -> [String] {
+        let nsText = text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        var result: [String] = []
+
+        if allowMentionAll {
+            let allPattern = #"(^|\s)@所有人(?=\s|$)"#
+            if let regex = try? NSRegularExpression(pattern: allPattern),
+               regex.firstMatch(in: text, options: [], range: fullRange) != nil {
+                result.append("all")
+            }
+        }
+
+        let sortedCandidates = candidates.sorted(by: {
+            $0.mentionText.count > $1.mentionText.count
+        })
+
+        for candidate in sortedCandidates {
+            let mentionText = candidate.mentionText.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            guard !mentionText.isEmpty else { continue }
+            let escaped = NSRegularExpression.escapedPattern(for: mentionText)
+            let pattern = "(^|\\s)@\(escaped)(?=\\s|$)"
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            if regex.firstMatch(in: text, options: [], range: fullRange) != nil,
+               !result.contains(candidate.userID) {
+                result.append(candidate.userID)
+            }
+        }
+
         return result
     }
 

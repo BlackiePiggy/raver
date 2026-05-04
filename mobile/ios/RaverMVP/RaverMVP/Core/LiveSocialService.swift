@@ -383,6 +383,21 @@ final class LiveSocialService: SocialService {
         throw await tencentIMUnavailableError(for: "send message")
     }
 
+    func sendMessage(
+        conversationID: String,
+        content: String,
+        mentionedUserIDs: [String]
+    ) async throws -> ChatMessage {
+        if let message = try await imSession.sendTextMessage(
+            conversationID: conversationID,
+            content: content,
+            mentionedUserIDs: mentionedUserIDs
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send message")
+    }
+
     func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
         try await sendImageMessage(conversationID: conversationID, fileURL: fileURL, onProgress: nil)
     }

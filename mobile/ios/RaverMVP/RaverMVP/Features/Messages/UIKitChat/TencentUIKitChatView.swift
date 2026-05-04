@@ -93,6 +93,8 @@ struct TencentUIKitChatView: View {
     @State private var presentedAudioFile: ChatAudioFilePresentation?
     @State private var composerObservedText = ""
     @State private var composerInjectedText: String?
+    @State private var mentionCandidates: [InputMentionCandidate] = []
+    @State private var allowMentionAll = false
 
     private let recorderSettings = RecorderSettings(
         sampleRate: 16000,
@@ -187,6 +189,9 @@ struct TencentUIKitChatView: View {
             let displayName = (notification.userInfo?["displayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let displayName, !displayName.isEmpty else { return }
             viewModel.overrideDirectConversationDisplayName(displayName)
+        }
+        .task(id: conversation.id) {
+            await refreshMentionCandidates()
         }
     }
 
@@ -306,6 +311,7 @@ struct TencentUIKitChatView: View {
         .scrollToMessageID(scrollToID)
         .keyboardDismissMode(.interactive)
         .showUsername(false)
+        .setMentionCandidates(mentionCandidates, allowMentionAll: allowMentionAll)
         .setAvailableInputs([.text, .media, .audio])
         .setMediaPickerLiveCameraStyle(.prominant)
         .setRecorderSettings(recorderSettings)
@@ -635,10 +641,12 @@ struct TencentUIKitChatView: View {
             )
         }
 
-        appendCandidate(
-            username: conversation.peer?.username,
-            displayName: conversation.peer?.displayName
-        )
+        if conversation.type == .group {
+            appendCandidate(
+                username: conversation.peer?.username,
+                displayName: conversation.peer?.displayName
+            )
+        }
 
         for message in viewModel.messages {
             appendCandidate(
@@ -653,20 +661,92 @@ struct TencentUIKitChatView: View {
     }
 
     private func insertMentionFromMessage(_ message: Message) {
-        guard let username = (message.customData["senderUsername"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-              !username.isEmpty else {
+        guard conversation.type == .group else { return }
+        let displayName = ((message.customData["senderDisplayName"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines))
+            .flatMap { $0.isEmpty ? nil : $0 }
+            ?? ((message.customData["senderUsername"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines))
+        guard let mentionText = displayName, !mentionText.isEmpty else {
             return
         }
 
         let existing = composerObservedText.trimmingCharacters(in: .whitespacesAndNewlines)
         if existing.isEmpty {
-            composerInjectedText = "@\(username) "
+            composerInjectedText = "@\(mentionText) "
             return
         }
 
         let separator = composerObservedText.last?.isWhitespace == true ? "" : " "
-        composerInjectedText = composerObservedText + separator + "@\(username) "
+        composerInjectedText = composerObservedText + separator + "@\(mentionText) "
+    }
+
+    @MainActor
+    private func refreshMentionCandidates() async {
+        guard conversation.type == .group else {
+            mentionCandidates = []
+            allowMentionAll = false
+            return
+        }
+
+        if conversation.type == .group {
+            do {
+                let directory = try await service.fetchSquadMemberDirectory(squadID: conversation.id)
+                mentionCandidates = directory.members
+                    .filter { member in
+                        let memberID = member.id.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let username = member.username.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !username.isEmpty else { return false }
+                        if let currentUserID = appState.session?.user.id.trimmingCharacters(in: .whitespacesAndNewlines),
+                           !currentUserID.isEmpty,
+                           currentUserID.caseInsensitiveCompare(memberID) == .orderedSame {
+                            return false
+                        }
+                        if let currentUsername = appState.session?.user.username.trimmingCharacters(in: .whitespacesAndNewlines),
+                           currentUsername.caseInsensitiveCompare(username) == .orderedSame {
+                            return false
+                        }
+                        return true
+                    }
+                    .map {
+                        let resolvedAvatarAsset = AppConfig.resolvedUserAvatarAssetName(
+                            userID: $0.id,
+                            username: $0.username,
+                            avatarURL: $0.avatarURL
+                        )
+                        return InputMentionCandidate(
+                            userID: $0.id,
+                            username: $0.username,
+                            displayName: $0.shownName,
+                            avatarURL: "local-avatar://\(resolvedAvatarAsset)"
+                        )
+                    }
+                    .sorted { $0.mentionText.localizedCaseInsensitiveCompare($1.mentionText) == .orderedAscending }
+
+                let normalizedRole = directory.myRole?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                allowMentionAll = normalizedRole == "leader" || normalizedRole == "admin"
+                viewModel.updateMentionCandidates(mentionCandidates, allowMentionAll: allowMentionAll)
+                return
+            } catch {
+                // Fall back to the lightweight local candidate set below.
+            }
+        }
+
+        mentionCandidates = composerMentionCandidates.map {
+            let resolvedAvatarAsset = AppConfig.resolvedUserAvatarAssetName(
+                userID: nil,
+                username: $0.username,
+                avatarURL: nil
+            )
+            return InputMentionCandidate(
+                userID: $0.username.lowercased(),
+                username: $0.username,
+                displayName: $0.displayName ?? $0.username,
+                avatarURL: "local-avatar://\(resolvedAvatarAsset)"
+            )
+        }
+        allowMentionAll = false
+        viewModel.updateMentionCandidates(mentionCandidates, allowMentionAll: allowMentionAll)
     }
 
     private var chatTheme: ChatTheme {
@@ -1873,6 +1953,8 @@ private final class ExyteChatConversationViewModel: ObservableObject {
     private var typingResetTask: Task<Void, Never>?
     private var lastSentTypingAt: Date?
     private var isSendingTyping = false
+    private var mentionCandidates: [InputMentionCandidate] = []
+    private var allowMentionAll = false
 
     init(conversation: Conversation, service: SocialService) {
         self.conversation = conversation
@@ -1922,6 +2004,11 @@ private final class ExyteChatConversationViewModel: ObservableObject {
         Task {
             await sendDraft(draft)
         }
+    }
+
+    func updateMentionCandidates(_ candidates: [InputMentionCandidate], allowMentionAll: Bool) {
+        mentionCandidates = candidates
+        self.allowMentionAll = allowMentionAll
     }
 
     func updateCurrentSession(_ session: Session?) {
@@ -2096,7 +2183,11 @@ private final class ExyteChatConversationViewModel: ObservableObject {
 
             if !trimmedText.isEmpty {
                 try attachReplyIfNeeded(replyMessageID, shouldAttachReply: &shouldAttachReply)
-                _ = try await chatController.sendTextMessage(trimmedText)
+                _ = try await chatController.sendTextMessage(
+                    trimmedText,
+                    mentionCandidates: mentionCandidates,
+                    allowMentionAll: allowMentionAll
+                )
             }
 
             if let fileURL = draft.fileURL {
@@ -2284,8 +2375,9 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             "sourceKind": source.kind.rawValue,
             "senderUsername": source.sender.username,
             "senderDisplayName": source.sender.displayName,
+            "senderAvatarURL": source.sender.avatarURL ?? "",
             "canCopy": source.kind == .text,
-            "canMention": !source.isMine && source.kind != .system && !source.sender.username.isEmpty,
+            "canMention": conversation.type == .group && !source.isMine && source.kind != .system && !source.sender.username.isEmpty,
             "canReply": source.kind != .system && source.deliveryStatus == .sent,
             "canDelete": source.kind != .system && source.deliveryStatus != .sending,
             "canRevoke": source.isMine &&

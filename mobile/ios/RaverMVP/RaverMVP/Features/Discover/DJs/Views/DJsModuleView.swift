@@ -2489,6 +2489,9 @@ struct DJDetailView: View {
     @State private var isLoading = false
     @State private var isRefreshing = false
     @State private var bannerMessage: String?
+    @State private var bannerStyle: ScreenStatusBannerStyle = .error
+    @State private var bannerAllowsRetry = true
+    @State private var bannerDismissToken = UUID()
     @State private var errorMessage: String?
     @State private var selectedTab: DJDetailTab = .intro
     @State private var pageProgress: CGFloat = 0
@@ -2531,6 +2534,9 @@ struct DJDetailView: View {
     @State private var historyEventEndDate: Date?
     @State private var isCachingManualSnapshot = false
     @State private var manualCachedAt: Date?
+    @State private var widgetStatusMessage: String?
+    @State private var widgetStatusConversation: Conversation?
+    @State private var widgetStatusDismissToken = UUID()
     @State private var djCardSharePresentation: DJCardSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: DJCardSharePresentation?
@@ -2585,66 +2591,7 @@ struct DJDetailView: View {
     }
 
     var body: some View {
-        Group {
-            switch phase {
-            case .idle, .initialLoading:
-                DJDetailSkeletonView()
-            case .failure(let message), .offline(let message):
-                ScrollView {
-                    ScreenErrorCard(message: message) {
-                        Task { await load() }
-                    }
-                }
-                .padding(16)
-                .padding(.top, 96)
-            case .empty:
-                ContentUnavailableView(LL("DJ 不存在"), systemImage: "person.crop.circle.badge.exclamationmark")
-            case .success:
-                if let dj {
-                    ZStack(alignment: .top) {
-                        GeometryReader { proxy in
-                            let cardWidth = max(proxy.size.width - 32, 0)
-                            RaverImmersiveDetailPagerChrome(
-                                title: dj.name,
-                                tabs: DJDetailTab.allCases,
-                                selectedTab: selectedTab,
-                                pageProgress: $pageProgress,
-                                namespace: "dj-detail",
-                                configuration: detailChromeConfiguration
-                            ) {
-                                heroSection(dj)
-                            } tabBar: {
-                                tabBar
-                            } content: { chrome in
-                                tabPager(dj, cardWidth: cardWidth, chrome: chrome)
-                            }
-                        }
-
-                        if isRefreshing || bannerMessage != nil {
-                            VStack(alignment: .leading, spacing: 10) {
-                                if isRefreshing {
-                                    InlineLoadingBadge(title: L("正在更新 DJ 详情", "Updating DJ details"))
-                                }
-                                if let bannerMessage {
-                                    ScreenStatusBanner(
-                                        message: bannerMessage,
-                                        style: .error,
-                                        actionTitle: L("重试", "Retry")
-                                    ) {
-                                        Task { await load() }
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.top, 68)
-                        }
-                    }
-                    .ignoresSafeArea(edges: .top)
-                } else {
-                    ContentUnavailableView(LL("DJ 不存在"), systemImage: "person.crop.circle.badge.exclamationmark")
-                }
-            }
-        }
+        detailBody
         .ignoresSafeArea(edges: .top)
         .background(RaverTheme.background)
         .raverImmersiveFloatingNavigationChrome(
@@ -2652,28 +2599,7 @@ struct DJDetailView: View {
         ) {
             dismiss()
         }
-        .sheet(item: $fullChatSharePresentation) { presentation in
-            ChatShareSheet(
-                loadConversations: {
-                    try await loadSharePanelConversations()
-                },
-                onShareToConversation: { conversation in
-                    try await sendSharePayload(
-                        presentation.payload,
-                        to: conversation,
-                        note: nil
-                    )
-                }
-            ) { conversation in
-                bannerMessage = L(
-                    "已分享到 \(conversation.title)",
-                    "Shared to \(conversation.title)"
-                )
-            } preview: {
-                DJSharePreviewCard(payload: presentation.payload)
-            }
-            .presentationDetents([.fraction(0.76), .large])
-        }
+        .sheet(item: $fullChatSharePresentation, content: fullChatShareSheet)
         .task {
             await refreshManualCacheState()
             await load()
@@ -2686,46 +2612,7 @@ struct DJDetailView: View {
         } message: {
             Text(errorMessage ?? "")
         }
-        .overlay {
-            if let presentation = djCardSharePresentation {
-                SharePanelOverlay(
-                    isVisible: isShareMorePanelVisible,
-                    onBackdropTap: { dismissShareMorePanel() }
-                ) {
-                    ShareActionPanel(
-                        primaryActions: sharePrimaryActions(),
-                        quickActions: shareMoreQuickActions(for: dj),
-                        loadConversations: {
-                            try await loadSharePanelConversations()
-                        },
-                        onSendToConversation: { conversation, note in
-                            try await sendSharePayload(
-                                presentation.payload,
-                                to: conversation,
-                                note: note
-                            )
-                        },
-                        onDismiss: {
-                            dismissShareMorePanel()
-                        }
-                    ) { conversation in
-                        bannerMessage = L(
-                            "已分享到 \(conversation.title)",
-                            "Shared to \(conversation.title)"
-                        )
-                    } onMoreChats: {
-                        dismissShareMorePanel {
-                            fullChatSharePresentation = presentation
-                        }
-                    }
-                }
-                .onAppear {
-                    withAnimation(.sharePanelPresentSpring) {
-                        isShareMorePanelVisible = true
-                    }
-                }
-            }
-        }
+        .overlay { sharePanelOverlay }
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
         .navigationDestination(isPresented: $showDJEditSheet) {
             djEditSheet
@@ -2741,6 +2628,182 @@ struct DJDetailView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverRatingUnitDidUpdate)) { _ in
             Task { await reloadDJRatingUnits() }
+        }
+    }
+
+    @ViewBuilder
+    private var detailBody: some View {
+        Group {
+            switch phase {
+            case .idle, .initialLoading:
+                DJDetailSkeletonView()
+            case .failure(let message), .offline(let message):
+                ScrollView {
+                    ScreenErrorCard(message: message) {
+                        Task { await load() }
+                    }
+                }
+                .padding(16)
+                .padding(.top, 96)
+            case .empty:
+                ContentUnavailableView(LL("DJ 不存在"), systemImage: "person.crop.circle.badge.exclamationmark")
+            case .success:
+                successDetailBody
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var successDetailBody: some View {
+        if let dj {
+            ZStack(alignment: .top) {
+                successDetailChrome(dj)
+                detailTopStatusBanners
+            }
+            .ignoresSafeArea(edges: .top)
+        } else {
+            ContentUnavailableView(LL("DJ 不存在"), systemImage: "person.crop.circle.badge.exclamationmark")
+        }
+    }
+
+    private func successDetailChrome(_ dj: WebDJ) -> some View {
+        GeometryReader { proxy in
+            let cardWidth = max(proxy.size.width - 32, 0)
+            RaverImmersiveDetailPagerChrome(
+                title: dj.name,
+                tabs: DJDetailTab.allCases,
+                selectedTab: selectedTab,
+                pageProgress: $pageProgress,
+                namespace: "dj-detail",
+                configuration: detailChromeConfiguration
+            ) {
+                heroSection(dj)
+            } tabBar: {
+                tabBar
+            } content: { chrome in
+                tabPager(dj, cardWidth: cardWidth, chrome: chrome)
+            }
+        }
+    }
+
+    private func fullChatShareSheet(_ presentation: DJCardSharePresentation) -> some View {
+        ChatShareSheet(
+            loadConversations: {
+                try await loadSharePanelConversations()
+            },
+            onShareToConversation: { conversation in
+                try await sendSharePayload(
+                    presentation.payload,
+                    to: conversation,
+                    note: nil
+                )
+            }
+        ) { conversation in
+            showWidgetStatusBanner(
+                message: L(
+                    "已分享到 \(conversation.title)",
+                    "Shared to \(conversation.title)"
+                ),
+                conversation: conversation
+            )
+        } preview: {
+            DJSharePreviewCard(payload: presentation.payload)
+        }
+        .presentationDetents([.fraction(0.76), .large])
+    }
+
+    @ViewBuilder
+    private var sharePanelOverlay: some View {
+        if let presentation = djCardSharePresentation {
+            SharePanelOverlay(
+                isVisible: isShareMorePanelVisible,
+                onBackdropTap: { dismissShareMorePanel() }
+            ) {
+                ShareActionPanel(
+                    primaryActions: sharePrimaryActions(),
+                    quickActions: shareMoreQuickActions(for: dj),
+                    loadConversations: {
+                        try await loadSharePanelConversations()
+                    },
+                    onSendToConversation: { conversation, note in
+                        try await sendSharePayload(
+                            presentation.payload,
+                            to: conversation,
+                            note: note
+                        )
+                    },
+                    onDismiss: {
+                        dismissShareMorePanel()
+                    }
+                ) { conversation in
+                    showWidgetStatusBanner(
+                        message: L(
+                            "已分享到 \(conversation.title)",
+                            "Shared to \(conversation.title)"
+                        ),
+                        conversation: conversation
+                    )
+                } onMoreChats: {
+                    dismissShareMorePanel {
+                        fullChatSharePresentation = presentation
+                    }
+                }
+            }
+            .onAppear {
+                withAnimation(.sharePanelPresentSpring) {
+                    isShareMorePanelVisible = true
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var detailTopStatusBanners: some View {
+        if isRefreshing || bannerMessage != nil || widgetStatusMessage != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                if isRefreshing {
+                    InlineLoadingBadge(title: L("正在更新 DJ 详情", "Updating DJ details"))
+                }
+                widgetShareStatusBanner
+                detailErrorStatusBanner
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 100)
+        }
+    }
+
+    @ViewBuilder
+    private var widgetShareStatusBanner: some View {
+        if let widgetStatusMessage {
+            ScreenStatusBanner(
+                message: widgetStatusMessage,
+                style: .info,
+                actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
+            ) {
+                if let widgetStatusConversation {
+                    appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var detailErrorStatusBanner: some View {
+        if let bannerMessage {
+            if bannerAllowsRetry {
+                ScreenStatusBanner(
+                    message: bannerMessage,
+                    style: bannerStyle,
+                    actionTitle: L("重试", "Retry")
+                ) {
+                    Task { await load() }
+                }
+            } else {
+                ScreenStatusBanner(
+                    message: bannerMessage,
+                    style: bannerStyle
+                )
+            }
         }
     }
 
@@ -2797,18 +2860,53 @@ struct DJDetailView: View {
                 applyDJManualCacheSnapshot(snapshot)
                 phase = .success
                 if isRequestTimeoutError(error) {
-                    bannerMessage = L("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version.")
+                    showBannerMessageAutoDismiss(
+                        L("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version."),
+                        style: .warning
+                    )
                 } else {
-                    bannerMessage = L("网络较弱，已展示 DJ 缓存数据。", "Network is weak. Showing cached DJ data.")
+                    showBannerMessageAutoDismiss(
+                        L("网络较弱，已展示 DJ 缓存数据。", "Network is weak. Showing cached DJ data."),
+                        style: .warning
+                    )
                 }
             } else if hadContent {
                 isLoadingRelatedArticles = false
-                bannerMessage = error.userFacingMessage ?? L("DJ 详情更新失败，请稍后重试", "Failed to refresh DJ details. Please try again later.")
+                showBannerMessage(
+                    error.userFacingMessage ?? L("DJ 详情更新失败，请稍后重试", "Failed to refresh DJ details. Please try again later."),
+                    style: .error,
+                    allowsRetry: true
+                )
                 phase = .success
             } else {
                 isLoadingRelatedArticles = false
                 let message = error.userFacingMessage ?? L("DJ 详情加载失败，请稍后重试", "Failed to load DJ details. Please try again later.")
                 phase = .failure(message: message)
+            }
+        }
+    }
+
+    private func showBannerMessage(
+        _ message: String,
+        style: ScreenStatusBannerStyle,
+        allowsRetry: Bool
+    ) {
+        bannerMessage = message
+        bannerStyle = style
+        bannerAllowsRetry = allowsRetry
+    }
+
+    private func showBannerMessageAutoDismiss(
+        _ message: String,
+        style: ScreenStatusBannerStyle
+    ) {
+        showBannerMessage(message, style: style, allowsRetry: false)
+        let token = UUID()
+        bannerDismissToken = token
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            guard bannerDismissToken == token else { return }
+            withAnimation(.easeOut(duration: 0.25)) {
+                bannerMessage = nil
             }
         }
     }
@@ -3377,6 +3475,20 @@ struct DJDetailView: View {
             guard !isShareMorePanelVisible else { return }
             djCardSharePresentation = nil
             after?()
+        }
+    }
+
+    private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
+        widgetStatusConversation = conversation
+        widgetStatusMessage = message
+        let token = UUID()
+        widgetStatusDismissToken = token
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            guard widgetStatusDismissToken == token else { return }
+            withAnimation(.easeOut(duration: 0.25)) {
+                widgetStatusMessage = nil
+                widgetStatusConversation = nil
+            }
         }
     }
 
