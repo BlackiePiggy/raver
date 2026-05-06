@@ -161,6 +161,16 @@ final class RaverChatController: ObservableObject {
     }
 
     @discardableResult
+    func sendMyCheckinsCardMessage(_ payload: MyCheckinsShareCardPayload) async throws -> ChatMessage {
+        let sent = try await dataProvider.currentService.sendMyCheckinsCardMessage(
+            conversationID: dataProvider.currentConversation.id,
+            payload: payload
+        )
+        applySentMessage(sent)
+        return sent
+    }
+
+    @discardableResult
     func sendImageMessage(
         fileURL: URL,
         onProgress: ((Double) -> Void)? = nil

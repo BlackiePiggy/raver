@@ -1541,17 +1541,17 @@ private struct MessageGlobalSearchSheet: View {
     }
 
     private func cardPreviewText(from rawText: String) -> String? {
-        if let payload = parseEventCardPayloadForPreview(from: rawText) {
-            return "\(L("[活动卡片]", "[Event Card]")) \(payload.eventName)"
-        }
-        if let payload = parsePostCardPayloadForPreview(from: rawText) {
-            return "\(L("[帖子卡片]", "[Post Card]")) \(payload.authorDisplayName)"
-        }
         if let payload = parseRatingEventCardPayloadForPreview(from: rawText) {
             return "\(L("[打分事件卡片]", "[Rating Event Card]")) \(payload.eventName)"
         }
         if let payload = parseRatingUnitCardPayloadForPreview(from: rawText) {
             return "\(L("[打分单位卡片]", "[Rating Unit Card]")) \(payload.unitName)"
+        }
+        if let payload = parseEventCardPayloadForPreview(from: rawText) {
+            return "\(L("[活动卡片]", "[Event Card]")) \(payload.eventName)"
+        }
+        if let payload = parsePostCardPayloadForPreview(from: rawText) {
+            return "\(L("[帖子卡片]", "[Post Card]")) \(payload.authorDisplayName)"
         }
         if let payload = parseDJCardPayloadForPreview(from: rawText) {
             return "\(L("[DJ卡片]", "[DJ Card]")) \(payload.djName)"
@@ -1573,6 +1573,9 @@ private struct MessageGlobalSearchSheet: View {
         }
         if let payload = parseCircleIDCardPayloadForPreview(from: rawText) {
             return "\(L("[ID卡片]", "[ID Card]")) \(payload.songName)"
+        }
+        if let payload = parseMyCheckinsCardPayloadForPreview(from: rawText) {
+            return "\(L("[打卡卡片]", "[Check-ins Card]")) \(payload.title)"
         }
 
         return nil
@@ -1626,7 +1629,7 @@ private struct MessageGlobalSearchSheet: View {
             return payload
         }
 
-        return try? JSONDecoder().decode(RatingEventShareCardPayload.self, from: data)
+        return nil
     }
 
     private func parseRatingUnitCardPayloadForPreview(from rawText: String) -> RatingUnitShareCardPayload? {
@@ -1763,6 +1766,23 @@ private struct MessageGlobalSearchSheet: View {
         }
 
         return try? JSONDecoder().decode(CircleIDShareCardPayload.self, from: data)
+    }
+
+    private func parseMyCheckinsCardPayloadForPreview(from rawText: String) -> MyCheckinsShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: MyCheckinsShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "my_checkins",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(MyCheckinsShareCardPayload.self, from: data)
     }
 
     @ViewBuilder

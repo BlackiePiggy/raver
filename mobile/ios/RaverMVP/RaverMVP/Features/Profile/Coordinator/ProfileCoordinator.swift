@@ -9,7 +9,7 @@ enum ProfileRoute: Hashable {
     case myPublishes
     case myRoutes
     case editProfile
-    case myCheckins(targetUserID: String?, title: String)
+    case myCheckins(targetUserID: String?, title: String, ownerDisplayName: String?)
     case avatarFullscreen
     case publishEvent
     case uploadSet

@@ -461,10 +461,11 @@ struct MainTabCoordinatorView: View {
                         NotificationCenter.default.post(name: .profileDidUpdate, object: updated)
                     }
                 }
-            case let .myCheckins(targetUserID, title):
+            case let .myCheckins(targetUserID, title, ownerDisplayName):
                 MyCheckinsView(
                     targetUserID: targetUserID,
-                    title: title
+                    title: title,
+                    ownerDisplayName: ownerDisplayName
                 )
             case .avatarFullscreen:
                 CurrentUserProfileLoaderView(repository: appContainer.profileSocialRepository) { profile in

@@ -123,7 +123,8 @@ private struct UserProfileScreen: View {
                             ) {
                                 profilePush(.myCheckins(
                                     targetUserID: viewModel.profile?.id,
-                                    title: L("\(viewModel.profile?.displayName ?? "Ta")的打卡", "\(viewModel.profile?.displayName ?? "Ta")'s Check-ins")
+                                    title: L("\(viewModel.profile?.displayName ?? "Ta")的打卡", "\(viewModel.profile?.displayName ?? "Ta")'s Check-ins"),
+                                    ownerDisplayName: viewModel.profile?.displayName
                                 ))
                             }
 

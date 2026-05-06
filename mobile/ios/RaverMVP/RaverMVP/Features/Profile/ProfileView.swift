@@ -84,7 +84,8 @@ struct ProfileView: View {
                             ) {
                                 profilePush(.myCheckins(
                                     targetUserID: nil,
-                                    title: L("我的打卡", "My Check-ins")
+                                    title: L("我的打卡", "My Check-ins"),
+                                    ownerDisplayName: viewModel.profile?.displayName
                                 ))
                             }
 

@@ -337,10 +337,77 @@ final class MyCheckinsViewModel: ObservableObject {
     }
 }
 
+private struct MyCheckinsSharePresentation: Identifiable {
+    let id = UUID()
+    let payload: MyCheckinsShareCardPayload
+}
+
+private struct MyCheckinsSharePreviewCard: View {
+    let payload: MyCheckinsShareCardPayload
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let coverImageURL = payload.coverImageURL?.nilIfBlank {
+                ZStack(alignment: .bottomLeading) {
+                    ImageLoaderView(urlString: coverImageURL)
+                        .frame(height: 142)
+                        .clipped()
+
+                    LinearGradient(
+                        colors: [Color.black.opacity(0.06), Color.black.opacity(0.48)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+
+                    if let badgeText = payload.badgeText?.nilIfBlank {
+                        Text(badgeText)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.black.opacity(0.24), in: Capsule())
+                            .padding(12)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                if payload.coverImageURL?.nilIfBlank == nil,
+                   let badgeText = payload.badgeText?.nilIfBlank {
+                    Text(badgeText)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                }
+
+                Text(payload.title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+
+                if let summary = payload.summary?.nilIfBlank {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(2)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RaverTheme.card)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(RaverTheme.cardBorder.opacity(0.45), lineWidth: 1)
+        )
+    }
+}
+
 struct MyCheckinsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appContainer: AppContainer
+    @EnvironmentObject private var appState: AppState
 
     private struct TimelineDJEntry: Identifiable {
         let id: String
@@ -476,15 +543,23 @@ struct MyCheckinsView: View {
 
     private let targetUserID: String?
     private let navigationTitleText: String
+    private let ownerDisplayName: String?
     private var service: WebFeatureService { appContainer.webService }
 
     @State private var displayMode: DisplayMode = .timeline
     @State private var galleryMode: GalleryMode = .event
+    @State private var shareMorePresentation: MyCheckinsSharePresentation?
+    @State private var fullChatSharePresentation: MyCheckinsSharePresentation?
+    @State private var isShareMorePanelVisible = false
+    @State private var widgetStatusMessage: String?
+    @State private var widgetStatusConversation: Conversation?
+    @State private var widgetStatusDismissToken: UUID?
     @StateObject private var viewModel: MyCheckinsViewModel
 
-    init(targetUserID: String? = nil, title: String = "") {
+    init(targetUserID: String? = nil, title: String = "", ownerDisplayName: String? = nil) {
         self.targetUserID = targetUserID
         self.navigationTitleText = title.isEmpty ? L("我的打卡", "My Check-ins") : title
+        self.ownerDisplayName = ownerDisplayName
         _viewModel = StateObject(wrappedValue: MyCheckinsViewModel(targetUserID: targetUserID))
     }
 
@@ -572,7 +647,10 @@ struct MyCheckinsView: View {
         }
         .background(RaverTheme.background)
         .scrollIndicators(.hidden)
-        .raverGradientNavigationChrome(title: navigationTitleText) {
+        .raverGradientNavigationChrome(
+            title: navigationTitleText,
+            trailing: navigationShareButton.eraseToAnyView()
+        ) {
             dismiss()
         }
         .task {
@@ -580,6 +658,28 @@ struct MyCheckinsView: View {
         }
         .refreshable {
             await viewModel.reload(service: service)
+        }
+        .sheet(item: $fullChatSharePresentation) { presentation in
+            ChatShareSheet(
+                loadConversations: {
+                    try await loadSharePanelConversations()
+                },
+                onShareToConversation: { conversation in
+                    try await sendSharePayload(
+                        presentation.payload,
+                        to: conversation,
+                        note: nil
+                    )
+                }
+            ) { conversation in
+                showWidgetStatusBanner(
+                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    conversation: conversation
+                )
+            } preview: {
+                MyCheckinsSharePreviewCard(payload: presentation.payload)
+            }
+            .presentationDetents([.fraction(0.76), .large])
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -589,6 +689,64 @@ struct MyCheckinsView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
+        .overlay {
+            if let presentation = shareMorePresentation {
+                SharePanelOverlay(
+                    isVisible: isShareMorePanelVisible,
+                    onBackdropTap: { dismissShareMorePanel() }
+                ) {
+                    ShareActionPanel(
+                        primaryActions: sharePrimaryActions(),
+                        quickActions: shareMoreQuickActions(),
+                        loadConversations: {
+                            try await loadSharePanelConversations()
+                        },
+                        onSendToConversation: { conversation, note in
+                            try await sendSharePayload(
+                                presentation.payload,
+                                to: conversation,
+                                note: note
+                            )
+                        },
+                        onDismiss: {
+                            dismissShareMorePanel()
+                        }
+                    ) { conversation in
+                        showWidgetStatusBanner(
+                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            conversation: conversation
+                        )
+                    } onMoreChats: {
+                        dismissShareMorePanel {
+                            fullChatSharePresentation = presentation
+                        }
+                    }
+                }
+                .onAppear {
+                    withAnimation(.sharePanelPresentSpring) {
+                        isShareMorePanelVisible = true
+                    }
+                }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let widgetStatusMessage {
+                ScreenStatusBanner(
+                    message: widgetStatusMessage,
+                    style: .info,
+                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
+                ) {
+                    if let widgetStatusConversation {
+                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 120)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
+        .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
     }
 
     private var items: [WebCheckin] { viewModel.items }
@@ -607,6 +765,29 @@ struct MyCheckinsView: View {
     private var errorMessage: String? {
         get { viewModel.errorMessage }
         nonmutating set { viewModel.errorMessage = newValue }
+    }
+    private var effectiveOwnerDisplayName: String {
+        if let trimmedOwnerDisplayName = ownerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !trimmedOwnerDisplayName.isEmpty {
+            return trimmedOwnerDisplayName
+        }
+        if targetUserID == nil,
+           let sessionName = appState.session?.user.displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+           !sessionName.isEmpty {
+            return sessionName
+        }
+        return L("Ta", "They")
+    }
+    private var effectiveShareUserID: String? {
+        if let trimmedTargetUserID = targetUserID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !trimmedTargetUserID.isEmpty {
+            return trimmedTargetUserID
+        }
+        if let sessionUserID = appState.session?.user.id.trimmingCharacters(in: .whitespacesAndNewlines),
+           !sessionUserID.isEmpty {
+            return sessionUserID
+        }
+        return nil
     }
 
     private var rawVisibleItems: [WebCheckin] {
@@ -688,6 +869,38 @@ struct MyCheckinsView: View {
             }
     }
 
+    private var checkinActivityCount: Int {
+        timelineNodes.filter { node in
+            if node.event != nil {
+                return true
+            }
+            let manualEventName = node.manualEventName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return !manualEventName.isEmpty
+        }.count
+    }
+
+    private var checkinArtistCount: Int {
+        Set(
+            galleryDJEntries.map { entry in
+                galleryDJGroupingKey(for: resolvedGalleryDJ(entry.dj))
+            }
+        ).count
+    }
+
+    private var shareStatsSummaryText: String {
+        L(
+            "打卡\(checkinActivityCount)次活动、\(checkinArtistCount)个艺人",
+            "Checked in at \(checkinActivityCount) events, \(checkinArtistCount) artists"
+        )
+    }
+
+    private var timelineStatsText: String {
+        L(
+            "\(checkinActivityCount)次活动、\(checkinArtistCount)个艺人",
+            "\(checkinActivityCount) events, \(checkinArtistCount) artists"
+        )
+    }
+
     private var isCurrentViewEmpty: Bool {
         switch displayMode {
         case .timeline:
@@ -697,30 +910,184 @@ struct MyCheckinsView: View {
         }
     }
 
-    private var timelineView: some View {
-        ZStack(alignment: .topLeading) {
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.98, green: 0.78, blue: 0.69),
-                            Color(red: 0.99, green: 0.91, blue: 0.84),
-                            Color.white.opacity(0.12)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: 2)
-                .padding(.leading, 11)
-                .padding(.top, 10)
-
-            VStack(spacing: 26) {
-                ForEach(timelineNodes) { node in
-                    timelineNodeRow(node)
-                }
+    private var navigationShareButton: some View {
+        Button {
+            guard let payload = makeSharePayload() else {
+                errorMessage = L("当前打卡页暂时无法分享。", "This check-ins page cannot be shared right now.")
+                return
             }
-            .padding(.leading, 6)
+            shareMorePresentation = MyCheckinsSharePresentation(payload: payload)
+            isShareMorePanelVisible = false
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+                .frame(width: 36, height: 36)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func dismissShareMorePanel(after completion: (() -> Void)? = nil) {
+        withAnimation(.sharePanelDismissSpring) {
+            isShareMorePanelVisible = false
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
+            guard !isShareMorePanelVisible else { return }
+            shareMorePresentation = nil
+            completion?()
+        }
+    }
+
+    private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
+        widgetStatusConversation = conversation
+        widgetStatusMessage = message
+        let token = UUID()
+        widgetStatusDismissToken = token
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            guard widgetStatusDismissToken == token else { return }
+            withAnimation(.easeOut(duration: 0.25)) {
+                widgetStatusMessage = nil
+                widgetStatusConversation = nil
+            }
+        }
+    }
+
+    private func loadSharePanelConversations() async throws -> [Conversation] {
+        async let directs = appContainer.socialService.fetchConversations(type: .direct)
+        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        let merged = try await directs + groups
+        let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
+            partialResult[conversation.id] = conversation
+        }
+        return deduped.values.sorted {
+            if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
+            return $0.updatedAt > $1.updatedAt
+        }
+    }
+
+    private func sendSharePayload(
+        _ payload: MyCheckinsShareCardPayload,
+        to conversation: Conversation,
+        note: String?
+    ) async throws {
+        _ = try await appContainer.socialService.sendMyCheckinsCardMessage(
+            conversationID: conversation.id,
+            payload: payload
+        )
+
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedNote.isEmpty {
+            _ = try await appContainer.socialService.sendMessage(
+                conversationID: conversation.id,
+                content: trimmedNote
+            )
+        }
+    }
+
+    private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
+        [
+            SharePanelPrimaryAction(
+                title: "微信",
+                systemImage: "message.circle.fill",
+                accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
+            ) {
+                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+            },
+            SharePanelPrimaryAction(
+                title: "QQ",
+                systemImage: "paperplane.circle.fill",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+            }
+        ]
+    }
+
+    private func shareMoreQuickActions() -> [SharePanelQuickAction] {
+        [
+            SharePanelQuickAction(
+                title: L("举报", "Report"),
+                systemImage: "flag",
+                accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
+            ) {
+                openCheckinsReportEntry()
+            }
+        ]
+    }
+
+    private func openCheckinsReportEntry() {
+        errorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+    }
+
+    private func makeSharePayload() -> MyCheckinsShareCardPayload? {
+        guard let userID = effectiveShareUserID else { return nil }
+
+        let coverImageURL = rawVisibleItems.compactMap { item in
+            let photoURL = item.photoUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let photoURL, !photoURL.isEmpty {
+                return photoURL
+            }
+            let eventCover = item.event?.coverImageUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let eventCover, !eventCover.isEmpty {
+                return eventCover
+            }
+            let djAvatar = item.dj?.avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let djAvatar, !djAvatar.isEmpty {
+                return djAvatar
+            }
+            return nil
+        }.first
+
+        let shareTitle: String
+        if let targetUserID, !targetUserID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            shareTitle = navigationTitleText
+        } else {
+            shareTitle = L("\(effectiveOwnerDisplayName)的打卡", "\(effectiveOwnerDisplayName)'s Check-ins")
+        }
+
+        return MyCheckinsShareCardPayload(
+            userID: userID,
+            displayName: effectiveOwnerDisplayName,
+            title: shareTitle,
+            summary: shareStatsSummaryText,
+            coverImageURL: coverImageURL,
+            badgeText: L("打卡", "Check-ins")
+        )
+    }
+
+    private var timelineView: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(timelineStatsText)
+                .font(.caption)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .padding(.leading, 30)
+
+            ZStack(alignment: .topLeading) {
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.98, green: 0.78, blue: 0.69),
+                                Color(red: 0.99, green: 0.91, blue: 0.84),
+                                Color.white.opacity(0.12)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 2)
+                    .padding(.leading, 11)
+                    .padding(.top, 10)
+
+                VStack(spacing: 26) {
+                    ForEach(timelineNodes) { node in
+                        timelineNodeRow(node)
+                    }
+                }
+                .padding(.leading, 6)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)

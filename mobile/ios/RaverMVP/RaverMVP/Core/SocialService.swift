@@ -47,6 +47,7 @@ protocol IMChatCompatibilityService: AnyObject {
     func sendRatingUnitCardMessage(conversationID: String, payload: RatingUnitShareCardPayload) async throws -> ChatMessage
     func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage
     func sendCircleIDCardMessage(conversationID: String, payload: CircleIDShareCardPayload) async throws -> ChatMessage
+    func sendMyCheckinsCardMessage(conversationID: String, payload: MyCheckinsShareCardPayload) async throws -> ChatMessage
     func sendTypingStatus(conversationID: String, isTyping: Bool) async throws
     func revokeMessage(conversationID: String, messageID: String) async throws -> String
     func deleteMessage(conversationID: String, messageID: String) async throws
@@ -165,6 +166,15 @@ struct CircleIDShareCardPayload: Codable, Hashable {
     let eventName: String?
     let coverImageURL: String?
     let hasVideo: Bool
+    let badgeText: String?
+}
+
+struct MyCheckinsShareCardPayload: Codable, Hashable {
+    let userID: String
+    let displayName: String
+    let title: String
+    let summary: String?
+    let coverImageURL: String?
     let badgeText: String?
 }
 
@@ -343,6 +353,12 @@ extension IMChatCompatibilityService {
     }
 
     func sendCircleIDCardMessage(conversationID: String, payload: CircleIDShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendMyCheckinsCardMessage(conversationID: String, payload: MyCheckinsShareCardPayload) async throws -> ChatMessage {
         _ = conversationID
         _ = payload
         throw ServiceError.message("Not supported")

@@ -903,6 +903,13 @@ final class TencentIMSession: NSObject {
         let payload: CircleIDShareCardPayload
     }
 
+    private struct TencentMyCheckinsCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: MyCheckinsShareCardPayload
+    }
+
     var onStateChange: ((TencentIMConnectionState) -> Void)?
     var onUnreadCountChange: ((Int) -> Void)?
     let messageSubject = PassthroughSubject<ChatMessage, Never>()
@@ -2444,6 +2451,45 @@ final class TencentIMSession: NSObject {
         return sent
     }
 
+    func sendMyCheckinsCardMessage(
+        conversationID: String,
+        payload: MyCheckinsShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentMyCheckinsCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "my_checkins",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create my check-ins card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[打卡卡片]", "[Check-ins Card]")) \(payload.title)"
+        )
+        var sent = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            offlinePushInfo: offlinePushInfo,
+            progress: nil
+        )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.title
+        sent.media = ChatMessageMediaPayload(thumbnailURL: payload.coverImageURL)
+        return sent
+    }
+
     func sendImageMessage(
         conversationID: String,
         fileURL: URL,
@@ -3574,6 +3620,9 @@ final class TencentIMSession: NSObject {
             if let idCard = customCircleIDCardPayload(from: message.customElem?.data) {
                 return "\(L("[ID卡片]", "[ID Card]")) \(idCard.songName)"
             }
+            if let myCheckinsCard = customMyCheckinsCardPayload(from: message.customElem?.data) {
+                return "\(L("[打卡卡片]", "[Check-ins Card]")) \(myCheckinsCard.title)"
+            }
             return normalizedText(message.customElem?.desc) ?? L("[自定义消息]", "[Custom Message]")
         case Self.elemTypeGroupTipsRawValue:
             return L("[群提示]", "[Group Notice]")
@@ -3706,14 +3755,16 @@ final class TencentIMSession: NSObject {
                 )
             } else if let ratingEventCard = customRatingEventCardPayload(from: message.customElem?.data) {
                 kind = .card
-                content = (try? String(data: JSONEncoder().encode(ratingEventCard), encoding: .utf8))
+                content = message.customElem?.data.flatMap { String(data: $0, encoding: .utf8) }
+                    ?? (try? String(data: JSONEncoder().encode(ratingEventCard), encoding: .utf8))
                     ?? ratingEventCard.eventName
                 media = ChatMessageMediaPayload(
                     thumbnailURL: ratingEventCard.coverImageURL
                 )
             } else if let ratingUnitCard = customRatingUnitCardPayload(from: message.customElem?.data) {
                 kind = .card
-                content = (try? String(data: JSONEncoder().encode(ratingUnitCard), encoding: .utf8))
+                content = message.customElem?.data.flatMap { String(data: $0, encoding: .utf8) }
+                    ?? (try? String(data: JSONEncoder().encode(ratingUnitCard), encoding: .utf8))
                     ?? ratingUnitCard.unitName
                 media = ChatMessageMediaPayload(
                     thumbnailURL: ratingUnitCard.coverImageURL
@@ -3731,6 +3782,14 @@ final class TencentIMSession: NSObject {
                     ?? idCard.songName
                 media = ChatMessageMediaPayload(
                     thumbnailURL: idCard.coverImageURL
+                )
+            } else if let myCheckinsCard = customMyCheckinsCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = message.customElem?.data.flatMap { String(data: $0, encoding: .utf8) }
+                    ?? (try? String(data: JSONEncoder().encode(myCheckinsCard), encoding: .utf8))
+                    ?? myCheckinsCard.title
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: myCheckinsCard.coverImageURL
                 )
             } else {
                 kind = .custom
@@ -3975,6 +4034,16 @@ final class TencentIMSession: NSObject {
               let envelope = try? JSONDecoder().decode(TencentCircleIDCardEnvelope.self, from: data),
               envelope.businessID == Self.customCardBusinessID,
               envelope.cardType == "circle_id" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customMyCheckinsCardPayload(from data: Data?) -> MyCheckinsShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentMyCheckinsCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "my_checkins" else {
             return nil
         }
         return envelope.payload
