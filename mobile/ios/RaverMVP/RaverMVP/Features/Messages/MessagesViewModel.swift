@@ -10,6 +10,12 @@ protocol MessagesRepository: IMChatConversationDataSource {
     func fetchFollowedEventsSummary() async throws -> FollowedEventsSummary
     func fetchFollowedEventNotifications(limit: Int) async throws -> [FollowedEventNotificationItem]
     func markFollowedEventNotificationRead(notificationID: String) async throws
+    func fetchFollowedDJsSummary() async throws -> FollowedDJsSummary
+    func fetchFollowedDJNotifications(limit: Int) async throws -> [FollowedDJNotificationItem]
+    func markFollowedDJNotificationRead(notificationID: String) async throws
+    func fetchFollowedBrandsSummary() async throws -> FollowedBrandsSummary
+    func fetchFollowedBrandNotifications(limit: Int) async throws -> [FollowedBrandNotificationItem]
+    func markFollowedBrandNotificationRead(notificationID: String) async throws
 }
 
 struct MessagesRepositoryAdapter: MessagesRepository {
@@ -66,6 +72,30 @@ struct MessagesRepositoryAdapter: MessagesRepository {
     func markFollowedEventNotificationRead(notificationID: String) async throws {
         try await service.markFollowedEventNotificationRead(notificationID: notificationID)
     }
+
+    func fetchFollowedDJsSummary() async throws -> FollowedDJsSummary {
+        try await service.fetchFollowedDJsSummary()
+    }
+
+    func fetchFollowedDJNotifications(limit: Int) async throws -> [FollowedDJNotificationItem] {
+        try await service.fetchFollowedDJNotifications(limit: limit)
+    }
+
+    func markFollowedDJNotificationRead(notificationID: String) async throws {
+        try await service.markFollowedDJNotificationRead(notificationID: notificationID)
+    }
+
+    func fetchFollowedBrandsSummary() async throws -> FollowedBrandsSummary {
+        try await service.fetchFollowedBrandsSummary()
+    }
+
+    func fetchFollowedBrandNotifications(limit: Int) async throws -> [FollowedBrandNotificationItem] {
+        try await service.fetchFollowedBrandNotifications(limit: limit)
+    }
+
+    func markFollowedBrandNotificationRead(notificationID: String) async throws {
+        try await service.markFollowedBrandNotificationRead(notificationID: notificationID)
+    }
 }
 
 @MainActor
@@ -90,6 +120,8 @@ final class MessagesViewModel: ObservableObject {
     @Published var isEditingConversations = false
     @Published var selectedConversationIDs: Set<String> = []
     @Published var followedEventsSummary: FollowedEventsSummary = .empty
+    @Published var followedDJsSummary: FollowedDJsSummary = .empty
+    @Published var followedBrandsSummary: FollowedBrandsSummary = .empty
 
     private let repository: MessagesRepository
     private let chatStore = IMChatStore.shared
@@ -114,7 +146,12 @@ final class MessagesViewModel: ObservableObject {
 
         do {
             try await chatStore.loadConversations(using: repository)
-            followedEventsSummary = (try? await repository.fetchFollowedEventsSummary()) ?? .empty
+            async let followedEventsTask = repository.fetchFollowedEventsSummary()
+            async let followedDJsTask = repository.fetchFollowedDJsSummary()
+            async let followedBrandsTask = repository.fetchFollowedBrandsSummary()
+            followedEventsSummary = (try? await followedEventsTask) ?? .empty
+            followedDJsSummary = (try? await followedDJsTask) ?? .empty
+            followedBrandsSummary = (try? await followedBrandsTask) ?? .empty
             phase = conversations.isEmpty ? .empty : .success
             bannerMessage = nil
             self.error = nil
@@ -131,6 +168,14 @@ final class MessagesViewModel: ObservableObject {
 
     func refreshFollowedEventsSummary() async {
         followedEventsSummary = (try? await repository.fetchFollowedEventsSummary()) ?? .empty
+    }
+
+    func refreshFollowedDJsSummary() async {
+        followedDJsSummary = (try? await repository.fetchFollowedDJsSummary()) ?? .empty
+    }
+
+    func refreshFollowedBrandsSummary() async {
+        followedBrandsSummary = (try? await repository.fetchFollowedBrandsSummary()) ?? .empty
     }
 
     func markConversationRead(conversationID: String) async {

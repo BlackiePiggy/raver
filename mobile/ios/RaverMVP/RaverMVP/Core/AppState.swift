@@ -840,6 +840,69 @@ final class TencentIMSession: NSObject {
         let payload: DJShareCardPayload
     }
 
+    private struct TencentSetCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: SetShareCardPayload
+    }
+
+    private struct TencentBrandCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: BrandShareCardPayload
+    }
+
+    private struct TencentLabelCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: LabelShareCardPayload
+    }
+
+    private struct TencentNewsCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: NewsShareCardPayload
+    }
+
+    private struct TencentRankingBoardCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: RankingBoardShareCardPayload
+    }
+
+    private struct TencentRatingEventCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: RatingEventShareCardPayload
+    }
+
+    private struct TencentRatingUnitCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: RatingUnitShareCardPayload
+    }
+
+    private struct TencentPostCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: PostShareCardPayload
+    }
+
+    private struct TencentCircleIDCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: CircleIDShareCardPayload
+    }
+
     var onStateChange: ((TencentIMConnectionState) -> Void)?
     var onUnreadCountChange: ((Int) -> Void)?
     let messageSubject = PassthroughSubject<ChatMessage, Never>()
@@ -2014,6 +2077,373 @@ final class TencentIMSession: NSObject {
         return sent
     }
 
+    func sendSetCardMessage(
+        conversationID: String,
+        payload: SetShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentSetCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "set",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create set card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[Set卡片]", "[Set Card]")) \(payload.setTitle)"
+        )
+        var sent = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            offlinePushInfo: offlinePushInfo,
+            progress: nil
+        )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.setTitle
+        sent.media = ChatMessageMediaPayload(
+            thumbnailURL: payload.coverImageURL
+        )
+        return sent
+    }
+
+    func sendBrandCardMessage(
+        conversationID: String,
+        payload: BrandShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentBrandCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "brand",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create brand card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[音乐节卡片]", "[Festival Card]")) \(payload.brandName)"
+        )
+        var sent = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            offlinePushInfo: offlinePushInfo,
+            progress: nil
+        )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.brandName
+        sent.media = ChatMessageMediaPayload(
+            thumbnailURL: payload.coverImageURL
+        )
+        return sent
+    }
+
+    func sendLabelCardMessage(
+        conversationID: String,
+        payload: LabelShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentLabelCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "label",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create label card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[厂牌卡片]", "[Label Card]")) \(payload.labelName)"
+        )
+        var sent = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            offlinePushInfo: offlinePushInfo,
+            progress: nil
+        )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.labelName
+        sent.media = ChatMessageMediaPayload(
+            thumbnailURL: payload.coverImageURL
+        )
+        return sent
+    }
+
+    func sendNewsCardMessage(
+        conversationID: String,
+        payload: NewsShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentNewsCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "news",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create news card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[资讯卡片]", "[News Card]")) \(payload.headline)"
+        )
+        var sent = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            offlinePushInfo: offlinePushInfo,
+            progress: nil
+        )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.headline
+        sent.media = ChatMessageMediaPayload(
+            thumbnailURL: payload.coverImageURL
+        )
+        return sent
+    }
+
+    func sendRankingBoardCardMessage(
+        conversationID: String,
+        payload: RankingBoardShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentRankingBoardCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "ranking",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create ranking board card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[榜单卡片]", "[Ranking Card]")) \(payload.boardName) · \(payload.year)"
+        )
+        var sent = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            offlinePushInfo: offlinePushInfo,
+            progress: nil
+        )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.boardName
+        sent.media = ChatMessageMediaPayload(
+            thumbnailURL: payload.coverImageURL
+        )
+        return sent
+    }
+
+    func sendRatingEventCardMessage(
+        conversationID: String,
+        payload: RatingEventShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentRatingEventCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "rating_event",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create rating event card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[打分事件卡片]", "[Rating Event Card]")) \(payload.eventName)"
+        )
+        var sent = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            offlinePushInfo: offlinePushInfo,
+            progress: nil
+        )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.eventName
+        sent.media = ChatMessageMediaPayload(
+            thumbnailURL: payload.coverImageURL
+        )
+        return sent
+    }
+
+    func sendRatingUnitCardMessage(
+        conversationID: String,
+        payload: RatingUnitShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentRatingUnitCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "rating_unit",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create rating unit card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[打分单位卡片]", "[Rating Unit Card]")) \(payload.unitName)"
+        )
+        var sent = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            offlinePushInfo: offlinePushInfo,
+            progress: nil
+        )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.unitName
+        sent.media = ChatMessageMediaPayload(
+            thumbnailURL: payload.coverImageURL
+        )
+        return sent
+    }
+
+    func sendPostCardMessage(
+        conversationID: String,
+        payload: PostShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentPostCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "post",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create post card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[帖子卡片]", "[Post Card]")) \(payload.authorDisplayName)"
+        )
+        var sent = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            offlinePushInfo: offlinePushInfo,
+            progress: nil
+        )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.contentText
+        sent.media = ChatMessageMediaPayload(
+            thumbnailURL: payload.coverImageURL
+        )
+        return sent
+    }
+
+    func sendCircleIDCardMessage(
+        conversationID: String,
+        payload: CircleIDShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentCircleIDCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "circle_id",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create ID card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[ID卡片]", "[ID Card]")) \(payload.songName)"
+        )
+        var sent = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            offlinePushInfo: offlinePushInfo,
+            progress: nil
+        )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.songName
+        sent.media = ChatMessageMediaPayload(thumbnailURL: payload.coverImageURL)
+        return sent
+    }
+
     func sendImageMessage(
         conversationID: String,
         fileURL: URL,
@@ -3117,6 +3547,33 @@ final class TencentIMSession: NSObject {
             if let djCard = customDJCardPayload(from: message.customElem?.data) {
                 return "\(L("[DJ卡片]", "[DJ Card]")) \(djCard.djName)"
             }
+            if let setCard = customSetCardPayload(from: message.customElem?.data) {
+                return "\(L("[Set卡片]", "[Set Card]")) \(setCard.setTitle)"
+            }
+            if let brandCard = customBrandCardPayload(from: message.customElem?.data) {
+                return "\(L("[音乐节卡片]", "[Festival Card]")) \(brandCard.brandName)"
+            }
+            if let labelCard = customLabelCardPayload(from: message.customElem?.data) {
+                return "\(L("[厂牌卡片]", "[Label Card]")) \(labelCard.labelName)"
+            }
+            if let newsCard = customNewsCardPayload(from: message.customElem?.data) {
+                return "\(L("[资讯卡片]", "[News Card]")) \(newsCard.headline)"
+            }
+            if let rankingCard = customRankingBoardCardPayload(from: message.customElem?.data) {
+                return "\(L("[榜单卡片]", "[Ranking Card]")) \(rankingCard.boardName) · \(rankingCard.year)"
+            }
+            if let ratingEventCard = customRatingEventCardPayload(from: message.customElem?.data) {
+                return "\(L("[打分事件卡片]", "[Rating Event Card]")) \(ratingEventCard.eventName)"
+            }
+            if let ratingUnitCard = customRatingUnitCardPayload(from: message.customElem?.data) {
+                return "\(L("[打分单位卡片]", "[Rating Unit Card]")) \(ratingUnitCard.unitName)"
+            }
+            if let postCard = customPostCardPayload(from: message.customElem?.data) {
+                return "\(L("[帖子卡片]", "[Post Card]")) \(postCard.authorDisplayName)"
+            }
+            if let idCard = customCircleIDCardPayload(from: message.customElem?.data) {
+                return "\(L("[ID卡片]", "[ID Card]")) \(idCard.songName)"
+            }
             return normalizedText(message.customElem?.desc) ?? L("[自定义消息]", "[Custom Message]")
         case Self.elemTypeGroupTipsRawValue:
             return L("[群提示]", "[Group Notice]")
@@ -3211,6 +3668,69 @@ final class TencentIMSession: NSObject {
                     ?? djCard.djName
                 media = ChatMessageMediaPayload(
                     thumbnailURL: djCard.coverImageURL
+                )
+            } else if let setCard = customSetCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = (try? String(data: JSONEncoder().encode(setCard), encoding: .utf8))
+                    ?? setCard.setTitle
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: setCard.coverImageURL
+                )
+            } else if let brandCard = customBrandCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = (try? String(data: JSONEncoder().encode(brandCard), encoding: .utf8))
+                    ?? brandCard.brandName
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: brandCard.coverImageURL
+                )
+            } else if let labelCard = customLabelCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = (try? String(data: JSONEncoder().encode(labelCard), encoding: .utf8))
+                    ?? labelCard.labelName
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: labelCard.coverImageURL
+                )
+            } else if let newsCard = customNewsCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = (try? String(data: JSONEncoder().encode(newsCard), encoding: .utf8))
+                    ?? newsCard.headline
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: newsCard.coverImageURL
+                )
+            } else if let rankingCard = customRankingBoardCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = (try? String(data: JSONEncoder().encode(rankingCard), encoding: .utf8))
+                    ?? rankingCard.boardName
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: rankingCard.coverImageURL
+                )
+            } else if let ratingEventCard = customRatingEventCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = (try? String(data: JSONEncoder().encode(ratingEventCard), encoding: .utf8))
+                    ?? ratingEventCard.eventName
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: ratingEventCard.coverImageURL
+                )
+            } else if let ratingUnitCard = customRatingUnitCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = (try? String(data: JSONEncoder().encode(ratingUnitCard), encoding: .utf8))
+                    ?? ratingUnitCard.unitName
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: ratingUnitCard.coverImageURL
+                )
+            } else if let postCard = customPostCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = (try? String(data: JSONEncoder().encode(postCard), encoding: .utf8))
+                    ?? postCard.contentText
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: postCard.coverImageURL
+                )
+            } else if let idCard = customCircleIDCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = (try? String(data: JSONEncoder().encode(idCard), encoding: .utf8))
+                    ?? idCard.songName
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: idCard.coverImageURL
                 )
             } else {
                 kind = .custom
@@ -3365,6 +3885,96 @@ final class TencentIMSession: NSObject {
               let envelope = try? JSONDecoder().decode(TencentDJCardEnvelope.self, from: data),
               envelope.businessID == Self.customCardBusinessID,
               envelope.cardType == "dj" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customSetCardPayload(from data: Data?) -> SetShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentSetCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "set" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customBrandCardPayload(from data: Data?) -> BrandShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentBrandCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "brand" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customLabelCardPayload(from data: Data?) -> LabelShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentLabelCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "label" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customNewsCardPayload(from data: Data?) -> NewsShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentNewsCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "news" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customRankingBoardCardPayload(from data: Data?) -> RankingBoardShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentRankingBoardCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "ranking" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customRatingEventCardPayload(from data: Data?) -> RatingEventShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentRatingEventCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "rating_event" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customRatingUnitCardPayload(from data: Data?) -> RatingUnitShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentRatingUnitCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "rating_unit" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customPostCardPayload(from data: Data?) -> PostShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentPostCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "post" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customCircleIDCardPayload(from data: Data?) -> CircleIDShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentCircleIDCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "circle_id" else {
             return nil
         }
         return envelope.payload
@@ -3861,6 +4471,8 @@ final class AppState: ObservableObject {
     private var tencentIMBootstrapRefreshTask: Task<Void, Never>?
     private var cachedCommunityUnread = 0
     private var cachedFollowedEventsUnread = 0
+    private var cachedFollowedDJsUnread = 0
+    private var cachedFollowedBrandsUnread = 0
     private var latestPushToken: String?
     private var lastTencentIMBootstrapRefreshAt: Date?
     private var pendingSystemNotificationPayload: ([AnyHashable: Any], String)?
@@ -4112,11 +4724,17 @@ final class AppState: ObservableObject {
         do {
             async let notificationsUnreadTask = service.fetchNotificationUnreadCount()
             async let followedEventsSummaryTask = service.fetchFollowedEventsSummary()
+            async let followedDJsSummaryTask = service.fetchFollowedDJsSummary()
+            async let followedBrandsSummaryTask = service.fetchFollowedBrandsSummary()
             let chatsUnread = try await fetchChatUnreadCount()
             let socialUnread = try await notificationsUnreadTask
             let followedEventsSummary = try await followedEventsSummaryTask
+            let followedDJsSummary = try await followedDJsSummaryTask
+            let followedBrandsSummary = try await followedBrandsSummaryTask
             cachedCommunityUnread = Self.communityUnreadCount(from: socialUnread)
             cachedFollowedEventsUnread = max(0, followedEventsSummary.unreadCount)
+            cachedFollowedDJsUnread = max(0, followedDJsSummary.unreadCount)
+            cachedFollowedBrandsUnread = max(0, followedBrandsSummary.unreadCount)
             recomputeUnreadMessagesCount(chatsUnread: chatsUnread, source: "refresh-success")
         } catch {
             // Keep current count when refresh fails.
@@ -4127,6 +4745,8 @@ final class AppState: ObservableObject {
     private func resetUnreadCounts() {
         cachedCommunityUnread = 0
         cachedFollowedEventsUnread = 0
+        cachedFollowedDJsUnread = 0
+        cachedFollowedBrandsUnread = 0
         unreadMessagesCount = 0
 #if canImport(ImSDK_Plus)
         TencentIMAPNSBadgeBridge.shared.setUnifiedUnreadCount(0)
@@ -4159,14 +4779,16 @@ final class AppState: ObservableObject {
         let chatUnread = max(0, chatsUnread ?? localChatUnreadSnapshot())
         let communityUnread = max(0, cachedCommunityUnread)
         let followedEventsUnread = max(0, cachedFollowedEventsUnread)
-        let next = chatUnread + communityUnread + followedEventsUnread
+        let followedDJsUnread = max(0, cachedFollowedDJsUnread)
+        let followedBrandsUnread = max(0, cachedFollowedBrandsUnread)
+        let next = chatUnread + communityUnread + followedEventsUnread + followedDJsUnread + followedBrandsUnread
         unreadMessagesCount = next
 #if canImport(ImSDK_Plus)
         TencentIMAPNSBadgeBridge.shared.setUnifiedUnreadCount(next)
 #endif
         UIApplication.shared.applicationIconBadgeNumber = next
         if previous != next {
-            debug("badge recompute source=\(source) from=\(previous) to=\(next) chat=\(chatUnread) community=\(communityUnread) followedEvents=\(followedEventsUnread)")
+            debug("badge recompute source=\(source) from=\(previous) to=\(next) chat=\(chatUnread) community=\(communityUnread) followedEvents=\(followedEventsUnread) followedDJs=\(followedDJsUnread) followedBrands=\(followedBrandsUnread)")
         }
     }
 
@@ -4291,6 +4913,8 @@ final class AppState: ObservableObject {
         if let extPayload = Self.extractPushExtPayload(from: payload) {
             Self.pushRouteLog("handle ext source=\(source) summary=\(Self.summarizePushExtPayload(extPayload))")
             handleEventUpdatePushSideEffectsIfNeeded(extPayload, source: source)
+            handleDJUpdatePushSideEffectsIfNeeded(extPayload, source: source)
+            handleBrandUpdatePushSideEffectsIfNeeded(extPayload, source: source)
         } else {
             Self.pushRouteLog("handle ext source=\(source) summary=nil")
         }
@@ -4352,6 +4976,84 @@ final class AppState: ObservableObject {
                 Self.pushRouteLog("event_update mark-read success itemID=\(itemID) source=\(source) newsID=\(newsID)")
             } catch {
                 Self.pushRouteLog("event_update mark-read failed itemID=\(itemID) source=\(source) newsID=\(newsID) error=\(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func handleDJUpdatePushSideEffectsIfNeeded(_ payload: [String: Any], source: String) {
+        let route = (payload["route"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard route == "dj_update" else { return }
+
+        let itemID = [
+            payload["itemID"] as? String,
+            payload["itemId"] as? String,
+            payload["notificationID"] as? String,
+            payload["notificationId"] as? String,
+            payload["inboxID"] as? String,
+            payload["inboxId"] as? String
+        ]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty })
+
+        let newsID = (payload["newsID"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "nil"
+
+        guard let itemID else {
+            Self.pushRouteLog("dj_update open no itemID source=\(source) newsID=\(newsID)")
+            return
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.service.markFollowedDJNotificationRead(notificationID: itemID)
+                self.cachedFollowedDJsUnread = max(0, self.cachedFollowedDJsUnread - 1)
+                self.recomputeUnreadMessagesCount(source: "dj-update-open")
+                NotificationCenter.default.post(name: .raverFollowedDJsDidMutate, object: nil)
+                Self.pushRouteLog("dj_update mark-read success itemID=\(itemID) source=\(source) newsID=\(newsID)")
+            } catch {
+                Self.pushRouteLog("dj_update mark-read failed itemID=\(itemID) source=\(source) newsID=\(newsID) error=\(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func handleBrandUpdatePushSideEffectsIfNeeded(_ payload: [String: Any], source: String) {
+        let route = (payload["route"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard route == "brand_update" else { return }
+
+        let itemID = [
+            payload["itemID"] as? String,
+            payload["itemId"] as? String,
+            payload["notificationID"] as? String,
+            payload["notificationId"] as? String,
+            payload["inboxID"] as? String,
+            payload["inboxId"] as? String
+        ]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty })
+
+        let newsID = (payload["newsID"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "nil"
+
+        guard let itemID else {
+            Self.pushRouteLog("brand_update open no itemID source=\(source) newsID=\(newsID)")
+            return
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.service.markFollowedBrandNotificationRead(notificationID: itemID)
+                self.cachedFollowedBrandsUnread = max(0, self.cachedFollowedBrandsUnread - 1)
+                self.recomputeUnreadMessagesCount(source: "brand-update-open")
+                NotificationCenter.default.post(name: .raverFollowedBrandsDidMutate, object: nil)
+                Self.pushRouteLog("brand_update mark-read success itemID=\(itemID) source=\(source) newsID=\(newsID)")
+            } catch {
+                Self.pushRouteLog("brand_update mark-read failed itemID=\(itemID) source=\(source) newsID=\(newsID) error=\(error.localizedDescription)")
             }
         }
     }
@@ -4465,6 +5167,29 @@ final class AppState: ObservableObject {
                !eventID.isEmpty {
                 let encodedEventID = eventID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? eventID
                 return "raver://event/\(encodedEventID)"
+            }
+            return nil
+        }
+
+        if route == "dj_update" {
+            if let explicitDeeplink = (payload["deeplink"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !explicitDeeplink.isEmpty {
+                return explicitDeeplink
+            }
+
+            if let newsID = (payload["newsID"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !newsID.isEmpty {
+                let encodedNewsID = newsID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? newsID
+                return "raver://news/\(encodedNewsID)"
+            }
+
+            if let djID = (payload["djID"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !djID.isEmpty {
+                let encodedDJID = djID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? djID
+                return "raver://dj/\(encodedDJID)"
             }
             return nil
         }

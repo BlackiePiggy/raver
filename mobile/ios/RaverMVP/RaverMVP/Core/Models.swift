@@ -822,6 +822,102 @@ struct FollowedEventNotificationItem: Codable, Identifiable, Hashable {
     }
 }
 
+struct FollowedDJsSummary: Codable, Hashable {
+    var unreadCount: Int
+    var latestItemPreview: String?
+    var latestOccurredAt: Date?
+
+    static let empty = FollowedDJsSummary(
+        unreadCount: 0,
+        latestItemPreview: nil,
+        latestOccurredAt: nil
+    )
+}
+
+struct FollowedDJNotificationItem: Codable, Identifiable, Hashable {
+    let id: String
+    var type: String
+    var djID: String
+    var djName: String
+    var newsID: String
+    var newsTitle: String
+    var newsSummary: String?
+    var newsCoverImageURL: String?
+    var isRead: Bool
+    var occurredAt: Date
+
+    var previewText: String {
+        let trimmedSummary = newsSummary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedSummary.isEmpty {
+            return trimmedSummary
+        }
+        return newsTitle
+    }
+}
+
+struct FollowedBrandUpdatePreference: Codable, Hashable {
+    var enabled: Bool
+    var reminderHours: [Int]
+    var timezone: String
+    var channels: [String]
+    var watchedBrandIds: [String]
+    var includeInfos: Bool
+    var includeEvents: Bool
+
+    static let empty = FollowedBrandUpdatePreference(
+        enabled: false,
+        reminderHours: [],
+        timezone: TimeZone.current.identifier,
+        channels: [],
+        watchedBrandIds: [],
+        includeInfos: true,
+        includeEvents: true
+    )
+}
+
+struct FollowedBrandUpdatePreferenceInput: Codable, Hashable {
+    var enabled: Bool?
+    var reminderHours: [Int]?
+    var timezone: String?
+    var channels: [String]?
+    var watchedBrandIds: [String]?
+    var includeInfos: Bool?
+    var includeEvents: Bool?
+}
+
+struct FollowedBrandsSummary: Codable, Hashable {
+    var unreadCount: Int
+    var latestItemPreview: String?
+    var latestOccurredAt: Date?
+
+    static let empty = FollowedBrandsSummary(
+        unreadCount: 0,
+        latestItemPreview: nil,
+        latestOccurredAt: nil
+    )
+}
+
+struct FollowedBrandNotificationItem: Codable, Identifiable, Hashable {
+    let id: String
+    var type: String
+    var brandID: String
+    var brandName: String
+    var newsID: String
+    var newsTitle: String
+    var newsSummary: String?
+    var newsCoverImageURL: String?
+    var isRead: Bool
+    var occurredAt: Date
+
+    var previewText: String {
+        let trimmedSummary = newsSummary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedSummary.isEmpty {
+            return trimmedSummary
+        }
+        return newsTitle
+    }
+}
+
 struct AppNotificationTarget: Codable, Hashable {
     var type: String
     var id: String

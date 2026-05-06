@@ -3807,15 +3807,13 @@ struct DJDetailView: View {
             }
             return dj.country?.nilIfBlank
         }()
-        let badgeText = genreText ?? L("DJ", "DJ")
-
         return DJShareCardPayload(
             djID: dj.id,
             djName: dj.name,
             country: countryText,
             genreText: genreText,
             coverImageURL: heroImageURL(for: dj),
-            badgeText: badgeText
+            badgeText: L("艺人", "Artist")
         )
     }
 

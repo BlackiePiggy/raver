@@ -95,6 +95,7 @@ struct TencentUIKitChatView: View {
     @State private var composerInjectedText: String?
     @State private var mentionCandidates: [InputMentionCandidate] = []
     @State private var allowMentionAll = false
+    @State private var recentCardNavigation: RecentCardNavigation?
 
     private let recorderSettings = RecorderSettings(
         sampleRate: 16000,
@@ -354,8 +355,26 @@ struct TencentUIKitChatView: View {
     private func groupMessageContent(_ params: MessageBuilderParameters) -> some View {
         if let eventCard = eventCardPayload(from: params.message) {
             eventCardMessageContent(params, payload: eventCard)
+        } else if let postCard = postCardPayload(from: params.message) {
+            postCardMessageContent(params, payload: postCard)
+        } else if let ratingEventCard = ratingEventCardPayload(from: params.message) {
+            ratingEventCardMessageContent(params, payload: ratingEventCard)
+        } else if let ratingUnitCard = ratingUnitCardPayload(from: params.message) {
+            ratingUnitCardMessageContent(params, payload: ratingUnitCard)
         } else if let djCard = djCardPayload(from: params.message) {
             djCardMessageContent(params, payload: djCard)
+        } else if let setCard = setCardPayload(from: params.message) {
+            setCardMessageContent(params, payload: setCard)
+        } else if let brandCard = brandCardPayload(from: params.message) {
+            brandCardMessageContent(params, payload: brandCard)
+        } else if let labelCard = labelCardPayload(from: params.message) {
+            labelCardMessageContent(params, payload: labelCard)
+        } else if let newsCard = newsCardPayload(from: params.message) {
+            newsCardMessageContent(params, payload: newsCard)
+        } else if let rankingCard = rankingBoardCardPayload(from: params.message) {
+            rankingBoardCardMessageContent(params, payload: rankingCard)
+        } else if let idCard = circleIDCardPayload(from: params.message) {
+            circleIDCardMessageContent(params, payload: idCard)
         } else if let audioFile = audioFilePayload(from: params.message) {
             audioFileMessageContent(params, payload: audioFile)
         } else if conversation.type == .group,
@@ -475,10 +494,193 @@ struct TencentUIKitChatView: View {
                         fileMessageTimeView(for: params.message, isMine: true)
                     }
 
-                    Button {
-                        appNavigate(.eventDetail(eventID: payload.eventID))
-                    } label: {
+                    interactiveBubble {
+                        navigateFromChatCard(kind: .event, id: payload.eventID) {
+                            appNavigate(.eventDetail(eventID: payload.eventID))
+                        }
+                    } onLongPress: {
+                        params.showContextMenuClosure()
+                    } content: {
                         ChatEventCardBubbleView(payload: payload)
+                    }
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func postCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatPostCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                Text(params.message.user.name)
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "AFB3B8"))
+                    .padding(.leading, 44)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    Button {
+                        appPush(.postDetail(postID: payload.postID))
+                    } label: {
+                        ChatPostCardBubbleView(payload: payload)
+                    }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.35)
+                            .onEnded { _ in
+                                params.showContextMenuClosure()
+                            }
+                    )
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func ratingEventCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatRatingEventCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                Text(params.message.user.name)
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "AFB3B8"))
+                    .padding(.leading, 44)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    interactiveBubble {
+#if DEBUG
+                        print("[RatingEventResolve] chat-tap route=.circle(.ratingEventDetail(\(payload.eventID)))")
+#endif
+                        navigateFromChatCard(kind: .ratingEvent, id: payload.eventID) {
+                            appPush(.circle(.ratingEventDetail(payload.eventID)))
+                        }
+                    } onLongPress: {
+                        params.showContextMenuClosure()
+                    } content: {
+                        ChatRatingEventCardBubbleView(payload: payload)
+                    }
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func ratingUnitCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatRatingUnitCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                Text(params.message.user.name)
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "AFB3B8"))
+                    .padding(.leading, 44)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    Button {
+                        appPush(.ratingUnitDetail(unitID: payload.unitID))
+                    } label: {
+                        ChatRatingUnitCardBubbleView(payload: payload)
                     }
                     .buttonStyle(.plain)
                     .simultaneousGesture(
@@ -568,6 +770,416 @@ struct TencentUIKitChatView: View {
     }
 
     @ViewBuilder
+    private func setCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatSetCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                Text(params.message.user.name)
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "AFB3B8"))
+                    .padding(.leading, 44)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    Button {
+                        appPush(.discover(.setDetail(setID: payload.setID)))
+                    } label: {
+                        ChatSetCardBubbleView(payload: payload)
+                    }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.35)
+                            .onEnded { _ in
+                                params.showContextMenuClosure()
+                            }
+                    )
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func brandCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatBrandCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                Text(params.message.user.name)
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "AFB3B8"))
+                    .padding(.leading, 44)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    Button {
+                        appPush(.discover(.festivalDetail(festivalID: payload.brandID)))
+                    } label: {
+                        ChatBrandCardBubbleView(payload: payload)
+                    }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.35)
+                            .onEnded { _ in
+                                params.showContextMenuClosure()
+                            }
+                    )
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func labelCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatLabelCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                Text(params.message.user.name)
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "AFB3B8"))
+                    .padding(.leading, 44)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    Button {
+                        appPush(.labelDetail(labelID: payload.labelID))
+                    } label: {
+                        ChatLabelCardBubbleView(payload: payload)
+                    }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.35)
+                            .onEnded { _ in
+                                params.showContextMenuClosure()
+                            }
+                    )
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func rankingBoardCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatRankingBoardCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                Text(params.message.user.name)
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "AFB3B8"))
+                    .padding(.leading, 44)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    Button {
+                        let board = RankingBoard(
+                            id: payload.boardID,
+                            title: payload.boardName,
+                            subtitle: payload.boardSubtitle,
+                            coverImageUrl: payload.coverImageURL,
+                            years: [payload.year]
+                        )
+                        appPush(.rankingBoardDetail(board: board, year: payload.year))
+                    } label: {
+                        ChatRankingBoardCardBubbleView(payload: payload)
+                    }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.35)
+                            .onEnded { _ in
+                                params.showContextMenuClosure()
+                            }
+                    )
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func circleIDCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatCircleIDCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                Text(params.message.user.name)
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "AFB3B8"))
+                    .padding(.leading, 44)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    Button {
+                        appPush(.circle(.idDetail(entryID: payload.entryID)))
+                    } label: {
+                        ChatCircleIDCardBubbleView(payload: payload)
+                    }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.35)
+                            .onEnded { _ in
+                                params.showContextMenuClosure()
+                            }
+                    )
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func newsCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatNewsCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                Text(params.message.user.name)
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "AFB3B8"))
+                    .padding(.leading, 44)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    Button {
+                        appPush(.newsDetail(articleID: payload.articleID))
+                    } label: {
+                        ChatNewsCardBubbleView(
+                            payload: payload,
+                            maxWidth: newsCardMaxWidth(
+                                message: params.message,
+                                isMine: isMine
+                            )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.35)
+                            .onEnded { _ in
+                                params.showContextMenuClosure()
+                            }
+                    )
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    private func newsCardMaxWidth(message: Message, isMine: Bool) -> CGFloat {
+        let screenWidth = UIScreen.main.bounds.width
+        let horizontalScreenEdgePadding: CGFloat = 12 * 2
+        let oppositeInsetProtection: CGFloat = 72
+        let avatarWidth: CGFloat = isMine ? 0 : 32
+        let avatarSpacing: CGFloat = isMine ? 0 : 6
+        let timeSpacing: CGFloat = 6
+        let baseTimeFont = UIFont.preferredFont(forTextStyle: .caption1)
+        let timeFont = UIFont.monospacedDigitSystemFont(
+            ofSize: baseTimeFont.pointSize,
+            weight: .regular
+        )
+        let timeText = message.createdAt.chatTimeText
+        let rawTimeWidth = ceil((timeText as NSString).size(withAttributes: [.font: timeFont]).width)
+        let timeWidth = rawTimeWidth + 4
+        let available = screenWidth
+            - horizontalScreenEdgePadding
+            - oppositeInsetProtection
+            - avatarWidth
+            - avatarSpacing
+            - timeSpacing
+            - timeWidth
+        return max(220, min(available, 276))
+    }
+
+    @ViewBuilder
     private func highlightedMessageContainer<Content: View>(
         messageID: String,
         @ViewBuilder content: () -> Content
@@ -583,6 +1195,43 @@ struct TencentUIKitChatView: View {
                     )
             }
             .animation(.easeOut(duration: 0.25), value: highlightedMessageID == messageID)
+    }
+
+    @ViewBuilder
+    private func interactiveBubble<Content: View>(
+        onTap: @escaping () -> Void,
+        onLongPress: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onTap)
+            .onLongPressGesture(minimumDuration: 0.35, perform: onLongPress)
+            .accessibilityAddTraits(.isButton)
+    }
+
+    private func navigateFromChatCard(
+        kind: ChatCardNavigationKind,
+        id: String,
+        perform: () -> Void
+    ) {
+        let now = Date()
+        if let recentCardNavigation,
+           recentCardNavigation.id == id,
+           recentCardNavigation.kind != kind,
+           now.timeIntervalSince(recentCardNavigation.timestamp) < 1.0 {
+#if DEBUG
+            print("[RatingEventResolve] suppress conflicting chat navigation kind=\(kind.rawValue) id=\(id) recent=\(recentCardNavigation.kind.rawValue)")
+#endif
+            return
+        }
+
+        recentCardNavigation = RecentCardNavigation(
+            kind: kind,
+            id: id,
+            timestamp: now
+        )
+        perform()
     }
 
     private func onReply(
@@ -877,6 +1526,81 @@ struct TencentUIKitChatView: View {
         )
     }
 
+    private func postCardPayload(from message: Message) -> ChatPostCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "post",
+              let postID = (message.customData["postID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !postID.isEmpty,
+              let authorID = (message.customData["postAuthorID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !authorID.isEmpty,
+              let authorDisplayName = (message.customData["postAuthorDisplayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !authorDisplayName.isEmpty else {
+            return nil
+        }
+
+        return ChatPostCardPayload(
+            postID: postID,
+            authorID: authorID,
+            authorDisplayName: authorDisplayName,
+            authorUsername: (message.customData["postAuthorUsername"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            contentText: (message.customData["postContentText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            coverImageURL: (message.customData["postCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            hasVideo: (message.customData["postHasVideo"] as? Bool) ?? false,
+            likeCount: (message.customData["postLikeCount"] as? Int) ?? 0,
+            commentCount: (message.customData["postCommentCount"] as? Int) ?? 0,
+            shareCount: (message.customData["postShareCount"] as? Int) ?? 0,
+            badgeText: (message.customData["postBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func ratingEventCardPayload(from message: Message) -> ChatRatingEventCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "rating_event",
+              let eventID = (message.customData["ratingEventID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !eventID.isEmpty,
+              let eventName = (message.customData["ratingEventName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !eventName.isEmpty else {
+            return nil
+        }
+
+        return ChatRatingEventCardPayload(
+            eventID: eventID,
+            eventName: eventName,
+            description: (message.customData["ratingEventDescription"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            coverImageURL: (message.customData["ratingEventCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            badgeText: (message.customData["ratingEventBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func ratingUnitCardPayload(from message: Message) -> ChatRatingUnitCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "rating_unit",
+              let unitID = (message.customData["ratingUnitID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !unitID.isEmpty,
+              let unitName = (message.customData["ratingUnitName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !unitName.isEmpty else {
+            return nil
+        }
+
+        return ChatRatingUnitCardPayload(
+            unitID: unitID,
+            unitName: unitName,
+            eventID: (message.customData["ratingUnitEventID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            eventName: (message.customData["ratingUnitEventName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: (message.customData["ratingUnitDescription"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            coverImageURL: (message.customData["ratingUnitCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            rating: message.customData["ratingUnitRating"] as? Double,
+            ratingCount: message.customData["ratingUnitRatingCount"] as? Int,
+            badgeText: (message.customData["ratingUnitBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
     private func djCardPayload(from message: Message) -> ChatDJCardPayload? {
         guard let sourceKind = message.customData["sourceKind"] as? String,
               sourceKind == ChatMessageKind.card.rawValue,
@@ -896,6 +1620,153 @@ struct TencentUIKitChatView: View {
             genreText: (message.customData["djGenreText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
             coverImageURL: (message.customData["djCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
             badgeText: (message.customData["djBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func brandCardPayload(from message: Message) -> ChatBrandCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "brand",
+              let brandID = (message.customData["brandID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !brandID.isEmpty,
+              let brandName = (message.customData["brandName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !brandName.isEmpty else {
+            return nil
+        }
+
+        return ChatBrandCardPayload(
+            brandID: brandID,
+            brandName: brandName,
+            country: (message.customData["brandCountry"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            city: (message.customData["brandCity"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            tagline: (message.customData["brandTagline"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            coverImageURL: (message.customData["brandCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            badgeText: (message.customData["brandBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func setCardPayload(from message: Message) -> ChatSetCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "set",
+              let setID = (message.customData["setID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !setID.isEmpty,
+              let setTitle = (message.customData["setTitle"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !setTitle.isEmpty else {
+            return nil
+        }
+
+        return ChatSetCardPayload(
+            setID: setID,
+            setTitle: setTitle,
+            djID: (message.customData["setDJID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            djName: (message.customData["setDJName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            eventName: (message.customData["setEventName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            venue: (message.customData["setVenue"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            coverImageURL: (message.customData["setCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            badgeText: (message.customData["setBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func labelCardPayload(from message: Message) -> ChatLabelCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "label",
+              let labelID = (message.customData["labelID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !labelID.isEmpty,
+              let labelName = (message.customData["labelName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !labelName.isEmpty else {
+            return nil
+        }
+
+        return ChatLabelCardPayload(
+            labelID: labelID,
+            labelName: labelName,
+            country: (message.customData["labelCountry"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            genreText: (message.customData["labelGenreText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            coverImageURL: (message.customData["labelCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            badgeText: (message.customData["labelBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func newsCardPayload(from message: Message) -> ChatNewsCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "news",
+              let articleID = (message.customData["newsArticleID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !articleID.isEmpty,
+              let headline = (message.customData["newsHeadline"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !headline.isEmpty else {
+            return nil
+        }
+
+        return ChatNewsCardPayload(
+            articleID: articleID,
+            headline: headline,
+            summary: (message.customData["newsSummary"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            source: (message.customData["newsSource"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            categoryRawValue: (message.customData["newsCategoryRawValue"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            coverImageURL: (message.customData["newsCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            authorName: (message.customData["newsAuthorName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            badgeText: (message.customData["newsBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func rankingBoardCardPayload(from message: Message) -> ChatRankingBoardCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "ranking",
+              let boardID = (message.customData["rankingBoardID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !boardID.isEmpty,
+              let boardName = (message.customData["rankingBoardName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !boardName.isEmpty,
+              let year = message.customData["rankingBoardYear"] as? Int else {
+            return nil
+        }
+
+        return ChatRankingBoardCardPayload(
+            boardID: boardID,
+            boardName: boardName,
+            boardSubtitle: (message.customData["rankingBoardSubtitle"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            year: year,
+            coverImageURL: (message.customData["rankingBoardCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            badgeText: (message.customData["rankingBoardBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func circleIDCardPayload(from message: Message) -> ChatCircleIDCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "circle_id",
+              let entryID = (message.customData["circleIDEntryID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !entryID.isEmpty,
+              let songName = (message.customData["circleIDSongName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !songName.isEmpty,
+              let contributorName = (message.customData["circleIDContributorName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !contributorName.isEmpty else {
+            return nil
+        }
+
+        let rawDJNames = message.customData["circleIDDJNames"] as? [String] ?? []
+        let djNames = rawDJNames
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return ChatCircleIDCardPayload(
+            entryID: entryID,
+            songName: songName,
+            contributorName: contributorName,
+            djNames: djNames,
+            eventName: (message.customData["circleIDEventName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            coverImageURL: (message.customData["circleIDCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            hasVideo: (message.customData["circleIDHasVideo"] as? Bool) ?? false,
+            badgeText: (message.customData["circleIDBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
 
@@ -1030,6 +1901,101 @@ private struct ChatDJCardPayload {
     let country: String?
     let genreText: String?
     let coverImageURL: String?
+    let badgeText: String?
+}
+
+private enum ChatCardNavigationKind: String {
+    case event
+    case ratingEvent
+}
+
+private struct RecentCardNavigation {
+    let kind: ChatCardNavigationKind
+    let id: String
+    let timestamp: Date
+}
+
+private struct ChatPostCardPayload {
+    let postID: String
+    let authorID: String
+    let authorDisplayName: String
+    let authorUsername: String
+    let contentText: String
+    let coverImageURL: String?
+    let hasVideo: Bool
+    let likeCount: Int
+    let commentCount: Int
+    let shareCount: Int
+    let badgeText: String?
+}
+
+private struct ChatRatingEventCardPayload {
+    let eventID: String
+    let eventName: String
+    let description: String?
+    let coverImageURL: String?
+    let badgeText: String?
+}
+
+private struct ChatRatingUnitCardPayload {
+    let unitID: String
+    let unitName: String
+    let eventID: String?
+    let eventName: String?
+    let description: String?
+    let coverImageURL: String?
+    let rating: Double?
+    let ratingCount: Int?
+    let badgeText: String?
+}
+
+private struct ChatBrandCardPayload {
+    let brandID: String
+    let brandName: String
+    let country: String?
+    let city: String?
+    let tagline: String?
+    let coverImageURL: String?
+    let badgeText: String?
+}
+
+private struct ChatLabelCardPayload {
+    let labelID: String
+    let labelName: String
+    let country: String?
+    let genreText: String?
+    let coverImageURL: String?
+    let badgeText: String?
+}
+
+private struct ChatNewsCardPayload {
+    let articleID: String
+    let headline: String
+    let summary: String?
+    let source: String?
+    let categoryRawValue: String?
+    let coverImageURL: String?
+    let authorName: String?
+    let badgeText: String?
+}
+
+private struct ChatRankingBoardCardPayload {
+    let boardID: String
+    let boardName: String
+    let boardSubtitle: String?
+    let year: Int
+    let coverImageURL: String?
+    let badgeText: String?
+}
+
+private struct ChatCircleIDCardPayload {
+    let entryID: String
+    let songName: String
+    let contributorName: String
+    let djNames: [String]
+    let eventName: String?
+    let coverImageURL: String?
+    let hasVideo: Bool
     let badgeText: String?
 }
 
@@ -1221,6 +2187,118 @@ private struct ChatEventCardBubbleView: View {
     }
 }
 
+private struct ChatPostCardBubbleView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let payload: ChatPostCardPayload
+
+    private let cardWidth: CGFloat = 236
+    private let cardCornerRadius: CGFloat = 18
+
+    var body: some View {
+        Group {
+            if let imageURL = payload.coverImageURL?.nilIfBlank {
+                ChatPosterCardBubble(
+                    imageURL: imageURL,
+                    badgeText: payload.badgeText,
+                    title: titleText,
+                    subtitle: subtitleText,
+                    fallbackSystemImage: "text.bubble.fill"
+                )
+                .overlay(alignment: .topTrailing) {
+                    if payload.hasVideo {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 30, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .shadow(color: Color.black.opacity(0.32), radius: 6, x: 0, y: 2)
+                            .padding(12)
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let badgeText = payload.badgeText?.nilIfBlank {
+                        Text(badgeText)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(badgeForegroundColor)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(badgeBackgroundColor, in: Capsule())
+                    }
+
+                    Text(titleText)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(titleColor)
+                        .lineLimit(3)
+
+                    if let subtitleText {
+                        Text(subtitleText)
+                            .font(.caption)
+                            .foregroundStyle(titleColor.opacity(0.72))
+                            .lineLimit(1)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(width: cardWidth, alignment: .leading)
+                .background(infoBackground)
+                .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+            }
+        }
+    }
+
+    private var titleText: String {
+        let trimmed = payload.contentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return L("来自 \(payload.authorDisplayName) 的动态", "A post from \(payload.authorDisplayName)")
+        }
+        return String(trimmed.prefix(100))
+    }
+
+    private var subtitleText: String? {
+        let parts = [
+            "@\(payload.authorUsername)".nilIfBlank,
+            payload.commentCount > 0 ? "\(payload.commentCount) \(L("评论", "comments"))" : nil
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private var infoBackground: some ShapeStyle {
+        LinearGradient(
+            colors: colorScheme == .dark ? darkInfoColors : lightInfoColors,
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var lightInfoColors: [Color] {
+        [
+            Color(red: 0.93, green: 0.93, blue: 0.95),
+            Color(red: 0.87, green: 0.87, blue: 0.90),
+            RaverTheme.accent.opacity(0.10)
+        ]
+    }
+
+    private var darkInfoColors: [Color] {
+        [
+            Color(red: 0.20, green: 0.20, blue: 0.23),
+            Color(red: 0.14, green: 0.14, blue: 0.17),
+            RaverTheme.accent.opacity(0.14)
+        ]
+    }
+
+    private var titleColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.96) : Color.black.opacity(0.84)
+    }
+
+    private var badgeForegroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.94) : RaverTheme.accent.opacity(0.95)
+    }
+
+    private var badgeBackgroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.10) : RaverTheme.accent.opacity(0.10)
+    }
+}
+
 private struct ChatDJCardBubbleView: View {
     let payload: ChatDJCardPayload
 
@@ -1234,31 +2312,416 @@ private struct ChatDJCardBubbleView: View {
     }
 }
 
+private struct ChatRatingEventCardBubbleView: View {
+    let payload: ChatRatingEventCardPayload
+
+    var body: some View {
+        ChatPosterCardBubble(
+            imageURL: payload.coverImageURL,
+            badgeText: payload.badgeText,
+            title: payload.eventName,
+            subtitle: payload.description?.nilIfBlank,
+            fallbackSystemImage: "sparkles.rectangle.stack.fill"
+        )
+    }
+}
+
+private struct ChatRatingUnitCardBubbleView: View {
+    let payload: ChatRatingUnitCardPayload
+
+    var body: some View {
+        ChatPosterCardBubble(
+            imageURL: payload.coverImageURL,
+            badgeText: payload.badgeText,
+            title: payload.unitName,
+            subtitle: metadataText,
+            fallbackSystemImage: "star.bubble.fill"
+        )
+    }
+
+    private var metadataText: String? {
+        var parts: [String] = []
+        if let eventName = payload.eventName?.nilIfBlank {
+            parts.append(eventName)
+        }
+        if let rating = payload.rating, rating > 0 {
+            if let count = payload.ratingCount, count > 0 {
+                parts.append(String(format: L("%.1f 分 · %d 人评分", "%.1f · %d ratings"), rating, count))
+            } else {
+                parts.append(String(format: L("%.1f 分", "%.1f"), rating))
+            }
+        } else if let description = payload.description?.nilIfBlank {
+            parts.append(description)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+private struct ChatSetCardBubbleView: View {
+    let payload: ChatSetCardPayload
+
+    var body: some View {
+        ChatPosterCardBubble(
+            imageURL: payload.coverImageURL,
+            badgeText: payload.badgeText,
+            title: payload.setTitle,
+            subtitle: metadataText,
+            fallbackSystemImage: "waveform.circle.fill",
+            coverAspectRatio: 16 / 9,
+            badgePlacement: .coverBottomLeading
+        )
+    }
+
+    private var metadataText: String? {
+        let parts = [
+            payload.djName?.nilIfBlank,
+            payload.eventName?.nilIfBlank ?? payload.venue?.nilIfBlank
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+private struct ChatBrandCardBubbleView: View {
+    let payload: ChatBrandCardPayload
+
+    var body: some View {
+        ChatPosterCardBubble(
+            imageURL: payload.coverImageURL,
+            badgeText: payload.badgeText,
+            title: payload.brandName,
+            fallbackSystemImage: "sparkles.tv"
+        )
+    }
+}
+
+private struct ChatLabelCardBubbleView: View {
+    let payload: ChatLabelCardPayload
+
+    var body: some View {
+        ChatPosterCardBubble(
+            imageURL: payload.coverImageURL,
+            badgeText: payload.badgeText,
+            title: payload.labelName,
+            subtitle: labelMetadataText,
+            fallbackSystemImage: "opticaldiscdrive.fill"
+        )
+    }
+
+    private var labelMetadataText: String? {
+        let parts = [payload.country?.nilIfBlank, payload.genreText?.nilIfBlank].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+private struct ChatRankingBoardCardBubbleView: View {
+    let payload: ChatRankingBoardCardPayload
+
+    var body: some View {
+        ChatPosterCardBubble(
+            imageURL: payload.coverImageURL,
+            badgeText: payload.badgeText,
+            title: payload.boardName,
+            subtitle: rankingMetadataText,
+            fallbackSystemImage: "chart.bar.xaxis"
+        )
+    }
+
+    private var rankingMetadataText: String {
+        if let subtitle = payload.boardSubtitle?.nilIfBlank {
+            return "\(payload.year) · \(subtitle)"
+        }
+        return String(payload.year)
+    }
+}
+
+private struct ChatCircleIDCardBubbleView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let payload: ChatCircleIDCardPayload
+
+    private let cardWidth: CGFloat = 236
+    private let cardCornerRadius: CGFloat = 18
+
+    var body: some View {
+        Group {
+            if let imageURL = payload.coverImageURL?.nilIfBlank {
+                ChatPosterCardBubble(
+                    imageURL: imageURL,
+                    badgeText: payload.badgeText,
+                    title: payload.songName,
+                    subtitle: subtitleText,
+                    fallbackSystemImage: "music.note"
+                )
+                .overlay(alignment: .topTrailing) {
+                    if payload.hasVideo {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 30, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .shadow(color: Color.black.opacity(0.32), radius: 6, x: 0, y: 2)
+                            .padding(12)
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let badgeText = payload.badgeText?.nilIfBlank {
+                        Text(badgeText)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(badgeForegroundColor)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(badgeBackgroundColor, in: Capsule())
+                    }
+
+                    Text(payload.songName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(titleColor)
+                        .lineLimit(3)
+
+                    if let subtitleText {
+                        Text(subtitleText)
+                            .font(.caption)
+                            .foregroundStyle(titleColor.opacity(0.72))
+                            .lineLimit(2)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(width: cardWidth, alignment: .leading)
+                .background(infoBackground)
+                .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+            }
+        }
+    }
+
+    private var subtitleText: String? {
+        let joinedDJs = payload.djNames.joined(separator: " · ").nilIfBlank
+        let parts = [
+            joinedDJs,
+            payload.eventName?.nilIfBlank,
+            payload.contributorName.nilIfBlank
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private var infoBackground: some ShapeStyle {
+        LinearGradient(
+            colors: colorScheme == .dark ? darkInfoColors : lightInfoColors,
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var lightInfoColors: [Color] {
+        [
+            Color(red: 0.93, green: 0.95, blue: 0.98),
+            Color(red: 0.88, green: 0.91, blue: 0.96),
+            RaverTheme.accent.opacity(0.10)
+        ]
+    }
+
+    private var darkInfoColors: [Color] {
+        [
+            Color(red: 0.18, green: 0.21, blue: 0.25),
+            Color(red: 0.13, green: 0.15, blue: 0.19),
+            RaverTheme.accent.opacity(0.14)
+        ]
+    }
+
+    private var titleColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.96) : Color.black.opacity(0.84)
+    }
+
+    private var badgeForegroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.94) : RaverTheme.accent.opacity(0.95)
+    }
+
+    private var badgeBackgroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.10) : RaverTheme.accent.opacity(0.10)
+    }
+}
+
+private struct ChatNewsCardBubbleView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let payload: ChatNewsCardPayload
+    let maxWidth: CGFloat?
+
+    private let cardHeight: CGFloat = 82
+    private let imageWidth: CGFloat = 94
+
+    private var cardWidth: CGFloat {
+        min(maxWidth ?? 276, 276)
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            coverView
+                .frame(width: imageWidth, height: cardHeight)
+                .clipped()
+
+            VStack(alignment: .leading, spacing: 8) {
+                if let badgeText = payload.badgeText?.nilIfBlank {
+                    newsBadgeView(badgeText)
+                }
+
+                Text(payload.headline)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(titleColor)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .frame(width: cardWidth - imageWidth, height: cardHeight, alignment: .leading)
+            .background(infoBackground)
+        }
+        .frame(width: cardWidth, height: cardHeight)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var coverView: some View {
+        if let raw = payload.coverImageURL,
+           let url = URL(string: raw),
+           !raw.isEmpty {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                default:
+                    fallbackCoverView
+                }
+            }
+        } else {
+            fallbackCoverView
+        }
+    }
+
+    private var fallbackCoverView: some View {
+        LinearGradient(
+            colors: [Color(red: 0.12, green: 0.16, blue: 0.22), Color(red: 0.18, green: 0.28, blue: 0.40)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(
+            Image(systemName: "newspaper.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.92))
+        )
+    }
+
+    private func newsBadgeView(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(accentColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(accentColor.opacity(colorScheme == .dark ? 0.16 : 0.12), in: Capsule())
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var titleColor: Color {
+        colorScheme == .dark ? Color.white : Color.black.opacity(0.9)
+    }
+
+    private var accentColor: Color {
+        Color(red: 0.34, green: 0.74, blue: 0.96)
+    }
+
+    private var infoBackground: some ShapeStyle {
+        LinearGradient(
+            colors: [
+                colorScheme == .dark
+                    ? Color(red: 0.10, green: 0.11, blue: 0.14)
+                    : Color.white,
+                colorScheme == .dark
+                    ? Color(red: 0.15, green: 0.17, blue: 0.21)
+                    : Color(red: 0.96, green: 0.97, blue: 0.99)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var borderColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.08)
+            : Color.black.opacity(0.06)
+    }
+}
+
+private struct ChatSetCardPayload {
+    let setID: String
+    let setTitle: String
+    let djID: String?
+    let djName: String?
+    let eventName: String?
+    let venue: String?
+    let coverImageURL: String?
+    let badgeText: String?
+}
+
 private struct ChatPosterCardBubble: View {
+    enum BadgePlacement {
+        case infoSection
+        case coverBottomLeading
+    }
+
     @Environment(\.colorScheme) private var colorScheme
 
     let imageURL: String?
     let badgeText: String?
     let title: String
+    let subtitle: String?
     let fallbackSystemImage: String
+    let coverAspectRatio: CGFloat
+    let badgePlacement: BadgePlacement
 
     private let cardWidth: CGFloat = 224
     private let cardCornerRadius: CGFloat = 18
 
+    init(
+        imageURL: String?,
+        badgeText: String?,
+        title: String,
+        subtitle: String? = nil,
+        fallbackSystemImage: String,
+        coverAspectRatio: CGFloat = 1,
+        badgePlacement: BadgePlacement = .infoSection
+    ) {
+        self.imageURL = imageURL
+        self.badgeText = badgeText
+        self.title = title
+        self.subtitle = subtitle
+        self.fallbackSystemImage = fallbackSystemImage
+        self.coverAspectRatio = max(coverAspectRatio, 0.01)
+        self.badgePlacement = badgePlacement
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             coverView
-                .frame(width: cardWidth, height: cardWidth)
+                .frame(width: cardWidth, height: cardWidth / coverAspectRatio)
+                .overlay(alignment: .bottomLeading) {
+                    if badgePlacement == .coverBottomLeading,
+                       let badgeText, !badgeText.isEmpty {
+                        badgeView(badgeText)
+                            .padding(.leading, 12)
+                            .padding(.bottom, 12)
+                    }
+                }
                 .clipped()
 
             VStack(alignment: .leading, spacing: 8) {
-                if let badgeText, !badgeText.isEmpty {
-                    Text(badgeText)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(badgeForegroundColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(badgeBackgroundColor, in: Capsule())
+                if badgePlacement == .infoSection,
+                   let badgeText, !badgeText.isEmpty {
+                    badgeView(badgeText)
                 }
 
                 Text(title)
@@ -1267,6 +2730,13 @@ private struct ChatPosterCardBubble: View {
                     .lineLimit(2)
                     .truncationMode(.tail)
                     .multilineTextAlignment(.leading)
+
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(titleColor.opacity(0.72))
+                        .lineLimit(1)
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -1279,6 +2749,15 @@ private struct ChatPosterCardBubble: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+    }
+
+    private func badgeView(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(badgeForegroundColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(badgeBackgroundColor, in: Capsule())
     }
 
     private var infoBackground: some ShapeStyle {
@@ -1562,6 +3041,24 @@ private struct ConversationMessageSearchSheet: View {
         if let payload = parseDJCardPayloadForPreview(from: rawText) {
             return "\(L("[DJ卡片]", "[DJ Card]")) \(payload.djName)"
         }
+        if let payload = parseSetCardPayloadForPreview(from: rawText) {
+            return "\(L("[Set卡片]", "[Set Card]")) \(payload.setTitle)"
+        }
+        if let payload = parseBrandCardPayloadForPreview(from: rawText) {
+            return "\(L("[音乐节卡片]", "[Festival Card]")) \(payload.brandName)"
+        }
+        if let payload = parseLabelCardPayloadForPreview(from: rawText) {
+            return "\(L("[厂牌卡片]", "[Label Card]")) \(payload.labelName)"
+        }
+        if let payload = parseNewsCardPayloadForPreview(from: rawText) {
+            return "\(L("[资讯卡片]", "[News Card]")) \(payload.headline)"
+        }
+        if let payload = parseRankingBoardCardPayloadForPreview(from: rawText) {
+            return "\(L("[榜单卡片]", "[Ranking Card]")) \(payload.boardName) · \(payload.year)"
+        }
+        if let payload = parseCircleIDCardPayloadForPreview(from: rawText) {
+            return "\(L("[ID卡片]", "[ID Card]")) \(payload.songName)"
+        }
         return nil
     }
 
@@ -1597,6 +3094,108 @@ private struct ConversationMessageSearchSheet: View {
         }
 
         return try? JSONDecoder().decode(DJShareCardPayload.self, from: data)
+    }
+
+    private func parseSetCardPayloadForPreview(from rawText: String) -> SetShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: SetShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "set",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(SetShareCardPayload.self, from: data)
+    }
+
+    private func parseBrandCardPayloadForPreview(from rawText: String) -> BrandShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: BrandShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "brand",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(BrandShareCardPayload.self, from: data)
+    }
+
+    private func parseLabelCardPayloadForPreview(from rawText: String) -> LabelShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: LabelShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "label",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(LabelShareCardPayload.self, from: data)
+    }
+
+    private func parseNewsCardPayloadForPreview(from rawText: String) -> NewsShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: NewsShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "news",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(NewsShareCardPayload.self, from: data)
+    }
+
+    private func parseRankingBoardCardPayloadForPreview(from rawText: String) -> RankingBoardShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: RankingBoardShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "ranking",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(RankingBoardShareCardPayload.self, from: data)
+    }
+
+    private func parseCircleIDCardPayloadForPreview(from rawText: String) -> CircleIDShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: CircleIDShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "circle_id",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(CircleIDShareCardPayload.self, from: data)
     }
 }
 
@@ -2402,6 +4001,55 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             data["eventBadgeText"] = payload.badgeText ?? ""
             data["canCopy"] = false
         } else if source.kind == .card,
+                  let payload = parsePostCardPayload(from: source.content) {
+            data["cardType"] = "post"
+            data["postID"] = payload.postID
+            data["postAuthorID"] = payload.authorID
+            data["postAuthorDisplayName"] = payload.authorDisplayName
+            data["postAuthorUsername"] = payload.authorUsername
+            data["postContentText"] = payload.contentText
+            data["postCoverImageURL"] = payload.coverImageURL ?? ""
+            data["postHasVideo"] = payload.hasVideo
+            data["postLikeCount"] = payload.likeCount
+            data["postCommentCount"] = payload.commentCount
+            data["postShareCount"] = payload.shareCount
+            data["postBadgeText"] = payload.badgeText ?? ""
+            data["canCopy"] = false
+        } else if source.kind == .card,
+                  let payload = parseRatingEventCardPayload(from: source.content) {
+            data["cardType"] = "rating_event"
+            data["ratingEventID"] = payload.eventID
+            data["ratingEventName"] = payload.eventName
+            data["ratingEventDescription"] = payload.description ?? ""
+            data["ratingEventCoverImageURL"] = payload.coverImageURL ?? ""
+            data["ratingEventBadgeText"] = payload.badgeText ?? ""
+            data["canCopy"] = false
+        } else if source.kind == .card,
+                  let payload = parseRatingUnitCardPayload(from: source.content) {
+            data["cardType"] = "rating_unit"
+            data["ratingUnitID"] = payload.unitID
+            data["ratingUnitName"] = payload.unitName
+            data["ratingUnitEventID"] = payload.eventID ?? ""
+            data["ratingUnitEventName"] = payload.eventName ?? ""
+            data["ratingUnitDescription"] = payload.description ?? ""
+            data["ratingUnitCoverImageURL"] = payload.coverImageURL ?? ""
+            data["ratingUnitRating"] = payload.rating ?? 0
+            data["ratingUnitRatingCount"] = payload.ratingCount ?? 0
+            data["ratingUnitBadgeText"] = payload.badgeText ?? ""
+            data["canCopy"] = false
+        } else if source.kind == .card,
+                  let payload = parseSetCardPayload(from: source.content) {
+            data["cardType"] = "set"
+            data["setID"] = payload.setID
+            data["setTitle"] = payload.setTitle
+            data["setDJID"] = payload.djID ?? ""
+            data["setDJName"] = payload.djName ?? ""
+            data["setEventName"] = payload.eventName ?? ""
+            data["setVenue"] = payload.venue ?? ""
+            data["setCoverImageURL"] = payload.coverImageURL ?? ""
+            data["setBadgeText"] = payload.badgeText ?? ""
+            data["canCopy"] = false
+        } else if source.kind == .card,
                   let payload = parseDJCardPayload(from: source.content) {
             data["cardType"] = "dj"
             data["djID"] = payload.djID
@@ -2410,6 +4058,61 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             data["djGenreText"] = payload.genreText ?? ""
             data["djCoverImageURL"] = payload.coverImageURL ?? ""
             data["djBadgeText"] = payload.badgeText ?? ""
+            data["canCopy"] = false
+        } else if source.kind == .card,
+                  let payload = parseBrandCardPayload(from: source.content) {
+            data["cardType"] = "brand"
+            data["brandID"] = payload.brandID
+            data["brandName"] = payload.brandName
+            data["brandCountry"] = payload.country ?? ""
+            data["brandCity"] = payload.city ?? ""
+            data["brandTagline"] = payload.tagline ?? ""
+            data["brandCoverImageURL"] = payload.coverImageURL ?? ""
+            data["brandBadgeText"] = payload.badgeText ?? ""
+            data["canCopy"] = false
+        } else if source.kind == .card,
+                  let payload = parseLabelCardPayload(from: source.content) {
+            data["cardType"] = "label"
+            data["labelID"] = payload.labelID
+            data["labelName"] = payload.labelName
+            data["labelCountry"] = payload.country ?? ""
+            data["labelGenreText"] = payload.genreText ?? ""
+            data["labelCoverImageURL"] = payload.coverImageURL ?? ""
+            data["labelBadgeText"] = payload.badgeText ?? ""
+            data["canCopy"] = false
+        } else if source.kind == .card,
+                  let payload = parseNewsCardPayload(from: source.content) {
+            data["cardType"] = "news"
+            data["newsArticleID"] = payload.articleID
+            data["newsHeadline"] = payload.headline
+            data["newsSummary"] = payload.summary ?? ""
+            data["newsSource"] = payload.source ?? ""
+            data["newsCategoryRawValue"] = payload.categoryRawValue ?? ""
+            data["newsCoverImageURL"] = payload.coverImageURL ?? ""
+            data["newsAuthorName"] = payload.authorName ?? ""
+            data["newsBadgeText"] = payload.badgeText ?? ""
+            data["canCopy"] = false
+        } else if source.kind == .card,
+                  let payload = parseRankingBoardCardPayload(from: source.content) {
+            data["cardType"] = "ranking"
+            data["rankingBoardID"] = payload.boardID
+            data["rankingBoardName"] = payload.boardName
+            data["rankingBoardSubtitle"] = payload.boardSubtitle ?? ""
+            data["rankingBoardYear"] = payload.year
+            data["rankingBoardCoverImageURL"] = payload.coverImageURL ?? ""
+            data["rankingBoardBadgeText"] = payload.badgeText ?? ""
+            data["canCopy"] = false
+        } else if source.kind == .card,
+                  let payload = parseCircleIDCardPayload(from: source.content) {
+            data["cardType"] = "circle_id"
+            data["circleIDEntryID"] = payload.entryID
+            data["circleIDSongName"] = payload.songName
+            data["circleIDContributorName"] = payload.contributorName
+            data["circleIDDJNames"] = payload.djNames
+            data["circleIDEventName"] = payload.eventName ?? ""
+            data["circleIDCoverImageURL"] = payload.coverImageURL ?? ""
+            data["circleIDHasVideo"] = payload.hasVideo
+            data["circleIDBadgeText"] = payload.badgeText ?? ""
             data["canCopy"] = false
         }
 
@@ -2435,6 +4138,63 @@ private final class ExyteChatConversationViewModel: ObservableObject {
         return try? JSONDecoder().decode(EventShareCardPayload.self, from: data)
     }
 
+    private func parsePostCardPayload(from rawContent: String) -> PostShareCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: PostShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "post",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(PostShareCardPayload.self, from: data)
+    }
+
+    private func parseRatingEventCardPayload(from rawContent: String) -> RatingEventShareCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: RatingEventShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "rating_event",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(RatingEventShareCardPayload.self, from: data)
+    }
+
+    private func parseRatingUnitCardPayload(from rawContent: String) -> RatingUnitShareCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: RatingUnitShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "rating_unit",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(RatingUnitShareCardPayload.self, from: data)
+    }
+
     private func parseDJCardPayload(from rawContent: String) -> DJShareCardPayload? {
         guard let data = rawContent.data(using: .utf8) else { return nil }
 
@@ -2451,7 +4211,126 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             return payload
         }
 
+        if let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           jsonObject["setID"] != nil || jsonObject["setTitle"] != nil {
+            return nil
+        }
+
         return try? JSONDecoder().decode(DJShareCardPayload.self, from: data)
+    }
+
+    private func parseSetCardPayload(from rawContent: String) -> SetShareCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: SetShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "set",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(SetShareCardPayload.self, from: data)
+    }
+
+    private func parseBrandCardPayload(from rawContent: String) -> BrandShareCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: BrandShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "brand",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(BrandShareCardPayload.self, from: data)
+    }
+
+    private func parseLabelCardPayload(from rawContent: String) -> LabelShareCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: LabelShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "label",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(LabelShareCardPayload.self, from: data)
+    }
+
+    private func parseNewsCardPayload(from rawContent: String) -> NewsShareCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: NewsShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "news",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(NewsShareCardPayload.self, from: data)
+    }
+
+    private func parseRankingBoardCardPayload(from rawContent: String) -> RankingBoardShareCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: RankingBoardShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "ranking",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(RankingBoardShareCardPayload.self, from: data)
+    }
+
+    private func parseCircleIDCardPayload(from rawContent: String) -> CircleIDShareCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: CircleIDShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "circle_id",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(CircleIDShareCardPayload.self, from: data)
     }
 
     private func eventCardDateText(_ iso: String?) -> String {

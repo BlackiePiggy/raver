@@ -1614,10 +1614,6 @@ struct EventDetailView: View {
     }
 
     private func makeEventShareCardPayload(from event: WebEvent) -> EventShareCardPayload {
-        let eventType = EventTypeOption.displayText(for: event.eventType, fallbackWhenEmpty: false)
-        let badgeText = eventType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? L("活动", "Event")
-            : eventType
         let cityText = localizedPointText(event.cityI18n).nilIfBlank ?? event.city?.nilIfBlank
         let venueText = hasEventVenueContent(event) ? eventVenueDisplayText(event).nilIfBlank : nil
         let coverURL = AppConfig.resolvedURLString(event.coverAssetURL)
@@ -1629,7 +1625,7 @@ struct EventDetailView: View {
             city: cityText,
             startAtISO8601: Self.eventCardISO8601Formatter.string(from: event.startDate),
             coverImageURL: coverURL,
-            badgeText: badgeText
+            badgeText: L("活动", "Event")
         )
     }
 

@@ -559,12 +559,18 @@ struct CreateSquadView: View {
 struct MessagesHomeView: View {
     private enum ConversationListEntry: Identifiable {
         case followedEvents
+        case followedDJs
+        case followedBrands
         case conversation(Conversation)
 
         var id: String {
             switch self {
             case .followedEvents:
                 return "followed-events"
+            case .followedDJs:
+                return "followed-djs"
+            case .followedBrands:
+                return "followed-brands"
             case .conversation(let conversation):
                 return conversation.id
             }
@@ -635,13 +641,15 @@ struct MessagesHomeView: View {
                 Spacer()
                 VStack(spacing: 16) {
                     followedEventsEntryCard
-                        .padding(.horizontal, 16)
+                    followedDJsEntryCard
+                    followedBrandsEntryCard
                     ContentUnavailableView(
                         L("暂无会话", "No Conversations Yet"),
                         systemImage: "bubble.left.and.bubble.right",
                         description: Text(LL("从用户主页发起私信或加入小队后会显示在这里"))
                     )
                 }
+                .padding(.horizontal, 16)
                 Spacer()
             case .success:
                 List {
@@ -649,6 +657,10 @@ struct MessagesHomeView: View {
                         switch entry {
                         case .followedEvents:
                             followedEventsEntryRow
+                        case .followedDJs:
+                            followedDJsEntryRow
+                        case .followedBrands:
+                            followedBrandsEntryRow
                         case .conversation(let conversation):
                             Button {
                                 if chatViewModel.isEditingConversations {
@@ -775,6 +787,18 @@ struct MessagesHomeView: View {
                 onUnreadStateChanged()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .raverFollowedDJsDidMutate)) { _ in
+            Task {
+                await chatViewModel.refreshFollowedDJsSummary()
+                onUnreadStateChanged()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .raverFollowedBrandsDidMutate)) { _ in
+            Task {
+                await chatViewModel.refreshFollowedBrandsSummary()
+                onUnreadStateChanged()
+            }
+        }
         .alert(L("消息加载失败", "Failed to Load Messages"), isPresented: Binding(
             get: { chatViewModel.error != nil || alertViewModel.error != nil },
             set: { newValue in
@@ -851,9 +875,61 @@ struct MessagesHomeView: View {
         .listRowBackground(RaverTheme.card)
     }
 
+    private var followedDJsEntryCard: some View {
+        Button {
+            appPush(.followedDJsInbox)
+        } label: {
+            followedDJsRowContent
+                .padding(14)
+                .background(RaverTheme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var followedDJsEntryRow: some View {
+        Button {
+            appPush(.followedDJsInbox)
+        } label: {
+            followedDJsRowContent
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(RaverTheme.card)
+    }
+
+    private var followedBrandsEntryCard: some View {
+        Button {
+            appPush(.followedBrandsInbox)
+        } label: {
+            followedBrandsRowContent
+                .padding(14)
+                .background(RaverTheme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var followedBrandsEntryRow: some View {
+        Button {
+            appPush(.followedBrandsInbox)
+        } label: {
+            followedBrandsRowContent
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(RaverTheme.card)
+    }
+
     private var sortedConversationEntries: [ConversationListEntry] {
         var entries = chatViewModel.conversations.map { ConversationListEntry.conversation($0) }
         entries.append(.followedEvents)
+        entries.append(.followedDJs)
+        entries.append(.followedBrands)
         return entries.sorted(by: compareConversationEntries)
     }
 
@@ -877,6 +953,10 @@ struct MessagesHomeView: View {
         switch entry {
         case .followedEvents:
             return false
+        case .followedDJs:
+            return false
+        case .followedBrands:
+            return false
         case .conversation(let conversation):
             return conversation.isPinned
         }
@@ -886,6 +966,10 @@ struct MessagesHomeView: View {
         switch entry {
         case .followedEvents:
             return chatViewModel.followedEventsSummary.latestOccurredAt ?? .distantPast
+        case .followedDJs:
+            return chatViewModel.followedDJsSummary.latestOccurredAt ?? .distantPast
+        case .followedBrands:
+            return chatViewModel.followedBrandsSummary.latestOccurredAt ?? .distantPast
         case .conversation(let conversation):
             return conversation.updatedAt
         }
@@ -948,6 +1032,128 @@ struct MessagesHomeView: View {
                 }
             }
         }
+    }
+
+    private var followedDJsRowContent: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.blue.opacity(0.20),
+                                Color.cyan.opacity(0.22)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: "music.mic.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.blue)
+            }
+            .frame(width: 40, height: 40)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(L("关注的DJ", "Followed DJs"))
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Spacer(minLength: 8)
+                    if let latestOccurredAt = chatViewModel.followedDJsSummary.latestOccurredAt {
+                        Text(latestOccurredAt.chatTimeText)
+                            .font(.system(size: 12))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Text(
+                        chatViewModel.followedDJsSummary.latestItemPreview
+                            ?? L("你关注的DJ发布新资讯后会显示在这里", "Updates from followed DJs will appear here.")
+                    )
+                    .font(.system(size: 13))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                    Spacer(minLength: 0)
+
+                    if chatViewModel.followedDJsSummary.unreadCount > 0 {
+                        Text(unreadBadgeText(for: chatViewModel.followedDJsSummary.unreadCount))
+                            .font(.system(size: 11, weight: .semibold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.red)
+                            .clipShape(Capsule())
+                            .foregroundStyle(Color.white)
+                    }
+                }
+            }
+        }
+    }
+
+    private var followedBrandsRowContent: some View {
+        HStack(spacing: 10) {
+            followedBrandsSummaryArtworkFallback
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(L("关注的音乐节", "Followed Festivals"))
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Spacer(minLength: 8)
+                    if let latestOccurredAt = chatViewModel.followedBrandsSummary.latestOccurredAt {
+                        Text(latestOccurredAt.chatTimeText)
+                            .font(.system(size: 12))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Text(
+                        chatViewModel.followedBrandsSummary.latestItemPreview
+                            ?? L("你关注的音乐节发布新资讯后会显示在这里", "Updates from followed festivals will appear here.")
+                    )
+                    .font(.system(size: 13))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                    Spacer(minLength: 0)
+
+                    if chatViewModel.followedBrandsSummary.unreadCount > 0 {
+                        Text(unreadBadgeText(for: chatViewModel.followedBrandsSummary.unreadCount))
+                            .font(.system(size: 11, weight: .semibold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.red)
+                            .clipShape(Capsule())
+                            .foregroundStyle(Color.white)
+                    }
+                }
+            }
+        }
+    }
+
+    private var followedBrandsSummaryArtworkFallback: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            RaverTheme.accent.opacity(0.22),
+                            Color.orange.opacity(0.18)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: "sparkles.rectangle.stack.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(RaverTheme.accent)
+        }
+        .frame(width: 40, height: 40)
     }
 
     private var editConversationsButton: some View {
@@ -1335,31 +1541,228 @@ private struct MessageGlobalSearchSheet: View {
     }
 
     private func cardPreviewText(from rawText: String) -> String? {
+        if let payload = parseEventCardPayloadForPreview(from: rawText) {
+            return "\(L("[活动卡片]", "[Event Card]")) \(payload.eventName)"
+        }
+        if let payload = parsePostCardPayloadForPreview(from: rawText) {
+            return "\(L("[帖子卡片]", "[Post Card]")) \(payload.authorDisplayName)"
+        }
+        if let payload = parseRatingEventCardPayloadForPreview(from: rawText) {
+            return "\(L("[打分事件卡片]", "[Rating Event Card]")) \(payload.eventName)"
+        }
+        if let payload = parseRatingUnitCardPayloadForPreview(from: rawText) {
+            return "\(L("[打分单位卡片]", "[Rating Unit Card]")) \(payload.unitName)"
+        }
+        if let payload = parseDJCardPayloadForPreview(from: rawText) {
+            return "\(L("[DJ卡片]", "[DJ Card]")) \(payload.djName)"
+        }
+        if let payload = parseSetCardPayloadForPreview(from: rawText) {
+            return "\(L("[Set卡片]", "[Set Card]")) \(payload.setTitle)"
+        }
+        if let payload = parseBrandCardPayloadForPreview(from: rawText) {
+            return "\(L("[音乐节卡片]", "[Festival Card]")) \(payload.brandName)"
+        }
+        if let payload = parseLabelCardPayloadForPreview(from: rawText) {
+            return "\(L("[厂牌卡片]", "[Label Card]")) \(payload.labelName)"
+        }
+        if let payload = parseNewsCardPayloadForPreview(from: rawText) {
+            return "\(L("[资讯卡片]", "[News Card]")) \(payload.headline)"
+        }
+        if let payload = parseRankingBoardCardPayloadForPreview(from: rawText) {
+            return "\(L("[榜单卡片]", "[Ranking Card]")) \(payload.boardName) · \(payload.year)"
+        }
+        if let payload = parseCircleIDCardPayloadForPreview(from: rawText) {
+            return "\(L("[ID卡片]", "[ID Card]")) \(payload.songName)"
+        }
+
+        return nil
+    }
+
+    private func parseEventCardPayloadForPreview(from rawText: String) -> EventShareCardPayload? {
         guard let data = rawText.data(using: .utf8) else { return nil }
 
-        struct EventEnvelope: Decodable {
+        struct Envelope: Decodable {
             let cardType: String?
             let payload: EventShareCardPayload?
         }
 
-        if let envelope = try? JSONDecoder().decode(EventEnvelope.self, from: data),
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
            envelope.cardType == "event",
            let payload = envelope.payload {
-            return "\(L("[活动卡片]", "[Event Card]")) \(payload.eventName)"
+            return payload
         }
 
-        struct DJEnvelope: Decodable {
+        return try? JSONDecoder().decode(EventShareCardPayload.self, from: data)
+    }
+
+    private func parsePostCardPayloadForPreview(from rawText: String) -> PostShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: PostShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "post",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(PostShareCardPayload.self, from: data)
+    }
+
+    private func parseRatingEventCardPayloadForPreview(from rawText: String) -> RatingEventShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: RatingEventShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "rating_event",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(RatingEventShareCardPayload.self, from: data)
+    }
+
+    private func parseRatingUnitCardPayloadForPreview(from rawText: String) -> RatingUnitShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: RatingUnitShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "rating_unit",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(RatingUnitShareCardPayload.self, from: data)
+    }
+
+    private func parseDJCardPayloadForPreview(from rawText: String) -> DJShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
             let cardType: String?
             let payload: DJShareCardPayload?
         }
 
-        if let envelope = try? JSONDecoder().decode(DJEnvelope.self, from: data),
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
            envelope.cardType == "dj",
            let payload = envelope.payload {
-            return "\(L("[DJ卡片]", "[DJ Card]")) \(payload.djName)"
+            return payload
         }
 
-        return nil
+        return try? JSONDecoder().decode(DJShareCardPayload.self, from: data)
+    }
+
+    private func parseSetCardPayloadForPreview(from rawText: String) -> SetShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: SetShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "set",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(SetShareCardPayload.self, from: data)
+    }
+
+    private func parseBrandCardPayloadForPreview(from rawText: String) -> BrandShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: BrandShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "brand",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(BrandShareCardPayload.self, from: data)
+    }
+
+    private func parseLabelCardPayloadForPreview(from rawText: String) -> LabelShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: LabelShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "label",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(LabelShareCardPayload.self, from: data)
+    }
+
+    private func parseNewsCardPayloadForPreview(from rawText: String) -> NewsShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: NewsShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "news",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(NewsShareCardPayload.self, from: data)
+    }
+
+    private func parseRankingBoardCardPayloadForPreview(from rawText: String) -> RankingBoardShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: RankingBoardShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "ranking",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(RankingBoardShareCardPayload.self, from: data)
+    }
+
+    private func parseCircleIDCardPayloadForPreview(from rawText: String) -> CircleIDShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: CircleIDShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "circle_id",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(CircleIDShareCardPayload.self, from: data)
     }
 
     @ViewBuilder
@@ -1724,5 +2127,435 @@ struct FollowedEventsInboxView: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(RaverTheme.accent)
             )
+    }
+}
+
+@MainActor
+final class FollowedDJsInboxViewModel: ObservableObject {
+    @Published var items: [FollowedDJNotificationItem] = []
+    @Published var summary: FollowedDJsSummary = .empty
+    @Published var phase: LoadPhase = .idle
+    @Published var isRefreshing = false
+    @Published var bannerMessage: String?
+    @Published var error: String?
+
+    private let repository: MessagesRepository
+
+    init(repository: MessagesRepository) {
+        self.repository = repository
+    }
+
+    func load() async {
+        let hadContent = !items.isEmpty
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
+        defer { isRefreshing = false }
+
+        do {
+            async let summaryTask = repository.fetchFollowedDJsSummary()
+            async let itemsTask = repository.fetchFollowedDJNotifications(limit: 50)
+            let (summary, items) = try await (summaryTask, itemsTask)
+            self.summary = summary
+            self.items = items
+            self.phase = items.isEmpty ? .empty : .success
+            self.bannerMessage = nil
+            self.error = nil
+        } catch {
+            let message = error.userFacingMessage ?? L("关注DJ加载失败，请稍后重试", "Failed to load followed DJs. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
+            self.error = message
+        }
+    }
+
+    func markRead(_ item: FollowedDJNotificationItem) async {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        guard items[index].isRead == false else { return }
+        items[index].isRead = true
+        summary.unreadCount = max(0, summary.unreadCount - 1)
+        do {
+            try await repository.markFollowedDJNotificationRead(notificationID: item.id)
+            NotificationCenter.default.post(name: .raverFollowedDJsDidMutate, object: nil)
+        } catch {
+            items[index].isRead = false
+            summary.unreadCount += 1
+            self.error = error.userFacingMessage
+        }
+    }
+}
+
+struct FollowedDJsInboxView: View {
+    @Environment(\.appPush) private var appPush
+    @StateObject private var viewModel: FollowedDJsInboxViewModel
+
+    init(repository: MessagesRepository) {
+        _viewModel = StateObject(wrappedValue: FollowedDJsInboxViewModel(repository: repository))
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if viewModel.isRefreshing {
+                        InlineLoadingBadge(title: L("正在更新关注DJ", "Updating followed DJs"))
+                    }
+                    if let bannerMessage = viewModel.bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task { await viewModel.load() }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            switch viewModel.phase {
+            case .idle, .initialLoading:
+                ProgressView(LL("正在加载关注的DJ..."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            case .failure(let message), .offline(let message):
+                Spacer()
+                ScreenErrorCard(
+                    title: L("关注DJ加载失败", "Followed DJs Failed to Load"),
+                    message: message,
+                    retryAction: {
+                        Task { await viewModel.load() }
+                    }
+                )
+                .padding(.horizontal, 16)
+                Spacer()
+            case .empty:
+                ContentUnavailableView(
+                    L("暂无DJ更新", "No DJ Updates"),
+                    systemImage: "music.mic",
+                    description: Text(LL("你关注的DJ发布新资讯后，会显示在这里"))
+                )
+            case .success:
+                List(viewModel.items) { item in
+                    Button {
+                        Task {
+                            await viewModel.markRead(item)
+                            appPush(.newsDetail(articleID: item.newsID))
+                        }
+                    } label: {
+                        followedDJRow(item)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(RaverTheme.card)
+                }
+                .scrollContentBackground(.hidden)
+                .refreshable {
+                    await viewModel.load()
+                }
+            }
+        }
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: L("关注的DJ", "Followed DJs"))
+        .toolbar {
+            if viewModel.summary.unreadCount > 0 {
+                Text(L("未读", "Unread") + " \(viewModel.summary.unreadCount)")
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .task {
+            await viewModel.load()
+        }
+    }
+
+    private func followedDJRow(_ item: FollowedDJNotificationItem) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            followedDJArtwork(item)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(item.djName)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 8)
+
+                    Text(item.occurredAt.feedTimeText)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+
+                Text(L("发布了新资讯", "Published a new article"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.blue)
+
+                Text(item.newsTitle)
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+
+                if let summary = item.newsSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !summary.isEmpty {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(2)
+                }
+            }
+
+            if !item.isRead {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, 8)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private func followedDJArtwork(_ item: FollowedDJNotificationItem) -> some View {
+        if let url = AppConfig.resolvedURLString(item.newsCoverImageURL),
+           (url.hasPrefix("http://") || url.hasPrefix("https://")),
+           URL(string: url) != nil {
+            ImageLoaderView(urlString: url)
+                .background(followedDJArtworkFallback)
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else {
+            followedDJArtworkFallback
+        }
+    }
+
+    private var followedDJArtworkFallback: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.blue.opacity(0.14))
+            Image(systemName: "music.mic.circle.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(Color.blue)
+        }
+        .frame(width: 52, height: 52)
+    }
+}
+
+@MainActor
+final class FollowedBrandsInboxViewModel: ObservableObject {
+    @Published var items: [FollowedBrandNotificationItem] = []
+    @Published var summary: FollowedBrandsSummary = .empty
+    @Published var phase: LoadPhase = .idle
+    @Published var isRefreshing = false
+    @Published var bannerMessage: String?
+    @Published var error: String?
+
+    private let repository: MessagesRepository
+
+    init(repository: MessagesRepository) {
+        self.repository = repository
+    }
+
+    func load() async {
+        let hadContent = !items.isEmpty
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
+        defer { isRefreshing = false }
+
+        do {
+            async let summaryTask = repository.fetchFollowedBrandsSummary()
+            async let itemsTask = repository.fetchFollowedBrandNotifications(limit: 50)
+            let (summary, items) = try await (summaryTask, itemsTask)
+            self.summary = summary
+            self.items = items
+            self.phase = items.isEmpty ? .empty : .success
+            self.bannerMessage = nil
+            self.error = nil
+        } catch {
+            let message = error.userFacingMessage ?? L("关注音乐节加载失败，请稍后重试", "Failed to load followed festivals. Please try again later.")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
+            self.error = message
+        }
+    }
+
+    func markRead(_ item: FollowedBrandNotificationItem) async {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        guard items[index].isRead == false else { return }
+        items[index].isRead = true
+        summary.unreadCount = max(0, summary.unreadCount - 1)
+        do {
+            try await repository.markFollowedBrandNotificationRead(notificationID: item.id)
+            NotificationCenter.default.post(name: .raverFollowedBrandsDidMutate, object: nil)
+        } catch {
+            items[index].isRead = false
+            summary.unreadCount += 1
+            self.error = error.userFacingMessage
+        }
+    }
+}
+
+struct FollowedBrandsInboxView: View {
+    @Environment(\.appPush) private var appPush
+    @StateObject private var viewModel: FollowedBrandsInboxViewModel
+
+    init(repository: MessagesRepository) {
+        _viewModel = StateObject(wrappedValue: FollowedBrandsInboxViewModel(repository: repository))
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if viewModel.isRefreshing {
+                        InlineLoadingBadge(title: L("正在更新关注音乐节", "Updating followed festivals"))
+                    }
+                    if let bannerMessage = viewModel.bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: L("重试", "Retry")
+                        ) {
+                            Task { await viewModel.load() }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            switch viewModel.phase {
+            case .idle, .initialLoading:
+                ProgressView(LL("正在加载关注的音乐节..."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            case .failure(let message), .offline(let message):
+                Spacer()
+                ScreenErrorCard(
+                    title: L("关注音乐节加载失败", "Followed Festivals Failed to Load"),
+                    message: message,
+                    retryAction: {
+                        Task { await viewModel.load() }
+                    }
+                )
+                .padding(.horizontal, 16)
+                Spacer()
+            case .empty:
+                ContentUnavailableView(
+                    L("暂无音乐节更新", "No Festival Updates"),
+                    systemImage: "fireworks",
+                    description: Text(LL("你关注的音乐节发布新资讯后，会显示在这里"))
+                )
+            case .success:
+                List(viewModel.items) { item in
+                    Button {
+                        Task {
+                            await viewModel.markRead(item)
+                            appPush(.newsDetail(articleID: item.newsID))
+                        }
+                    } label: {
+                        followedBrandRow(item)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(RaverTheme.card)
+                }
+                .scrollContentBackground(.hidden)
+                .refreshable {
+                    await viewModel.load()
+                }
+            }
+        }
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: L("关注的音乐节", "Followed Festivals"))
+        .toolbar {
+            if viewModel.summary.unreadCount > 0 {
+                Text(L("未读", "Unread") + " \(viewModel.summary.unreadCount)")
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .task {
+            await viewModel.load()
+        }
+    }
+
+    private func followedBrandRow(_ item: FollowedBrandNotificationItem) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            followedBrandArtwork(item)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(item.brandName)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 8)
+
+                    Text(item.occurredAt.feedTimeText)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+
+                Text(L("发布了新资讯", "Published a new article"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.pink)
+
+                Text(item.newsTitle)
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+
+                if let summary = item.newsSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !summary.isEmpty {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(2)
+                }
+            }
+
+            if !item.isRead {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, 8)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private func followedBrandArtwork(_ item: FollowedBrandNotificationItem) -> some View {
+        if let url = AppConfig.resolvedURLString(item.newsCoverImageURL),
+           (url.hasPrefix("http://") || url.hasPrefix("https://")),
+           URL(string: url) != nil {
+            ImageLoaderView(urlString: url)
+                .background(followedBrandArtworkFallback)
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else {
+            followedBrandArtworkFallback
+        }
+    }
+
+    private var followedBrandArtworkFallback: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.pink.opacity(0.14))
+            Image(systemName: "fireworks.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(Color.pink)
+        }
+        .frame(width: 52, height: 52)
     }
 }

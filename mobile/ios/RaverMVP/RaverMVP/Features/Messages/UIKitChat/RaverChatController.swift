@@ -111,6 +111,56 @@ final class RaverChatController: ObservableObject {
     }
 
     @discardableResult
+    func sendSetCardMessage(_ payload: SetShareCardPayload) async throws -> ChatMessage {
+        let sent = try await dataProvider.currentService.sendSetCardMessage(
+            conversationID: dataProvider.currentConversation.id,
+            payload: payload
+        )
+        applySentMessage(sent)
+        return sent
+    }
+
+    @discardableResult
+    func sendBrandCardMessage(_ payload: BrandShareCardPayload) async throws -> ChatMessage {
+        let sent = try await dataProvider.currentService.sendBrandCardMessage(
+            conversationID: dataProvider.currentConversation.id,
+            payload: payload
+        )
+        applySentMessage(sent)
+        return sent
+    }
+
+    @discardableResult
+    func sendLabelCardMessage(_ payload: LabelShareCardPayload) async throws -> ChatMessage {
+        let sent = try await dataProvider.currentService.sendLabelCardMessage(
+            conversationID: dataProvider.currentConversation.id,
+            payload: payload
+        )
+        applySentMessage(sent)
+        return sent
+    }
+
+    @discardableResult
+    func sendNewsCardMessage(_ payload: NewsShareCardPayload) async throws -> ChatMessage {
+        let sent = try await dataProvider.currentService.sendNewsCardMessage(
+            conversationID: dataProvider.currentConversation.id,
+            payload: payload
+        )
+        applySentMessage(sent)
+        return sent
+    }
+
+    @discardableResult
+    func sendRankingBoardCardMessage(_ payload: RankingBoardShareCardPayload) async throws -> ChatMessage {
+        let sent = try await dataProvider.currentService.sendRankingBoardCardMessage(
+            conversationID: dataProvider.currentConversation.id,
+            payload: payload
+        )
+        applySentMessage(sent)
+        return sent
+    }
+
+    @discardableResult
     func sendImageMessage(
         fileURL: URL,
         onProgress: ((Double) -> Void)? = nil

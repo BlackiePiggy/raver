@@ -1346,3 +1346,133 @@ APN 点击链建议顺序：
 4. 对应新增或修改了哪些源码入口
 
 如果只改代码不改这份文档，通知系统会很快再次变成“多处散落、难以判断全貌”的状态。
+
+## 18. 关注的 DJ（News First）
+
+### 当前语义
+
+- 产品展示层使用 `关注的DJ` 容器名
+- 实际通知分发用户集合使用现有 DJ follow 关系
+- 也就是：谁关注了某个 DJ，谁就会收到该 DJ 的 `dj_update(news)` 通知
+
+### 当前真实触发源
+
+当前第一版仍然监听 Archive / Festival Viewer 发布的 Feed Post。
+
+只有同时满足以下条件时，才会触发 `dj_update(news)`：
+
+1. 调用后端 `POST /v1/feed/posts`
+2. `content` 中包含 `#RAVER_NEWS`
+3. 帖子绑定了至少一个 `boundDjIDs`
+
+当前实现边界：
+
+- 只在创建时触发，不在更新时触发
+- 若一条 news 绑定多个 DJ，则分别向每个 DJ 的关注用户集合分发
+- 发布者本人如果同时关注了该 DJ，也会收到该条通知
+
+### 第一阶段能力
+
+当后台有人发布了与某个 DJ 关联的新 news 后，系统需要：
+
+1. 找出所有关注了这个 DJ 的用户
+2. 给这些用户各自写入一条 `dj_update(news)` 通知
+3. 在会话列表的固定入口 `关注的DJ` 上体现新的摘要和未读数
+4. 给这些用户发送一条自建 APN
+5. 用户点击 APN 或容器流中的通知时，跳到具体 `newsID`
+
+### 第一阶段数据模型
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `route` | string | 是 | 固定 `dj_update` |
+| `primaryUpdateKind` | string | 是 | 固定 `news` |
+| `djID` | string | 是 | DJ 主键 |
+| `djName` | string | 是 | DJ 名称 |
+| `newsID` | string | 是 | 具体 news 主键 |
+| `newsTitle` | string | 是 | news 标题 |
+| `newsSummary` | string | 建议 | APN / 容器摘要 |
+| `newsCoverImageURL` | string | 可选 | 容器流封面 |
+| `deeplink` | string | 是 | `raver://news/{newsID}` |
+| `occurredAt` | ISO8601 | 是 | 发生时间 |
+
+### 接口
+
+| 能力 | 路径 | 说明 |
+| --- | --- | --- |
+| 拉取容器摘要 | `GET /notification-center/followed-djs/summary` | 会话列表入口使用 |
+| 拉取容器流列表 | `GET /notification-center/followed-djs/items` | 支持分页 |
+| 单条已读 | `POST /notification-center/followed-djs/read` | 点击具体 news 后调用 |
+
+### 当前落地状态（2026-05-05）
+
+- iOS 已支持 `dj_update(news)` APN deeplink 解析与点击副作用
+- 会话列表已新增 `关注的DJ` 入口，并按正常会话时间顺序参与排序
+- `关注的DJ` 容器详情页已支持 `summary / items / read`
+- `关注的DJ` unread 已并入 iOS 现有总 badge 聚合
+- 后端已在 `POST /v1/feed/posts` 创建成功后，对 `#RAVER_NEWS + boundDjIDs` 触发 `followed_dj_update`
+
+## 19. 关注的音乐节 / Brand（News First）
+
+### 当前语义
+
+- 产品展示层使用 `关注的音乐节` 容器名
+- 实际通知分发用户集合使用现有 brand follow / watched brand 偏好
+- 也就是：谁把某个 music festival brand 加进了 `watchedBrandIds`，谁就会收到该品牌的 `brand_update(news)` 通知
+
+### 当前真实触发源
+
+当前第一版仍然监听 Archive / Festival Viewer 发布的 Feed Post。
+
+只有同时满足以下条件时，才会触发 `brand_update(news)`：
+
+1. 调用后端 `POST /v1/feed/posts`
+2. `content` 中包含 `#RAVER_NEWS`
+3. 帖子绑定了至少一个 `boundBrandIDs`
+
+当前实现边界：
+
+- 只在创建时触发，不在更新时触发
+- 若一条 news 绑定多个 brand，则分别向每个 brand 的关注用户集合分发
+- 发布者本人如果同时关注了该 brand，也会收到该条通知
+
+### 第一阶段能力
+
+当后台有人发布了与某个 music festival brand 关联的新 news 后，系统需要：
+
+1. 找出所有关注了这个 brand 的用户
+2. 给这些用户各自写入一条 `brand_update(news)` 通知
+3. 在会话列表的固定入口 `关注的音乐节` 上体现新的摘要和未读数
+4. 给这些用户发送一条自建 APN
+5. 用户点击 APN 或容器流中的通知时，跳到具体 `newsID`
+
+### 第一阶段数据模型
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `route` | string | 是 | 固定 `brand_update` |
+| `primaryUpdateKind` | string | 是 | 固定 `news` |
+| `brandID` | string | 是 | 品牌主键 |
+| `brandName` | string | 是 | 音乐节品牌名称 |
+| `newsID` | string | 是 | 具体 news 主键 |
+| `newsTitle` | string | 是 | news 标题 |
+| `newsSummary` | string | 建议 | APN / 容器摘要 |
+| `newsCoverImageURL` | string | 可选 | 容器流封面 |
+| `deeplink` | string | 是 | `raver://news/{newsID}` |
+| `occurredAt` | ISO8601 | 是 | 发生时间 |
+
+### 接口
+
+| 能力 | 路径 | 说明 |
+| --- | --- | --- |
+| 拉取容器摘要 | `GET /notification-center/followed-brands/summary` | 会话列表入口使用 |
+| 拉取容器流列表 | `GET /notification-center/followed-brands/items` | 支持分页 |
+| 单条已读 | `POST /notification-center/followed-brands/read` | 点击具体 news 后调用 |
+
+### 当前落地状态（2026-05-05）
+
+- iOS 已支持 `brand_update(news)` APN deeplink 解析与点击副作用
+- 会话列表已新增 `关注的音乐节` 入口，并按正常会话时间顺序参与排序
+- `关注的音乐节` 容器详情页已支持 `summary / items / read`
+- `关注的音乐节` unread 已并入 iOS 现有总 badge 聚合
+- 后端已在 `POST /v1/feed/posts` 创建成功后，对 `#RAVER_NEWS + boundBrandIDs` 触发 `followed_brand_update`

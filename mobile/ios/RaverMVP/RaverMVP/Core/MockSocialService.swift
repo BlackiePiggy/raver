@@ -21,6 +21,9 @@ actor MockSocialService: SocialService {
     private var squads: [SquadProfile] = []
     private var notifications: [AppNotification] = []
     private var followedEventNotifications: [FollowedEventNotificationItem] = []
+    private var followedDJNotifications: [FollowedDJNotificationItem] = []
+    private var followedBrandNotifications: [FollowedBrandNotificationItem] = []
+    private var followedBrandUpdatePreference = FollowedBrandUpdatePreference.empty
 
     private var followersByUserID: [String: Set<String>] = [:]
     private var followingByUserID: [String: Set<String>] = [:]
@@ -41,6 +44,8 @@ actor MockSocialService: SocialService {
         squads = seed.squads
         notifications = seed.notifications
         followedEventNotifications = seed.followedEventNotifications
+        followedDJNotifications = seed.followedDJNotifications
+        followedBrandNotifications = seed.followedBrandNotifications
         followersByUserID = seed.followersByUserID
         followingByUserID = seed.followingByUserID
         likeActionAtByPostID = seed.likeActionAtByPostID
@@ -704,6 +709,240 @@ actor MockSocialService: SocialService {
         )
     }
 
+    func sendSetCardMessage(conversationID: String, payload: SetShareCardPayload) async throws -> ChatMessage {
+        struct Envelope: Codable {
+            let businessID: String
+            let version: Int
+            let cardType: String
+            let payload: SetShareCardPayload
+        }
+        let data = try JSONEncoder().encode(
+            Envelope(
+                businessID: "raver_custom_card",
+                version: 1,
+                cardType: "set",
+                payload: payload
+            )
+        )
+        let content = String(data: data, encoding: .utf8) ?? payload.setTitle
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .card,
+            media: ChatMessageMediaPayload(
+                thumbnailURL: payload.coverImageURL
+            )
+        )
+    }
+
+    func sendBrandCardMessage(conversationID: String, payload: BrandShareCardPayload) async throws -> ChatMessage {
+        struct Envelope: Codable {
+            let businessID: String
+            let version: Int
+            let cardType: String
+            let payload: BrandShareCardPayload
+        }
+        let data = try JSONEncoder().encode(
+            Envelope(
+                businessID: "raver_custom_card",
+                version: 1,
+                cardType: "brand",
+                payload: payload
+            )
+        )
+        let content = String(data: data, encoding: .utf8) ?? payload.brandName
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .card,
+            media: ChatMessageMediaPayload(
+                thumbnailURL: payload.coverImageURL
+            )
+        )
+    }
+
+    func sendLabelCardMessage(conversationID: String, payload: LabelShareCardPayload) async throws -> ChatMessage {
+        struct Envelope: Codable {
+            let businessID: String
+            let version: Int
+            let cardType: String
+            let payload: LabelShareCardPayload
+        }
+        let data = try JSONEncoder().encode(
+            Envelope(
+                businessID: "raver_custom_card",
+                version: 1,
+                cardType: "label",
+                payload: payload
+            )
+        )
+        let content = String(data: data, encoding: .utf8) ?? payload.labelName
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .card,
+            media: ChatMessageMediaPayload(
+                thumbnailURL: payload.coverImageURL
+            )
+        )
+    }
+
+    func sendNewsCardMessage(conversationID: String, payload: NewsShareCardPayload) async throws -> ChatMessage {
+        struct Envelope: Codable {
+            let businessID: String
+            let version: Int
+            let cardType: String
+            let payload: NewsShareCardPayload
+        }
+        let data = try JSONEncoder().encode(
+            Envelope(
+                businessID: "raver_custom_card",
+                version: 1,
+                cardType: "news",
+                payload: payload
+            )
+        )
+        let content = String(data: data, encoding: .utf8) ?? payload.headline
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .card,
+            media: ChatMessageMediaPayload(
+                thumbnailURL: payload.coverImageURL
+            )
+        )
+    }
+
+    func sendRankingBoardCardMessage(conversationID: String, payload: RankingBoardShareCardPayload) async throws -> ChatMessage {
+        struct Envelope: Codable {
+            let businessID: String
+            let version: Int
+            let cardType: String
+            let payload: RankingBoardShareCardPayload
+        }
+        let data = try JSONEncoder().encode(
+            Envelope(
+                businessID: "raver_custom_card",
+                version: 1,
+                cardType: "ranking",
+                payload: payload
+            )
+        )
+        let content = String(data: data, encoding: .utf8) ?? payload.boardName
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .card,
+            media: ChatMessageMediaPayload(
+                thumbnailURL: payload.coverImageURL
+            )
+        )
+    }
+
+    func sendRatingEventCardMessage(conversationID: String, payload: RatingEventShareCardPayload) async throws -> ChatMessage {
+        struct Envelope: Codable {
+            let businessID: String
+            let version: Int
+            let cardType: String
+            let payload: RatingEventShareCardPayload
+        }
+        let data = try JSONEncoder().encode(
+            Envelope(
+                businessID: "raver_custom_card",
+                version: 1,
+                cardType: "rating_event",
+                payload: payload
+            )
+        )
+        let content = String(data: data, encoding: .utf8) ?? payload.eventName
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .card,
+            media: ChatMessageMediaPayload(
+                thumbnailURL: payload.coverImageURL
+            )
+        )
+    }
+
+    func sendRatingUnitCardMessage(conversationID: String, payload: RatingUnitShareCardPayload) async throws -> ChatMessage {
+        struct Envelope: Codable {
+            let businessID: String
+            let version: Int
+            let cardType: String
+            let payload: RatingUnitShareCardPayload
+        }
+        let data = try JSONEncoder().encode(
+            Envelope(
+                businessID: "raver_custom_card",
+                version: 1,
+                cardType: "rating_unit",
+                payload: payload
+            )
+        )
+        let content = String(data: data, encoding: .utf8) ?? payload.unitName
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .card,
+            media: ChatMessageMediaPayload(
+                thumbnailURL: payload.coverImageURL
+            )
+        )
+    }
+
+    func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage {
+        struct Envelope: Codable {
+            let businessID: String
+            let version: Int
+            let cardType: String
+            let payload: PostShareCardPayload
+        }
+        let data = try JSONEncoder().encode(
+            Envelope(
+                businessID: "raver_custom_card",
+                version: 1,
+                cardType: "post",
+                payload: payload
+            )
+        )
+        let content = String(data: data, encoding: .utf8) ?? payload.contentText
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .card,
+            media: ChatMessageMediaPayload(
+                thumbnailURL: payload.coverImageURL
+            )
+        )
+    }
+
+    func sendCircleIDCardMessage(conversationID: String, payload: CircleIDShareCardPayload) async throws -> ChatMessage {
+        struct Envelope: Codable {
+            let businessID: String
+            let version: Int
+            let cardType: String
+            let payload: CircleIDShareCardPayload
+        }
+        let data = try JSONEncoder().encode(
+            Envelope(
+                businessID: "raver_custom_card",
+                version: 1,
+                cardType: "circle_id",
+                payload: payload
+            )
+        )
+        let content = String(data: data, encoding: .utf8) ?? payload.songName
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .card,
+            media: ChatMessageMediaPayload(
+                thumbnailURL: payload.coverImageURL
+            )
+        )
+    }
+
     private func appendOutgoingMessage(
         conversationID: String,
         content: String,
@@ -1272,6 +1511,85 @@ actor MockSocialService: SocialService {
         followedEventNotifications[index].isRead = true
     }
 
+    func fetchFollowedDJsSummary() async throws -> FollowedDJsSummary {
+        let unreadItems = followedDJNotifications.filter { !$0.isRead }
+        let latest = followedDJNotifications.sorted(by: { $0.occurredAt > $1.occurredAt }).first
+        return FollowedDJsSummary(
+            unreadCount: unreadItems.count,
+            latestItemPreview: latest?.previewText,
+            latestOccurredAt: latest?.occurredAt
+        )
+    }
+
+    func fetchFollowedDJNotifications(limit: Int) async throws -> [FollowedDJNotificationItem] {
+        let normalized = max(1, min(limit, 50))
+        return Array(
+            followedDJNotifications
+                .sorted(by: { $0.occurredAt > $1.occurredAt })
+                .prefix(normalized)
+        )
+    }
+
+    func markFollowedDJNotificationRead(notificationID: String) async throws {
+        guard let index = followedDJNotifications.firstIndex(where: { $0.id == notificationID }) else { return }
+        followedDJNotifications[index].isRead = true
+    }
+
+    func fetchFollowedBrandsSummary() async throws -> FollowedBrandsSummary {
+        let unreadItems = followedBrandNotifications.filter { !$0.isRead }
+        let latest = followedBrandNotifications.sorted(by: { $0.occurredAt > $1.occurredAt }).first
+        return FollowedBrandsSummary(
+            unreadCount: unreadItems.count,
+            latestItemPreview: latest?.previewText,
+            latestOccurredAt: latest?.occurredAt
+        )
+    }
+
+    func fetchFollowedBrandNotifications(limit: Int) async throws -> [FollowedBrandNotificationItem] {
+        let normalized = max(1, min(limit, 50))
+        return Array(
+            followedBrandNotifications
+                .sorted(by: { $0.occurredAt > $1.occurredAt })
+                .prefix(normalized)
+        )
+    }
+
+    func markFollowedBrandNotificationRead(notificationID: String) async throws {
+        guard let index = followedBrandNotifications.firstIndex(where: { $0.id == notificationID }) else { return }
+        followedBrandNotifications[index].isRead = true
+    }
+
+    func fetchFollowedBrandUpdatePreference() async throws -> FollowedBrandUpdatePreference {
+        followedBrandUpdatePreference
+    }
+
+    func updateFollowedBrandUpdatePreference(_ input: FollowedBrandUpdatePreferenceInput) async throws -> FollowedBrandUpdatePreference {
+        if let enabled = input.enabled {
+            followedBrandUpdatePreference.enabled = enabled
+        }
+        if let reminderHours = input.reminderHours {
+            followedBrandUpdatePreference.reminderHours = reminderHours
+        }
+        if let timezone = input.timezone?.trimmingCharacters(in: .whitespacesAndNewlines), !timezone.isEmpty {
+            followedBrandUpdatePreference.timezone = timezone
+        }
+        if let channels = input.channels {
+            followedBrandUpdatePreference.channels = channels
+        }
+        if let watchedBrandIds = input.watchedBrandIds {
+            followedBrandUpdatePreference.watchedBrandIds = Array(
+                NSOrderedSet(array: watchedBrandIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
+            ) as? [String] ?? watchedBrandIds
+        }
+        if let includeInfos = input.includeInfos {
+            followedBrandUpdatePreference.includeInfos = includeInfos
+        }
+        if let includeEvents = input.includeEvents {
+            followedBrandUpdatePreference.includeEvents = includeEvents
+        }
+        return followedBrandUpdatePreference
+    }
+
     func registerDevicePushToken(
         deviceID: String,
         platform: String,
@@ -1499,6 +1817,8 @@ actor MockSocialService: SocialService {
         squads: [SquadProfile],
         notifications: [AppNotification],
         followedEventNotifications: [FollowedEventNotificationItem],
+        followedDJNotifications: [FollowedDJNotificationItem],
+        followedBrandNotifications: [FollowedBrandNotificationItem],
         followersByUserID: [String: Set<String>],
         followingByUserID: [String: Set<String>],
         likeActionAtByPostID: [String: Date],
@@ -1764,6 +2084,36 @@ actor MockSocialService: SocialService {
             )
         ]
 
+        let followedDJNotifications: [FollowedDJNotificationItem] = [
+            FollowedDJNotificationItem(
+                id: "fdn_1",
+                type: "dj_update.news",
+                djID: "dj_warehouse_anya",
+                djName: "Anya",
+                newsID: "news_dj_anya_1",
+                newsTitle: "Anya announced a new warehouse series",
+                newsSummary: "Anya confirmed a new warehouse residency and opening weekend details.",
+                newsCoverImageURL: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=600&q=80",
+                isRead: false,
+                occurredAt: now.addingTimeInterval(-430)
+            )
+        ]
+
+        let followedBrandNotifications: [FollowedBrandNotificationItem] = [
+            FollowedBrandNotificationItem(
+                id: "fbn_1",
+                type: "brand_update.news",
+                brandID: "brand_tomorrowland",
+                brandName: "Tomorrowland",
+                newsID: "news_brand_tomorrowland_1",
+                newsTitle: "Tomorrowland opened a new 2026 pre-registration editorial update",
+                newsSummary: "住宿体验、园区动线和预注册时间窗口已经同步到本周的品牌资讯。",
+                newsCoverImageURL: "https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=600&q=80",
+                isRead: false,
+                occurredAt: now.addingTimeInterval(-260)
+            )
+        ]
+
         let followersByUserID: [String: Set<String>] = [
             currentUser.id: [alice.id],
             alice.id: [currentUser.id],
@@ -1853,6 +2203,8 @@ actor MockSocialService: SocialService {
             squads,
             notifications,
             followedEventNotifications,
+            followedDJNotifications,
+            followedBrandNotifications,
             followersByUserID,
             followingByUserID,
             likeActionAtByPostID,

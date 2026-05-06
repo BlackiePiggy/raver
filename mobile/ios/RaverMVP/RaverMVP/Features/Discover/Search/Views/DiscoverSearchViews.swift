@@ -468,7 +468,7 @@ struct DJsSearchResultsView: View {
                                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                                         ForEach(viewModel.rankingBoards) { board in
                                             Button {
-                                                appPush(.rankingBoardDetail(board: board))
+                                                appPush(.rankingBoardDetail(board: board, year: nil))
                                             } label: {
                                                 RankingBoardCoverCard(board: board)
                                             }

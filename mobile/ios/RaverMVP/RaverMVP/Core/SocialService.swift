@@ -38,6 +38,15 @@ protocol IMChatCompatibilityService: AnyObject {
     func sendFileMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage
     func sendEventCardMessage(conversationID: String, payload: EventShareCardPayload) async throws -> ChatMessage
     func sendDJCardMessage(conversationID: String, payload: DJShareCardPayload) async throws -> ChatMessage
+    func sendSetCardMessage(conversationID: String, payload: SetShareCardPayload) async throws -> ChatMessage
+    func sendBrandCardMessage(conversationID: String, payload: BrandShareCardPayload) async throws -> ChatMessage
+    func sendLabelCardMessage(conversationID: String, payload: LabelShareCardPayload) async throws -> ChatMessage
+    func sendNewsCardMessage(conversationID: String, payload: NewsShareCardPayload) async throws -> ChatMessage
+    func sendRankingBoardCardMessage(conversationID: String, payload: RankingBoardShareCardPayload) async throws -> ChatMessage
+    func sendRatingEventCardMessage(conversationID: String, payload: RatingEventShareCardPayload) async throws -> ChatMessage
+    func sendRatingUnitCardMessage(conversationID: String, payload: RatingUnitShareCardPayload) async throws -> ChatMessage
+    func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage
+    func sendCircleIDCardMessage(conversationID: String, payload: CircleIDShareCardPayload) async throws -> ChatMessage
     func sendTypingStatus(conversationID: String, isTyping: Bool) async throws
     func revokeMessage(conversationID: String, messageID: String) async throws -> String
     func deleteMessage(conversationID: String, messageID: String) async throws
@@ -59,6 +68,103 @@ struct DJShareCardPayload: Codable, Hashable {
     let country: String?
     let genreText: String?
     let coverImageURL: String?
+    let badgeText: String?
+}
+
+struct SetShareCardPayload: Codable, Hashable {
+    let setID: String
+    let setTitle: String
+    let djID: String?
+    let djName: String?
+    let eventName: String?
+    let venue: String?
+    let coverImageURL: String?
+    let recordedAtISO8601: String?
+    let badgeText: String?
+}
+
+struct BrandShareCardPayload: Codable, Hashable {
+    let brandID: String
+    let brandName: String
+    let country: String?
+    let city: String?
+    let tagline: String?
+    let coverImageURL: String?
+    let badgeText: String?
+}
+
+struct LabelShareCardPayload: Codable, Hashable {
+    let labelID: String
+    let labelName: String
+    let country: String?
+    let genreText: String?
+    let coverImageURL: String?
+    let badgeText: String?
+}
+
+struct NewsShareCardPayload: Codable, Hashable {
+    let articleID: String
+    let headline: String
+    let summary: String?
+    let source: String?
+    let categoryRawValue: String?
+    let coverImageURL: String?
+    let publishedAtISO8601: String?
+    let authorName: String?
+    let badgeText: String?
+}
+
+struct RankingBoardShareCardPayload: Codable, Hashable {
+    let boardID: String
+    let boardName: String
+    let boardSubtitle: String?
+    let year: Int
+    let coverImageURL: String?
+    let badgeText: String?
+}
+
+struct RatingEventShareCardPayload: Codable, Hashable {
+    let eventID: String
+    let eventName: String
+    let description: String?
+    let coverImageURL: String?
+    let badgeText: String?
+}
+
+struct RatingUnitShareCardPayload: Codable, Hashable {
+    let unitID: String
+    let unitName: String
+    let eventID: String?
+    let eventName: String?
+    let description: String?
+    let coverImageURL: String?
+    let rating: Double?
+    let ratingCount: Int?
+    let badgeText: String?
+}
+
+struct PostShareCardPayload: Codable, Hashable {
+    let postID: String
+    let authorID: String
+    let authorDisplayName: String
+    let authorUsername: String
+    let contentText: String
+    let coverImageURL: String?
+    let hasVideo: Bool
+    let likeCount: Int
+    let commentCount: Int
+    let shareCount: Int
+    let badgeText: String?
+}
+
+struct CircleIDShareCardPayload: Codable, Hashable {
+    let entryID: String
+    let songName: String
+    let contributorName: String
+    let djNames: [String]
+    let eventName: String?
+    let coverImageURL: String?
+    let hasVideo: Bool
     let badgeText: String?
 }
 
@@ -145,6 +251,14 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func fetchFollowedEventsSummary() async throws -> FollowedEventsSummary
     func fetchFollowedEventNotifications(limit: Int) async throws -> [FollowedEventNotificationItem]
     func markFollowedEventNotificationRead(notificationID: String) async throws
+    func fetchFollowedDJsSummary() async throws -> FollowedDJsSummary
+    func fetchFollowedDJNotifications(limit: Int) async throws -> [FollowedDJNotificationItem]
+    func markFollowedDJNotificationRead(notificationID: String) async throws
+    func fetchFollowedBrandsSummary() async throws -> FollowedBrandsSummary
+    func fetchFollowedBrandNotifications(limit: Int) async throws -> [FollowedBrandNotificationItem]
+    func markFollowedBrandNotificationRead(notificationID: String) async throws
+    func fetchFollowedBrandUpdatePreference() async throws -> FollowedBrandUpdatePreference
+    func updateFollowedBrandUpdatePreference(_ input: FollowedBrandUpdatePreferenceInput) async throws -> FollowedBrandUpdatePreference
     func registerDevicePushToken(
         deviceID: String,
         platform: String,
@@ -181,6 +295,60 @@ extension IMChatCompatibilityService {
     }
 
     func sendDJCardMessage(conversationID: String, payload: DJShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendSetCardMessage(conversationID: String, payload: SetShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendBrandCardMessage(conversationID: String, payload: BrandShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendLabelCardMessage(conversationID: String, payload: LabelShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendNewsCardMessage(conversationID: String, payload: NewsShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendRankingBoardCardMessage(conversationID: String, payload: RankingBoardShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendRatingEventCardMessage(conversationID: String, payload: RatingEventShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendCircleIDCardMessage(conversationID: String, payload: CircleIDShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendRatingUnitCardMessage(conversationID: String, payload: RatingUnitShareCardPayload) async throws -> ChatMessage {
         _ = conversationID
         _ = payload
         throw ServiceError.message("Not supported")

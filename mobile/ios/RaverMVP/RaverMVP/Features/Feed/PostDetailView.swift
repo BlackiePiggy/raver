@@ -15,8 +15,10 @@ struct PostDetailView: View {
     @State private var isRefreshing = false
     @State private var bannerMessage: String?
     @State private var error: String?
-    @State private var sharePayload: PostSharePayload?
     @State private var isShowingHideReasonDialog = false
+    @State private var isSharePanelVisible = false
+    @State private var isSharePanelMounted = false
+    @State private var isShowingMoreChatsSheet = false
     @State private var replyTargetComment: Comment?
     @State private var commentSortMode: CommentSortMode = .hot
     @State private var visibleRootCount = 0
@@ -54,70 +56,7 @@ struct PostDetailView: View {
                         }
                     }
 
-                    PostCardView(
-                        post: post,
-                        currentUserId: appState.session?.user.id,
-                        showsFollowButton: true,
-                        onLikeTap: {
-                            Task {
-                                do {
-                                    post = try await service.toggleLike(postID: post.id, shouldLike: !post.isLiked)
-                                    notifyPostUpdated()
-                                    await trackFeedEvent(eventType: "feed_like")
-                                } catch {
-                                    self.error = error.userFacingMessage
-                                }
-                            }
-                        },
-                        onRepostTap: {
-                            Task {
-                                do {
-                                    post = try await service.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
-                                    notifyPostUpdated()
-                                } catch {
-                                    self.error = error.userFacingMessage
-                                }
-                            }
-                        },
-                        onSaveTap: {
-                            Task {
-                                guard appState.session != nil else {
-                                    self.error = L("请先登录后再收藏", "Please sign in before saving.")
-                                    return
-                                }
-                                do {
-                                    post = try await service.toggleSave(postID: post.id, shouldSave: !post.isSaved)
-                                    notifyPostUpdated()
-                                    await trackFeedEvent(eventType: "feed_save")
-                                } catch {
-                                    self.error = error.userFacingMessage
-                                }
-                            }
-                        },
-                        onShareTap: {
-                            sharePayload = PostSharePayload(post: post)
-                        },
-                        onHideTap: {
-                            isShowingHideReasonDialog = true
-                        },
-                        onFollowTap: {
-                            Task {
-                                do {
-                                    let author = try await service.toggleFollow(userID: post.author.id, shouldFollow: !post.author.isFollowing)
-                                    post.author = author
-                                    notifyPostUpdated()
-                                } catch {
-                                    self.error = error.userFacingMessage
-                                }
-                            }
-                        },
-                        onMessageTap: nil,
-                        onAuthorTap: {
-                            appPush(.userProfile(userID: post.author.id))
-                        },
-                        onSquadTap: nil,
-                        onEditTap: nil
-                    )
+                    detailPostCard
 
                     GlassCard {
                         VStack(alignment: .leading, spacing: 10) {
@@ -216,6 +155,9 @@ struct PostDetailView: View {
         }
         .background(RaverTheme.background)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                shareToolbarButton
+            }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button(L("收起", "Collapse")) {
@@ -223,28 +165,29 @@ struct PostDetailView: View {
                 }
             }
         }
-        .raverGradientNavigationChrome(title: LL("动态详情")) {
-            dismiss()
-        }
+        .raverSystemNavigation(title: LL("动态详情"))
         .task {
             await loadComments()
         }
         .onChange(of: commentSortMode) { _, _ in
             resetRootPaging()
         }
-        .sheet(item: $sharePayload) { payload in
-            PostInAppShareSheet(payload: payload) { channel in
-                guard appState.session != nil else { return }
-                Task {
-                    do {
-                        post = try await service.recordShare(postID: post.id, channel: channel, status: "completed")
-                        notifyPostUpdated()
-                        await trackFeedEvent(eventType: "feed_share", metadata: ["channel": channel])
-                    } catch {
-                        self.error = error.userFacingMessage
-                    }
+        .overlay { sharePanelOverlay }
+        .animation(.sharePanelPresentSpring, value: isSharePanelVisible)
+        .sheet(isPresented: $isShowingMoreChatsSheet) {
+            ChatShareSheet(
+                loadConversations: {
+                    try await loadSharePanelConversations()
+                },
+                onShareToConversation: { conversation in
+                    try await sendPostSharePayload(to: conversation, note: nil)
                 }
+            ) { _ in
+                isShowingMoreChatsSheet = false
+            } preview: {
+                PostSharePreviewCard(payload: PostSharePayload(post: post))
             }
+            .presentationDetents([.fraction(0.76), .large])
         }
         .confirmationDialog(
             L("告诉我们原因", "Tell us why"),
@@ -268,6 +211,214 @@ struct PostDetailView: View {
         } message: {
             Text(error ?? "")
         }
+    }
+
+    private var shareToolbarButton: some View {
+        Button {
+            presentSharePanel()
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+                .frame(width: 36, height: 36)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L("更多", "More"))
+    }
+
+    @ViewBuilder
+    private var sharePanelOverlay: some View {
+        if isSharePanelMounted {
+            SharePanelOverlay(
+                isVisible: isSharePanelVisible,
+                onBackdropTap: { dismissSharePanel() },
+                bottomPadding: 12,
+                hiddenOffset: 340
+            ) {
+                ShareActionPanel(
+                    primaryActions: sharePrimaryActions(),
+                    quickActions: shareQuickActions(),
+                    loadConversations: {
+                        try await loadSharePanelConversations()
+                    },
+                    onSendToConversation: { conversation, note in
+                        try await sendPostSharePayload(to: conversation, note: note)
+                    },
+                    onDismiss: {
+                        dismissSharePanel()
+                    },
+                    onConversationShared: { _ in },
+                    onMoreChats: {
+                        dismissSharePanel {
+                            isShowingMoreChatsSheet = true
+                        }
+                    }
+                )
+            }
+            .onAppear {
+                withAnimation(.sharePanelPresentSpring) {
+                    isSharePanelVisible = true
+                }
+            }
+            .transition(.opacity)
+        }
+    }
+
+    private var detailPostCard: some View {
+        PostCardView(
+            post: post,
+            currentUserId: appState.session?.user.id,
+            showsFollowButton: true,
+            showsMoreButton: false,
+            onLikeTap: {
+                Task {
+                    do {
+                        post = try await service.toggleLike(postID: post.id, shouldLike: !post.isLiked)
+                        notifyPostUpdated()
+                        await trackFeedEvent(eventType: "feed_like")
+                    } catch {
+                        self.error = error.userFacingMessage
+                    }
+                }
+            },
+            onRepostTap: {
+                Task {
+                    do {
+                        post = try await service.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
+                        notifyPostUpdated()
+                    } catch {
+                        self.error = error.userFacingMessage
+                    }
+                }
+            },
+            onSaveTap: {
+                Task {
+                    guard appState.session != nil else {
+                        self.error = L("请先登录后再收藏", "Please sign in before saving.")
+                        return
+                    }
+                    do {
+                        post = try await service.toggleSave(postID: post.id, shouldSave: !post.isSaved)
+                        notifyPostUpdated()
+                        await trackFeedEvent(eventType: "feed_save")
+                    } catch {
+                        self.error = error.userFacingMessage
+                    }
+                }
+            },
+            onHideTap: nil,
+            onFollowTap: {
+                Task {
+                    do {
+                        let author = try await service.toggleFollow(userID: post.author.id, shouldFollow: !post.author.isFollowing)
+                        post.author = author
+                        notifyPostUpdated()
+                    } catch {
+                        self.error = error.userFacingMessage
+                    }
+                }
+            },
+            onMessageTap: nil,
+            onAuthorTap: {
+                appPush(.userProfile(userID: post.author.id))
+            },
+            onSquadTap: nil,
+            onEditTap: nil
+        )
+    }
+
+    private func presentSharePanel() {
+        isSharePanelMounted = true
+        isSharePanelVisible = false
+    }
+
+    private func dismissSharePanel(after completion: (() -> Void)? = nil) {
+        withAnimation(.sharePanelDismissSpring) {
+            isSharePanelVisible = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            guard !isSharePanelVisible else { return }
+            isSharePanelMounted = false
+            completion?()
+        }
+    }
+
+    private func loadSharePanelConversations() async throws -> [Conversation] {
+        async let directs = service.fetchConversations(type: .direct)
+        async let groups = service.fetchConversations(type: .group)
+        let merged = try await directs + groups
+        let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
+            partialResult[conversation.id] = conversation
+        }
+        return deduped.values.sorted {
+            if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
+            return $0.updatedAt > $1.updatedAt
+        }
+    }
+
+    private func sendPostSharePayload(to conversation: Conversation, note: String?) async throws {
+        _ = try await service.sendPostCardMessage(
+            conversationID: conversation.id,
+            payload: PostSharePayload(post: post).cardPayload
+        )
+
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedNote.isEmpty {
+            _ = try await service.sendMessage(
+                conversationID: conversation.id,
+                content: trimmedNote
+            )
+        }
+
+        post = try await service.recordShare(postID: post.id, channel: "in_app_chat", status: "completed")
+        notifyPostUpdated()
+        await trackFeedEvent(eventType: "feed_share", metadata: ["channel": "in_app_chat"])
+    }
+
+    private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
+        [
+            SharePanelPrimaryAction(
+                title: "微信",
+                systemImage: "message.circle.fill",
+                accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
+            ) {
+                error = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+            },
+            SharePanelPrimaryAction(
+                title: "QQ",
+                systemImage: "paperplane.circle.fill",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                error = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+            }
+        ]
+    }
+
+    private func shareQuickActions() -> [SharePanelQuickAction] {
+        [
+            SharePanelQuickAction(
+                title: L("复制链接", "Copy Link"),
+                systemImage: "link",
+                accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
+            ) {
+                UIPasteboard.general.string = PostSharePayload(post: post).shareURLString
+            },
+            SharePanelQuickAction(
+                title: L("不感兴趣", "Not Interested"),
+                systemImage: "eye.slash",
+                accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
+            ) {
+                isShowingHideReasonDialog = true
+            },
+            SharePanelQuickAction(
+                title: L("举报", "Report"),
+                systemImage: "flag",
+                accentColor: Color(red: 0.93, green: 0.39, blue: 0.24)
+            ) {
+                error = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+            }
+        ]
     }
 
     @MainActor

@@ -1466,6 +1466,211 @@ const publishFavoritedEventNewsSafely = async (params: {
   }
 };
 
+const publishFollowedDJNewsSafely = async (params: {
+  actorUserId: string;
+  postId: string;
+  content: string;
+  imageURLs: string[];
+  boundDjIDs: string[];
+  occurredAt: Date;
+}): Promise<void> => {
+  const normalizedDJIDs = Array.from(
+    new Set(params.boundDjIDs.map((item) => item.trim()).filter((item) => item.length > 0))
+  );
+  if (normalizedDJIDs.length === 0) {
+    return;
+  }
+
+  const decodedNews = decodeRaverNewsDraft(params.content);
+  if (!decodedNews) {
+    return;
+  }
+
+  const djs = await prisma.dJ.findMany({
+    where: {
+      id: {
+        in: normalizedDJIDs,
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+  if (djs.length === 0) {
+    return;
+  }
+
+  const djNameByID = new Map(djs.map((item) => [item.id, item.name.trim() || item.id]));
+  const coverImageURL = params.imageURLs.find((item) => item.trim().length > 0)?.trim() || null;
+  const fallbackSummary = newsSingleLine(decodedNews.body).slice(0, 140);
+  const newsSummary = decodedNews.summary || fallbackSummary || '你关注的DJ发布了新的资讯。';
+
+  for (const djID of normalizedDJIDs) {
+    const djName = djNameByID.get(djID);
+    if (!djName) continue;
+
+    const rows = await prisma.follow.findMany({
+      where: {
+        djId: djID,
+        type: 'dj',
+      },
+      select: {
+        followerId: true,
+      },
+    });
+
+    const targetUserIds = normalizeNotificationTargets(rows.map((item) => item.followerId));
+    if (targetUserIds.length === 0) {
+      continue;
+    }
+
+    void notificationCenterService
+      .publish({
+        category: 'followed_dj_update',
+        targets: targetUserIds.map((userId) => ({ userId })),
+        channels: ['in_app', 'apns'],
+        payload: {
+          title: `${djName} 发布了新资讯`,
+          body: decodedNews.title,
+          deeplink: `raver://news/${encodeURIComponent(params.postId)}`,
+          metadata: {
+            route: 'dj_update',
+            primaryUpdateKind: 'news',
+            updateKind: 'news',
+            djID,
+            djName,
+            newsID: params.postId,
+            newsTitle: decodedNews.title,
+            newsSummary,
+            newsCoverImageURL: coverImageURL,
+            occurredAt: params.occurredAt.toISOString(),
+            source: 'followed_dj_news_publish',
+            sourceAudience: 'followed_dj_users',
+          },
+        },
+        dedupeKey: `dj-news:${djID}:post:${params.postId}`,
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[notification-center] followed dj news publish failed dj=${djID} error=${message}`);
+      });
+  }
+};
+
+const publishFollowedBrandNewsSafely = async (params: {
+  actorUserId: string;
+  postId: string;
+  content: string;
+  imageURLs: string[];
+  boundBrandIDs: string[];
+  occurredAt: Date;
+}): Promise<void> => {
+  const normalizedBrandIDs = Array.from(
+    new Set(params.boundBrandIDs.map((item) => item.trim()).filter((item) => item.length > 0))
+  );
+  if (normalizedBrandIDs.length === 0) {
+    return;
+  }
+
+  const decodedNews = decodeRaverNewsDraft(params.content);
+  if (!decodedNews) {
+    return;
+  }
+
+  const [wikiBrands, labels] = await Promise.all([
+    prisma.wikiFestival.findMany({
+      where: {
+        id: {
+          in: normalizedBrandIDs,
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    }),
+    prisma.label.findMany({
+      where: {
+        id: {
+          in: normalizedBrandIDs,
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    }),
+  ]);
+
+  const brandNameByID = new Map<string, string>();
+  for (const brand of wikiBrands) {
+    brandNameByID.set(brand.id, brand.name.trim() || brand.id);
+  }
+  for (const brand of labels) {
+    if (!brandNameByID.has(brand.id)) {
+      brandNameByID.set(brand.id, brand.name.trim() || brand.id);
+    }
+  }
+  if (brandNameByID.size == 0) {
+    return;
+  }
+
+  const subscriptions = await notificationCenterService.fetchFollowedBrandUpdateSubscriptions();
+  if (subscriptions.length === 0) {
+    return;
+  }
+
+  const coverImageURL = params.imageURLs.find((item) => item.trim().length > 0)?.trim() || null;
+  const fallbackSummary = newsSingleLine(decodedNews.body).slice(0, 140);
+  const newsSummary = decodedNews.summary || fallbackSummary || '你关注的音乐节发布了新的资讯。';
+
+  for (const brandID of normalizedBrandIDs) {
+    const brandName = brandNameByID.get(brandID);
+    if (!brandName) continue;
+
+    const targetUserIds = normalizeNotificationTargets(
+      subscriptions
+        .filter((item) => item.preference.enabled && item.preference.watchedBrandIds.includes(brandID))
+        .map((item) => item.userId)
+    );
+    if (targetUserIds.length === 0) {
+      continue;
+    }
+
+    void notificationCenterService
+      .publish({
+        category: 'followed_brand_update',
+        targets: targetUserIds.map((userId) => ({ userId })),
+        channels: ['in_app', 'apns'],
+        payload: {
+          title: `${brandName} 发布了新资讯`,
+          body: decodedNews.title,
+          deeplink: `raver://news/${encodeURIComponent(params.postId)}`,
+          metadata: {
+            route: 'brand_update',
+            primaryUpdateKind: 'news',
+            updateKind: 'news',
+            brandID,
+            brandName,
+            newsID: params.postId,
+            newsTitle: decodedNews.title,
+            newsSummary,
+            newsCoverImageURL: coverImageURL,
+            occurredAt: params.occurredAt.toISOString(),
+            source: 'followed_brand_news_publish',
+            sourceAudience: 'followed_brand_users',
+          },
+        },
+        dedupeKey: `brand-news:${brandID}:post:${params.postId}`,
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[notification-center] followed brand news publish failed brand=${brandID} error=${message}`);
+      });
+  }
+};
+
 type NotificationType = 'follow' | 'like' | 'comment' | 'squad_invite';
 
 type CommunityNotificationSource =
@@ -5004,6 +5209,24 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
       content: created.content,
       imageURLs: Array.isArray(created.images) ? created.images : [],
       boundEventIDs: Array.isArray((created as any).boundEventIds) ? ((created as any).boundEventIds as string[]) : [],
+      occurredAt: created.displayPublishedAt ?? created.createdAt,
+    });
+
+    void publishFollowedDJNewsSafely({
+      actorUserId: userId,
+      postId: created.id,
+      content: created.content,
+      imageURLs: Array.isArray(created.images) ? created.images : [],
+      boundDjIDs: Array.isArray((created as any).boundDjIds) ? ((created as any).boundDjIds as string[]) : [],
+      occurredAt: created.displayPublishedAt ?? created.createdAt,
+    });
+
+    void publishFollowedBrandNewsSafely({
+      actorUserId: userId,
+      postId: created.id,
+      content: created.content,
+      imageURLs: Array.isArray(created.images) ? created.images : [],
+      boundBrandIDs: Array.isArray((created as any).boundBrandIds) ? ((created as any).boundBrandIds as string[]) : [],
       occurredAt: created.displayPublishedAt ?? created.createdAt,
     });
 

@@ -9,6 +9,93 @@ import MapKit
 import CoreLocation
 import CoreText
 
+private struct SetCardSharePresentation: Identifiable {
+    let id = UUID()
+    let payload: SetShareCardPayload
+}
+
+private struct SetSharePreviewCard: View {
+    let payload: SetShareCardPayload
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            previewImage
+                .frame(width: 84, height: 84 * 9 / 16)
+                .overlay(alignment: .bottomLeading) {
+                    if let badge = payload.badgeText?.nilIfBlank {
+                        Text(badge)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.58), in: Capsule())
+                            .padding(.leading, 8)
+                            .padding(.bottom, 8)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(payload.setTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+
+                if let metadataText {
+                    Text(metadataText)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(RaverTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var metadataText: String? {
+        let parts = [
+            payload.djName?.nilIfBlank,
+            payload.eventName?.nilIfBlank ?? payload.venue?.nilIfBlank
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private var previewImage: some View {
+        if let raw = payload.coverImageURL,
+           let url = URL(string: raw),
+           !raw.isEmpty {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    fallbackImage
+                }
+            }
+        } else {
+            fallbackImage
+        }
+    }
+
+    private var fallbackImage: some View {
+        LinearGradient(
+            colors: [Color(red: 0.10, green: 0.14, blue: 0.20), Color(red: 0.16, green: 0.24, blue: 0.35)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(
+            Image(systemName: "waveform.circle.fill")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.92))
+        )
+    }
+}
+
 struct SetsModuleView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
@@ -368,6 +455,12 @@ struct DJSetDetailView: View {
     @State private var isScrubbingProgress = false
     @State private var relatedEvent: WebEvent?
     @State private var audioListenSetID: String?
+    @State private var shareMorePresentation: SetCardSharePresentation?
+    @State private var isShareMorePanelVisible = false
+    @State private var fullChatSharePresentation: SetCardSharePresentation?
+    @State private var widgetStatusMessage: String?
+    @State private var widgetStatusConversation: Conversation?
+    @State private var widgetStatusDismissToken = UUID()
 
     init(setID: String, playbackMode: PlaybackMode = .video) {
         self.setID = setID
@@ -379,16 +472,16 @@ struct DJSetDetailView: View {
     }
 
     private var immersiveTrailingAction: AnyView? {
-        guard !isAudioOnlyMode, let set else { return nil }
+        guard let _ = set else { return nil }
         return AnyView(
             RaverNavigationCircleIconButton(
-                systemName: "headphones",
+                systemName: "ellipsis",
                 style: .immersiveAdaptive
             ) {
-                nativePlayerSession.pause()
-                isPlaybackPaused = true
-                audioListenSetID = set.id
-                showControlsTemporarily()
+                shareMorePresentation = SetCardSharePresentation(
+                    payload: makeSetShareCardPayload()
+                )
+                isShareMorePanelVisible = false
             }
         )
     }
@@ -474,7 +567,7 @@ struct DJSetDetailView: View {
                 RaverImmersiveFloatingTopBar(
                     onBack: handleImmersiveBack,
                     buttonStyle: .glass,
-                    trailing: nil
+                    trailing: immersiveTrailingAction
                 )
                 .frame(maxWidth: .infinity, alignment: .top)
             }
@@ -574,6 +667,86 @@ struct DJSetDetailView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .sheet(item: $fullChatSharePresentation) { presentation in
+            ChatShareSheet(
+                loadConversations: {
+                    try await loadSharePanelConversations()
+                },
+                onShareToConversation: { conversation in
+                    try await sendSharePayload(
+                        presentation.payload,
+                        to: conversation,
+                        note: nil
+                    )
+                }
+            ) { conversation in
+                showWidgetStatusBanner(
+                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    conversation: conversation
+                )
+            } preview: {
+                SetSharePreviewCard(payload: presentation.payload)
+            }
+            .presentationDetents([.fraction(0.76), .large])
+        }
+        .overlay {
+            if let presentation = shareMorePresentation {
+                SharePanelOverlay(
+                    isVisible: isShareMorePanelVisible,
+                    onBackdropTap: { dismissShareMorePanel() }
+                ) {
+                    ShareActionPanel(
+                        primaryActions: sharePrimaryActions(),
+                        quickActions: shareMoreQuickActions(),
+                        loadConversations: {
+                            try await loadSharePanelConversations()
+                        },
+                        onSendToConversation: { conversation, note in
+                            try await sendSharePayload(
+                                presentation.payload,
+                                to: conversation,
+                                note: note
+                            )
+                        },
+                        onDismiss: {
+                            dismissShareMorePanel()
+                        }
+                    ) { conversation in
+                        showWidgetStatusBanner(
+                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            conversation: conversation
+                        )
+                    } onMoreChats: {
+                        dismissShareMorePanel {
+                            fullChatSharePresentation = presentation
+                        }
+                    }
+                }
+                .onAppear {
+                    withAnimation(.sharePanelPresentSpring) {
+                        isShareMorePanelVisible = true
+                    }
+                }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let widgetStatusMessage {
+                ScreenStatusBanner(
+                    message: widgetStatusMessage,
+                    style: .info,
+                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
+                ) {
+                    if let widgetStatusConversation {
+                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 120)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
+        .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
     }
 
     @ViewBuilder
@@ -719,27 +892,6 @@ struct DJSetDetailView: View {
         )
         .font(.caption)
         .foregroundStyle(RaverTheme.secondaryText)
-
-        if isMine(set) {
-            HStack {
-                Button(LL("编辑 Set")) {
-                    discoverPush(.setEdit(setID: set.id))
-                }
-                .buttonStyle(.bordered)
-
-                Button(LL("编辑 Tracklist")) {
-                    showTrackEditor = true
-                }
-                .buttonStyle(.bordered)
-
-                Button(role: .destructive) {
-                    Task { await deleteSet() }
-                } label: {
-                    Text(LL("删除 Set"))
-                }
-                .buttonStyle(.bordered)
-            }
-        }
 
         contributorSection(for: set)
         commentsSection
@@ -1013,10 +1165,11 @@ struct DJSetDetailView: View {
 
                     Spacer()
 
-                    setsPlayerOverlayIconButton(systemName: "headphones") {
-                        nativePlayerSession.pause()
-                        isPlaybackPaused = true
-                        audioListenSetID = set.id
+                    setsPlayerOverlayIconButton(systemName: "ellipsis") {
+                        shareMorePresentation = SetCardSharePresentation(
+                            payload: makeSetShareCardPayload()
+                        )
+                        isShareMorePanelVisible = false
                         showControlsTemporarily()
                     }
                 }
@@ -1826,6 +1979,164 @@ struct DJSetDetailView: View {
 
     private func isMine(_ set: WebDJSet) -> Bool {
         set.uploadedById == appState.session?.user.id
+    }
+
+    private func makeSetShareCardPayload() -> SetShareCardPayload {
+        let currentSet = set
+        return SetShareCardPayload(
+            setID: setID,
+            setTitle: currentSet?.title ?? L("未命名 Set", "Untitled Set"),
+            djID: currentSet?.dj?.id ?? currentSet?.djId,
+            djName: currentSet?.dj?.name,
+            eventName: currentSet?.eventName?.nilIfBlank,
+            venue: currentSet?.venue?.nilIfBlank,
+            coverImageURL: AppConfig.resolvedURLString(currentSet?.thumbnailUrl ?? ""),
+            recordedAtISO8601: currentSet?.recordedAt.map {
+                ISO8601DateFormatter().string(from: $0)
+            },
+            badgeText: L("Set", "Set")
+        )
+    }
+
+    private func loadSharePanelConversations() async throws -> [Conversation] {
+        async let directTask = appContainer.socialService.fetchConversations(type: .direct)
+        async let groupTask = appContainer.socialService.fetchConversations(type: .group)
+        let direct = try await directTask
+        let groups = try await groupTask
+        return (direct + groups).sorted { lhs, rhs in
+            let leftDate = lhs.updatedAt
+            let rightDate = rhs.updatedAt
+            if leftDate != rightDate {
+                return leftDate > rightDate
+            }
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        }
+    }
+
+    private func sendSharePayload(
+        _ payload: SetShareCardPayload,
+        to conversation: Conversation,
+        note: String?
+    ) async throws {
+        _ = note
+        _ = try await appContainer.socialService.sendSetCardMessage(
+            conversationID: conversation.id,
+            payload: payload
+        )
+    }
+
+    private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
+        [
+            SharePanelPrimaryAction(
+                title: "微信",
+                systemImage: "message.circle.fill",
+                accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
+            ) {
+                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+            },
+            SharePanelPrimaryAction(
+                title: "QQ",
+                systemImage: "paperplane.circle.fill",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+            }
+        ]
+    }
+
+    private func shareMoreQuickActions() -> [SharePanelQuickAction] {
+        var actions: [SharePanelQuickAction] = []
+
+        if !isAudioOnlyMode {
+            actions.append(
+                SharePanelQuickAction(
+                    title: L("听音频", "Listen Audio"),
+                    systemImage: "headphones",
+                    accentColor: RaverTheme.accent
+                ) {
+                    nativePlayerSession.pause()
+                    isPlaybackPaused = true
+                    audioListenSetID = setID
+                    dismissShareMorePanel()
+                }
+            )
+        }
+
+        if appState.session != nil {
+            actions.append(
+                SharePanelQuickAction(
+                    title: L("上传 Tracklist", "Upload Tracklist"),
+                    systemImage: "square.and.arrow.up",
+                    accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
+                ) {
+                    showTracklistUpload = true
+                    dismissShareMorePanel()
+                }
+            )
+        }
+
+        if let currentSet = set, isMine(currentSet) {
+            actions.append(
+                SharePanelQuickAction(
+                    title: L("编辑 Set", "Edit Set"),
+                    systemImage: "square.and.pencil",
+                    accentColor: Color(red: 0.99, green: 0.65, blue: 0.20)
+                ) {
+                    dismissShareMorePanel {
+                        discoverPush(.setEdit(setID: currentSet.id))
+                    }
+                }
+            )
+            actions.append(
+                SharePanelQuickAction(
+                    title: L("编辑 Tracklist", "Edit Tracklist"),
+                    systemImage: "text.badge.plus",
+                    accentColor: Color(red: 0.91, green: 0.44, blue: 0.85)
+                ) {
+                    showTrackEditor = true
+                    dismissShareMorePanel()
+                }
+            )
+            actions.append(
+                SharePanelQuickAction(
+                    title: L("删除 Set", "Delete Set"),
+                    systemImage: "trash",
+                    accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
+                ) {
+                    dismissShareMorePanel {
+                        Task { await deleteSet() }
+                    }
+                }
+            )
+        }
+
+        return actions
+    }
+
+    private func dismissShareMorePanel(after completion: (() -> Void)? = nil) {
+        withAnimation(.sharePanelDismissSpring) {
+            isShareMorePanelVisible = false
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            shareMorePresentation = nil
+            completion?()
+        }
+    }
+
+    private func showWidgetStatusBanner(message: String, conversation: Conversation?) {
+        widgetStatusDismissToken = UUID()
+        widgetStatusMessage = message
+        widgetStatusConversation = conversation
+        let token = widgetStatusDismissToken
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            guard widgetStatusDismissToken == token else { return }
+            withAnimation(.easeOut(duration: 0.22)) {
+                widgetStatusMessage = nil
+                widgetStatusConversation = nil
+            }
+        }
     }
 
     private func load() async {

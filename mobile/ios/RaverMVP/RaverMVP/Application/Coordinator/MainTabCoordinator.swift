@@ -14,12 +14,15 @@ enum AppRoute: Hashable {
     case profile(ProfileRoute)
     case conversation(target: ChatRouteTarget)
     case followedEventsInbox
+    case followedDJsInbox
+    case followedBrandsInbox
     case postDetail(postID: String)
     case eventDetail(eventID: String)
     case newsDetail(articleID: String)
     case eventSchedule(eventID: String)
     case djDetail(djID: String)
-    case rankingBoardDetail(board: RankingBoard)
+    case labelDetail(labelID: String)
+    case rankingBoardDetail(board: RankingBoard, year: Int?)
     case userProfile(userID: String)
     case squadProfile(squadID: String)
     case squadManage(squadID: String)
@@ -36,11 +39,14 @@ extension AppRoute {
             return true
         case .conversation,
              .followedEventsInbox,
+             .followedDJsInbox,
+             .followedBrandsInbox,
              .postDetail,
              .eventDetail,
              .newsDetail,
              .eventSchedule,
              .djDetail,
+             .labelDetail,
              .rankingBoardDetail,
              .userProfile,
              .squadProfile,
@@ -64,6 +70,10 @@ extension AppRoute {
             return "conversation.detail"
         case .followedEventsInbox:
             return "followed.events.inbox"
+        case .followedDJsInbox:
+            return "followed.djs.inbox"
+        case .followedBrandsInbox:
+            return "followed.brands.inbox"
         case .postDetail:
             return "post.detail"
         case .eventDetail:
@@ -74,6 +84,8 @@ extension AppRoute {
             return "event.schedule"
         case .djDetail:
             return "dj.detail"
+        case .labelDetail:
+            return "label.detail"
         case .rankingBoardDetail:
             return "ranking.board.detail"
         case .userProfile:
@@ -101,9 +113,13 @@ extension AppRoute {
             return .messages
         case .followedEventsInbox:
             return .messages
+        case .followedDJsInbox:
+            return .messages
+        case .followedBrandsInbox:
+            return .messages
         case .postDetail, .squadProfile, .squadManage, .ratingUnitDetail:
             return .circle
-        case .eventDetail, .newsDetail, .eventSchedule, .djDetail, .rankingBoardDetail:
+        case .eventDetail, .newsDetail, .eventSchedule, .djDetail, .labelDetail, .rankingBoardDetail:
             return .discover
         case .userProfile:
             return .profile
@@ -158,6 +174,58 @@ final class AppRouter: ObservableObject {
     @Published var fullScreen: AppFullScreenRoute?
 
     func push(_ route: AppRoute) {
+#if DEBUG
+        let description: String = {
+            switch route {
+            case .eventDetail(let eventID):
+                return "eventDetail(\(eventID))"
+            case .circle(let circleRoute):
+                return "circle(\(circleRoute))"
+            case .conversation(let target):
+                return "conversation(\(target.debugSummary))"
+            case .postDetail(let postID):
+                return "postDetail(\(postID))"
+            case .followedEventsInbox:
+                return "followedEventsInbox"
+            case .followedDJsInbox:
+                return "followedDJsInbox"
+            case .followedBrandsInbox:
+                return "followedBrandsInbox"
+            case .newsDetail(let articleID):
+                return "newsDetail(\(articleID))"
+            case .eventSchedule(let eventID):
+                return "eventSchedule(\(eventID))"
+            case .djDetail(let djID):
+                return "djDetail(\(djID))"
+            case .labelDetail(let labelID):
+                return "labelDetail(\(labelID))"
+            case .rankingBoardDetail(let board, let year):
+                return "rankingBoardDetail(\(board.id), year=\(year?.description ?? "nil"))"
+            case .squadProfile(let squadID):
+                return "squadProfile(\(squadID))"
+            case .squadManage(let squadID):
+                return "squadManage(\(squadID))"
+            case .ratingUnitDetail(let unitID):
+                return "ratingUnitDetail(\(unitID))"
+            case .userProfile(let userID):
+                return "userProfile(\(userID))"
+            case .discover(let route):
+                return "discover(\(route))"
+            case .messages(let route):
+                return "messages(\(route))"
+            case .profile(let route):
+                return "profile(\(route))"
+            }
+        }()
+        print("[RatingEventResolve] AppRouter.push route=\(description)")
+        if case .eventDetail = route {
+            print("[RatingEventResolve] AppRouter.push stack for eventDetail: begin")
+            for (index, line) in Thread.callStackSymbols.prefix(20).enumerated() {
+                print("[RatingEventResolve][stack \(index)] \(line)")
+            }
+            print("[RatingEventResolve] AppRouter.push stack for eventDetail: end")
+        }
+#endif
         path.append(route)
     }
 
@@ -265,6 +333,11 @@ struct MainTabCoordinatorView: View {
 
     @ViewBuilder
     private func routeDestination(for route: AppRoute) -> some View {
+        let _ = {
+#if DEBUG
+            print("[RatingEventResolve] routeDestination route=\(describeRoute(route))")
+#endif
+        }()
         switch route {
         case .discover(let discoverRoute):
             makeDiscoverRouteDestination(
@@ -311,6 +384,10 @@ struct MainTabCoordinatorView: View {
                     NotificationCenter.default.post(name: .circleIDDidCreate, object: entry)
                 }
                 .environmentObject(appState)
+
+            case let .idDetail(entryID):
+                CircleIDDetailLoaderView(entryID: entryID)
+                    .environmentObject(appState)
 
             case .ratingEventCreate:
                 CreateRatingEventSheet { input in
@@ -417,6 +494,12 @@ struct MainTabCoordinatorView: View {
         case .followedEventsInbox:
             FollowedEventsInboxView(repository: appContainer.messagesRepository)
 
+        case .followedDJsInbox:
+            FollowedDJsInboxView(repository: appContainer.messagesRepository)
+
+        case .followedBrandsInbox:
+            FollowedBrandsInboxView(repository: appContainer.messagesRepository)
+
         case let .postDetail(postID):
             PostDetailLoaderView(postID: postID, service: appContainer.socialService)
                 .environmentObject(appState)
@@ -437,8 +520,15 @@ struct MainTabCoordinatorView: View {
         case .djDetail(let djID):
             DJDetailView(djID: djID)
 
-        case .rankingBoardDetail(let board):
-            RankingBoardDetailView(board: board)
+        case .labelDetail(let labelID):
+            makeDiscoverRouteDestination(
+                .labelDetail(labelID: labelID),
+                push: pushDiscoverRoute,
+                appContainer: appContainer
+            )
+
+        case .rankingBoardDetail(let board, let year):
+            RankingBoardDetailView(board: board, initialYear: year)
 
         case .userProfile(let userID):
             UserProfileView(userID: TencentIMIdentity.normalizePlatformUserIDForProfile(userID))
@@ -502,10 +592,14 @@ struct MainTabCoordinatorView: View {
     }
 
     private func pushCircleRoute(_ route: CircleRoute) {
+#if DEBUG
+        print("[RatingEventResolve] pushCircleRoute route=\(route)")
+#endif
         switch route {
         case .postCreate,
                 .postEdit,
                 .idCreate,
+                .idDetail,
                 .ratingEventDetail,
                 .ratingEventCreate,
                 .ratingEventImportFromEvent,
@@ -600,6 +694,14 @@ struct MainTabCoordinatorView: View {
             return .followedEventsInbox
         }
 
+        if host == "messages", pathParts.count >= 1, pathParts[0].lowercased() == "followed-djs" {
+            return .followedDJsInbox
+        }
+
+        if host == "messages", pathParts.count >= 1, pathParts[0].lowercased() == "followed-brands" {
+            return .followedBrandsInbox
+        }
+
         if host == "community", pathParts.count >= 2, pathParts[0].lowercased() == "post" {
             return .postDetail(postID: pathParts[1])
         }
@@ -614,6 +716,25 @@ struct MainTabCoordinatorView: View {
 
         if host == "dj", let djID = pathParts.first {
             return .djDetail(djID: djID)
+        }
+
+        if host == "label", let labelID = pathParts.first {
+            return .labelDetail(labelID: labelID)
+        }
+
+        if host == "ranking-board", let boardID = pathParts.first {
+            let year = queryItems.first(where: { $0.name == "year" })?.value.flatMap(Int.init)
+            let title = queryItems.first(where: { $0.name == "title" })?.value ?? L("榜单", "Ranking Board")
+            let subtitle = queryItems.first(where: { $0.name == "subtitle" })?.value
+            let coverImageURL = queryItems.first(where: { $0.name == "coverImageURL" })?.value
+            let board = RankingBoard(
+                id: boardID,
+                title: title,
+                subtitle: subtitle?.isEmpty == false ? subtitle : nil,
+                coverImageUrl: coverImageURL?.isEmpty == false ? coverImageURL : nil,
+                years: year.map { [$0] } ?? []
+            )
+            return .rankingBoardDetail(board: board, year: year)
         }
 
         if host == "squad", let squadID = pathParts.first {
@@ -639,6 +760,13 @@ struct MainTabCoordinatorView: View {
         if normalizedParts.count >= 2, normalizedParts[0] == "messages", normalizedParts[1] == "followed-events" {
             return .followedEventsInbox
         }
+
+        if normalizedParts.count >= 2, normalizedParts[0] == "messages", normalizedParts[1] == "followed-djs" {
+            return .followedDJsInbox
+        }
+        if normalizedParts.count >= 2, normalizedParts[0] == "messages", normalizedParts[1] == "followed-brands" {
+            return .followedBrandsInbox
+        }
         if normalizedParts.count >= 3, normalizedParts[0] == "community", normalizedParts[1] == "post" {
             return .postDetail(postID: normalizedParts[2])
         }
@@ -650,6 +778,23 @@ struct MainTabCoordinatorView: View {
         }
         if normalizedParts.count >= 2, normalizedParts[0] == "dj" {
             return .djDetail(djID: normalizedParts[1])
+        }
+        if normalizedParts.count >= 2, normalizedParts[0] == "label" {
+            return .labelDetail(labelID: normalizedParts[1])
+        }
+        if normalizedParts.count >= 2, normalizedParts[0] == "ranking-board" {
+            let year = queryItems.first(where: { $0.name == "year" })?.value.flatMap(Int.init)
+            let title = queryItems.first(where: { $0.name == "title" })?.value ?? L("榜单", "Ranking Board")
+            let subtitle = queryItems.first(where: { $0.name == "subtitle" })?.value
+            let coverImageURL = queryItems.first(where: { $0.name == "coverImageURL" })?.value
+            let board = RankingBoard(
+                id: normalizedParts[1],
+                title: title,
+                subtitle: subtitle?.isEmpty == false ? subtitle : nil,
+                coverImageUrl: coverImageURL?.isEmpty == false ? coverImageURL : nil,
+                years: year.map { [$0] } ?? []
+            )
+            return .rankingBoardDetail(board: board, year: year)
         }
         if normalizedParts.count >= 2, normalizedParts[0] == "squad" {
             return .squadProfile(squadID: normalizedParts[1])
@@ -668,6 +813,10 @@ struct MainTabCoordinatorView: View {
             return "postDetail(\(postID))"
         case .followedEventsInbox:
             return "followedEventsInbox"
+        case .followedDJsInbox:
+            return "followedDJsInbox"
+        case .followedBrandsInbox:
+            return "followedBrandsInbox"
         case .eventDetail(let eventID):
             return "eventDetail(\(eventID))"
         case .newsDetail(let articleID):
@@ -676,6 +825,8 @@ struct MainTabCoordinatorView: View {
             return "eventSchedule(\(eventID))"
         case .djDetail(let djID):
             return "djDetail(\(djID))"
+        case .labelDetail(let labelID):
+            return "labelDetail(\(labelID))"
         case .squadProfile(let squadID):
             return "squadProfile(\(squadID))"
         case .userProfile(let userID):

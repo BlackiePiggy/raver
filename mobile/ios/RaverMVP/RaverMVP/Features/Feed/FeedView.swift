@@ -20,7 +20,6 @@ private struct FeedScreen: View {
     @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: FeedViewModel
     @State private var editTapPostID: String?
-    @State private var sharePayload: PostSharePayload?
     @State private var hideReasonTargetPost: Post?
 
     init(viewModel: FeedViewModel) {
@@ -86,6 +85,7 @@ private struct FeedScreen: View {
                                     post: post,
                                     currentUserId: appState.session?.user.id,
                                     showsFollowButton: false,
+                                    showsMoreButton: false,
                                     onLikeTap: {
                                         Task { await viewModel.toggleLike(post: post, position: index) }
                                     },
@@ -98,9 +98,6 @@ private struct FeedScreen: View {
                                             return
                                         }
                                         Task { await viewModel.toggleSave(post: post, position: index) }
-                                    },
-                                    onShareTap: {
-                                        sharePayload = PostSharePayload(post: post)
                                     },
                                     onHideTap: {
                                         hideReasonTargetPost = post
@@ -193,13 +190,6 @@ private struct FeedScreen: View {
         }
         .task {
             await viewModel.load()
-        }
-        .sheet(item: $sharePayload) { payload in
-            PostInAppShareSheet(payload: payload) { channel in
-                guard appState.session != nil else { return }
-                let position = viewModel.posts.firstIndex(where: { $0.id == payload.post.id })
-                Task { await viewModel.recordShare(post: payload.post, channel: channel, position: position) }
-            }
         }
         .confirmationDialog(
             L("告诉我们原因", "Tell us why"),

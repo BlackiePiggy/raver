@@ -439,8 +439,78 @@ private struct CircleIDDetailRoute: Identifiable, Hashable {
     let id: String
 }
 
+private enum CircleIDStorage {
+    static let entriesKey = "circle.id.entries.v1"
+}
+
+private struct CircleIDShareCardPresentation: Identifiable, Hashable {
+    let id = UUID()
+    let payload: CircleIDShareCardPayload
+}
+
+struct CircleIDDetailLoaderView: View {
+    @EnvironmentObject private var appState: AppState
+    let entryID: String
+
+    @State private var entry: CircleIDEntry?
+
+    var body: some View {
+        Group {
+            if let entry {
+                CircleIDDetailView(
+                    entry: Binding(
+                        get: { entry },
+                        set: { newValue in
+                            self.entry = newValue
+                            persistUpdatedEntry(newValue)
+                        }
+                    ),
+                    onPersist: {
+                        if let currentEntry = self.entry {
+                            persistUpdatedEntry(currentEntry)
+                        }
+                    }
+                )
+                .environmentObject(appState)
+            } else {
+                ContentUnavailableView(
+                    L("该 ID 已不存在", "This ID no longer exists"),
+                    systemImage: "music.note.slash"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RaverTheme.background)
+                .raverSystemNavigation(title: L("ID详情", "ID Detail"))
+            }
+        }
+        .task {
+            entry = loadEntry()
+        }
+    }
+
+    private func loadEntry() -> CircleIDEntry? {
+        guard let data = UserDefaults.standard.data(forKey: CircleIDStorage.entriesKey),
+              let entries = try? JSONDecoder.raver.decode([CircleIDEntry].self, from: data) else {
+            return nil
+        }
+        return entries.first(where: { $0.id == entryID })
+    }
+
+    private func persistUpdatedEntry(_ updated: CircleIDEntry) {
+        guard let data = UserDefaults.standard.data(forKey: CircleIDStorage.entriesKey),
+              var entries = try? JSONDecoder.raver.decode([CircleIDEntry].self, from: data),
+              let index = entries.firstIndex(where: { $0.id == updated.id }) else {
+            return
+        }
+        entries[index] = updated
+        if let encoded = try? JSONEncoder.raver.encode(entries) {
+            UserDefaults.standard.set(encoded, forKey: CircleIDStorage.entriesKey)
+        }
+    }
+}
+
 private struct CircleIDHubView: View {
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.appPush) private var appPush
     @Environment(\.circlePush) private var circlePush
 
@@ -448,8 +518,13 @@ private struct CircleIDHubView: View {
     @State private var hasLoaded = false
     @State private var selectedDetailRoute: CircleIDDetailRoute?
     @State private var errorMessage: String?
+    @State private var shareMorePresentation: CircleIDShareCardPresentation?
+    @State private var fullChatSharePresentation: CircleIDShareCardPresentation?
+    @State private var isShareMorePanelVisible = false
+    @State private var widgetStatusMessage: String?
+    @State private var widgetStatusConversation: Conversation?
 
-    private let storageKey = "circle.id.entries.v1"
+    private var socialService: SocialService { appContainer.socialService }
 
     private var sortedEntries: [CircleIDEntry] {
         entries.sorted { lhs, rhs in
@@ -478,6 +553,19 @@ private struct CircleIDHubView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
+
+            if let widgetStatusMessage {
+                ScreenStatusBanner(
+                    message: widgetStatusMessage,
+                    style: .info,
+                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
+                ) {
+                    if let widgetStatusConversation {
+                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
+                    }
+                }
+                .padding(.horizontal, 14)
+            }
 
             if sortedEntries.isEmpty {
                 Spacer()
@@ -517,6 +605,7 @@ private struct CircleIDHubView: View {
                     }
                 )
                 .environmentObject(appState)
+                .environmentObject(appContainer)
             } else {
                 VStack(spacing: 12) {
                     Text(L("该 ID 已不存在", "This ID no longer exists"))
@@ -531,6 +620,73 @@ private struct CircleIDHubView: View {
                 .background(RaverTheme.background)
             }
         }
+        .sheet(item: $fullChatSharePresentation) { presentation in
+            ChatShareSheet(
+                loadConversations: {
+                    try await loadCircleIDSharePanelConversations(using: socialService)
+                },
+                onShareToConversation: { conversation in
+                    try await sendCircleIDSharePayload(
+                        presentation.payload,
+                        using: socialService,
+                        to: conversation,
+                        note: nil
+                    )
+                }
+            ) { conversation in
+                errorMessage = nil
+                showWidgetStatusBanner(
+                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    conversation: conversation
+                )
+            } preview: {
+                CircleIDSharePreviewCard(payload: presentation.payload)
+            }
+            .presentationDetents([.fraction(0.76), .large])
+        }
+        .overlay {
+            if let presentation = shareMorePresentation {
+                SharePanelOverlay(
+                    isVisible: isShareMorePanelVisible,
+                    onBackdropTap: { dismissShareMorePanel() }
+                ) {
+                    ShareActionPanel(
+                        primaryActions: sharePrimaryActions(),
+                        quickActions: shareMoreQuickActions(for: presentation.payload),
+                        loadConversations: {
+                            try await loadCircleIDSharePanelConversations(using: socialService)
+                        },
+                        onSendToConversation: { conversation, note in
+                            try await sendCircleIDSharePayload(
+                                presentation.payload,
+                                using: socialService,
+                                to: conversation,
+                                note: note
+                            )
+                        },
+                        onDismiss: {
+                            dismissShareMorePanel()
+                        }
+                    ) { conversation in
+                        errorMessage = nil
+                        showWidgetStatusBanner(
+                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            conversation: conversation
+                        )
+                    } onMoreChats: {
+                        dismissShareMorePanel {
+                            fullChatSharePresentation = presentation
+                        }
+                    }
+                }
+                .onAppear {
+                    withAnimation(.sharePanelPresentSpring) {
+                        isShareMorePanelVisible = true
+                    }
+                }
+            }
+        }
+        .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
         .alert(LL("提示"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -543,6 +699,26 @@ private struct CircleIDHubView: View {
 
     private func idEntryCard(_ entry: CircleIDEntry) -> some View {
         VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Text(entry.songName)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+
+                Spacer(minLength: 0)
+
+                Button {
+                    selectedDetailRoute = CircleIDDetailRoute(id: entry.id)
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
             CircleIDCardPlayerView(
                 songName: entry.songName,
                 audioURLString: entry.audioUrl,
@@ -807,7 +983,7 @@ private struct CircleIDHubView: View {
     }
 
     private func loadEntries() {
-        guard let data = UserDefaults.standard.data(forKey: storageKey) else {
+        guard let data = UserDefaults.standard.data(forKey: CircleIDStorage.entriesKey) else {
             entries = []
             return
         }
@@ -827,7 +1003,7 @@ private struct CircleIDHubView: View {
     private func persistEntries() {
         do {
             let data = try JSONEncoder.raver.encode(entries)
-            UserDefaults.standard.set(data, forKey: storageKey)
+            UserDefaults.standard.set(data, forKey: CircleIDStorage.entriesKey)
         } catch {
             errorMessage = error.userFacingMessage
         }
@@ -879,21 +1055,107 @@ private struct CircleIDHubView: View {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return nil }
         return $entries[index]
     }
+
+    private func presentShareMorePanel(for entry: CircleIDEntry) {
+        shareMorePresentation = CircleIDShareCardPresentation(payload: circleIDSharePayload(from: entry))
+        isShareMorePanelVisible = false
+    }
+
+    private func dismissShareMorePanel(after completion: (() -> Void)? = nil) {
+        withAnimation(.sharePanelDismissSpring) {
+            isShareMorePanelVisible = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            guard !isShareMorePanelVisible else { return }
+            shareMorePresentation = nil
+            completion?()
+        }
+    }
+
+    private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
+        widgetStatusConversation = conversation
+        widgetStatusMessage = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+            guard widgetStatusMessage == message else { return }
+            widgetStatusMessage = nil
+            widgetStatusConversation = nil
+        }
+    }
+
+    private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
+        [
+            SharePanelPrimaryAction(
+                title: "微信",
+                systemImage: "message.circle.fill",
+                accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
+            ) {
+                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+            },
+            SharePanelPrimaryAction(
+                title: "QQ",
+                systemImage: "paperplane.circle.fill",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+            }
+        ]
+    }
+
+    private func shareMoreQuickActions(for payload: CircleIDShareCardPayload) -> [SharePanelQuickAction] {
+        [
+            SharePanelQuickAction(
+                title: L("复制链接", "Copy link"),
+                systemImage: "link",
+                accentColor: Color(red: 0.26, green: 0.57, blue: 0.96)
+            ) {
+                UIPasteboard.general.string = "raver://circle/id/\(payload.entryID)"
+                showWidgetStatusBanner(message: L("已复制 ID 链接", "ID link copied"))
+            },
+            SharePanelQuickAction(
+                title: L("举报", "Report"),
+                systemImage: "flag",
+                accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
+            ) {
+                errorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+            }
+        ]
+    }
 }
 
 private struct CircleIDDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
 
     @Binding var entry: CircleIDEntry
     let onPersist: () -> Void
 
     @State private var commentDraft = ""
+    @State private var actionErrorMessage: String?
+    @State private var shareMorePresentation: CircleIDShareCardPresentation?
+    @State private var fullChatSharePresentation: CircleIDShareCardPresentation?
+    @State private var isShareMorePanelVisible = false
+    @State private var widgetStatusMessage: String?
+    @State private var widgetStatusConversation: Conversation?
+
+    private var socialService: SocialService { appContainer.socialService }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                if let widgetStatusMessage {
+                    ScreenStatusBanner(
+                        message: widgetStatusMessage,
+                        style: .info,
+                        actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
+                    ) {
+                        if let widgetStatusConversation {
+                            dismissAndPush(.conversation(target: .fromConversation(widgetStatusConversation)))
+                        }
+                    }
+                }
+
                 CircleIDCardPlayerView(
                     songName: entry.songName,
                     audioURLString: entry.audioUrl,
@@ -1058,6 +1320,12 @@ private struct CircleIDDetailView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
+
+                    if let actionErrorMessage {
+                        Text(actionErrorMessage)
+                            .font(.caption2)
+                            .foregroundStyle(.red.opacity(0.9))
+                    }
                 }
                 .padding(12)
                 .background(RaverTheme.card)
@@ -1068,6 +1336,96 @@ private struct CircleIDDetailView: View {
         }
         .background(RaverTheme.background)
         .raverSystemNavigation(title: L("ID详情", "ID Detail"))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    presentShareMorePanel()
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .toolbar(.visible, for: .navigationBar)
+        .sheet(item: $fullChatSharePresentation) { presentation in
+            ChatShareSheet(
+                loadConversations: {
+                    try await loadCircleIDSharePanelConversations(using: socialService)
+                },
+                onShareToConversation: { conversation in
+                    try await sendCircleIDSharePayload(
+                        presentation.payload,
+                        using: socialService,
+                        to: conversation,
+                        note: nil
+                    )
+                }
+            ) { conversation in
+                actionErrorMessage = nil
+                showWidgetStatusBanner(
+                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    conversation: conversation
+                )
+            } preview: {
+                CircleIDSharePreviewCard(payload: presentation.payload)
+            }
+            .presentationDetents([.fraction(0.76), .large])
+        }
+        .overlay {
+            if let presentation = shareMorePresentation {
+                SharePanelOverlay(
+                    isVisible: isShareMorePanelVisible,
+                    onBackdropTap: { dismissShareMorePanel() }
+                ) {
+                    ShareActionPanel(
+                        primaryActions: sharePrimaryActions(),
+                        quickActions: shareMoreQuickActions(for: presentation.payload),
+                        loadConversations: {
+                            try await loadCircleIDSharePanelConversations(using: socialService)
+                        },
+                        onSendToConversation: { conversation, note in
+                            try await sendCircleIDSharePayload(
+                                presentation.payload,
+                                using: socialService,
+                                to: conversation,
+                                note: note
+                            )
+                        },
+                        onDismiss: {
+                            dismissShareMorePanel()
+                        }
+                    ) { conversation in
+                        actionErrorMessage = nil
+                        showWidgetStatusBanner(
+                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            conversation: conversation
+                        )
+                    } onMoreChats: {
+                        dismissShareMorePanel {
+                            fullChatSharePresentation = presentation
+                        }
+                    }
+                }
+                .onAppear {
+                    withAnimation(.sharePanelPresentSpring) {
+                        isShareMorePanelVisible = true
+                    }
+                }
+            }
+        }
+        .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
+        .alert(LL("提示"), isPresented: Binding(
+            get: { actionErrorMessage != nil },
+            set: { if !$0 { actionErrorMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(actionErrorMessage ?? "")
+        }
     }
 
     private func reactionButton(icon: String, count: Int, isActive: Bool, action: @escaping () -> Void) -> some View {
@@ -1231,6 +1589,79 @@ private struct CircleIDDetailView: View {
         }
         let sessionAvatar = sessionUser.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return sessionAvatar.isEmpty ? nil : sessionAvatar
+    }
+
+    private func presentShareMorePanel() {
+        shareMorePresentation = CircleIDShareCardPresentation(payload: circleIDSharePayload(from: entry))
+        isShareMorePanelVisible = false
+    }
+
+    private func dismissShareMorePanel(after completion: (() -> Void)? = nil) {
+        withAnimation(.sharePanelDismissSpring) {
+            isShareMorePanelVisible = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            guard !isShareMorePanelVisible else { return }
+            shareMorePresentation = nil
+            completion?()
+        }
+    }
+
+    private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
+        widgetStatusConversation = conversation
+        widgetStatusMessage = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+            guard widgetStatusMessage == message else { return }
+            widgetStatusMessage = nil
+            widgetStatusConversation = nil
+        }
+    }
+
+    private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
+        [
+            SharePanelPrimaryAction(
+                title: "微信",
+                systemImage: "message.circle.fill",
+                accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
+            ) {
+                actionErrorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+            },
+            SharePanelPrimaryAction(
+                title: "QQ",
+                systemImage: "paperplane.circle.fill",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                actionErrorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+            }
+        ]
+    }
+
+    private func shareMoreQuickActions(for payload: CircleIDShareCardPayload) -> [SharePanelQuickAction] {
+        [
+            SharePanelQuickAction(
+                title: L("复制链接", "Copy link"),
+                systemImage: "link",
+                accentColor: Color(red: 0.26, green: 0.57, blue: 0.96)
+            ) {
+                UIPasteboard.general.string = "raver://circle/id/\(payload.entryID)"
+                showWidgetStatusBanner(message: L("已复制 ID 链接", "ID link copied"))
+            },
+            SharePanelQuickAction(
+                title: L("举报", "Report"),
+                systemImage: "flag",
+                accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
+            ) {
+                actionErrorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+            }
+        ]
+    }
+}
+
+private struct CircleIDSharePreviewCard: View {
+    let payload: CircleIDShareCardPayload
+
+    var body: some View {
+        ChatCircleIDSharePreviewContent(payload: payload)
     }
 }
 
@@ -2656,11 +3087,40 @@ struct CircleRatingEventDetailView: View {
     @State private var isLoading = false
     @State private var isRefreshing = false
     @State private var bannerMessage: String?
+    @State private var shareMorePresentation: RatingDetailSharePresentation?
+    @State private var fullChatSharePresentation: RatingDetailSharePresentation?
+    @State private var isShareMorePanelVisible = false
+    @State private var actionErrorMessage: String?
+    @State private var widgetStatusMessage: String?
+    @State private var widgetStatusConversation: Conversation?
+    @State private var resolvedEventID: String?
 
     var body: some View {
+        let _ = {
+#if DEBUG
+            let currentEventID = event?.id ?? "nil"
+            let currentPhaseDescription: String
+            switch phase {
+            case .idle:
+                currentPhaseDescription = "idle"
+            case .initialLoading:
+                currentPhaseDescription = "initialLoading"
+            case .success:
+                currentPhaseDescription = "success"
+            case .empty:
+                currentPhaseDescription = "empty"
+            case .failure(let message):
+                currentPhaseDescription = "failure(\(message))"
+            case .offline(let message):
+                currentPhaseDescription = "offline(\(message))"
+            }
+            print("[RatingEventResolve] render phase=\(currentPhaseDescription) eventNil=\(event == nil) eventID=\(currentEventID)")
+#endif
+        }()
+
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                if isRefreshing || bannerMessage != nil {
+                if isRefreshing || bannerMessage != nil || actionErrorMessage != nil || widgetStatusMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if isRefreshing {
                             InlineLoadingBadge(title: L("正在更新事件详情", "Updating event details"))
@@ -2674,6 +3134,24 @@ struct CircleRatingEventDetailView: View {
                                 Task { await loadEvent() }
                             }
                         }
+                        if let actionErrorMessage {
+                            ScreenStatusBanner(
+                                message: actionErrorMessage,
+                                style: .error,
+                                actionTitle: nil
+                            ) {}
+                        }
+                        if let widgetStatusMessage {
+                            ScreenStatusBanner(
+                                message: widgetStatusMessage,
+                                style: .info,
+                                actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
+                            ) {
+                                if let widgetStatusConversation {
+                                    appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -2685,7 +3163,7 @@ struct CircleRatingEventDetailView: View {
                             Text(LL("还没有打分单位"))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(RaverTheme.primaryText)
-                            Text(LL("点击右上角 +，在这个事件下发布第一个打分单位。"))
+                            Text(LL("点击右上角更多，在这个事件下发布第一个打分单位。"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
@@ -2736,10 +3214,10 @@ struct CircleRatingEventDetailView: View {
         .raverGradientNavigationChrome(
             title: LL("打分事件详情"),
             trailing: RaverNavigationCircleIconButton(
-                systemName: "plus",
+                systemName: "ellipsis",
                 style: .dimmed,
                 action: {
-                    circlePush(.ratingUnitCreate(eventID: eventID))
+                    presentShareMorePanel()
                 },
                 frameSize: 34,
                 font: .headline.weight(.semibold)
@@ -2753,6 +3231,73 @@ struct CircleRatingEventDetailView: View {
         .task {
             await loadEvent()
         }
+        .sheet(item: $fullChatSharePresentation) { presentation in
+            ChatShareSheet(
+                loadConversations: {
+                    try await loadRatingSharePanelConversations(using: appContainer.socialService)
+                },
+                onShareToConversation: { conversation in
+                    try await sendRatingSharePayload(
+                        presentation.payload,
+                        using: appContainer.socialService,
+                        to: conversation,
+                        note: nil
+                    )
+                }
+            ) { conversation in
+                actionErrorMessage = nil
+                showWidgetStatusBanner(
+                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    conversation: conversation
+                )
+            } preview: {
+                RatingDetailSharePreviewCard(payload: presentation.payload)
+            }
+            .presentationDetents([.fraction(0.76), .large])
+        }
+        .overlay {
+            if let presentation = shareMorePresentation {
+                SharePanelOverlay(
+                    isVisible: isShareMorePanelVisible,
+                    onBackdropTap: { dismissShareMorePanel() }
+                ) {
+                    ShareActionPanel(
+                        primaryActions: sharePrimaryActions(),
+                        quickActions: shareMoreQuickActions(),
+                        loadConversations: {
+                            try await loadRatingSharePanelConversations(using: appContainer.socialService)
+                        },
+                        onSendToConversation: { conversation, note in
+                            try await sendRatingSharePayload(
+                                presentation.payload,
+                                using: appContainer.socialService,
+                                to: conversation,
+                                note: note
+                            )
+                        },
+                        onDismiss: {
+                            dismissShareMorePanel()
+                        }
+                    ) { conversation in
+                        actionErrorMessage = nil
+                        showWidgetStatusBanner(
+                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            conversation: conversation
+                        )
+                    } onMoreChats: {
+                        dismissShareMorePanel {
+                            fullChatSharePresentation = presentation
+                        }
+                    }
+                }
+                .onAppear {
+                    withAnimation(.sharePanelPresentSpring) {
+                        isShareMorePanelVisible = true
+                    }
+                }
+            }
+        }
+        .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
         .onDisappear {
             onUpdated()
         }
@@ -2785,19 +3330,13 @@ struct CircleRatingEventDetailView: View {
     @ViewBuilder
     private func ratingEventHeaderCard(_ event: WebRatingEvent) -> some View {
         let sourceEventID = event.sourceEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !sourceEventID.isEmpty {
-            Button {
-                appPush(.eventDetail(eventID: sourceEventID))
-            } label: {
-                ratingEventHeaderCardContent(event, isLinkedToEvent: true)
-            }
-            .buttonStyle(.plain)
-        } else {
-            ratingEventHeaderCardContent(event, isLinkedToEvent: false)
-        }
+        ratingEventHeaderCardContent(
+            event,
+            linkedEventID: sourceEventID.isEmpty ? nil : sourceEventID
+        )
     }
 
-    private func ratingEventHeaderCardContent(_ event: WebRatingEvent, isLinkedToEvent: Bool) -> some View {
+    private func ratingEventHeaderCardContent(_ event: WebRatingEvent, linkedEventID: String?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 10) {
                 RatingSquareImage(
@@ -2820,23 +3359,42 @@ struct CircleRatingEventDetailView: View {
                         .lineLimit(1)
                 }
 
-                if isLinkedToEvent {
+                if linkedEventID != nil {
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(RaverTheme.secondaryText)
-                        .padding(.top, 2)
+                    Button {
+                        guard let linkedEventID else { return }
+#if DEBUG
+                        print("[RatingEventResolve] header-jump route=.eventDetail(\(linkedEventID)) sourceEventId=\(event.sourceEventId ?? "nil") ratingEventID=\(event.id)")
+#endif
+                        appPush(.eventDetail(eventID: linkedEventID))
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
                 }
             }
 
-            if isLinkedToEvent {
-                HStack(spacing: 6) {
-                    Image(systemName: "calendar.badge.clock")
-                        .font(.caption2.weight(.semibold))
-                    Text(LL("进入对应电音节活动详情"))
-                        .font(.caption2.weight(.semibold))
+            if let linkedEventID {
+                Button {
+#if DEBUG
+                    print("[RatingEventResolve] header-jump-banner route=.eventDetail(\(linkedEventID)) sourceEventId=\(event.sourceEventId ?? "nil") ratingEventID=\(event.id)")
+#endif
+                    appPush(.eventDetail(eventID: linkedEventID))
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.caption2.weight(.semibold))
+                        Text(LL("进入对应电音节活动详情"))
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(RaverTheme.accent)
                 }
-                .foregroundStyle(RaverTheme.accent)
+                .buttonStyle(.plain)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2902,10 +3460,18 @@ struct CircleRatingEventDetailView: View {
         defer { isLoading = false }
         defer { isRefreshing = false }
         do {
-            event = try await service.fetchRatingEvent(id: eventID)
+            let loadedEvent = try await resolveRatingEvent(for: eventID)
+#if DEBUG
+            print("[RatingEventResolve] load-success requestedID=\(eventID) loadedID=\(loadedEvent.id) name=\(loadedEvent.name) phase-before=\(phase)")
+#endif
+            event = loadedEvent
+            resolvedEventID = loadedEvent.id
             phase = event == nil ? .empty : .success
             bannerMessage = nil
         } catch {
+#if DEBUG
+            print("[RatingEventResolve] load-failure requestedID=\(eventID) error=\(error)")
+#endif
             let message = error.userFacingMessage ?? L("事件加载失败，请稍后重试", "Failed to load event. Please try again later.")
             if hadContent {
                 bannerMessage = message
@@ -2915,9 +3481,126 @@ struct CircleRatingEventDetailView: View {
             }
         }
     }
+
+    private func resolveRatingEvent(for requestedID: String) async throws -> WebRatingEvent {
+        do {
+            let direct = try await service.fetchRatingEvent(id: requestedID)
+#if DEBUG
+            print("[RatingEventResolve] direct-hit requestedID=\(requestedID) resolvedID=\(direct.id) sourceEventId=\(direct.sourceEventId ?? "nil")")
+#endif
+            return direct
+        } catch {
+#if DEBUG
+            print("[RatingEventResolve] direct-miss requestedID=\(requestedID) error=\(error)")
+#endif
+        }
+
+        let related = try await service.fetchEventRatingEvents(eventID: requestedID)
+        if let exactSourceMatch = related.first(where: {
+            ($0.sourceEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") == requestedID
+        }) {
+#if DEBUG
+            print("[RatingEventResolve] source-event-fallback requestedID=\(requestedID) resolvedID=\(exactSourceMatch.id)")
+#endif
+            return exactSourceMatch
+        }
+        if related.count == 1, let first = related.first {
+#if DEBUG
+            print("[RatingEventResolve] single-related-fallback requestedID=\(requestedID) resolvedID=\(first.id)")
+#endif
+            return first
+        }
+
+        throw ServiceError.message(
+            L(
+                "未找到对应的打分事件（请求 ID：\(requestedID)）",
+                "Rating event not found (requested ID: \(requestedID))"
+            )
+        )
+    }
+
+    private func makeSharePayload() -> RatingDetailSharePayload {
+        let current = event
+        let shareID = current?.id ?? resolvedEventID ?? eventID
+        return RatingDetailSharePayload(
+            kind: .event,
+            entityID: shareID,
+            title: current?.name ?? L("打分事件", "Rating Event"),
+            subtitle: current?.description?.nilIfBlank,
+            coverImageURL: current?.imageUrl?.nilIfBlank,
+            rating: nil,
+            ratingCount: nil,
+            deepLink: "raver://circle/rating-event/\(shareID)"
+        )
+    }
+
+    private func presentShareMorePanel() {
+        shareMorePresentation = RatingDetailSharePresentation(payload: makeSharePayload())
+        isShareMorePanelVisible = false
+    }
+
+    private func dismissShareMorePanel(after completion: (() -> Void)? = nil) {
+        withAnimation(.sharePanelDismissSpring) {
+            isShareMorePanelVisible = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            guard !isShareMorePanelVisible else { return }
+            shareMorePresentation = nil
+            completion?()
+        }
+    }
+
+    private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
+        widgetStatusConversation = conversation
+        widgetStatusMessage = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+            guard widgetStatusMessage == message else { return }
+            widgetStatusMessage = nil
+            widgetStatusConversation = nil
+        }
+    }
+
+    private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
+        [
+            SharePanelPrimaryAction(
+                title: "微信",
+                systemImage: "message.circle.fill",
+                accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
+            ) {
+                actionErrorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+            },
+            SharePanelPrimaryAction(
+                title: "QQ",
+                systemImage: "paperplane.circle.fill",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                actionErrorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+            }
+        ]
+    }
+
+    private func shareMoreQuickActions() -> [SharePanelQuickAction] {
+        [
+            SharePanelQuickAction(
+                title: L("新增打分单位", "Add Rating Unit"),
+                systemImage: "plus.circle",
+                accentColor: Color(red: 0.99, green: 0.65, blue: 0.20)
+            ) {
+                circlePush(.ratingUnitCreate(eventID: eventID))
+            },
+            SharePanelQuickAction(
+                title: L("举报", "Report"),
+                systemImage: "flag",
+                accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
+            ) {
+                actionErrorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+            }
+        ]
+    }
 }
 
 struct CircleRatingUnitDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
@@ -2937,11 +3620,16 @@ struct CircleRatingUnitDetailView: View {
     @State private var isLoading = false
     @State private var isRefreshing = false
     @State private var isSubmitting = false
+    @State private var shareMorePresentation: RatingDetailSharePresentation?
+    @State private var fullChatSharePresentation: RatingDetailSharePresentation?
+    @State private var isShareMorePanelVisible = false
+    @State private var widgetStatusMessage: String?
+    @State private var widgetStatusConversation: Conversation?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                if isRefreshing || loadBannerMessage != nil {
+                if isRefreshing || loadBannerMessage != nil || widgetStatusMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if isRefreshing {
                             InlineLoadingBadge(title: L("正在更新评分单位", "Updating rating unit"))
@@ -2953,6 +3641,17 @@ struct CircleRatingUnitDetailView: View {
                                 actionTitle: L("重试", "Retry")
                             ) {
                                 Task { await loadUnit() }
+                            }
+                        }
+                        if let widgetStatusMessage {
+                            ScreenStatusBanner(
+                                message: widgetStatusMessage,
+                                style: .info,
+                                actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
+                            ) {
+                                if let widgetStatusConversation {
+                                    appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
+                                }
                             }
                         }
                     }
@@ -3163,11 +3862,92 @@ struct CircleRatingUnitDetailView: View {
         }
         .background(RaverTheme.background)
         .raverSystemNavigation(title: LL("评论列表"))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    presentShareMorePanel()
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
         .toolbar(.visible, for: .navigationBar)
         .task {
             await loadUnit()
             await refreshMyProfile()
         }
+        .sheet(item: $fullChatSharePresentation) { presentation in
+            ChatShareSheet(
+                loadConversations: {
+                    try await loadRatingSharePanelConversations(using: appContainer.socialService)
+                },
+                onShareToConversation: { conversation in
+                    try await sendRatingSharePayload(
+                        presentation.payload,
+                        using: appContainer.socialService,
+                        to: conversation,
+                        note: nil
+                    )
+                }
+            ) { conversation in
+                actionErrorMessage = nil
+                showWidgetStatusBanner(
+                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    conversation: conversation
+                )
+            } preview: {
+                RatingDetailSharePreviewCard(payload: presentation.payload)
+            }
+            .presentationDetents([.fraction(0.76), .large])
+        }
+        .overlay {
+            if let presentation = shareMorePresentation {
+                SharePanelOverlay(
+                    isVisible: isShareMorePanelVisible,
+                    onBackdropTap: { dismissShareMorePanel() }
+                ) {
+                    ShareActionPanel(
+                        primaryActions: sharePrimaryActions(),
+                        quickActions: shareMoreQuickActions(),
+                        loadConversations: {
+                            try await loadRatingSharePanelConversations(using: appContainer.socialService)
+                        },
+                        onSendToConversation: { conversation, note in
+                            try await sendRatingSharePayload(
+                                presentation.payload,
+                                using: appContainer.socialService,
+                                to: conversation,
+                                note: note
+                            )
+                        },
+                        onDismiss: {
+                            dismissShareMorePanel()
+                        }
+                    ) { conversation in
+                        actionErrorMessage = nil
+                        showWidgetStatusBanner(
+                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            conversation: conversation
+                        )
+                    } onMoreChats: {
+                        dismissShareMorePanel {
+                            fullChatSharePresentation = presentation
+                        }
+                    }
+                }
+                .onAppear {
+                    withAnimation(.sharePanelPresentSpring) {
+                        isShareMorePanelVisible = true
+                    }
+                }
+            }
+        }
+        .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
     }
 
     private var canSendComment: Bool {
@@ -3295,6 +4075,367 @@ struct CircleRatingUnitDetailView: View {
         } catch {
             actionErrorMessage = error.userFacingMessage
         }
+    }
+
+    private func makeSharePayload() -> RatingDetailSharePayload {
+        let current = unit
+        return RatingDetailSharePayload(
+            kind: .unit,
+            entityID: unitID,
+            title: current?.name ?? L("打分单位", "Rating Unit"),
+            subtitle: current?.event?.name ?? current?.description?.nilIfBlank,
+            coverImageURL: current?.imageUrl?.nilIfBlank,
+            rating: current?.rating,
+            ratingCount: current?.ratingCount,
+            deepLink: "raver://rating-unit/\(unitID)"
+        )
+    }
+
+    private func presentShareMorePanel() {
+        shareMorePresentation = RatingDetailSharePresentation(payload: makeSharePayload())
+        isShareMorePanelVisible = false
+    }
+
+    private func dismissShareMorePanel(after completion: (() -> Void)? = nil) {
+        withAnimation(.sharePanelDismissSpring) {
+            isShareMorePanelVisible = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            guard !isShareMorePanelVisible else { return }
+            shareMorePresentation = nil
+            completion?()
+        }
+    }
+
+    private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
+        widgetStatusConversation = conversation
+        widgetStatusMessage = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+            guard widgetStatusMessage == message else { return }
+            widgetStatusMessage = nil
+            widgetStatusConversation = nil
+        }
+    }
+
+    private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
+        [
+            SharePanelPrimaryAction(
+                title: "微信",
+                systemImage: "message.circle.fill",
+                accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
+            ) {
+                actionErrorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+            },
+            SharePanelPrimaryAction(
+                title: "QQ",
+                systemImage: "paperplane.circle.fill",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                actionErrorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+            }
+        ]
+    }
+
+    private func shareMoreQuickActions() -> [SharePanelQuickAction] {
+        [
+            SharePanelQuickAction(
+                title: L("举报", "Report"),
+                systemImage: "flag",
+                accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
+            ) {
+                actionErrorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+            }
+        ]
+    }
+}
+
+private struct RatingDetailSharePayload: Identifiable {
+    enum Kind {
+        case event
+        case unit
+    }
+
+    let id = UUID()
+    let kind: Kind
+    let entityID: String
+    let title: String
+    let subtitle: String?
+    let coverImageURL: String?
+    let rating: Double?
+    let ratingCount: Int?
+    let deepLink: String
+
+    var tagTitle: String {
+        switch kind {
+        case .event:
+            return L("Rating Event", "Rating Event")
+        case .unit:
+            return L("Rating Unit", "Rating Unit")
+        }
+    }
+
+    var iconName: String {
+        switch kind {
+        case .event:
+            return "sparkles.rectangle.stack.fill"
+        case .unit:
+            return "music.mic"
+        }
+    }
+
+    var summaryText: String {
+        var lines = ["[\(tagTitle)] \(title)"]
+        if let subtitle = subtitle?.trimmingCharacters(in: .whitespacesAndNewlines), !subtitle.isEmpty {
+            lines.append(subtitle)
+        }
+        lines.append(deepLink)
+        return lines.joined(separator: "\n")
+    }
+
+    var ratingEventCardPayload: RatingEventShareCardPayload? {
+        guard kind == .event else { return nil }
+        return RatingEventShareCardPayload(
+            eventID: entityID,
+            eventName: title,
+            description: subtitle,
+            coverImageURL: coverImageURL,
+            badgeText: L("Rating Event", "Rating Event")
+        )
+    }
+
+    var ratingUnitCardPayload: RatingUnitShareCardPayload? {
+        guard kind == .unit else { return nil }
+        return RatingUnitShareCardPayload(
+            unitID: entityID,
+            unitName: title,
+            eventID: nil,
+            eventName: subtitle,
+            description: subtitle,
+            coverImageURL: coverImageURL,
+            rating: rating,
+            ratingCount: ratingCount,
+            badgeText: L("Rating Unit", "Rating Unit")
+        )
+    }
+}
+
+private struct RatingDetailSharePresentation: Identifiable {
+    let id = UUID()
+    let payload: RatingDetailSharePayload
+}
+
+private struct RatingDetailSharePreviewCard: View {
+    let payload: RatingDetailSharePayload
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.93, green: 0.58, blue: 0.19),
+                            Color(red: 0.84, green: 0.34, blue: 0.29)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    Image(systemName: payload.iconName)
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.95))
+                )
+                .frame(width: 72, height: 72)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(payload.tagTitle)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                Text(payload.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+                if let subtitle = payload.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines), !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(RaverTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private func circleIDSharePayload(from entry: CircleIDEntry) -> CircleIDShareCardPayload {
+    CircleIDShareCardPayload(
+        entryID: entry.id,
+        songName: entry.songName,
+        contributorName: entry.contributor.shownName,
+        djNames: entry.djs.map(\.name),
+        eventName: entry.event?.name,
+        coverImageURL: entry.event?.coverImageUrl?.nilIfBlank,
+        hasVideo: entry.videoUrl?.nilIfBlank != nil,
+        badgeText: "ID"
+    )
+}
+
+private func loadCircleIDSharePanelConversations(using service: SocialService) async throws -> [Conversation] {
+    async let directs = service.fetchConversations(type: .direct)
+    async let groups = service.fetchConversations(type: .group)
+    let merged = try await directs + groups
+    let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
+        partialResult[conversation.id] = conversation
+    }
+    return deduped.values.sorted {
+        if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
+        return $0.updatedAt > $1.updatedAt
+    }
+}
+
+private func sendCircleIDSharePayload(
+    _ payload: CircleIDShareCardPayload,
+    using service: SocialService,
+    to conversation: Conversation,
+    note: String?
+) async throws {
+    _ = try await service.sendCircleIDCardMessage(
+        conversationID: conversation.id,
+        payload: payload
+    )
+
+    let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !trimmedNote.isEmpty {
+        _ = try await service.sendMessage(
+            conversationID: conversation.id,
+            content: trimmedNote
+        )
+    }
+}
+
+private struct ChatCircleIDSharePreviewContent: View {
+    let payload: CircleIDShareCardPayload
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let coverImageURL = payload.coverImageURL?.nilIfBlank {
+                ZStack(alignment: .bottomLeading) {
+                    ImageLoaderView(urlString: coverImageURL)
+                        .frame(height: 142)
+                        .clipped()
+
+                    LinearGradient(
+                        colors: [Color.black.opacity(0.06), Color.black.opacity(0.48)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+
+                    if let badgeText = payload.badgeText?.nilIfBlank {
+                        Text(badgeText)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.black.opacity(0.24), in: Capsule())
+                            .padding(12)
+                    }
+
+                    if payload.hasVideo {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 34, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.28), radius: 8, x: 0, y: 2)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                if payload.coverImageURL?.nilIfBlank == nil,
+                   let badgeText = payload.badgeText?.nilIfBlank {
+                    Text(badgeText)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                }
+
+                Text(payload.songName)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(3)
+
+                Text(circleIDSharePreviewSubtitle(payload))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(2)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RaverTheme.card)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(RaverTheme.cardBorder.opacity(0.45), lineWidth: 1)
+        )
+    }
+}
+
+private func circleIDSharePreviewSubtitle(_ payload: CircleIDShareCardPayload) -> String {
+    let joinedDJs = payload.djNames.joined(separator: " · ").nilIfBlank
+    let parts = [
+        joinedDJs,
+        payload.eventName?.nilIfBlank,
+        payload.contributorName.nilIfBlank
+    ].compactMap { $0 }
+    return parts.isEmpty ? L("未发行歌曲分享", "Unreleased track share") : parts.joined(separator: " · ")
+}
+
+private func loadRatingSharePanelConversations(using service: SocialService) async throws -> [Conversation] {
+    async let directs = service.fetchConversations(type: .direct)
+    async let groups = service.fetchConversations(type: .group)
+    let merged = try await directs + groups
+    let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
+        partialResult[conversation.id] = conversation
+    }
+    return deduped.values.sorted {
+        if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
+        return $0.updatedAt > $1.updatedAt
+    }
+}
+
+private func sendRatingSharePayload(
+    _ payload: RatingDetailSharePayload,
+    using service: SocialService,
+    to conversation: Conversation,
+    note: String?
+) async throws {
+    if let eventPayload = payload.ratingEventCardPayload {
+        _ = try await service.sendRatingEventCardMessage(
+            conversationID: conversation.id,
+            payload: eventPayload
+        )
+    } else if let unitPayload = payload.ratingUnitCardPayload {
+        _ = try await service.sendRatingUnitCardMessage(
+            conversationID: conversation.id,
+            payload: unitPayload
+        )
+    } else {
+        _ = try await service.sendMessage(
+            conversationID: conversation.id,
+            content: payload.summaryText
+        )
+    }
+
+    let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !trimmedNote.isEmpty {
+        _ = try await service.sendMessage(
+            conversationID: conversation.id,
+            content: trimmedNote
+        )
     }
 }
 

@@ -5,6 +5,7 @@ enum CircleRoute: Hashable {
     case postCreate
     case postEdit(postID: String)
     case idCreate
+    case idDetail(entryID: String)
     case ratingEventCreate
     case ratingEventImportFromEvent
     case ratingUnitCreate(eventID: String)
@@ -99,6 +100,9 @@ struct CircleCoordinatorView<Content: View>: View {
                 NotificationCenter.default.post(name: .circleIDDidCreate, object: entry)
             }
             .environmentObject(appState)
+        case let .idDetail(entryID):
+            CircleIDDetailLoaderView(entryID: entryID)
+                .environmentObject(appState)
         case .ratingEventCreate:
             CreateRatingEventSheet { input in
                 let created = try await appContainer.webService.createRatingEvent(input: input)

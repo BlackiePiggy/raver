@@ -1,4 +1,83 @@
 import SwiftUI
+import UIKit
+
+private struct NewsCardSharePresentation: Identifiable {
+    let id = UUID()
+    let payload: NewsShareCardPayload
+}
+
+private struct NewsSharePreviewCard: View {
+    let payload: NewsShareCardPayload
+
+    private let cardHeight: CGFloat = 82
+    private let imageWidth: CGFloat = 94
+
+    var body: some View {
+        HStack(spacing: 0) {
+            previewImage
+                .frame(width: imageWidth, height: cardHeight)
+                .clipped()
+
+            VStack(alignment: .leading, spacing: 8) {
+                if let badge = payload.badgeText?.nilIfBlank {
+                    Text(badge)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color(red: 0.34, green: 0.74, blue: 0.96))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color(red: 0.34, green: 0.74, blue: 0.96).opacity(0.12), in: Capsule())
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                Text(payload.headline)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .frame(height: cardHeight, alignment: .leading)
+        }
+        .background(RaverTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(RaverTheme.primaryText.opacity(0.06), lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var previewImage: some View {
+        if let raw = payload.coverImageURL,
+           let url = URL(string: raw),
+           !raw.isEmpty {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    fallbackImage
+                }
+            }
+        } else {
+            fallbackImage
+        }
+    }
+
+    private var fallbackImage: some View {
+        LinearGradient(
+            colors: [Color(red: 0.12, green: 0.16, blue: 0.22), Color(red: 0.18, green: 0.28, blue: 0.40)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(
+            Image(systemName: "newspaper.fill")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.92))
+        )
+    }
+}
 
 struct DiscoverNewsDetailView: View {
     @EnvironmentObject private var appContainer: AppContainer
@@ -19,6 +98,13 @@ struct DiscoverNewsDetailView: View {
     @State private var commentInput = ""
     @State private var commentActionMessage: String?
     @State private var coverImageSize: CGSize = .zero
+    @State private var shareMorePresentation: NewsCardSharePresentation?
+    @State private var isShareMorePanelVisible = false
+    @State private var fullChatSharePresentation: NewsCardSharePresentation?
+    @State private var widgetStatusMessage: String?
+    @State private var widgetStatusConversation: Conversation?
+    @State private var widgetStatusDismissToken = UUID()
+    @State private var errorMessage: String?
 
     private var newsRepository: DiscoverNewsRepository {
         appContainer.discoverNewsRepository
@@ -101,17 +187,124 @@ struct DiscoverNewsDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(RaverTheme.background)
-        .raverGradientNavigationChrome(title: LL("资讯详情")) {
+        .raverGradientNavigationChrome(
+            title: LL("资讯详情"),
+            trailing: navigationShareButton.eraseToAnyView()
+        ) {
             dismiss()
         }
         .task(id: article.id) {
             await loadBoundEntities()
             await loadComments(reset: true)
         }
+        .sheet(item: $fullChatSharePresentation) { presentation in
+            ChatShareSheet(
+                loadConversations: {
+                    try await loadSharePanelConversations()
+                },
+                onShareToConversation: { conversation in
+                    try await sendSharePayload(
+                        presentation.payload,
+                        to: conversation,
+                        note: nil
+                    )
+                }
+            ) { conversation in
+                showWidgetStatusBanner(
+                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    conversation: conversation
+                )
+            } preview: {
+                NewsSharePreviewCard(payload: presentation.payload)
+            }
+            .presentationDetents([.fraction(0.76), .large])
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+        .overlay {
+            if let presentation = shareMorePresentation {
+                SharePanelOverlay(
+                    isVisible: isShareMorePanelVisible,
+                    onBackdropTap: { dismissShareMorePanel() }
+                ) {
+                    ShareActionPanel(
+                        primaryActions: sharePrimaryActions(),
+                        quickActions: shareMoreQuickActions(),
+                        loadConversations: {
+                            try await loadSharePanelConversations()
+                        },
+                        onSendToConversation: { conversation, note in
+                            try await sendSharePayload(
+                                presentation.payload,
+                                to: conversation,
+                                note: note
+                            )
+                        },
+                        onDismiss: {
+                            dismissShareMorePanel()
+                        }
+                    ) { conversation in
+                        showWidgetStatusBanner(
+                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            conversation: conversation
+                        )
+                    } onMoreChats: {
+                        dismissShareMorePanel {
+                            fullChatSharePresentation = presentation
+                        }
+                    }
+                }
+                .onAppear {
+                    withAnimation(.sharePanelPresentSpring) {
+                        isShareMorePanelVisible = true
+                    }
+                }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let widgetStatusMessage {
+                ScreenStatusBanner(
+                    message: widgetStatusMessage,
+                    style: .info,
+                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
+                ) {
+                    if let widgetStatusConversation {
+                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 120)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
+        .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
     }
 
     private var hasAnyBoundEntity: Bool {
         !article.boundDjIDs.isEmpty || !article.boundBrandIDs.isEmpty || !article.boundEventIDs.isEmpty
+    }
+
+    private var navigationShareButton: some View {
+        Button {
+            shareMorePresentation = NewsCardSharePresentation(
+                payload: makeNewsShareCardPayload()
+            )
+            isShareMorePanelVisible = false
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+                .frame(width: 36, height: 36)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var coverAspectRatio: CGFloat {
@@ -543,6 +736,137 @@ struct DiscoverNewsDetailView: View {
             return ids.compactMap { festivalByID[$0] }
         } catch {
             return []
+        }
+    }
+
+    private func makeNewsShareCardPayload() -> NewsShareCardPayload {
+        NewsShareCardPayload(
+            articleID: article.id,
+            headline: article.title,
+            summary: article.summary.nilIfBlank,
+            source: article.source.nilIfBlank,
+            categoryRawValue: article.category.rawValue,
+            coverImageURL: article.coverImageURL?.nilIfBlank,
+            publishedAtISO8601: ISO8601DateFormatter().string(from: article.publishedAt),
+            authorName: article.authorName.nilIfBlank,
+            badgeText: L("资讯", "News")
+        )
+    }
+
+    private func newsDeeplink(for payload: NewsShareCardPayload) -> String {
+        "raver://news/\(payload.articleID)"
+    }
+
+    private func loadSharePanelConversations() async throws -> [Conversation] {
+        async let directs = appContainer.socialService.fetchConversations(type: .direct)
+        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        let merged = try await directs + groups
+        let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
+            partialResult[conversation.id] = conversation
+        }
+        return deduped.values.sorted {
+            if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
+            return $0.updatedAt > $1.updatedAt
+        }
+    }
+
+    private func sendSharePayload(
+        _ payload: NewsShareCardPayload,
+        to conversation: Conversation,
+        note: String?
+    ) async throws {
+        _ = try await appContainer.socialService.sendNewsCardMessage(
+            conversationID: conversation.id,
+            payload: payload
+        )
+
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedNote.isEmpty {
+            _ = try await appContainer.socialService.sendMessage(
+                conversationID: conversation.id,
+                content: trimmedNote
+            )
+        }
+    }
+
+    private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
+        [
+            SharePanelPrimaryAction(
+                title: "微信",
+                systemImage: "message.circle.fill",
+                accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
+            ) {
+                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+            },
+            SharePanelPrimaryAction(
+                title: "QQ",
+                systemImage: "bubble.left.and.bubble.right.fill",
+                accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
+            ) {
+                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+            }
+        ]
+    }
+
+    private func shareMoreQuickActions() -> [SharePanelQuickAction] {
+        var actions: [SharePanelQuickAction] = [
+            SharePanelQuickAction(
+                title: L("复制链接", "Copy Link"),
+                systemImage: "link",
+                accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
+            ) {
+                UIPasteboard.general.string = article.link?.nilIfBlank ?? newsDeeplink(for: makeNewsShareCardPayload())
+                showWidgetStatusBanner(message: L("已复制链接", "Link copied"))
+            },
+            SharePanelQuickAction(
+                title: L("复制 App 内链接", "Copy App Link"),
+                systemImage: "link",
+                accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
+            ) {
+                UIPasteboard.general.string = newsDeeplink(for: makeNewsShareCardPayload())
+                showWidgetStatusBanner(message: L("链接已复制", "Link copied"))
+            }
+        ]
+
+        if let raw = article.link?.nilIfBlank,
+           let url = URL(string: raw) {
+            actions.append(
+                SharePanelQuickAction(
+                    title: L("查看原文", "Open Source"),
+                    systemImage: "arrow.up.right.square",
+                    accentColor: Color(red: 0.53, green: 0.45, blue: 0.96)
+                ) {
+                    UIApplication.shared.open(url)
+                }
+            )
+        }
+
+        return actions
+    }
+
+    private func dismissShareMorePanel(after: (() -> Void)? = nil) {
+        withAnimation(.sharePanelDismissSpring) {
+            isShareMorePanelVisible = false
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
+            guard !isShareMorePanelVisible else { return }
+            shareMorePresentation = nil
+            after?()
+        }
+    }
+
+    private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
+        widgetStatusConversation = conversation
+        widgetStatusMessage = message
+        let token = UUID()
+        widgetStatusDismissToken = token
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            guard widgetStatusDismissToken == token else { return }
+            withAnimation(.easeOut(duration: 0.25)) {
+                widgetStatusMessage = nil
+                widgetStatusConversation = nil
+            }
         }
     }
 

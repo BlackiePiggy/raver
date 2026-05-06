@@ -7,14 +7,15 @@ import UIKit
 
 struct PostCardView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var appContainer: AppContainer
 
     let post: Post
     let currentUserId: String?
     let showsFollowButton: Bool
+    let showsMoreButton: Bool
     let onLikeTap: () -> Void
     let onRepostTap: (() -> Void)?
     let onSaveTap: (() -> Void)?
-    let onShareTap: (() -> Void)?
     let onHideTap: (() -> Void)?
     let onFollowTap: (() -> Void)?
     let onMessageTap: (() -> Void)?
@@ -22,15 +23,18 @@ struct PostCardView: View {
     let onSquadTap: (() -> Void)?
     let onEditTap: (() -> Void)?
     @State private var isShowingLocationMap = false
+    @State private var isSharePanelVisible = false
+    @State private var isShowingMoreChatsSheet = false
+    @State private var shareErrorMessage: String?
 
     init(
         post: Post,
         currentUserId: String?,
         showsFollowButton: Bool,
+        showsMoreButton: Bool = true,
         onLikeTap: @escaping () -> Void,
         onRepostTap: (() -> Void)?,
         onSaveTap: (() -> Void)? = nil,
-        onShareTap: (() -> Void)? = nil,
         onHideTap: (() -> Void)? = nil,
         onFollowTap: (() -> Void)?,
         onMessageTap: (() -> Void)?,
@@ -41,10 +45,10 @@ struct PostCardView: View {
         self.post = post
         self.currentUserId = currentUserId
         self.showsFollowButton = showsFollowButton
+        self.showsMoreButton = showsMoreButton
         self.onLikeTap = onLikeTap
         self.onRepostTap = onRepostTap
         self.onSaveTap = onSaveTap
-        self.onShareTap = onShareTap
         self.onHideTap = onHideTap
         self.onFollowTap = onFollowTap
         self.onMessageTap = onMessageTap
@@ -176,22 +180,18 @@ struct PostCardView: View {
                         .foregroundStyle(RaverTheme.secondaryText)
                     }
 
-                    if onShareTap != nil || onHideTap != nil {
-                        Menu {
-                            if let onShareTap {
-                                Button(action: onShareTap) {
-                                    Label(LL("分享"), systemImage: "square.and.arrow.up")
-                                }
-                            }
-                            if let onHideTap {
-                                Button(role: .destructive, action: onHideTap) {
-                                    Label(LL("不感兴趣"), systemImage: "eye.slash")
-                                }
+                    if showsMoreButton {
+                        Button {
+                            withAnimation(.sharePanelPresentSpring) {
+                                isSharePanelVisible = true
                             }
                         } label: {
                             Image(systemName: "ellipsis")
-                                .frame(width: 28, height: 28)
+                                .frame(width: 36, height: 36)
+                                .background(Circle().fill(RaverTheme.card.opacity(0.001)))
+                                .contentShape(Circle())
                         }
+                        .buttonStyle(.plain)
                         .foregroundStyle(RaverTheme.secondaryText)
                     }
 
@@ -214,6 +214,56 @@ struct PostCardView: View {
             if let locationText = normalizedLocationText {
                 PostLocationMapView(locationText: locationText)
             }
+        }
+        .overlay {
+            if isSharePanelVisible {
+                SharePanelOverlay(
+                    isVisible: isSharePanelVisible,
+                    onBackdropTap: dismissSharePanel,
+                    bottomPadding: 12,
+                    hiddenOffset: 340
+                ) {
+                    ShareActionPanel(
+                        primaryActions: sharePrimaryActions(),
+                        quickActions: shareQuickActions(),
+                        loadConversations: {
+                            try await loadSharePanelConversations()
+                        },
+                        onSendToConversation: { conversation, note in
+                            try await sendPostSharePayload(to: conversation, note: note)
+                        },
+                        onDismiss: dismissSharePanel,
+                        onConversationShared: { _ in },
+                        onMoreChats: {
+                            isShowingMoreChatsSheet = true
+                        }
+                    )
+                }
+                .transition(.opacity)
+            }
+        }
+        .sheet(isPresented: $isShowingMoreChatsSheet) {
+            ChatShareSheet(
+                loadConversations: {
+                    try await loadSharePanelConversations()
+                },
+                onShareToConversation: { conversation in
+                    try await sendPostSharePayload(to: conversation, note: nil)
+                }
+            ) { _ in
+                isShowingMoreChatsSheet = false
+            } preview: {
+                PostSharePreviewCard(payload: PostSharePayload(post: post))
+            }
+            .presentationDetents([.fraction(0.76), .large])
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { shareErrorMessage != nil },
+            set: { if !$0 { shareErrorMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(shareErrorMessage ?? "")
         }
     }
 
@@ -291,6 +341,95 @@ struct PostCardView: View {
         .frame(width: 34, height: 34)
         .background(RaverTheme.card)
         .clipShape(Circle())
+    }
+
+    private func dismissSharePanel() {
+        withAnimation(.sharePanelDismissSpring) {
+            isSharePanelVisible = false
+        }
+    }
+
+    private func loadSharePanelConversations() async throws -> [Conversation] {
+        async let directs = appContainer.socialService.fetchConversations(type: .direct)
+        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        let merged = try await directs + groups
+        let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
+            partialResult[conversation.id] = conversation
+        }
+        return deduped.values.sorted {
+            if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
+            return $0.updatedAt > $1.updatedAt
+        }
+    }
+
+    private func sendPostSharePayload(to conversation: Conversation, note: String?) async throws {
+        _ = try await appContainer.socialService.sendPostCardMessage(
+            conversationID: conversation.id,
+            payload: PostSharePayload(post: post).cardPayload
+        )
+
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedNote.isEmpty {
+            _ = try await appContainer.socialService.sendMessage(
+                conversationID: conversation.id,
+                content: trimmedNote
+            )
+        }
+
+        _ = try? await appContainer.socialService.recordShare(postID: post.id, channel: "in_app_chat", status: "completed")
+    }
+
+    private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
+        [
+            SharePanelPrimaryAction(
+                title: "微信",
+                systemImage: "message.circle.fill",
+                accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
+            ) {
+                shareErrorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+            },
+            SharePanelPrimaryAction(
+                title: "QQ",
+                systemImage: "paperplane.circle.fill",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                shareErrorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+            }
+        ]
+    }
+
+    private func shareQuickActions() -> [SharePanelQuickAction] {
+        var actions: [SharePanelQuickAction] = [
+            SharePanelQuickAction(
+                title: L("复制链接", "Copy Link"),
+                systemImage: "link",
+                accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
+            ) {
+                UIPasteboard.general.string = PostSharePayload(post: post).shareURLString
+            }
+        ]
+
+        if let onHideTap {
+            actions.append(
+                SharePanelQuickAction(
+                    title: L("不感兴趣", "Not Interested"),
+                    systemImage: "eye.slash",
+                    accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
+                ) {
+                    onHideTap()
+                }
+            )
+        }
+        actions.append(
+            SharePanelQuickAction(
+                title: L("举报", "Report"),
+                systemImage: "flag",
+                accentColor: Color(red: 0.93, green: 0.39, blue: 0.24)
+            ) {
+                shareErrorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+            }
+        )
+        return actions
     }
 }
 
@@ -938,6 +1077,24 @@ struct PostSharePayload: Identifiable {
         }
         return FullscreenMediaItem(rawURL: first, index: 0)
     }
+
+    var cardPayload: PostShareCardPayload {
+        let firstURL = firstMedia?.url?.absoluteString
+        let hasVideo = firstMedia?.isVideo ?? false
+        return PostShareCardPayload(
+            postID: post.id,
+            authorID: post.author.id,
+            authorDisplayName: post.author.displayName,
+            authorUsername: post.author.username,
+            contentText: post.content,
+            coverImageURL: firstURL,
+            hasVideo: hasVideo,
+            likeCount: post.likeCount,
+            commentCount: post.commentCount,
+            shareCount: post.shareCount,
+            badgeText: L("Post", "Post")
+        )
+    }
 }
 
 struct PostInAppShareSheet: View {
@@ -1047,7 +1204,7 @@ private struct PostShareActionButton: View {
     }
 }
 
-private struct PostSharePreviewCard: View {
+struct PostSharePreviewCard: View {
     let payload: PostSharePayload
 
     var body: some View {

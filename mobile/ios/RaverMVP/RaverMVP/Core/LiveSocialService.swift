@@ -476,6 +476,96 @@ final class LiveSocialService: SocialService {
         throw await tencentIMUnavailableError(for: "send dj card message")
     }
 
+    func sendSetCardMessage(conversationID: String, payload: SetShareCardPayload) async throws -> ChatMessage {
+        if let message = try await imSession.sendSetCardMessage(
+            conversationID: conversationID,
+            payload: payload
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send set card message")
+    }
+
+    func sendBrandCardMessage(conversationID: String, payload: BrandShareCardPayload) async throws -> ChatMessage {
+        if let message = try await imSession.sendBrandCardMessage(
+            conversationID: conversationID,
+            payload: payload
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send brand card message")
+    }
+
+    func sendLabelCardMessage(conversationID: String, payload: LabelShareCardPayload) async throws -> ChatMessage {
+        if let message = try await imSession.sendLabelCardMessage(
+            conversationID: conversationID,
+            payload: payload
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send label card message")
+    }
+
+    func sendNewsCardMessage(conversationID: String, payload: NewsShareCardPayload) async throws -> ChatMessage {
+        if let message = try await imSession.sendNewsCardMessage(
+            conversationID: conversationID,
+            payload: payload
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send news card message")
+    }
+
+    func sendRankingBoardCardMessage(conversationID: String, payload: RankingBoardShareCardPayload) async throws -> ChatMessage {
+        if let message = try await imSession.sendRankingBoardCardMessage(
+            conversationID: conversationID,
+            payload: payload
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send ranking board card message")
+    }
+
+    func sendRatingEventCardMessage(conversationID: String, payload: RatingEventShareCardPayload) async throws -> ChatMessage {
+        if let message = try await imSession.sendRatingEventCardMessage(
+            conversationID: conversationID,
+            payload: payload
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send rating event card message")
+    }
+
+    func sendRatingUnitCardMessage(conversationID: String, payload: RatingUnitShareCardPayload) async throws -> ChatMessage {
+        if let message = try await imSession.sendRatingUnitCardMessage(
+            conversationID: conversationID,
+            payload: payload
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send rating unit card message")
+    }
+
+    func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage {
+        if let message = try await imSession.sendPostCardMessage(
+            conversationID: conversationID,
+            payload: payload
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send post card message")
+    }
+
+    func sendCircleIDCardMessage(conversationID: String, payload: CircleIDShareCardPayload) async throws -> ChatMessage {
+        if let message = try await imSession.sendCircleIDCardMessage(
+            conversationID: conversationID,
+            payload: payload
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send ID card message")
+    }
+
     func sendTypingStatus(conversationID: String, isTyping: Bool) async throws {
         if try await imSession.sendTypingStatus(
             conversationID: conversationID,
@@ -699,6 +789,107 @@ final class LiveSocialService: SocialService {
             method: "POST",
             body: ["itemId": notificationID]
         )
+    }
+
+    func fetchFollowedDJsSummary() async throws -> FollowedDJsSummary {
+        let response: FollowedDJsSummaryResponse = try await request(
+            path: "/v1/notification-center/followed-djs/summary",
+            method: "GET"
+        )
+        return FollowedDJsSummary(
+            unreadCount: max(0, response.unreadCount),
+            latestItemPreview: response.latestItemPreview?.nilIfBlank,
+            latestOccurredAt: response.latestOccurredAt
+        )
+    }
+
+    func fetchFollowedDJNotifications(limit: Int) async throws -> [FollowedDJNotificationItem] {
+        let normalized = max(1, min(limit, 50))
+        let response: FollowedDJsInboxResponse = try await request(
+            path: "/v1/notification-center/followed-djs/items?limit=\(normalized)",
+            method: "GET"
+        )
+        return response.items.map { item in
+            FollowedDJNotificationItem(
+                id: item.id,
+                type: item.type,
+                djID: item.djID,
+                djName: item.djName,
+                newsID: item.newsID,
+                newsTitle: item.newsTitle,
+                newsSummary: item.newsSummary?.nilIfBlank,
+                newsCoverImageURL: item.newsCoverImageURL?.nilIfBlank,
+                isRead: item.isRead,
+                occurredAt: item.occurredAt
+            )
+        }
+    }
+
+    func markFollowedDJNotificationRead(notificationID: String) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/notification-center/followed-djs/read",
+            method: "POST",
+            body: ["itemId": notificationID]
+        )
+    }
+
+    func fetchFollowedBrandsSummary() async throws -> FollowedBrandsSummary {
+        let response: FollowedBrandsSummaryResponse = try await request(
+            path: "/v1/notification-center/followed-brands/summary",
+            method: "GET"
+        )
+        return FollowedBrandsSummary(
+            unreadCount: response.unreadCount,
+            latestItemPreview: response.latestItemPreview?.nilIfBlank,
+            latestOccurredAt: response.latestOccurredAt
+        )
+    }
+
+    func fetchFollowedBrandNotifications(limit: Int) async throws -> [FollowedBrandNotificationItem] {
+        let normalizedLimit = max(1, min(limit, 100))
+        let response: FollowedBrandsInboxResponse = try await request(
+            path: "/v1/notification-center/followed-brands/items?limit=\(normalizedLimit)",
+            method: "GET"
+        )
+        return response.items.map { item in
+            FollowedBrandNotificationItem(
+                id: item.id,
+                type: item.type,
+                brandID: item.brandID,
+                brandName: item.brandName,
+                newsID: item.newsID,
+                newsTitle: item.newsTitle,
+                newsSummary: item.newsSummary?.nilIfBlank,
+                newsCoverImageURL: item.newsCoverImageURL?.nilIfBlank,
+                isRead: item.isRead,
+                occurredAt: item.occurredAt
+            )
+        }
+    }
+
+    func markFollowedBrandNotificationRead(notificationID: String) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/notification-center/followed-brands/read",
+            method: "POST",
+            body: ["itemId": notificationID]
+        )
+    }
+
+    func fetchFollowedBrandUpdatePreference() async throws -> FollowedBrandUpdatePreference {
+        let response: FollowedBrandUpdatePreferenceEnvelope = try await request(
+            path: "/v1/notification-center/preferences/followed-brand-update",
+            method: "GET"
+        )
+        return response.preference
+    }
+
+    func updateFollowedBrandUpdatePreference(_ input: FollowedBrandUpdatePreferenceInput) async throws -> FollowedBrandUpdatePreference {
+        let response: FollowedBrandUpdatePreferenceEnvelope = try await request(
+            path: "/v1/notification-center/preferences/followed-brand-update",
+            method: "PUT",
+            body: input
+        )
+        return response.preference
     }
 
     func registerDevicePushToken(
@@ -1157,6 +1348,57 @@ private struct FollowedEventsInboxItem: Decodable {
     let newsCoverImageURL: String?
     let isRead: Bool
     let occurredAt: Date
+}
+
+private struct FollowedDJsSummaryResponse: Decodable {
+    let unreadCount: Int
+    let latestItemPreview: String?
+    let latestOccurredAt: Date?
+}
+
+private struct FollowedDJsInboxResponse: Decodable {
+    let items: [FollowedDJsInboxItem]
+}
+
+private struct FollowedDJsInboxItem: Decodable {
+    let id: String
+    let type: String
+    let djID: String
+    let djName: String
+    let newsID: String
+    let newsTitle: String
+    let newsSummary: String?
+    let newsCoverImageURL: String?
+    let isRead: Bool
+    let occurredAt: Date
+}
+
+private struct FollowedBrandsSummaryResponse: Decodable {
+    let unreadCount: Int
+    let latestItemPreview: String?
+    let latestOccurredAt: Date?
+}
+
+private struct FollowedBrandsInboxResponse: Decodable {
+    let items: [FollowedBrandsInboxItem]
+}
+
+private struct FollowedBrandsInboxItem: Decodable {
+    let id: String
+    let type: String
+    let brandID: String
+    let brandName: String
+    let newsID: String
+    let newsTitle: String
+    let newsSummary: String?
+    let newsCoverImageURL: String?
+    let isRead: Bool
+    let occurredAt: Date
+}
+
+private struct FollowedBrandUpdatePreferenceEnvelope: Decodable {
+    let success: Bool
+    let preference: FollowedBrandUpdatePreference
 }
 
 private struct AnyEncodable: Encodable {
