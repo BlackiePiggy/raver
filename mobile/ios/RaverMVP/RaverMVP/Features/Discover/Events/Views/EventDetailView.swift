@@ -3709,24 +3709,26 @@ private struct EventTimelineBoardView: View {
         let resolvedTopExtension = max(0, topExtension)
 
         return VStack(spacing: 0) {
-            headerBackdropColor
-                .frame(
-                    width: width,
-                    height: resolvedTopExtension + EventTimelineLayout.stageHeaderHeight
-                )
-                .offset(y: -resolvedTopExtension)
+            if resolvedTopExtension > 0 {
+                headerBackdropColor
+                    .frame(
+                        width: width,
+                        height: resolvedTopExtension + EventTimelineLayout.stageHeaderHeight
+                    )
+                    .offset(y: -resolvedTopExtension)
 
-            LinearGradient(
-                colors: [
-                    headerBackdropColor.opacity(isDarkMode ? 0.86 : 0.92),
-                    headerBackdropColor.opacity(isDarkMode ? 0.34 : 0.46),
-                    headerBackdropColor.opacity(0.0)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(width: width, height: EventTimelineLayout.stageHeaderFadeHeight)
-            .offset(y: -resolvedTopExtension)
+                LinearGradient(
+                    colors: [
+                        headerBackdropColor.opacity(isDarkMode ? 0.86 : 0.92),
+                        headerBackdropColor.opacity(isDarkMode ? 0.34 : 0.46),
+                        headerBackdropColor.opacity(0.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(width: width, height: EventTimelineLayout.stageHeaderFadeHeight)
+                .offset(y: -resolvedTopExtension)
+            }
         }
         .allowsHitTesting(false)
     }
@@ -3898,7 +3900,148 @@ private struct EventTimelineBoardView: View {
     }()
 }
 
+private struct EventRouteSharePresentation: Identifiable {
+    let id = UUID()
+    let payload: EventRouteShareCardPayload
+}
+
+private struct EventRouteSharePreviewCard: View {
+    let payload: EventRouteShareCardPayload
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let coverImageURL = payload.coverImageURL?.nilIfBlank {
+                ZStack(alignment: .bottomLeading) {
+                    ImageLoaderView(urlString: coverImageURL)
+                        .frame(height: 142)
+                        .clipped()
+
+                    LinearGradient(
+                        colors: [Color.black.opacity(0.06), Color.black.opacity(0.48)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+
+                    if let badgeText = payload.badgeText?.nilIfBlank {
+                        Text(badgeText)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.black.opacity(0.24), in: Capsule())
+                            .padding(12)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                if payload.coverImageURL?.nilIfBlank == nil,
+                   let badgeText = payload.badgeText?.nilIfBlank {
+                    Text(badgeText)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                }
+
+                Text(payload.title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+
+                if let subtitle = payload.subtitle?.nilIfBlank {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(2)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RaverTheme.card)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(RaverTheme.cardBorder.opacity(0.45), lineWidth: 1)
+        )
+    }
+}
+
+struct EventRoutePlannerLoaderView: View {
+    @EnvironmentObject private var appContainer: AppContainer
+
+    let eventID: String
+    let ownerUserID: String?
+    let ownerDisplayName: String?
+    let selectedDayID: String?
+    let selectedSlotIDs: [String]?
+
+    @State private var event: WebEvent?
+    @State private var phase: LoadPhase = .idle
+
+    var body: some View {
+        Group {
+            switch phase {
+            case .idle, .initialLoading:
+                EventDetailSkeletonView()
+            case .failure(let message), .offline(let message):
+                ScrollView {
+                    ScreenErrorCard(message: message) {
+                        Task { await load(force: true) }
+                    }
+                    .padding(16)
+                    .padding(.top, 96)
+                }
+                .background(RaverTheme.background)
+            case .empty:
+                ContentUnavailableView(LL("活动不存在"), systemImage: "music.note.house")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+            case .success:
+                if let event {
+                    EventRoutePlannerView(
+                        event: event,
+                        days: EventScheduleDay.build(
+                            from: event.lineupSlots,
+                            anchorDate: event.startDate,
+                            useWeekMode: EventWeekScheduleMode.isEnabled(in: event.description),
+                            dayRolloverHour: event.dayRolloverHour
+                        ),
+                        initialDayID: selectedDayID,
+                        initialSelectedSlotIDs: selectedSlotIDs.map(Set.init),
+                        routeOwnerUserID: ownerUserID,
+                        routeOwnerDisplayName: ownerDisplayName
+                    )
+                } else {
+                    ContentUnavailableView(LL("活动不存在"), systemImage: "music.note.house")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(RaverTheme.background)
+                }
+            }
+        }
+        .task {
+            guard phase == .idle else { return }
+            await load()
+        }
+    }
+
+    @MainActor
+    private func load(force: Bool = false) async {
+        if !force, phase == .success, event != nil { return }
+        phase = .initialLoading
+        do {
+            event = try await appContainer.discoverEventsRepository.fetchEvent(id: eventID)
+            phase = event == nil ? .empty : .success
+        } catch {
+            phase = .failure(
+                message: error.userFacingMessage
+                    ?? L("路线加载失败，请稍后重试", "Failed to load route. Please try again later.")
+            )
+        }
+    }
+}
+
 private struct EventRoutePlannerShareSnapshotView: View {
+    let title: String
     let event: WebEvent
     let days: [EventScheduleDay]
     let selectedDayID: String
@@ -3954,6 +4097,20 @@ private struct EventRoutePlannerShareSnapshotView: View {
             .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 14) {
+                if let trimmedTitle = title.nilIfBlank {
+                    Text(trimmedTitle)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(2)
+                }
+
+                if let eventName = event.name.nilIfBlank {
+                    Text(eventName)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(2)
+                }
+
                 if days.count > 1 {
                     daySelector
                 }
@@ -4011,29 +4168,103 @@ private struct EventRoutePlannerShareSnapshotView: View {
 private struct EventRoutePlannerView: View {
     let event: WebEvent
     let days: [EventScheduleDay]
-    let initialDayID: String
+    let initialDayID: String?
+    let routeOwnerUserID: String?
+    let routeOwnerDisplayName: String?
 
+    @Environment(\.appPush) private var appPush
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var appContainer: AppContainer
+    @EnvironmentObject private var appState: AppState
     @ObservedObject private var routeStore = EventRouteStore.shared
 
     @State private var selectedDayID: String
     @State private var selectedSlotIDs: Set<String> = []
     @State private var isGeneratingShare = false
-    @State private var shareImage: UIImage?
-    @State private var showShareSheet = false
     @State private var feedbackMessage: String?
     @State private var showRouteSavedToast = false
+    @State private var isSharePanelMounted = false
+    @State private var isShareMorePanelVisible = false
+    @State private var fullChatSharePresentation: EventRouteSharePresentation?
+    @State private var widgetStatusMessage: String?
+    @State private var widgetStatusConversation: Conversation?
+    @State private var widgetStatusDismissToken = UUID()
 
-    init(event: WebEvent, days: [EventScheduleDay], initialDayID: String) {
+    init(
+        event: WebEvent,
+        days: [EventScheduleDay],
+        initialDayID: String? = nil,
+        initialSelectedSlotIDs: Set<String>? = nil,
+        routeOwnerUserID: String? = nil,
+        routeOwnerDisplayName: String? = nil
+    ) {
         self.event = event
         self.days = days
         self.initialDayID = initialDayID
-        _selectedDayID = State(initialValue: initialDayID)
-        _selectedSlotIDs = State(initialValue: EventRouteStore.shared.route(for: event.id)?.selectedSlotIDSet ?? [])
+        self.routeOwnerUserID = routeOwnerUserID
+        self.routeOwnerDisplayName = routeOwnerDisplayName
+
+        let trimmedOwnerUserID = routeOwnerUserID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedOwnerDisplayName = routeOwnerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let isSharedContext = !trimmedOwnerUserID.isEmpty || !trimmedOwnerDisplayName.isEmpty
+        let defaultSelectedSlotIDs = isSharedContext
+            ? Set<String>()
+            : (EventRouteStore.shared.route(for: event.id)?.selectedSlotIDSet ?? [])
+
+        _selectedDayID = State(initialValue: initialDayID ?? "")
+        _selectedSlotIDs = State(initialValue: initialSelectedSlotIDs ?? defaultSelectedSlotIDs)
     }
 
     private var selectedDay: EventScheduleDay? {
         days.first(where: { $0.id == selectedDayID }) ?? days.first
+    }
+
+    private var currentUserID: String? {
+        let trimmed = appState.session?.user.id.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var currentUserDisplayName: String {
+        let trimmed = appState.session?.user.displayName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? L("我", "Me") : trimmed
+    }
+
+    private var normalizedRouteOwnerUserID: String? {
+        let trimmed = routeOwnerUserID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var normalizedRouteOwnerDisplayName: String? {
+        let trimmed = routeOwnerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var isViewingOwnRoute: Bool {
+        if let normalizedRouteOwnerUserID, let currentUserID {
+            return normalizedRouteOwnerUserID == currentUserID
+        }
+        return normalizedRouteOwnerUserID == nil && normalizedRouteOwnerDisplayName == nil
+    }
+
+    private var routeOwnerName: String {
+        if isViewingOwnRoute {
+            return currentUserDisplayName
+        }
+        return normalizedRouteOwnerDisplayName ?? L("Ta", "They")
+    }
+
+    private var navigationTitleText: String {
+        isViewingOwnRoute
+            ? L("我的路线", "My Route")
+            : L("\(routeOwnerName)的路线", "\(routeOwnerName)'s Route")
+    }
+
+    private var shareCardTitleText: String {
+        L("\(routeOwnerName)的路线", "\(routeOwnerName)'s Route")
+    }
+
+    private var routePlannerTimelineStickyTopInset: CGFloat {
+        topSafeAreaInset() + 44
     }
 
     private var selectedDayTextColor: Color {
@@ -4057,20 +4288,10 @@ private struct EventRoutePlannerView: View {
     }
 
     private var plannerBackgroundGradientColors: [Color] {
-        if colorScheme == .dark {
-            return [
-                Color(red: 0.05, green: 0.06, blue: 0.11),
-                Color(red: 0.03, green: 0.03, blue: 0.04)
-            ]
-        }
         return [
-            Color.white,
+            RaverTheme.background,
             RaverTheme.background
         ]
-    }
-
-    private var routePlannerTimelineStickyTopInset: CGFloat {
-        topSafeAreaInset() + 44
     }
 
     var body: some View {
@@ -4084,6 +4305,13 @@ private struct EventRoutePlannerView: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 14) {
+                    if let eventName = event.name.nilIfBlank {
+                        Text(eventName)
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .lineLimit(2)
+                    }
+
                     if days.count > 1 {
                         daySelector
                     }
@@ -4093,14 +4321,14 @@ private struct EventRoutePlannerView: View {
                             event: event,
                             day: selectedDay,
                             selectedSlotIDs: selectedSlotIDs,
-                            selectable: true,
-                            onToggleSlot: { slot in
+                            selectable: isViewingOwnRoute,
+                            onToggleSlot: isViewingOwnRoute ? { slot in
                                 if selectedSlotIDs.contains(slot.id) {
                                     selectedSlotIDs.remove(slot.id)
                                 } else {
                                     selectedSlotIDs.insert(slot.id)
                                 }
-                            },
+                            } : nil,
                             stickyTopInset: routePlannerTimelineStickyTopInset
                         )
                         .frame(height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots))
@@ -4134,23 +4362,93 @@ private struct EventRoutePlannerView: View {
                     .zIndex(10)
             }
         }
+        .overlay {
+            if isSharePanelMounted {
+                SharePanelOverlay(
+                    isVisible: isShareMorePanelVisible,
+                    onBackdropTap: { dismissShareMorePanel() }
+                ) {
+                    ShareActionPanel(
+                        primaryActions: sharePrimaryActions(),
+                        quickActions: shareMoreQuickActions(),
+                        loadConversations: {
+                            try await loadSharePanelConversations()
+                        },
+                        onSendToConversation: { conversation, note in
+                            guard let payload = makeSharePayload() else {
+                                throw ServiceError.message(
+                                    L("当前路线还没有可分享的演出内容。", "This route has no selected sets to share yet.")
+                                )
+                            }
+                            try await sendSharePayload(
+                                payload,
+                                to: conversation,
+                                note: note
+                            )
+                        },
+                        onDismiss: {
+                            dismissShareMorePanel()
+                        }
+                    ) { conversation in
+                        showWidgetStatusBanner(
+                            message: L(
+                                "已分享到 \(conversation.title)",
+                                "Shared to \(conversation.title)"
+                            ),
+                            conversation: conversation
+                        )
+                    } onMoreChats: {
+                        guard let payload = makeSharePayload() else {
+                            feedbackMessage = L(
+                                "当前路线还没有可分享的演出内容。",
+                                "This route has no selected sets to share yet."
+                            )
+                            dismissShareMorePanel()
+                            return
+                        }
+                        dismissShareMorePanel {
+                            fullChatSharePresentation = EventRouteSharePresentation(payload: payload)
+                        }
+                    }
+                }
+                .onAppear {
+                    withAnimation(.sharePanelPresentSpring) {
+                        isShareMorePanelVisible = true
+                    }
+                }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let widgetStatusMessage {
+                ScreenStatusBanner(
+                    message: widgetStatusMessage,
+                    style: .info,
+                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
+                ) {
+                    if let widgetStatusConversation {
+                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 100)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .animation(.spring(response: 0.30, dampingFraction: 0.86), value: showRouteSavedToast)
-        .raverSystemNavigation(title: LL("定制路线"), backgroundColor: RaverTheme.background)
+        .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
+        .raverSystemNavigation(title: navigationTitleText, backgroundColor: RaverTheme.background)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    saveCurrentRoute()
+                    presentShareMorePanel()
                 } label: {
-                    Label(LL("保存"), systemImage: "square.and.arrow.down")
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Circle())
                 }
-
-                Button {
-                    Task { await exportSharePoster() }
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                .disabled(isGeneratingShare)
-                .opacity(isGeneratingShare ? 0.6 : 1)
+                .buttonStyle(.plain)
             }
         }
         .onAppear {
@@ -4158,10 +4456,30 @@ private struct EventRoutePlannerView: View {
                 selectedDayID = days.first?.id ?? ""
             }
         }
-        .sheet(isPresented: $showShareSheet) {
-            if let shareImage {
-                ActivityShareSheet(items: [shareImage], completion: nil)
+        .sheet(item: $fullChatSharePresentation) { presentation in
+            ChatShareSheet(
+                loadConversations: {
+                    try await loadSharePanelConversations()
+                },
+                onShareToConversation: { conversation in
+                    try await sendSharePayload(
+                        presentation.payload,
+                        to: conversation,
+                        note: nil
+                    )
+                }
+            ) { conversation in
+                showWidgetStatusBanner(
+                    message: L(
+                        "已分享到 \(conversation.title)",
+                        "Shared to \(conversation.title)"
+                    ),
+                    conversation: conversation
+                )
+            } preview: {
+                EventRouteSharePreviewCard(payload: presentation.payload)
             }
+            .presentationDetents([.fraction(0.76), .large])
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { feedbackMessage != nil },
@@ -4173,6 +4491,37 @@ private struct EventRoutePlannerView: View {
         }
     }
 
+    private func dismissShareMorePanel(after completion: (() -> Void)? = nil) {
+        withAnimation(.sharePanelDismissSpring) {
+            isShareMorePanelVisible = false
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
+            guard !isShareMorePanelVisible else { return }
+            isSharePanelMounted = false
+            completion?()
+        }
+    }
+
+    private func presentShareMorePanel() {
+        isSharePanelMounted = true
+        isShareMorePanelVisible = false
+    }
+
+    private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
+        widgetStatusConversation = conversation
+        widgetStatusMessage = message
+        let token = UUID()
+        widgetStatusDismissToken = token
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            guard widgetStatusDismissToken == token else { return }
+            withAnimation(.easeOut(duration: 0.25)) {
+                widgetStatusMessage = nil
+                widgetStatusConversation = nil
+            }
+        }
+    }
+
     private func saveCurrentRoute() {
         routeStore.save(event: event, selectedSlotIDs: selectedSlotIDs)
         showRouteSavedToast = true
@@ -4181,8 +4530,128 @@ private struct EventRoutePlannerView: View {
         }
     }
 
+    private func savePosterImage() {
+        Task {
+            guard let image = await generatePosterImage() else { return }
+            await savePosterToPhotos(image)
+        }
+    }
+
+    private func shareMoreQuickActions() -> [SharePanelQuickAction] {
+        if isViewingOwnRoute {
+            return [
+                SharePanelQuickAction(
+                    title: L("保存图片", "Save Image"),
+                    systemImage: "photo.badge.arrow.down",
+                    accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
+                ) {
+                    savePosterImage()
+                },
+                SharePanelQuickAction(
+                    title: L("保存路线", "Save Route"),
+                    systemImage: "square.and.arrow.down",
+                    accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
+                ) {
+                    saveCurrentRoute()
+                }
+            ]
+        }
+
+        return [
+            SharePanelQuickAction(
+                title: L("定制我的路线", "Customize Mine"),
+                systemImage: "point.topleft.down.curvedto.point.bottomright.up",
+                accentColor: RaverTheme.accent
+            ) {
+                appPush(
+                    .eventRoute(
+                        eventID: event.id,
+                        ownerUserID: nil,
+                        ownerDisplayName: nil,
+                        selectedDayID: selectedDayID,
+                        selectedSlotIDs: nil
+                    )
+                )
+            },
+            SharePanelQuickAction(
+                title: L("保存图片", "Save Image"),
+                systemImage: "photo.badge.arrow.down",
+                accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
+            ) {
+                savePosterImage()
+            }
+        ]
+    }
+
+    private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
+        [
+            SharePanelPrimaryAction(
+                title: "微信",
+                systemImage: "message.circle.fill",
+                accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
+            ) {
+                feedbackMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+            },
+            SharePanelPrimaryAction(
+                title: "QQ",
+                systemImage: "paperplane.circle.fill",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                feedbackMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+            }
+        ]
+    }
+
+    private func loadSharePanelConversations() async throws -> [Conversation] {
+        async let directs = appContainer.socialService.fetchConversations(type: .direct)
+        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        let merged = try await directs + groups
+        let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
+            partialResult[conversation.id] = conversation
+        }
+        return deduped.values.sorted {
+            if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
+            return $0.updatedAt > $1.updatedAt
+        }
+    }
+
+    private func sendSharePayload(
+        _ payload: EventRouteShareCardPayload,
+        to conversation: Conversation,
+        note: String?
+    ) async throws {
+        _ = try await appContainer.socialService.sendEventRouteCardMessage(
+            conversationID: conversation.id,
+            payload: payload
+        )
+
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedNote.isEmpty {
+            _ = try await appContainer.socialService.sendMessage(
+                conversationID: conversation.id,
+                content: trimmedNote
+            )
+        }
+    }
+
+    private func makeSharePayload() -> EventRouteShareCardPayload? {
+        guard !selectedSlotIDs.isEmpty else { return nil }
+
+        return EventRouteShareCardPayload(
+            eventID: event.id,
+            eventName: event.name,
+            ownerUserID: isViewingOwnRoute ? currentUserID : normalizedRouteOwnerUserID,
+            ownerDisplayName: routeOwnerName,
+            title: shareCardTitleText,
+            subtitle: event.name,
+            coverImageURL: event.coverAssetURL,
+            badgeText: L("路线", "Route"),
+            selectedDayID: selectedDayID.nilIfBlank,
+            selectedSlotIDs: selectedSlotIDs.sorted()
+        )
+    }
+
     private var daySelector: some View {
-        //HorizontalAxisLockedScrollView(showsIndicators: false) {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 ForEach(days) { day in
@@ -4212,11 +4681,11 @@ private struct EventRoutePlannerView: View {
     }
 
     @MainActor
-    private func exportSharePoster() async {
-        guard !isGeneratingShare else { return }
+    private func generatePosterImage() async -> UIImage? {
+        guard !isGeneratingShare else { return nil }
         guard let selectedDay else {
-            feedbackMessage = L("暂无可分享的时间表", "No timetable available to share.")
-            return
+            feedbackMessage = L("暂无可保存的路线图片", "No route image is available to save.")
+            return nil
         }
 
         isGeneratingShare = true
@@ -4227,10 +4696,14 @@ private struct EventRoutePlannerView: View {
             CGFloat(stageCount) * EventTimelineLayout.minStageWidth +
             CGFloat(max(stageCount - 1, 0)) * EventTimelineLayout.stageGap
         let fullBoardWidth = EventTimelineLayout.axisWidth + stageRegionWidth
-        let viewportContentWidth = max(UIScreen.main.bounds.width - 20, EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth)
+        let viewportContentWidth = max(
+            UIScreen.main.bounds.width - 20,
+            EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth
+        )
         let snapshotContentWidth = max(fullBoardWidth, viewportContentWidth)
 
         let snapshotView = EventRoutePlannerShareSnapshotView(
+            title: navigationTitleText,
             event: event,
             days: days,
             selectedDayID: selectedDay.id,
@@ -4244,20 +4717,20 @@ private struct EventRoutePlannerView: View {
         renderer.proposedSize = ProposedViewSize(width: snapshotContentWidth + 20, height: nil)
 
         guard let image = renderer.uiImage else {
-            feedbackMessage = L("行程图生成失败，请重试", "Failed to generate route image. Please try again.")
-            return
+            feedbackMessage = L("路线图生成失败，请重试", "Failed to generate route image. Please try again.")
+            return nil
         }
-
-        shareImage = image
-        showShareSheet = true
-        await savePosterToPhotos(image)
+        return image
     }
 
     @MainActor
     private func savePosterToPhotos(_ image: UIImage) async {
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard status == .authorized || status == .limited else {
-            feedbackMessage = L("未获得相册权限，可先通过分享面板手动保存", "Photo permission denied. You can save manually from the share panel.")
+            feedbackMessage = L(
+                "未获得相册权限，可稍后重新授权后再试。",
+                "Photo permission denied. Please grant access and try again."
+            )
             return
         }
 
@@ -4269,7 +4742,10 @@ private struct EventRoutePlannerView: View {
                     if success {
                         feedbackMessage = L("已保存到相册", "Saved to Photos.")
                     } else if let error {
-                        feedbackMessage = L("保存失败：\(error.userFacingMessage ?? "")", "Save failed: \(error.userFacingMessage ?? "")")
+                        feedbackMessage = L(
+                            "保存失败：\(error.userFacingMessage ?? "")",
+                            "Save failed: \(error.userFacingMessage ?? "")"
+                        )
                     } else {
                         feedbackMessage = L("保存失败，请重试", "Save failed. Please try again.")
                     }
@@ -4278,7 +4754,6 @@ private struct EventRoutePlannerView: View {
             }
         }
     }
-
 }
 
 private struct EventRoutineView: View {

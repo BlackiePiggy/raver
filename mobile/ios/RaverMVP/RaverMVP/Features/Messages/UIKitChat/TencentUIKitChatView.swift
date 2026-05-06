@@ -377,6 +377,8 @@ struct TencentUIKitChatView: View {
             circleIDCardMessageContent(params, payload: idCard)
         } else if let myCheckinsCard = myCheckinsCardPayload(from: params.message) {
             myCheckinsCardMessageContent(params, payload: myCheckinsCard)
+        } else if let eventRouteCard = eventRouteCardPayload(from: params.message) {
+            eventRouteCardMessageContent(params, payload: eventRouteCard)
         } else if let audioFile = audioFilePayload(from: params.message) {
             audioFileMessageContent(params, payload: audioFile)
         } else if conversation.type == .group,
@@ -1159,6 +1161,76 @@ struct TencentUIKitChatView: View {
     }
 
     @ViewBuilder
+    private func eventRouteCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatEventRouteCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                Text(params.message.user.name)
+                    .font(.caption)
+                    .foregroundColor(Color(hex: "AFB3B8"))
+                    .padding(.leading, 44)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    Button {
+                        appPush(
+                            .eventRoute(
+                                eventID: payload.eventID,
+                                ownerUserID: payload.ownerUserID,
+                                ownerDisplayName: payload.ownerDisplayName,
+                                selectedDayID: payload.selectedDayID,
+                                selectedSlotIDs: payload.selectedSlotIDs
+                            )
+                        )
+                    } label: {
+                        ChatEventRouteCardBubbleView(payload: payload)
+                    }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.35)
+                            .onEnded { _ in
+                                params.showContextMenuClosure()
+                            }
+                    )
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
     private func newsCardMessageContent(
         _ params: MessageBuilderParameters,
         payload: ChatNewsCardPayload
@@ -1866,6 +1938,36 @@ struct TencentUIKitChatView: View {
         )
     }
 
+    private func eventRouteCardPayload(from message: Message) -> ChatEventRouteCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "event_route",
+              let eventID = (message.customData["eventRouteEventID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !eventID.isEmpty,
+              let ownerDisplayName = (message.customData["eventRouteOwnerDisplayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !ownerDisplayName.isEmpty,
+              let title = (message.customData["eventRouteTitle"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty,
+              let eventName = (message.customData["eventRouteEventName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !eventName.isEmpty else {
+            return nil
+        }
+
+        return ChatEventRouteCardPayload(
+            eventID: eventID,
+            eventName: eventName,
+            ownerUserID: (message.customData["eventRouteOwnerUserID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            ownerDisplayName: ownerDisplayName,
+            title: title,
+            subtitle: (message.customData["eventRouteSubtitle"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            coverImageURL: (message.customData["eventRouteCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            badgeText: (message.customData["eventRouteBadgeText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            selectedDayID: (message.customData["eventRouteSelectedDayID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            selectedSlotIDs: (message.customData["eventRouteSelectedSlotIDs"] as? [String]) ?? []
+        )
+    }
+
     private func shouldShowAvatar(for params: MessageBuilderParameters) -> Bool {
         params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .last)
@@ -2102,6 +2204,19 @@ private struct ChatMyCheckinsCardPayload {
     let summary: String?
     let coverImageURL: String?
     let badgeText: String?
+}
+
+private struct ChatEventRouteCardPayload {
+    let eventID: String
+    let eventName: String
+    let ownerUserID: String?
+    let ownerDisplayName: String
+    let title: String
+    let subtitle: String?
+    let coverImageURL: String?
+    let badgeText: String?
+    let selectedDayID: String?
+    let selectedSlotIDs: [String]
 }
 
 private struct ChatAudioFilePresentation: Identifiable {
@@ -2786,6 +2901,20 @@ private struct ChatMyCheckinsCardBubbleView: View {
     }
 }
 
+private struct ChatEventRouteCardBubbleView: View {
+    let payload: ChatEventRouteCardPayload
+
+    var body: some View {
+        ChatPosterCardBubble(
+            imageURL: payload.coverImageURL,
+            badgeText: payload.badgeText,
+            title: payload.title,
+            subtitle: payload.subtitle ?? payload.eventName,
+            fallbackSystemImage: "point.topleft.down.curvedto.point.bottomright.up"
+        )
+    }
+}
+
 private struct ChatPosterCardBubble: View {
     enum BadgePlacement {
         case infoSection
@@ -3187,6 +3316,9 @@ private struct ConversationMessageSearchSheet: View {
         if let payload = parseMyCheckinsCardPayloadForPreview(from: rawText) {
             return "\(L("[打卡卡片]", "[Check-ins Card]")) \(payload.title)"
         }
+        if let payload = parseEventRouteCardPayloadForPreview(from: rawText) {
+            return "\(L("[路线卡片]", "[Route Card]")) \(payload.title)"
+        }
         return nil
     }
 
@@ -3375,6 +3507,23 @@ private struct ConversationMessageSearchSheet: View {
         }
 
         return try? JSONDecoder().decode(MyCheckinsShareCardPayload.self, from: data)
+    }
+
+    private func parseEventRouteCardPayloadForPreview(from rawText: String) -> EventRouteShareCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: EventRouteShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "event_route",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(EventRouteShareCardPayload.self, from: data)
     }
 }
 
@@ -4303,6 +4452,20 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             data["myCheckinsCoverImageURL"] = payload.coverImageURL ?? ""
             data["myCheckinsBadgeText"] = payload.badgeText ?? ""
             data["canCopy"] = false
+        } else if source.kind == .card,
+                  let payload = parseEventRouteCardPayload(from: source.content) {
+            data["cardType"] = "event_route"
+            data["eventRouteEventID"] = payload.eventID
+            data["eventRouteEventName"] = payload.eventName
+            data["eventRouteOwnerUserID"] = payload.ownerUserID ?? ""
+            data["eventRouteOwnerDisplayName"] = payload.ownerDisplayName
+            data["eventRouteTitle"] = payload.title
+            data["eventRouteSubtitle"] = payload.subtitle ?? ""
+            data["eventRouteCoverImageURL"] = payload.coverImageURL ?? ""
+            data["eventRouteBadgeText"] = payload.badgeText ?? ""
+            data["eventRouteSelectedDayID"] = payload.selectedDayID ?? ""
+            data["eventRouteSelectedSlotIDs"] = payload.selectedSlotIDs
+            data["canCopy"] = false
         }
 
         return data
@@ -4401,6 +4564,25 @@ private final class ExyteChatConversationViewModel: ObservableObject {
         }
 
         return try? JSONDecoder().decode(MyCheckinsShareCardPayload.self, from: data)
+    }
+
+    private func parseEventRouteCardPayload(from rawContent: String) -> EventRouteShareCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: EventRouteShareCardPayload?
+        }
+
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+           envelope.cardType == "event_route",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? JSONDecoder().decode(EventRouteShareCardPayload.self, from: data)
     }
 
     private func parseDJCardPayload(from rawContent: String) -> DJShareCardPayload? {

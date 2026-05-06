@@ -48,6 +48,7 @@ protocol IMChatCompatibilityService: AnyObject {
     func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage
     func sendCircleIDCardMessage(conversationID: String, payload: CircleIDShareCardPayload) async throws -> ChatMessage
     func sendMyCheckinsCardMessage(conversationID: String, payload: MyCheckinsShareCardPayload) async throws -> ChatMessage
+    func sendEventRouteCardMessage(conversationID: String, payload: EventRouteShareCardPayload) async throws -> ChatMessage
     func sendTypingStatus(conversationID: String, isTyping: Bool) async throws
     func revokeMessage(conversationID: String, messageID: String) async throws -> String
     func deleteMessage(conversationID: String, messageID: String) async throws
@@ -176,6 +177,19 @@ struct MyCheckinsShareCardPayload: Codable, Hashable {
     let summary: String?
     let coverImageURL: String?
     let badgeText: String?
+}
+
+struct EventRouteShareCardPayload: Codable, Hashable {
+    let eventID: String
+    let eventName: String
+    let ownerUserID: String?
+    let ownerDisplayName: String
+    let title: String
+    let subtitle: String?
+    let coverImageURL: String?
+    let badgeText: String?
+    let selectedDayID: String?
+    let selectedSlotIDs: [String]
 }
 
 enum FeedMode: String, Codable, CaseIterable, Identifiable {
@@ -359,6 +373,12 @@ extension IMChatCompatibilityService {
     }
 
     func sendMyCheckinsCardMessage(conversationID: String, payload: MyCheckinsShareCardPayload) async throws -> ChatMessage {
+        _ = conversationID
+        _ = payload
+        throw ServiceError.message("Not supported")
+    }
+
+    func sendEventRouteCardMessage(conversationID: String, payload: EventRouteShareCardPayload) async throws -> ChatMessage {
         _ = conversationID
         _ = payload
         throw ServiceError.message("Not supported")

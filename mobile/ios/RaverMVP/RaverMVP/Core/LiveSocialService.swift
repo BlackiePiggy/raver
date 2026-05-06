@@ -576,6 +576,16 @@ final class LiveSocialService: SocialService {
         throw await tencentIMUnavailableError(for: "send my check-ins card message")
     }
 
+    func sendEventRouteCardMessage(conversationID: String, payload: EventRouteShareCardPayload) async throws -> ChatMessage {
+        if let message = try await imSession.sendEventRouteCardMessage(
+            conversationID: conversationID,
+            payload: payload
+        ) {
+            return message
+        }
+        throw await tencentIMUnavailableError(for: "send event route card message")
+    }
+
     func sendTypingStatus(conversationID: String, isTyping: Bool) async throws {
         if try await imSession.sendTypingStatus(
             conversationID: conversationID,

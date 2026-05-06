@@ -910,6 +910,13 @@ final class TencentIMSession: NSObject {
         let payload: MyCheckinsShareCardPayload
     }
 
+    private struct TencentEventRouteCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: EventRouteShareCardPayload
+    }
+
     var onStateChange: ((TencentIMConnectionState) -> Void)?
     var onUnreadCountChange: ((Int) -> Void)?
     let messageSubject = PassthroughSubject<ChatMessage, Never>()
@@ -2490,6 +2497,45 @@ final class TencentIMSession: NSObject {
         return sent
     }
 
+    func sendEventRouteCardMessage(
+        conversationID: String,
+        payload: EventRouteShareCardPayload
+    ) async throws -> ChatMessage? {
+        guard currentBootstrap?.enabled == true else {
+            return nil
+        }
+
+        let manager = try requireReadyManager()
+        let target = try await resolveConversationTarget(conversationID: conversationID, manager: manager)
+        let envelope = TencentEventRouteCardEnvelope(
+            businessID: Self.customCardBusinessID,
+            version: 1,
+            cardType: "event_route",
+            payload: payload
+        )
+        let data = try JSONEncoder().encode(envelope)
+        guard let message = manager.createCustomMessage(data: data) else {
+            throw ServiceError.message("Tencent IM create event route card message failed")
+        }
+        message.needReadReceipt = shouldRequestReadReceipt(for: target)
+        let offlinePushInfo = await buildCardOfflinePushInfo(
+            manager: manager,
+            target: target,
+            previewText: "\(L("[路线卡片]", "[Route Card]")) \(payload.title)"
+        )
+        var sent = try await sendMessage(
+            manager: manager,
+            message: message,
+            target: target,
+            offlinePushInfo: offlinePushInfo,
+            progress: nil
+        )
+        sent.kind = .card
+        sent.content = String(data: data, encoding: .utf8) ?? payload.title
+        sent.media = ChatMessageMediaPayload(thumbnailURL: payload.coverImageURL)
+        return sent
+    }
+
     func sendImageMessage(
         conversationID: String,
         fileURL: URL,
@@ -3623,6 +3669,9 @@ final class TencentIMSession: NSObject {
             if let myCheckinsCard = customMyCheckinsCardPayload(from: message.customElem?.data) {
                 return "\(L("[打卡卡片]", "[Check-ins Card]")) \(myCheckinsCard.title)"
             }
+            if let eventRouteCard = customEventRouteCardPayload(from: message.customElem?.data) {
+                return "\(L("[路线卡片]", "[Route Card]")) \(eventRouteCard.title)"
+            }
             return normalizedText(message.customElem?.desc) ?? L("[自定义消息]", "[Custom Message]")
         case Self.elemTypeGroupTipsRawValue:
             return L("[群提示]", "[Group Notice]")
@@ -3790,6 +3839,14 @@ final class TencentIMSession: NSObject {
                     ?? myCheckinsCard.title
                 media = ChatMessageMediaPayload(
                     thumbnailURL: myCheckinsCard.coverImageURL
+                )
+            } else if let eventRouteCard = customEventRouteCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = message.customElem?.data.flatMap { String(data: $0, encoding: .utf8) }
+                    ?? (try? String(data: JSONEncoder().encode(eventRouteCard), encoding: .utf8))
+                    ?? eventRouteCard.title
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: eventRouteCard.coverImageURL
                 )
             } else {
                 kind = .custom
@@ -4044,6 +4101,16 @@ final class TencentIMSession: NSObject {
               let envelope = try? JSONDecoder().decode(TencentMyCheckinsCardEnvelope.self, from: data),
               envelope.businessID == Self.customCardBusinessID,
               envelope.cardType == "my_checkins" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customEventRouteCardPayload(from data: Data?) -> EventRouteShareCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentEventRouteCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "event_route" else {
             return nil
         }
         return envelope.payload

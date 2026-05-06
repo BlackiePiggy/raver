@@ -680,7 +680,15 @@ struct MyRoutesView: View {
 
                     ForEach(routeStore.routes) { route in
                         Button {
-                            appPush(.eventSchedule(eventID: route.eventID))
+                            appPush(
+                                .eventRoute(
+                                    eventID: route.eventID,
+                                    ownerUserID: nil,
+                                    ownerDisplayName: nil,
+                                    selectedDayID: nil,
+                                    selectedSlotIDs: nil
+                                )
+                            )
                         } label: {
                             savedRouteRow(route)
                         }

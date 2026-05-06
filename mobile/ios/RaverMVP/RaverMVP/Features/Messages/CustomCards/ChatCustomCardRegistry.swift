@@ -68,7 +68,7 @@ struct ChatCustomCardDefinition: Codable, Hashable, Identifiable {
 enum ChatCustomCardRegistry {
     static let all: [ChatCustomCardDefinition] = [
         .init(type: .event, displayNameCN: "活动卡片", displayNameEN: "Event Card", displayStyle: .coverMeta, routeHint: "eventDetail(eventID:)", requiredFields: ["eventID", "eventName", "venueName", "startAt"], status: .shareEntry),
-        .init(type: .eventSchedule, displayNameCN: "活动时间表卡片", displayNameEN: "Event Schedule Card", displayStyle: .timeline, routeHint: "eventSchedule(eventID:)", requiredFields: ["eventID", "eventName", "scheduleSummary"], status: .planning),
+        .init(type: .eventSchedule, displayNameCN: "路线卡片", displayNameEN: "Route Card", displayStyle: .timeline, routeHint: "eventRoute(eventID:ownerUserID:ownerDisplayName:selectedDayID:selectedSlotIDs:)", requiredFields: ["eventID", "eventName", "ownerDisplayName", "selectedSlotIDs"], status: .done),
         .init(type: .dj, displayNameCN: "DJ 卡片", displayNameEN: "DJ Card", displayStyle: .coverMeta, routeHint: "djDetail(djID:)", requiredFields: ["djID", "djName", "badgeText"], status: .shareEntry),
         .init(type: .set, displayNameCN: "Set 卡片", displayNameEN: "Set Card", displayStyle: .coverMeta, routeHint: "setDetail(setID:)", requiredFields: ["setID", "setTitle"], status: .shareEntry),
         .init(type: .news, displayNameCN: "资讯卡片", displayNameEN: "News Card", displayStyle: .coverMeta, routeHint: "newsDetail(articleID:)", requiredFields: ["articleID", "headline"], status: .shareEntry),

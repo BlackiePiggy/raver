@@ -20,6 +20,13 @@ enum AppRoute: Hashable {
     case eventDetail(eventID: String)
     case newsDetail(articleID: String)
     case eventSchedule(eventID: String)
+    case eventRoute(
+        eventID: String,
+        ownerUserID: String?,
+        ownerDisplayName: String?,
+        selectedDayID: String?,
+        selectedSlotIDs: [String]?
+    )
     case djDetail(djID: String)
     case labelDetail(labelID: String)
     case rankingBoardDetail(board: RankingBoard, year: Int?)
@@ -45,6 +52,7 @@ extension AppRoute {
              .eventDetail,
              .newsDetail,
              .eventSchedule,
+             .eventRoute,
              .djDetail,
              .labelDetail,
              .rankingBoardDetail,
@@ -82,6 +90,8 @@ extension AppRoute {
             return "news.detail"
         case .eventSchedule:
             return "event.schedule"
+        case .eventRoute:
+            return "event.route"
         case .djDetail:
             return "dj.detail"
         case .labelDetail:
@@ -119,7 +129,7 @@ extension AppRoute {
             return .messages
         case .postDetail, .squadProfile, .squadManage, .ratingUnitDetail:
             return .circle
-        case .eventDetail, .newsDetail, .eventSchedule, .djDetail, .labelDetail, .rankingBoardDetail:
+        case .eventDetail, .newsDetail, .eventSchedule, .eventRoute, .djDetail, .labelDetail, .rankingBoardDetail:
             return .discover
         case .userProfile:
             return .profile
@@ -195,6 +205,10 @@ final class AppRouter: ObservableObject {
                 return "newsDetail(\(articleID))"
             case .eventSchedule(let eventID):
                 return "eventSchedule(\(eventID))"
+            case .eventRoute(let eventID, let ownerUserID, let ownerDisplayName, _, let selectedSlotIDs):
+                let owner = ownerDisplayName ?? ownerUserID ?? "nil"
+                let slotCount = selectedSlotIDs?.count ?? 0
+                return "eventRoute(\(eventID),owner=\(owner),slots=\(slotCount))"
             case .djDetail(let djID):
                 return "djDetail(\(djID))"
             case .labelDetail(let labelID):
@@ -518,6 +532,15 @@ struct MainTabCoordinatorView: View {
         case .eventSchedule(let eventID):
             EventDetailView(eventID: eventID, initialTabRawValue: "schedule")
 
+        case let .eventRoute(eventID, ownerUserID, ownerDisplayName, selectedDayID, selectedSlotIDs):
+            EventRoutePlannerLoaderView(
+                eventID: eventID,
+                ownerUserID: ownerUserID,
+                ownerDisplayName: ownerDisplayName,
+                selectedDayID: selectedDayID,
+                selectedSlotIDs: selectedSlotIDs
+            )
+
         case .djDetail(let djID):
             DJDetailView(djID: djID)
 
@@ -824,6 +847,10 @@ struct MainTabCoordinatorView: View {
             return "newsDetail(\(articleID))"
         case .eventSchedule(let eventID):
             return "eventSchedule(\(eventID))"
+        case .eventRoute(let eventID, let ownerUserID, let ownerDisplayName, _, let selectedSlotIDs):
+            let owner = ownerDisplayName ?? ownerUserID ?? "nil"
+            let slotCount = selectedSlotIDs?.count ?? 0
+            return "eventRoute(\(eventID),owner=\(owner),slots=\(slotCount))"
         case .djDetail(let djID):
             return "djDetail(\(djID))"
         case .labelDetail(let labelID):

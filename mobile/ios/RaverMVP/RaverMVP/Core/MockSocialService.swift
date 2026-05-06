@@ -969,6 +969,32 @@ actor MockSocialService: SocialService {
         )
     }
 
+    func sendEventRouteCardMessage(conversationID: String, payload: EventRouteShareCardPayload) async throws -> ChatMessage {
+        struct Envelope: Codable {
+            let businessID: String
+            let version: Int
+            let cardType: String
+            let payload: EventRouteShareCardPayload
+        }
+        let data = try JSONEncoder().encode(
+            Envelope(
+                businessID: "raver_custom_card",
+                version: 1,
+                cardType: "event_route",
+                payload: payload
+            )
+        )
+        let content = String(data: data, encoding: .utf8) ?? payload.title
+        return appendOutgoingMessage(
+            conversationID: conversationID,
+            content: content,
+            kind: .card,
+            media: ChatMessageMediaPayload(
+                thumbnailURL: payload.coverImageURL
+            )
+        )
+    }
+
     private func appendOutgoingMessage(
         conversationID: String,
         content: String,
