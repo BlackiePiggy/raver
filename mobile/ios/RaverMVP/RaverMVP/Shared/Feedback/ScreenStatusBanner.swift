@@ -1,12 +1,15 @@
 import SwiftUI
 
 enum ScreenStatusBannerStyle {
+    case success
     case info
     case warning
     case error
 
     var background: Color {
         switch self {
+        case .success:
+            return Color(red: 0.08, green: 0.56, blue: 0.27)
         case .info:
             return RaverTheme.card
         case .warning:
@@ -18,6 +21,8 @@ enum ScreenStatusBannerStyle {
 
     var border: Color {
         switch self {
+        case .success:
+            return Color(red: 0.15, green: 0.74, blue: 0.38)
         case .info:
             return RaverTheme.cardBorder
         case .warning:
@@ -29,6 +34,8 @@ enum ScreenStatusBannerStyle {
 
     var foreground: Color {
         switch self {
+        case .success:
+            return Color.white
         case .info:
             return RaverTheme.secondaryText
         case .warning:
@@ -40,6 +47,8 @@ enum ScreenStatusBannerStyle {
 
     var iconName: String {
         switch self {
+        case .success:
+            return "checkmark.circle"
         case .info:
             return "arrow.triangle.2.circlepath"
         case .warning:
@@ -55,6 +64,7 @@ struct ScreenStatusBanner: View {
     var style: ScreenStatusBannerStyle = .info
     var actionTitle: String? = nil
     var action: (() -> Void)? = nil
+    var onDismiss: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -64,7 +74,7 @@ struct ScreenStatusBanner: View {
 
             Text(message)
                 .font(.footnote)
-                .foregroundStyle(RaverTheme.primaryText)
+                .foregroundStyle(style == .success ? Color.white : RaverTheme.primaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let actionTitle, let action {
@@ -73,9 +83,21 @@ struct ScreenStatusBanner: View {
                     .foregroundStyle(style.foreground)
                     .buttonStyle(.plain)
             }
+
+            if let onDismiss {
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(style == .success ? Color.white.opacity(0.82) : RaverTheme.secondaryText)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L("关闭", "Close"))
+            }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(style.background)

@@ -1590,6 +1590,346 @@ actor MockWebFeatureService: WebFeatureService {
         )
     }
 
+    func fetchMyCheckinsOverview() async throws -> MyCheckinsOverviewResponse {
+        try await fetchUserCheckinsOverview(userID: currentUser.id)
+    }
+
+    func fetchUserCheckinsOverview(userID: String) async throws -> MyCheckinsOverviewResponse {
+        let filtered = checkins
+            .filter { $0.userId == userID && !$0.isMarkedCheckin }
+            .sorted(by: { lhs, rhs in
+                if lhs.attendedAt == rhs.attendedAt {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.attendedAt > rhs.attendedAt
+            })
+
+        let eventCheckins = filtered.filter { $0.type == "event" }
+        let latestCheckinAt = filtered.first?.attendedAt
+
+        var uniqueArtistKeys = Set<String>()
+        var topArtistsByKey: [String: MyCheckinsOverviewGalleryArtist] = [:]
+
+        for item in filtered {
+            if item.type == "dj", let dj = item.dj {
+                let key = dj.id
+                uniqueArtistKeys.insert(key)
+                if var existing = topArtistsByKey[key] {
+                    existing.count += 1
+                    existing.latestAttendedAt = max(existing.latestAttendedAt, item.attendedAt)
+                    topArtistsByKey[key] = existing
+                } else {
+                    topArtistsByKey[key] = MyCheckinsOverviewGalleryArtist(
+                        djId: dj.id,
+                        name: dj.name,
+                        avatarUrl: dj.avatarUrl,
+                        country: dj.country,
+                        count: 1,
+                        latestAttendedAt: item.attendedAt
+                    )
+                }
+            }
+
+            for day in item.eventAttendanceSelections {
+                for selection in day.djSelections {
+                    let names = splitOverviewArtistNames(selection.name)
+                    for (index, name) in names.enumerated() {
+                        let key = index == 0 ? selection.id : "name-\(name.lowercased())"
+                        uniqueArtistKeys.insert(key)
+                        if var existing = topArtistsByKey[key] {
+                            existing.count += 1
+                            existing.latestAttendedAt = max(existing.latestAttendedAt, item.attendedAt)
+                            topArtistsByKey[key] = existing
+                        } else {
+                            topArtistsByKey[key] = MyCheckinsOverviewGalleryArtist(
+                                djId: index == 0 ? selection.id : nil,
+                                name: name,
+                                avatarUrl: index == 0 ? selection.avatarUrl : nil,
+                                country: index == 0 ? selection.country : nil,
+                                count: 1,
+                                latestAttendedAt: item.attendedAt
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        let timelineItems = eventCheckins.prefix(3).map { item in
+            let selections = item.eventAttendanceSelections
+                .sorted(by: { $0.dayIndex < $1.dayIndex })
+                .map { day in
+                    MyCheckinsOverviewTimelineDay(
+                        dayId: day.dayID,
+                        dayIndex: day.dayIndex,
+                        acts: day.djSelections.enumerated().map { index, selection in
+                            let names = splitOverviewArtistNames(selection.name)
+                            let actType: String = {
+                                switch names.count {
+                                case 3: return "b3b"
+                                case 2: return "b2b"
+                                default: return "solo"
+                                }
+                            }()
+                            return MyCheckinsOverviewTimelineAct(
+                                actGroupId: "\(day.dayID)-\(index)",
+                                actType: actType,
+                                displayName: selection.name,
+                                performers: names.enumerated().map { performerIndex, name in
+                                    MyCheckinsOverviewTimelinePerformer(
+                                        djId: performerIndex == 0 ? selection.id : nil,
+                                        name: name,
+                                        avatarUrl: performerIndex == 0 ? selection.avatarUrl : nil,
+                                        country: performerIndex == 0 ? selection.country : nil,
+                                        performerIndex: performerIndex
+                                    )
+                                }
+                            )
+                        }
+                    )
+                }
+
+            let performanceCount = selections.reduce(0) { $0 + $1.acts.count }
+            let artistCount = selections.reduce(into: Set<String>()) { partialResult, day in
+                for act in day.acts {
+                    for performer in act.performers {
+                        partialResult.insert(performer.djId ?? performer.name.lowercased())
+                    }
+                }
+            }.count
+
+            return MyCheckinsOverviewTimelineItem(
+                id: item.id,
+                type: "event",
+                attendedAt: item.attendedAt,
+                createdAt: item.createdAt,
+                event: MyCheckinsOverviewTimelineEvent(
+                    id: item.event?.id ?? item.eventId ?? item.id,
+                    name: item.event?.name,
+                    nameI18n: item.event?.nameI18n,
+                    coverImageUrl: item.event?.coverImageUrl,
+                    address: item.event?.unifiedAddress,
+                    city: item.event?.city,
+                    country: item.event?.country,
+                    startDate: item.event?.startDate,
+                    endDate: item.event?.endDate
+                ),
+                summary: MyCheckinsOverviewTimelineSummary(
+                    dayCount: selections.count,
+                    artistCount: artistCount,
+                    performanceCount: performanceCount
+                ),
+                selections: selections
+            )
+        }
+
+        let topArtists = topArtistsByKey.values.sorted { lhs, rhs in
+            if lhs.count != rhs.count { return lhs.count > rhs.count }
+            return lhs.latestAttendedAt > rhs.latestAttendedAt
+        }
+
+        return MyCheckinsOverviewResponse(
+            stats: MyCheckinsOverviewStats(
+                eventCount: eventCheckins.count,
+                artistCount: uniqueArtistKeys.count,
+                latestCheckinAt: latestCheckinAt
+            ),
+            timeline: MyCheckinsOverviewTimelineSection(
+                items: Array(timelineItems),
+                pagination: MyCheckinsOverviewPagination(
+                    limit: 3,
+                    hasMore: eventCheckins.count > 3,
+                    totalEventCount: eventCheckins.count
+                )
+            ),
+            gallerySummary: MyCheckinsOverviewGallerySummary(
+                topEvents: Array(timelineItems).map { item in
+                    MyCheckinsOverviewGalleryEvent(
+                        eventId: item.event.id,
+                        name: item.event.name,
+                        coverImageUrl: item.event.coverImageUrl,
+                        address: item.event.address,
+                        attendedAt: item.attendedAt,
+                        artistCount: item.summary.artistCount,
+                        performanceCount: item.summary.performanceCount
+                    )
+                },
+                topArtists: Array(topArtists.prefix(6))
+            )
+        )
+    }
+
+    func fetchMyCheckinsTimeline(page: Int, limit: Int) async throws -> MyCheckinsTimelinePage {
+        try await fetchUserCheckinsTimeline(userID: currentUser.id, page: page, limit: limit)
+    }
+
+    func fetchUserCheckinsTimeline(userID: String, page: Int, limit: Int) async throws -> MyCheckinsTimelinePage {
+        let filtered = checkins
+            .filter { $0.userId == userID && !$0.isMarkedCheckin && $0.type == "event" }
+            .sorted(by: { lhs, rhs in
+                if lhs.attendedAt == rhs.attendedAt {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.attendedAt > rhs.attendedAt
+            })
+
+        let normalizedPage = max(1, page)
+        let normalizedLimit = max(1, min(100, limit))
+        let start = (normalizedPage - 1) * normalizedLimit
+        let end = min(start + normalizedLimit, filtered.count)
+        let slice = start < end ? Array(filtered[start..<end]) : []
+
+        let timelineItems = slice.map { item in
+            let selections = item.eventAttendanceSelections
+                .sorted(by: { $0.dayIndex < $1.dayIndex })
+                .map { day in
+                    MyCheckinsOverviewTimelineDay(
+                        dayId: day.dayID,
+                        dayIndex: day.dayIndex,
+                        acts: day.djSelections.enumerated().map { index, selection in
+                            let names = splitOverviewArtistNames(selection.name)
+                            let actType: String = {
+                                switch names.count {
+                                case 3: return "b3b"
+                                case 2: return "b2b"
+                                default: return "solo"
+                                }
+                            }()
+                            return MyCheckinsOverviewTimelineAct(
+                                actGroupId: "\(day.dayID)-\(index)",
+                                actType: actType,
+                                displayName: selection.name,
+                                performers: names.enumerated().map { performerIndex, name in
+                                    MyCheckinsOverviewTimelinePerformer(
+                                        djId: performerIndex == 0 ? selection.id : nil,
+                                        name: name,
+                                        avatarUrl: performerIndex == 0 ? selection.avatarUrl : nil,
+                                        country: performerIndex == 0 ? selection.country : nil,
+                                        performerIndex: performerIndex
+                                    )
+                                }
+                            )
+                        }
+                    )
+                }
+
+            let performanceCount = selections.reduce(0) { $0 + $1.acts.count }
+            let artistCount = selections.reduce(into: Set<String>()) { partialResult, day in
+                for act in day.acts {
+                    for performer in act.performers {
+                        partialResult.insert(performer.djId ?? performer.name.lowercased())
+                    }
+                }
+            }.count
+
+            return MyCheckinsOverviewTimelineItem(
+                id: item.id,
+                type: "event",
+                attendedAt: item.attendedAt,
+                createdAt: item.createdAt,
+                event: MyCheckinsOverviewTimelineEvent(
+                    id: item.event?.id ?? item.eventId ?? item.id,
+                    name: item.event?.name,
+                    nameI18n: item.event?.nameI18n,
+                    coverImageUrl: item.event?.coverImageUrl,
+                    address: item.event?.unifiedAddress,
+                    city: item.event?.city,
+                    country: item.event?.country,
+                    startDate: item.event?.startDate,
+                    endDate: item.event?.endDate
+                ),
+                summary: MyCheckinsOverviewTimelineSummary(
+                    dayCount: selections.count,
+                    artistCount: artistCount,
+                    performanceCount: performanceCount
+                ),
+                selections: selections
+            )
+        }
+
+        return MyCheckinsTimelinePage(
+            items: timelineItems,
+            pagination: BFFPagination(
+                page: normalizedPage,
+                limit: normalizedLimit,
+                total: filtered.count,
+                totalPages: max(1, Int(ceil(Double(filtered.count) / Double(normalizedLimit))))
+            )
+        )
+    }
+
+    func fetchMyCheckinsGalleryEvents(page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage {
+        try await fetchUserCheckinsGalleryEvents(userID: currentUser.id, page: page, limit: limit)
+    }
+
+    func fetchUserCheckinsGalleryEvents(userID: String, page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage {
+        let eventItems = checkins
+            .filter { $0.userId == userID && !$0.isMarkedCheckin && $0.type == "event" }
+            .sorted(by: { lhs, rhs in
+                if lhs.attendedAt == rhs.attendedAt {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.attendedAt > rhs.attendedAt
+            })
+            .map(makeMockGalleryEvent)
+
+        let normalizedPage = max(1, page)
+        let normalizedLimit = max(1, min(100, limit))
+        let items = pagedSlice(eventItems, page: normalizedPage, limit: normalizedLimit)
+
+        return MyCheckinsGalleryEventPage(
+            items: items,
+            pagination: BFFPagination(
+                page: normalizedPage,
+                limit: normalizedLimit,
+                total: eventItems.count,
+                totalPages: max(1, Int(ceil(Double(eventItems.count) / Double(normalizedLimit))))
+            )
+        )
+    }
+
+    func fetchMyCheckinsGalleryArtists(page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage {
+        try await fetchUserCheckinsGalleryArtists(userID: currentUser.id, page: page, limit: limit)
+    }
+
+    func fetchUserCheckinsGalleryArtists(userID: String, page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage {
+        let artistItems = makeMockGalleryArtists(userID: userID)
+        let normalizedPage = max(1, page)
+        let normalizedLimit = max(1, min(100, limit))
+        let items = pagedSlice(artistItems, page: normalizedPage, limit: normalizedLimit)
+
+        return MyCheckinsGalleryArtistPage(
+            items: items,
+            pagination: BFFPagination(
+                page: normalizedPage,
+                limit: normalizedLimit,
+                total: artistItems.count,
+                totalPages: max(1, Int(ceil(Double(artistItems.count) / Double(normalizedLimit))))
+            )
+        )
+    }
+
+    func fetchMyCheckinsStats() async throws -> MyCheckinsOverviewStats {
+        try await fetchUserCheckinsStats(userID: currentUser.id)
+    }
+
+    func fetchUserCheckinsStats(userID: String) async throws -> MyCheckinsOverviewStats {
+        let filtered = checkins
+            .filter { $0.userId == userID && !$0.isMarkedCheckin }
+            .sorted(by: { lhs, rhs in
+                if lhs.attendedAt == rhs.attendedAt {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.attendedAt > rhs.attendedAt
+            })
+
+        return MyCheckinsOverviewStats(
+            eventCount: filtered.filter { $0.type == "event" }.count,
+            artistCount: makeMockGalleryArtists(userID: userID).count,
+            latestCheckinAt: filtered.first?.attendedAt
+        )
+    }
+
     func fetchMyDJCheckinCount(djID: String) async throws -> Int {
         checkins.filter { item in
             item.userId == currentUser.id
@@ -1602,6 +1942,7 @@ actor MockWebFeatureService: WebFeatureService {
         guard input.type == "event" || input.type == "dj" else {
             throw ServiceError.message("type 必须是 event 或 dj")
         }
+        print("[CheckinProjection] mock create request projectionMode=mock-local type=\(input.type) eventId=\(input.eventId ?? "nil") djId=\(input.djId ?? "nil")")
 
         let event = input.eventId.flatMap { id in events.first(where: { $0.id == id }) }
         let dj = input.djId.flatMap { id in djs.first(where: { $0.id == id }) }
@@ -1650,10 +1991,16 @@ actor MockWebFeatureService: WebFeatureService {
             dj: dj.map { CheckinDJLite(id: $0.id, name: $0.name, avatarUrl: $0.avatarUrl, country: $0.country) }
         )
         checkins.insert(item, at: 0)
+        print("[CheckinProjection] mock create success checkinId=\(item.id); posting raverCheckinsDidMutate")
+        await MainActor.run {
+            CheckinProjectionMutationStore.markMutation(action: "mock-create", checkinID: item.id)
+            NotificationCenter.default.post(name: .raverCheckinsDidMutate, object: item.id)
+        }
         return item
     }
 
     func updateCheckin(id: String, input: UpdateCheckinInput) async throws -> WebCheckin {
+        print("[CheckinProjection] mock update request checkinId=\(id) projectionMode=mock-local eventId=\(input.eventId ?? "nil") djId=\(input.djId ?? "nil")")
         guard let idx = checkins.firstIndex(where: { $0.id == id }) else {
             throw ServiceError.message("打卡不存在")
         }
@@ -1690,14 +2037,25 @@ actor MockWebFeatureService: WebFeatureService {
         }
 
         checkins[idx] = item
+        print("[CheckinProjection] mock update success checkinId=\(item.id); posting raverCheckinsDidMutate")
+        await MainActor.run {
+            CheckinProjectionMutationStore.markMutation(action: "mock-update", checkinID: item.id)
+            NotificationCenter.default.post(name: .raverCheckinsDidMutate, object: item.id)
+        }
         return item
     }
 
     func deleteCheckin(id: String) async throws {
+        print("[CheckinProjection] mock delete request checkinId=\(id) projectionMode=mock-local")
         guard let idx = checkins.firstIndex(where: { $0.id == id }) else {
             throw ServiceError.message("打卡不存在")
         }
         checkins.remove(at: idx)
+        print("[CheckinProjection] mock delete success checkinId=\(id); posting raverCheckinsDidMutate")
+        await MainActor.run {
+            CheckinProjectionMutationStore.markMutation(action: "mock-delete", checkinID: id)
+            NotificationCenter.default.post(name: .raverCheckinsDidMutate, object: id)
+        }
     }
 
     func fetchRatingEvents() async throws -> [WebRatingEvent] {
@@ -1709,6 +2067,126 @@ actor MockWebFeatureService: WebFeatureService {
                 normalized.units = event.units.map(normalizeRatingUnit)
                 return normalized
             }
+    }
+
+    private func splitOverviewArtistNames(_ raw: String) -> [String] {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        if trimmed.range(of: "\\s*B3B\\s*", options: .regularExpression) != nil {
+            return trimmed
+                .replacingOccurrences(of: "(?i)\\s*B3B\\s*", with: "__SPLIT__", options: .regularExpression)
+                .components(separatedBy: "__SPLIT__")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        if trimmed.range(of: "\\s*B2B\\s*", options: .regularExpression) != nil {
+            return trimmed
+                .replacingOccurrences(of: "(?i)\\s*B2B\\s*", with: "__SPLIT__", options: .regularExpression)
+                .components(separatedBy: "__SPLIT__")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        return [trimmed]
+    }
+
+    private func makeMockGalleryEvent(_ checkin: WebCheckin) -> MyCheckinsOverviewGalleryEvent {
+        let selections = checkin.eventAttendanceSelections
+        let artistCount = selections.reduce(into: Set<String>()) { partialResult, day in
+            for selection in day.djSelections {
+                for (index, name) in splitOverviewArtistNames(selection.name).enumerated() {
+                    partialResult.insert(index == 0 ? selection.id : "name-\(name.lowercased())")
+                }
+            }
+        }.count
+        let performanceCount = selections.reduce(0) { total, day in
+            total + day.djSelections.count
+        }
+
+        return MyCheckinsOverviewGalleryEvent(
+            eventId: checkin.event?.id ?? checkin.eventId ?? checkin.id,
+            name: checkin.event?.name,
+            coverImageUrl: checkin.event?.coverImageUrl,
+            address: checkin.event?.unifiedAddress,
+            attendedAt: checkin.attendedAt,
+            artistCount: artistCount,
+            performanceCount: performanceCount
+        )
+    }
+
+    private func makeMockGalleryArtists(userID: String) -> [MyCheckinsOverviewGalleryArtist] {
+        let filtered = checkins.filter { $0.userId == userID && !$0.isMarkedCheckin }
+        var artistsByKey: [String: MyCheckinsOverviewGalleryArtist] = [:]
+
+        func upsert(
+            key: String,
+            djId: String?,
+            name: String,
+            avatarUrl: String?,
+            country: String?,
+            attendedAt: Date
+        ) {
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else { return }
+
+            if var existing = artistsByKey[key] {
+                existing.count += 1
+                existing.latestAttendedAt = max(existing.latestAttendedAt, attendedAt)
+                if existing.avatarUrl == nil { existing.avatarUrl = avatarUrl }
+                if existing.country == nil { existing.country = country }
+                artistsByKey[key] = existing
+                return
+            }
+
+            artistsByKey[key] = MyCheckinsOverviewGalleryArtist(
+                djId: djId,
+                name: trimmedName,
+                avatarUrl: avatarUrl,
+                country: country,
+                count: 1,
+                latestAttendedAt: attendedAt
+            )
+        }
+
+        for item in filtered {
+            if item.type == "dj", let dj = item.dj {
+                upsert(
+                    key: "id-\(dj.id)",
+                    djId: dj.id,
+                    name: dj.name,
+                    avatarUrl: dj.avatarUrl,
+                    country: dj.country,
+                    attendedAt: item.attendedAt
+                )
+            }
+
+            for day in item.eventAttendanceSelections {
+                for selection in day.djSelections {
+                    let names = splitOverviewArtistNames(selection.name)
+                    for (index, name) in names.enumerated() {
+                        upsert(
+                            key: index == 0 ? "id-\(selection.id)" : "name-\(name.lowercased())",
+                            djId: index == 0 ? selection.id : nil,
+                            name: name,
+                            avatarUrl: index == 0 ? selection.avatarUrl : nil,
+                            country: index == 0 ? selection.country : nil,
+                            attendedAt: item.attendedAt
+                        )
+                    }
+                }
+            }
+        }
+
+        return artistsByKey.values.sorted { lhs, rhs in
+            if lhs.count != rhs.count { return lhs.count > rhs.count }
+            if lhs.latestAttendedAt != rhs.latestAttendedAt { return lhs.latestAttendedAt > rhs.latestAttendedAt }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    private func pagedSlice<T>(_ items: [T], page: Int, limit: Int) -> [T] {
+        let start = (page - 1) * limit
+        let end = min(start + limit, items.count)
+        return start < end ? Array(items[start..<end]) : []
     }
 
     func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent] {

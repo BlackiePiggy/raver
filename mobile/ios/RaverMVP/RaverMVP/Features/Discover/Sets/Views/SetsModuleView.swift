@@ -458,9 +458,6 @@ struct DJSetDetailView: View {
     @State private var shareMorePresentation: SetCardSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: SetCardSharePresentation?
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
-    @State private var widgetStatusDismissToken = UUID()
 
     init(setID: String, playbackMode: PlaybackMode = .video) {
         self.setID = setID
@@ -729,24 +726,8 @@ struct DJSetDetailView: View {
                 }
             }
         }
-        .overlay(alignment: .top) {
-            if let widgetStatusMessage {
-                ScreenStatusBanner(
-                    message: widgetStatusMessage,
-                    style: .info,
-                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-                ) {
-                    if let widgetStatusConversation {
-                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 120)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
+        .operationBannerHost()
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
-        .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
     }
 
     @ViewBuilder
@@ -2125,18 +2106,10 @@ struct DJSetDetailView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation?) {
-        widgetStatusDismissToken = UUID()
-        widgetStatusMessage = message
-        widgetStatusConversation = conversation
-        let token = widgetStatusDismissToken
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_200_000_000)
-            guard widgetStatusDismissToken == token else { return }
-            withAnimation(.easeOut(duration: 0.22)) {
-                widgetStatusMessage = nil
-                widgetStatusConversation = nil
-            }
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { .appRoute(.conversation(target: .fromConversation($0))) } ?? .none
+        )
     }
 
     private func load() async {

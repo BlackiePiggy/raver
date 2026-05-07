@@ -223,8 +223,8 @@ final class AppRouter: ObservableObject {
                 return "ratingUnitDetail(\(unitID))"
             case .userProfile(let userID):
                 return "userProfile(\(userID))"
-            case .discover(let route):
-                return "discover(\(route))"
+        case .discover(let route):
+            return "discover(\(route))"
             case .messages(let route):
                 return "messages(\(route))"
             case .profile(let route):

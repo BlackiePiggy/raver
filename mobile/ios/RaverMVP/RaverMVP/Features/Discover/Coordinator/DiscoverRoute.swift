@@ -30,6 +30,7 @@ enum DiscoverRoute: Hashable {
     case setEdit(setID: String)
     case eventCreate
     case eventEdit(eventID: String)
+    case djImport(initialName: String? = nil)
 }
 
 extension Notification.Name {
@@ -190,6 +191,13 @@ func makeDiscoverRouteDestination(
 
     case .eventEdit(let eventID):
         DiscoverEventEditorLoaderView(eventID: eventID, repository: appContainer.discoverEventsRepository)
+
+    case .djImport(let initialName):
+        DJsModuleView(
+            viewModel: DJsModuleViewModel(repository: appContainer.discoverDJsRepository),
+            initialImportName: initialName,
+            openImportOnAppear: true
+        )
 
     case .newsPublish:
         DiscoverNewsPublishSheet { draft in

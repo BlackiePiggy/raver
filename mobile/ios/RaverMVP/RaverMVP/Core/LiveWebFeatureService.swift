@@ -512,6 +512,104 @@ final class LiveWebFeatureService: WebFeatureService {
         )
     }
 
+    func fetchMyCheckinsOverview() async throws -> MyCheckinsOverviewResponse {
+        let response: BFFEnvelope<MyCheckinsOverviewResponse> = try await request(
+            path: "/v2/me/checkins/overview",
+            method: "GET"
+        )
+        return localizedMyCheckinsOverview(response.data)
+    }
+
+    func fetchUserCheckinsOverview(userID: String) async throws -> MyCheckinsOverviewResponse {
+        let response: BFFEnvelope<MyCheckinsOverviewResponse> = try await request(
+            path: "/v2/users/\(userID)/checkins/overview",
+            method: "GET"
+        )
+        return localizedMyCheckinsOverview(response.data)
+    }
+
+    func fetchMyCheckinsTimeline(page: Int, limit: Int) async throws -> MyCheckinsTimelinePage {
+        let response: BFFEnvelope<BFFItems<MyCheckinsOverviewTimelineItem>> = try await request(
+            path: "/v2/me/checkins/timeline",
+            method: "GET",
+            queryItems: checkinsPaginationQueryItems(page: page, limit: limit)
+        )
+        return MyCheckinsTimelinePage(
+            items: localizedMyCheckinsTimelineItems(response.data.items),
+            pagination: response.pagination
+        )
+    }
+
+    func fetchUserCheckinsTimeline(userID: String, page: Int, limit: Int) async throws -> MyCheckinsTimelinePage {
+        let response: BFFEnvelope<BFFItems<MyCheckinsOverviewTimelineItem>> = try await request(
+            path: "/v2/users/\(userID)/checkins/timeline",
+            method: "GET",
+            queryItems: checkinsPaginationQueryItems(page: page, limit: limit)
+        )
+        return MyCheckinsTimelinePage(
+            items: localizedMyCheckinsTimelineItems(response.data.items),
+            pagination: response.pagination
+        )
+    }
+
+    func fetchMyCheckinsGalleryEvents(page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage {
+        let response: BFFEnvelope<BFFItems<MyCheckinsOverviewGalleryEvent>> = try await request(
+            path: "/v2/me/checkins/gallery/events",
+            method: "GET",
+            queryItems: checkinsPaginationQueryItems(page: page, limit: limit)
+        )
+        return MyCheckinsGalleryEventPage(
+            items: localizedMyCheckinsGalleryEvents(response.data.items),
+            pagination: response.pagination
+        )
+    }
+
+    func fetchUserCheckinsGalleryEvents(userID: String, page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage {
+        let response: BFFEnvelope<BFFItems<MyCheckinsOverviewGalleryEvent>> = try await request(
+            path: "/v2/users/\(userID)/checkins/gallery/events",
+            method: "GET",
+            queryItems: checkinsPaginationQueryItems(page: page, limit: limit)
+        )
+        return MyCheckinsGalleryEventPage(
+            items: localizedMyCheckinsGalleryEvents(response.data.items),
+            pagination: response.pagination
+        )
+    }
+
+    func fetchMyCheckinsGalleryArtists(page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage {
+        let response: BFFEnvelope<BFFItems<MyCheckinsOverviewGalleryArtist>> = try await request(
+            path: "/v2/me/checkins/gallery/djs",
+            method: "GET",
+            queryItems: checkinsPaginationQueryItems(page: page, limit: limit)
+        )
+        return MyCheckinsGalleryArtistPage(items: response.data.items, pagination: response.pagination)
+    }
+
+    func fetchUserCheckinsGalleryArtists(userID: String, page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage {
+        let response: BFFEnvelope<BFFItems<MyCheckinsOverviewGalleryArtist>> = try await request(
+            path: "/v2/users/\(userID)/checkins/gallery/djs",
+            method: "GET",
+            queryItems: checkinsPaginationQueryItems(page: page, limit: limit)
+        )
+        return MyCheckinsGalleryArtistPage(items: response.data.items, pagination: response.pagination)
+    }
+
+    func fetchMyCheckinsStats() async throws -> MyCheckinsOverviewStats {
+        let response: BFFEnvelope<MyCheckinsOverviewStats> = try await request(
+            path: "/v2/me/checkins/stats",
+            method: "GET"
+        )
+        return response.data
+    }
+
+    func fetchUserCheckinsStats(userID: String) async throws -> MyCheckinsOverviewStats {
+        let response: BFFEnvelope<MyCheckinsOverviewStats> = try await request(
+            path: "/v2/users/\(userID)/checkins/stats",
+            method: "GET"
+        )
+        return response.data
+    }
+
     func fetchMyDJCheckinCount(djID: String) async throws -> Int {
         let page = try await fetchCheckins(
             page: 1,
@@ -554,17 +652,42 @@ final class LiveWebFeatureService: WebFeatureService {
     }
 
     func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin {
-        let response: BFFEnvelope<WebCheckin> = try await request(path: "/v1/checkins", method: "POST", body: input)
-        return localizedCheckin(response.data)
+        let path = input.selections == nil ? "/v1/checkins" : "/v2/checkins"
+        let projectionMode = path.hasPrefix("/v2") ? "write-after-refresh" : "legacy-v1"
+        print("[CheckinProjection] create request path=\(path) projectionMode=\(projectionMode) type=\(input.type) eventId=\(input.eventId ?? "nil") djId=\(input.djId ?? "nil")")
+        let response: BFFEnvelope<WebCheckin> = try await request(path: path, method: "POST", body: input)
+        let checkin = localizedCheckin(response.data)
+        print("[CheckinProjection] create success checkinId=\(checkin.id) path=\(path) projectionMode=\(projectionMode); posting raverCheckinsDidMutate")
+        await MainActor.run {
+            CheckinProjectionMutationStore.markMutation(action: "create", checkinID: checkin.id)
+            NotificationCenter.default.post(name: .raverCheckinsDidMutate, object: checkin.id)
+        }
+        return checkin
     }
 
     func updateCheckin(id: String, input: UpdateCheckinInput) async throws -> WebCheckin {
-        let response: BFFEnvelope<WebCheckin> = try await request(path: "/v1/checkins/\(id)", method: "PATCH", body: input)
-        return localizedCheckin(response.data)
+        let path = input.selections == nil ? "/v1/checkins/\(id)" : "/v2/checkins/\(id)"
+        let projectionMode = path.hasPrefix("/v2") ? "write-after-refresh" : "legacy-v1"
+        print("[CheckinProjection] update request checkinId=\(id) path=\(path) projectionMode=\(projectionMode) eventId=\(input.eventId ?? "nil") djId=\(input.djId ?? "nil")")
+        let response: BFFEnvelope<WebCheckin> = try await request(path: path, method: "PATCH", body: input)
+        let checkin = localizedCheckin(response.data)
+        print("[CheckinProjection] update success checkinId=\(checkin.id) path=\(path) projectionMode=\(projectionMode); posting raverCheckinsDidMutate")
+        await MainActor.run {
+            CheckinProjectionMutationStore.markMutation(action: "update", checkinID: checkin.id)
+            NotificationCenter.default.post(name: .raverCheckinsDidMutate, object: checkin.id)
+        }
+        return checkin
     }
 
     func deleteCheckin(id: String) async throws {
-        let _: BFFEnvelope<GenericSuccess> = try await request(path: "/v1/checkins/\(id)", method: "DELETE")
+        let path = "/v2/checkins/\(id)"
+        print("[CheckinProjection] delete request checkinId=\(id) path=\(path) projectionMode=write-after-refresh")
+        let _: BFFEnvelope<GenericSuccess> = try await request(path: path, method: "DELETE")
+        print("[CheckinProjection] delete success checkinId=\(id) path=\(path) projectionMode=write-after-refresh; posting raverCheckinsDidMutate")
+        await MainActor.run {
+            CheckinProjectionMutationStore.markMutation(action: "delete", checkinID: id)
+            NotificationCenter.default.post(name: .raverCheckinsDidMutate, object: id)
+        }
     }
 
     func fetchRatingEvents() async throws -> [WebRatingEvent] {
@@ -914,6 +1037,70 @@ final class LiveWebFeatureService: WebFeatureService {
             localized.dj = dj
         }
         return localized
+    }
+
+    private func localizedMyCheckinsOverview(_ overview: MyCheckinsOverviewResponse) -> MyCheckinsOverviewResponse {
+        var localized = overview
+        let language = AppLanguagePreference.current.effectiveLanguage
+
+        localized.timeline.items = overview.timeline.items.map { item in
+            var next = item
+            if let nameI18n = next.event.nameI18n {
+                let localizedName = nameI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !localizedName.isEmpty {
+                    next.event.name = localizedName
+                }
+            }
+            return next
+        }
+
+        localized.gallerySummary.topEvents = overview.gallerySummary.topEvents.map { event in
+            var next = event
+            if let match = localized.timeline.items.first(where: { $0.event.id == event.eventId }),
+               let localizedName = match.event.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !localizedName.isEmpty {
+                next.name = localizedName
+            }
+            return next
+        }
+
+        return localized
+    }
+
+    private func localizedMyCheckinsGalleryEvents(
+        _ events: [MyCheckinsOverviewGalleryEvent]
+    ) -> [MyCheckinsOverviewGalleryEvent] {
+        events.map { event in
+            var next = event
+            let trimmedName = event.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if trimmedName.isEmpty {
+                next.name = nil
+            }
+            return next
+        }
+    }
+
+    private func localizedMyCheckinsTimelineItems(
+        _ items: [MyCheckinsOverviewTimelineItem]
+    ) -> [MyCheckinsOverviewTimelineItem] {
+        let language = AppLanguagePreference.current.effectiveLanguage
+        return items.map { item in
+            var next = item
+            if let nameI18n = next.event.nameI18n {
+                let localizedName = nameI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !localizedName.isEmpty {
+                    next.event.name = localizedName
+                }
+            }
+            return next
+        }
+    }
+
+    private func checkinsPaginationQueryItems(page: Int, limit: Int) -> [URLQueryItem] {
+        [
+            URLQueryItem(name: "page", value: "\(max(1, page))"),
+            URLQueryItem(name: "limit", value: "\(max(1, min(100, limit)))")
+        ]
     }
 
     private func decodeResponse<T: Decodable>(data: Data, response: URLResponse) throws -> T {

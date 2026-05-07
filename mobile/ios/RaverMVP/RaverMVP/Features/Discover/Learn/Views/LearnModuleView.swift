@@ -1517,9 +1517,6 @@ struct LearnLabelDetailView: View {
     @State private var shareMorePresentation: LabelCardSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: LabelCardSharePresentation?
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
-    @State private var widgetStatusDismissToken = UUID()
     @State private var errorMessage: String?
 
     var body: some View {
@@ -1701,24 +1698,8 @@ struct LearnLabelDetailView: View {
                 }
             }
         }
-        .overlay(alignment: .top) {
-            if let widgetStatusMessage {
-                ScreenStatusBanner(
-                    message: widgetStatusMessage,
-                    style: .info,
-                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-                ) {
-                    if let widgetStatusConversation {
-                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 120)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
+        .operationBannerHost()
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
-        .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
     }
 
     @ViewBuilder
@@ -1922,17 +1903,10 @@ struct LearnLabelDetailView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
-        widgetStatusConversation = conversation
-        widgetStatusMessage = message
-        let token = UUID()
-        widgetStatusDismissToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            guard widgetStatusDismissToken == token else { return }
-            withAnimation(.easeOut(duration: 0.25)) {
-                widgetStatusMessage = nil
-                widgetStatusConversation = nil
-            }
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { .appRoute(.conversation(target: .fromConversation($0))) } ?? .none
+        )
     }
 
     private func makeLabelShareCardPayload() -> LabelShareCardPayload {
@@ -2766,9 +2740,6 @@ struct LearnFestivalDetailView: View {
     @State private var shareMorePresentation: BrandCardSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: BrandCardSharePresentation?
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
-    @State private var widgetStatusDismissToken = UUID()
 
     init(festival: LearnFestival, onFestivalUpdated: ((LearnFestival) -> Void)? = nil) {
         self.onFestivalUpdated = onFestivalUpdated
@@ -2921,24 +2892,8 @@ struct LearnFestivalDetailView: View {
                 }
             }
         }
-        .overlay(alignment: .top) {
-            if let widgetStatusMessage {
-                ScreenStatusBanner(
-                    message: widgetStatusMessage,
-                    style: .info,
-                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-                ) {
-                    if let widgetStatusConversation {
-                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 120)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
+        .operationBannerHost()
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
-        .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
     }
 
     private var immersiveTrailingAction: AnyView? {
@@ -3070,17 +3025,10 @@ struct LearnFestivalDetailView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
-        widgetStatusConversation = conversation
-        widgetStatusMessage = message
-        let token = UUID()
-        widgetStatusDismissToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            guard widgetStatusDismissToken == token else { return }
-            withAnimation(.easeOut(duration: 0.25)) {
-                widgetStatusMessage = nil
-                widgetStatusConversation = nil
-            }
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { .appRoute(.conversation(target: .fromConversation($0))) } ?? .none
+        )
     }
 
     private func makeBrandShareCardPayload(from festival: LearnFestival) -> BrandShareCardPayload {
@@ -4999,9 +4947,6 @@ struct RankingBoardDetailView: View {
     @State private var fullChatSharePresentation: RankingBoardCardSharePresentation?
     @State private var shareMorePresentation: RankingBoardCardSharePresentation?
     @State private var isShareMorePanelVisible = false
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
-    @State private var widgetStatusDismissToken: UUID?
 
     init(board: RankingBoard, initialYear: Int? = nil) {
         self.board = board
@@ -5097,24 +5042,8 @@ struct RankingBoardDetailView: View {
                 }
             }
         }
-        .overlay(alignment: .top) {
-            if let widgetStatusMessage {
-                ScreenStatusBanner(
-                    message: widgetStatusMessage,
-                    style: .info,
-                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-                ) {
-                    if let widgetStatusConversation {
-                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 120)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
+        .operationBannerHost()
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
-        .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
         .task {
             await load()
         }
@@ -5320,17 +5249,10 @@ struct RankingBoardDetailView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
-        widgetStatusConversation = conversation
-        widgetStatusMessage = message
-        let token = UUID()
-        widgetStatusDismissToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            guard widgetStatusDismissToken == token else { return }
-            withAnimation(.easeOut(duration: 0.25)) {
-                widgetStatusMessage = nil
-                widgetStatusConversation = nil
-            }
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { .appRoute(.conversation(target: .fromConversation($0))) } ?? .none
+        )
     }
 }
 

@@ -11,12 +11,21 @@ import spotifyArtistService, { SpotifyUpstreamError } from '../services/spotify-
 import discogsArtistService, { DiscogsUpstreamError } from '../services/discogs-artist.service';
 import soundcloudArtistService, { SoundCloudUpstreamError } from '../services/soundcloud-artist.service';
 import { verifyToken, type JWTPayload } from '../utils/auth';
+import { rebuildUserCheckinProjection } from '../services/checkin-projection';
 import {
   normalizeCountryBiTextPayload,
 } from '../utils/country-i18n';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
+
+const refreshUserCheckinProjectionBestEffort = async (userId: string): Promise<void> => {
+  try {
+    await rebuildUserCheckinProjection(prisma, userId);
+  } catch (error) {
+    console.error('BFF web refresh checkin projection failed:', error);
+  }
+};
 
 interface BFFAuthRequest extends Request {
   user?: JWTPayload;
@@ -748,6 +757,59 @@ const normalizeLineupSlots = (
     })
     .filter((slot): slot is NormalizedLineupSlot => slot !== null);
 };
+
+const resolveLineupSlotPerformerIds = (slot: any): string[] => {
+  const ids = Array.isArray(slot?.djIds) ? slot.djIds : [];
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of [...ids, slot?.djId]) {
+    const id = typeof raw === 'string' ? raw.trim() : '';
+    if (!id || isLineupDjIdPlaceholder(id) || seen.has(id)) continue;
+    seen.add(id);
+    result.push(id);
+  }
+
+  return result;
+};
+
+const withLineupSlotPerformers = async <T extends { lineupSlots?: any[] }>(rows: T[]): Promise<T[]> => {
+  const performerIds = Array.from(
+    new Set(rows.flatMap((row) => (Array.isArray(row.lineupSlots) ? row.lineupSlots : []).flatMap(resolveLineupSlotPerformerIds)))
+  );
+
+  if (performerIds.length === 0) {
+    return rows;
+  }
+
+  const performers = await prisma.dJ.findMany({
+    where: { id: { in: performerIds } },
+    select: {
+      id: true,
+      name: true,
+      avatarUrl: true,
+      bannerUrl: true,
+      country: true,
+      soundCloudFollowers: true,
+    },
+  });
+  const performerById = new Map(performers.map((performer) => [performer.id, performer]));
+
+  return rows.map((row) => ({
+    ...row,
+    lineupSlots: Array.isArray(row.lineupSlots)
+      ? row.lineupSlots.map((slot: any) => ({
+          ...slot,
+          djs: resolveLineupSlotPerformerIds(slot)
+            .map((id) => performerById.get(id))
+            .filter((performer): performer is NonNullable<typeof performer> => Boolean(performer)),
+        }))
+      : [],
+  }));
+};
+
+const withLineupSlotPerformersOne = async <T extends { lineupSlots?: any[] }>(row: T): Promise<T> =>
+  (await withLineupSlotPerformers([row]))[0];
 
 const normalizeName = (value: string): string => value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
 
@@ -2866,6 +2928,19 @@ const mapEvent = (row: any) => {
           eventId: slot.eventId,
           djId: slot.djId,
           djIds: Array.isArray(slot.djIds) ? slot.djIds : (slot.djId ? [slot.djId] : []),
+          djs: Array.isArray(slot.djs)
+            ? slot.djs.map((dj: any) => ({
+                id: dj.id,
+                name: dj.name,
+                avatarUrl: dj.avatarUrl,
+                avatarOriginalUrl: buildOssAvatarVariantUrl(dj.avatarUrl, 'original'),
+                avatarMediumUrl: buildOssAvatarVariantUrl(dj.avatarUrl, 'medium'),
+                avatarSmallUrl: buildOssAvatarVariantUrl(dj.avatarUrl, 'small'),
+                bannerUrl: dj.bannerUrl,
+                country: dj.country,
+                soundCloudFollowers: dj.soundCloudFollowers ?? null,
+              }))
+            : [],
           djName: slot.djName,
           festivalDayIndex: typeof slot.festivalDayIndex === 'number' ? slot.festivalDayIndex : null,
           stageName: slot.stageName,
@@ -3776,9 +3851,11 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
       prisma.event.count({ where }),
     ]);
 
+    const rowsWithPerformers = await withLineupSlotPerformers(rows);
+
     ok(
       res,
-      { items: rows.map(mapEvent) },
+      { items: rowsWithPerformers.map(mapEvent) },
       {
         page,
         limit,
@@ -3831,7 +3908,9 @@ router.get('/events/my', optionalAuth, async (req: Request, res: Response): Prom
       },
     });
 
-    ok(res, { items: rows.map(mapEvent) });
+    const rowsWithPerformers = await withLineupSlotPerformers(rows);
+
+    ok(res, { items: rowsWithPerformers.map(mapEvent) });
   } catch (error) {
     console.error('BFF web my events error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -3879,7 +3958,7 @@ router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Pro
       return;
     }
 
-    ok(res, mapEvent(row));
+    ok(res, mapEvent(await withLineupSlotPerformersOne(row)));
   } catch (error) {
     console.error('BFF web event detail error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -4173,7 +4252,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       },
     });
 
-    ok(res, mapEvent(created));
+    ok(res, mapEvent(await withLineupSlotPerformersOne(created)));
   } catch (error) {
     console.error('BFF web create event error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -4530,7 +4609,7 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       }
     }
 
-    ok(res, mapEvent(updated));
+    ok(res, mapEvent(await withLineupSlotPerformersOne(updated)));
   } catch (error) {
     console.error('BFF web update event error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -7436,6 +7515,23 @@ router.get('/checkins', optionalAuth, async (req: Request, res: Response): Promi
               countryI18n: true,
             },
           },
+          selections: {
+            orderBy: [{ dayIndex: 'asc' }, { sortOrder: 'asc' }],
+            select: {
+              dayId: true,
+              dayIndex: true,
+              djs: {
+                orderBy: [{ sortOrder: 'asc' }, { performerIndex: 'asc' }],
+                select: {
+                  djId: true,
+                  displayName: true,
+                  actGroupId: true,
+                  actType: true,
+                  performerIndex: true,
+                },
+              },
+            },
+          },
         },
       }),
       prisma.checkin.count({ where }),
@@ -7457,6 +7553,17 @@ router.get('/checkins', optionalAuth, async (req: Request, res: Response): Promi
           createdAt: row.createdAt,
           event: row.event,
           dj: row.dj,
+          selections: row.selections.map((selection) => ({
+            dayId: selection.dayId,
+            dayIndex: selection.dayIndex,
+            djs: selection.djs.map((dj) => ({
+              djId: dj.djId,
+              displayName: dj.displayName,
+              actGroupId: dj.actGroupId ?? `${selection.dayId}:act:${dj.displayName}`,
+              actType: dj.actType ?? 'solo',
+              performerIndex: dj.performerIndex,
+            })),
+          })),
         })),
       },
       {
@@ -7734,7 +7841,14 @@ router.delete('/checkins/:id', optionalAuth, async (req: Request, res: Response)
       return;
     }
 
-    await prisma.checkin.delete({ where: { id: checkinId } });
+    await prisma.checkin.update({
+      where: { id: checkinId },
+      data: {
+        status: 'deleted',
+        projectionVersion: 0,
+      },
+    });
+    await refreshUserCheckinProjectionBestEffort(existing.userId);
     ok(res, { success: true });
   } catch (error) {
     console.error('BFF web delete checkin error:', error);

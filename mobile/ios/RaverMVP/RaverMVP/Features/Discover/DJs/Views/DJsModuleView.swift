@@ -164,6 +164,8 @@ struct DJsModuleView: View {
     @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     private let hotDJBatchSize = 25
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
+    private let initialImportName: String?
+    private let openImportOnAppear: Bool
     @StateObject private var viewModel: DJsModuleViewModel
 
     private var repository: DiscoverDJsRepository {
@@ -212,13 +214,21 @@ struct DJsModuleView: View {
     @State private var manualAvatarData: Data?
     @State private var manualBannerData: Data?
     @State private var isImportingDJ = false
+    @State private var didOpenInitialImport = false
 
     init(
         viewModel: DJsModuleViewModel,
+        initialImportName: String? = nil,
+        openImportOnAppear: Bool = false,
         onHorizontalDragStateChanged: ((Bool) -> Void)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        let normalizedInitialName = initialImportName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.initialImportName = normalizedInitialName?.isEmpty == false ? normalizedInitialName : nil
+        self.openImportOnAppear = openImportOnAppear
         self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
+        _importMode = State(initialValue: normalizedInitialName?.isEmpty == false ? .manual : .spotify)
+        _manualName = State(initialValue: normalizedInitialName?.isEmpty == false ? (normalizedInitialName ?? "") : "")
     }
 
     var body: some View {
@@ -280,6 +290,7 @@ struct DJsModuleView: View {
         .background(RaverTheme.background)
         .task {
             await viewModel.loadIfNeeded()
+            openInitialImportIfNeeded()
         }
         .overlay(alignment: .bottomTrailing) {
             if selectedSection == .hot {
@@ -311,6 +322,17 @@ struct DJsModuleView: View {
         } message: {
             Text(activeErrorMessage ?? "")
         }
+    }
+
+    @MainActor
+    private func openInitialImportIfNeeded() {
+        guard openImportOnAppear, !didOpenInitialImport else { return }
+        didOpenInitialImport = true
+        if let initialImportName {
+            importMode = .manual
+            manualName = initialImportName
+        }
+        showDJImportSheet = true
     }
 
     private var activeErrorMessage: String? {
@@ -2534,9 +2556,6 @@ struct DJDetailView: View {
     @State private var historyEventEndDate: Date?
     @State private var isCachingManualSnapshot = false
     @State private var manualCachedAt: Date?
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
-    @State private var widgetStatusDismissToken = UUID()
     @State private var djCardSharePresentation: DJCardSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: DJCardSharePresentation?
@@ -2599,6 +2618,7 @@ struct DJDetailView: View {
         ) {
             dismiss()
         }
+        .operationBannerHost()
         .sheet(item: $fullChatSharePresentation, content: fullChatShareSheet)
         .task {
             await refreshManualCacheState()
@@ -2759,31 +2779,15 @@ struct DJDetailView: View {
 
     @ViewBuilder
     private var detailTopStatusBanners: some View {
-        if isRefreshing || bannerMessage != nil || widgetStatusMessage != nil {
+        if isRefreshing || bannerMessage != nil {
             VStack(alignment: .leading, spacing: 10) {
                 if isRefreshing {
                     InlineLoadingBadge(title: L("正在更新 DJ 详情", "Updating DJ details"))
                 }
-                widgetShareStatusBanner
                 detailErrorStatusBanner
             }
             .padding(.horizontal, 16)
             .padding(.top, 100)
-        }
-    }
-
-    @ViewBuilder
-    private var widgetShareStatusBanner: some View {
-        if let widgetStatusMessage {
-            ScreenStatusBanner(
-                message: widgetStatusMessage,
-                style: .info,
-                actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-            ) {
-                if let widgetStatusConversation {
-                    appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                }
-            }
         }
     }
 
@@ -3479,17 +3483,10 @@ struct DJDetailView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
-        widgetStatusConversation = conversation
-        widgetStatusMessage = message
-        let token = UUID()
-        widgetStatusDismissToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            guard widgetStatusDismissToken == token else { return }
-            withAnimation(.easeOut(duration: 0.25)) {
-                widgetStatusMessage = nil
-                widgetStatusConversation = nil
-            }
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { .appRoute(.conversation(target: .fromConversation($0))) } ?? .none
+        )
     }
 
     private func loadSharePanelConversations() async throws -> [Conversation] {

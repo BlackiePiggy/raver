@@ -521,8 +521,6 @@ private struct CircleIDHubView: View {
     @State private var shareMorePresentation: CircleIDShareCardPresentation?
     @State private var fullChatSharePresentation: CircleIDShareCardPresentation?
     @State private var isShareMorePanelVisible = false
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
 
     private var socialService: SocialService { appContainer.socialService }
 
@@ -554,19 +552,6 @@ private struct CircleIDHubView: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
 
-            if let widgetStatusMessage {
-                ScreenStatusBanner(
-                    message: widgetStatusMessage,
-                    style: .info,
-                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-                ) {
-                    if let widgetStatusConversation {
-                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                    }
-                }
-                .padding(.horizontal, 14)
-            }
-
             if sortedEntries.isEmpty {
                 Spacer()
                 ContentUnavailableView(
@@ -588,6 +573,7 @@ private struct CircleIDHubView: View {
             }
         }
         .background(RaverTheme.background)
+        .operationBannerHost(horizontalPadding: 14)
         .task {
             await loadEntriesIfNeeded()
         }
@@ -1073,13 +1059,10 @@ private struct CircleIDHubView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
-        widgetStatusConversation = conversation
-        widgetStatusMessage = message
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
-            guard widgetStatusMessage == message else { return }
-            widgetStatusMessage = nil
-            widgetStatusConversation = nil
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { .appRoute(.conversation(target: .fromConversation($0))) } ?? .none
+        )
     }
 
     private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
@@ -1136,26 +1119,12 @@ private struct CircleIDDetailView: View {
     @State private var shareMorePresentation: CircleIDShareCardPresentation?
     @State private var fullChatSharePresentation: CircleIDShareCardPresentation?
     @State private var isShareMorePanelVisible = false
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
 
     private var socialService: SocialService { appContainer.socialService }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                if let widgetStatusMessage {
-                    ScreenStatusBanner(
-                        message: widgetStatusMessage,
-                        style: .info,
-                        actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-                    ) {
-                        if let widgetStatusConversation {
-                            dismissAndPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                        }
-                    }
-                }
-
                 CircleIDCardPlayerView(
                     songName: entry.songName,
                     audioURLString: entry.audioUrl,
@@ -1336,6 +1305,7 @@ private struct CircleIDDetailView: View {
         }
         .background(RaverTheme.background)
         .raverSystemNavigation(title: L("ID详情", "ID Detail"))
+        .operationBannerHost()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -1608,13 +1578,14 @@ private struct CircleIDDetailView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
-        widgetStatusConversation = conversation
-        widgetStatusMessage = message
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
-            guard widgetStatusMessage == message else { return }
-            widgetStatusMessage = nil
-            widgetStatusConversation = nil
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { conversation in
+                .custom(title: L("点击跳转", "Open chat")) {
+                    dismissAndPush(.conversation(target: .fromConversation(conversation)))
+                }
+            } ?? .none
+        )
     }
 
     private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
@@ -3091,8 +3062,6 @@ struct CircleRatingEventDetailView: View {
     @State private var fullChatSharePresentation: RatingDetailSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var actionErrorMessage: String?
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
     @State private var resolvedEventID: String?
 
     var body: some View {
@@ -3120,7 +3089,7 @@ struct CircleRatingEventDetailView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                if isRefreshing || bannerMessage != nil || actionErrorMessage != nil || widgetStatusMessage != nil {
+                if isRefreshing || bannerMessage != nil || actionErrorMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if isRefreshing {
                             InlineLoadingBadge(title: L("正在更新事件详情", "Updating event details"))
@@ -3140,17 +3109,6 @@ struct CircleRatingEventDetailView: View {
                                 style: .error,
                                 actionTitle: nil
                             ) {}
-                        }
-                        if let widgetStatusMessage {
-                            ScreenStatusBanner(
-                                message: widgetStatusMessage,
-                                style: .info,
-                                actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-                            ) {
-                                if let widgetStatusConversation {
-                                    appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                                }
-                            }
                         }
                     }
                 }
@@ -3228,6 +3186,7 @@ struct CircleRatingEventDetailView: View {
                 dismiss()
             }
         )
+        .operationBannerHost()
         .task {
             await loadEvent()
         }
@@ -3551,13 +3510,10 @@ struct CircleRatingEventDetailView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
-        widgetStatusConversation = conversation
-        widgetStatusMessage = message
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
-            guard widgetStatusMessage == message else { return }
-            widgetStatusMessage = nil
-            widgetStatusConversation = nil
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { .appRoute(.conversation(target: .fromConversation($0))) } ?? .none
+        )
     }
 
     private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
@@ -3623,13 +3579,11 @@ struct CircleRatingUnitDetailView: View {
     @State private var shareMorePresentation: RatingDetailSharePresentation?
     @State private var fullChatSharePresentation: RatingDetailSharePresentation?
     @State private var isShareMorePanelVisible = false
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                if isRefreshing || loadBannerMessage != nil || widgetStatusMessage != nil {
+                if isRefreshing || loadBannerMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if isRefreshing {
                             InlineLoadingBadge(title: L("正在更新评分单位", "Updating rating unit"))
@@ -3641,17 +3595,6 @@ struct CircleRatingUnitDetailView: View {
                                 actionTitle: L("重试", "Retry")
                             ) {
                                 Task { await loadUnit() }
-                            }
-                        }
-                        if let widgetStatusMessage {
-                            ScreenStatusBanner(
-                                message: widgetStatusMessage,
-                                style: .info,
-                                actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-                            ) {
-                                if let widgetStatusConversation {
-                                    appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                                }
                             }
                         }
                     }
@@ -3862,6 +3805,7 @@ struct CircleRatingUnitDetailView: View {
         }
         .background(RaverTheme.background)
         .raverSystemNavigation(title: LL("评论列表"))
+        .operationBannerHost()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -4108,13 +4052,10 @@ struct CircleRatingUnitDetailView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
-        widgetStatusConversation = conversation
-        widgetStatusMessage = message
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
-            guard widgetStatusMessage == message else { return }
-            widgetStatusMessage = nil
-            widgetStatusConversation = nil
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { .appRoute(.conversation(target: .fromConversation($0))) } ?? .none
+        )
     }
 
     private func sharePrimaryActions() -> [SharePanelPrimaryAction] {

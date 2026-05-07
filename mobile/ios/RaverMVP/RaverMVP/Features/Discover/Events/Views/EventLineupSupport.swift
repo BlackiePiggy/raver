@@ -54,19 +54,35 @@ struct EventLineupResolvedAct: Hashable {
 
 enum EventLineupActCodec {
     static func parse(slot: WebEventLineupSlot) -> EventLineupResolvedAct {
+        let boundDJs = normalizedBoundDJs(from: slot)
+        if !boundDJs.isEmpty {
+            let type = actType(forPerformerCount: boundDJs.count)
+            let performers = boundDJs.prefix(type.performerCount).enumerated().map { index, dj in
+                EventLineupPerformer(
+                    id: "slot-\(slot.id)-p-\(index)",
+                    name: dj.name,
+                    djID: dj.id,
+                    avatarUrl: firstNonEmpty(dj.avatarSmallUrl, dj.avatarUrl, dj.avatarMediumUrl, dj.avatarOriginalUrl)
+                )
+            }
+            return EventLineupResolvedAct(type: type, performers: performers)
+        }
+
         let preferredName = slot.djName.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallbackName = slot.dj?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let rawName = preferredName.isEmpty ? fallbackName : preferredName
-        var act = parse(
-            name: rawName,
-            djID: slot.dj?.id ?? slot.djId,
-            avatarUrl: slot.dj?.avatarUrl,
-            performerIDPrefix: "slot-\(slot.id)-p"
+        let normalizedID = normalizedID(slot.dj?.id ?? slot.djId)
+        return EventLineupResolvedAct(
+            type: .solo,
+            performers: [
+                EventLineupPerformer(
+                    id: "slot-\(slot.id)-p-0",
+                    name: fallbackName.isEmpty ? rawName : fallbackName,
+                    djID: normalizedID,
+                    avatarUrl: normalizedID == nil ? nil : slot.dj?.avatarUrl
+                )
+            ]
         )
-        if !fallbackName.isEmpty, !act.performers.isEmpty {
-            act.performers[0].name = fallbackName
-        }
-        return act
     }
 
     static func parse(
@@ -166,11 +182,55 @@ enum EventLineupActCodec {
     }
 
     static func canonicalKey(for act: EventLineupResolvedAct) -> String {
-        let names = act.performers
-            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        let performerKeys = act.performers
+            .map { performer in
+                if let djID = normalizedID(performer.djID) {
+                    return "id:\(djID)"
+                }
+                return "unbound:\(performer.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+            }
             .filter { !$0.isEmpty }
             .joined(separator: "|")
-        return "\(act.type.rawValue)-\(names)"
+        return "\(act.type.rawValue)-\(performerKeys)"
+    }
+
+    private static func normalizedBoundDJs(from slot: WebEventLineupSlot) -> [WebEventLineupSlotDJ] {
+        let source = slot.djs ?? []
+        var result: [WebEventLineupSlotDJ] = []
+        var seen = Set<String>()
+
+        for dj in source {
+            let id = normalizedID(dj.id)
+            guard let id, seen.insert(id).inserted else { continue }
+            result.append(dj)
+        }
+
+        if result.isEmpty,
+           let dj = slot.dj,
+           let id = normalizedID(dj.id),
+           seen.insert(id).inserted {
+            result.append(dj)
+        }
+
+        let orderedIDs = (slot.djIds ?? []).compactMap(normalizedID)
+        guard !orderedIDs.isEmpty else { return result }
+        let byID = Dictionary(uniqueKeysWithValues: result.map { ($0.id, $0) })
+        let ordered = orderedIDs.compactMap { byID[$0] }
+        return ordered.isEmpty ? result : ordered
+    }
+
+    private static func actType(forPerformerCount count: Int) -> EventLineupActType {
+        if count >= 3 { return .b3b }
+        if count == 2 { return .b2b }
+        return .solo
+    }
+
+    private static func firstNonEmpty(_ values: String?...) -> String? {
+        for value in values {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return nil
     }
 
     private static func split(_ raw: String, keyword: String) -> [String]? {

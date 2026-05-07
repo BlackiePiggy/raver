@@ -86,6 +86,16 @@ protocol WebFeatureService {
     func fetchMyCheckins(page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage
     func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage
     func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage
+    func fetchMyCheckinsOverview() async throws -> MyCheckinsOverviewResponse
+    func fetchUserCheckinsOverview(userID: String) async throws -> MyCheckinsOverviewResponse
+    func fetchMyCheckinsTimeline(page: Int, limit: Int) async throws -> MyCheckinsTimelinePage
+    func fetchUserCheckinsTimeline(userID: String, page: Int, limit: Int) async throws -> MyCheckinsTimelinePage
+    func fetchMyCheckinsGalleryEvents(page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage
+    func fetchUserCheckinsGalleryEvents(userID: String, page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage
+    func fetchMyCheckinsGalleryArtists(page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage
+    func fetchUserCheckinsGalleryArtists(userID: String, page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage
+    func fetchMyCheckinsStats() async throws -> MyCheckinsOverviewStats
+    func fetchUserCheckinsStats(userID: String) async throws -> MyCheckinsOverviewStats
     func fetchMyDJCheckinCount(djID: String) async throws -> Int
     func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin
     func updateCheckin(id: String, input: UpdateCheckinInput) async throws -> WebCheckin

@@ -101,9 +101,6 @@ struct DiscoverNewsDetailView: View {
     @State private var shareMorePresentation: NewsCardSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: NewsCardSharePresentation?
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
-    @State private var widgetStatusDismissToken = UUID()
     @State private var errorMessage: String?
 
     private var newsRepository: DiscoverNewsRepository {
@@ -267,24 +264,8 @@ struct DiscoverNewsDetailView: View {
                 }
             }
         }
-        .overlay(alignment: .top) {
-            if let widgetStatusMessage {
-                ScreenStatusBanner(
-                    message: widgetStatusMessage,
-                    style: .info,
-                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-                ) {
-                    if let widgetStatusConversation {
-                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 120)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
+        .operationBannerHost()
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
-        .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
     }
 
     private var hasAnyBoundEntity: Bool {
@@ -857,17 +838,10 @@ struct DiscoverNewsDetailView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
-        widgetStatusConversation = conversation
-        widgetStatusMessage = message
-        let token = UUID()
-        widgetStatusDismissToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            guard widgetStatusDismissToken == token else { return }
-            withAnimation(.easeOut(duration: 0.25)) {
-                widgetStatusMessage = nil
-                widgetStatusConversation = nil
-            }
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { .appRoute(.conversation(target: .fromConversation($0))) } ?? .none
+        )
     }
 
     @ViewBuilder

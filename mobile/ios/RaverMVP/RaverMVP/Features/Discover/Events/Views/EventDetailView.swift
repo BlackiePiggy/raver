@@ -156,6 +156,7 @@ struct EventDetailView: View {
     @State private var relatedEventCheckins: [WebCheckin] = []
     @State private var bannerMessage: String?
     @State private var errorMessage: String?
+    @State private var pendingUnboundDJName: String?
     @State private var selectedTab: EventDetailTab = .info
     @State private var pageProgress: CGFloat = 0
     @State private var isTabSwitchingByTap = false
@@ -175,9 +176,6 @@ struct EventDetailView: View {
     @State private var selectedLineupMedia: FullscreenMediaSelection?
     @State private var isCachingManualSnapshot = false
     @State private var manualCachedAt: Date?
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
-    @State private var widgetStatusDismissToken = UUID()
     @State private var bannerDismissToken = UUID()
     @State private var isInWidgetCountdownPool = false
     @State private var shareMorePresentation: EventCardSharePresentation?
@@ -690,22 +688,10 @@ struct EventDetailView: View {
                             }
                         }
 
-                        if isRefreshing || bannerMessage != nil || widgetStatusMessage != nil {
+                        if isRefreshing || bannerMessage != nil {
                             VStack(alignment: .leading, spacing: 10) {
                                 if isRefreshing {
                                     InlineLoadingBadge(title: L("正在更新活动详情", "Updating event details"))
-                                }
-                                if let widgetStatusMessage {
-                                    ScreenStatusBanner(
-                                        message: widgetStatusMessage,
-                                        style: .info,
-                                        actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-                                    ) {
-                                        if let widgetStatusConversation {
-                                            appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                                        }
-                                    }
-                                    .transition(.opacity)
                                 }
                                 if let bannerMessage {
                                     ScreenStatusBanner(
@@ -720,7 +706,6 @@ struct EventDetailView: View {
                             }
                             .padding(.horizontal, 16)
                             .padding(.top, 100)
-                            .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
                             .animation(.easeOut(duration: 0.25), value: bannerMessage != nil)
                         }
                     }
@@ -763,6 +748,7 @@ struct EventDetailView: View {
         ) {
             dismiss()
         }
+        .operationBannerHost()
         .navigationDestination(
             isPresented: Binding(
                 get: { selectedRatingEventID != nil },
@@ -825,6 +811,21 @@ struct EventDetailView: View {
             Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+        .alert(L("DJ 信息待补充", "DJ Info Needed"), isPresented: Binding(
+            get: { pendingUnboundDJName != nil },
+            set: { if !$0 { pendingUnboundDJName = nil } }
+        )) {
+            Button(L("关闭", "Close"), role: .cancel) {
+                pendingUnboundDJName = nil
+            }
+            Button(L("去补充", "Add Info")) {
+                let name = pendingUnboundDJName
+                pendingUnboundDJName = nil
+                appPush(.discover(.djImport(initialName: name)))
+            }
+        } message: {
+            Text(L("这个 DJ 暂未建立唯一档案，补充资料后就可以跳转到详情页。", "This DJ does not have a unique profile yet. Add the info to enable detail navigation."))
         }
         .overlay {
             if let presentation = shareMorePresentation {
@@ -1150,16 +1151,6 @@ struct EventDetailView: View {
             .frame(width: cardWidth, alignment: .leading)
         }
 
-        if isMine(event) {
-            Button(role: .destructive) {
-                Task { await deleteEvent() }
-            } label: {
-                Text(LL("删除活动"))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .padding(.top, 2)
-        }
     }
 
     @ViewBuilder
@@ -1798,17 +1789,10 @@ struct EventDetailView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
-        widgetStatusConversation = conversation
-        widgetStatusMessage = message
-        let token = UUID()
-        widgetStatusDismissToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            guard widgetStatusDismissToken == token else { return }
-            withAnimation(.easeOut(duration: 0.25)) {
-                widgetStatusMessage = nil
-                widgetStatusConversation = nil
-            }
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { .appRoute(.conversation(target: .fromConversation($0))) } ?? .none
+        )
     }
 
     private func showBannerMessageAutoDismiss(_ message: String) {
@@ -1885,6 +1869,15 @@ struct EventDetailView: View {
                     accentColor: Color(red: 0.99, green: 0.65, blue: 0.20)
                 ) {
                     discoverPush(.eventEdit(eventID: event.id))
+                }
+            )
+            actions.append(
+                SharePanelQuickAction(
+                    title: LL("删除活动"),
+                    systemImage: "trash",
+                    accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
+                ) {
+                    Task { await deleteEvent() }
                 }
             )
         }
@@ -2172,10 +2165,13 @@ struct EventDetailView: View {
         .frame(width: itemWidth, alignment: .top)
 
         if dj.act.type == .solo,
-           let primaryPerformer = dj.act.performers.first,
-           let djID = resolvedPerformerDJID(primaryPerformer) {
+           let primaryPerformer = dj.act.performers.first {
             Button {
-                appPush(.djDetail(djID: djID))
+                if let djID = resolvedPerformerDJID(primaryPerformer) {
+                    appPush(.djDetail(djID: djID))
+                } else {
+                    presentUnboundDJPrompt(name: primaryPerformer.name)
+                }
             } label: {
                 content
             }
@@ -2241,13 +2237,23 @@ struct EventDetailView: View {
             }
             .buttonStyle(.plain)
         } else {
-            lineupPerformerAvatar(performer, size: size)
+            Button {
+                presentUnboundDJPrompt(name: performer.name)
+            } label: {
+                lineupPerformerAvatar(performer, size: size)
+            }
+            .buttonStyle(.plain)
         }
     }
 
     private func resolvedPerformerDJID(_ performer: EventLineupPerformer) -> String? {
         let inlineID = performer.djID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return inlineID.isEmpty ? nil : inlineID
+    }
+
+    private func presentUnboundDJPrompt(name: String) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        pendingUnboundDJName = trimmedName.isEmpty ? nil : trimmedName
     }
 
     private func lineupActConnectorLabel(text: String, color: Color, vertical: Bool) -> some View {
@@ -2265,18 +2271,9 @@ struct EventDetailView: View {
     private func lineupDJEntries(for event: WebEvent, sortMode: LineupSortMode) -> [EventLineupDJEntry] {
         var seen = Set<String>()
         var result: [EventLineupDJEntry] = []
-        let avatarByName = performerAvatarMap(from: event)
 
         for slot in event.lineupSlots.sorted(by: { $0.startTime < $1.startTime }) {
-            var act = EventLineupActCodec.parse(slot: slot)
-            for index in act.performers.indices {
-                if act.performers[index].avatarUrl == nil {
-                    let key = normalizedPerformerNameKey(act.performers[index].name)
-                    if let avatar = avatarByName[key] {
-                        act.performers[index].avatarUrl = avatar
-                    }
-                }
-            }
+            let act = EventLineupActCodec.parse(slot: slot)
             let displayName = act.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !displayName.isEmpty else { continue }
 
@@ -2300,7 +2297,6 @@ struct EventDetailView: View {
                 .map(\.element)
         }
 
-        let followerByName = lineupFollowerMapByName(from: event)
         let followerByID = lineupFollowerMapByID(from: event)
         return result
             .enumerated()
@@ -2311,46 +2307,23 @@ struct EventDetailView: View {
                     lhsIndex: lhs.offset,
                     rhsIndex: rhs.offset,
                     followerByID: followerByID,
-                    followerByName: followerByName
+                    followerByName: [:]
                 )
             }
             .map(\.element)
     }
 
-    private func performerAvatarMap(from event: WebEvent) -> [String: String] {
-        var map: [String: String] = [:]
-        for slot in event.lineupSlots.sorted(by: { $0.startTime < $1.startTime }) {
-            if let dj = slot.dj {
-                let nameKey = normalizedPerformerNameKey(dj.name)
-                let avatar = (dj.avatarSmallUrl ?? dj.avatarUrl)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                if !nameKey.isEmpty, !avatar.isEmpty, map[nameKey] == nil {
-                    map[nameKey] = avatar
-                }
-            }
-        }
-        return map
-    }
-
-    private func lineupFollowerMapByName(from event: WebEvent) -> [String: Int] {
-        var map: [String: Int] = [:]
-        for slot in event.lineupSlots {
-            guard let dj = slot.dj else { continue }
-            let key = normalizedPerformerNameKey(dj.name)
-            guard !key.isEmpty else { continue }
-            guard let followers = dj.soundCloudFollowers else { continue }
-            map[key] = max(map[key] ?? 0, followers)
-        }
-
-        return map
-    }
-
     private func lineupFollowerMapByID(from event: WebEvent) -> [String: Int] {
         var map: [String: Int] = [:]
         for slot in event.lineupSlots {
-            guard let dj = slot.dj else { continue }
-            guard let followers = dj.soundCloudFollowers else { continue }
-            map[dj.id] = max(map[dj.id] ?? 0, followers)
+            for dj in slot.djs ?? [] {
+                guard let followers = dj.soundCloudFollowers else { continue }
+                map[dj.id] = max(map[dj.id] ?? 0, followers)
+            }
+            if let dj = slot.dj,
+               let followers = dj.soundCloudFollowers {
+                map[dj.id] = max(map[dj.id] ?? 0, followers)
+            }
         }
 
         return map
@@ -2365,7 +2338,7 @@ struct EventDetailView: View {
            let followers = followerByID[djID] {
             return followers
         }
-        return followerByName[normalizedPerformerNameKey(performer.name)]
+        return nil
     }
 
     private func lineupMaxFollowers(
@@ -2840,7 +2813,7 @@ struct EventDetailView: View {
             selectedEventCheckinDayIDs = Set(selections.map(\.dayID))
             selectedEventCheckinDJIDsByDayID = Dictionary(
                 uniqueKeysWithValues: selections.map { selection in
-                    (selection.dayID, Set(selection.djSelections.map(\.id)))
+                    (selection.dayID, selectedCheckinOptionIDs(from: selection))
                 }
             )
         } else {
@@ -2903,7 +2876,6 @@ struct EventDetailView: View {
     private func eventCheckinDJOptions(for event: WebEvent, selectedDayIDs: Set<String>) -> [EventCheckinDJOption] {
         guard !selectedDayIDs.isEmpty else { return [] }
 
-        let avatarByName = performerAvatarMap(from: event)
         var firstStartByOptionID: [String: Date] = [:]
         var optionByOptionID: [String: EventCheckinDJOption] = [:]
 
@@ -2918,15 +2890,7 @@ struct EventDetailView: View {
             )
             guard selectedDayIDs.contains(key) else { continue }
 
-            var act = EventLineupActCodec.parse(slot: slot)
-            for index in act.performers.indices {
-                if act.performers[index].avatarUrl == nil {
-                    let performerKey = normalizedPerformerNameKey(act.performers[index].name)
-                    if let avatar = avatarByName[performerKey] {
-                        act.performers[index].avatarUrl = avatar
-                    }
-                }
-            }
+            let act = EventLineupActCodec.parse(slot: slot)
             let displayName = act.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !displayName.isEmpty else { continue }
 
@@ -3005,10 +2969,12 @@ struct EventDetailView: View {
                         djId: nil,
                         note: note,
                         rating: nil,
-                        attendedAt: attendedAt
+                        attendedAt: attendedAt,
+                        visibility: "private",
+                        selections: makeCheckinSelectionInputs(from: payloads)
                     )
                 )
-                errorMessage = L("打卡信息已更新", "Check-in updated.")
+                showCheckinOperationSuccessBanner(message: L("打卡信息已更新", "Check-in updated."))
             } else {
                 primaryCheckin = try await eventsRepository.createCheckin(
                     input: CreateCheckinInput(
@@ -3017,10 +2983,12 @@ struct EventDetailView: View {
                         djId: nil,
                         note: note,
                         rating: nil,
-                        attendedAt: attendedAt
+                        attendedAt: attendedAt,
+                        visibility: "private",
+                        selections: makeCheckinSelectionInputs(from: payloads)
                     )
                 )
-                errorMessage = L("活动打卡成功", "Event check-in successful.")
+                showCheckinOperationSuccessBanner(message: L("活动打卡成功", "Event check-in successful."))
             }
 
             await cleanupLegacyEventCheckins(keeping: primaryCheckin.id)
@@ -3036,16 +3004,26 @@ struct EventDetailView: View {
 
         do {
             try await eventsRepository.deleteCheckin(id: activeAttendanceCheckin.id)
-            await cleanupLegacyEventCheckins(keeping: nil)
+            await cleanupLegacyEventCheckins(keeping: activeAttendanceCheckin.id)
             relatedEventCheckins.removeAll { checkin in
                 checkin.id == activeAttendanceCheckin.id || shouldCleanupEventCheckin(checkin, keeping: nil)
             }
             selectedEventCheckinDayIDs = []
             selectedEventCheckinDJIDsByDayID = [:]
-            errorMessage = L("已取消活动打卡", "Event check-in canceled.")
+            showCheckinOperationSuccessBanner(message: L("已取消活动打卡", "Event check-in canceled."))
         } catch {
             errorMessage = error.userFacingMessage
         }
+    }
+
+    private func showCheckinOperationSuccessBanner(message: String) {
+        OperationBannerCenter.shared.success(
+            message,
+            action: .appRoute(
+                .profile(.myCheckins(targetUserID: nil, title: "", ownerDisplayName: nil)),
+                title: L("查看我的打卡", "View My Check-ins")
+            )
+        )
     }
 
     private func preselectedDaySelections(for checkin: WebCheckin, in event: WebEvent) -> [EventAttendanceDaySelectionPayload] {
@@ -3073,6 +3051,19 @@ struct EventDetailView: View {
         return [makeAttendanceSelectionPayload(for: event, day: selectedDay, selectedDJIDs: selectedDJIDs)]
     }
 
+    private func selectedCheckinOptionIDs(from selection: EventAttendanceDaySelectionPayload) -> Set<String> {
+        Set(
+            selection.djSelections.compactMap { item in
+                let actGroupID = item.actGroupId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if !actGroupID.isEmpty {
+                    return actGroupID
+                }
+                let itemID = item.id.trimmingCharacters(in: .whitespacesAndNewlines)
+                return itemID.isEmpty ? nil : itemID
+            }
+        )
+    }
+
     private func dayID(for date: Date, in event: WebEvent) -> String? {
         let options = eventCheckinDayOptions(for: event)
         guard !options.isEmpty else { return nil }
@@ -3093,16 +3084,26 @@ struct EventDetailView: View {
         day: EventCheckinDayOption,
         selectedDJIDs: Set<String>
     ) -> EventAttendanceDaySelectionPayload {
-        let snapshots = eventCheckinDJOptions(for: event, selectedDayIDs: [day.id])
-            .filter { selectedDJIDs.contains($0.djID) }
-            .map {
-                EventAttendanceDJSelection(
-                    id: $0.djID,
-                    name: $0.name,
-                    avatarUrl: $0.avatarUrl,
-                    country: nil
+        var snapshots: [EventAttendanceDJSelection] = []
+        for option in eventCheckinDJOptions(for: event, selectedDayIDs: [day.id]) where selectedDJIDs.contains(option.djID) {
+            for (index, performer) in option.performers.enumerated() {
+                let djID = resolvedPerformerDJID(performer)
+                let selectionID = djID ?? "\(option.id)-performer-\(index)"
+                snapshots.append(
+                    EventAttendanceDJSelection(
+                        id: selectionID,
+                        djId: djID,
+                        name: performer.name,
+                        avatarUrl: performer.avatarUrl,
+                        country: nil,
+                        actGroupId: option.id,
+                        actType: option.actType.rawValue,
+                        performerIndex: index
+                    )
                 )
             }
+        }
+        snapshots = snapshots
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
         return EventAttendanceDaySelectionPayload(
@@ -3110,6 +3111,29 @@ struct EventDetailView: View {
             dayIndex: day.dayIndex,
             djSelections: snapshots
         )
+    }
+
+    private func makeCheckinSelectionInputs(
+        from payloads: [EventAttendanceDaySelectionPayload]
+    ) -> [CheckinSelectionInput] {
+        payloads.map { payload in
+            CheckinSelectionInput(
+                dayId: payload.dayID,
+                dayIndex: payload.dayIndex,
+                djs: payload.djSelections.compactMap { selection in
+                    let djID = selection.djId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let displayName = selection.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !displayName.isEmpty else { return nil }
+                    return CheckinSelectionDJInput(
+                        djId: djID.isEmpty ? nil : djID,
+                        displayName: displayName,
+                        actGroupId: selection.actGroupId ?? (djID.isEmpty ? selection.id : djID),
+                        actType: selection.actType ?? "solo",
+                        performerIndex: selection.performerIndex ?? 0
+                    )
+                }
+            )
+        }
     }
 
     private func cleanupLegacyEventCheckins(keeping keptID: String?) async {
@@ -4186,9 +4210,6 @@ private struct EventRoutePlannerView: View {
     @State private var isSharePanelMounted = false
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: EventRouteSharePresentation?
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
-    @State private var widgetStatusDismissToken = UUID()
 
     init(
         event: WebEvent,
@@ -4307,7 +4328,7 @@ private struct EventRoutePlannerView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     if let eventName = event.name.nilIfBlank {
                         Text(eventName)
-                            .font(.caption)
+                            .font(.headline)
                             .foregroundStyle(RaverTheme.secondaryText)
                             .lineLimit(2)
                     }
@@ -4418,25 +4439,9 @@ private struct EventRoutePlannerView: View {
                 }
             }
         }
-        .overlay(alignment: .top) {
-            if let widgetStatusMessage {
-                ScreenStatusBanner(
-                    message: widgetStatusMessage,
-                    style: .info,
-                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-                ) {
-                    if let widgetStatusConversation {
-                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 100)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
         .animation(.spring(response: 0.30, dampingFraction: 0.86), value: showRouteSavedToast)
-        .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
         .raverSystemNavigation(title: navigationTitleText, backgroundColor: RaverTheme.background)
+        .operationBannerHost()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -4509,17 +4514,10 @@ private struct EventRoutePlannerView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
-        widgetStatusConversation = conversation
-        widgetStatusMessage = message
-        let token = UUID()
-        widgetStatusDismissToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            guard widgetStatusDismissToken == token else { return }
-            withAnimation(.easeOut(duration: 0.25)) {
-                widgetStatusMessage = nil
-                widgetStatusConversation = nil
-            }
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { .appRoute(.conversation(target: .fromConversation($0))) } ?? .none
+        )
     }
 
     private func saveCurrentRoute() {
@@ -4765,6 +4763,7 @@ private struct EventRoutineView: View {
     private struct EventScheduleDJSelectionOption: Identifiable, Hashable {
         let id: String
         let name: String
+        let djID: String?
     }
 
     let event: WebEvent
@@ -4779,6 +4778,7 @@ private struct EventRoutineView: View {
     @State private var showsSavedRouteOverlay = true
     @State private var pendingDJSelectionOptions: [EventScheduleDJSelectionOption] = []
     @State private var showDJSelectionDialog = false
+    @State private var pendingUnboundDJName: String?
 
     private var isEmbedded: Bool {
         presentationStyle == .embedded
@@ -4887,13 +4887,32 @@ private struct EventRoutineView: View {
         ) {
             ForEach(pendingDJSelectionOptions) { option in
                 Button(option.name) {
-                    appPush(.djDetail(djID: option.id))
+                    if let djID = option.djID {
+                        appPush(.djDetail(djID: djID))
+                    } else {
+                        presentUnboundDJPrompt(name: option.name)
+                    }
                     clearPendingDJSelection()
                 }
             }
             Button(L("取消", "Cancel"), role: .cancel) {
                 clearPendingDJSelection()
             }
+        }
+        .alert(L("DJ 信息待补充", "DJ Info Needed"), isPresented: Binding(
+            get: { pendingUnboundDJName != nil },
+            set: { if !$0 { pendingUnboundDJName = nil } }
+        )) {
+            Button(L("关闭", "Close"), role: .cancel) {
+                pendingUnboundDJName = nil
+            }
+            Button(L("去补充", "Add Info")) {
+                let name = pendingUnboundDJName
+                pendingUnboundDJName = nil
+                appPush(.discover(.djImport(initialName: name)))
+            }
+        } message: {
+            Text(L("这个 DJ 暂未建立唯一档案，补充资料后就可以跳转到详情页。", "This DJ does not have a unique profile yet. Add the info to enable detail navigation."))
         }
     }
 
@@ -5007,9 +5026,20 @@ private struct EventRoutineView: View {
             return
         }
 
-        let djID = options.first?.id ?? preferredDJID(for: slot)
-        guard let djID else { return }
-        appPush(.djDetail(djID: djID))
+        if let option = options.first {
+            if let djID = option.djID {
+                appPush(.djDetail(djID: djID))
+            } else {
+                presentUnboundDJPrompt(name: option.name)
+            }
+            return
+        }
+
+        if let djID = preferredDJID(for: slot) {
+            appPush(.djDetail(djID: djID))
+        } else {
+            presentUnboundDJPrompt(name: act.displayName)
+        }
     }
 
     private func djSelectionOptions(
@@ -5019,17 +5049,24 @@ private struct EventRoutineView: View {
         var options: [EventScheduleDJSelectionOption] = []
         var seenIDs = Set<String>()
 
-        let appendOption: (_ djID: String, _ name: String) -> Void = { djID, name in
-            let normalizedID = djID.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalizedID.isEmpty, seenIDs.insert(normalizedID).inserted else { return }
+        let appendOption: (_ djID: String?, _ name: String, _ fallbackID: String) -> Void = { djID, name, fallbackID in
+            let normalizedID = djID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let optionID = normalizedID.isEmpty ? fallbackID : normalizedID
+            guard seenIDs.insert(optionID).inserted else { return }
             let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let resolvedName = trimmedName.isEmpty ? normalizedID : trimmedName
-            options.append(EventScheduleDJSelectionOption(id: normalizedID, name: resolvedName))
+            let resolvedName = trimmedName.isEmpty ? (normalizedID.isEmpty ? LL("待补充 DJ") : normalizedID) : trimmedName
+            options.append(
+                EventScheduleDJSelectionOption(
+                    id: optionID,
+                    name: resolvedName,
+                    djID: normalizedID.isEmpty ? nil : normalizedID
+                )
+            )
         }
 
-        for performer in act.performers {
+        for (index, performer) in act.performers.enumerated() {
             let djID = performer.djID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            appendOption(djID, performer.name)
+            appendOption(djID, performer.name, "unbound-\(slot.id)-\(index)")
         }
 
         let fallbackIDs = (slot.djIds ?? [])
@@ -5042,12 +5079,12 @@ private struct EventRoutineView: View {
             } else {
                 fallbackName = "DJ \(index + 1)"
             }
-            appendOption(djID, fallbackName)
+            appendOption(djID, fallbackName, "fallback-\(slot.id)-\(index)")
         }
 
         let primaryID = slot.djId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !primaryID.isEmpty {
-            appendOption(primaryID, act.performers.first?.name ?? "")
+            appendOption(primaryID, act.performers.first?.name ?? "", "primary-\(slot.id)")
         }
 
         return options
@@ -5074,6 +5111,11 @@ private struct EventRoutineView: View {
 
     private func clearPendingDJSelection() {
         pendingDJSelectionOptions = []
+    }
+
+    private func presentUnboundDJPrompt(name: String) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        pendingUnboundDJName = trimmedName.isEmpty ? LL("待补充 DJ") : trimmedName
     }
 
     private var daySelector: some View {

@@ -261,4 +261,35 @@ final class AppOrientationLock {
 extension Notification.Name {
     static let raverDidRegisterPushToken = Notification.Name("raver.push.didRegisterToken")
     static let raverDidOpenSystemNotification = Notification.Name("raver.push.didOpenNotification")
+    static let raverCheckinsDidMutate = Notification.Name("raver.checkins.didMutate")
+}
+
+enum CheckinProjectionMutationStore {
+    private static let tokenKey = "raver.checkins.projectionMutationToken"
+    private static let consumedTokenKey = "raver.checkins.projectionMutationConsumedToken"
+
+    static var token: Int {
+        UserDefaults.standard.integer(forKey: tokenKey)
+    }
+
+    static var consumedToken: Int {
+        UserDefaults.standard.integer(forKey: consumedTokenKey)
+    }
+
+    static var hasUnconsumedMutation: Bool {
+        token > consumedToken
+    }
+
+    @discardableResult
+    static func markMutation(action: String, checkinID: String) -> Int {
+        let nextToken = token + 1
+        UserDefaults.standard.set(nextToken, forKey: tokenKey)
+        print("[CheckinProjection] mutation token updated action=\(action) checkinId=\(checkinID) token=\(nextToken)")
+        return nextToken
+    }
+
+    static func markConsumed(_ token: Int) {
+        UserDefaults.standard.set(token, forKey: consumedTokenKey)
+        print("[CheckinProjection] mutation token consumed token=\(token)")
+    }
 }

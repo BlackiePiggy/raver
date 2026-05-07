@@ -4,11 +4,17 @@ import UIKit
 
 @MainActor
 final class MyCheckinsViewModel: ObservableObject {
+    private enum PaginationSource {
+        case overviewPrefetched
+        case timelineAPI
+    }
+
     let targetUserID: String?
 
     @Published var page = 1
     @Published var totalPages = 1
-    @Published var items: [WebCheckin] = []
+    @Published var canLoadMore = false
+    @Published var timelineItems: [MyCheckinsOverviewTimelineItem] = []
     @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
     @Published var isRefreshing = false
@@ -17,23 +23,66 @@ final class MyCheckinsViewModel: ObservableObject {
     @Published var timelineDJIdentityByName: [String: CheckinDJLite] = [:]
     @Published var timelineDJIdentityByID: [String: CheckinDJLite] = [:]
     @Published var timelineLocalizedEventByID: [String: WebEvent] = [:]
+    @Published var stats: MyCheckinsOverviewStats?
+    @Published var galleryEvents: [MyCheckinsOverviewGalleryEvent] = []
+    @Published var galleryArtists: [MyCheckinsOverviewGalleryArtist] = []
+    @Published var galleryEventsPhase: LoadPhase = .idle
+    @Published var galleryArtistsPhase: LoadPhase = .idle
+    @Published var canLoadMoreGalleryEvents = false
+    @Published var canLoadMoreGalleryArtists = false
+    @Published var isLoadingGalleryEvents = false
+    @Published var isLoadingGalleryArtists = false
+    private var didLoadInitialPage = false
+    private var nextPaginationSource: PaginationSource = .overviewPrefetched
+    private var timelineLoadToken = 0
+    private var lastRequestedTimelinePage: Int?
+    private var galleryEventsPage = 1
+    private var galleryArtistsPage = 1
+    private var galleryEventsUseOverviewSummary = true
+    private var galleryArtistsUseOverviewSummary = true
+    private let timelinePageLimit = 20
+    private let galleryPageLimit = 20
 
     init(targetUserID: String? = nil) {
         self.targetUserID = targetUserID
     }
 
-    func reload(service: WebFeatureService) async {
-        let hadContent = !items.isEmpty
+    func invalidateLoadedState() {
+        didLoadInitialPage = false
+        timelineLoadToken += 1
+        lastRequestedTimelinePage = nil
+    }
+
+    func reload(service: WebFeatureService, force: Bool = false) async {
+        if !force, didLoadInitialPage, !timelineItems.isEmpty, !isRefreshing {
+            return
+        }
+
+        let hadContent = !timelineItems.isEmpty
         if hadContent {
             isRefreshing = true
         } else {
             phase = .initialLoading
             page = 1
             totalPages = 1
-            items = []
+            canLoadMore = false
+            timelineItems = []
             timelineDJIdentityByName = [:]
             timelineDJIdentityByID = [:]
             timelineLocalizedEventByID = [:]
+            stats = nil
+            galleryEvents = []
+            galleryArtists = []
+            galleryEventsPhase = .idle
+            galleryArtistsPhase = .idle
+            canLoadMoreGalleryEvents = false
+            canLoadMoreGalleryArtists = false
+            galleryEventsPage = 1
+            galleryArtistsPage = 1
+            galleryEventsUseOverviewSummary = true
+            galleryArtistsUseOverviewSummary = true
+            timelineLoadToken += 1
+            lastRequestedTimelinePage = nil
         }
         defer { isRefreshing = false }
         await loadMore(service: service, reset: true)
@@ -45,44 +94,62 @@ final class MyCheckinsViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let result: CheckinListPage
-            let requestedPage = reset ? 1 : page
-            if let targetUserID {
-                result = try await service.fetchUserCheckins(userID: targetUserID, page: requestedPage, limit: 20, type: nil)
-            } else {
-                result = try await service.fetchMyCheckins(page: requestedPage, limit: 20, type: nil)
-            }
-
-            let eventOnlyResult: CheckinListPage?
             if reset {
-                if let targetUserID {
-                    eventOnlyResult = try? await service.fetchUserCheckins(userID: targetUserID, page: 1, limit: 200, type: "event")
-                } else {
-                    eventOnlyResult = try? await service.fetchMyCheckins(page: 1, limit: 200, type: "event")
-                }
-            } else {
-                eventOnlyResult = nil
-            }
-
-            if reset {
+                let overview = try await fetchOverview(service: service)
                 timelineDJIdentityByName = [:]
                 timelineDJIdentityByID = [:]
                 timelineLocalizedEventByID = [:]
-                items = mergeUniqueCheckins(result.items, with: eventOnlyResult?.items ?? [])
-            } else {
-                items = mergeUniqueCheckins(items + result.items, with: [])
+                timelineItems = applyOverview(overview)
+                print("[CheckinProjection] MyCheckins overview loaded items=\(timelineItems.count) ids=\(timelineItems.map(\.id).joined(separator: ","))")
+                nextPaginationSource = .overviewPrefetched
+                stats = overview.stats
+                seedGallerySummary(from: overview)
+                totalPages = overview.timeline.pagination.hasMore ? Int.max : 1
+                page = 1
+                canLoadMore = overview.timeline.pagination.hasMore
+                phase = timelineItems.isEmpty ? .empty : .success
+                didLoadInitialPage = true
+                timelineLoadToken += 1
+                lastRequestedTimelinePage = nil
+                bannerMessage = nil
+                return
             }
-            totalPages = result.pagination?.totalPages ?? 1
+
+            let requestedPage = page
+            guard requestedPage <= totalPages else {
+                canLoadMore = false
+                return
+            }
+            guard lastRequestedTimelinePage != requestedPage else { return }
+            lastRequestedTimelinePage = requestedPage
+            print("[CheckinProjection] MyCheckins timeline loadMore request page=\(requestedPage) totalPages=\(totalPages) currentItems=\(timelineItems.count)")
+            let timelinePage = try await fetchTimelinePage(service: service, page: requestedPage, limit: timelinePageLimit)
+            let nextItems = applyTimelinePage(timelinePage)
+
+            if nextPaginationSource == .overviewPrefetched {
+                timelineItems = mergeUniqueTimelineItems(timelineItems, with: nextItems)
+                nextPaginationSource = .timelineAPI
+            } else {
+                timelineItems = mergeUniqueTimelineItems(timelineItems, with: nextItems)
+            }
+
+            totalPages = timelinePage.pagination?.totalPages ?? max(totalPages, requestedPage)
             page = requestedPage + 1
-            await hydrateTimelineEventLocalizationMap(from: items, service: service)
-            await hydrateTimelineDJIdentityMap(from: items, service: service)
-            phase = items.isEmpty ? .empty : .success
+            canLoadMore = requestedPage < (timelinePage.pagination?.totalPages ?? requestedPage)
+            if !canLoadMore {
+                lastRequestedTimelinePage = nil
+            }
+            phase = timelineItems.isEmpty ? .empty : .success
             bannerMessage = nil
+            print("[CheckinProjection] MyCheckins timeline loadMore finished page=\(requestedPage) received=\(nextItems.count) timelineItems=\(timelineItems.count) canLoadMore=\(canLoadMore)")
         } catch {
+            if !reset {
+                lastRequestedTimelinePage = nil
+            }
             let message = error.userFacingMessage ?? L("打卡记录加载失败，请稍后重试", "Failed to load check-ins. Please try again later.")
             if reset {
                 phase = .failure(message: message)
-            } else if !items.isEmpty {
+            } else if !timelineItems.isEmpty {
                 bannerMessage = message
             } else {
                 phase = .failure(message: message)
@@ -90,17 +157,194 @@ final class MyCheckinsViewModel: ObservableObject {
         }
     }
 
+    var currentTimelineLoadToken: Int {
+        timelineLoadToken
+    }
+
+    func ensureGalleryEventsLoaded(service: WebFeatureService) async {
+        guard galleryEventsUseOverviewSummary || galleryEventsPhase == .idle else { return }
+        await loadMoreGalleryEvents(service: service, reset: true)
+    }
+
+    func ensureGalleryArtistsLoaded(service: WebFeatureService) async {
+        guard galleryArtistsUseOverviewSummary || galleryArtistsPhase == .idle else { return }
+        await loadMoreGalleryArtists(service: service, reset: true)
+    }
+
+    func loadMoreGalleryEvents(service: WebFeatureService, reset: Bool = false) async {
+        guard !isLoadingGalleryEvents else { return }
+        isLoadingGalleryEvents = true
+        defer { isLoadingGalleryEvents = false }
+
+        let shouldReplace = reset || galleryEventsUseOverviewSummary
+        if galleryEvents.isEmpty {
+            galleryEventsPhase = .initialLoading
+        }
+
+        do {
+            let requestedPage = shouldReplace ? 1 : galleryEventsPage
+            let page = try await fetchGalleryEventsPage(service: service, page: requestedPage, limit: galleryPageLimit)
+            galleryEvents = shouldReplace
+                ? page.items
+                : mergeUniqueGalleryEvents(galleryEvents, with: page.items)
+            galleryEventsPage = requestedPage + 1
+            canLoadMoreGalleryEvents = requestedPage < (page.pagination?.totalPages ?? requestedPage)
+            galleryEventsUseOverviewSummary = false
+            galleryEventsPhase = galleryEvents.isEmpty ? .empty : .success
+            bannerMessage = nil
+        } catch {
+            let message = error.userFacingMessage ?? L("活动画廊加载失败，请稍后重试", "Failed to load event gallery. Please try again later.")
+            if galleryEvents.isEmpty {
+                galleryEventsPhase = .failure(message: message)
+            } else {
+                bannerMessage = message
+                galleryEventsPhase = .success
+            }
+        }
+    }
+
+    func loadMoreGalleryArtists(service: WebFeatureService, reset: Bool = false) async {
+        guard !isLoadingGalleryArtists else { return }
+        isLoadingGalleryArtists = true
+        defer { isLoadingGalleryArtists = false }
+
+        let shouldReplace = reset || galleryArtistsUseOverviewSummary
+        if galleryArtists.isEmpty {
+            galleryArtistsPhase = .initialLoading
+        }
+
+        do {
+            let requestedPage = shouldReplace ? 1 : galleryArtistsPage
+            let page = try await fetchGalleryArtistsPage(service: service, page: requestedPage, limit: galleryPageLimit)
+            galleryArtists = shouldReplace
+                ? page.items
+                : mergeUniqueGalleryArtists(galleryArtists, with: page.items)
+            galleryArtistsPage = requestedPage + 1
+            canLoadMoreGalleryArtists = requestedPage < (page.pagination?.totalPages ?? requestedPage)
+            galleryArtistsUseOverviewSummary = false
+            galleryArtistsPhase = galleryArtists.isEmpty ? .empty : .success
+            bannerMessage = nil
+        } catch {
+            let message = error.userFacingMessage ?? L("DJ 画廊加载失败，请稍后重试", "Failed to load DJ gallery. Please try again later.")
+            if galleryArtists.isEmpty {
+                galleryArtistsPhase = .failure(message: message)
+            } else {
+                bannerMessage = message
+                galleryArtistsPhase = .success
+            }
+        }
+    }
+
+    private func fetchOverview(service: WebFeatureService) async throws -> MyCheckinsOverviewResponse {
+        if let targetUserID {
+            return try await service.fetchUserCheckinsOverview(userID: targetUserID)
+        }
+        return try await service.fetchMyCheckinsOverview()
+    }
+
+    private func fetchTimelinePage(service: WebFeatureService, page: Int, limit: Int) async throws -> MyCheckinsTimelinePage {
+        if let targetUserID {
+            return try await service.fetchUserCheckinsTimeline(userID: targetUserID, page: page, limit: limit)
+        }
+        return try await service.fetchMyCheckinsTimeline(page: page, limit: limit)
+    }
+
+    private func fetchGalleryEventsPage(service: WebFeatureService, page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage {
+        if let targetUserID {
+            return try await service.fetchUserCheckinsGalleryEvents(userID: targetUserID, page: page, limit: limit)
+        }
+        return try await service.fetchMyCheckinsGalleryEvents(page: page, limit: limit)
+    }
+
+    private func fetchGalleryArtistsPage(service: WebFeatureService, page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage {
+        if let targetUserID {
+            return try await service.fetchUserCheckinsGalleryArtists(userID: targetUserID, page: page, limit: limit)
+        }
+        return try await service.fetchMyCheckinsGalleryArtists(page: page, limit: limit)
+    }
+
     func delete(id: String, service: WebFeatureService) async {
         do {
             try await service.deleteCheckin(id: id)
-            items.removeAll { $0.id == id }
+            timelineItems.removeAll { $0.id == id }
         } catch {
             errorMessage = error.userFacingMessage
         }
     }
 
-    private func mergeUniqueCheckins(_ base: [WebCheckin], with extras: [WebCheckin]) -> [WebCheckin] {
-        var mergedByID: [String: WebCheckin] = [:]
+    private func applyOverview(_ overview: MyCheckinsOverviewResponse) -> [MyCheckinsOverviewTimelineItem] {
+        applyTimelineItems(overview.timeline.items)
+    }
+
+    private func seedGallerySummary(from overview: MyCheckinsOverviewResponse) {
+        galleryEvents = overview.gallerySummary.topEvents
+        galleryArtists = overview.gallerySummary.topArtists
+        galleryEventsPage = 1
+        galleryArtistsPage = 1
+        galleryEventsUseOverviewSummary = true
+        galleryArtistsUseOverviewSummary = true
+        canLoadMoreGalleryEvents = overview.stats.eventCount > galleryEvents.count
+        canLoadMoreGalleryArtists = overview.stats.artistCount > galleryArtists.count
+        galleryEventsPhase = galleryEvents.isEmpty ? .idle : .success
+        galleryArtistsPhase = galleryArtists.isEmpty ? .idle : .success
+    }
+
+    private func mergeUniqueGalleryEvents(
+        _ base: [MyCheckinsOverviewGalleryEvent],
+        with extras: [MyCheckinsOverviewGalleryEvent]
+    ) -> [MyCheckinsOverviewGalleryEvent] {
+        var merged = base
+        var indexByID = Dictionary(uniqueKeysWithValues: base.enumerated().map { ($0.element.eventId, $0.offset) })
+        for item in extras {
+            if let existingIndex = indexByID[item.eventId] {
+                merged[existingIndex] = item
+                continue
+            }
+            indexByID[item.eventId] = merged.count
+            merged.append(item)
+        }
+        return merged
+    }
+
+    private func mergeUniqueGalleryArtists(
+        _ base: [MyCheckinsOverviewGalleryArtist],
+        with extras: [MyCheckinsOverviewGalleryArtist]
+    ) -> [MyCheckinsOverviewGalleryArtist] {
+        var merged = base
+        var indexByID = Dictionary(uniqueKeysWithValues: base.enumerated().map { ($0.element.id, $0.offset) })
+        for item in extras {
+            let key = item.id
+            if let existingIndex = indexByID[key] {
+                merged[existingIndex] = item
+                continue
+            }
+            indexByID[key] = merged.count
+            merged.append(item)
+        }
+        return merged
+    }
+
+    private func applyTimelinePage(_ page: MyCheckinsTimelinePage) -> [MyCheckinsOverviewTimelineItem] {
+        for item in page.items {
+            timelineLocalizedEventByID[item.event.id] = makeLocalizedEventDetail(from: item.event, timelineItem: item)
+            seedTimelineDJIdentity(from: item)
+        }
+        return page.items
+    }
+
+    private func applyTimelineItems(_ timelineItems: [MyCheckinsOverviewTimelineItem]) -> [MyCheckinsOverviewTimelineItem] {
+        timelineItems.map { item in
+            timelineLocalizedEventByID[item.event.id] = makeLocalizedEventDetail(from: item.event, timelineItem: item)
+            seedTimelineDJIdentity(from: item)
+            return item
+        }
+    }
+
+    private func mergeUniqueTimelineItems(
+        _ base: [MyCheckinsOverviewTimelineItem],
+        with extras: [MyCheckinsOverviewTimelineItem]
+    ) -> [MyCheckinsOverviewTimelineItem] {
+        var mergedByID: [String: MyCheckinsOverviewTimelineItem] = [:]
         for item in base + extras {
             if let existing = mergedByID[item.id] {
                 if item.attendedAt > existing.attendedAt {
@@ -118,168 +362,76 @@ final class MyCheckinsViewModel: ObservableObject {
         }
     }
 
-    private func hydrateTimelineEventLocalizationMap(from checkins: [WebCheckin], service: WebFeatureService) async {
-        let eventIDs = Set(
-            checkins.compactMap { item in
-                if let nestedID = item.event?.id, !nestedID.isEmpty {
-                    return nestedID
-                }
-                let rawID = item.eventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                return rawID.isEmpty ? nil : rawID
-            }
-        )
-        guard !eventIDs.isEmpty else { return }
-
-        let unresolvedIDs = eventIDs
-            .filter { timelineLocalizedEventByID[$0] == nil }
-            .sorted()
-        guard !unresolvedIDs.isEmpty else { return }
-
-        var resolved: [String: WebEvent] = [:]
-        for eventID in unresolvedIDs {
-            do {
-                let event = try await service.fetchEvent(id: eventID)
-                resolved[eventID] = event
-            } catch {
-                continue
-            }
-        }
-        guard !resolved.isEmpty else { return }
-
-        for (eventID, event) in resolved where timelineLocalizedEventByID[eventID] == nil {
-            timelineLocalizedEventByID[eventID] = event
-        }
-    }
-
-    private func hydrateTimelineDJIdentityMap(from checkins: [WebCheckin], service: WebFeatureService) async {
-        var resolvedByName: [String: CheckinDJLite] = [:]
-        var resolvedByID: [String: CheckinDJLite] = [:]
-
-        for checkin in checkins {
-            guard let dj = checkin.dj else { continue }
-            let nameKey = normalizedTimelineNameKey(dj.name)
-            if !nameKey.isEmpty {
-                resolvedByName[nameKey] = mergedTimelineDJIdentity(existing: resolvedByName[nameKey], candidate: dj)
-            }
-            resolvedByID[dj.id] = mergedTimelineDJIdentity(existing: resolvedByID[dj.id], candidate: dj)
-        }
-
-        for performerID in unresolvedTimelinePerformerIDs(from: checkins) {
-            guard timelineDJIdentityByID[performerID] == nil, resolvedByID[performerID] == nil else { continue }
-            do {
-                let dj = try await service.fetchDJ(id: performerID)
-                let resolvedDJ = CheckinDJLite(
-                    id: dj.id,
-                    name: dj.name,
-                    avatarUrl: dj.avatarUrl,
-                    country: dj.country,
-                    followerCount: dj.followerCount,
-                    soundCloudFollowers: dj.soundCloudFollowers
+    private func makeLocalizedEventDetail(
+        from event: MyCheckinsOverviewTimelineEvent,
+        timelineItem: MyCheckinsOverviewTimelineItem
+    ) -> WebEvent {
+        WebEvent(
+            id: event.id,
+            name: event.name ?? "",
+            slug: "",
+            description: "",
+            countryI18n: event.country.map { WebBiText(en: $0, zh: $0) },
+            cityI18n: event.city.map { WebBiText(en: $0, zh: $0) },
+            coverImageUrl: event.coverImageUrl,
+            lineupImageUrl: nil,
+            eventType: "festival",
+            organizerName: nil,
+            city: event.city,
+            country: event.country,
+            manualLocation: event.address.map {
+                WebEventManualLocation(
+                    detailAddressI18n: WebBiText(en: $0, zh: $0),
+                    formattedAddressI18n: WebBiText(en: $0, zh: $0),
+                    selectedAt: timelineItem.createdAt
                 )
-                let nameKey = normalizedTimelineNameKey(dj.name)
-                if !nameKey.isEmpty {
-                    resolvedByName[nameKey] = mergedTimelineDJIdentity(existing: resolvedByName[nameKey], candidate: resolvedDJ)
-                }
-                resolvedByID[dj.id] = mergedTimelineDJIdentity(existing: resolvedByID[dj.id], candidate: resolvedDJ)
-            } catch {
-                continue
-            }
-        }
+            },
+            latitude: nil,
+            longitude: nil,
+            startDate: event.startDate ?? timelineItem.attendedAt,
+            endDate: event.endDate ?? timelineItem.attendedAt,
+            ticketUrl: nil,
+            ticketPriceMin: nil,
+            ticketPriceMax: nil,
+            ticketCurrency: nil,
+            ticketNotes: nil,
+            officialWebsite: nil,
+            status: "ended",
+            isVerified: true,
+            createdAt: timelineItem.createdAt,
+            updatedAt: timelineItem.createdAt,
+            organizer: nil,
+            ticketTiers: [],
+            lineupSlots: []
+        )
+    }
 
-        for name in unresolvedTimelinePerformerNames(from: checkins) {
-            let lookupKey = normalizedTimelineNameKey(name)
-            guard !lookupKey.isEmpty,
-                  timelineDJIdentityByName[lookupKey] == nil,
-                  resolvedByName[lookupKey] == nil else { continue }
-            do {
-                let page = try await service.fetchDJs(page: 1, limit: 20, search: name, sortBy: "name")
-                if let match = page.items.first(where: { normalizedTimelineNameKey($0.name) == lookupKey }) {
-                    let resolvedDJ = CheckinDJLite(
-                        id: match.id,
-                        name: match.name,
-                        avatarUrl: match.avatarUrl,
-                        country: match.country,
-                        followerCount: match.followerCount,
-                        soundCloudFollowers: match.soundCloudFollowers
+    private func seedTimelineDJIdentity(from item: MyCheckinsOverviewTimelineItem) {
+        for day in item.selections {
+            for act in day.acts {
+                for performer in act.performers {
+                    let candidate = CheckinDJLite(
+                        id: performer.djId ?? "performer-\(performer.performerIndex)-\(performer.name)",
+                        name: performer.name,
+                        avatarUrl: performer.avatarUrl,
+                        country: performer.country
                     )
-                    resolvedByName[lookupKey] = mergedTimelineDJIdentity(existing: resolvedByName[lookupKey], candidate: resolvedDJ)
-                    resolvedByID[match.id] = mergedTimelineDJIdentity(existing: resolvedByID[match.id], candidate: resolvedDJ)
-                }
-            } catch {
-                continue
-            }
-        }
-
-        guard !resolvedByName.isEmpty || !resolvedByID.isEmpty else { return }
-        for (key, value) in resolvedByName {
-            timelineDJIdentityByName[key] = mergedTimelineDJIdentity(existing: timelineDJIdentityByName[key], candidate: value)
-        }
-        for (key, value) in resolvedByID {
-            timelineDJIdentityByID[key] = mergedTimelineDJIdentity(existing: timelineDJIdentityByID[key], candidate: value)
-        }
-    }
-
-    private func unresolvedTimelinePerformerIDs(from checkins: [WebCheckin]) -> [String] {
-        var ids = Set<String>()
-        for checkin in checkins {
-            for day in checkin.eventAttendanceSelections {
-                for selection in day.djSelections {
-                    if let explicitID = normalizedTimelineDJID(selection.id),
-                       timelineDJIdentityByID[explicitID] == nil {
-                        ids.insert(explicitID)
+                    if let djId = performer.djId?.trimmingCharacters(in: .whitespacesAndNewlines), !djId.isEmpty {
+                        timelineDJIdentityByID[djId] = mergedTimelineDJIdentity(
+                            existing: timelineDJIdentityByID[djId],
+                            candidate: candidate
+                        )
                     }
                 }
             }
         }
-        return ids.sorted()
-    }
-
-    private func unresolvedTimelinePerformerNames(from checkins: [WebCheckin]) -> [String] {
-        var names = Set<String>()
-        for checkin in checkins {
-            for day in checkin.eventAttendanceSelections {
-                for selection in day.djSelections {
-                    let rawName = selection.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !rawName.isEmpty else { continue }
-
-                    if let split = splitActNames(rawName, keyword: "B3B"), split.count >= 3 {
-                        for name in split.prefix(3) {
-                            let key = normalizedTimelineNameKey(name)
-                            if timelineDJIdentityByName[key] == nil {
-                                names.insert(name)
-                            }
-                        }
-                        continue
-                    }
-
-                    if let split = splitActNames(rawName, keyword: "B2B"), split.count >= 2 {
-                        for name in split.prefix(2) {
-                            let key = normalizedTimelineNameKey(name)
-                            if timelineDJIdentityByName[key] == nil {
-                                names.insert(name)
-                            }
-                        }
-                        continue
-                    }
-
-                    if normalizedTimelineDJID(selection.id) == nil {
-                        let key = normalizedTimelineNameKey(rawName)
-                        if timelineDJIdentityByName[key] == nil {
-                            names.insert(rawName)
-                        }
-                    }
-                }
-            }
-        }
-
-        return names.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     private func normalizedTimelineDJID(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let lowered = trimmed.lowercased()
-        if lowered.hasPrefix("act-") || lowered.hasPrefix("solo-") {
+        if lowered.hasPrefix("act-") || lowered.hasPrefix("solo-") || lowered.hasPrefix("unbound-") || lowered.contains("-performer-") {
             return nil
         }
         return trimmed
@@ -408,6 +560,7 @@ struct MyCheckinsView: View {
     @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appContainer: AppContainer
     @EnvironmentObject private var appState: AppState
+    @State private var pendingUnboundDJName: String?
 
     private struct TimelineDJEntry: Identifiable {
         let id: String
@@ -415,19 +568,36 @@ struct MyCheckinsView: View {
         let dj: CheckinDJLite
     }
 
-    private struct TimelineNode: Identifiable {
+    private struct TimelineEventLite: Identifiable, Hashable {
+        let id: String
+        var name: String
+        var nameI18n: WebBiText?
+        var coverImageUrl: String?
+        var address: String?
+        var city: String?
+        var country: String?
+        var startDate: Date?
+        var endDate: Date?
+
+        var unifiedAddress: String {
+            let explicitAddress = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !explicitAddress.isEmpty { return explicitAddress }
+            return [city, country]
+                .compactMap { value in
+                    let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    return trimmed.isEmpty ? nil : trimmed
+                }
+                .joined(separator: " · ")
+        }
+    }
+
+    private struct TimelineNodeV2: Identifiable {
         let id: String
         var anchorDate: Date
         var day: Date
-        let event: CheckinEventLite?
-        var eventCheckin: WebCheckin?
-        var djs: [TimelineDJEntry]
-        var manualEventName: String?
+        let event: TimelineEventLite
         var structuredSelections: [EventAttendanceDaySelectionPayload]
-
-        var isStandaloneDJNode: Bool {
-            event == nil
-        }
+        var summary: MyCheckinsOverviewTimelineSummary
     }
 
     private struct TimelineAttendanceSection: Identifiable {
@@ -551,9 +721,10 @@ struct MyCheckinsView: View {
     @State private var shareMorePresentation: MyCheckinsSharePresentation?
     @State private var fullChatSharePresentation: MyCheckinsSharePresentation?
     @State private var isShareMorePanelVisible = false
-    @State private var widgetStatusMessage: String?
-    @State private var widgetStatusConversation: Conversation?
-    @State private var widgetStatusDismissToken: UUID?
+    @State private var timelineAutoLoadTask: Task<Void, Never>?
+    @State private var galleryAutoLoadTask: Task<Void, Never>?
+    @State private var didTriggerTimelineAutoLoadInVisibleCycle = false
+    @State private var didTriggerGalleryAutoLoadInVisibleCycle = false
     @StateObject private var viewModel: MyCheckinsViewModel
 
     init(targetUserID: String? = nil, title: String = "", ownerDisplayName: String? = nil) {
@@ -565,7 +736,7 @@ struct MyCheckinsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            LazyVStack(spacing: 20) {
                 if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if viewModel.isRefreshing {
@@ -577,7 +748,7 @@ struct MyCheckinsView: View {
                                 style: .error,
                                 actionTitle: L("重试", "Retry")
                             ) {
-                                Task { await viewModel.reload(service: service) }
+                                Task { await viewModel.reload(service: service, force: true) }
                             }
                         }
                     }
@@ -606,7 +777,7 @@ struct MyCheckinsView: View {
                         title: L("打卡记录加载失败", "Check-ins Failed to Load"),
                         message: message
                     ) {
-                        Task { await viewModel.reload(service: service) }
+                        Task { await viewModel.reload(service: service, force: true) }
                     }
                     .frame(maxWidth: .infinity, minHeight: 260)
                 } else if case .offline(let message) = viewModel.phase {
@@ -614,7 +785,7 @@ struct MyCheckinsView: View {
                         title: L("网络不可用", "Network Unavailable"),
                         message: message
                     ) {
-                        Task { await viewModel.reload(service: service) }
+                        Task { await viewModel.reload(service: service, force: true) }
                     }
                     .frame(maxWidth: .infinity, minHeight: 260)
                 } else if isCurrentViewEmpty {
@@ -632,14 +803,7 @@ struct MyCheckinsView: View {
                     } else {
                         galleryView
                     }
-
-                    if viewModel.page < viewModel.totalPages {
-                        Button(L("加载更多", "Load More")) {
-                            Task { await viewModel.loadMore(service: service) }
-                        }
-                        .buttonStyle(.bordered)
-                        .padding(.top, 4)
-                    }
+                    activeAutoLoadMoreSentinel
                 }
             }
             .padding(.horizontal, 16)
@@ -653,11 +817,38 @@ struct MyCheckinsView: View {
         ) {
             dismiss()
         }
-        .task {
+        .task(id: targetUserID ?? "me") {
             await viewModel.reload(service: service)
+            if targetUserID == nil, !CheckinProjectionMutationStore.hasUnconsumedMutation {
+                CheckinProjectionMutationStore.markConsumed(CheckinProjectionMutationStore.token)
+            }
+        }
+        .onAppear {
+            Task {
+                await reconcileMissedCheckinMutationIfNeeded()
+            }
+        }
+        .task(id: displayMode) {
+            await ensureActiveGalleryLoaded()
+        }
+        .task(id: galleryMode) {
+            await ensureActiveGalleryLoaded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .raverCheckinsDidMutate)) { notification in
+            guard targetUserID == nil else { return }
+            let checkinId = notification.object as? String ?? "unknown"
+            print("[CheckinProjection] MyCheckins received raverCheckinsDidMutate checkinId=\(checkinId); invalidating loaded state and refreshing v2 read model")
+            viewModel.invalidateLoadedState()
+            Task {
+                await viewModel.reload(service: service, force: true)
+                await ensureActiveGalleryLoaded()
+                CheckinProjectionMutationStore.markConsumed(CheckinProjectionMutationStore.token)
+                print("[CheckinProjection] MyCheckins refresh finished after mutation checkinId=\(checkinId) phase=\(viewModel.phase) timelineItems=\(viewModel.timelineItems.count) galleryEvents=\(viewModel.galleryEvents.count) galleryArtists=\(viewModel.galleryArtists.count)")
+            }
         }
         .refreshable {
-            await viewModel.reload(service: service)
+            await viewModel.reload(service: service, force: true)
+            await ensureActiveGalleryLoaded()
         }
         .sheet(item: $fullChatSharePresentation) { presentation in
             ChatShareSheet(
@@ -688,6 +879,21 @@ struct MyCheckinsView: View {
             Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "")
+        }
+        .alert(L("DJ 信息待补充", "DJ Info Needed"), isPresented: Binding(
+            get: { pendingUnboundDJName != nil },
+            set: { if !$0 { pendingUnboundDJName = nil } }
+        )) {
+            Button(L("关闭", "Close"), role: .cancel) {
+                pendingUnboundDJName = nil
+            }
+            Button(L("去补充", "Add Info")) {
+                let name = pendingUnboundDJName
+                pendingUnboundDJName = nil
+                appPush(.discover(.djImport(initialName: name)))
+            }
+        } message: {
+            Text(L("这个 DJ 暂未建立唯一档案，补充资料后就可以跳转到详情页。", "This DJ does not have a unique profile yet. Add the info to enable detail navigation."))
         }
         .overlay {
             if let presentation = shareMorePresentation {
@@ -729,27 +935,11 @@ struct MyCheckinsView: View {
                 }
             }
         }
-        .overlay(alignment: .top) {
-            if let widgetStatusMessage {
-                ScreenStatusBanner(
-                    message: widgetStatusMessage,
-                    style: .info,
-                    actionTitle: widgetStatusConversation == nil ? nil : L("点击跳转", "Open chat")
-                ) {
-                    if let widgetStatusConversation {
-                        appPush(.conversation(target: .fromConversation(widgetStatusConversation)))
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 120)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
+        .operationBannerHost()
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
-        .animation(.easeOut(duration: 0.25), value: widgetStatusMessage != nil)
     }
 
-    private var items: [WebCheckin] { viewModel.items }
+    private var timelineItems: [MyCheckinsOverviewTimelineItem] { viewModel.timelineItems }
     private var timelineDJIdentityByName: [String: CheckinDJLite] {
         get { viewModel.timelineDJIdentityByName }
         nonmutating set { viewModel.timelineDJIdentityByName = newValue }
@@ -790,71 +980,39 @@ struct MyCheckinsView: View {
         return nil
     }
 
-    private var rawVisibleItems: [WebCheckin] {
-        items
-            .sorted { lhs, rhs in
-                lhs.attendedAt > rhs.attendedAt
-            }
+    private var timelineNodes: [TimelineNodeV2] {
+        buildTimelineNodes(from: timelineItems)
     }
 
-    private var timelineNodes: [TimelineNode] {
-        buildTimelineNodes(from: rawVisibleItems)
-    }
-
-    private var galleryEventNodes: [TimelineNode] {
-        timelineNodes.filter { $0.event != nil }
+    private var galleryEventNodes: [TimelineNodeV2] {
+        timelineNodes
     }
 
     private var galleryDJEntries: [TimelineDJEntry] {
         timelineNodes
-            .flatMap { $0.djs }
+            .flatMap { node in
+                timelineDJEntries(
+                    from: node.structuredSelections,
+                    attendedAt: node.anchorDate,
+                    eventID: node.event.id
+                )
+            }
             .sorted { $0.attendedAt > $1.attendedAt }
     }
 
     private var galleryDJSections: [GalleryDJCountSection] {
-        var rankedByKey: [String: GalleryDJRankEntry] = [:]
-
-        for entry in galleryDJEntries {
-            let resolvedDJ = resolvedGalleryDJ(entry.dj)
-            let key = galleryDJGroupingKey(for: resolvedDJ)
-
-            if var existing = rankedByKey[key] {
-                existing.count += 1
-                existing.latestAttendedAt = max(existing.latestAttendedAt, entry.attendedAt)
-                existing.dj = mergedGalleryDJIdentity(existing: existing.dj, candidate: resolvedDJ)
-                rankedByKey[key] = existing
-            } else {
-                rankedByKey[key] = GalleryDJRankEntry(
-                    id: key,
-                    dj: resolvedDJ,
-                    count: 1,
-                    latestAttendedAt: entry.attendedAt
-                )
-            }
-        }
-
-        let ranked = rankedByKey.values.sorted { lhs, rhs in
-            if lhs.count != rhs.count { return lhs.count > rhs.count }
-
-            let leftFollowers = timelineDJFollowers(lhs.dj)
-            let rightFollowers = timelineDJFollowers(rhs.dj)
-            switch (leftFollowers, rightFollowers) {
-            case let (left?, right?) where left != right:
-                return left > right
-            case (_?, nil):
-                return true
-            case (nil, _?):
-                return false
-            default:
-                break
-            }
-
-            let nameCompare = timelineSortNameKey(lhs.dj.name)
-                .localizedCaseInsensitiveCompare(timelineSortNameKey(rhs.dj.name))
-            if nameCompare != .orderedSame {
-                return nameCompare == .orderedAscending
-            }
-            return lhs.latestAttendedAt > rhs.latestAttendedAt
+        let ranked = viewModel.galleryArtists.map { artist in
+            GalleryDJRankEntry(
+                id: artist.id,
+                dj: CheckinDJLite(
+                    id: artist.djId ?? artist.id,
+                    name: artist.name,
+                    avatarUrl: artist.avatarUrl,
+                    country: artist.country
+                ),
+                count: artist.count,
+                latestAttendedAt: artist.latestAttendedAt
+            )
         }
 
         let grouped = Dictionary(grouping: ranked, by: \.count)
@@ -870,17 +1028,11 @@ struct MyCheckinsView: View {
     }
 
     private var checkinActivityCount: Int {
-        timelineNodes.filter { node in
-            if node.event != nil {
-                return true
-            }
-            let manualEventName = node.manualEventName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return !manualEventName.isEmpty
-        }.count
+        viewModel.stats?.eventCount ?? timelineNodes.count
     }
 
     private var checkinArtistCount: Int {
-        Set(
+        viewModel.stats?.artistCount ?? Set(
             galleryDJEntries.map { entry in
                 galleryDJGroupingKey(for: resolvedGalleryDJ(entry.dj))
             }
@@ -906,7 +1058,102 @@ struct MyCheckinsView: View {
         case .timeline:
             return timelineNodes.isEmpty
         case .gallery:
-            return galleryMode == .event ? galleryEventNodes.isEmpty : galleryDJSections.isEmpty
+            if activeGalleryPhase == .initialLoading {
+                return false
+            }
+            if case .failure = activeGalleryPhase {
+                return false
+            }
+            return galleryMode == .event ? viewModel.galleryEvents.isEmpty : viewModel.galleryArtists.isEmpty
+        }
+    }
+
+    private var activeGalleryPhase: LoadPhase {
+        galleryMode == .event ? viewModel.galleryEventsPhase : viewModel.galleryArtistsPhase
+    }
+
+    private var galleryCanLoadMore: Bool {
+        galleryMode == .event ? viewModel.canLoadMoreGalleryEvents : viewModel.canLoadMoreGalleryArtists
+    }
+
+    @ViewBuilder
+    private var activeAutoLoadMoreSentinel: some View {
+        switch displayMode {
+        case .timeline:
+            timelineAutoLoadMoreSentinel
+        case .gallery:
+            galleryAutoLoadMoreSentinel
+        }
+    }
+
+    private func ensureActiveGalleryLoaded() async {
+        guard displayMode == .gallery else { return }
+        switch galleryMode {
+        case .event:
+            await viewModel.ensureGalleryEventsLoaded(service: service)
+        case .dj:
+            await viewModel.ensureGalleryArtistsLoaded(service: service)
+        }
+    }
+
+    private func reconcileMissedCheckinMutationIfNeeded() async {
+        guard targetUserID == nil else { return }
+        let currentToken = CheckinProjectionMutationStore.token
+        let consumedToken = CheckinProjectionMutationStore.consumedToken
+        guard currentToken > consumedToken else { return }
+
+        print("[CheckinProjection] MyCheckins detected missed mutation token consumed=\(consumedToken) current=\(currentToken); refreshing v2 read model")
+        while viewModel.isLoading || viewModel.isRefreshing {
+            try? await Task.sleep(nanoseconds: 120_000_000)
+        }
+        viewModel.invalidateLoadedState()
+        await viewModel.reload(service: service, force: true)
+        await ensureActiveGalleryLoaded()
+        CheckinProjectionMutationStore.markConsumed(currentToken)
+        print("[CheckinProjection] MyCheckins refresh finished after missed mutation token=\(currentToken) phase=\(viewModel.phase) timelineItems=\(viewModel.timelineItems.count) galleryEvents=\(viewModel.galleryEvents.count) galleryArtists=\(viewModel.galleryArtists.count)")
+    }
+
+    private func loadMoreActiveGallery() async {
+        switch galleryMode {
+        case .event:
+            await viewModel.loadMoreGalleryEvents(service: service)
+        case .dj:
+            await viewModel.loadMoreGalleryArtists(service: service)
+        }
+    }
+
+    private func triggerTimelineAutoLoadMore() {
+        guard !didTriggerTimelineAutoLoadInVisibleCycle else { return }
+        guard timelineAutoLoadTask == nil else { return }
+        guard viewModel.canLoadMore, !viewModel.isLoading else { return }
+        let loadToken = viewModel.currentTimelineLoadToken
+        didTriggerTimelineAutoLoadInVisibleCycle = true
+        timelineAutoLoadTask = Task {
+            guard loadToken == viewModel.currentTimelineLoadToken else {
+                timelineAutoLoadTask = nil
+                return
+            }
+            await viewModel.loadMore(service: service)
+            timelineAutoLoadTask = nil
+        }
+    }
+
+    private func triggerGalleryAutoLoadMore() {
+        guard !didTriggerGalleryAutoLoadInVisibleCycle else { return }
+        guard galleryAutoLoadTask == nil else { return }
+        didTriggerGalleryAutoLoadInVisibleCycle = true
+        galleryAutoLoadTask = Task {
+            await loadMoreActiveGallery()
+            galleryAutoLoadTask = nil
+        }
+    }
+
+    private func reloadActiveGallery() async {
+        switch galleryMode {
+        case .event:
+            await viewModel.loadMoreGalleryEvents(service: service, reset: true)
+        case .dj:
+            await viewModel.loadMoreGalleryArtists(service: service, reset: true)
         }
     }
 
@@ -941,17 +1188,10 @@ struct MyCheckinsView: View {
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
-        widgetStatusConversation = conversation
-        widgetStatusMessage = message
-        let token = UUID()
-        widgetStatusDismissToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            guard widgetStatusDismissToken == token else { return }
-            withAnimation(.easeOut(duration: 0.25)) {
-                widgetStatusMessage = nil
-                widgetStatusConversation = nil
-            }
-        }
+        OperationBannerCenter.shared.success(
+            message,
+            action: conversation.map { .appRoute(.conversation(target: .fromConversation($0))) } ?? .none
+        )
     }
 
     private func loadSharePanelConversations() async throws -> [Conversation] {
@@ -1024,21 +1264,11 @@ struct MyCheckinsView: View {
     private func makeSharePayload() -> MyCheckinsShareCardPayload? {
         guard let userID = effectiveShareUserID else { return nil }
 
-        let coverImageURL = rawVisibleItems.compactMap { item in
-            let photoURL = item.photoUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let photoURL, !photoURL.isEmpty {
-                return photoURL
-            }
-            let eventCover = item.event?.coverImageUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let eventCover, !eventCover.isEmpty {
-                return eventCover
-            }
-            let djAvatar = item.dj?.avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let djAvatar, !djAvatar.isEmpty {
-                return djAvatar
-            }
-            return nil
-        }.first
+        let coverImageURL = timelineItems
+            .compactMap { $0.event.coverImageUrl?.nilIfBlank }
+            .first
+            ?? viewModel.galleryEvents.compactMap { $0.coverImageUrl?.nilIfBlank }.first
+            ?? viewModel.galleryArtists.compactMap { $0.avatarUrl?.nilIfBlank }.first
 
         let shareTitle: String
         if let targetUserID, !targetUserID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -1060,7 +1290,7 @@ struct MyCheckinsView: View {
     private var timelineView: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(timelineStatsText)
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.leading, 30)
 
@@ -1096,14 +1326,69 @@ struct MyCheckinsView: View {
 
     private var galleryView: some View {
         Group {
-            if galleryMode == .event {
-                galleryEventView
+            if activeGalleryPhase == .initialLoading {
+                FeedSkeletonView(count: 3)
+                    .frame(maxWidth: .infinity)
+            } else if case .failure(let message) = activeGalleryPhase {
+                ScreenErrorCard(
+                    title: L("画廊加载失败", "Gallery Failed to Load"),
+                    message: message
+                ) {
+                    Task { await reloadActiveGallery() }
+                }
+                .frame(maxWidth: .infinity, minHeight: 260)
             } else {
-                galleryDJView
+                if galleryMode == .event {
+                    galleryEventView
+                } else {
+                    galleryDJView
+                }
             }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
+    }
+
+    @ViewBuilder
+    private var timelineAutoLoadMoreSentinel: some View {
+        if viewModel.canLoadMore {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(L("正在加载更多", "Loading more"))
+                    .font(.footnote)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .onAppear {
+                triggerTimelineAutoLoadMore()
+            }
+            .onDisappear {
+                didTriggerTimelineAutoLoadInVisibleCycle = false
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var galleryAutoLoadMoreSentinel: some View {
+        if galleryCanLoadMore {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(L("正在加载更多", "Loading more"))
+                    .font(.footnote)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .onAppear {
+                triggerGalleryAutoLoadMore()
+            }
+            .onDisappear {
+                didTriggerGalleryAutoLoadInVisibleCycle = false
+            }
+        }
     }
 
     private var galleryEventView: some View {
@@ -1113,26 +1398,24 @@ struct MyCheckinsView: View {
         ]
 
         return LazyVGrid(columns: columns, spacing: 14) {
-            ForEach(galleryEventNodes) { node in
-                if let event = node.event {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Button {
-                            appPush(.eventDetail(eventID: event.id))
-                        } label: {
-                            eventHero(for: event)
-                                .frame(height: 124)
-                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-
-                        Text(eventNodeTitle(for: node))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(RaverTheme.primaryText)
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity, minHeight: 32, alignment: .topLeading)
+            ForEach(viewModel.galleryEvents) { event in
+                VStack(alignment: .leading, spacing: 8) {
+                    Button {
+                        appPush(.eventDetail(eventID: event.eventId))
+                    } label: {
+                        galleryEventHero(for: event)
+                            .frame(height: 124)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .buttonStyle(.plain)
+
+                    Text(galleryEventTitle(for: event))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, minHeight: 32, alignment: .topLeading)
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         }
     }
@@ -1158,7 +1441,7 @@ struct MyCheckinsView: View {
                                 if let resolvedID = resolvedTimelineDetailDJID(for: rankedEntry.dj) {
                                     appPush(.djDetail(djID: resolvedID))
                                 } else {
-                                    errorMessage = L("该 DJ 暂未建立详情档案", "This DJ profile is not available yet.")
+                                    presentUnboundDJPrompt(name: rankedEntry.dj.name)
                                 }
                             } label: {
                                 VStack(spacing: 8) {
@@ -1180,7 +1463,7 @@ struct MyCheckinsView: View {
         }
     }
 
-    private func timelineNodeRow(_ node: TimelineNode) -> some View {
+    private func timelineNodeRow(_ node: TimelineNodeV2) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Circle()
                 .fill(Color(red: 0.98, green: 0.45, blue: 0.27))
@@ -1199,80 +1482,57 @@ struct MyCheckinsView: View {
         }
     }
 
-    private func timelineTimestamp(for node: TimelineNode) -> some View {
+    private func timelineTimestamp(for node: TimelineNodeV2) -> some View {
         Text(node.day.appLocalizedYMDWeekdayText())
             .font(.headline.weight(.bold))
             .foregroundStyle(RaverTheme.primaryText)
     }
 
-    private func timelineExperienceCard(_ node: TimelineNode) -> some View {
+    private func timelineExperienceCard(_ node: TimelineNodeV2) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            if let event = node.event {
-                VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(eventNodeTitle(for: node))
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(RaverTheme.primaryText)
+            let event = node.event
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(eventNodeTitle(for: node))
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+
+                    if let subtitle = eventNodeSubtitle(for: node, fallbackEvent: event) {
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(RaverTheme.secondaryText)
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)
-
-                        if let subtitle = eventNodeSubtitle(for: node, fallbackEvent: event) {
-                            Text(subtitle)
-                                .font(.subheadline)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(2)
-                        }
                     }
-                    .padding(.bottom, 12)
-
-                    Button {
-                        appPush(.eventDetail(eventID: event.id))
-                    } label: {
-                        eventHero(for: event)
-                            .frame(height: 188)
-                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(Rectangle())
                 }
-            } else {
-                standaloneDJHeader(manualEventName: node.manualEventName)
+                .padding(.bottom, 12)
+
+                Button {
+                    appPush(.eventDetail(eventID: event.id))
+                } label: {
+                    eventHero(for: event)
+                        .frame(height: 188)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
             }
 
             let attendanceSections = attendanceSections(for: node)
             if !attendanceSections.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
-                    if node.isStandaloneDJNode {
-                        HStack {
-                            Text(LL("这次打卡的 DJ"))
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(RaverTheme.primaryText)
-
-                            Spacer()
-
-                            checkinCountBadge(attendanceSections.reduce(0) { total, section in
-                                total + attendanceSectionDJCount(section)
-                            })
-                        }
-                    }
-
                     ForEach(attendanceSections) { section in
                         VStack(alignment: .leading, spacing: 10) {
-                            if node.isStandaloneDJNode {
+                            HStack(alignment: .center, spacing: 10) {
                                 Text(section.title)
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(Color(red: 0.84, green: 0.42, blue: 0.28))
-                            } else {
-                                HStack(alignment: .center, spacing: 10) {
-                                    Text(section.title)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(Color(red: 0.84, green: 0.42, blue: 0.28))
 
-                                    Spacer()
+                                Spacer()
 
-                                    checkinCountBadge(attendanceSectionDJCount(section))
-                                }
+                                checkinCountBadge(attendanceSectionDJCount(section))
                             }
 
                             if section.djs.isEmpty {
@@ -1302,7 +1562,7 @@ struct MyCheckinsView: View {
                         }
                     }
                 }
-                .padding(.top, node.event == nil ? 0 : 4)
+                .padding(.top, 4)
             }
         }
         .padding(.trailing, 4)
@@ -1316,6 +1576,31 @@ struct MyCheckinsView: View {
         } else {
             eventTimelineFallback
         }
+    }
+
+    @ViewBuilder
+    private func eventHero(for event: TimelineEventLite) -> some View {
+        if let cover = AppConfig.resolvedURLString(event.coverImageUrl), let url = URL(string: cover) {
+            ImageLoaderView(urlString: url.absoluteString)
+                .background(eventTimelineFallback)
+        } else {
+            eventTimelineFallback
+        }
+    }
+
+    @ViewBuilder
+    private func galleryEventHero(for event: MyCheckinsOverviewGalleryEvent) -> some View {
+        if let cover = AppConfig.resolvedURLString(event.coverImageUrl), let url = URL(string: cover) {
+            ImageLoaderView(urlString: url.absoluteString)
+                .background(eventTimelineFallback)
+        } else {
+            eventTimelineFallback
+        }
+    }
+
+    private func galleryEventTitle(for event: MyCheckinsOverviewGalleryEvent) -> String {
+        let trimmed = event.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? L("未命名活动", "Untitled Event") : trimmed
     }
 
     private var eventTimelineFallback: some View {
@@ -1359,7 +1644,7 @@ struct MyCheckinsView: View {
             if let resolvedID = resolvedTimelineDetailDJID(for: entry.dj) {
                 appPush(.djDetail(djID: resolvedID))
             } else {
-                errorMessage = L("该 DJ 暂未建立详情档案", "This DJ profile is not available yet.")
+                presentUnboundDJPrompt(name: entry.dj.name)
             }
         } label: {
             VStack(spacing: 6) {
@@ -1382,13 +1667,13 @@ struct MyCheckinsView: View {
     private func timelineStructuredDJGrid(
         _ selections: [EventAttendanceDJSelection],
         sectionID: String,
-        node: TimelineNode
+        node: TimelineNodeV2
     ) -> some View {
         let acts = sortedTimelineActs(
             timelineActs(
                 from: selections,
                 sectionID: sectionID,
-                eventID: resolvedEvent(for: node)?.id,
+                eventID: node.event.id,
                 dayID: sectionID
             )
         )
@@ -1598,14 +1883,12 @@ struct MyCheckinsView: View {
             )
     }
 
-    private func eventNodeTitle(for node: TimelineNode) -> String {
+    private func eventNodeTitle(for node: TimelineNodeV2) -> String {
         if let fullEvent = localizedEventDetail(for: node) {
             let localizedName = fullEvent.name.trimmingCharacters(in: .whitespacesAndNewlines)
             if !localizedName.isEmpty { return localizedName }
         }
-        guard let event = resolvedEvent(for: node) else {
-            return L("独立 DJ 打卡", "Standalone DJ Check-in")
-        }
+        let event = node.event
         if let localized = localizedBiText(event.nameI18n) {
             return localized
         }
@@ -1613,21 +1896,20 @@ struct MyCheckinsView: View {
         return trimmed.isEmpty ? L("未命名活动", "Untitled Event") : trimmed
     }
 
-    private func eventNodeSubtitle(for node: TimelineNode, fallbackEvent: CheckinEventLite) -> String? {
+    private func eventNodeSubtitle(for node: TimelineNodeV2, fallbackEvent: TimelineEventLite) -> String? {
         if let fullEvent = localizedEventDetail(for: node) {
             let location = fullEvent.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
             if !location.isEmpty { return location }
         }
 
-        let event = resolvedEvent(for: node) ?? fallbackEvent
+        let event = fallbackEvent
         let unifiedLocation = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         if !unifiedLocation.isEmpty {
             return unifiedLocation
         }
 
-        let localizedCountry = localizedBiText(event.countryI18n)
         let fallbackCountry = event.country?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let country = localizedCountry ?? ((fallbackCountry?.isEmpty == false) ? fallbackCountry : nil)
+        let country = (fallbackCountry?.isEmpty == false) ? fallbackCountry : nil
         let city = event.city?.trimmingCharacters(in: .whitespacesAndNewlines)
         let location = [city, country]
             .compactMap { value in
@@ -1638,13 +1920,8 @@ struct MyCheckinsView: View {
         return location.isEmpty ? nil : location
     }
 
-    private func resolvedEvent(for node: TimelineNode) -> CheckinEventLite? {
-        node.eventCheckin?.event ?? node.event
-    }
-
-    private func localizedEventDetail(for node: TimelineNode) -> WebEvent? {
-        guard let eventID = resolvedEvent(for: node)?.id else { return nil }
-        return timelineLocalizedEventByID[eventID]
+    private func localizedEventDetail(for node: TimelineNodeV2) -> WebEvent? {
+        timelineLocalizedEventByID[node.event.id]
     }
 
     private func localizedBiText(_ value: WebBiText?) -> String? {
@@ -1680,135 +1957,61 @@ struct MyCheckinsView: View {
         }
     }
 
-    private func buildTimelineNodes(from items: [WebCheckin]) -> [TimelineNode] {
-        var nodesByKey: [String: TimelineNode] = [:]
-
-        for item in items where item.type == "event" {
-            guard let event = item.event else { continue }
-            let day = Calendar.current.startOfDay(for: item.attendedAt)
-            let key = "event|\(event.id)"
-            let structuredSelections = item.eventAttendanceSelections
-            let structuredDJs = timelineDJEntries(
-                from: structuredSelections,
-                attendedAt: item.attendedAt,
-                eventID: event.id
+    private func buildTimelineNodes(from items: [MyCheckinsOverviewTimelineItem]) -> [TimelineNodeV2] {
+        items.map { item in
+            let event = TimelineEventLite(
+                id: item.event.id,
+                name: item.event.name ?? "",
+                nameI18n: item.event.nameI18n,
+                coverImageUrl: item.event.coverImageUrl,
+                address: item.event.address,
+                city: item.event.city,
+                country: item.event.country,
+                startDate: item.event.startDate,
+                endDate: item.event.endDate
             )
+            return TimelineNodeV2(
+                id: item.id,
+                anchorDate: item.attendedAt,
+                day: Calendar.current.startOfDay(for: item.attendedAt),
+                event: event,
+                structuredSelections: timelineSelectionPayloads(from: item.selections),
+                summary: item.summary
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.anchorDate == rhs.anchorDate {
+                return lhs.id > rhs.id
+            }
+            return lhs.anchorDate > rhs.anchorDate
+        }
+    }
 
-            if var existing = nodesByKey[key] {
-                if item.attendedAt > existing.anchorDate {
-                    existing.anchorDate = item.attendedAt
-                    existing.day = day
-                    existing.eventCheckin = item
-                    existing.structuredSelections = structuredSelections
-                    if !structuredDJs.isEmpty {
-                        existing.djs = structuredDJs
+    private func timelineSelectionPayloads(
+        from days: [MyCheckinsOverviewTimelineDay]
+    ) -> [EventAttendanceDaySelectionPayload] {
+        days
+            .sorted { $0.dayIndex < $1.dayIndex }
+            .map { day in
+                EventAttendanceDaySelectionPayload(
+                    dayID: day.dayId,
+                    dayIndex: day.dayIndex,
+                    djSelections: day.acts.map { act in
+                        let primaryPerformer = act.performers.first
+                        return EventAttendanceDJSelection(
+                            id: act.actGroupId,
+                            djId: act.actType == "solo" ? primaryPerformer?.djId : nil,
+                            name: act.displayName,
+                            avatarUrl: act.actType == "solo" ? primaryPerformer?.avatarUrl : nil,
+                            country: act.actType == "solo" ? primaryPerformer?.country : nil,
+                            actGroupId: act.actGroupId,
+                            actType: act.actType,
+                            performerIndex: primaryPerformer?.performerIndex,
+                            performers: act.performers
+                        )
                     }
-                }
-                nodesByKey[key] = existing
-            } else {
-                nodesByKey[key] = TimelineNode(
-                    id: key,
-                    anchorDate: item.attendedAt,
-                    day: day,
-                    event: event,
-                    eventCheckin: item,
-                    djs: structuredDJs,
-                    manualEventName: nil,
-                    structuredSelections: structuredSelections
                 )
             }
-        }
-
-        for item in items where item.type == "dj" {
-            guard let dj = item.dj else { continue }
-            let day = Calendar.current.startOfDay(for: item.attendedAt)
-            let manualEventName = manualEventName(from: item.note)
-            if let eventID = item.eventId,
-               nodesByKey.values.contains(where: { $0.event?.id == eventID && !$0.structuredSelections.isEmpty }) {
-                continue
-            }
-            let candidateKeys = nodesByKey.keys.filter { key in
-                guard let node = nodesByKey[key], node.day == day else { return false }
-                if let eventID = item.eventId {
-                    guard node.structuredSelections.isEmpty else { return false }
-                    return node.event?.id == eventID
-                }
-                if let manualEventName {
-                    guard node.event == nil else { return false }
-                    return node.manualEventName?.caseInsensitiveCompare(manualEventName) == .orderedSame
-                }
-                return node.event == nil
-            }
-
-            let selectedKey = candidateKeys.min { lhs, rhs in
-                guard let leftNode = nodesByKey[lhs], let rightNode = nodesByKey[rhs] else { return false }
-                let leftDistance = abs(leftNode.anchorDate.timeIntervalSince(item.attendedAt))
-                let rightDistance = abs(rightNode.anchorDate.timeIntervalSince(item.attendedAt))
-                return leftDistance < rightDistance
-            }
-
-            let entry = TimelineDJEntry(id: item.id, attendedAt: item.attendedAt, dj: dj)
-
-            if let selectedKey, var node = nodesByKey[selectedKey] {
-                if let existingIndex = node.djs.firstIndex(where: { $0.dj.id == dj.id }) {
-                    if item.attendedAt > node.djs[existingIndex].attendedAt {
-                        node.djs[existingIndex] = entry
-                    }
-                } else {
-                    node.djs.append(entry)
-                }
-                if item.attendedAt > node.anchorDate {
-                    node.anchorDate = item.attendedAt
-                }
-                if node.manualEventName == nil, let manualEventName {
-                    node.manualEventName = manualEventName
-                }
-                node.djs.sort { $0.attendedAt < $1.attendedAt }
-                nodesByKey[selectedKey] = node
-            } else {
-                let standaloneKey: String = {
-                    if let eventID = item.eventId, !eventID.isEmpty {
-                        return "dj|\(eventID)|\(Int(day.timeIntervalSince1970))"
-                    }
-                    if let manualEventName {
-                        return "dj|manual|\(normalizedStandaloneEventKey(manualEventName))|\(Int(day.timeIntervalSince1970))"
-                    }
-                    return "dj|none|\(Int(day.timeIntervalSince1970))"
-                }()
-                if var existing = nodesByKey[standaloneKey] {
-                    if let existingIndex = existing.djs.firstIndex(where: { $0.dj.id == dj.id }) {
-                        if item.attendedAt > existing.djs[existingIndex].attendedAt {
-                            existing.djs[existingIndex] = entry
-                        }
-                    } else {
-                        existing.djs.append(entry)
-                    }
-                    if item.attendedAt > existing.anchorDate {
-                        existing.anchorDate = item.attendedAt
-                    }
-                    if existing.manualEventName == nil, let manualEventName {
-                        existing.manualEventName = manualEventName
-                    }
-                    existing.djs.sort { $0.attendedAt < $1.attendedAt }
-                    nodesByKey[standaloneKey] = existing
-                } else {
-                    nodesByKey[standaloneKey] = TimelineNode(
-                        id: standaloneKey,
-                        anchorDate: item.attendedAt,
-                        day: day,
-                        event: nil,
-                        eventCheckin: nil,
-                        djs: [entry],
-                        manualEventName: manualEventName,
-                        structuredSelections: []
-                    )
-                }
-            }
-        }
-
-        return nodesByKey.values.sorted { lhs, rhs in
-            lhs.anchorDate > rhs.anchorDate
-        }
     }
 
     private func timelineDJEntries(
@@ -1841,6 +2044,22 @@ struct MyCheckinsView: View {
     ) -> [TimelineDJEntry] {
         let rawName = selection.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !rawName.isEmpty else { return [] }
+        if let performers = selection.performers, !performers.isEmpty {
+            return performers
+                .sorted { $0.performerIndex < $1.performerIndex }
+                .enumerated()
+                .map { offset, performer in
+                    timelineResolvedDJEntry(
+                        name: performer.name,
+                        fallbackID: performer.djId ?? "\(selection.id)-performer-\(performer.performerIndex)",
+                        attendedAt: attendedAt.addingTimeInterval(TimeInterval(offset)),
+                        entryID: "\(entryPrefix)-performer-\(performer.performerIndex)",
+                        explicitDJID: performer.djId.flatMap(normalizedTimelineDJID),
+                        explicitAvatarURL: performer.avatarUrl,
+                        explicitCountry: performer.country
+                    )
+                }
+        }
 
         if let lineupAct = timelineResolveLineupAct(for: selection, eventID: eventID, dayID: dayID) {
             return lineupAct.performers.enumerated().map { offset, performer in
@@ -1887,7 +2106,7 @@ struct MyCheckinsView: View {
                 fallbackID: selection.id,
                 attendedAt: attendedAt,
                 entryID: entryPrefix,
-                explicitDJID: normalizedTimelineDJID(selection.id),
+                explicitDJID: selection.djId.flatMap(normalizedTimelineDJID),
                 explicitAvatarURL: selection.avatarUrl,
                 explicitCountry: selection.country
             )
@@ -2159,26 +2378,23 @@ struct MyCheckinsView: View {
         explicitCountry: String? = nil
     ) -> TimelineDJEntry {
         let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lookupKey = normalizedTimelineNameKey(cleanedName)
-        let resolvedByName = timelineDJIdentityByName[lookupKey]
         let resolvedByID = explicitDJID.flatMap { timelineDJIdentityByID[$0] }
-        let displayName = firstNonEmptyValue(resolvedByID?.name, resolvedByName?.name, cleanedName) ?? cleanedName
+        let displayName = firstNonEmptyValue(resolvedByID?.name, cleanedName) ?? cleanedName
 
         let resolvedID: String = {
             if let explicitDJID, !explicitDJID.isEmpty { return explicitDJID }
             if let resolvedByID, !resolvedByID.id.isEmpty { return resolvedByID.id }
-            if let resolvedByName, !resolvedByName.id.isEmpty { return resolvedByName.id }
             return fallbackID
         }()
 
         let avatar = (explicitAvatarURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
             ? explicitAvatarURL
-            : (resolvedByID?.avatarUrl ?? resolvedByName?.avatarUrl)
+            : resolvedByID?.avatarUrl
         let country = (explicitCountry?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
             ? explicitCountry
-            : (resolvedByID?.country ?? resolvedByName?.country)
-        let followerCount = resolvedByID?.followerCount ?? resolvedByName?.followerCount
-        let soundCloudFollowers = resolvedByID?.soundCloudFollowers ?? resolvedByName?.soundCloudFollowers
+            : resolvedByID?.country
+        let followerCount = resolvedByID?.followerCount
+        let soundCloudFollowers = resolvedByID?.soundCloudFollowers
 
         return TimelineDJEntry(
             id: entryID,
@@ -2285,10 +2501,6 @@ struct MyCheckinsView: View {
             }
         }
 
-        let key = normalizedTimelineNameKey(performer.name)
-        if let resolvedByName = timelineDJIdentityByName[key] {
-            return resolvedByName.soundCloudFollowers
-        }
         return nil
     }
 
@@ -2303,10 +2515,6 @@ struct MyCheckinsView: View {
             }
         }
 
-        let key = normalizedTimelineNameKey(dj.name)
-        if let resolvedByName = timelineDJIdentityByName[key] {
-            return resolvedByName.soundCloudFollowers
-        }
         return nil
     }
 
@@ -2324,6 +2532,25 @@ struct MyCheckinsView: View {
     ) -> TimelineActEntry? {
         let rawName = selection.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !rawName.isEmpty else { return nil }
+        if let performers = selection.performers, !performers.isEmpty {
+            let actType = timelineActType(from: selection.actType, performerCount: performers.count)
+            let resolvedPerformers = performers
+                .sorted { $0.performerIndex < $1.performerIndex }
+                .map { performer in
+                    timelineActPerformer(
+                        name: performer.name,
+                        fallbackID: performer.djId ?? "\(entryID)-performer-\(performer.performerIndex)",
+                        explicitDJID: performer.djId.flatMap(normalizedTimelineDJID),
+                        explicitAvatarURL: performer.avatarUrl
+                    )
+                }
+            return TimelineActEntry(
+                id: "\(entryID)-\(selection.actGroupId ?? selection.id)",
+                title: rawName,
+                type: actType,
+                performers: resolvedPerformers
+            )
+        }
 
         if let lineupAct = timelineResolveLineupAct(for: selection, eventID: eventID, dayID: dayID) {
             let performers = Array(lineupAct.performers.prefix(lineupAct.type.performerCount).enumerated()).map { offset, performer in
@@ -2356,7 +2583,7 @@ struct MyCheckinsView: View {
             return TimelineActEntry(id: "\(entryID)-b2b", title: rawName, type: .b2b, performers: performers)
         }
 
-        let explicitID = normalizedTimelineDJID(selection.id)
+        let explicitID = selection.djId.flatMap(normalizedTimelineDJID)
         let performer = timelineActPerformer(
             name: rawName,
             fallbackID: "\(entryID)-solo",
@@ -2364,6 +2591,19 @@ struct MyCheckinsView: View {
             explicitAvatarURL: selection.avatarUrl
         )
         return TimelineActEntry(id: "\(entryID)-solo", title: rawName, type: .solo, performers: [performer])
+    }
+
+    private func timelineActType(from raw: String?, performerCount: Int) -> TimelineActType {
+        switch raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "b3b":
+            return .b3b
+        case "b2b":
+            return .b2b
+        default:
+            if performerCount >= 3 { return .b3b }
+            if performerCount == 2 { return .b2b }
+            return .solo
+        }
     }
 
     private func timelineActPerformer(
@@ -2412,34 +2652,33 @@ struct MyCheckinsView: View {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let lowered = trimmed.lowercased()
-        if lowered.hasPrefix("act-") || lowered.hasPrefix("solo-") {
+        if lowered.hasPrefix("act-") || lowered.hasPrefix("solo-") || lowered.hasPrefix("unbound-") || lowered.contains("-performer-") {
             return nil
         }
         return trimmed
+    }
+
+    private func presentUnboundDJPrompt(name: String) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        pendingUnboundDJName = trimmedName.isEmpty ? LL("待补充 DJ") : trimmedName
     }
 
     private func galleryDJGroupingKey(for dj: CheckinDJLite) -> String {
         if let resolvedID = resolvedTimelineDetailDJID(for: dj)?.lowercased(), !resolvedID.isEmpty {
             return "id:\(resolvedID)"
         }
-        let nameKey = normalizedTimelineNameKey(dj.name)
-        if !nameKey.isEmpty {
-            return "name:\(nameKey)"
-        }
         return "raw:\(dj.id.lowercased())"
     }
 
     private func resolvedGalleryDJ(_ dj: CheckinDJLite) -> CheckinDJLite {
         let resolvedID = resolvedTimelineDetailDJID(for: dj) ?? dj.id
-        let lookupKey = normalizedTimelineNameKey(dj.name)
-        let resolvedByName = timelineDJIdentityByName[lookupKey]
         let resolvedByID = timelineDJIdentityByID[resolvedID]
 
-        let avatar = firstNonEmptyValue(dj.avatarUrl, resolvedByID?.avatarUrl, resolvedByName?.avatarUrl)
-        let country = firstNonEmptyValue(dj.country, resolvedByID?.country, resolvedByName?.country)
-        let followerCount = dj.followerCount ?? resolvedByID?.followerCount ?? resolvedByName?.followerCount
-        let soundCloudFollowers = dj.soundCloudFollowers ?? resolvedByID?.soundCloudFollowers ?? resolvedByName?.soundCloudFollowers
-        let displayName = firstNonEmptyValue(resolvedByID?.name, resolvedByName?.name, dj.name) ?? dj.name
+        let avatar = firstNonEmptyValue(dj.avatarUrl, resolvedByID?.avatarUrl)
+        let country = firstNonEmptyValue(dj.country, resolvedByID?.country)
+        let followerCount = dj.followerCount ?? resolvedByID?.followerCount
+        let soundCloudFollowers = dj.soundCloudFollowers ?? resolvedByID?.soundCloudFollowers
+        let displayName = firstNonEmptyValue(resolvedByID?.name, dj.name) ?? dj.name
 
         return CheckinDJLite(
             id: resolvedID,
@@ -2496,8 +2735,7 @@ struct MyCheckinsView: View {
         if let normalizedID = normalizedTimelineDJID(dj.id) {
             return normalizedID
         }
-        let lookupKey = normalizedTimelineNameKey(dj.name)
-        return timelineDJIdentityByName[lookupKey]?.id
+        return nil
     }
 
     private func normalizedTimelineNameKey(_ name: String) -> String {
@@ -2505,109 +2743,6 @@ struct MyCheckinsView: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-    }
-
-    private func hydrateTimelineDJIdentityMap(from checkins: [WebCheckin]) async {
-        let performerIDs = unresolvedTimelinePerformerIDs(from: checkins)
-        var resolvedByName: [String: CheckinDJLite] = [:]
-        var resolvedByID: [String: CheckinDJLite] = [:]
-
-        for checkin in checkins {
-            guard let dj = checkin.dj else { continue }
-            let nameKey = normalizedTimelineNameKey(dj.name)
-            if !nameKey.isEmpty {
-                resolvedByName[nameKey] = mergedTimelineDJIdentity(existing: resolvedByName[nameKey], candidate: dj)
-            }
-            resolvedByID[dj.id] = mergedTimelineDJIdentity(existing: resolvedByID[dj.id], candidate: dj)
-        }
-
-        for performerID in performerIDs {
-            guard timelineDJIdentityByID[performerID] == nil, resolvedByID[performerID] == nil else { continue }
-            do {
-                let dj = try await service.fetchDJ(id: performerID)
-                let resolvedDJ = CheckinDJLite(
-                    id: dj.id,
-                    name: dj.name,
-                    avatarUrl: dj.avatarUrl,
-                    country: dj.country,
-                    followerCount: dj.followerCount,
-                    soundCloudFollowers: dj.soundCloudFollowers
-                )
-                let nameKey = normalizedTimelineNameKey(dj.name)
-                if !nameKey.isEmpty {
-                    resolvedByName[nameKey] = mergedTimelineDJIdentity(existing: resolvedByName[nameKey], candidate: resolvedDJ)
-                }
-                resolvedByID[dj.id] = mergedTimelineDJIdentity(existing: resolvedByID[dj.id], candidate: resolvedDJ)
-            } catch {
-                continue
-            }
-        }
-
-        let names = unresolvedTimelinePerformerNames(from: checkins)
-        for name in names {
-            let lookupKey = normalizedTimelineNameKey(name)
-            guard !lookupKey.isEmpty,
-                  timelineDJIdentityByName[lookupKey] == nil,
-                  resolvedByName[lookupKey] == nil else { continue }
-            do {
-                let page = try await service.fetchDJs(page: 1, limit: 20, search: name, sortBy: "name")
-                if let match = page.items.first(where: { normalizedTimelineNameKey($0.name) == lookupKey }) {
-                    let resolvedDJ = CheckinDJLite(
-                        id: match.id,
-                        name: match.name,
-                        avatarUrl: match.avatarUrl,
-                        country: match.country,
-                        followerCount: match.followerCount,
-                        soundCloudFollowers: match.soundCloudFollowers
-                    )
-                    resolvedByName[lookupKey] = mergedTimelineDJIdentity(existing: resolvedByName[lookupKey], candidate: resolvedDJ)
-                    resolvedByID[match.id] = mergedTimelineDJIdentity(existing: resolvedByID[match.id], candidate: resolvedDJ)
-                }
-            } catch {
-                continue
-            }
-        }
-
-        guard !resolvedByName.isEmpty || !resolvedByID.isEmpty else { return }
-        for (key, value) in resolvedByName {
-            timelineDJIdentityByName[key] = mergedTimelineDJIdentity(existing: timelineDJIdentityByName[key], candidate: value)
-        }
-        for (key, value) in resolvedByID {
-            timelineDJIdentityByID[key] = mergedTimelineDJIdentity(existing: timelineDJIdentityByID[key], candidate: value)
-        }
-    }
-
-    private func hydrateTimelineEventLocalizationMap(from checkins: [WebCheckin]) async {
-        let eventIDs = Set(
-            checkins.compactMap { item in
-                if let nestedID = item.event?.id, !nestedID.isEmpty {
-                    return nestedID
-                }
-                let rawID = item.eventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                return rawID.isEmpty ? nil : rawID
-            }
-        )
-        guard !eventIDs.isEmpty else { return }
-
-        let unresolvedIDs = eventIDs
-            .filter { timelineLocalizedEventByID[$0] == nil }
-            .sorted()
-        guard !unresolvedIDs.isEmpty else { return }
-
-        var resolved: [String: WebEvent] = [:]
-        for eventID in unresolvedIDs {
-            do {
-                let event = try await service.fetchEvent(id: eventID)
-                resolved[eventID] = event
-            } catch {
-                continue
-            }
-        }
-        guard !resolved.isEmpty else { return }
-
-        for (eventID, event) in resolved where timelineLocalizedEventByID[eventID] == nil {
-            timelineLocalizedEventByID[eventID] = event
-        }
     }
 
     private func mergedTimelineDJIdentity(existing: CheckinDJLite?, candidate: CheckinDJLite) -> CheckinDJLite {
@@ -2640,112 +2775,7 @@ struct MyCheckinsView: View {
         return existing
     }
 
-    private func unresolvedTimelinePerformerIDs(from checkins: [WebCheckin]) -> [String] {
-        var ids = Set<String>()
-        for checkin in checkins {
-            let selections = checkin.eventAttendanceSelections
-            guard !selections.isEmpty else { continue }
-            let eventID = timelineEventID(for: checkin)
-
-            for day in selections {
-                for selection in day.djSelections {
-                    if let lineupAct = timelineResolveLineupAct(for: selection, eventID: eventID, dayID: day.dayID) {
-                        for performer in lineupAct.performers {
-                            guard let performerID = normalizedTimelineDJID(performer.djID ?? "") else { continue }
-                            if timelineDJIdentityByID[performerID] == nil {
-                                ids.insert(performerID)
-                            }
-                        }
-                        continue
-                    }
-
-                    if let explicitID = normalizedTimelineDJID(selection.id),
-                       timelineDJIdentityByID[explicitID] == nil {
-                        ids.insert(explicitID)
-                    }
-                }
-            }
-        }
-        return ids.sorted()
-    }
-
-    private func unresolvedTimelinePerformerNames(from checkins: [WebCheckin]) -> [String] {
-        var names = Set<String>()
-        for checkin in checkins {
-            let selections = checkin.eventAttendanceSelections
-            guard !selections.isEmpty else { continue }
-            let eventID = timelineEventID(for: checkin)
-
-            for day in selections {
-                for selection in day.djSelections {
-                    let rawName = selection.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !rawName.isEmpty else { continue }
-                    let lineupAct = timelineResolveLineupAct(for: selection, eventID: eventID, dayID: day.dayID)
-
-                    if let split = splitActNames(rawName, keyword: "B3B"), split.count >= 3 {
-                        for (offset, name) in split.prefix(3).enumerated() {
-                            let key = normalizedTimelineNameKey(name)
-                            let hasBoundID = lineupActPerformerID(in: lineupAct, index: offset) != nil
-                            if timelineDJIdentityByName[key] == nil, !hasBoundID {
-                                names.insert(name)
-                            }
-                        }
-                        continue
-                    }
-
-                    if let split = splitActNames(rawName, keyword: "B2B"), split.count >= 2 {
-                        for (offset, name) in split.prefix(2).enumerated() {
-                            let key = normalizedTimelineNameKey(name)
-                            let hasBoundID = lineupActPerformerID(in: lineupAct, index: offset) != nil
-                            if timelineDJIdentityByName[key] == nil, !hasBoundID {
-                                names.insert(name)
-                            }
-                        }
-                        continue
-                    }
-
-                    if normalizedTimelineDJID(selection.id) == nil, lineupActPerformerID(in: lineupAct, index: 0) == nil {
-                        let key = normalizedTimelineNameKey(rawName)
-                        if timelineDJIdentityByName[key] == nil {
-                            names.insert(rawName)
-                        }
-                    }
-                }
-            }
-        }
-
-        return names.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-    }
-
-    private func timelineEventID(for checkin: WebCheckin) -> String? {
-        if let nestedEvent = checkin.event {
-            let nestedID = nestedEvent.id.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !nestedID.isEmpty {
-                return nestedID
-            }
-        }
-        let rawID = checkin.eventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return rawID.isEmpty ? nil : rawID
-    }
-
-    private func lineupActPerformerID(in act: TimelineLineupResolvedAct?, index: Int) -> String? {
-        guard let act, act.performers.indices.contains(index) else { return nil }
-        return normalizedTimelineDJID(act.performers[index].djID ?? "")
-    }
-
-    private func attendanceSections(for node: TimelineNode) -> [TimelineAttendanceSection] {
-        if node.isStandaloneDJNode {
-            guard !node.djs.isEmpty else { return [] }
-            return [
-                    TimelineAttendanceSection(
-                        id: "standalone-\(node.id)",
-                        title: L("单独 DJ 打卡", "Standalone DJ Check-in"),
-                        djs: node.djs,
-                        structuredDJSelections: nil
-                    )
-                ]
-        }
-
+    private func attendanceSections(for node: TimelineNodeV2) -> [TimelineAttendanceSection] {
         if !node.structuredSelections.isEmpty {
             return node.structuredSelections
                 .sorted { $0.dayIndex < $1.dayIndex }
@@ -2756,7 +2786,7 @@ struct MyCheckinsView: View {
                         djs: timelineDJEntries(
                             from: [selection],
                             attendedAt: node.anchorDate,
-                            eventID: resolvedEvent(for: node)?.id
+                            eventID: node.event.id
                         ),
                         structuredDJSelections: selection.djSelections
                     )
@@ -2768,14 +2798,15 @@ struct MyCheckinsView: View {
             TimelineAttendanceSection(
                 id: "fallback-\(node.id)",
                 title: title,
-                djs: node.djs,
+                djs: [],
                 structuredDJSelections: nil
             )
         ]
     }
 
-    private func fallbackDayLabel(for node: TimelineNode) -> String? {
-        guard let event = node.event, let startDate = event.startDate else { return nil }
+    private func fallbackDayLabel(for node: TimelineNodeV2) -> String? {
+        let event = node.event
+        guard let startDate = event.startDate else { return nil }
         let calendar = Calendar.current
         let startDay = calendar.startOfDay(for: startDate)
         let currentDay = calendar.startOfDay(for: node.day)

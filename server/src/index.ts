@@ -21,6 +21,7 @@ import bffWebRoutes from './routes/bff.web.routes';
 import tencentIMRoutes from './routes/tencent-im.routes';
 import preRegistrationRoutes from './routes/pre-registration.routes';
 import notificationCenterRoutes from './routes/notification-center.routes';
+import checkinsV2Routes from './routes/checkins-v2.routes';
 import {
   registerNotificationCenterAPNSHandler,
   startNotificationEventCountdownScheduler,
@@ -98,6 +99,7 @@ app.use('/api/labels', labelRoutes);
 app.use('/api', preRegistrationRoutes);
 app.use('/v1', bffRoutes);
 app.use('/v1', bffWebRoutes);
+app.use('/v2', checkinsV2Routes);
 app.use('/v1/im/tencent', tencentIMRoutes);
 app.use('/v1/notification-center', notificationCenterRoutes);
 registerNotificationCenterAPNSHandler();
@@ -122,6 +124,7 @@ app.get('/api', (_req: Request, res: Response) => {
       preRegistrations: '/api/pre-registrations',
       preRegistrationAdmin: '/api/admin/pre-registrations',
       bffV1: '/v1',
+      checkinsV2: '/v2/checkins',
     },
   });
 });

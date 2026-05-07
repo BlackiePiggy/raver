@@ -28,6 +28,132 @@ struct CheckinListPage: Codable {
     var pagination: BFFPagination?
 }
 
+struct MyCheckinsOverviewResponse: Codable, Hashable {
+    var stats: MyCheckinsOverviewStats
+    var timeline: MyCheckinsOverviewTimelineSection
+    var gallerySummary: MyCheckinsOverviewGallerySummary
+}
+
+struct MyCheckinsGalleryEventPage: Codable {
+    var items: [MyCheckinsOverviewGalleryEvent]
+    var pagination: BFFPagination?
+}
+
+struct MyCheckinsGalleryArtistPage: Codable {
+    var items: [MyCheckinsOverviewGalleryArtist]
+    var pagination: BFFPagination?
+}
+
+struct MyCheckinsTimelinePage: Codable {
+    var items: [MyCheckinsOverviewTimelineItem]
+    var pagination: BFFPagination?
+}
+
+struct MyCheckinsOverviewStats: Codable, Hashable {
+    var eventCount: Int
+    var artistCount: Int
+    var latestCheckinAt: Date?
+}
+
+struct MyCheckinsOverviewTimelineSection: Codable, Hashable {
+    var items: [MyCheckinsOverviewTimelineItem]
+    var pagination: MyCheckinsOverviewPagination
+}
+
+struct MyCheckinsOverviewPagination: Codable, Hashable {
+    var limit: Int
+    var hasMore: Bool
+    var totalEventCount: Int
+}
+
+struct MyCheckinsOverviewGallerySummary: Codable, Hashable {
+    var topEvents: [MyCheckinsOverviewGalleryEvent]
+    var topArtists: [MyCheckinsOverviewGalleryArtist]
+}
+
+struct MyCheckinsOverviewGalleryEvent: Codable, Hashable, Identifiable {
+    var id: String { eventId }
+    var eventId: String
+    var name: String?
+    var coverImageUrl: String?
+    var address: String?
+    var attendedAt: Date
+    var artistCount: Int
+    var performanceCount: Int
+}
+
+struct MyCheckinsOverviewGalleryArtist: Codable, Hashable, Identifiable {
+    var id: String {
+        if let djId, !djId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return djId
+        }
+        return "artist-\(name.lowercased())"
+    }
+    var djId: String?
+    var name: String
+    var avatarUrl: String?
+    var country: String?
+    var count: Int
+    var latestAttendedAt: Date
+}
+
+struct MyCheckinsOverviewTimelineItem: Codable, Hashable, Identifiable {
+    let id: String
+    var type: String
+    var attendedAt: Date
+    var createdAt: Date
+    var event: MyCheckinsOverviewTimelineEvent
+    var summary: MyCheckinsOverviewTimelineSummary
+    var selections: [MyCheckinsOverviewTimelineDay]
+}
+
+struct MyCheckinsOverviewTimelineEvent: Codable, Hashable, Identifiable {
+    let id: String
+    var name: String?
+    var nameI18n: WebBiText? = nil
+    var coverImageUrl: String?
+    var address: String?
+    var city: String?
+    var country: String?
+    var startDate: Date?
+    var endDate: Date?
+}
+
+struct MyCheckinsOverviewTimelineSummary: Codable, Hashable {
+    var dayCount: Int
+    var artistCount: Int
+    var performanceCount: Int
+}
+
+struct MyCheckinsOverviewTimelineDay: Codable, Hashable, Identifiable {
+    var id: String { dayId }
+    var dayId: String
+    var dayIndex: Int
+    var acts: [MyCheckinsOverviewTimelineAct]
+}
+
+struct MyCheckinsOverviewTimelineAct: Codable, Hashable, Identifiable {
+    var id: String { actGroupId }
+    var actGroupId: String
+    var actType: String
+    var displayName: String
+    var performers: [MyCheckinsOverviewTimelinePerformer]
+}
+
+struct MyCheckinsOverviewTimelinePerformer: Codable, Hashable, Identifiable {
+    var id: String {
+        if let djId, !djId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return djId
+        }
+        return "performer-\(performerIndex)-\(name.lowercased())"
+    }
+    var djId: String?
+    var name: String
+    var avatarUrl: String?
+    var country: String?
+    var performerIndex: Int
+}
+
 struct LearnLabelListPage: Codable {
     var items: [LearnLabel]
     var pagination: BFFPagination?
@@ -186,6 +312,7 @@ struct WebEventLineupSlot: Codable, Identifiable, Hashable {
     var eventId: String?
     var djId: String?
     var djIds: [String]? = nil
+    var djs: [WebEventLineupSlotDJ]? = nil
     var festivalDayIndex: Int? = nil
     var djName: String
     var stageName: String?
@@ -719,13 +846,19 @@ struct WebCheckin: Codable, Identifiable, Hashable {
     var createdAt: Date
     var event: CheckinEventLite?
     var dj: CheckinDJLite?
+    var selections: [CheckinSelectionInput]? = nil
 }
 
 struct EventAttendanceDJSelection: Codable, Hashable, Identifiable {
     let id: String
+    var djId: String? = nil
     var name: String
     var avatarUrl: String?
     var country: String?
+    var actGroupId: String? = nil
+    var actType: String? = nil
+    var performerIndex: Int? = nil
+    var performers: [MyCheckinsOverviewTimelinePerformer]? = nil
 }
 
 struct EventAttendanceDaySelectionPayload: Codable, Hashable, Identifiable {
@@ -751,6 +884,30 @@ extension WebCheckin {
     }
 
     var eventAttendanceSelections: [EventAttendanceDaySelectionPayload] {
+        if let selections, !selections.isEmpty {
+            return selections
+                .sorted { $0.dayIndex < $1.dayIndex }
+                .map { selection in
+                    EventAttendanceDaySelectionPayload(
+                        dayID: selection.dayId,
+                        dayIndex: selection.dayIndex,
+                        djSelections: selection.djs
+                            .sorted { $0.performerIndex < $1.performerIndex }
+                            .map { dj in
+                                EventAttendanceDJSelection(
+                                    id: dj.actGroupId,
+                                    djId: dj.djId,
+                                    name: dj.displayName,
+                                    avatarUrl: nil,
+                                    country: nil,
+                                    actGroupId: dj.actGroupId,
+                                    actType: dj.actType,
+                                    performerIndex: dj.performerIndex
+                                )
+                            }
+                    )
+                }
+        }
         guard let note else { return [] }
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix(Self.eventAttendanceNotePrefix) else { return [] }
@@ -827,6 +984,8 @@ struct CreateCheckinInput: Codable {
     var note: String?
     var rating: Int?
     var attendedAt: Date? = nil
+    var visibility: String? = nil
+    var selections: [CheckinSelectionInput]? = nil
 }
 
 struct UpdateCheckinInput: Codable {
@@ -835,6 +994,22 @@ struct UpdateCheckinInput: Codable {
     var note: String?
     var rating: Int?
     var attendedAt: Date? = nil
+    var visibility: String? = nil
+    var selections: [CheckinSelectionInput]? = nil
+}
+
+struct CheckinSelectionInput: Codable, Hashable {
+    var dayId: String
+    var dayIndex: Int
+    var djs: [CheckinSelectionDJInput]
+}
+
+struct CheckinSelectionDJInput: Codable, Hashable {
+    var djId: String?
+    var displayName: String
+    var actGroupId: String
+    var actType: String
+    var performerIndex: Int
 }
 
 struct WebRatingComment: Codable, Identifiable, Hashable {
