@@ -724,12 +724,12 @@ struct EventDetailView: View {
                             confirmButtonTitle: activeAttendanceCheckin == nil ? L("确认打卡", "Confirm Check-in") : L("保存修改", "Save Changes"),
                             destructiveButtonTitle: activeAttendanceCheckin == nil ? nil : L("取消打卡", "Cancel Check-in"),
                             onDelete: activeAttendanceCheckin == nil ? nil : {
-                                Task { await cancelEventCheckin() }
+                                try await cancelEventCheckin()
                             }
                         ) { selectionsByDayID in
                             selectedEventCheckinDayIDs = Set(selectionsByDayID.keys)
                             selectedEventCheckinDJIDsByDayID = selectionsByDayID
-                            Task { await submitEventCheckinSelections(selectedDJIDsByDayID: selectionsByDayID) }
+                            try await submitEventCheckinSelections(selectedDJIDsByDayID: selectionsByDayID)
                         }
                         .presentationDetents([.fraction(0.78), .large])
                     }
@@ -2935,33 +2935,32 @@ struct EventDetailView: View {
         }
     }
 
-    private func submitEventCheckinSelections(selectedDJIDsByDayID: [String: Set<String>]) async {
+    private func submitEventCheckinSelections(selectedDJIDsByDayID: [String: Set<String>]) async throws {
         guard let event else { return }
         let selectedDays = eventCheckinDayOptions(for: event)
             .filter { selectedEventCheckinDayIDs.contains($0.id) }
             .sorted { $0.dayIndex < $1.dayIndex }
 
         guard !selectedDays.isEmpty else {
-            errorMessage = L("请至少选择一个参加日", "Please select at least one attended day.")
-            return
+            throw ServiceError.message(L("请至少选择一个参加日", "Please select at least one attended day."))
         }
 
-        do {
-            let payloads = selectedDays.map { day in
-                makeAttendanceSelectionPayload(
-                    for: event,
-                    day: day,
-                    selectedDJIDs: selectedDJIDsByDayID[day.id] ?? []
-                )
-            }
-            guard let note = WebCheckin.makeEventAttendanceNote(selections: payloads) else {
-                errorMessage = L("打卡信息生成失败，请重试", "Failed to generate check-in payload. Please try again.")
-                return
-            }
-            let attendedAt = selectedDays.map(\.attendedAt).max() ?? Date()
+        let payloads = selectedDays.map { day in
+            makeAttendanceSelectionPayload(
+                for: event,
+                day: day,
+                selectedDJIDs: selectedDJIDsByDayID[day.id] ?? []
+            )
+        }
+        guard let note = WebCheckin.makeEventAttendanceNote(selections: payloads) else {
+            throw ServiceError.message(L("打卡信息生成失败，请重试", "Failed to generate check-in payload. Please try again."))
+        }
+        let attendedAt = selectedDays.map(\.attendedAt).max() ?? Date()
 
-            let primaryCheckin: WebCheckin
-            if let activeAttendanceCheckin {
+        let primaryCheckin: WebCheckin
+        let didUpdateExisting: Bool
+        if let activeAttendanceCheckin {
+            do {
                 primaryCheckin = try await eventsRepository.updateCheckin(
                     id: activeAttendanceCheckin.id,
                     input: UpdateCheckinInput(
@@ -2974,46 +2973,96 @@ struct EventDetailView: View {
                         selections: makeCheckinSelectionInputs(from: payloads)
                     )
                 )
-                showCheckinOperationSuccessBanner(message: L("打卡信息已更新", "Check-in updated."))
-            } else {
-                primaryCheckin = try await eventsRepository.createCheckin(
-                    input: CreateCheckinInput(
-                        type: "event",
-                        eventId: eventID,
-                        djId: nil,
+                didUpdateExisting = true
+            } catch {
+                if isInactiveCheckinError(error) {
+                    try await refreshRelatedEventCheckins()
+                    primaryCheckin = try await createEventAttendanceCheckin(
                         note: note,
-                        rating: nil,
                         attendedAt: attendedAt,
-                        visibility: "private",
-                        selections: makeCheckinSelectionInputs(from: payloads)
+                        payloads: payloads
                     )
-                )
-                showCheckinOperationSuccessBanner(message: L("活动打卡成功", "Event check-in successful."))
+                    didUpdateExisting = false
+                } else {
+                    throw error
+                }
             }
-
-            await cleanupLegacyEventCheckins(keeping: primaryCheckin.id)
-            relatedEventCheckins = ([primaryCheckin] + relatedEventCheckins.filter { $0.id != primaryCheckin.id })
-                .filter { $0.id == primaryCheckin.id || !shouldCleanupEventCheckin($0, keeping: primaryCheckin.id) }
-        } catch {
-            errorMessage = error.userFacingMessage
+        } else {
+            primaryCheckin = try await createEventAttendanceCheckin(
+                note: note,
+                attendedAt: attendedAt,
+                payloads: payloads
+            )
+            didUpdateExisting = false
         }
+
+        await cleanupLegacyEventCheckins(keeping: primaryCheckin.id)
+        try await refreshRelatedEventCheckins()
+        relatedEventCheckins = ([primaryCheckin] + relatedEventCheckins.filter { $0.id != primaryCheckin.id })
+            .filter { $0.id == primaryCheckin.id || !shouldCleanupEventCheckin($0, keeping: primaryCheckin.id) }
+
+        showCheckinOperationSuccessBanner(
+            message: didUpdateExisting ? L("打卡信息已更新", "Check-in updated.") : L("活动打卡成功", "Event check-in successful.")
+        )
     }
 
-    private func cancelEventCheckin() async {
-        guard let activeAttendanceCheckin else { return }
+    private func createEventAttendanceCheckin(
+        note: String,
+        attendedAt: Date,
+        payloads: [EventAttendanceDaySelectionPayload]
+    ) async throws -> WebCheckin {
+        try await eventsRepository.createCheckin(
+            input: CreateCheckinInput(
+                type: "event",
+                eventId: eventID,
+                djId: nil,
+                note: note,
+                rating: nil,
+                attendedAt: attendedAt,
+                visibility: "private",
+                selections: makeCheckinSelectionInputs(from: payloads)
+            )
+        )
+    }
+
+    private func cancelEventCheckin() async throws {
+        guard let activeAttendanceCheckin else {
+            try await refreshRelatedEventCheckins()
+            return
+        }
 
         do {
             try await eventsRepository.deleteCheckin(id: activeAttendanceCheckin.id)
-            await cleanupLegacyEventCheckins(keeping: activeAttendanceCheckin.id)
-            relatedEventCheckins.removeAll { checkin in
-                checkin.id == activeAttendanceCheckin.id || shouldCleanupEventCheckin(checkin, keeping: nil)
-            }
-            selectedEventCheckinDayIDs = []
-            selectedEventCheckinDJIDsByDayID = [:]
-            showCheckinOperationSuccessBanner(message: L("已取消活动打卡", "Event check-in canceled."))
         } catch {
-            errorMessage = error.userFacingMessage
+            guard isInactiveCheckinError(error) else { throw error }
         }
+
+        await cleanupLegacyEventCheckins(keeping: activeAttendanceCheckin.id)
+        try await refreshRelatedEventCheckins()
+        relatedEventCheckins.removeAll { checkin in
+            checkin.id == activeAttendanceCheckin.id || shouldCleanupEventCheckin(checkin, keeping: nil)
+        }
+        selectedEventCheckinDayIDs = []
+        selectedEventCheckinDJIDsByDayID = [:]
+        showCheckinOperationSuccessBanner(message: L("已取消活动打卡", "Event check-in canceled."))
+    }
+
+    private func refreshRelatedEventCheckins() async throws {
+        let page = try await eventsRepository.fetchMyCheckins(
+            page: 1,
+            limit: 200,
+            type: nil,
+            eventID: eventID,
+            djID: nil
+        )
+        relatedEventCheckins = page.items
+    }
+
+    private func isInactiveCheckinError(_ error: Error) -> Bool {
+        let message = (error.userFacingMessage ?? error.localizedDescription).lowercased()
+        return message.contains("checkin is no longer active")
+            || message.contains("check-in is no longer active")
+            || message.contains("no longer active")
     }
 
     private func showCheckinOperationSuccessBanner(message: String) {

@@ -176,12 +176,19 @@ struct EventCheckinSelectionSheet: View {
     let initialSelectedDJIDsByDayID: [String: Set<String>]
     let confirmButtonTitle: String
     let destructiveButtonTitle: String?
-    let onDelete: (() -> Void)?
-    let onConfirm: ([String: Set<String>]) -> Void
+    let onDelete: (() async throws -> Void)?
+    let onConfirm: ([String: Set<String>]) async throws -> Void
 
     @State private var selectedDayIDs: Set<String>
     @State private var selectedDJIDsByDayID: [String: Set<String>]
     @State private var expandedDayIDs: Set<String>
+    @State private var activeOperation: Operation?
+    @State private var operationErrorMessage: String?
+
+    private enum Operation {
+        case save
+        case delete
+    }
 
     private var columns: [GridItem] {
         [
@@ -211,8 +218,8 @@ struct EventCheckinSelectionSheet: View {
         initialSelectedDJIDsByDayID: [String: Set<String>] = [:],
         confirmButtonTitle: String = "",
         destructiveButtonTitle: String? = nil,
-        onDelete: (() -> Void)? = nil,
-        onConfirm: @escaping ([String: Set<String>]) -> Void
+        onDelete: (() async throws -> Void)? = nil,
+        onConfirm: @escaping ([String: Set<String>]) async throws -> Void
     ) {
         self.eventName = eventName
         self.options = options
@@ -255,6 +262,10 @@ struct EventCheckinSelectionSheet: View {
                             daySelectionCard(option)
                         }
                     }
+
+                    if let operationErrorMessage {
+                        FormStatusMessage(message: operationErrorMessage, style: .error)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
@@ -263,18 +274,29 @@ struct EventCheckinSelectionSheet: View {
             .toolbar {
                 if let destructiveButtonTitle, let onDelete {
                     ToolbarItem(placement: .bottomBar) {
-                        Button(destructiveButtonTitle, role: .destructive) {
-                            onDelete()
-                            dismiss()
+                        Button(role: .destructive) {
+                            Task { await performDelete(onDelete) }
+                        } label: {
+                            toolbarButtonLabel(
+                                title: destructiveButtonTitle,
+                                loadingTitle: L("取消中...", "Canceling..."),
+                                isLoading: activeOperation == .delete
+                            )
                         }
+                        .disabled(activeOperation != nil)
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(confirmButtonTitle) {
-                        onConfirm(normalizedSelections())
-                        dismiss()
+                    Button {
+                        Task { await performSave() }
+                    } label: {
+                        toolbarButtonLabel(
+                            title: confirmButtonTitle,
+                            loadingTitle: L("保存中...", "Saving..."),
+                            isLoading: activeOperation == .save
+                        )
                     }
-                    .disabled(selectedDayIDs.isEmpty)
+                    .disabled(selectedDayIDs.isEmpty || activeOperation != nil)
                 }
             }
             .onAppear {
@@ -282,6 +304,49 @@ struct EventCheckinSelectionSheet: View {
             }
         }
         .raverEnableCustomSwipeBack(edgeRatio: 0.2)
+        .interactiveDismissDisabled(activeOperation != nil)
+    }
+
+    private var isOperating: Bool {
+        activeOperation != nil
+    }
+
+    private func toolbarButtonLabel(title: String, loadingTitle: String, isLoading: Bool) -> some View {
+        HStack(spacing: 6) {
+            if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+            }
+            Text(isLoading ? loadingTitle : title)
+        }
+    }
+
+    @MainActor
+    private func performSave() async {
+        guard activeOperation == nil else { return }
+        activeOperation = .save
+        operationErrorMessage = nil
+        do {
+            try await onConfirm(normalizedSelections())
+            dismiss()
+        } catch {
+            operationErrorMessage = error.userFacingMessage ?? L("打卡保存失败，请稍后重试。", "Failed to save check-in. Please try again later.")
+        }
+        activeOperation = nil
+    }
+
+    @MainActor
+    private func performDelete(_ onDelete: @escaping () async throws -> Void) async {
+        guard activeOperation == nil else { return }
+        activeOperation = .delete
+        operationErrorMessage = nil
+        do {
+            try await onDelete()
+            dismiss()
+        } catch {
+            operationErrorMessage = error.userFacingMessage ?? L("取消打卡失败，请稍后重试。", "Failed to cancel check-in. Please try again later.")
+        }
+        activeOperation = nil
     }
 
     private var selectedDJCount: Int {
@@ -411,6 +476,7 @@ struct EventCheckinSelectionSheet: View {
     }
 
     private func toggleDaySelection(_ dayID: String) {
+        guard !isOperating else { return }
         if selectedDayIDs.contains(dayID) {
             selectedDayIDs.remove(dayID)
             selectedDJIDsByDayID[dayID] = nil
@@ -423,6 +489,7 @@ struct EventCheckinSelectionSheet: View {
     }
 
     private func toggleDayExpansion(_ dayID: String) {
+        guard !isOperating else { return }
         if expandedDayIDs.contains(dayID) {
             expandedDayIDs.remove(dayID)
         } else {
@@ -432,6 +499,7 @@ struct EventCheckinSelectionSheet: View {
     }
 
     private func toggleDJSelection(dayID: String, djID: String) {
+        guard !isOperating else { return }
         if !selectedDayIDs.contains(dayID) {
             selectedDayIDs.insert(dayID)
         }
