@@ -27,6 +27,10 @@ struct PostCardView: View {
     @State private var isShowingMoreChatsSheet = false
     @State private var shareErrorMessage: String?
 
+    private var shareLinkCoordinator: ShareLinkCoordinator {
+        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+    }
+
     init(
         post: Post,
         currentUserId: String?,
@@ -405,7 +409,7 @@ struct PostCardView: View {
                 systemImage: "link",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
             ) {
-                UIPasteboard.general.string = PostSharePayload(post: post).shareURLString
+                Task { await copyPostShareLink() }
             }
         ]
 
@@ -430,6 +434,29 @@ struct PostCardView: View {
             }
         )
         return actions
+    }
+
+    @MainActor
+    private func copyPostShareLink() async {
+        do {
+            let result = try await shareLinkCoordinator.copyLink(
+                target: ShareTarget(
+                    type: .post,
+                    id: post.id,
+                    title: PostSharePayload(post: post).shareTitle,
+                    subtitle: PostSharePayload(post: post).shareSummary,
+                    imageURL: post.images.first
+                )
+            )
+
+            if result.usedDeepLinkFallback {
+                shareErrorMessage = L("已复制 App 内链接", "Copied app-only link.")
+            } else {
+                OperationBannerCenter.shared.success(L("已复制链接", "Link copied"))
+            }
+        } catch {
+            shareErrorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+        }
     }
 }
 

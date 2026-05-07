@@ -102,6 +102,7 @@ struct EventDetailView: View {
 
     private var eventsRepository: DiscoverEventsRepository { appContainer.discoverEventsRepository }
     private var newsRepository: DiscoverNewsRepository { appContainer.discoverNewsRepository }
+    private var shareLinkCoordinator: ShareLinkCoordinator { ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService()) }
 
     let eventID: String
 
@@ -1884,6 +1885,17 @@ struct EventDetailView: View {
 
         actions.append(
             SharePanelQuickAction(
+                title: L("复制链接", "Copy Link"),
+                systemImage: "link",
+                accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
+            ) {
+                guard let event else { return }
+                Task { await copyEventShareLink(event) }
+            }
+        )
+
+        actions.append(
+            SharePanelQuickAction(
                 title: isCachingManualSnapshot ? L("缓存中", "Caching") : L("缓存", "Cache"),
                 systemImage: "arrow.down.circle",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
@@ -1924,6 +1936,33 @@ struct EventDetailView: View {
         )
 
         return actions
+    }
+
+    @MainActor
+    private func copyEventShareLink(_ event: WebEvent) async {
+        do {
+            let subtitle = [event.city, event.organizerName].compactMap { value in
+                value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            }.filter { !$0.isEmpty }.joined(separator: " · ")
+
+            let result = try await shareLinkCoordinator.copyLink(
+                target: ShareTarget(
+                    type: .event,
+                    id: event.id,
+                    title: event.name,
+                    subtitle: subtitle.isEmpty ? nil : subtitle,
+                    imageURL: event.coverImageUrl
+                )
+            )
+
+            if result.usedDeepLinkFallback {
+                showWidgetStatusBanner(message: L("已复制 App 内链接", "Copied app-only link."))
+            } else {
+                showWidgetStatusBanner(message: L("已复制链接", "Link copied"))
+            }
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+        }
     }
 
     private func openEventFeedbackEntry() {

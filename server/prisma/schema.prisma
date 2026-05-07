@@ -30,6 +30,8 @@ model User {
   isVerified            Boolean   @default(false) @map("is_verified")
   isActive              Boolean   @default(true) @map("is_active")
   role                  String    @default("user")
+  profileShareCode      String?   @unique @map("profile_share_code")
+  profileShareQrCodeUrl String?   @map("profile_share_qr_code_url")
 
   checkins            Checkin[]
   follows             Follow[]        @relation("UserFollows")
@@ -44,7 +46,7 @@ model User {
   ratingComments      RatingComment[] @relation("RatingCommentAuthor")
 
   // Community & Squad
-  posts                     Post[]                    @relation("UserPosts")
+  posts                     Post[]                     @relation("UserPosts")
   postLikes                 PostLike[]
   postReposts               PostRepost[]
   postSaves                 PostSave[]
@@ -52,14 +54,14 @@ model User {
   postHides                 PostHide[]
   feedEvents                FeedEvent[]
   postComments              PostComment[]
-  postCommentReplyTargets   PostComment[]             @relation("PostCommentReplyToUser")
-  ledSquads                 Squad[]                   @relation("SquadLeader")
+  postCommentReplyTargets   PostComment[]              @relation("PostCommentReplyToUser")
+  ledSquads                 Squad[]                    @relation("SquadLeader")
   squadMemberships          SquadMember[]
-  sentInvites               SquadInvite[]             @relation("SentInvites")
-  receivedInvites           SquadInvite[]             @relation("ReceivedInvites")
+  sentInvites               SquadInvite[]              @relation("SentInvites")
+  receivedInvites           SquadInvite[]              @relation("ReceivedInvites")
   squadMessages             SquadMessage[]
-  directConversationsA      DirectConversation[]      @relation("DirectConversationUserA")
-  directConversationsB      DirectConversation[]      @relation("DirectConversationUserB")
+  directConversationsA      DirectConversation[]       @relation("DirectConversationUserA")
+  directConversationsB      DirectConversation[]       @relation("DirectConversationUserB")
   directConversationReads   DirectConversationRead[]
   directMessages            DirectMessage[]
   notificationReads         NotificationRead[]
@@ -72,56 +74,60 @@ model User {
   uploadedPhotos            SquadAlbumPhoto[]
   wikiFestivalContributions WikiFestivalContributor[]
   authRefreshTokens         AuthRefreshToken[]
+  createdShareLinks         ShareLink[]                @relation("ShareLinkCreator")
+  shareLinkEvents           ShareLinkEvent[]
+  sentInviteReferrals       InviteReferral[]           @relation("InviteReferralInviter")
+  receivedInviteReferrals   InviteReferral[]           @relation("InviteReferralInvitee")
 
   @@map("users")
 }
 
 model Event {
-  id              String   @id @default(uuid())
-  organizerId     String?  @map("organizer_id")
-  wikiFestivalId  String?  @map("wiki_festival_id")
-  archiveFestivalId String? @unique @map("archive_festival_id")
-  name            String
-  nameI18n        Json?    @map("name_i18n")
-  slug            String   @unique
-  description     String?
-  descriptionI18n Json?    @map("description_i18n")
-  locationI18n    Json?    @map("location_i18n")
-  countryI18n     Json?    @map("country_i18n")
-  cityI18n        Json?    @map("city_i18n")
-  coverImageUrl   String?  @map("cover_image_url")
-  lineupImageUrl  String?  @map("lineup_image_url")
-  imageAssets     Json?    @map("image_assets")
-  referenceLinks  String[] @default([]) @map("reference_links")
-  socialLinks     Json?    @map("social_links")
-  sourceProvider  String?  @map("source_provider")
-  sourceEventUrl  String?  @map("source_event_url")
-  eventType       String?  @map("event_type")
-  organizerName   String?  @map("organizer_name")
-  venueName       String?  @map("venue_name")
-  venueAddress    String?  @map("venue_address")
-  city            String?
-  country         String?
-  manualLocation  Json?    @map("manual_location")
-  locationPoint   Json?    @map("location_point")
-  latitude        Decimal? @db.Decimal(10, 8)
-  longitude       Decimal? @db.Decimal(11, 8)
-  startDate       DateTime @map("start_date")
-  endDate         DateTime @map("end_date")
-  startTime       String   @default("00:00:00") @map("start_time")
-  endTime         String   @default("23:59:59") @map("end_time")
-  dayRolloverHour Int      @default(6) @map("day_rollover_hour")
-  stageOrder      Json?    @map("stage_order")
-  ticketUrl       String?  @map("ticket_url")
-  ticketPriceMin  Decimal? @map("ticket_price_min") @db.Decimal(10, 2)
-  ticketPriceMax  Decimal? @map("ticket_price_max") @db.Decimal(10, 2)
-  ticketCurrency  String?  @map("ticket_currency")
-  ticketNotes     String?  @map("ticket_notes")
-  officialWebsite String?  @map("official_website")
-  status          String   @default("upcoming")
-  isVerified      Boolean  @default(false) @map("is_verified")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(uuid())
+  organizerId       String?  @map("organizer_id")
+  wikiFestivalId    String?  @map("wiki_festival_id")
+  archiveFestivalId String?  @unique @map("archive_festival_id")
+  name              String
+  nameI18n          Json?    @map("name_i18n")
+  slug              String   @unique
+  description       String?
+  descriptionI18n   Json?    @map("description_i18n")
+  locationI18n      Json?    @map("location_i18n")
+  countryI18n       Json?    @map("country_i18n")
+  cityI18n          Json?    @map("city_i18n")
+  coverImageUrl     String?  @map("cover_image_url")
+  lineupImageUrl    String?  @map("lineup_image_url")
+  imageAssets       Json?    @map("image_assets")
+  referenceLinks    String[] @default([]) @map("reference_links")
+  socialLinks       Json?    @map("social_links")
+  sourceProvider    String?  @map("source_provider")
+  sourceEventUrl    String?  @map("source_event_url")
+  eventType         String?  @map("event_type")
+  organizerName     String?  @map("organizer_name")
+  venueName         String?  @map("venue_name")
+  venueAddress      String?  @map("venue_address")
+  city              String?
+  country           String?
+  manualLocation    Json?    @map("manual_location")
+  locationPoint     Json?    @map("location_point")
+  latitude          Decimal? @db.Decimal(10, 8)
+  longitude         Decimal? @db.Decimal(11, 8)
+  startDate         DateTime @map("start_date")
+  endDate           DateTime @map("end_date")
+  startTime         String   @default("00:00:00") @map("start_time")
+  endTime           String   @default("23:59:59") @map("end_time")
+  dayRolloverHour   Int      @default(6) @map("day_rollover_hour")
+  stageOrder        Json?    @map("stage_order")
+  ticketUrl         String?  @map("ticket_url")
+  ticketPriceMin    Decimal? @map("ticket_price_min") @db.Decimal(10, 2)
+  ticketPriceMax    Decimal? @map("ticket_price_max") @db.Decimal(10, 2)
+  ticketCurrency    String?  @map("ticket_currency")
+  ticketNotes       String?  @map("ticket_notes")
+  officialWebsite   String?  @map("official_website")
+  status            String   @default("upcoming")
+  isVerified        Boolean  @default(false) @map("is_verified")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   organizer       User?             @relation("UserPublishedEvents", fields: [organizerId], references: [id], onDelete: SetNull)
   wikiFestival    WikiFestival?     @relation(fields: [wikiFestivalId], references: [id], onDelete: SetNull)
@@ -154,18 +160,18 @@ model EventTicketTier {
 }
 
 model EventLineupSlot {
-  id        String   @id @default(uuid())
-  eventId   String   @map("event_id")
-  djId      String?  @map("dj_id")
-  djIds     String[] @default([]) @map("dj_ids")
-  festivalDayIndex Int?    @map("festival_day_index")
-  djName    String   @map("dj_name")
-  stageName String?  @map("stage_name")
-  sortOrder Int      @default(0) @map("sort_order")
-  startTime DateTime @map("start_time")
-  endTime   DateTime @map("end_time")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id               String   @id @default(uuid())
+  eventId          String   @map("event_id")
+  djId             String?  @map("dj_id")
+  djIds            String[] @default([]) @map("dj_ids")
+  festivalDayIndex Int?     @map("festival_day_index")
+  djName           String   @map("dj_name")
+  stageName        String?  @map("stage_name")
+  sortOrder        Int      @default(0) @map("sort_order")
+  startTime        DateTime @map("start_time")
+  endTime          DateTime @map("end_time")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   dj    DJ?   @relation(fields: [djId], references: [id], onDelete: SetNull)
@@ -177,35 +183,35 @@ model EventLineupSlot {
 }
 
 model DJ {
-  id              String   @id @default(uuid())
-  name            String
-  nameI18n        Json?    @map("name_i18n")
-  aliases         String[] @default([])
-  genres          String[] @default([])
-  slug            String   @unique
-  bio             String?
-  bioI18n         Json?    @map("bio_i18n")
-  avatarUrl       String?  @map("avatar_url")
-  avatarSourceUrl String?  @map("avatar_source_url")
-  bannerUrl       String?  @map("banner_url")
-  country         String?
-  countryI18n     Json?    @map("country_i18n")
-  spotifyId       String?  @map("spotify_id")
-  spotifyFollowers Int?    @map("spotify_followers")
-  appleMusicId    String?  @map("apple_music_id")
-  soundcloudUrl   String?  @map("soundcloud_url")
-  soundcloudId    String?  @map("soundcloud_id")
-  website         String?  @map("website")
-  trackCount      Int?     @map("track_count")
-  playlistCount   Int?     @map("playlist_count")
-  soundCloudFollowers Int? @map("soundcloud_followers")
-  soundCloudFavorites Int? @map("soundcloud_favorites")
-  instagramUrl    String?  @map("instagram_url")
-  facebookUrl     String?  @map("facebook_url")
-  twitterUrl      String?  @map("twitter_url")
-  youtubeUrl      String?  @map("youtube_url")
-  isVerified      Boolean  @default(false) @map("is_verified")
-  followerCount   Int      @default(0) @map("follower_count")
+  id                  String   @id @default(uuid())
+  name                String
+  nameI18n            Json?    @map("name_i18n")
+  aliases             String[] @default([])
+  genres              String[] @default([])
+  slug                String   @unique
+  bio                 String?
+  bioI18n             Json?    @map("bio_i18n")
+  avatarUrl           String?  @map("avatar_url")
+  avatarSourceUrl     String?  @map("avatar_source_url")
+  bannerUrl           String?  @map("banner_url")
+  country             String?
+  countryI18n         Json?    @map("country_i18n")
+  spotifyId           String?  @map("spotify_id")
+  spotifyFollowers    Int?     @map("spotify_followers")
+  appleMusicId        String?  @map("apple_music_id")
+  soundcloudUrl       String?  @map("soundcloud_url")
+  soundcloudId        String?  @map("soundcloud_id")
+  website             String?  @map("website")
+  trackCount          Int?     @map("track_count")
+  playlistCount       Int?     @map("playlist_count")
+  soundCloudFollowers Int?     @map("soundcloud_followers")
+  soundCloudFavorites Int?     @map("soundcloud_favorites")
+  instagramUrl        String?  @map("instagram_url")
+  facebookUrl         String?  @map("facebook_url")
+  twitterUrl          String?  @map("twitter_url")
+  youtubeUrl          String?  @map("youtube_url")
+  isVerified          Boolean  @default(false) @map("is_verified")
+  followerCount       Int      @default(0) @map("follower_count")
 
   // EDM Dance Directory source fields
   sourceId                 String?   @map("source_id")
@@ -396,28 +402,28 @@ model WikiFestivalContributor {
 }
 
 model Checkin {
-  id                String            @id @default(uuid())
-  userId            String            @map("user_id")
-  eventId           String?           @map("event_id")
-  djId              String?           @map("dj_id")
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  eventId           String?  @map("event_id")
+  djId              String?  @map("dj_id")
   type              String // "event" or "dj"
   note              String?
-  photoUrl          String?           @map("photo_url")
+  photoUrl          String?  @map("photo_url")
   rating            Int? // 1-5
-  visibility        String            @default("private")
-  status            String            @default("active")
-  source            String            @default("ios")
-  schemaVersion     Int               @default(1) @map("schema_version")
-  projectionVersion Int               @default(0) @map("projection_version")
-  attendedAt        DateTime          @default(now()) @map("attended_at")
-  createdAt         DateTime          @default(now()) @map("created_at")
-  updatedAt         DateTime          @updatedAt @map("updated_at")
+  visibility        String   @default("private")
+  status            String   @default("active")
+  source            String   @default("ios")
+  schemaVersion     Int      @default(1) @map("schema_version")
+  projectionVersion Int      @default(0) @map("projection_version")
+  attendedAt        DateTime @default(now()) @map("attended_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event             Event?            @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  dj                DJ?               @relation(fields: [djId], references: [id], onDelete: Cascade)
-  snapshot          CheckinSnapshot?
-  selections        CheckinSelection[]
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event      Event?             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  dj         DJ?                @relation(fields: [djId], references: [id], onDelete: Cascade)
+  snapshot   CheckinSnapshot?
+  selections CheckinSelection[]
 
   @@index([userId])
   @@index([userId, attendedAt])
@@ -429,25 +435,25 @@ model Checkin {
 }
 
 model CheckinSnapshot {
-  checkinId          String   @id @map("checkin_id")
-  userDisplayName    String?  @map("user_display_name")
-  eventName          String?  @map("event_name")
-  eventNameI18n      Json?    @map("event_name_i18n")
-  eventCoverUrl      String?  @map("event_cover_url")
-  eventCity          String?  @map("event_city")
-  eventCountry       String?  @map("event_country")
-  eventAddress       String?  @map("event_address")
+  checkinId          String    @id @map("checkin_id")
+  userDisplayName    String?   @map("user_display_name")
+  eventName          String?   @map("event_name")
+  eventNameI18n      Json?     @map("event_name_i18n")
+  eventCoverUrl      String?   @map("event_cover_url")
+  eventCity          String?   @map("event_city")
+  eventCountry       String?   @map("event_country")
+  eventAddress       String?   @map("event_address")
   eventStartAt       DateTime? @map("event_start_at")
   eventEndAt         DateTime? @map("event_end_at")
-  primaryDjName      String?  @map("primary_dj_name")
-  primaryDjNameI18n  Json?    @map("primary_dj_name_i18n")
-  primaryDjAvatarUrl String?  @map("primary_dj_avatar_url")
-  primaryDjCountry   String?  @map("primary_dj_country")
-  selectionSummary   Json?    @map("selection_summary")
-  visibilityResolved String   @default("private") @map("visibility_resolved")
-  snapshotVersion    Int      @default(1) @map("snapshot_version")
-  generatedAt        DateTime @default(now()) @map("generated_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  primaryDjName      String?   @map("primary_dj_name")
+  primaryDjNameI18n  Json?     @map("primary_dj_name_i18n")
+  primaryDjAvatarUrl String?   @map("primary_dj_avatar_url")
+  primaryDjCountry   String?   @map("primary_dj_country")
+  selectionSummary   Json?     @map("selection_summary")
+  visibilityResolved String    @default("private") @map("visibility_resolved")
+  snapshotVersion    Int       @default(1) @map("snapshot_version")
+  generatedAt        DateTime  @default(now()) @map("generated_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   checkin Checkin @relation(fields: [checkinId], references: [id], onDelete: Cascade)
 
@@ -455,13 +461,13 @@ model CheckinSnapshot {
 }
 
 model CheckinSelection {
-  id        String              @id @default(uuid())
-  checkinId String              @map("checkin_id")
-  dayId     String              @map("day_id")
-  dayIndex  Int                 @map("day_index")
-  sortOrder Int                 @default(0) @map("sort_order")
-  createdAt DateTime            @default(now()) @map("created_at")
-  updatedAt DateTime            @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  checkinId String   @map("checkin_id")
+  dayId     String   @map("day_id")
+  dayIndex  Int      @map("day_index")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   checkin Checkin              @relation(fields: [checkinId], references: [id], onDelete: Cascade)
   djs     CheckinSelectionDJ[]
@@ -493,24 +499,24 @@ model CheckinSelectionDJ {
 }
 
 model UserCheckinTimelineEntry {
-  id                  String   @id @default(uuid())
-  userId              String   @map("user_id")
-  timelineDate        DateTime @map("timeline_date") @db.Date
-  anchorAt            DateTime @map("anchor_at")
-  nodeType            String   @map("node_type")
-  primaryCheckinId    String   @map("primary_checkin_id")
-  eventId             String?  @map("event_id")
-  eventName           String?  @map("event_name")
-  eventCoverUrl       String?  @map("event_cover_url")
-  eventAddress        String?  @map("event_address")
-  payload             Json
-  statsDjCount        Int      @default(0) @map("stats_dj_count")
-  statsPerformanceCount Int    @default(0) @map("stats_performance_count")
-  statsSelectionCount Int      @default(0) @map("stats_selection_count")
-  visibilityResolved  String   @default("private") @map("visibility_resolved")
-  projectionVersion   Int      @default(1) @map("projection_version")
-  updatedAt           DateTime @updatedAt @map("updated_at")
-  createdAt           DateTime @default(now()) @map("created_at")
+  id                    String   @id @default(uuid())
+  userId                String   @map("user_id")
+  timelineDate          DateTime @map("timeline_date") @db.Date
+  anchorAt              DateTime @map("anchor_at")
+  nodeType              String   @map("node_type")
+  primaryCheckinId      String   @map("primary_checkin_id")
+  eventId               String?  @map("event_id")
+  eventName             String?  @map("event_name")
+  eventCoverUrl         String?  @map("event_cover_url")
+  eventAddress          String?  @map("event_address")
+  payload               Json
+  statsDjCount          Int      @default(0) @map("stats_dj_count")
+  statsPerformanceCount Int      @default(0) @map("stats_performance_count")
+  statsSelectionCount   Int      @default(0) @map("stats_selection_count")
+  visibilityResolved    String   @default("private") @map("visibility_resolved")
+  projectionVersion     Int      @default(1) @map("projection_version")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  createdAt             DateTime @default(now()) @map("created_at")
 
   @@index([userId, timelineDate, anchorAt])
   @@index([userId, visibilityResolved, anchorAt])
@@ -519,19 +525,19 @@ model UserCheckinTimelineEntry {
 }
 
 model UserCheckinStat {
-  id                String   @id @default(uuid())
-  userId            String   @map("user_id")
-  scope             String   @default("all")
-  eventCount        Int      @default(0) @map("event_count")
-  artistCount       Int      @default(0) @map("artist_count")
-  eventCheckinCount Int      @default(0) @map("event_checkin_count")
-  djCheckinCount    Int      @default(0) @map("dj_checkin_count")
-  performanceCount  Int      @default(0) @map("performance_count")
-  latestCheckinAt   DateTime? @map("latest_checkin_at")
-  visibilityResolved String  @default("private") @map("visibility_resolved")
-  projectionVersion Int      @default(1) @map("projection_version")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-  createdAt         DateTime @default(now()) @map("created_at")
+  id                 String    @id @default(uuid())
+  userId             String    @map("user_id")
+  scope              String    @default("all")
+  eventCount         Int       @default(0) @map("event_count")
+  artistCount        Int       @default(0) @map("artist_count")
+  eventCheckinCount  Int       @default(0) @map("event_checkin_count")
+  djCheckinCount     Int       @default(0) @map("dj_checkin_count")
+  performanceCount   Int       @default(0) @map("performance_count")
+  latestCheckinAt    DateTime? @map("latest_checkin_at")
+  visibilityResolved String    @default("private") @map("visibility_resolved")
+  projectionVersion  Int       @default(1) @map("projection_version")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
 
   @@unique([userId, scope])
   @@index([userId, scope])
@@ -540,19 +546,19 @@ model UserCheckinStat {
 }
 
 model UserCheckinGalleryDJAggregate {
-  id                 String   @id @default(uuid())
-  userId             String   @map("user_id")
-  scope              String   @default("all")
-  djId               String?  @map("dj_id")
-  displayName        String   @map("display_name")
-  avatarUrl          String?  @map("avatar_url")
+  id                 String    @id @default(uuid())
+  userId             String    @map("user_id")
+  scope              String    @default("all")
+  djId               String?   @map("dj_id")
+  displayName        String    @map("display_name")
+  avatarUrl          String?   @map("avatar_url")
   country            String?
-  count              Int      @default(0)
+  count              Int       @default(0)
   latestAttendedAt   DateTime? @map("latest_attended_at")
-  visibilityResolved String   @default("private") @map("visibility_resolved")
-  projectionVersion  Int      @default(1) @map("projection_version")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-  createdAt          DateTime @default(now()) @map("created_at")
+  visibilityResolved String    @default("private") @map("visibility_resolved")
+  projectionVersion  Int       @default(1) @map("projection_version")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
 
   @@index([userId, scope, count, latestAttendedAt])
   @@index([userId, scope, visibilityResolved, count])
@@ -561,21 +567,21 @@ model UserCheckinGalleryDJAggregate {
 }
 
 model UserCheckinGalleryEventAggregate {
-  id                 String   @id @default(uuid())
-  userId             String   @map("user_id")
-  scope              String   @default("all")
-  eventId            String?  @map("event_id")
-  eventName          String   @map("event_name")
-  eventCoverUrl      String?  @map("event_cover_url")
-  eventAddress       String?  @map("event_address")
-  artistCount        Int      @default(0) @map("artist_count")
-  performanceCount   Int      @default(0) @map("performance_count")
-  count              Int      @default(0)
+  id                 String    @id @default(uuid())
+  userId             String    @map("user_id")
+  scope              String    @default("all")
+  eventId            String?   @map("event_id")
+  eventName          String    @map("event_name")
+  eventCoverUrl      String?   @map("event_cover_url")
+  eventAddress       String?   @map("event_address")
+  artistCount        Int       @default(0) @map("artist_count")
+  performanceCount   Int       @default(0) @map("performance_count")
+  count              Int       @default(0)
   latestAttendedAt   DateTime? @map("latest_attended_at")
-  visibilityResolved String   @default("private") @map("visibility_resolved")
-  projectionVersion  Int      @default(1) @map("projection_version")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-  createdAt          DateTime @default(now()) @map("created_at")
+  visibilityResolved String    @default("private") @map("visibility_resolved")
+  projectionVersion  Int       @default(1) @map("projection_version")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
 
   @@index([userId, scope, count, latestAttendedAt])
   @@index([userId, scope, visibilityResolved, count])
@@ -600,18 +606,18 @@ model UserCheckinDerivedSignal {
 }
 
 model CheckinOutboxEvent {
-  id            String   @id @default(uuid())
-  eventType     String   @map("event_type")
-  aggregateType String   @map("aggregate_type")
-  aggregateId   String   @map("aggregate_id")
-  userId        String   @map("user_id")
+  id            String    @id @default(uuid())
+  eventType     String    @map("event_type")
+  aggregateType String    @map("aggregate_type")
+  aggregateId   String    @map("aggregate_id")
+  userId        String    @map("user_id")
   payload       Json
-  status        String   @default("pending")
-  retryCount    Int      @default(0) @map("retry_count")
-  availableAt   DateTime @default(now()) @map("available_at")
+  status        String    @default("pending")
+  retryCount    Int       @default(0) @map("retry_count")
+  availableAt   DateTime  @default(now()) @map("available_at")
   processedAt   DateTime? @map("processed_at")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   @@index([status, availableAt])
   @@index([aggregateType, aggregateId])
@@ -839,40 +845,40 @@ model RatingComment {
 // ============================================
 
 model Post {
-  id           String   @id @default(uuid())
-  userId       String   @map("user_id")
-  content      String   @db.Text
-  images       String[] @default([])
-  location     String?
-  type         String   @default("general") // general, event, set, squad
-  visibility   String   @default("public") // public, friends, squad
-  squadId      String?  @map("squad_id")
-  eventId      String?  @map("event_id")
-  setId        String?  @map("set_id")
-  boundDjIds   String[] @default([]) @map("bound_dj_ids")
-  boundBrandIds String[] @default([]) @map("bound_brand_ids")
-  boundEventIds String[] @default([]) @map("bound_event_ids")
-  displayPublishedAt DateTime? @db.Timestamptz(3) @map("display_published_at")
-  likeCount    Int      @default(0) @map("like_count")
-  repostCount  Int      @default(0) @map("repost_count")
-  saveCount    Int      @default(0) @map("save_count")
-  shareCount   Int      @default(0) @map("share_count")
-  hideCount    Int      @default(0) @map("hide_count")
-  commentCount Int      @default(0) @map("comment_count")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                 String    @id @default(uuid())
+  userId             String    @map("user_id")
+  content            String    @db.Text
+  images             String[]  @default([])
+  location           String?
+  type               String    @default("general") // general, event, set, squad
+  visibility         String    @default("public") // public, friends, squad
+  squadId            String?   @map("squad_id")
+  eventId            String?   @map("event_id")
+  setId              String?   @map("set_id")
+  boundDjIds         String[]  @default([]) @map("bound_dj_ids")
+  boundBrandIds      String[]  @default([]) @map("bound_brand_ids")
+  boundEventIds      String[]  @default([]) @map("bound_event_ids")
+  displayPublishedAt DateTime? @map("display_published_at") @db.Timestamptz(3)
+  likeCount          Int       @default(0) @map("like_count")
+  repostCount        Int       @default(0) @map("repost_count")
+  saveCount          Int       @default(0) @map("save_count")
+  shareCount         Int       @default(0) @map("share_count")
+  hideCount          Int       @default(0) @map("hide_count")
+  commentCount       Int       @default(0) @map("comment_count")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  user     User          @relation("UserPosts", fields: [userId], references: [id], onDelete: Cascade)
-  squad    Squad?        @relation(fields: [squadId], references: [id], onDelete: Cascade)
-  event    Event?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  set      DJSet?        @relation(fields: [setId], references: [id], onDelete: SetNull)
-  likes    PostLike[]
-  reposts  PostRepost[]
-  saves    PostSave[]
-  shares   PostShare[]
-  hides    PostHide[]
+  user       User          @relation("UserPosts", fields: [userId], references: [id], onDelete: Cascade)
+  squad      Squad?        @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  event      Event?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  set        DJSet?        @relation(fields: [setId], references: [id], onDelete: SetNull)
+  likes      PostLike[]
+  reposts    PostRepost[]
+  saves      PostSave[]
+  shares     PostShare[]
+  hides      PostHide[]
   feedEvents FeedEvent[]
-  comments PostComment[]
+  comments   PostComment[]
 
   @@index([userId])
   @@index([squadId])
@@ -998,13 +1004,13 @@ model PostComment {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  post            Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parentComment   PostComment?  @relation("PostCommentReplies", fields: [parentCommentId], references: [id], onDelete: SetNull)
-  childComments   PostComment[] @relation("PostCommentReplies")
-  rootComment     PostComment?  @relation("PostCommentThreads", fields: [rootCommentId], references: [id], onDelete: SetNull)
-  threadComments  PostComment[] @relation("PostCommentThreads")
-  replyToUser     User?         @relation("PostCommentReplyToUser", fields: [replyToUserId], references: [id], onDelete: SetNull)
+  post           Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentComment  PostComment?  @relation("PostCommentReplies", fields: [parentCommentId], references: [id], onDelete: SetNull)
+  childComments  PostComment[] @relation("PostCommentReplies")
+  rootComment    PostComment?  @relation("PostCommentThreads", fields: [rootCommentId], references: [id], onDelete: SetNull)
+  threadComments PostComment[] @relation("PostCommentThreads")
+  replyToUser    User?         @relation("PostCommentReplyToUser", fields: [replyToUserId], references: [id], onDelete: SetNull)
 
   @@index([postId])
   @@index([userId])
@@ -1023,23 +1029,118 @@ model Squad {
   bannerUrl   String?  @map("banner_url")
   notice      String?  @db.Text
   qrCodeUrl   String?  @map("qr_code_url")
+  shareCode   String?  @unique @map("share_code")
   leaderId    String   @map("leader_id")
   isPublic    Boolean  @default(false) @map("is_public")
   maxMembers  Int      @default(50) @map("max_members")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  leader     User            @relation("SquadLeader", fields: [leaderId], references: [id], onDelete: Cascade)
-  members    SquadMember[]
-  invites    SquadInvite[]
-  activities SquadActivity[]
-  albums     SquadAlbum[]
-  messages   SquadMessage[]
-  posts      Post[]
+  leader          User             @relation("SquadLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  members         SquadMember[]
+  invites         SquadInvite[]
+  activities      SquadActivity[]
+  albums          SquadAlbum[]
+  messages        SquadMessage[]
+  posts           Post[]
+  inviteReferrals InviteReferral[]
 
   @@index([leaderId])
   @@index([isPublic])
   @@map("squads")
+}
+
+model ShareLink {
+  id           String    @id @default(uuid())
+  code         String    @unique
+  targetType   String    @map("target_type")
+  targetId     String    @map("target_id")
+  canonicalUrl String    @map("canonical_url")
+  deepLink     String    @map("deep_link")
+  fallbackUrl  String    @map("fallback_url")
+  title        String
+  subtitle     String?
+  imageUrl     String?   @map("image_url")
+  posterUrl    String?   @map("poster_url")
+  previewType  String    @map("preview_type")
+  visibility   String    @default("public")
+  status       String    @default("active")
+  expiresAt    DateTime? @map("expires_at")
+  maxUses      Int?      @map("max_uses")
+  usedCount    Int       @default(0) @map("used_count")
+  createdBy    String?   @map("created_by")
+  rewardRuleId String?   @map("reward_rule_id")
+  metadata     Json?
+  scanCount    Int       @default(0) @map("scan_count")
+  clickCount   Int       @default(0) @map("click_count")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  creator         User?            @relation("ShareLinkCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  events          ShareLinkEvent[]
+  inviteReferrals InviteReferral[]
+
+  @@index([targetType, targetId])
+  @@index([status])
+  @@index([visibility])
+  @@index([createdBy])
+  @@index([expiresAt])
+  @@map("share_links")
+}
+
+model ShareLinkEvent {
+  id          String   @id @default(uuid())
+  linkId      String   @map("link_id")
+  eventType   String   @map("event_type")
+  channel     String?
+  userId      String?  @map("user_id")
+  anonymousId String?  @map("anonymous_id")
+  platform    String
+  userAgent   String?  @map("user_agent")
+  ipHash      String?  @map("ip_hash")
+  referrer    String?
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  link ShareLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  user User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([linkId])
+  @@index([eventType])
+  @@index([channel])
+  @@index([userId])
+  @@index([anonymousId])
+  @@index([createdAt])
+  @@map("share_link_events")
+}
+
+model InviteReferral {
+  id            String    @id @default(uuid())
+  linkId        String    @map("link_id")
+  inviterUserId String    @map("inviter_user_id")
+  inviteeUserId String?   @map("invitee_user_id")
+  squadId       String?   @map("squad_id")
+  rewardStatus  String    @default("pending") @map("reward_status")
+  rewardType    String?   @map("reward_type")
+  rewardPayload Json?     @map("reward_payload")
+  qualifiedAt   DateTime? @map("qualified_at")
+  grantedAt     DateTime? @map("granted_at")
+  metadata      Json?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  link    ShareLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  inviter User      @relation("InviteReferralInviter", fields: [inviterUserId], references: [id], onDelete: Cascade)
+  invitee User?     @relation("InviteReferralInvitee", fields: [inviteeUserId], references: [id], onDelete: SetNull)
+  squad   Squad?    @relation(fields: [squadId], references: [id], onDelete: SetNull)
+
+  @@index([linkId])
+  @@index([inviterUserId])
+  @@index([inviteeUserId])
+  @@index([squadId])
+  @@index([rewardStatus])
+  @@index([createdAt])
+  @@map("invite_referrals")
 }
 
 model SquadMember {
@@ -1264,15 +1365,15 @@ model DevicePushToken {
 }
 
 model NotificationEvent {
-  id         String   @id @default(uuid())
-  category   String
-  payload    Json
-  dedupeKey  String?  @map("dedupe_key")
-  status     String   @default("queued")
-  scheduledAt DateTime? @map("scheduled_at")
+  id           String    @id @default(uuid())
+  category     String
+  payload      Json
+  dedupeKey    String?   @map("dedupe_key")
+  status       String    @default("queued")
+  scheduledAt  DateTime? @map("scheduled_at")
   dispatchedAt DateTime? @map("dispatched_at")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   deliveries NotificationDelivery[]
 
@@ -1283,18 +1384,18 @@ model NotificationEvent {
 }
 
 model NotificationInboxItem {
-  id         String    @id @default(uuid())
-  userId     String    @map("user_id")
-  type       String
-  title      String
-  body       String    @db.Text
-  deeplink   String?
-  metadata   Json?
-  sourceEventId String? @map("source_event_id")
-  isRead     Boolean   @default(false) @map("is_read")
-  readAt     DateTime? @map("read_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  type          String
+  title         String
+  body          String    @db.Text
+  deeplink      String?
+  metadata      Json?
+  sourceEventId String?   @map("source_event_id")
+  isRead        Boolean   @default(false) @map("is_read")
+  readAt        DateTime? @map("read_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1356,21 +1457,21 @@ model NotificationAdminConfig {
 }
 
 model OpenIMSyncJob {
-  id          String   @id @default(uuid())
-  dedupeKey   String   @unique @map("dedupe_key")
-  jobType     String   @map("job_type")
-  entityType  String   @map("entity_type")
-  entityId    String   @map("entity_id")
+  id          String    @id @default(uuid())
+  dedupeKey   String    @unique @map("dedupe_key")
+  jobType     String    @map("job_type")
+  entityType  String    @map("entity_type")
+  entityId    String    @map("entity_id")
   payload     Json?
-  status      String   @default("pending")
-  attempts    Int      @default(0)
-  maxAttempts Int      @default(5) @map("max_attempts")
-  nextRunAt   DateTime @default(now()) @map("next_run_at")
+  status      String    @default("pending")
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5) @map("max_attempts")
+  nextRunAt   DateTime  @default(now()) @map("next_run_at")
   lockedAt    DateTime? @map("locked_at")
-  lockedBy    String?  @map("locked_by")
-  lastError   String?  @map("last_error")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  lockedBy    String?   @map("locked_by")
+  lastError   String?   @map("last_error")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@index([status, nextRunAt])
   @@index([entityType, entityId])
@@ -1379,17 +1480,17 @@ model OpenIMSyncJob {
 }
 
 model OpenIMWebhookEvent {
-  id             String   @id @default(uuid())
-  deliveryId     String?  @map("delivery_id")
-  callbackCommand String? @map("callback_command")
-  operationId    String?  @map("operation_id")
-  eventId        String?  @map("event_id")
-  sourceIp       String?  @map("source_ip")
-  signatureValid Boolean  @default(false) @map("signature_valid")
-  verifyReason   String?  @map("verify_reason")
-  payload        Json
-  receivedAt     DateTime @default(now()) @map("received_at")
-  createdAt      DateTime @default(now()) @map("created_at")
+  id              String   @id @default(uuid())
+  deliveryId      String?  @map("delivery_id")
+  callbackCommand String?  @map("callback_command")
+  operationId     String?  @map("operation_id")
+  eventId         String?  @map("event_id")
+  sourceIp        String?  @map("source_ip")
+  signatureValid  Boolean  @default(false) @map("signature_valid")
+  verifyReason    String?  @map("verify_reason")
+  payload         Json
+  receivedAt      DateTime @default(now()) @map("received_at")
+  createdAt       DateTime @default(now()) @map("created_at")
 
   @@index([deliveryId])
   @@index([callbackCommand])
@@ -1530,7 +1631,7 @@ model PreRegistrationNotification {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  registration PreRegistration      @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registration PreRegistration       @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   batch        PreRegistrationBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   @@index([batchId, channel, createdAt])
@@ -1555,20 +1656,20 @@ model AdminAuditLog {
 }
 
 model AuthRefreshToken {
-  id               String    @id @default(uuid())
-  userId           String    @map("user_id")
-  tokenHash        String    @unique @map("token_hash")
-  userAgent        String?   @map("user_agent")
-  ipAddress        String?   @map("ip_address")
-  expiresAt        DateTime  @map("expires_at")
-  lastUsedAt       DateTime? @map("last_used_at")
-  revokedAt        DateTime? @map("revoked_at")
-  replacedByTokenId String?  @map("replaced_by_token_id")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  userId            String    @map("user_id")
+  tokenHash         String    @unique @map("token_hash")
+  userAgent         String?   @map("user_agent")
+  ipAddress         String?   @map("ip_address")
+  expiresAt         DateTime  @map("expires_at")
+  lastUsedAt        DateTime? @map("last_used_at")
+  revokedAt         DateTime? @map("revoked_at")
+  replacedByTokenId String?   @map("replaced_by_token_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  replacedBy    AuthRefreshToken? @relation("AuthRefreshTokenRotation", fields: [replacedByTokenId], references: [id], onDelete: SetNull)
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedBy     AuthRefreshToken?  @relation("AuthRefreshTokenRotation", fields: [replacedByTokenId], references: [id], onDelete: SetNull)
   previousTokens AuthRefreshToken[] @relation("AuthRefreshTokenRotation")
 
   @@index([userId, revokedAt, expiresAt])

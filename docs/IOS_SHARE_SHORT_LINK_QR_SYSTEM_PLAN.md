@@ -1,15 +1,25 @@
 # iOS 分享短链与二维码系统设计方案
 
+关联执行清单：`docs/IOS_SHARE_SHORT_LINK_QR_SYSTEM_EXECUTION_TRACKER.md`
+关联开发日志：`docs/IOS_SHARE_SHORT_LINK_QR_SYSTEM_DEV_LOG.md`
+
 ## 1. 目标
 
-Raver 需要一套统一的分享链接系统，覆盖 iOS 端所有「更多 / 分享 / 更多操作」面板：
+Raver 需要一套统一的分享链接系统，当前只服务移动端，并且 Phase 1 只落 iOS 端：
 
 - 每个更多面板必须有「复制链接」。
 - 复制出来的链接必须是可公开访问的 HTTPS 链接，不再复制 `raver://...` 私有 scheme。
-- 同一套链接同时服务 App 内跳转、外部分享、二维码扫码、未安装 App 的落地页、数据统计和后续增长归因。
+- 同一套链接同时服务 iOS App 内跳转、外部分享、二维码扫码、未安装 App 的最小承接页、数据统计和邀请增长。
 - 个人名片和群名片需要稳定短链与二维码，支持长期展示、更新头像/昵称后不换码。
+- 分享预览、邀请奖励、二维码资产管理、风控撤销能力都要纳入一期设计。
 
-核心结论：不要继续把业务页面各自拼接链接；建设一个 `ShareLinkService`，所有分享入口只传「分享对象」，由统一服务返回 `shortUrl`、`canonicalUrl`、`universalLink`、`deepLink`、`qrCodeUrl` 和预览元数据。
+核心结论：不要继续把业务页面各自拼接链接；建设一个 `ShareLinkService`，所有分享入口只传「分享对象」，由统一服务返回 `shortUrl`、`canonicalUrl`、`universalLink`、`deepLink`、`qrCodeUrl`、`posterUrl` 和预览元数据。
+
+补充边界：
+
+- 这是一个 iOS 分享基础设施方案，不做独立 Web 产品。
+- 但为了让 HTTPS 分享链接、Universal Link、社交预览、未安装兜底成立，仍然需要一层最小 H5/落地页承接能力。
+- Android、完整 Web 站点、多语言、出海适配不纳入本期范围，只要求未来数据模型和路由规范可平滑扩展。
 
 ## 2. 当前项目现状
 
@@ -34,7 +44,14 @@ Raver 需要一套统一的分享链接系统，覆盖 iOS 端所有「更多 / 
 
 ## 3. 市场成熟方案选择
 
-2026 年应采用「自有 HTTPS Universal Link + 短链重定向 + 动态二维码」作为默认方案。
+2026 年对 Raver 当前阶段最合适的方案是：「自有 HTTPS Universal Link + 主域路径短链 + 动态二维码 + 最小 H5 承接页 + iOS 统一分享服务」。
+
+这是一个典型的商用成熟组合：
+
+- 对用户：看到的是稳定链接、二维码、系统分享卡片。
+- 对 iOS：拿到的是可统一解析的 Universal Link 和 Deep Link。
+- 对增长：可以继续叠加邀请奖励、渠道归因、活动 campaign。
+- 对产品：不需要先做完整 Web 站点，也能把分享链路跑通。
 
 ### 3.1 不建议用 Firebase Dynamic Links
 
@@ -45,29 +62,43 @@ Firebase Dynamic Links 已在 2025-08-25 停止服务，新旧链接会停止工
 推荐默认自建：
 
 - Raver 已经有 Node/Express、Prisma、BFF、iOS deeplink 路由，建设成本可控。
-- 内容分享、个人名片、群名片更需要长期稳定域名和业务权限控制。
-- 链接和二维码属于核心社交资产，应尽量绑定自有域名。
+- 内容分享、个人名片、群名片、邀请奖励都更需要长期稳定域名和业务权限控制。
+- 链接、二维码、邀请关系都属于核心社交资产，应尽量绑定自有域名和自有数据模型。
+- 你当前只做 iOS，一期没有必要为了分享系统单独引入重型第三方增长平台。
 
 可选第三方：
 
-- 如果需要强安装归因、广告投放归因、Deferred Deep Link、跨渠道增长报表，可以后续接 Branch / AppsFlyer / Adjust。
+- 如果后续需要强安装归因、广告投放归因、Deferred Deep Link、跨渠道增长报表，可以再接 Branch / AppsFlyer / Adjust。
 - 第三方应作为 attribution adapter，而不是替代 Raver 自有 canonical link。
+- 本期先预留字段和事件，不把第三方 SDK 作为上线前置依赖。
 
 ## 4. 链接协议
 
 ### 4.1 域名
 
-建议准备两个域名：
+当前实际情况：你已经购买了 `ravehub.top`，但该域名暂时还未备案，当前不能把它当作这一期分享系统的正式生产入口。
 
-- `https://raver.app`：内容落地页和 canonical URL。
-- `https://rvr.link` 或 `https://rvrl.ink`：短链域名。
+因此域名策略改为分阶段：
 
-iOS Associated Domains：
+- 第一阶段（立即可做，不能被备案阻塞）：继续使用当前可立即上线、可稳定提供 HTTPS 和 AASA 的域名作为正式分享域名。文档中先用 `https://raver.app` 表示 canonical 域名；短链优先使用同一主域下路径方案 `https://raver.app/s/{code}`，或一个同样已可用的海外短链域名。
+- 第二阶段（`ravehub.top` 备案完成后）：再决定是否把 canonical 域名切到 `https://ravehub.top`，例如 `https://ravehub.top/u/{username}`。
+- 无论是否切 canonical，已经发出去的短链和二维码都不应失效，所以短链 code 必须独立于具体业务路径，避免未来迁移时重做二维码。
+
+当前建议：
+
+- Canonical 域名：暂时仍以 `https://raver.app` 作为方案占位和第一期落地域名。
+- Short URL：优先采用 `https://raver.app/s/{code}`，这样不用额外等新短链域名准备完成。
+- `ravehub.top`：作为备案完成后的品牌域名迁移目标，不纳入当前 Phase 1 的强依赖。
+
+iOS Associated Domains 在当前阶段只配置已真正可访问并已部署 AASA 的域名，例如：
 
 - `applinks:raver.app`
-- `applinks:rvr.link`
 
-两者都提供 `/.well-known/apple-app-site-association`。
+只有当 `ravehub.top` 已备案、HTTPS 生效、AASA 可访问后，才追加：
+
+- `applinks:ravehub.top`
+
+不要提前把尚未可用的域名写进正式发布配置。
 
 ### 4.2 三层链接
 
@@ -75,8 +106,8 @@ iOS Associated Domains：
 
 | 类型 | 示例 | 用途 |
 |---|---|---|
-| Canonical URL | `https://raver.app/u/blackie` | SEO、网页落地页、可读、长期稳定 |
-| Short URL | `https://rvr.link/a8K3pQ` | 分享、二维码、短信、海报 |
+| Canonical URL | `https://raver.app/u/blackie` | SEO、网页落地页、可读、长期稳定；备案完成后可迁移到 `https://ravehub.top/u/blackie` |
+| Short URL | `https://raver.app/s/a8K3pQ` | 分享、二维码、短信、海报；第一期建议直接走主域路径短链 |
 | Deep Link | `raver://profile/{userId}` | App 内路由，不直接暴露给用户复制 |
 
 复制链接和二维码统一使用 `shortUrl`。只有 App 内消息卡片 payload 可以带 `deepLink`。
@@ -100,10 +131,54 @@ Canonical URL 建议：
 
 短链统一：
 
-- `https://rvr.link/{code}`
+- 第一阶段：`https://raver.app/s/{code}`
+- 第二阶段如有需要，可新增独立短链域名或迁移到 `https://ravehub.top/s/{code}`，但旧短链必须继续可用
 - 可附统计参数：`?ch=copy_link&src=ios&campaign=profile_card`
 
 短链 code 用 Base62，默认 7 位起步。公开长期链接建议固定 code；一次性邀请链接可以更长并带过期时间。
+
+### 4.4 本期对象边界与默认策略
+
+按商用成熟方案，Phase 1 的分享对象收敛为两类：
+
+- 核心公开分享对象：`user_card`、`squad_card`、`post`、`event`、`news`
+- 受控邀请对象：`squad_invite`
+
+本期不纳入统一分享主链路的对象：
+
+- `dj`、`djSet`、`label`、`festival`、`rankingBoard`、`ratingUnit`、`ratingEvent`、`circleID`
+- 这些对象先不阻塞一期，可以保留后续扩展位，但不作为当前数据模型和 UI 的必做项
+
+默认策略：
+
+- 公开内容采用“一个对象一个永久公开短链”的策略。
+- 个人名片和群名片默认拥有永久短链和永久二维码。
+- 私密群邀请采用“临时邀请码短链”的策略，支持过期、限次、重置。
+- 所有对外分享默认复制 `shortUrl`，而不是 `canonicalUrl`。
+- 所有二维码默认编码 `shortUrl`，不编码 `deepLink`。
+
+### 4.5 分享预览策略
+
+分享预览能力一期必须有，采用常见商用做法：由后端统一生产预览元数据，iOS 只消费，不让页面自己拼。
+
+预览字段统一为：
+
+- `title`：分享主标题
+- `subtitle`：副标题/摘要
+- `imageUrl`：封面图
+- `previewType`：`profile_card`、`squad_card`、`content_card`、`invite_card`
+- `buttonLabel`：如“打开 Raver”“加入小队”
+
+推荐规则：
+
+- 用户名片：昵称 + 用户名 + 城市/bio 摘要 + 头像
+- 群名片：群名 + 简介/人数 + 群头像
+- 动态：作者名 + 正文摘要 + 首图
+- 活动：活动名 + 时间地点摘要 + 封面
+- 资讯：标题 + 摘要 + 头图
+- 私密群邀请：群名 + 最小必要说明 + 群头像，不暴露敏感内容
+
+所有 HTTPS 落地页都需要输出最小 OG Meta，这不是为了做 Web 产品，而是为了让 iMessage、微信、Slack、浏览器等场景看到可用预览。
 
 ## 5. 后端设计
 
@@ -115,19 +190,24 @@ Canonical URL 建议：
 |---|---|---|
 | id | uuid | 主键 |
 | code | string unique | 短链 code |
-| targetType | enum/string | `user_card`、`squad_card`、`post` 等 |
+| targetType | enum/string | `user_card`、`squad_card`、`post`、`event`、`news`、`squad_invite` |
 | targetId | string | 业务对象 id |
 | canonicalUrl | string | 长链接 |
 | deepLink | string | App 私有路由 |
-| fallbackUrl | string | 未安装 App 时网页落地页 |
+| fallbackUrl | string | 未安装 App 时最小承接页 |
 | title | string | 分享标题快照 |
 | subtitle | string? | 分享副标题 |
 | imageUrl | string? | 预览图 |
+| posterUrl | string? | 可分享海报图 |
+| previewType | string | `profile_card`、`squad_card`、`content_card`、`invite_card` |
 | visibility | string | `public`、`members_only`、`private_invite` |
 | status | string | `active`、`revoked`、`expired` |
 | expiresAt | datetime? | 临时邀请可过期 |
+| maxUses | int? | 邀请码最大使用次数 |
+| usedCount | int | 已使用次数 |
 | createdBy | string? | 创建人 |
-| metadata | json | 渠道、UTM、版本 |
+| rewardRuleId | string? | 邀请奖励规则快照或引用 |
+| metadata | json | 渠道、UTM、版本、分享来源 |
 | scanCount/clickCount | int | 聚合计数，可选 |
 | createdAt/updatedAt | datetime | 时间戳 |
 
@@ -137,13 +217,28 @@ Canonical URL 建议：
 |---|---|
 | id | 主键 |
 | linkId/code | 关联短链 |
-| eventType | `create`、`copy`、`open`、`scan`、`redirect`、`app_open`、`install_click` |
-| channel | `copy_link`、`qr_scan`、`wechat`、`im`、`system_share` |
+| eventType | `create`、`copy`、`open`、`scan`、`redirect`、`app_open`、`install_click`、`invite_accept`、`reward_grant`、`revoke` |
+| channel | `copy_link`、`qr_scan`、`wechat`、`imessage`、`system_share`、`poster_save` |
 | userId | 当前用户，可空 |
-| anonymousId | Web cookie/device id |
-| platform | iOS/Android/Web |
+| anonymousId | 设备匿名 id，可空 |
+| platform | iOS/WebLanding |
 | userAgent/ipHash/referrer | 风控与统计 |
 | createdAt | 时间 |
+
+新增 `invite_referrals`：
+
+| 字段 | 说明 |
+|---|---|
+| id | 主键 |
+| linkId | 关联 `share_links` |
+| inviterUserId | 邀请人 |
+| inviteeUserId | 被邀请人，注册前可空 |
+| squadId | 对应群，可空 |
+| rewardStatus | `pending`、`granted`、`rejected` |
+| rewardType | 积分、勋章、权益等 |
+| rewardPayload | 奖励详情 |
+| qualifiedAt/grantedAt | 达标/发奖时间 |
+| metadata | 渠道、设备、风控信息 |
 
 个人和群的永久名片可额外加业务字段：
 
@@ -160,44 +255,56 @@ BFF 新增：
 
 - `POST /api/bff/share-links/resolve`
   - 入参：`targetType`、`targetId`、`channel`、`campaign`、`preferPermanent`
-  - 返回：`shortUrl`、`canonicalUrl`、`deepLink`、`qrCodeUrl`、`title`、`subtitle`、`imageUrl`
+  - 返回：`shortUrl`、`canonicalUrl`、`deepLink`、`qrCodeUrl`、`posterUrl`、`title`、`subtitle`、`imageUrl`
 - `GET /api/bff/share-links/:code`
-  - 给 App 查询短链详情。
+  - 给 iOS 查询短链详情和预览信息。
 - `POST /api/bff/share-links/:code/events`
-  - 记录 copy/open/scan/share。
+  - 记录 copy/open/scan/share/invite_accept。
 - `GET /s/:code`
-  - 短链打开入口，返回 302 或中间页。
+  - 短链打开入口，返回 Universal Link 或最小承接页。
 - `GET /qr/:code.png`
   - 二维码图片入口，可 CDN 缓存。
+- `GET /poster/:code.png`
+  - 分享海报图片入口，可 CDN 缓存。
 - `POST /api/bff/squads/:id/share-card`
   - 创建/刷新群名片永久链接。
 - `POST /api/bff/users/:id/share-card`
   - 创建/刷新个人名片永久链接。
+- `POST /api/bff/squads/:id/invite-links`
+  - 创建群邀请短链，支持失效时间、最大使用次数、奖励规则。
+- `POST /api/bff/invite-links/:code/redeem`
+  - 绑定邀请关系并进入奖励判定。
 
 ### 5.3 短链打开策略
 
-`GET https://rvr.link/{code}`：
+`GET https://raver.app/s/{code}`：
+
+当前第一期推荐直接挂在 canonical 主域下，即 `GET https://raver.app/s/:code`，这样不依赖新的独立短链域名。等 `ravehub.top` 可用后，再评估是否新增同构入口。
 
 1. 查询 `share_links`。
 2. 记录 `open` 事件。
 3. 如果链接失效，跳通用错误页。
 4. 如果是普通浏览器且 App 已安装，Universal Link 由 iOS 直接拉起 App。
-5. 如果没有拉起 App，展示 Web 落地页：
+5. 如果没有拉起 App，展示最小承接页：
    - 内容预览卡。
    - 「打开 Raver」按钮。
    - 「下载 App」按钮。
-   - 微信内提示「右上角在浏览器打开」或使用应用宝/App Store fallback。
-6. 对私密群：
+   - 输出 OG Meta，保证社交分享预览正常。
+   - 不把它当成完整 Web 产品，只承担分享承接和预览职责。
+6. 对私密群和邀请链接：
    - 不暴露完整成员/聊天内容。
-   - 展示群名、头像、人数、入群申请按钮。
+   - 只展示群名、头像、人数区间、最小必要说明和加入按钮。
    - 加入动作必须登录并走权限校验。
+   - 若邀请码过期、超次、已撤销，要给出明确状态页。
 
 ### 5.4 AASA 文件
 
-Web 需要提供：
+分享基础设施需要提供：
 
-- `https://raver.app/.well-known/apple-app-site-association`
-- `https://rvr.link/.well-known/apple-app-site-association`
+- 当前上线域名：`https://raver.app/.well-known/apple-app-site-association`
+- 若未来启用 `ravehub.top`，再补：`https://ravehub.top/.well-known/apple-app-site-association`
+
+原则：只给已经真实启用、可返回正确 HTTPS 响应的域名部署 AASA。
 
 示意：
 
@@ -212,14 +319,8 @@ Web 需要提供：
           { "/": "/g/*" },
           { "/": "/p/*" },
           { "/": "/e/*" },
-          { "/": "/dj/*" },
-          { "/": "/set/*" },
           { "/": "/n/*" },
-          { "/": "/label/*" },
-          { "/": "/festival/*" },
-          { "/": "/ranking/*" },
-          { "/": "/rating/*" },
-          { "/": "/id/*" },
+          { "/": "/s/*" },
           { "/": "/*" }
         ]
       }
@@ -238,11 +339,14 @@ Web 需要提供：
 enum ShareTargetType: String, Codable {
     case userCard
     case squadCard
+    case squadInvite
     case post
     case event
+    case news
+
+    // Reserved for Phase 2+ expansion.
     case dj
     case djSet
-    case news
     case label
     case festival
     case rankingBoard
@@ -265,22 +369,25 @@ struct ShareLinkPayload: Codable, Hashable {
     let canonicalURL: String
     let deepLink: String
     let qrCodeURL: String?
+    let posterURL: String?
     let title: String
     let subtitle: String?
     let imageURL: String?
+    let previewType: String
 }
 ```
 
 新增 `ShareLinkService`：
 
 - live：请求 BFF。
-- mock：本地生成 `https://rvr.link/mock-{type}-{id}`。
+- mock：本地生成 `https://raver.app/s/mock-{type}-{id}`。
 - 带内存缓存，避免同一面板反复请求。
 
 新增 `UniversalLinkRouter`：
 
-- 支持解析 `https://raver.app/...` 和 `https://rvr.link/{code}`。
-- `rvr.link` 如果无法本地判断，调用 `GET /api/bff/share-links/:code` resolve 成 `deepLink` 或 `AppRoute`。
+- 支持解析 `https://raver.app/...` 和 `https://raver.app/s/{code}`。
+- `/s/{code}` 如果无法本地判断，调用 `GET /api/bff/share-links/:code` resolve 成 `deepLink` 或 `AppRoute`。
+- 后续如果启用 `ravehub.top`，按同一套路由兼容新老域名。
 - 保留现有 `raver://...` 解析作为内部兼容。
 
 ### 6.2 统一「复制链接」按钮
@@ -288,8 +395,16 @@ struct ShareLinkPayload: Codable, Hashable {
 所有 `ShareActionPanel` 的 `quickActions` 至少注入：
 
 - 复制链接：复制 `ShareLinkPayload.shortURL`。
-- 生成二维码 / 保存二维码：根据页面是否需要展示。
 - 系统分享：分享 title + shortURL。
+- 查看二维码：进入二维码页。
+- 保存二维码：保存高清二维码图片。
+- 保存分享海报：如果该对象支持海报，则保存 `posterURL`。
+
+邀请对象额外支持：
+
+- 复制邀请链接
+- 生成临时邀请码
+- 重置邀请码
 
 建议不要让页面自己写：
 
@@ -347,7 +462,7 @@ iOS 端补齐：
 链接：
 
 - canonical：`https://raver.app/u/{username}`
-- short：`https://rvr.link/{profileShareCode}`
+- short：`https://raver.app/s/{profileShareCode}`
 - deepLink：`raver://profile/{userId}`
 
 ### 7.2 二维码生命周期
@@ -379,7 +494,7 @@ iOS 端补齐：
 链接：
 
 - canonical：`https://raver.app/g/{squadHandleOrId}`
-- short：`https://rvr.link/{squadShareCode}`
+- short：`https://raver.app/s/{squadShareCode}`
 - deepLink：`raver://squad/{squadId}`
 
 ### 8.2 公开群与私密群
@@ -404,6 +519,23 @@ iOS 端补齐：
 - 编辑页只保留「重置二维码」而不是输入二维码 URL。
 - 兼容旧数据：如果旧 `qrCodeUrl` 存在，迁移时生成新短链二维码并回填。
 
+## 9. 二维码与分享资产
+
+### 9.0 资产范围
+
+本期分享系统不仅输出链接，还要统一管理以下资产：
+
+- `shortUrl`
+- `qrCodeUrl`
+- `posterUrl`
+- 预览图 `imageUrl`
+
+其中：
+
+- 二维码是通用资产，个人名片、群名片、邀请链接都要支持。
+- 海报是增强资产，本期建议至少支持个人名片、群名片、群邀请三类。
+- 海报模板由后端统一生成，iOS 只负责展示、保存、系统分享。
+
 ## 9. 二维码生成
 
 ### 9.1 内容
@@ -411,7 +543,7 @@ iOS 端补齐：
 二维码只编码短 HTTPS 链接：
 
 ```text
-https://rvr.link/a8K3pQ
+https://raver.app/s/a8K3pQ
 ```
 
 不要编码：
@@ -442,72 +574,86 @@ iOS 可作为兜底用 Core Image `CIQRCodeGenerator` 本地生成。
 
 ## 10. 分享面板覆盖清单
 
-Phase 1 必须统一复制链接：
+Phase 1 只要求覆盖 iOS 端以下对象：
 
-- 动态卡片、动态详情。
-- 活动详情、活动列表卡片更多。
-- DJ 详情、DJ 列表卡片更多。
-- Set 详情、Set 列表卡片更多。
-- 资讯详情。
-- Label / Festival / Brand / 榜单。
-- 圈子 ID / 评分事件 / 评分单元。
-- 个人主页、他人主页。
-- 小队主页、小队成员页、小队更多面板。
-- 聊天内分享卡片长按菜单可复制原始短链。
+- 个人主页、他人主页
+- 小队主页、小队成员页、小队更多面板
+- 动态卡片、动态详情
+- 活动详情、活动列表卡片更多
+- 资讯详情
 
-每个入口行为一致：
+Phase 1 不强制接入的对象：
+
+- DJ、Set、Label、Festival、Brand、榜单、圈子 ID、评分事件、评分单元
+- 这些入口可以等主链路稳定后再批量迁移
+
+每个已接入入口行为一致：
 
 1. 点击更多。
 2. 面板出现「复制链接」。
-3. 点击后复制 `shortUrl`。
-4. Toast：`已复制链接`。
-5. 后端记录 `copy` 事件。
+3. 面板按对象能力显示「系统分享」「查看二维码」「保存二维码」「保存海报」。
+4. 点击后优先使用 `shortUrl`。
+5. iOS 端显示统一 Toast。
+6. 后端记录对应事件。
 
 ## 11. 迁移路线
 
 ### Phase 0：协议与域名准备
 
-- 确定正式域名和短链域名。
-- 配置 AASA。
-- iOS entitlements 增加 Associated Domains。
-- Web 提供基础落地页。
+- 不等待 `ravehub.top` 备案，先确定第一期可立即上线的分享域名；当前建议直接使用 `raver.app`。
+- 第一期短链采用主域路径方案：`/s/{code}`。
+- 只为当前可用域名配置 AASA。
+- iOS entitlements 只增加当前已启用域名的 Associated Domains。
+- Web 提供基础落地页和 `/s/:code` 跳转入口。
+- 备案完成后，再单独执行 `ravehub.top` 域名接入与迁移，不阻塞分享系统上线。
 
 ### Phase 1：分享服务闭环
 
-- 后端新增 `share_links`、`share_link_events`。
-- BFF 新增 resolve/create/event API。
-- iOS 新增 `ShareLinkService`、`ShareTarget`、`ShareCoordinator`。
+- 后端新增 `share_links`、`share_link_events`、`invite_referrals`。
+- BFF 新增 resolve/create/event/redeem API。
+- iOS 新增 `ShareLinkService`、`ShareTarget`、`ShareCoordinator`、`ShareAssetViewModel`。
 - `ShareActionPanel` 支持注入统一复制链接动作。
 - 替换所有 `UIPasteboard.general.string = "raver://..."`。
+- 落最小承接页、OG Meta、AASA 和 Universal Link 解析。
 
-### Phase 2：个人名片与群名片
+### Phase 2：个人名片、群名片与邀请
 
-- 个人主页新增名片分享和二维码页。
-- 小队主页新增群名片分享和二维码页。
+- 个人主页新增名片分享、二维码页、海报分享。
+- 小队主页新增群名片分享、二维码页、海报分享。
 - 群二维码从手填 URL 迁移为系统生成。
-- 支持群二维码重置、私密群临时邀请码。
+- 支持群永久短链、私密群临时邀请码、邀请码重置。
+- 支持邀请关系绑定与奖励状态流转。
 
 ### Phase 3：统计与增长
 
-- 短链打开、扫码、复制、App 打开事件入库。
-- 管理端/埋点看板。
-- 需要广告归因时接 Branch / AppsFlyer adapter。
+- 短链打开、扫码、复制、App 打开、邀请接受、奖励发放事件入库。
+- 提供基础查询接口和管理端可读数据。
+- 需要广告归因时再接 Branch / AppsFlyer adapter。
 
 ### Phase 4：质量与风控
 
 - 私密链接权限检查。
 - 链接封禁、过期、重置。
 - 防刷统计、IP hash、异常 UA 限流。
+- 邀请作弊识别、重复领奖防护。
 - 黑名单内容短链撤销。
+
+### Phase 5：`ravehub.top` 备案完成后的域名迁移
+
+- 为 `ravehub.top` 部署 HTTPS、AASA、落地页和 `/s/:code` 兼容入口。
+- iOS Associated Domains 追加 `applinks:ravehub.top`。
+- 评估是否把 canonical URL 从 `raver.app` 切换到 `ravehub.top`。
+- 历史短链、历史二维码必须继续可用；如果对外切域名，旧域名至少保留长期 301/302 和 Universal Link 兼容。
+- 如需品牌统一，可逐步让新生成链接使用 `ravehub.top`，但不要批量作废已发出的二维码。
 
 ## 12. 验收标准
 
 ### 12.1 链接正确性
 
-- 所有更多面板都有「复制链接」。
-- iOS 复制结果全部是 `https://...`，不是 `raver://...`。
+- 所有已纳入 Phase 1 的 iOS 更多面板都有「复制链接」。
+- iOS 复制结果全部是 `https://...`，不是 `raver://...`；在备案完成前，优先复制当前已上线域名，而不是 `ravehub.top`。
 - 已安装 App：点击短链直达目标页。
-- 未安装 App：打开对应 Web 落地页。
+- 未安装 App：打开最小承接页。
 - 微信/短信/浏览器/相机扫码均可打开。
 
 ### 12.2 个人名片
@@ -526,9 +672,9 @@ Phase 1 必须统一复制链接：
 ### 12.4 回归测试
 
 - `scripts/check-coordinator-deeplink-roundtrip.sh` 增加 HTTPS Universal Link 样例。
-- iOS UI tests 覆盖复制链接按钮。
-- 后端 API tests 覆盖 create/resolve/revoke/redirect。
-- Web smoke 覆盖 AASA、短链 302、落地页 OG meta。
+- iOS UI tests 覆盖复制链接、系统分享、二维码页、海报保存。
+- 后端 API tests 覆盖 create/resolve/revoke/redirect/invite redeem/reward grant。
+- 最小承接页 smoke 覆盖 AASA、短链 302、OG meta、失效邀请码状态页。
 
 ## 13. 立刻要改的代码点
 
@@ -538,31 +684,31 @@ Phase 1 必须统一复制链接：
   - `PostSharePayload.shareURLString` 改为来自 `ShareLinkService`。
 - `mobile/ios/RaverMVP/RaverMVP/Features/Feed/PostDetailView.swift`
   - 复制链接动作改为统一 share coordinator。
-- `mobile/ios/RaverMVP/RaverMVP/Features/Discover/Learn/Views/LearnModuleView.swift`
-  - Label/Festival 不再复制官网或 `raver://discover/festivals/...`，统一复制 Raver 短链。
 - `mobile/ios/RaverMVP/RaverMVP/Features/Discover/News/Views/DiscoverNewsDetailView.swift`
   - 「复制链接」复制 Raver 短链；外部原文链接单独叫「复制原文链接」。
-- `mobile/ios/RaverMVP/RaverMVP/Features/MainTabView.swift`
-  - 圈子 ID / Rating 分享不再复制私有 scheme。
 - `mobile/ios/RaverMVP/RaverMVP/Features/Squads/SquadProfileView.swift`
-  - 群二维码显示系统生成二维码；新增复制群链接。
+  - 群二维码显示系统生成二维码；新增复制群链接、查看二维码、邀请链接入口。
 - `mobile/ios/RaverMVP/RaverMVP/Features/Profile/ProfileView.swift`
-  - 增加个人名片分享入口。
+  - 增加个人名片分享入口、二维码页、海报分享入口。
+- `mobile/ios/RaverMVP/RaverMVP/Shared/ShareActionPanel.swift`
+  - 支持统一分享动作矩阵。
 
 优先级 P1：
 
 - `server/prisma/schema.prisma`
-  - 新增短链和事件表。
+  - 新增短链、事件、邀请关系表。
 - `server/src/routes/bff.routes.ts`
-  - 增加分享 BFF API。
-- `web/src/app`
-  - 增加 canonical 落地页和短链 redirect 页面。
+  - 增加分享 BFF API、邀请 redeem API。
+- 最小承接页工程
+  - 增加 canonical 承接页、短链 redirect 页面、OG meta 输出。
 - iOS entitlements
   - 增加 Associated Domains。
+- 奖励规则服务
+  - 增加邀请达标与发奖逻辑。
 
 ## 14. 推荐最终形态
 
-用户看到的是一个简单动作：「复制链接」或「我的二维码」。
+用户看到的是几个简单动作：「复制链接」「系统分享」「我的二维码」「分享海报」「邀请好友」。
 
 系统内部则统一成：
 
@@ -573,10 +719,11 @@ flowchart LR
     C --> D["BFF / share-links"]
     D --> E["share_links"]
     D --> F["share_link_events"]
+    D --> M["invite_referrals"]
     C --> G["UIPasteboard: shortUrl"]
-    H["相机/微信扫码"] --> I["https://rvr.link/{code}"]
+    H["相机/微信扫码"] --> I["https://raver.app/s/{code}"]
     I --> J["Universal Link 打开 App"]
-    I --> K["Web 落地页 / 下载页"]
+    I --> K["最小承接页 / 下载页"]
     J --> L["AppRoute 目标页面"]
 ```
 

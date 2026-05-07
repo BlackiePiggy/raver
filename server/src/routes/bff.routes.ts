@@ -21,6 +21,14 @@ import { tencentIMGroupService } from '../services/tencent-im/tencent-im-group.s
 import { tencentIMUserService } from '../services/tencent-im/tencent-im-user.service';
 import { smsService } from '../services/sms/sms-provider';
 import { notificationCenterService } from '../services/notification-center';
+import {
+  getShareLinkByCode,
+  recordShareLinkEvent,
+  redeemShareLinkInvite,
+  resolveOrCreateShareLink,
+  resetShareLinkInvite,
+  ShareLinkError,
+} from '../services/share-link.service';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -1911,6 +1919,127 @@ router.get('/', (_req: Request, res: Response) => {
   });
 });
 
+router.post('/share-links/resolve', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const targetType = String(body.targetType ?? '').trim();
+    const targetId = String(body.targetId ?? '').trim();
+    const channel = typeof body.channel === 'string' ? body.channel.trim() : null;
+    const campaign = typeof body.campaign === 'string' ? body.campaign.trim() : null;
+    const preferPermanent = body.preferPermanent !== false;
+    const expiresInHours = typeof body.expiresInHours === 'number' ? body.expiresInHours : null;
+    const maxUses = typeof body.maxUses === 'number' ? body.maxUses : null;
+
+    const payload = await resolveOrCreateShareLink({
+      prisma,
+      targetType,
+      targetId,
+      channel,
+      campaign,
+      preferPermanent,
+      userId: authReq.user?.userId ?? null,
+      expiresInHours,
+      maxUses,
+    });
+
+    res.json(payload);
+  } catch (error) {
+    if (error instanceof ShareLinkError) {
+      res.status(error.status).json({ error: error.code, message: error.message });
+      return;
+    }
+    console.error('BFF resolve share link error:', error);
+    res.status(500).json({ error: 'internal_server_error' });
+  }
+});
+
+router.get('/share-links/:code', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const payload = await getShareLinkByCode(prisma, req.params.code as string);
+    res.json(payload);
+  } catch (error) {
+    if (error instanceof ShareLinkError) {
+      res.status(error.status).json({ error: error.code, message: error.message });
+      return;
+    }
+    console.error('BFF get share link error:', error);
+    res.status(500).json({ error: 'internal_server_error' });
+  }
+});
+
+router.post('/share-links/:code/events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const payload = await recordShareLinkEvent({
+      prisma,
+      code: req.params.code as string,
+      eventType: String(body.eventType ?? '').trim(),
+      channel: typeof body.channel === 'string' ? body.channel.trim() : null,
+      userId: authReq.user?.userId ?? null,
+      anonymousId: typeof body.anonymousId === 'string' ? body.anonymousId.trim() : null,
+      platform: typeof body.platform === 'string' ? body.platform.trim() : 'iOS',
+      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+      referrer: typeof req.headers.referer === 'string' ? req.headers.referer : null,
+      metadata: typeof body.metadata === 'object' && body.metadata !== null
+        ? body.metadata as Prisma.InputJsonValue
+        : undefined,
+    });
+    res.json(payload);
+  } catch (error) {
+    if (error instanceof ShareLinkError) {
+      res.status(error.status).json({ error: error.code, message: error.message });
+      return;
+    }
+    console.error('BFF record share link event error:', error);
+    res.status(500).json({ error: 'internal_server_error' });
+  }
+});
+
+router.post('/share-links/:code/redeem', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const payload = await redeemShareLinkInvite({
+      prisma,
+      code: req.params.code as string,
+      userId,
+      channel: typeof body.channel === 'string' ? body.channel.trim() : 'invite_redeem',
+      platform: typeof body.platform === 'string' ? body.platform.trim() : 'iOS',
+      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+      referrer: typeof req.headers.referer === 'string' ? req.headers.referer : null,
+    });
+    res.json(payload);
+  } catch (error) {
+    if (error instanceof ShareLinkError) {
+      res.status(error.status).json({ error: error.code, message: error.message });
+      return;
+    }
+    console.error('BFF redeem share invite error:', error);
+    res.status(500).json({ error: 'internal_server_error' });
+  }
+});
+
+router.post('/share-links/:code/reset', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const payload = await resetShareLinkInvite(prisma, req.params.code as string, userId);
+    res.json(payload);
+  } catch (error) {
+    if (error instanceof ShareLinkError) {
+      res.status(error.status).json({ error: error.code, message: error.message });
+      return;
+    }
+    console.error('BFF reset share invite error:', error);
+    res.status(500).json({ error: 'internal_server_error' });
+  }
+});
+
 router.post('/auth/login', async (req: Request, res: Response): Promise<void> => {
   try {
     const { username, identifier, email, password } = req.body as {
@@ -3478,6 +3607,15 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
       buildFriendUserIds(targetUserId),
     ]);
 
+    const profileShareLink = await resolveOrCreateShareLink({
+      prisma,
+      targetType: 'user_card',
+      targetId: targetUserId,
+      userId: viewerId,
+      channel: 'profile_qr_bootstrap',
+      preferPermanent: true,
+    });
+
     const canViewFollowersList = viewerId === targetUserId || user.isFollowersListPublic;
     const canViewFollowingList = viewerId === targetUserId || user.isFollowingListPublic;
 
@@ -3497,6 +3635,7 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
       friendsCount: friendIds.size,
       postsCount,
       isFollowing: Boolean(followRow),
+      qrCodeURL: profileShareLink.qrCodeUrl,
     });
   } catch (error) {
     console.error('BFF user profile error:', error);
@@ -4147,6 +4286,21 @@ router.get('/squads/:id/profile', optionalAuth, async (req: Request, res: Respon
 
     const leaderNickname = memberNicknameMap.get(squad.leader.id);
 
+    let qrCodeURL = squad.qrCodeUrl;
+    if (!qrCodeURL) {
+      const qrPayload = await resolveOrCreateShareLink({
+        prisma,
+        targetType: squad.isPublic ? 'squad_card' : 'squad_invite',
+        targetId: squad.id,
+        userId,
+        channel: 'squad_qr_bootstrap',
+        preferPermanent: squad.isPublic,
+        expiresInHours: squad.isPublic ? null : 72,
+        maxUses: squad.isPublic ? null : 10,
+      });
+      qrCodeURL = qrPayload.qrCodeUrl;
+    }
+
     res.json({
       id: squad.id,
       name: squad.name,
@@ -4154,7 +4308,7 @@ router.get('/squads/:id/profile', optionalAuth, async (req: Request, res: Respon
       avatarURL: squad.avatarUrl,
       bannerURL: squad.bannerUrl,
       notice: squad.notice || '',
-      qrCodeURL: squad.qrCodeUrl,
+      qrCodeURL,
       isPublic: squad.isPublic,
       maxMembers: squad.maxMembers,
       memberCount: squad._count.members,
@@ -6920,6 +7074,15 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
       return;
     }
 
+    const profileShareLink = await resolveOrCreateShareLink({
+      prisma,
+      targetType: 'user_card',
+      targetId: userId,
+      userId,
+      channel: 'profile_qr_bootstrap',
+      preferPermanent: true,
+    });
+
     res.json({
       id: user.id,
       username: user.username,
@@ -6936,6 +7099,7 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
       friendsCount: friendIds.size,
       postsCount,
       isFollowing: false,
+      qrCodeURL: profileShareLink.qrCodeUrl,
     });
   } catch (error) {
     console.error('BFF profile error:', error);

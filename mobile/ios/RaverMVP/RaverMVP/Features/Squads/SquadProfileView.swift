@@ -11,6 +11,10 @@ struct SquadProfileView: View {
     @State private var myNotificationsEnabled = true
     @State private var pendingRemoveMember: SquadMemberProfile?
 
+    private var shareLinkCoordinator: ShareLinkCoordinator {
+        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+    }
+
     init(squadID: String, service: SocialService) {
         self.service = service
         _viewModel = StateObject(wrappedValue: SquadProfileViewModel(squadID: squadID, service: service))
@@ -115,6 +119,33 @@ struct SquadProfileView: View {
                     dismissKeyboard()
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                if let profile = viewModel.profile {
+                    Button {
+                        appPush(
+                            .profile(
+                                .shareQRCode(
+                                    title: profile.name,
+                                    subtitle: profile.description,
+                                    imageURL: profile.avatarURL,
+                                    qrCodeURL: profile.qrCodeURL
+                                )
+                            )
+                        )
+                    } label: {
+                        Image(systemName: "qrcode")
+                    }
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                if viewModel.profile != nil {
+                    Button {
+                        Task { await copySquadShareLink() }
+                    } label: {
+                        Image(systemName: "link")
+                    }
+                }
+            }
         }
         .raverGradientNavigationChrome(title: LL("小队")) {
             dismiss()
@@ -165,6 +196,44 @@ struct SquadProfileView: View {
             if let member = pendingRemoveMember {
                 Text(L("将从小队中移出 \(member.shownName)。", "Remove \(member.shownName) from squad."))
             }
+        }
+    }
+
+    @MainActor
+    private func copySquadShareLink() async {
+        guard let profile = viewModel.profile else { return }
+
+        let isInviteLink = !profile.isPublic
+        let targetType: ShareTargetType = isInviteLink ? .squadInvite : .squadCard
+        let successMessage = isInviteLink
+            ? L("已复制小队邀请链接", "Squad invite link copied")
+            : L("已复制小队链接", "Squad link copied")
+        let failureMessage = isInviteLink
+            ? L("复制小队邀请链接失败，请稍后重试。", "Failed to copy squad invite link. Please try again.")
+            : L("复制小队链接失败，请稍后重试。", "Failed to copy squad link. Please try again.")
+
+        do {
+            let result = try await shareLinkCoordinator.copyLink(
+                target: ShareTarget(
+                    type: targetType,
+                    id: profile.id,
+                    title: isInviteLink ? L("加入「\(profile.name)」", "Join \(profile.name)") : profile.name,
+                    subtitle: profile.description,
+                    imageURL: profile.avatarURL
+                ),
+                channel: isInviteLink ? "copy_invite_link" : "copy_link",
+                preferPermanent: !isInviteLink,
+                expiresInHours: isInviteLink ? 72 : nil,
+                maxUses: isInviteLink ? 10 : nil
+            )
+
+            if result.usedDeepLinkFallback {
+                viewModel.error = L("已复制 App 内链接", "Copied app-only link.")
+            } else {
+                OperationBannerCenter.shared.success(successMessage)
+            }
+        } catch {
+            viewModel.error = error.userFacingMessage ?? failureMessage
         }
     }
 
@@ -247,7 +316,21 @@ struct SquadProfileView: View {
                     Text(LL("小队二维码"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
-                    groupQRCode(urlString: profile.qrCodeURL)
+                    Button {
+                        appPush(
+                            .profile(
+                                .shareQRCode(
+                                    title: profile.name,
+                                    subtitle: profile.description,
+                                    imageURL: profile.avatarURL,
+                                    qrCodeURL: profile.qrCodeURL
+                                )
+                            )
+                        )
+                    } label: {
+                        groupQRCode(urlString: profile.qrCodeURL)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -674,7 +757,6 @@ private struct SquadManageFormView: View {
     @State private var notice: String
     @State private var avatarURL: String
     @State private var bannerURL: String
-    @State private var qrCodeURL: String
     @State private var selectedAvatarPhotoItem: PhotosPickerItem?
     @State private var selectedFlagPhotoItem: PhotosPickerItem?
     @State private var isUploadingAvatar = false
@@ -701,7 +783,6 @@ private struct SquadManageFormView: View {
         _notice = State(initialValue: profile.notice)
         _avatarURL = State(initialValue: profile.avatarURL ?? "")
         _bannerURL = State(initialValue: profile.bannerURL ?? "")
-        _qrCodeURL = State(initialValue: profile.qrCodeURL ?? "")
     }
 
     var body: some View {
@@ -753,13 +834,6 @@ private struct SquadManageFormView: View {
                     }
                 }
                 .disabled(isUploadingFlag)
-                TextField(LL("小队二维码 URL（可选）"), text: $qrCodeURL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.done)
-                    .onSubmit {
-                        dismissKeyboard()
-                    }
             }
 
             Section(LL("小队通知")) {
@@ -779,7 +853,7 @@ private struct SquadManageFormView: View {
                             avatarURL: avatarURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : avatarURL,
                             bannerURL: bannerURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : bannerURL,
                             notice: notice,
-                            qrCodeURL: qrCodeURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : qrCodeURL
+                            qrCodeURL: nil
                         )
                     )
                 } label: {

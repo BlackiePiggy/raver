@@ -85,6 +85,7 @@ struct UserProfile: Codable, Identifiable {
     var displayName: String
     var bio: String
     var avatarURL: String?
+    var qrCodeURL: String? = nil
     var tags: [String]
     var isFollowersListPublic: Bool
     var isFollowingListPublic: Bool

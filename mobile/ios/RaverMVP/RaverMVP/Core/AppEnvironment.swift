@@ -19,11 +19,24 @@ enum AppEnvironment {
         }
     }()
 
+    static let sharedShareLinkService: ShareLinkService = {
+        switch AppConfig.runtimeMode {
+        case .mock:
+            return MockShareLinkService()
+        case .live:
+            return LiveShareLinkService(baseURL: AppConfig.bffBaseURL)
+        }
+    }()
+
     static func makeService() -> SocialService {
         sharedService
     }
 
     static func makeWebService() -> WebFeatureService {
         sharedWebService
+    }
+
+    static func makeShareLinkService() -> ShareLinkService {
+        sharedShareLinkService
     }
 }

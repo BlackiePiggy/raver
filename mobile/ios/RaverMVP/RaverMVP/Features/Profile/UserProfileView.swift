@@ -22,6 +22,10 @@ private struct UserProfileScreen: View {
     @StateObject private var viewModel: UserProfileViewModel
     @State private var isStartingDirectChat = false
 
+    private var shareLinkCoordinator: ShareLinkCoordinator {
+        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+    }
+
     init(viewModel: UserProfileViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
     }
@@ -184,6 +188,35 @@ private struct UserProfileScreen: View {
         }
         .background(RaverTheme.background)
         .raverSystemNavigation(title: L("用户主页", "Profile"))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if let profile = viewModel.profile {
+                    Button {
+                        appPush(
+                            .profile(
+                                .shareQRCode(
+                                    title: profile.displayName,
+                                    subtitle: profile.bio.isEmpty ? nil : profile.bio,
+                                    imageURL: profile.avatarURL,
+                                    qrCodeURL: profile.qrCodeURL
+                                )
+                            )
+                        )
+                    } label: {
+                        Image(systemName: "qrcode")
+                    }
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                if viewModel.profile != nil {
+                    Button {
+                        Task { await copyUserProfileShareLink() }
+                    } label: {
+                        Image(systemName: "link")
+                    }
+                }
+            }
+        }
         .task {
             await viewModel.load()
         }
@@ -194,6 +227,31 @@ private struct UserProfileScreen: View {
             Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
+        }
+    }
+
+    @MainActor
+    private func copyUserProfileShareLink() async {
+        guard let profile = viewModel.profile else { return }
+
+        do {
+            let result = try await shareLinkCoordinator.copyLink(
+                target: ShareTarget(
+                    type: .userCard,
+                    id: profile.id,
+                    title: profile.displayName,
+                    subtitle: profile.bio.isEmpty ? nil : profile.bio,
+                    imageURL: profile.avatarURL
+                )
+            )
+
+            if result.usedDeepLinkFallback {
+                viewModel.error = L("已复制 App 内链接", "Copied app-only link.")
+            } else {
+                OperationBannerCenter.shared.success(L("已复制个人主页链接", "Profile link copied"))
+            }
+        } catch {
+            viewModel.error = error.userFacingMessage ?? L("复制个人主页链接失败，请稍后重试。", "Failed to copy profile link. Please try again.")
         }
     }
 

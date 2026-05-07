@@ -223,8 +223,8 @@ final class AppRouter: ObservableObject {
                 return "ratingUnitDetail(\(unitID))"
             case .userProfile(let userID):
                 return "userProfile(\(userID))"
-        case .discover(let route):
-            return "discover(\(route))"
+            case .discover(let route):
+                return "discover(\(route))"
             case .messages(let route):
                 return "messages(\(route))"
             case .profile(let route):
@@ -498,6 +498,13 @@ struct MainTabCoordinatorView: View {
                 ProfileRatingEventEditorLoaderView(eventID: eventID, service: appContainer.webService)
             case let .editRatingUnit(unitID):
                 ProfileRatingUnitEditorLoaderView(unitID: unitID, service: appContainer.webService)
+            case let .shareQRCode(title, subtitle, imageURL, qrCodeURL):
+                ShareQRCodeDetailView(
+                    title: title,
+                    subtitle: subtitle,
+                    imageURL: imageURL,
+                    qrCodeURL: qrCodeURL
+                )
             }
 
         case let .conversation(target):
@@ -662,7 +669,8 @@ struct MainTabCoordinatorView: View {
                 .editEvent,
                 .editSet,
                 .editRatingEvent,
-                .editRatingUnit:
+                .editRatingUnit,
+                .shareQRCode:
             router.push(.profile(route))
         case .avatarFullscreen:
             router.presentFullScreen(.avatarFullscreen)

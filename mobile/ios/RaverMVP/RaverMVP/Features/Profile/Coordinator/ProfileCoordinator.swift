@@ -17,6 +17,12 @@ enum ProfileRoute: Hashable {
     case editSet(setID: String)
     case editRatingEvent(eventID: String)
     case editRatingUnit(unitID: String)
+    case shareQRCode(
+        title: String,
+        subtitle: String?,
+        imageURL: String?,
+        qrCodeURL: String?
+    )
 }
 
 private struct ProfilePushKey: EnvironmentKey {

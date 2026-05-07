@@ -26,6 +26,10 @@ struct PostDetailView: View {
     @State private var visibleReplyCountByRoot: [String: Int] = [:]
     @State private var feedSessionID = UUID().uuidString
 
+    private var shareLinkCoordinator: ShareLinkCoordinator {
+        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+    }
+
     private let rootPageSize = 12
     private let replyPreviewCount = 3
     private let replyPageSize = 6
@@ -402,7 +406,7 @@ struct PostDetailView: View {
                 systemImage: "link",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
             ) {
-                UIPasteboard.general.string = PostSharePayload(post: post).shareURLString
+                Task { await copyPostShareLink() }
             },
             SharePanelQuickAction(
                 title: L("不感兴趣", "Not Interested"),
@@ -419,6 +423,30 @@ struct PostDetailView: View {
                 error = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
             }
         ]
+    }
+
+    @MainActor
+    private func copyPostShareLink() async {
+        do {
+            let payload = PostSharePayload(post: post)
+            let result = try await shareLinkCoordinator.copyLink(
+                target: ShareTarget(
+                    type: .post,
+                    id: post.id,
+                    title: payload.shareTitle,
+                    subtitle: payload.shareSummary,
+                    imageURL: post.images.first
+                )
+            )
+
+            if result.usedDeepLinkFallback {
+                error = L("已复制 App 内链接", "Copied app-only link.")
+            } else {
+                OperationBannerCenter.shared.success(L("已复制链接", "Link copied"))
+            }
+        } catch {
+            self.error = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+        }
     }
 
     @MainActor

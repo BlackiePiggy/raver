@@ -6,6 +6,10 @@ struct ProfileView: View {
     @Environment(\.profilePush) private var profilePush
     @ObservedObject private var viewModel: ProfileViewModel
 
+    private var shareLinkCoordinator: ShareLinkCoordinator {
+        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+    }
+
     init(viewModel: ProfileViewModel) {
         _viewModel = ObservedObject(wrappedValue: viewModel)
     }
@@ -129,6 +133,31 @@ struct ProfileView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 if viewModel.profile != nil {
                     Button {
+                        Task { await copyMyProfileShareLink() }
+                    } label: {
+                        Image(systemName: "link")
+                    }
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                if let profile = viewModel.profile {
+                    Button {
+                        profilePush(
+                            .shareQRCode(
+                                title: profile.displayName,
+                                subtitle: profile.bio.isEmpty ? nil : profile.bio,
+                                imageURL: profile.avatarURL,
+                                qrCodeURL: profile.qrCodeURL
+                            )
+                        )
+                    } label: {
+                        Image(systemName: "qrcode")
+                    }
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                if viewModel.profile != nil {
+                    Button {
                         profilePush(.settings)
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -146,6 +175,31 @@ struct ProfileView: View {
             Button(L("确定", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
+        }
+    }
+
+    @MainActor
+    private func copyMyProfileShareLink() async {
+        guard let profile = viewModel.profile else { return }
+
+        do {
+            let result = try await shareLinkCoordinator.copyLink(
+                target: ShareTarget(
+                    type: .userCard,
+                    id: profile.id,
+                    title: profile.displayName,
+                    subtitle: profile.bio.isEmpty ? nil : profile.bio,
+                    imageURL: profile.avatarURL
+                )
+            )
+
+            if result.usedDeepLinkFallback {
+                viewModel.error = L("已复制 App 内链接", "Copied app-only link.")
+            } else {
+                OperationBannerCenter.shared.success(L("已复制个人主页链接", "Profile link copied"))
+            }
+        } catch {
+            viewModel.error = error.userFacingMessage ?? L("复制个人主页链接失败，请稍后重试。", "Failed to copy profile link. Please try again.")
         }
     }
 
@@ -2019,5 +2073,125 @@ private enum MovieBannerColorPreset: String, CaseIterable, Identifiable {
         guard let index = all.firstIndex(of: self) else { return self }
         let nextIndex = all.index(after: index)
         return nextIndex == all.endIndex ? all[all.startIndex] : all[nextIndex]
+    }
+}
+
+struct ShareQRCodeDetailView: View {
+    let title: String
+    let subtitle: String?
+    let imageURL: String?
+    let qrCodeURL: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                shareSubjectCard
+                qrCard
+                hintCard
+            }
+            .padding(16)
+        }
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: L("分享二维码", "Share QR Code"))
+    }
+
+    private var shareSubjectCard: some View {
+        GlassCard {
+            HStack(spacing: 12) {
+                subjectImage
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(RaverTheme.primaryText)
+
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .lineLimit(3)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var qrCard: some View {
+        GlassCard {
+            VStack(spacing: 14) {
+                qrImage
+
+                Text(L("扫码后可在 iPhone 中打开对应页面", "Scan to open the related page on iPhone"))
+                    .font(.footnote)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var hintCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("当前说明", "Notes"))
+                    .font(.headline)
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                Text(L("此二维码由系统自动生成，与短链保持一致。后续切换分享域名时，历史二维码仍应继续可用。", "This QR code is generated by the system and stays aligned with the share short link. Historical QR codes should remain valid even after future share-domain migrations."))
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var subjectImage: some View {
+        if let resolved = AppConfig.resolvedURLString(imageURL),
+           URL(string: resolved) != nil,
+           (resolved.hasPrefix("http://") || resolved.hasPrefix("https://")) {
+            ImageLoaderView(urlString: resolved)
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(RaverTheme.card)
+                .frame(width: 52, height: 52)
+                .overlay {
+                    Image(systemName: "sparkles.rectangle.stack")
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var qrImage: some View {
+        let resolved = AppConfig.resolvedURLString(qrCodeURL)
+        if let resolved,
+           !resolved.isEmpty,
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved, resizingMode: .fit)
+                .frame(width: 240, height: 240)
+                .background(RaverTheme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(RaverTheme.card)
+                .frame(width: 240, height: 240)
+                .overlay {
+                    VStack(spacing: 10) {
+                        Image(systemName: "qrcode")
+                            .font(.system(size: 56, weight: .medium))
+                        Text(L("二维码生成中", "QR code is loading"))
+                            .font(.footnote)
+                    }
+                    .foregroundStyle(RaverTheme.secondaryText)
+                }
+        }
     }
 }

@@ -103,6 +103,10 @@ struct DiscoverNewsDetailView: View {
     @State private var fullChatSharePresentation: NewsCardSharePresentation?
     @State private var errorMessage: String?
 
+    private var shareLinkCoordinator: ShareLinkCoordinator {
+        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+    }
+
     private var newsRepository: DiscoverNewsRepository {
         appContainer.discoverNewsRepository
     }
@@ -796,8 +800,7 @@ struct DiscoverNewsDetailView: View {
                 systemImage: "link",
                 accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
             ) {
-                UIPasteboard.general.string = article.link?.nilIfBlank ?? newsDeeplink(for: makeNewsShareCardPayload())
-                showWidgetStatusBanner(message: L("已复制链接", "Link copied"))
+                Task { await copyNewsShareLink() }
             },
             SharePanelQuickAction(
                 title: L("复制 App 内链接", "Copy App Link"),
@@ -823,6 +826,29 @@ struct DiscoverNewsDetailView: View {
         }
 
         return actions
+    }
+
+    @MainActor
+    private func copyNewsShareLink() async {
+        do {
+            let result = try await shareLinkCoordinator.copyLink(
+                target: ShareTarget(
+                    type: .news,
+                    id: article.id,
+                    title: article.title,
+                    subtitle: article.summary,
+                    imageURL: article.coverImageURL
+                )
+            )
+
+            if result.usedDeepLinkFallback {
+                showWidgetStatusBanner(message: L("已复制 App 内链接", "Copied app-only link."))
+            } else {
+                showWidgetStatusBanner(message: L("已复制链接", "Link copied"))
+            }
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+        }
     }
 
     private func dismissShareMorePanel(after: (() -> Void)? = nil) {
