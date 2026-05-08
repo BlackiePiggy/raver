@@ -227,6 +227,7 @@ struct MainTabView: View {
                 showsLoginRequiredPrompt = true
                 return
             }
+            GlobalSearchTelemetry.overlayOpened(source: "main_tab")
             withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
                 isGlobalSearchPresented = true
             }
@@ -257,6 +258,7 @@ struct MainTabView: View {
         .frame(width: 52, height: 52)
         .accessibilityIdentifier("mainTab.action.globalSearch")
         .accessibilityLabel(L("搜索", "Search"))
+        .accessibilityHint(L("打开全局聚合搜索", "Opens global aggregated search"))
     }
 
     private func tabIcon(for tab: MainTab) -> some View {

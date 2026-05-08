@@ -2829,6 +2829,30 @@ actor MockWebFeatureService: WebFeatureService {
         return RankingBoardDetail(boardId: board.id, title: board.title, years: board.years, year: selectedYear, entries: entries)
     }
 
+    func searchGlobal(query: String, tab: GlobalSearchTab, limit: Int) async throws -> GlobalSearchResponse {
+        let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let items = Self.mockGlobalSearchItems(for: keyword)
+            .filter { tab == .all || tab.searchableItemTypes.contains($0.type) }
+            .sorted { $0.relevanceScore > $1.relevanceScore }
+        let clampedLimit = max(1, min(80, limit))
+        let limitedItems = Array(items.prefix(clampedLimit))
+        var countsByTab: [String: Int] = Dictionary(uniqueKeysWithValues: GlobalSearchTab.allCases.map { ($0.rawValue, 0) })
+        for item in items {
+            countsByTab[item.tab.rawValue, default: 0] += 1
+        }
+        countsByTab[GlobalSearchTab.all.rawValue] = items.count
+        return GlobalSearchResponse(
+            query: keyword,
+            tab: tab,
+            limit: clampedLimit,
+            totalCount: items.count,
+            items: limitedItems,
+            countsByTab: countsByTab,
+            partialErrors: [],
+            generatedAt: Date()
+        )
+    }
+
     func fetchMyPublishes() async throws -> MyPublishes {
         let mySets = sets
             .filter { $0.uploadedById == currentUser.id }
@@ -3066,6 +3090,53 @@ actor MockWebFeatureService: WebFeatureService {
             return bestEventID
         }
         return candidates.count == 1 ? candidates[0].id : nil
+    }
+
+    private static func mockGlobalSearchItems(for query: String) -> [GlobalSearchItem] {
+        [
+            mockGlobalSearchItem(.event, "event-ultra-2026", query, "Ultra Shanghai 2026", L("上海 · Expo Park · 2026.09.12", "Shanghai · Expo Park · Sep 12, 2026"), L("包含主舞台、Afterlife 舞台和多位 Techno / Trance DJ。", "Includes main stage, Afterlife stage, and Techno / Trance artists."), "2026", 0.98),
+            mockGlobalSearchItem(.dj, "dj-charlotte-de-witte", query, "Charlotte de Witte", L("Techno · KNTXT", "Techno · KNTXT"), L("相关活动、Sets 和打分单位都在 Raver 内有内容。", "Related events, sets, and rating units are available in Raver."), "DJ", 0.94),
+            mockGlobalSearchItem(.news, "news-ultra-lineup", query, L("Ultra 公布首批阵容", "Ultra announces first lineup wave"), L("Raver News · 2 小时前", "Raver News · 2h ago"), L("官方公布首批出演名单，更多舞台信息将在下周更新。", "The first wave is announced, with more stage details next week."), L("资讯", "News"), 0.88),
+            mockGlobalSearchItem(.set, "set-afterlife-2025", query, "Afterlife Shanghai Closing Set", L("Tale Of Us · 92 min", "Tale Of Us · 92 min"), L("旋律 Techno 现场录音，收藏热度持续上升。", "A melodic techno live recording with rising saves."), "Set", 0.84),
+            mockGlobalSearchItem(.ratingEvent, "rating-event-ultra-2025", query, L("Ultra 2025 现场体验打分", "Ultra 2025 Experience Rating"), L("3,428 人参与 · 平均 8.7", "3,428 ratings · Avg 8.7"), L("只搜索打分活动和打分单位，不包含评论内容。", "Searches rating events and units only, excluding comments."), L("打分活动", "Rating Event"), 0.81),
+            mockGlobalSearchItem(.post, "post-circle-ultra-guide", query, L("第一次去 Ultra 应该怎么安排？", "How should first-timers plan Ultra?"), L("圈子 · 128 赞", "Circle · 128 likes"), L("用户分享交通、舞台动线和散场建议；不包含评论搜索。", "A post about transport, stages, and exit tips; comments excluded."), L("圈子", "Post"), 0.78),
+            mockGlobalSearchItem(.rankingBoard, "ranking-dj-2025", query, "Raver Top DJs 2025", L("年度榜单 · 2025", "Annual ranking · 2025"), L("按 Raver 站内热度、收藏和打分综合生成。", "Generated from Raver popularity, saves, and ratings."), L("榜单", "Ranking"), 0.73, rankingYear: 2025),
+            mockGlobalSearchItem(.festival, "festival-edc-china", query, "EDC China", L("音乐节品牌 · 中国", "Festival brand · China"), L("音乐节介绍、历史阵容和相关活动。", "Festival intro, past lineups, and related events."), L("音乐节", "Festival"), 0.68),
+            mockGlobalSearchItem(.label, "label-kntxt", query, "KNTXT", L("厂牌 · Techno", "Label · Techno"), L("Charlotte de Witte 创立的 Techno 厂牌。", "A techno label founded by Charlotte de Witte."), L("厂牌", "Label"), 0.64),
+            mockGlobalSearchItem(.genre, "genre-melodic-techno", query, "Melodic Techno", L("风格树 · Techno", "Genre Tree · Techno"), L("在 Techno 框架中加入旋律与情绪线。", "Adds melody and emotional lines within a techno framework."), L("风格", "Genre"), 0.61),
+            mockGlobalSearchItem(.user, "user-raver-alex", query, "Alex Chen", L("@alexraves · 上海", "@alexraves · Shanghai"), L("关注 Techno、Trance 和大型音乐节攻略。", "Follows techno, trance, and festival guides."), L("用户", "User"), 0.59),
+            mockGlobalSearchItem(.squad, "squad-techno-shanghai", query, L("上海 Techno 小队", "Shanghai Techno Squad"), L("892 成员 · 公开小队", "892 members · Public squad"), L("线下活动、拼车和舞台集合点讨论。", "Offline meetups, rides, and stage gathering points."), L("小队", "Squad"), 0.56),
+            mockGlobalSearchItem(.ratingUnit, "rating-unit-mainstage", query, L("Ultra 主舞台音响", "Ultra Mainstage Sound"), L("打分单位 · 平均 8.3", "Rating unit · Avg 8.3"), L("声音、灯光、视觉和拥挤度单项打分。", "Sound, lights, visuals, and crowding ratings."), L("打分单位", "Rating Unit"), 0.53),
+            mockGlobalSearchItem(.rankingEntry, "ranking-dj-2025", query, "#3 Charlotte de Witte", L("Raver Top DJs 2025", "Raver Top DJs 2025"), L("榜单条目会进入所属榜单详情。", "Ranking entries open their parent ranking board."), L("榜单条目", "Ranking Entry"), 0.51, rankingYear: 2025)
+        ]
+    }
+
+    private static func mockGlobalSearchItem(
+        _ type: GlobalSearchItemType,
+        _ id: String,
+        _ query: String,
+        _ title: String,
+        _ subtitle: String?,
+        _ summary: String?,
+        _ badge: String?,
+        _ score: Double,
+        rankingYear: Int? = nil
+    ) -> GlobalSearchItem {
+        GlobalSearchItem(
+            id: "\(type.rawValue)-\(id)-\(query.lowercased())",
+            type: type,
+            entityID: id,
+            title: title,
+            subtitle: subtitle,
+            summary: summary,
+            imageUrl: nil,
+            badgeText: badge,
+            deeplink: "raver://\(type.rawValue)/\(id)",
+            relevanceScore: score,
+            publishedAt: nil,
+            updatedAt: nil,
+            rankingYear: rankingYear
+        )
     }
 
     private func ratingUnitDescription(slot: WebEventLineupSlot, formatter: DateFormatter) -> String? {

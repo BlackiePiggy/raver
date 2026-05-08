@@ -131,6 +131,7 @@ protocol WebFeatureService {
     func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival
     func fetchRankingBoards() async throws -> [RankingBoard]
     func fetchRankingBoardDetail(boardID: String, year: Int?) async throws -> RankingBoardDetail
+    func searchGlobal(query: String, tab: GlobalSearchTab, limit: Int) async throws -> GlobalSearchResponse
 
     func fetchMyPublishes() async throws -> MyPublishes
 }

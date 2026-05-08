@@ -666,7 +666,15 @@ struct MainTabCoordinatorView: View {
             }
 
         case let .globalSearchResults(query, initialTab):
-            GlobalSearchResultsPlaceholderView(query: query, initialTab: initialTab)
+            if appState.isLoggedIn {
+                GlobalSearchResultsPlaceholderView(
+                    query: query,
+                    initialTab: initialTab,
+                    service: appContainer.webService
+                )
+            } else {
+                GlobalSearchLoginRequiredView()
+            }
         }
     }
 

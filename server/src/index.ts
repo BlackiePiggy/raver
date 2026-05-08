@@ -23,6 +23,7 @@ import tencentIMRoutes from './routes/tencent-im.routes';
 import preRegistrationRoutes from './routes/pre-registration.routes';
 import notificationCenterRoutes from './routes/notification-center.routes';
 import checkinsV2Routes from './routes/checkins-v2.routes';
+import searchRoutes from './routes/search.routes';
 import {
   registerNotificationCenterAPNSHandler,
   startNotificationEventCountdownScheduler,
@@ -101,6 +102,7 @@ app.use('/api', preRegistrationRoutes);
 app.use('/', shareRoutes);
 app.use('/v1', bffRoutes);
 app.use('/v1', bffWebRoutes);
+app.use('/v1/search', searchRoutes);
 app.use('/v2', checkinsV2Routes);
 app.use('/v1/im/tencent', tencentIMRoutes);
 app.use('/v1/notification-center', notificationCenterRoutes);

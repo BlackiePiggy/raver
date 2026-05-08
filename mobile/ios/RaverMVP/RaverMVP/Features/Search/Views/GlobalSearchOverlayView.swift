@@ -85,6 +85,7 @@ struct GlobalSearchOverlayView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L("关闭搜索", "Close search"))
+            .accessibilityIdentifier("globalSearch.overlay.close")
         }
     }
 
@@ -107,6 +108,8 @@ struct GlobalSearchOverlayView: View {
             .onSubmit {
                 submit()
             }
+            .accessibilityIdentifier("globalSearch.overlay.input")
+            .accessibilityLabel(L("搜索关键词", "Search query"))
 
             if !trimmedQuery.isEmpty {
                 Button {
@@ -118,6 +121,7 @@ struct GlobalSearchOverlayView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(L("清空关键词", "Clear query"))
+                .accessibilityIdentifier("globalSearch.overlay.clear")
             }
 
             Button {
@@ -135,6 +139,7 @@ struct GlobalSearchOverlayView: View {
             .buttonStyle(.plain)
             .disabled(trimmedQuery.isEmpty)
             .accessibilityLabel(L("搜索", "Search"))
+            .accessibilityIdentifier("globalSearch.overlay.submit")
         }
         .padding(.horizontal, 13)
         .frame(height: 54)
@@ -160,6 +165,7 @@ struct GlobalSearchOverlayView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("globalSearch.overlay.clearRecent")
                 }
 
                 FlowLayout(spacing: 8, rowSpacing: 8) {
@@ -184,6 +190,7 @@ struct GlobalSearchOverlayView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(L("搜索 \(item)", "Search \(item)"))
                     }
                 }
             }
@@ -227,6 +234,7 @@ struct GlobalSearchOverlayView: View {
     private func submit(_ rawQuery: String) {
         let keyword = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !keyword.isEmpty else { return }
+        GlobalSearchTelemetry.submitted(query: keyword, source: "overlay")
         recentStore.record(keyword)
         isInputFocused = false
         onSearch(keyword)

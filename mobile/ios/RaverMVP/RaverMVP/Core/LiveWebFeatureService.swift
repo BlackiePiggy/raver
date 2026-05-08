@@ -863,6 +863,24 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data
     }
 
+    func searchGlobal(query: String, tab: GlobalSearchTab, limit: Int) async throws -> GlobalSearchResponse {
+        let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        var queryItems = [
+            URLQueryItem(name: "q", value: keyword),
+            URLQueryItem(name: "tab", value: tab.rawValue),
+            URLQueryItem(name: "limit", value: "\(max(1, min(80, limit)))")
+        ]
+        if keyword.isEmpty {
+            queryItems.removeAll { $0.name == "q" }
+        }
+        let response: BFFEnvelope<GlobalSearchResponse> = try await request(
+            path: "/v1/search",
+            method: "GET",
+            queryItems: queryItems
+        )
+        return response.data
+    }
+
     func fetchMyPublishes() async throws -> MyPublishes {
         let response: BFFEnvelope<MyPublishes> = try await request(path: "/v1/publishes/me", method: "GET")
         return response.data
