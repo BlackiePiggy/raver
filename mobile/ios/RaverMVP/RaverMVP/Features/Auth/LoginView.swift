@@ -4,6 +4,7 @@ import UIKit
 
 struct LoginView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var mode: AuthMode = .login
     @State private var loginMethod: LoginMethod = .account
@@ -168,11 +169,15 @@ struct LoginView: View {
             .foregroundStyle(.white)
         }
         .onAppear {
-            videoController.play()
+            videoController.start()
         }
         .onDisappear {
-            videoController.pause()
+            videoController.stop()
             smsCooldownTask?.cancel()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            videoController.resumeIfNeeded()
         }
         .onChange(of: mode) { _, newMode in
             if newMode == .register {
@@ -643,21 +648,42 @@ private struct LoginBackgroundVideoView: UIViewRepresentable {
 private final class LoginBackgroundVideoController: ObservableObject {
     let player = AVQueuePlayer()
     private var looper: AVPlayerLooper?
+    private var shouldPlay = false
+    private var appLifecycleObservers: [NSObjectProtocol] = []
 
     init() {
         configure()
+        observeAppLifecycle()
     }
 
-    func play() {
-        guard player.currentItem != nil else { return }
-        player.play()
+    deinit {
+        appLifecycleObservers.forEach(NotificationCenter.default.removeObserver)
     }
 
-    func pause() {
+    func start() {
+        shouldPlay = true
+        resumeIfNeeded()
+    }
+
+    func stop() {
+        shouldPlay = false
         player.pause()
     }
 
+    func resumeIfNeeded() {
+        guard shouldPlay else { return }
+
+        if player.currentItem == nil {
+            configure()
+        }
+
+        player.isMuted = true
+        player.play()
+    }
+
     private func configure() {
+        player.removeAllItems()
+        looper = nil
         player.isMuted = true
         player.actionAtItemEnd = .none
         player.preventsDisplaySleepDuringVideoPlayback = false
@@ -668,6 +694,24 @@ private final class LoginBackgroundVideoController: ObservableObject {
 
         let item = AVPlayerItem(url: url)
         looper = AVPlayerLooper(player: player, templateItem: item)
-        player.play()
+    }
+
+    private func observeAppLifecycle() {
+        let notificationCenter = NotificationCenter.default
+        let foregroundObserver = notificationCenter.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.resumeIfNeeded()
+        }
+        let activeObserver = notificationCenter.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.resumeIfNeeded()
+        }
+        appLifecycleObservers = [foregroundObserver, activeObserver]
     }
 }

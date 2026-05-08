@@ -1519,6 +1519,10 @@ struct LearnLabelDetailView: View {
     @State private var fullChatSharePresentation: LabelCardSharePresentation?
     @State private var errorMessage: String?
 
+    private var shareLinkCoordinator: ShareLinkCoordinator {
+        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
@@ -1923,6 +1927,31 @@ struct LearnLabelDetailView: View {
         )
     }
 
+    private func shareTarget() -> ShareTarget {
+        let canonicalURL = "https://raver.app/label/\(label.id)"
+        let coverImageURL = AppConfig.resolvedURLString(label.backgroundUrl)
+            ?? AppConfig.resolvedURLString(label.avatarUrl)
+        let subtitle = [
+            label.nation?.nilIfBlank,
+            displayGenres.prefix(3).isEmpty ? nil : displayGenres.prefix(3).joined(separator: " / ").nilIfBlank
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+        .joined(separator: " · ")
+        return ShareTarget(
+            type: .label,
+            id: label.id,
+            title: label.name,
+            subtitle: subtitle.isEmpty ? nil : subtitle,
+            imageURL: coverImageURL,
+            canonicalURL: canonicalURL,
+            deepLink: "raver://label/\(label.id)",
+            fallbackURL: canonicalURL,
+            previewType: "content_card",
+            visibility: "public"
+        )
+    }
+
     private func loadSharePanelConversations() async throws -> [Conversation] {
         async let directs = appContainer.socialService.fetchConversations(type: .direct)
         async let groups = appContainer.socialService.fetchConversations(type: .group)
@@ -1976,15 +2005,41 @@ struct LearnLabelDetailView: View {
                 systemImage: "link.circle.fill",
                 accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
             ) {
-                UIPasteboard.general.string = destinationURL(label.officialWebsiteUrl)?.absoluteString
-                    ?? "raver://label/\(label.id)"
-                showWidgetStatusBanner(message: L("已复制链接", "Link copied"))
+                Task { await copyLabelShareLink() }
             }
         ]
     }
 
     private func shareMoreQuickActions() -> [SharePanelQuickAction] {
         var actions: [SharePanelQuickAction] = []
+
+        actions.append(
+            SharePanelQuickAction(
+                title: L("查看二维码", "View QR"),
+                systemImage: "qrcode",
+                accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
+            ) {
+                Task { await openLabelQRCode() }
+            }
+        )
+        actions.append(
+            SharePanelQuickAction(
+                title: L("查看海报", "View Poster"),
+                systemImage: "photo.on.rectangle",
+                accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
+            ) {
+                Task { await openLabelPoster() }
+            }
+        )
+        actions.append(
+            SharePanelQuickAction(
+                title: L("保存海报", "Save Poster"),
+                systemImage: "photo.badge.arrow.down",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                Task { await saveLabelPoster() }
+            }
+        )
 
         actions.append(
             SharePanelQuickAction(
@@ -2029,6 +2084,75 @@ struct LearnLabelDetailView: View {
         }
 
         return actions
+    }
+
+    @MainActor
+    private func copyLabelShareLink() async {
+        do {
+            let result = try await shareLinkCoordinator.copyLink(target: shareTarget())
+            showWidgetStatusBanner(
+                message: result.usedDeepLinkFallback
+                    ? L("已复制 App 内链接", "Copied app-only link.")
+                    : L("已复制链接", "Link copied")
+            )
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+        }
+    }
+
+    @MainActor
+    private func openLabelQRCode() async {
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(), channel: "view_qr")
+            appPush(
+                .profile(
+                    .shareQRCode(
+                        title: resolved.payload.title,
+                        subtitle: resolved.payload.subtitle,
+                        imageURL: resolved.payload.imageURL,
+                        shortURL: resolved.payload.shortURL,
+                        qrCodeURL: resolved.payload.qrCodeURL
+                    )
+                )
+            )
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+        }
+    }
+
+    @MainActor
+    private func openLabelPoster() async {
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(), channel: "view_poster")
+            appPush(
+                .profile(
+                    .shareAsset(
+                        navigationTitle: L("分享海报", "Share Poster"),
+                        title: resolved.payload.title,
+                        subtitle: resolved.payload.subtitle,
+                        imageURL: resolved.payload.imageURL,
+                        assetURL: resolved.payload.posterURL,
+                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
+                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
+                        hintText: L("Label 海报由分享系统统一生成，名称、摘要和二维码都会跟随短链保持一致。", "Label posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link."),
+                        saveButtonTitle: L("保存海报", "Save Poster")
+                    )
+                )
+            )
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+        }
+    }
+
+    @MainActor
+    private func saveLabelPoster() async {
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(), channel: "poster_save")
+            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
+            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+        }
     }
 }
 
@@ -2741,6 +2865,10 @@ struct LearnFestivalDetailView: View {
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: BrandCardSharePresentation?
 
+    private var shareLinkCoordinator: ShareLinkCoordinator {
+        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+    }
+
     init(festival: LearnFestival, onFestivalUpdated: ((LearnFestival) -> Void)? = nil) {
         self.onFestivalUpdated = onFestivalUpdated
         _currentFestival = State(initialValue: festival)
@@ -3045,6 +3173,32 @@ struct LearnFestivalDetailView: View {
         )
     }
 
+    private func shareTarget(for festival: LearnFestival) -> ShareTarget {
+        let canonicalURL = "https://raver.app/festival/\(festival.id)"
+        let imageURL = AppConfig.resolvedURLString(festival.backgroundUrl)
+            ?? AppConfig.resolvedURLString(festival.avatarUrl)
+        let subtitle = [
+            festival.country.nilIfBlank,
+            festival.city.nilIfBlank,
+            festival.tagline.nilIfBlank
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+        .joined(separator: " · ")
+        return ShareTarget(
+            type: .festival,
+            id: festival.id,
+            title: festival.name,
+            subtitle: subtitle.isEmpty ? nil : subtitle,
+            imageURL: imageURL,
+            canonicalURL: canonicalURL,
+            deepLink: "raver://festival/\(festival.id)",
+            fallbackURL: canonicalURL,
+            previewType: "content_card",
+            visibility: "public"
+        )
+    }
+
     private func loadSharePanelConversations() async throws -> [Conversation] {
         async let directs = appContainer.socialService.fetchConversations(type: .direct)
         async let groups = appContainer.socialService.fetchConversations(type: .group)
@@ -3098,15 +3252,43 @@ struct LearnFestivalDetailView: View {
                 systemImage: "link.circle.fill",
                 accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
             ) {
-                UIPasteboard.general.string = destinationURL(currentFestival.links.first?.url)?.absoluteString
-                    ?? "raver://discover/festivals/\(currentFestival.id)"
-                showWidgetStatusBanner(message: L("已复制链接", "Link copied"))
+                Task { await copyFestivalShareLink(currentFestival) }
             }
         ]
     }
 
     private func shareMoreQuickActions(for festival: LearnFestival?) -> [SharePanelQuickAction] {
         var actions: [SharePanelQuickAction] = []
+
+        if let festival {
+            actions.append(
+                SharePanelQuickAction(
+                    title: L("查看二维码", "View QR"),
+                    systemImage: "qrcode",
+                    accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
+                ) {
+                    Task { await openFestivalQRCode(festival) }
+                }
+            )
+            actions.append(
+                SharePanelQuickAction(
+                    title: L("查看海报", "View Poster"),
+                    systemImage: "photo.on.rectangle",
+                    accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
+                ) {
+                    Task { await openFestivalPoster(festival) }
+                }
+            )
+            actions.append(
+                SharePanelQuickAction(
+                    title: L("保存海报", "Save Poster"),
+                    systemImage: "photo.badge.arrow.down",
+                    accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+                ) {
+                    Task { await saveFestivalPoster(festival) }
+                }
+            )
+        }
 
         if canEditFestival {
             actions.append(
@@ -3166,6 +3348,75 @@ struct LearnFestivalDetailView: View {
         }
 
         return actions
+    }
+
+    @MainActor
+    private func copyFestivalShareLink(_ festival: LearnFestival) async {
+        do {
+            let result = try await shareLinkCoordinator.copyLink(target: shareTarget(for: festival))
+            showWidgetStatusBanner(
+                message: result.usedDeepLinkFallback
+                    ? L("已复制 App 内链接", "Copied app-only link.")
+                    : L("已复制链接", "Link copied")
+            )
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+        }
+    }
+
+    @MainActor
+    private func openFestivalQRCode(_ festival: LearnFestival) async {
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(for: festival), channel: "view_qr")
+            appPush(
+                .profile(
+                    .shareQRCode(
+                        title: resolved.payload.title,
+                        subtitle: resolved.payload.subtitle,
+                        imageURL: resolved.payload.imageURL,
+                        shortURL: resolved.payload.shortURL,
+                        qrCodeURL: resolved.payload.qrCodeURL
+                    )
+                )
+            )
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+        }
+    }
+
+    @MainActor
+    private func openFestivalPoster(_ festival: LearnFestival) async {
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(for: festival), channel: "view_poster")
+            appPush(
+                .profile(
+                    .shareAsset(
+                        navigationTitle: L("分享海报", "Share Poster"),
+                        title: resolved.payload.title,
+                        subtitle: resolved.payload.subtitle,
+                        imageURL: resolved.payload.imageURL,
+                        assetURL: resolved.payload.posterURL,
+                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
+                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
+                        hintText: L("Festival 海报由分享系统统一生成，名称、摘要和二维码都会跟随短链保持一致。", "Festival posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link."),
+                        saveButtonTitle: L("保存海报", "Save Poster")
+                    )
+                )
+            )
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+        }
+    }
+
+    @MainActor
+    private func saveFestivalPoster(_ festival: LearnFestival) async {
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(for: festival), channel: "poster_save")
+            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
+            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+        }
     }
 
     @ViewBuilder
@@ -4948,6 +5199,10 @@ struct RankingBoardDetailView: View {
     @State private var shareMorePresentation: RankingBoardCardSharePresentation?
     @State private var isShareMorePanelVisible = false
 
+    private var shareLinkCoordinator: ShareLinkCoordinator {
+        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+    }
+
     init(board: RankingBoard, initialYear: Int? = nil) {
         self.board = board
         let latestYear = board.years.max() ?? 2025
@@ -5172,6 +5427,23 @@ struct RankingBoardDetailView: View {
         return components.string ?? "raver://ranking-board/\(payload.boardID)?year=\(payload.year)"
     }
 
+    private func shareTarget() -> ShareTarget {
+        let payload = makeRankingBoardShareCardPayload()
+        let canonicalURL = "https://raver.app/ranking-board/\(payload.boardID)?year=\(payload.year)"
+        return ShareTarget(
+            type: .rankingBoard,
+            id: payload.boardID,
+            title: payload.boardName,
+            subtitle: payload.boardSubtitle,
+            imageURL: payload.coverImageURL,
+            canonicalURL: canonicalURL,
+            deepLink: rankingBoardDeeplink(for: payload),
+            fallbackURL: canonicalURL,
+            previewType: "content_card",
+            visibility: "public"
+        )
+    }
+
     private func loadSharePanelConversations() async throws -> [Conversation] {
         async let directs = appContainer.socialService.fetchConversations(type: .direct)
         async let groups = appContainer.socialService.fetchConversations(type: .group)
@@ -5230,10 +5502,99 @@ struct RankingBoardDetailView: View {
                 systemImage: "link",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
             ) {
-                UIPasteboard.general.string = rankingBoardDeeplink(for: makeRankingBoardShareCardPayload())
-                showWidgetStatusBanner(message: L("链接已复制", "Link copied"))
+                Task { await copyRankingBoardShareLink() }
+            },
+            SharePanelQuickAction(
+                title: L("查看二维码", "View QR"),
+                systemImage: "qrcode",
+                accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
+            ) {
+                Task { await openRankingBoardQRCode() }
+            },
+            SharePanelQuickAction(
+                title: L("查看海报", "View Poster"),
+                systemImage: "photo.on.rectangle",
+                accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
+            ) {
+                Task { await openRankingBoardPoster() }
+            },
+            SharePanelQuickAction(
+                title: L("保存海报", "Save Poster"),
+                systemImage: "photo.badge.arrow.down",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                Task { await saveRankingBoardPoster() }
             }
         ]
+    }
+
+    @MainActor
+    private func copyRankingBoardShareLink() async {
+        do {
+            let result = try await shareLinkCoordinator.copyLink(target: shareTarget())
+            showWidgetStatusBanner(
+                message: result.usedDeepLinkFallback
+                    ? L("已复制 App 内链接", "Copied app-only link.")
+                    : L("链接已复制", "Link copied")
+            )
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+        }
+    }
+
+    @MainActor
+    private func openRankingBoardQRCode() async {
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(), channel: "view_qr")
+            appPush(
+                .profile(
+                    .shareQRCode(
+                        title: resolved.payload.title,
+                        subtitle: resolved.payload.subtitle,
+                        imageURL: resolved.payload.imageURL,
+                        shortURL: resolved.payload.shortURL,
+                        qrCodeURL: resolved.payload.qrCodeURL
+                    )
+                )
+            )
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+        }
+    }
+
+    @MainActor
+    private func openRankingBoardPoster() async {
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(), channel: "view_poster")
+            appPush(
+                .profile(
+                    .shareAsset(
+                        navigationTitle: L("分享海报", "Share Poster"),
+                        title: resolved.payload.title,
+                        subtitle: resolved.payload.subtitle,
+                        imageURL: resolved.payload.imageURL,
+                        assetURL: resolved.payload.posterURL,
+                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
+                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
+                        hintText: L("榜单海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "Ranking posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link."),
+                        saveButtonTitle: L("保存海报", "Save Poster")
+                    )
+                )
+            )
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+        }
+    }
+
+    @MainActor
+    private func saveRankingBoardPoster() async {
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(), channel: "poster_save")
+            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
+            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+        } catch {
+            errorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+        }
     }
 
     private func dismissShareMorePanel(after: (() -> Void)? = nil) {

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { TencentIMClientError, tencentIMClient } from './tencent-im-client';
+import { tencentIMConfig } from './tencent-im-config';
 import { toTencentIMEventGroupID, toTencentIMSquadGroupID, toTencentIMUserID } from './tencent-im-id';
 import type { TencentIMEventGroupProfile, TencentIMSquadGroupProfile } from './tencent-im-types';
 import { tencentIMUserService } from './tencent-im-user.service';
@@ -168,6 +169,9 @@ export const tencentIMGroupService = {
   async addGroupMembers(squadId: string, memberUserIds: string[], reason?: string): Promise<void> {
     const normalized = Array.from(new Set(memberUserIds.map((item) => item.trim()).filter((item) => item.length > 0)));
     if (normalized.length === 0) {
+      return;
+    }
+    if (!tencentIMConfig.enabled) {
       return;
     }
 

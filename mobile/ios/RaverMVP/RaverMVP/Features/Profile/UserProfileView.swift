@@ -198,6 +198,7 @@ private struct UserProfileScreen: View {
                                     title: profile.displayName,
                                     subtitle: profile.bio.isEmpty ? nil : profile.bio,
                                     imageURL: profile.avatarURL,
+                                    shortURL: nil,
                                     qrCodeURL: profile.qrCodeURL
                                 )
                             )

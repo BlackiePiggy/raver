@@ -67,7 +67,6 @@ struct SquadProfileView: View {
                             membersCard(profile)
                             groupDetailsCard(profile)
                             activitiesCard(profile)
-                            chatHistoryCard(profile)
 
                             if profile.isMember {
                                 mySettingsCard(profile)
@@ -119,35 +118,11 @@ struct SquadProfileView: View {
                     dismissKeyboard()
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                if let profile = viewModel.profile {
-                    Button {
-                        appPush(
-                            .profile(
-                                .shareQRCode(
-                                    title: profile.name,
-                                    subtitle: profile.description,
-                                    imageURL: profile.avatarURL,
-                                    qrCodeURL: profile.qrCodeURL
-                                )
-                            )
-                        )
-                    } label: {
-                        Image(systemName: "qrcode")
-                    }
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                if viewModel.profile != nil {
-                    Button {
-                        Task { await copySquadShareLink() }
-                    } label: {
-                        Image(systemName: "link")
-                    }
-                }
-            }
         }
-        .raverGradientNavigationChrome(title: LL("小队")) {
+        .raverGradientNavigationChrome(
+            title: LL("小队"),
+            trailing: AnyView(headerTrailingActions)
+        ) {
             dismiss()
         }
         .task {
@@ -199,6 +174,59 @@ struct SquadProfileView: View {
         }
     }
 
+    @ViewBuilder
+    private var headerTrailingActions: some View {
+        if let profile = viewModel.profile {
+            HStack(spacing: 8) {
+                RaverNavigationCircleIconButton(
+                    systemName: "qrcode",
+                    style: .dimmed,
+                    action: {
+                        appPush(
+                            .profile(
+                                .shareQRCode(
+                                    title: profile.name,
+                                    subtitle: profile.description,
+                                    imageURL: profile.avatarURL,
+                                    shortURL: nil,
+                                    qrCodeURL: profile.qrCodeURL
+                                )
+                            )
+                        )
+                    },
+                    frameSize: 34,
+                    font: .system(size: 14, weight: .semibold)
+                )
+                .accessibilityLabel(Text(L("小队二维码", "Squad QR Code")))
+
+                RaverNavigationCircleIconButton(
+                    systemName: "photo.on.rectangle",
+                    style: .dimmed,
+                    action: {
+                        Task { await openSquadPoster(profile) }
+                    },
+                    frameSize: 34,
+                    font: .system(size: 14, weight: .semibold)
+                )
+                .accessibilityLabel(Text(L("分享海报", "Share Poster")))
+
+                RaverNavigationCircleIconButton(
+                    systemName: "link",
+                    style: .dimmed,
+                    action: {
+                        Task { await copySquadShareLink() }
+                    },
+                    frameSize: 34,
+                    font: .system(size: 14, weight: .semibold)
+                )
+                .accessibilityLabel(Text(L("复制链接", "Copy Link")))
+            }
+        } else {
+            Color.clear
+                .frame(width: 34, height: 34)
+        }
+    }
+
     @MainActor
     private func copySquadShareLink() async {
         guard let profile = viewModel.profile else { return }
@@ -234,6 +262,47 @@ struct SquadProfileView: View {
             }
         } catch {
             viewModel.error = error.userFacingMessage ?? failureMessage
+        }
+    }
+
+    @MainActor
+    private func openSquadPoster(_ profile: SquadProfile) async {
+        let isInviteLink = !profile.isPublic
+        let targetType: ShareTargetType = isInviteLink ? .squadInvite : .squadCard
+
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(
+                target: ShareTarget(
+                    type: targetType,
+                    id: profile.id,
+                    title: isInviteLink ? L("加入「\(profile.name)」", "Join \(profile.name)") : profile.name,
+                    subtitle: profile.description,
+                    imageURL: profile.avatarURL
+                ),
+                channel: "view_poster",
+                preferPermanent: !isInviteLink,
+                expiresInHours: isInviteLink ? 72 : nil,
+                maxUses: isInviteLink ? 10 : nil
+            )
+            appPush(
+                .profile(
+                    .shareAsset(
+                        navigationTitle: L("分享海报", "Share Poster"),
+                        title: profile.name,
+                        subtitle: profile.description,
+                        imageURL: profile.avatarURL,
+                        assetURL: resolved.payload.posterURL,
+                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
+                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
+                        hintText: isInviteLink
+                            ? L("私密小队海报仍受邀请规则控制，过期或撤销后将无法继续加入。", "Private squad posters still follow invite-link rules and stop working after expiry or revocation.")
+                            : L("群名片海报由系统统一生成，后续更新群头像或简介后可继续复用。", "The squad poster is generated by the system and can continue to be reused after future avatar or bio updates."),
+                        saveButtonTitle: L("保存海报", "Save Poster")
+                    )
+                )
+            )
+        } catch {
+            viewModel.error = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
         }
     }
 
@@ -311,27 +380,6 @@ struct SquadProfileView: View {
                     Text(profile.notice.isEmpty ? L("暂无小队通知", "No Squad Notice Yet") : profile.notice)
                         .font(.subheadline)
                 }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(LL("小队二维码"))
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                    Button {
-                        appPush(
-                            .profile(
-                                .shareQRCode(
-                                    title: profile.name,
-                                    subtitle: profile.description,
-                                    imageURL: profile.avatarURL,
-                                    qrCodeURL: profile.qrCodeURL
-                                )
-                            )
-                        )
-                    } label: {
-                        groupQRCode(urlString: profile.qrCodeURL)
-                    }
-                    .buttonStyle(.plain)
-                }
             }
         }
     }
@@ -357,36 +405,6 @@ struct SquadProfileView: View {
                                     .foregroundStyle(RaverTheme.secondaryText)
                             }
                             Text(activity.date.feedTimeText)
-                                .font(.caption2)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
-            }
-        }
-    }
-
-    private func chatHistoryCard(_ profile: SquadProfile) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(LL("聊天历史记录"))
-                    .font(.headline)
-
-                if profile.recentMessages.isEmpty {
-                    Text(LL("还没有消息，加入后来发第一条吧。"))
-                        .font(.subheadline)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                } else {
-                    ForEach(profile.recentMessages) { item in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.sender.displayName)
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                            Text(item.content)
-                                .font(.subheadline)
-                                .lineLimit(2)
-                            Text(item.createdAt.feedTimeText)
                                 .font(.caption2)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
@@ -565,33 +583,6 @@ struct SquadProfileView: View {
             .background(RaverTheme.card)
             .frame(width: size, height: size)
             .clipShape(Circle())
-    }
-
-    private func groupQRCode(urlString: String?) -> some View {
-        let resolved = AppConfig.resolvedURLString(urlString)
-        return Group {
-            if let resolved, !resolved.isEmpty, URL(string: resolved) != nil {
-                ImageLoaderView(urlString: resolved, resizingMode: .fit)
-                    .background(qrPlaceholder)
-            } else {
-                qrPlaceholder
-            }
-        }
-        .frame(width: 160, height: 160)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(RaverTheme.cardBorder, lineWidth: 1)
-        )
-    }
-
-    private var qrPlaceholder: some View {
-        ZStack {
-            RaverTheme.card
-            Image(systemName: "qrcode")
-                .font(.system(size: 48, weight: .medium))
-                .foregroundStyle(RaverTheme.secondaryText)
-        }
     }
 
     private func avatarWithRoleBadge(member: SquadMemberProfile, size: CGFloat) -> some View {

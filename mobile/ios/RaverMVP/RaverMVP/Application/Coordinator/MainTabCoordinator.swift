@@ -29,10 +29,14 @@ enum AppRoute: Hashable {
     )
     case djDetail(djID: String)
     case labelDetail(labelID: String)
+    case festivalDetail(festivalID: String)
+    case setDetail(setID: String)
     case rankingBoardDetail(board: RankingBoard, year: Int?)
     case userProfile(userID: String)
     case squadProfile(squadID: String)
     case squadManage(squadID: String)
+    case circleIDDetail(entryID: String)
+    case ratingEventDetail(eventID: String)
     case ratingUnitDetail(unitID: String)
 }
 
@@ -55,10 +59,14 @@ extension AppRoute {
              .eventRoute,
              .djDetail,
              .labelDetail,
+             .festivalDetail,
+             .setDetail,
              .rankingBoardDetail,
              .userProfile,
              .squadProfile,
              .squadManage,
+             .circleIDDetail,
+             .ratingEventDetail,
              .ratingUnitDetail:
             return true
         }
@@ -96,6 +104,10 @@ extension AppRoute {
             return "dj.detail"
         case .labelDetail:
             return "label.detail"
+        case .festivalDetail:
+            return "festival.detail"
+        case .setDetail:
+            return "set.detail"
         case .rankingBoardDetail:
             return "ranking.board.detail"
         case .userProfile:
@@ -104,6 +116,10 @@ extension AppRoute {
             return "squad.profile"
         case .squadManage:
             return "squad.manage"
+        case .circleIDDetail:
+            return "circle.id.detail"
+        case .ratingEventDetail:
+            return "rating.event.detail"
         case .ratingUnitDetail:
             return "rating.unit.detail"
         }
@@ -127,9 +143,9 @@ extension AppRoute {
             return .messages
         case .followedBrandsInbox:
             return .messages
-        case .postDetail, .squadProfile, .squadManage, .ratingUnitDetail:
+        case .postDetail, .squadProfile, .squadManage, .circleIDDetail, .ratingEventDetail, .ratingUnitDetail:
             return .circle
-        case .eventDetail, .newsDetail, .eventSchedule, .eventRoute, .djDetail, .labelDetail, .rankingBoardDetail:
+        case .eventDetail, .newsDetail, .eventSchedule, .eventRoute, .djDetail, .labelDetail, .festivalDetail, .setDetail, .rankingBoardDetail:
             return .discover
         case .userProfile:
             return .profile
@@ -213,12 +229,20 @@ final class AppRouter: ObservableObject {
                 return "djDetail(\(djID))"
             case .labelDetail(let labelID):
                 return "labelDetail(\(labelID))"
+            case .festivalDetail(let festivalID):
+                return "festivalDetail(\(festivalID))"
+            case .setDetail(let setID):
+                return "setDetail(\(setID))"
             case .rankingBoardDetail(let board, let year):
                 return "rankingBoardDetail(\(board.id), year=\(year?.description ?? "nil"))"
             case .squadProfile(let squadID):
                 return "squadProfile(\(squadID))"
             case .squadManage(let squadID):
                 return "squadManage(\(squadID))"
+            case .circleIDDetail(let entryID):
+                return "circleIDDetail(\(entryID))"
+            case .ratingEventDetail(let eventID):
+                return "ratingEventDetail(\(eventID))"
             case .ratingUnitDetail(let unitID):
                 return "ratingUnitDetail(\(unitID))"
             case .userProfile(let userID):
@@ -467,6 +491,11 @@ struct MainTabCoordinatorView: View {
                     service: appContainer.webService,
                     socialService: appContainer.socialService
                 )
+            case .mySaves:
+                MySavesView(
+                    repository: appContainer.profileSocialRepository,
+                    webService: appContainer.webService
+                )
             case .myRoutes:
                 MyRoutesView()
             case .editProfile:
@@ -498,12 +527,25 @@ struct MainTabCoordinatorView: View {
                 ProfileRatingEventEditorLoaderView(eventID: eventID, service: appContainer.webService)
             case let .editRatingUnit(unitID):
                 ProfileRatingUnitEditorLoaderView(unitID: unitID, service: appContainer.webService)
-            case let .shareQRCode(title, subtitle, imageURL, qrCodeURL):
+            case let .shareQRCode(title, subtitle, imageURL, shortURL, qrCodeURL):
                 ShareQRCodeDetailView(
                     title: title,
                     subtitle: subtitle,
                     imageURL: imageURL,
+                    shortURL: shortURL,
                     qrCodeURL: qrCodeURL
+                )
+            case let .shareAsset(navigationTitle, title, subtitle, imageURL, assetURL, emptyTitle, emptyMessage, hintText, saveButtonTitle):
+                ShareAssetDetailView(
+                    navigationTitle: navigationTitle,
+                    title: title,
+                    subtitle: subtitle,
+                    imageURL: imageURL,
+                    assetURL: assetURL,
+                    emptyTitle: emptyTitle,
+                    emptyMessage: emptyMessage,
+                    hintText: hintText,
+                    saveButtonTitle: saveButtonTitle
                 )
             }
 
@@ -558,6 +600,20 @@ struct MainTabCoordinatorView: View {
                 appContainer: appContainer
             )
 
+        case .festivalDetail(let festivalID):
+            makeDiscoverRouteDestination(
+                .festivalDetail(festivalID: festivalID),
+                push: pushDiscoverRoute,
+                appContainer: appContainer
+            )
+
+        case .setDetail(let setID):
+            makeDiscoverRouteDestination(
+                .setDetail(setID: setID),
+                push: pushDiscoverRoute,
+                appContainer: appContainer
+            )
+
         case .rankingBoardDetail(let board, let year):
             RankingBoardDetailView(board: board, initialYear: year)
 
@@ -577,6 +633,18 @@ struct MainTabCoordinatorView: View {
                 service: appContainer.socialService,
                 webService: appContainer.webService
             )
+
+        case .circleIDDetail(let entryID):
+            CircleIDDetailLoaderView(entryID: entryID)
+                .environmentObject(appState)
+
+        case .ratingEventDetail(let eventID):
+            CircleRatingEventDetailView(
+                eventID: eventID,
+                onClose: {},
+                onUpdated: {}
+            )
+            .environmentObject(appContainer)
 
         case .ratingUnitDetail(let unitID):
             CircleRatingUnitDetailView(unitID: unitID) {
@@ -661,6 +729,7 @@ struct MainTabCoordinatorView: View {
                 .widgetManager,
                 .movieBanner,
                 .myPublishes,
+                .mySaves,
                 .myRoutes,
                 .editProfile,
                 .myCheckins,
@@ -670,7 +739,8 @@ struct MainTabCoordinatorView: View {
                 .editSet,
                 .editRatingEvent,
                 .editRatingUnit,
-                .shareQRCode:
+                .shareQRCode,
+                .shareAsset:
             router.push(.profile(route))
         case .avatarFullscreen:
             router.presentFullScreen(.avatarFullscreen)
@@ -750,8 +820,16 @@ struct MainTabCoordinatorView: View {
             return .djDetail(djID: djID)
         }
 
+        if host == "set", let setID = pathParts.first {
+            return .setDetail(setID: setID)
+        }
+
         if host == "label", let labelID = pathParts.first {
             return .labelDetail(labelID: labelID)
+        }
+
+        if host == "festival", let festivalID = pathParts.first {
+            return .festivalDetail(festivalID: festivalID)
         }
 
         if host == "ranking-board", let boardID = pathParts.first {
@@ -775,6 +853,18 @@ struct MainTabCoordinatorView: View {
 
         if host == "profile", let userID = pathParts.first {
             return .userProfile(userID: userID)
+        }
+
+        if host == "circle", pathParts.count >= 2, pathParts[0].lowercased() == "id" {
+            return .circleIDDetail(entryID: pathParts[1])
+        }
+
+        if host == "circle", pathParts.count >= 2, pathParts[0].lowercased() == "rating-event" {
+            return .ratingEventDetail(eventID: pathParts[1])
+        }
+
+        if host == "rating-unit", let unitID = pathParts.first {
+            return .ratingUnitDetail(unitID: unitID)
         }
 
         let normalizedParts = ([host] + pathParts).filter { !$0.isEmpty }
@@ -811,8 +901,14 @@ struct MainTabCoordinatorView: View {
         if normalizedParts.count >= 2, normalizedParts[0] == "dj" {
             return .djDetail(djID: normalizedParts[1])
         }
+        if normalizedParts.count >= 2, normalizedParts[0] == "set" {
+            return .setDetail(setID: normalizedParts[1])
+        }
         if normalizedParts.count >= 2, normalizedParts[0] == "label" {
             return .labelDetail(labelID: normalizedParts[1])
+        }
+        if normalizedParts.count >= 2, normalizedParts[0] == "festival" {
+            return .festivalDetail(festivalID: normalizedParts[1])
         }
         if normalizedParts.count >= 2, normalizedParts[0] == "ranking-board" {
             let year = queryItems.first(where: { $0.name == "year" })?.value.flatMap(Int.init)
@@ -833,6 +929,15 @@ struct MainTabCoordinatorView: View {
         }
         if normalizedParts.count >= 2, normalizedParts[0] == "profile" {
             return .userProfile(userID: normalizedParts[1])
+        }
+        if normalizedParts.count >= 3, normalizedParts[0] == "circle", normalizedParts[1] == "id" {
+            return .circleIDDetail(entryID: normalizedParts[2])
+        }
+        if normalizedParts.count >= 3, normalizedParts[0] == "circle", normalizedParts[1] == "rating-event" {
+            return .ratingEventDetail(eventID: normalizedParts[2])
+        }
+        if normalizedParts.count >= 2, normalizedParts[0] == "rating-unit" {
+            return .ratingUnitDetail(unitID: normalizedParts[1])
         }
         return nil
     }
@@ -863,6 +968,18 @@ struct MainTabCoordinatorView: View {
             return "djDetail(\(djID))"
         case .labelDetail(let labelID):
             return "labelDetail(\(labelID))"
+        case .festivalDetail(let festivalID):
+            return "festivalDetail(\(festivalID))"
+        case .setDetail(let setID):
+            return "setDetail(\(setID))"
+        case .rankingBoardDetail(let board, let year):
+            return "rankingBoardDetail(\(board.id), year=\(year?.description ?? "nil"))"
+        case .circleIDDetail(let entryID):
+            return "circleIDDetail(\(entryID))"
+        case .ratingEventDetail(let eventID):
+            return "ratingEventDetail(\(eventID))"
+        case .ratingUnitDetail(let unitID):
+            return "ratingUnitDetail(\(unitID))"
         case .squadProfile(let squadID):
             return "squadProfile(\(squadID))"
         case .userProfile(let userID):

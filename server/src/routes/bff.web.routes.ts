@@ -6789,6 +6789,62 @@ router.get('/djs/:id/rating-units', optionalAuth, async (req: Request, res: Resp
   }
 });
 
+router.get('/djs/followed', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const viewerId = requireAuth(authReq, res);
+    if (!viewerId) return;
+
+    const viewerRole = authReq.user?.role ?? null;
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const skip = (page - 1) * limit;
+
+    const [follows, total] = await Promise.all([
+      prisma.follow.findMany({
+        where: {
+          followerId: viewerId,
+          type: 'dj',
+          djId: { not: null },
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          dj: true,
+        },
+      }),
+      prisma.follow.count({
+        where: {
+          followerId: viewerId,
+          type: 'dj',
+          djId: { not: null },
+        },
+      }),
+    ]);
+
+    const rows = await attachDJContributorInfoList(
+      follows
+        .map((follow) => follow.dj)
+        .filter((dj): dj is NonNullable<typeof dj> => Boolean(dj))
+    );
+
+    ok(
+      res,
+      { items: rows.map((row) => mapDJ(row, true, viewerId, viewerRole)) },
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      }
+    );
+  } catch (error) {
+    console.error('BFF web followed djs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/djs/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const authReq = req as BFFAuthRequest;

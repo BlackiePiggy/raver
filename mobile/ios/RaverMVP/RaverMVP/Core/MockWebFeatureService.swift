@@ -1220,6 +1220,23 @@ actor MockWebFeatureService: WebFeatureService {
         return djs[idx]
     }
 
+    func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage {
+        let pageNum = max(1, page)
+        let pageLimit = max(1, min(100, limit))
+        let followed = djs.filter { $0.isFollowing == true }
+        let start = min((pageNum - 1) * pageLimit, followed.count)
+        let end = min(start + pageLimit, followed.count)
+        return DJListPage(
+            items: Array(followed[start..<end]),
+            pagination: BFFPagination(
+                page: pageNum,
+                limit: pageLimit,
+                total: followed.count,
+                totalPages: max(1, Int(ceil(Double(followed.count) / Double(pageLimit))))
+            )
+        )
+    }
+
     func fetchDJSets(page: Int, limit: Int, sortBy: String, djID: String?) async throws -> DJSetListPage {
         var filtered = sets
         if let djID, !djID.isEmpty {

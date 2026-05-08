@@ -231,7 +231,17 @@ struct TencentUIKitChatView: View {
                 Button {
                     Task {
                         if conversation.type == .group {
-                            let squadID = TencentIMIdentity.normalizePlatformSquadID(conversation.id)
+                            let squadID = resolvedHeaderSquadID()
+#if DEBUG
+                            print(
+                                """
+                                [ChatHeaderRoute] open squad profile \
+                                conversationID=\(conversation.id) \
+                                sdkConversationID=\(conversation.sdkConversationID ?? "nil") \
+                                targetSquadID=\(squadID)
+                                """
+                            )
+#endif
                             await MainActor.run {
                                 appNavigate(.squadProfile(squadID: squadID))
                             }
@@ -250,6 +260,14 @@ struct TencentUIKitChatView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(conversation.type == .direct && !viewModel.canOpenHeaderProfile)
+                .contentShape(Circle())
+                .accessibilityLabel(
+                    Text(
+                        conversation.type == .group
+                            ? L("查看小队主页", "View Squad Profile")
+                            : L("查看用户主页", "View User Profile")
+                    )
+                )
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(viewModel.chatTitle)
@@ -291,6 +309,21 @@ struct TencentUIKitChatView: View {
                 .frame(height: 0.5)
         }
         .background(colorScheme == .dark ? Color.black : Color.white)
+    }
+
+    private func resolvedHeaderSquadID() -> String {
+        let candidates = [
+            conversation.id.nilIfBlank,
+            conversation.sdkConversationID?.nilIfBlank.map { value in
+                value.hasPrefix("group_") ? String(value.dropFirst(6)) : value
+            }
+        ]
+        .compactMap { $0 }
+
+        guard let candidate = candidates.first else {
+            return conversation.id
+        }
+        return TencentIMIdentity.normalizePlatformSquadID(candidate)
     }
 
     private var chatContent: some View {

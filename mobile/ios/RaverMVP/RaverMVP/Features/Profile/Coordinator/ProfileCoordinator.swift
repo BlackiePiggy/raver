@@ -7,6 +7,7 @@ enum ProfileRoute: Hashable {
     case widgetManager
     case movieBanner
     case myPublishes
+    case mySaves
     case myRoutes
     case editProfile
     case myCheckins(targetUserID: String?, title: String, ownerDisplayName: String?)
@@ -21,7 +22,19 @@ enum ProfileRoute: Hashable {
         title: String,
         subtitle: String?,
         imageURL: String?,
+        shortURL: String?,
         qrCodeURL: String?
+    )
+    case shareAsset(
+        navigationTitle: String,
+        title: String,
+        subtitle: String?,
+        imageURL: String?,
+        assetURL: String?,
+        emptyTitle: String,
+        emptyMessage: String,
+        hintText: String,
+        saveButtonTitle: String?
     )
 }
 

@@ -7,6 +7,7 @@ import UIKit
 
 struct PostCardView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appContainer: AppContainer
 
     let post: Post
@@ -153,21 +154,25 @@ struct PostCardView: View {
                     }
                     .foregroundStyle(post.isLiked ? Color.pink : RaverTheme.secondaryText)
 
+                    /*
+                    Repost entry is temporarily hidden from post lists and detail cards.
+                    Keep this UI code ready because repost icon/data may be enabled again at any time.
                     if let onRepostTap {
                         Button(action: onRepostTap) {
-                            Label("\(post.repostCount)", systemImage: post.isReposted ? "arrow.2.squarepath.circle.fill" : "arrow.2.squarepath")
+                            Label("\(post.repostCount)", systemImage: post.isReposted ? "arrowshape.turn.up.right.fill" : "arrowshape.turn.up.right")
                         }
                         .foregroundStyle(post.isReposted ? RaverTheme.accent : RaverTheme.secondaryText)
                     }
+                    */
 
                     Label("\(post.commentCount)", systemImage: "text.bubble")
                         .foregroundStyle(RaverTheme.secondaryText)
 
                     if let onSaveTap {
                         Button(action: onSaveTap) {
-                            Label("\(post.saveCount)", systemImage: post.isSaved ? "bookmark.fill" : "bookmark")
+                            Label("\(post.saveCount)", systemImage: post.isSaved ? "star.fill" : "star")
                         }
-                        .foregroundStyle(post.isSaved ? RaverTheme.accent : RaverTheme.secondaryText)
+                        .foregroundStyle(post.isSaved ? Color.yellow : RaverTheme.secondaryText)
                     }
 
                     if post.author.id != currentUserId, let onMessageTap {
@@ -403,6 +408,7 @@ struct PostCardView: View {
     }
 
     private func shareQuickActions() -> [SharePanelQuickAction] {
+        let payload = PostSharePayload(post: post)
         var actions: [SharePanelQuickAction] = [
             SharePanelQuickAction(
                 title: L("复制链接", "Copy Link"),
@@ -410,6 +416,27 @@ struct PostCardView: View {
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
             ) {
                 Task { await copyPostShareLink() }
+            },
+            SharePanelQuickAction(
+                title: L("查看二维码", "View QR"),
+                systemImage: "qrcode",
+                accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
+            ) {
+                Task { await openPostQRCode() }
+            },
+            SharePanelQuickAction(
+                title: L("查看海报", "View Poster"),
+                systemImage: "photo.on.rectangle",
+                accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
+            ) {
+                Task { await openPostPoster() }
+            },
+            SharePanelQuickAction(
+                title: L("保存海报", "Save Poster"),
+                systemImage: "photo.badge.arrow.down",
+                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
+            ) {
+                Task { await savePostPoster() }
             }
         ]
 
@@ -456,6 +483,91 @@ struct PostCardView: View {
             }
         } catch {
             shareErrorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+        }
+    }
+
+    @MainActor
+    private func openPostQRCode() async {
+        let payload = PostSharePayload(post: post)
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(
+                target: ShareTarget(
+                    type: .post,
+                    id: post.id,
+                    title: payload.shareTitle,
+                    subtitle: payload.shareSummary,
+                    imageURL: post.images.first
+                ),
+                channel: "view_qr"
+            )
+            appPush(
+                .profile(
+                    .shareQRCode(
+                        title: resolved.payload.title,
+                        subtitle: resolved.payload.subtitle,
+                        imageURL: resolved.payload.imageURL,
+                        shortURL: resolved.payload.shortURL,
+                        qrCodeURL: resolved.payload.qrCodeURL
+                    )
+                )
+            )
+        } catch {
+            shareErrorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+        }
+    }
+
+    @MainActor
+    private func openPostPoster() async {
+        let payload = PostSharePayload(post: post)
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(
+                target: ShareTarget(
+                    type: .post,
+                    id: post.id,
+                    title: payload.shareTitle,
+                    subtitle: payload.shareSummary,
+                    imageURL: post.images.first
+                ),
+                channel: "view_poster"
+            )
+            appPush(
+                .profile(
+                    .shareAsset(
+                        navigationTitle: L("分享海报", "Share Poster"),
+                        title: resolved.payload.title,
+                        subtitle: resolved.payload.subtitle,
+                        imageURL: resolved.payload.imageURL,
+                        assetURL: resolved.payload.posterURL,
+                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
+                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
+                        hintText: L("动态海报由分享系统统一生成，内容封面、摘要和二维码都会跟随短链一起更新。", "Post posters are generated by the share system, so the cover, summary, and QR code stay aligned with the short link."),
+                        saveButtonTitle: L("保存海报", "Save Poster")
+                    )
+                )
+            )
+        } catch {
+            shareErrorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+        }
+    }
+
+    @MainActor
+    private func savePostPoster() async {
+        let payload = PostSharePayload(post: post)
+        do {
+            let resolved = try await shareLinkCoordinator.resolveLink(
+                target: ShareTarget(
+                    type: .post,
+                    id: post.id,
+                    title: payload.shareTitle,
+                    subtitle: payload.shareSummary,
+                    imageURL: post.images.first
+                ),
+                channel: "poster_save"
+            )
+            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
+            OperationBannerCenter.shared.success(L("海报已保存到相册", "Poster saved to Photos"))
+        } catch {
+            shareErrorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
         }
     }
 }

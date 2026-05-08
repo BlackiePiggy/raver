@@ -1,10 +1,12 @@
 import SwiftUI
+import Photos
 
 struct ProfileView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.appPush) private var appPush
     @Environment(\.profilePush) private var profilePush
     @ObservedObject private var viewModel: ProfileViewModel
+    @Namespace private var profilePostTabNamespace
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
         ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
@@ -16,11 +18,8 @@ struct ProfileView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+            if viewModel.bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
-                    if viewModel.isRefreshing {
-                        InlineLoadingBadge(title: L("正在更新个人主页", "Updating profile"))
-                    }
                     if let bannerMessage = viewModel.bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
@@ -95,14 +94,6 @@ struct ProfileView: View {
 
                             profileQuickActions
 
-                            Picker(LL("内容"), selection: $viewModel.selectedSection) {
-                                ForEach(ProfileViewModel.Section.allCases) { section in
-                                    Text(section.title).tag(section)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            .padding(.horizontal, 2)
-
                             sectionContent
                         }
                         .padding(16)
@@ -133,31 +124,6 @@ struct ProfileView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 if viewModel.profile != nil {
                     Button {
-                        Task { await copyMyProfileShareLink() }
-                    } label: {
-                        Image(systemName: "link")
-                    }
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                if let profile = viewModel.profile {
-                    Button {
-                        profilePush(
-                            .shareQRCode(
-                                title: profile.displayName,
-                                subtitle: profile.bio.isEmpty ? nil : profile.bio,
-                                imageURL: profile.avatarURL,
-                                qrCodeURL: profile.qrCodeURL
-                            )
-                        )
-                    } label: {
-                        Image(systemName: "qrcode")
-                    }
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                if viewModel.profile != nil {
-                    Button {
                         profilePush(.settings)
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -179,122 +145,129 @@ struct ProfileView: View {
     }
 
     @MainActor
-    private func copyMyProfileShareLink() async {
-        guard let profile = viewModel.profile else { return }
+    private func openMyProfileQRCode(_ profile: UserProfile) async {
+        let subtitle = profile.bio.isEmpty ? nil : profile.bio
+        let target = ShareTarget(
+            type: .userCard,
+            id: profile.id,
+            title: profile.displayName,
+            subtitle: subtitle,
+            imageURL: profile.avatarURL
+        )
 
         do {
-            let result = try await shareLinkCoordinator.copyLink(
-                target: ShareTarget(
-                    type: .userCard,
-                    id: profile.id,
-                    title: profile.displayName,
-                    subtitle: profile.bio.isEmpty ? nil : profile.bio,
-                    imageURL: profile.avatarURL
+            let resolved = try await shareLinkCoordinator.resolveLink(target: target, channel: "view_qr")
+            profilePush(
+                .shareQRCode(
+                    title: resolved.payload.title,
+                    subtitle: resolved.payload.subtitle,
+                    imageURL: resolved.payload.imageURL,
+                    shortURL: resolved.payload.shortURL,
+                    qrCodeURL: resolved.payload.qrCodeURL
                 )
             )
-
-            if result.usedDeepLinkFallback {
-                viewModel.error = L("已复制 App 内链接", "Copied app-only link.")
-            } else {
-                OperationBannerCenter.shared.success(L("已复制个人主页链接", "Profile link copied"))
-            }
         } catch {
-            viewModel.error = error.userFacingMessage ?? L("复制个人主页链接失败，请稍后重试。", "Failed to copy profile link. Please try again.")
+            viewModel.error = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
         }
     }
 
     private var profileQuickActions: some View {
         GlassCard {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 14) {
                 Text(L("快捷入口", "Quick Actions"))
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
 
-                Button {
-                    profilePush(.myPublishes)
-                } label: {
-                    quickActionRow(title: L("我的发布", "My Posts"), icon: "square.stack.3d.up")
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top), count: 4),
+                    spacing: 14
+                ) {
+                    quickActionTile(title: L("我的发布", "My Posts"), icon: "square.stack.3d.up") {
+                        profilePush(.myPublishes)
+                    }
+                    quickActionTile(title: L("我的收藏", "My Saves"), icon: "star.fill") {
+                        profilePush(.mySaves)
+                    }
+                    quickActionTile(title: L("我的路线", "My Routes"), icon: "point.topleft.down.curvedto.point.bottomright.up") {
+                        profilePush(.myRoutes)
+                    }
+                    quickActionTile(title: L("小工具", "Tools"), icon: "wand.and.stars") {
+                        profilePush(.tools)
+                    }
+                    quickActionTile(title: L("二维码", "QR Code"), icon: "qrcode") {
+                        guard let profile = viewModel.profile else { return }
+                        Task { await openMyProfileQRCode(profile) }
+                    }
                 }
-                .buttonStyle(.plain)
-
-                Button {
-                    viewModel.selectedSection = .saves
-                } label: {
-                    quickActionRow(title: L("我的收藏", "My Saves"), icon: "bookmark")
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    profilePush(.myRoutes)
-                } label: {
-                    quickActionRow(title: L("我的行程", "My Routes"), icon: "point.topleft.down.curvedto.point.bottomright.up")
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    profilePush(.tools)
-                } label: {
-                    quickActionRow(title: L("小工具", "Tools"), icon: "wand.and.stars")
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    profilePush(.publishEvent)
-                } label: {
-                    quickActionRow(title: L("发布活动", "Publish Event"), icon: "calendar.badge.plus")
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    profilePush(.uploadSet)
-                } label: {
-                    quickActionRow(title: L("上传 Set", "Upload Set"), icon: "square.and.arrow.up")
-                }
-                .buttonStyle(.plain)
             }
         }
     }
 
-    private func quickActionRow(title: String, icon: String) -> some View {
-        HStack {
-            Label(title, systemImage: icon)
-                .foregroundStyle(RaverTheme.primaryText)
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(RaverTheme.secondaryText)
+    private func quickActionTile(title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(RaverTheme.accent)
+                    .frame(width: 34, height: 30)
+
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.78)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 62, alignment: .top)
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 8)
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
     private var sectionContent: some View {
-        switch viewModel.selectedSection {
-        case .recent:
-            if viewModel.recentPosts.isEmpty {
-                ContentUnavailableView(LL("还没有动态"), systemImage: "square.and.pencil")
-            } else {
-                feedList(viewModel.recentPosts, actionAt: nil)
-            }
-        case .likes:
-            if viewModel.likedItems.isEmpty {
-                ContentUnavailableView(LL("还没有点赞记录"), systemImage: "heart")
-            } else {
-                feedList(viewModel.likedItems.map(\.post), actionAt: Dictionary(uniqueKeysWithValues: viewModel.likedItems.map { ($0.post.id, $0.actionAt) }))
-            }
-        case .reposts:
-            if viewModel.repostedItems.isEmpty {
-                ContentUnavailableView(LL("还没有转发记录"), systemImage: "arrow.2.squarepath")
-            } else {
-                feedList(viewModel.repostedItems.map(\.post), actionAt: Dictionary(uniqueKeysWithValues: viewModel.repostedItems.map { ($0.post.id, $0.actionAt) }))
-            }
-        case .saves:
-            if viewModel.savedItems.isEmpty {
-                ContentUnavailableView(LL("还没有收藏记录"), systemImage: "bookmark")
-            } else {
-                feedList(viewModel.savedItems.map(\.post), actionAt: Dictionary(uniqueKeysWithValues: viewModel.savedItems.map { ($0.post.id, $0.actionAt) }))
+        VStack(spacing: 12) {
+            RaverProfileSegmentedControl(
+                items: ProfileViewModel.Section.allCases,
+                selection: $viewModel.selectedSection,
+                namespace: profilePostTabNamespace,
+                title: { $0.title },
+                iconName: { $0.iconName }
+            )
+
+            switch viewModel.selectedSection {
+            case .published:
+                if viewModel.recentPosts.isEmpty {
+                    ContentUnavailableView(LL("还没有动态"), systemImage: "square.and.pencil")
+                } else {
+                    feedList(viewModel.recentPosts, actionAt: nil)
+                }
+            case .saves:
+                if viewModel.savedItems.isEmpty {
+                    ContentUnavailableView(L("暂无收藏帖子", "No saved posts yet"), systemImage: "star")
+                } else {
+                    feedList(
+                        viewModel.savedItems.map(\.post),
+                        actionAt: Dictionary(
+                            viewModel.savedItems.map { ($0.post.id, $0.actionAt) },
+                            uniquingKeysWith: { first, _ in first }
+                        )
+                    )
+                }
+            case .likes:
+                if viewModel.likedItems.isEmpty {
+                    ContentUnavailableView(L("暂无 Like 过的帖子", "No liked posts yet"), systemImage: "heart")
+                } else {
+                    feedList(
+                        viewModel.likedItems.map(\.post),
+                        actionAt: Dictionary(
+                            viewModel.likedItems.map { ($0.post.id, $0.actionAt) },
+                            uniquingKeysWith: { first, _ in first }
+                        )
+                    )
+                }
             }
         }
     }
@@ -345,6 +318,300 @@ struct ProfileView: View {
 
     private var currentUserID: String {
         appState.session?.user.id ?? ""
+    }
+}
+
+private struct RaverProfileSegmentedControl<ID: Hashable>: View {
+    let items: [ID]
+    @Binding var selection: ID
+    let namespace: Namespace.ID
+    let title: (ID) -> String
+    let iconName: (ID) -> String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(items, id: \.self) { item in
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+                        selection = item
+                    }
+                } label: {
+                    segmentContent(for: item)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == item ? .isSelected : [])
+            }
+        }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(RaverTheme.card.opacity(0.92))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(RaverTheme.cardBorder.opacity(0.78), lineWidth: 1)
+        )
+    }
+
+    private func segmentContent(for item: ID) -> some View {
+        let isSelected = selection == item
+
+        return HStack(spacing: 6) {
+            Image(systemName: iconName(item))
+                .font(.system(size: 12, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+
+            Text(title(item))
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .foregroundStyle(isSelected ? Color.white : RaverTheme.secondaryText)
+        .frame(maxWidth: .infinity, minHeight: 34)
+        .padding(.horizontal, 8)
+        .background {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                RaverTheme.tabBarSelectionStart,
+                                RaverTheme.accent,
+                                RaverTheme.tabBarSelectionEnd
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(RaverTheme.tabBarSelectionStroke, lineWidth: 1)
+                    )
+                    .matchedGeometryEffect(id: "profile-segment-\(String(describing: ID.self))", in: namespace)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+@MainActor
+final class MySavesViewModel: ObservableObject {
+    @Published var markedEvents: [WebEvent] = []
+    @Published var followedDJs: [WebDJ] = []
+    @Published var isLoading = false
+    @Published var isRefreshing = false
+    @Published var errorMessage: String?
+
+    private let repository: ProfileSocialRepository
+    private let webService: WebFeatureService
+
+    init(repository: ProfileSocialRepository, webService: WebFeatureService) {
+        self.repository = repository
+        self.webService = webService
+    }
+
+    func load(force: Bool = false) async {
+        guard force || (!isLoading && markedEvents.isEmpty && followedDJs.isEmpty) else { return }
+
+        isLoading = true
+        isRefreshing = force
+        defer {
+            isLoading = false
+            isRefreshing = false
+        }
+
+        do {
+            async let eventsTask = loadMarkedEvents()
+            async let djsTask = webService.fetchFollowedDJs(page: 1, limit: 100).items
+
+            markedEvents = try await eventsTask
+            followedDJs = try await djsTask
+            errorMessage = nil
+        } catch {
+            guard !error.isUserInitiatedCancellation else { return }
+            errorMessage = error.userFacingMessage ?? L("收藏内容加载失败，请稍后重试", "Failed to load saves. Please try again later.")
+        }
+    }
+
+    private func loadMarkedEvents() async throws -> [WebEvent] {
+        let page = try await webService.fetchMyCheckins(page: 1, limit: 200, type: "event")
+        let eventIDs = page.items
+            .filter { $0.type.lowercased() == "event" && $0.eventId != nil && $0.isMarkedCheckin }
+            .compactMap(\.eventId)
+
+        var eventsByID: [String: WebEvent] = [:]
+        try await withThrowingTaskGroup(of: WebEvent.self) { group in
+            for eventID in Set(eventIDs) {
+                group.addTask {
+                    try await self.webService.fetchEvent(id: eventID)
+                }
+            }
+            for try await event in group {
+                eventsByID[event.id] = event
+            }
+        }
+
+        return eventIDs.compactMap { eventsByID[$0] }
+    }
+}
+
+struct MySavesView: View {
+    @Environment(\.appPush) private var appPush
+    @StateObject private var viewModel: MySavesViewModel
+    @State private var selectedTab: SaveTab = .events
+    @Namespace private var saveTabNamespace
+
+    private enum SaveTab: String, CaseIterable, Identifiable {
+        case events
+        case djs
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .events: return L("收藏活动", "Events")
+            case .djs: return L("关注的DJ", "DJs")
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .events: return "star"
+            case .djs: return "headphones"
+            }
+        }
+    }
+
+    init(repository: ProfileSocialRepository, webService: WebFeatureService) {
+        _viewModel = StateObject(wrappedValue: MySavesViewModel(repository: repository, webService: webService))
+    }
+
+    var body: some View {
+        List {
+            RaverProfileSegmentedControl(
+                items: SaveTab.allCases,
+                selection: $selectedTab,
+                namespace: saveTabNamespace,
+                title: { $0.title },
+                iconName: { $0.iconName }
+            )
+            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
+            .listRowBackground(Color.clear)
+
+            switch selectedTab {
+            case .events:
+                savedEventsSection
+            case .djs:
+                followedDJsSection
+            }
+        }
+        .listStyle(.insetGrouped)
+        .environment(\.defaultMinListRowHeight, 52)
+        .listSectionSpacing(.compact)
+        .raverSystemNavigation(title: L("我的收藏", "My Saves"))
+        .task {
+            await viewModel.load()
+        }
+        .refreshable {
+            await viewModel.load(force: true)
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(viewModel.errorMessage ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private var savedEventsSection: some View {
+        if viewModel.markedEvents.isEmpty, !viewModel.isLoading {
+            ContentUnavailableView(L("暂无收藏活动", "No favorite events yet"), systemImage: "star")
+                .listRowBackground(Color.clear)
+        }
+
+        ForEach(viewModel.markedEvents) { event in
+            Button {
+                appPush(.eventDetail(eventID: event.id))
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(event.name)
+                        .font(.headline)
+                    Text(event.startDate.appLocalizedYMDText())
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    let addressText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+                    Text(addressText.isEmpty ? L("地点待补充", "Location pending") : addressText)
+                        .font(.caption2)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        }
+    }
+
+    @ViewBuilder
+    private var followedDJsSection: some View {
+        if viewModel.followedDJs.isEmpty, !viewModel.isLoading {
+            ContentUnavailableView(L("暂无关注的 DJ", "No followed DJs yet"), systemImage: "headphones")
+                .listRowBackground(Color.clear)
+        }
+
+        ForEach(viewModel.followedDJs) { dj in
+            Button {
+                appPush(.djDetail(djID: dj.id))
+            } label: {
+                HStack(spacing: 12) {
+                    djAvatar(dj)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(dj.name)
+                            .font(.headline)
+                        if let country = dj.country?.nilIfBlank {
+                            Text(country)
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                        if let followerCount = dj.followerCount {
+                            Text(L("\(followerCount) 位关注者", "\(followerCount) followers"))
+                                .font(.caption2)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+                .padding(.vertical, 2)
+            }
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+        }
+    }
+
+    @ViewBuilder
+    private func djAvatar(_ dj: WebDJ) -> some View {
+        if let avatar = dj.avatarSmallUrl ?? dj.avatarMediumUrl ?? dj.avatarUrl,
+           let resolved = AppConfig.resolvedURLString(avatar),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved)
+                .frame(width: 46, height: 46)
+                .clipShape(Circle())
+        } else {
+            Circle()
+                .fill(RaverTheme.card)
+                .frame(width: 46, height: 46)
+                .overlay {
+                    Image(systemName: "headphones")
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+        }
     }
 }
 
@@ -941,65 +1208,28 @@ struct ProfileToolsHubView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
-                GlassCard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(L("演出现场常用工具", "Live Show Tools"))
-                            .font(.headline)
-                            .foregroundStyle(RaverTheme.primaryText)
-                        Text(
-                            L(
-                                "输入一句话，立刻全屏展示，方便远距离应援互动。",
-                                "Type one sentence and display it instantly in full screen for crowd interaction."
-                            )
-                        )
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
+            VStack(alignment: .leading, spacing: 16) {
                 Button {
                     profilePush(.widgetManager)
                 } label: {
-                    GlassCard {
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(L("桌面倒计时管理", "Widget Countdown Manager"))
-                                    .font(.headline.weight(.semibold))
-                                    .foregroundStyle(RaverTheme.primaryText)
-                                Text(L("集中管理已加入桌面小组件的活动。", "Manage all events added to your home screen widget in one place."))
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                            Spacer(minLength: 8)
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        }
-                    }
+                    ProfileToolFeatureCard(
+                        title: L("桌面倒计时管理", "Widget Countdown"),
+                        subtitle: L("集中管理已加入桌面小组件的活动。", "Manage events added to your home screen widget."),
+                        systemImage: "apps.iphone",
+                        accent: Color(red: 0.38, green: 0.54, blue: 0.96)
+                    )
                 }
                 .buttonStyle(.plain)
 
                 Button {
                     profilePush(.movieBanner)
                 } label: {
-                    GlassCard {
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(L("Movie Banner 弹幕", "Movie Banner"))
-                                    .font(.headline.weight(.semibold))
-                                    .foregroundStyle(RaverTheme.primaryText)
-                                Text(L("超大字体全屏弹幕，支持静态与跑马灯。", "Huge full-screen banner with static and marquee modes."))
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                            Spacer(minLength: 8)
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        }
-                    }
+                    ProfileToolFeatureCard(
+                        title: L("Movie Banner 弹幕", "Movie Banner"),
+                        subtitle: L("超大字体全屏弹幕，支持静态与跑马灯。", "Huge full-screen banner with static and marquee modes."),
+                        systemImage: "textformat.size.larger",
+                        accent: Color(red: 0.93, green: 0.36, blue: 0.52)
+                    )
                 }
                 .buttonStyle(.plain)
             }
@@ -1007,6 +1237,66 @@ struct ProfileToolsHubView: View {
         }
         .background(RaverTheme.background)
         .raverSystemNavigation(title: L("小工具", "Tools"))
+    }
+}
+
+private struct ProfileToolFeatureCard: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let accent: Color
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                accent.opacity(0.95),
+                                RaverTheme.accent.opacity(0.82)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: systemImage)
+                    .font(.system(size: 24, weight: .bold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.white)
+            }
+            .frame(width: 54, height: 54)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 6)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(RaverTheme.secondaryText)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(RaverTheme.card.opacity(0.96))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(RaverTheme.cardBorder.opacity(0.76), lineWidth: 1)
+        )
     }
 }
 
@@ -2080,12 +2370,16 @@ struct ShareQRCodeDetailView: View {
     let title: String
     let subtitle: String?
     let imageURL: String?
+    let shortURL: String?
     let qrCodeURL: String?
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
                 shareSubjectCard
+                if resolvedShortURL != nil {
+                    shortLinkCard
+                }
                 qrCard
                 hintCard
             }
@@ -2093,6 +2387,11 @@ struct ShareQRCodeDetailView: View {
         }
         .background(RaverTheme.background)
         .raverSystemNavigation(title: L("分享二维码", "Share QR Code"))
+    }
+
+    private var resolvedShortURL: String? {
+        let trimmed = shortURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private var shareSubjectCard: some View {
@@ -2114,6 +2413,37 @@ struct ShareQRCodeDetailView: View {
                 }
 
                 Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var shortLinkCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(L("短链", "Short Link"))
+                    .font(.headline)
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                HStack(spacing: 10) {
+                    Text(resolvedShortURL ?? "")
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+
+                    Spacer(minLength: 0)
+
+                    Button {
+                        guard let resolvedShortURL else { return }
+                        UIPasteboard.general.string = resolvedShortURL
+                        OperationBannerCenter.shared.success(L("已复制短链", "Short link copied"))
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .frame(width: 34, height: 34)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel(Text(L("复制短链", "Copy short link")))
+                }
             }
         }
     }
@@ -2192,6 +2522,225 @@ struct ShareQRCodeDetailView: View {
                     }
                     .foregroundStyle(RaverTheme.secondaryText)
                 }
+        }
+    }
+}
+
+struct ShareAssetDetailView: View {
+    let navigationTitle: String
+    let title: String
+    let subtitle: String?
+    let imageURL: String?
+    let assetURL: String?
+    let emptyTitle: String
+    let emptyMessage: String
+    let hintText: String
+    let saveButtonTitle: String?
+
+    @State private var feedbackMessage: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                shareSubjectCard
+                assetCard
+                hintCard
+            }
+            .padding(16)
+        }
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: navigationTitle)
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { feedbackMessage != nil },
+            set: { if !$0 { feedbackMessage = nil } }
+        )) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(feedbackMessage ?? "")
+        }
+    }
+
+    private var shareSubjectCard: some View {
+        GlassCard {
+            HStack(spacing: 12) {
+                subjectImage
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(RaverTheme.primaryText)
+
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .lineLimit(3)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var assetCard: some View {
+        GlassCard {
+            VStack(spacing: 14) {
+                assetPreview
+
+                if let saveButtonTitle, hasValidAssetURL {
+                    Button {
+                        Task { await saveAssetToPhotos() }
+                    } label: {
+                        Label(saveButtonTitle, systemImage: "photo.badge.arrow.down")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var hintCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("当前说明", "Notes"))
+                    .font(.headline)
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                Text(hintText)
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+    }
+
+    private var hasValidAssetURL: Bool {
+        let resolved = AppConfig.resolvedURLString(assetURL)
+        guard let resolved, !resolved.isEmpty else { return false }
+        return URL(string: resolved) != nil
+    }
+
+    @ViewBuilder
+    private var subjectImage: some View {
+        if let resolved = AppConfig.resolvedURLString(imageURL),
+           URL(string: resolved) != nil,
+           (resolved.hasPrefix("http://") || resolved.hasPrefix("https://")) {
+            ImageLoaderView(urlString: resolved)
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(RaverTheme.card)
+                .frame(width: 52, height: 52)
+                .overlay {
+                    Image(systemName: "photo")
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var assetPreview: some View {
+        let resolved = AppConfig.resolvedURLString(assetURL)
+        if let resolved,
+           !resolved.isEmpty,
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved, resizingMode: .fit)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 280)
+                .background(RaverTheme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(RaverTheme.card)
+                .frame(maxWidth: .infinity)
+                .frame(height: 320)
+                .overlay {
+                    VStack(spacing: 10) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.system(size: 56, weight: .medium))
+                        Text(emptyTitle)
+                            .font(.headline)
+                        Text(emptyMessage)
+                            .font(.footnote)
+                            .multilineTextAlignment(.center)
+                    }
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .padding(.horizontal, 28)
+                }
+        }
+    }
+
+    @MainActor
+    private func saveAssetToPhotos() async {
+        do {
+            try await ShareAssetPhotoSaver.saveRemoteImage(from: assetURL)
+            feedbackMessage = L("已保存到相册", "Saved to Photos.")
+        } catch {
+            feedbackMessage = error.userFacingMessage ?? emptyMessage
+        }
+    }
+}
+
+enum ShareAssetPhotoSaver {
+    @MainActor
+    static func saveRemoteImage(from urlString: String?) async throws {
+        guard let resolved = AppConfig.resolvedURLString(urlString),
+              !resolved.isEmpty,
+              let url = URL(string: resolved) else {
+            throw ShareAssetPhotoSaverError.invalidURL
+        }
+
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            throw ShareAssetPhotoSaverError.permissionDenied
+        }
+
+        let (data, _) = try await URLSession.shared.data(from: url)
+        guard let image = UIImage(data: data) else {
+            throw ShareAssetPhotoSaverError.imageDecodeFailed
+        }
+
+        try await withCheckedThrowingContinuation { continuation in
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetChangeRequest.creationRequestForAsset(from: image)
+            }) { success, error in
+                DispatchQueue.main.async {
+                    if success {
+                        continuation.resume()
+                    } else if let error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(throwing: ShareAssetPhotoSaverError.saveFailed)
+                    }
+                }
+            }
+        }
+    }
+}
+
+enum ShareAssetPhotoSaverError: LocalizedError {
+    case invalidURL
+    case permissionDenied
+    case imageDecodeFailed
+    case saveFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return L("海报地址无效，请稍后重试。", "Poster URL is invalid. Please try again later.")
+        case .permissionDenied:
+            return L("未获得相册权限，可稍后重新授权后再试。", "Photo permission denied. Please grant access and try again.")
+        case .imageDecodeFailed:
+            return L("图片读取失败，请稍后重试。", "Failed to read image. Please try again later.")
+        case .saveFailed:
+            return L("保存失败，请重试。", "Save failed. Please try again.")
         }
     }
 }

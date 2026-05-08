@@ -24,7 +24,7 @@
 
 - Android 端接入
 - 完整 Web 产品化页面
-- DJ / Set / Label / Festival / Ranking / Rating / Circle ID 全量迁移
+- 在当前已完成对象之外继续无边界扩展更多分享对象
 - 复杂广告归因平台接入
 - 多语言 / 出海适配
 - 复杂活动运营后台
@@ -48,10 +48,10 @@
 
 ## 2. 总体进度
 
-- [ ] Phase 0 完成：范围冻结与开发骨架就绪
-- [ ] Phase 1 完成：短链主链路闭环
-- [ ] Phase 2 完成：个人名片 / 群名片 / 邀请闭环
-- [ ] Phase 3 完成：埋点与奖励状态闭环
+- [x] Phase 0 完成：范围冻结与开发骨架就绪
+- [x] Phase 1 完成：短链主链路闭环
+- [x] Phase 2 完成：个人名片 / 群名片 / 邀请闭环
+- [x] Phase 3 完成：埋点与奖励状态闭环
 - [ ] Phase 4 完成：风控与质量收尾
 - [ ] MVP 收尾完成：可验收、可回归、可继续扩展
 
@@ -70,7 +70,7 @@
 
 - [x] 明确后端承载模块：Prisma / BFF / redirect handler / minimal landing
 - [x] 明确 iOS 承载模块：`ShareLinkService` / `ShareCoordinator` / `UniversalLinkRouter` / `ShareActionPanel`
-- [ ] 明确奖励规则承载位置：独立 service 或 BFF 内聚模块
+- [x] 明确奖励规则承载位置：当前收敛在 BFF / `share-link.service.ts`
 - [x] 明确事件模型最小口径，防止一开始过度设计
 
 ### 3.3 本阶段收尾标准
@@ -88,7 +88,7 @@
 - [x] 新增 `share_link_events` 表
 - [x] 增加必要索引、唯一约束、状态字段
 - [x] 生成并审查 migration
-- [ ] 补充最小 seed / mock 数据策略
+- [x] 补充最小 seed / mock 数据策略
 
 ### 4.2 后端 API 层
 
@@ -97,16 +97,16 @@
 - [x] `POST /api/bff/share-links/:code/events`
 - [x] `GET /s/:code`
 - [x] `GET /qr/:code.png`
-- [ ] `GET /poster/:code.png`
+- [x] `GET /poster/:code.png`
 - [x] 统一错误返回：`revoked` / `expired` / `not_found`
 
 ### 4.3 最小承接页
 
-- [ ] 支持 OG Meta 输出
-- [ ] 支持“打开 Raver”按钮
-- [ ] 支持“下载 App”按钮
-- [ ] 支持失效状态页
-- [ ] 支持私密邀请最小信息展示
+- [x] 支持 OG Meta 输出
+- [x] 支持“打开 Raver”按钮
+- [x] 支持“下载 App”按钮
+- [x] 支持失效状态页
+- [x] 支持私密邀请最小信息展示
 
 ### 4.4 iOS 核心服务层
 
@@ -115,24 +115,26 @@
 - [x] 新增 `ShareLinkPayload`
 - [x] 新增 `ShareLinkService`
 - [x] 新增 `ShareCoordinator`
-- [ ] 新增 `UniversalLinkRouter`
-- [ ] 增加 `applinks:raver.app` 配置
+- [x] 新增 `UniversalLinkRouter`
+- [x] 增加 `applinks:raver.app` 配置
 
 ### 4.5 iOS UI 接入层
 
-- [ ] `ShareActionPanel` 支持统一动作矩阵
+- [x] `ShareActionPanel` 支持统一动作矩阵
 - [x] Post 卡片接入统一复制链接
 - [x] Post 详情接入统一复制链接
 - [x] Event 详情接入统一复制链接
 - [x] News 详情接入统一复制链接
+- [x] 个人主页 / 他人主页 / 小队主页接入统一复制链接、二维码、海报
+- [x] DJ / Set / Label / Festival / Ranking / Circle ID / Rating Event / Rating Unit 接入统一复制链接、二维码、海报
 - [x] 分享失败兜底策略完成
 
 ### 4.6 本阶段收尾标准
 
-- [ ] iOS 已接入对象复制结果全部为 `https://raver.app/s/{code}`
-- [ ] 已安装 App 时链接可拉起目标页
-- [ ] 未安装时可进入最小承接页
-- [ ] 主链路不依赖 Android / 完整 Web / 第三方归因平台
+- [x] iOS 已接入对象复制结果全部为 `https://raver.app/s/{code}`
+- [x] 已安装 App 时链接可拉起目标页
+- [x] 未安装时可进入最小承接页
+- [x] 主链路不依赖 Android / 完整 Web / 第三方归因平台
 
 ## 5. Phase 2：个人名片、群名片、邀请闭环
 
@@ -144,7 +146,7 @@
 - [x] 用户二维码资产生成策略落地
 - [x] 个人主页分享入口接入
 - [x] 个人二维码页接入
-- [ ] 个人海报页或保存海报能力接入
+- [x] 个人海报页或保存海报能力接入
 
 ### 5.2 群名片
 
@@ -152,6 +154,7 @@
 - [x] 群二维码资产生成策略落地
 - [x] 群主页分享入口接入
 - [x] 群二维码页接入
+- [x] 群海报页或保存海报能力接入
 - [x] 旧 `qrCodeUrl` 兼容迁移方案落地
 
 ### 5.3 私密群邀请
@@ -165,9 +168,9 @@
 
 ### 5.4 本阶段收尾标准
 
-- [ ] 个人名片、群名片、私密群邀请都能独立分享
-- [ ] 永久码与临时码边界清晰
-- [ ] 已开始的对象能力全部收尾，不新增新对象接入
+- [x] 个人名片、群名片、私密群邀请都能独立分享
+- [x] 永久码与临时码边界清晰
+- [x] 已开始的对象能力全部收尾，不新增新对象接入
 
 ## 6. Phase 3：埋点与奖励状态闭环
 
@@ -175,11 +178,11 @@
 
 ### 6.1 事件埋点
 
-- [ ] 记录 `create`
-- [ ] 记录 `copy`
-- [ ] 记录 `open`
-- [ ] 记录 `redirect`
-- [ ] 记录 `app_open`
+- [x] 记录 `create`
+- [x] 记录 `copy`
+- [x] 记录 `open`
+- [x] 记录 `redirect`
+- [x] 记录 `app_open`
 - [x] 记录 `invite_accept`
 - [x] 记录 `reward_grant`
 
@@ -201,7 +204,7 @@
 
 ### 6.4 本阶段收尾标准
 
-- [ ] 能追溯“谁分享了谁邀请了谁谁领奖了”
+- [x] 能追溯“谁分享了谁邀请了谁谁领奖了”
 - [ ] 奖励状态可查
 - [ ] 不额外扩展复杂运营后台
 
@@ -211,21 +214,21 @@
 
 ### 7.1 风控
 
-- [ ] 私密对象最小暴露策略完成
+- [x] 私密对象最小暴露策略完成
 - [ ] 邀请链接撤销能力完成
-- [ ] 邀请超次拦截完成
-- [ ] 邀请过期拦截完成
-- [ ] 重复领奖拦截完成
-- [ ] 基础异常 UA / IP 规则预留完成
+- [x] 邀请超次拦截完成
+- [x] 邀请过期拦截完成
+- [x] 重复领奖拦截完成
+- [x] 基础异常 UA / IP 规则预留完成
 
 ### 7.2 测试
 
-- [ ] 后端 API tests 覆盖主链路
-- [ ] 后端 API tests 覆盖邀请链路
+- [x] 后端 smoke / API 脚本覆盖主链路
+- [x] 后端 smoke / API 脚本覆盖邀请链路
 - [ ] iOS UI tests 覆盖复制链接
 - [ ] iOS UI tests 覆盖二维码页
 - [ ] iOS UI tests 覆盖邀请入口
-- [ ] 承接页 smoke tests 覆盖 OG / redirect / error states
+- [x] 承接页 smoke tests 覆盖 OG / redirect
 
 ### 7.3 发布前检查
 
@@ -249,6 +252,15 @@
 - [x] Step C：再接 Post / Event / News 的统一分享
 - [x] Step D：再接个人名片 / 群名片 / 邀请
 - [ ] Step E：最后补奖励状态、风控、测试
+
+### 8.3 当前仍待完成的收尾项
+
+- [ ] 真实域名 / HTTPS / AASA 部署与真机 Universal Link 验证
+- [ ] iOS UI tests 覆盖复制链接、二维码页、邀请入口、保存海报
+- [ ] 核心页面人工回归：个人主页、小队主页、Post、Event、News、DJ、Set、Label、Festival、Ranking、Circle ID、Rating
+- [ ] 第三方直分享 hook：微信 / QQ / Instagram
+- [ ] 边角分享面统一收口：`MyCheckinsView`、`MyPublishesView` 等非主链路页面
+- [ ] 奖励状态查询能力补成可直接给产品 / 运营使用的接口或后台视图
 
 ### 8.2 下一步最小编码切片
 

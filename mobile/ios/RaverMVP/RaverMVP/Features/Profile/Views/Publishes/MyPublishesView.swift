@@ -282,6 +282,25 @@ struct MyPublishesView: View {
         }
         .listStyle(.insetGrouped)
         .raverSystemNavigation(title: L("我的发布", "My Posts"))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        profilePush(.publishEvent)
+                    } label: {
+                        Label(L("发布活动", "Publish Event"), systemImage: "calendar.badge.plus")
+                    }
+
+                    Button {
+                        profilePush(.uploadSet)
+                    } label: {
+                        Label(L("上传 Set", "Upload Set"), systemImage: "square.and.arrow.up")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
         .task {
             await viewModel.load()
         }

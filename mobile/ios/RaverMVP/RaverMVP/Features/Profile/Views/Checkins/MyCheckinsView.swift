@@ -489,6 +489,90 @@ final class MyCheckinsViewModel: ObservableObject {
     }
 }
 
+private struct RaverCheckinsSegmentedControl<ID: Hashable>: View {
+    let items: [ID]
+    @Binding var selection: ID
+    let title: (ID) -> String
+    let iconName: (ID) -> String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(items, id: \.self) { item in
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        selection = item
+                    }
+                } label: {
+                    segmentContent(for: item)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == item ? .isSelected : [])
+            }
+        }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            RaverTheme.card.opacity(0.96),
+                            RaverTheme.cardBorder.opacity(0.34)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(RaverTheme.cardBorder.opacity(0.72), lineWidth: 1)
+        )
+    }
+
+    private func segmentContent(for item: ID) -> some View {
+        let isSelected = selection == item
+
+        return HStack(spacing: 7) {
+            Image(systemName: iconName(item))
+                .font(.system(size: 13, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+
+            Text(title(item))
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.84)
+        }
+        .foregroundStyle(isSelected ? Color.white : RaverTheme.secondaryText)
+        .frame(maxWidth: .infinity, minHeight: 34)
+        .padding(.horizontal, 10)
+        .background {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                RaverTheme.tabBarSelectionStart,
+                                RaverTheme.accent,
+                                RaverTheme.tabBarSelectionEnd
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(RaverTheme.tabBarSelectionStroke, lineWidth: 1)
+                    )
+                    .shadow(color: RaverTheme.tabBarShadowAccent, radius: 12, x: 0, y: 6)
+                    .matchedGeometryEffect(id: "selected-segment", in: namespace)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    @Namespace private var namespace
+}
+
 private struct MyCheckinsSharePresentation: Identifiable {
     let id = UUID()
     let payload: MyCheckinsShareCardPayload
@@ -704,11 +788,39 @@ struct MyCheckinsView: View {
     private enum DisplayMode: String, CaseIterable {
         case timeline
         case gallery
+
+        var title: String {
+            switch self {
+            case .timeline: return L("时间轴", "Timeline")
+            case .gallery: return L("画廊", "Gallery")
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .timeline: return "waveform.path.ecg"
+            case .gallery: return "square.grid.2x2"
+            }
+        }
     }
 
     private enum GalleryMode: String, CaseIterable {
         case event
         case dj
+
+        var title: String {
+            switch self {
+            case .event: return L("活动", "Events")
+            case .dj: return "DJ"
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .event: return "calendar"
+            case .dj: return "headphones"
+            }
+        }
     }
 
     private let targetUserID: String?
@@ -755,18 +867,21 @@ struct MyCheckinsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Picker(L("视图", "View"), selection: $displayMode) {
-                    Text(L("时间轴视图", "Timeline")).tag(DisplayMode.timeline)
-                    Text(L("画廊视图", "Gallery")).tag(DisplayMode.gallery)
-                }
-                .pickerStyle(.segmented)
+                RaverCheckinsSegmentedControl(
+                    items: DisplayMode.allCases,
+                    selection: $displayMode,
+                    title: { $0.title },
+                    iconName: { $0.iconName }
+                )
 
                 if displayMode == .gallery {
-                    Picker(L("画廊类型", "Gallery Type"), selection: $galleryMode) {
-                        Text(L("活动", "Events")).tag(GalleryMode.event)
-                        Text(L("DJ", "DJ")).tag(GalleryMode.dj)
-                    }
-                    .pickerStyle(.segmented)
+                    RaverCheckinsSegmentedControl(
+                        items: GalleryMode.allCases,
+                        selection: $galleryMode,
+                        title: { $0.title },
+                        iconName: { $0.iconName }
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
                 if viewModel.phase == .idle || viewModel.phase == .initialLoading {

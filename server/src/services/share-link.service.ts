@@ -12,6 +12,14 @@ const postType = 'post' as const;
 const eventType = 'event' as const;
 const newsType = 'news' as const;
 const squadInviteType = 'squad_invite' as const;
+const djType = 'dj' as const;
+const setType = 'set' as const;
+const labelType = 'label' as const;
+const festivalType = 'festival' as const;
+const rankingBoardType = 'ranking_board' as const;
+const circleIdType = 'circle_id' as const;
+const ratingEventType = 'rating_event' as const;
+const ratingUnitType = 'rating_unit' as const;
 
 export type ShareTargetType =
   | typeof userCardType
@@ -19,7 +27,15 @@ export type ShareTargetType =
   | typeof postType
   | typeof eventType
   | typeof newsType
-  | typeof squadInviteType;
+  | typeof squadInviteType
+  | typeof djType
+  | typeof setType
+  | typeof labelType
+  | typeof festivalType
+  | typeof rankingBoardType
+  | typeof circleIdType
+  | typeof ratingEventType
+  | typeof ratingUnitType;
 
 export type ShareEventType =
   | 'create'
@@ -54,6 +70,18 @@ type ResolveInput = {
   preferPermanent?: boolean;
   expiresInHours?: number | null;
   maxUses?: number | null;
+  targetSeed?: ClientShareTargetSeedInput | null;
+};
+
+type ClientShareTargetSeedInput = {
+  canonicalUrl?: string | null;
+  deepLink?: string | null;
+  fallbackUrl?: string | null;
+  title?: string | null;
+  subtitle?: string | null;
+  imageUrl?: string | null;
+  previewType?: string | null;
+  visibility?: string | null;
 };
 
 type ShareEventInput = {
@@ -140,6 +168,14 @@ const SHARE_TARGET_TYPES = new Set<ShareTargetType>([
   eventType,
   newsType,
   squadInviteType,
+  djType,
+  setType,
+  labelType,
+  festivalType,
+  rankingBoardType,
+  circleIdType,
+  ratingEventType,
+  ratingUnitType,
 ]);
 
 const SHARE_EVENT_TYPES = new Set<ShareEventType>([
@@ -206,6 +242,13 @@ const excerpt = (value: string, maxLength = 120): string => {
   return `${normalized.slice(0, maxLength - 1)}…`;
 };
 
+const optionalHttpUrl = (value: string | null | undefined): string | null => {
+  const normalized = singleLine(value || '');
+  if (!normalized) return null;
+  if (!/^https?:\/\//i.test(normalized)) return null;
+  return normalized;
+};
+
 const joinUrl = (pathname: string): string => {
   const url = new URL(SHARE_BASE_URL);
   url.pathname = pathname.startsWith('/') ? pathname : `/${pathname}`;
@@ -215,6 +258,35 @@ const joinUrl = (pathname: string): string => {
 export const buildShareShortUrl = (code: string): string => joinUrl(`/s/${encodeURIComponent(String(code || '').trim())}`);
 
 export const buildShareQrCodeUrl = (code: string): string => joinUrl(`/qr/${encodeURIComponent(String(code || '').trim())}.png`);
+
+export const buildSharePosterUrl = (code: string): string => joinUrl(`/poster/${encodeURIComponent(String(code || '').trim())}.png`);
+
+const buildClientTargetSeed = (
+  targetType: ShareTargetType,
+  targetId: string,
+  input?: ClientShareTargetSeedInput | null
+): ShareTargetSeed | null => {
+  const canonicalUrl = optionalHttpUrl(input?.canonicalUrl);
+  const fallbackUrl = optionalHttpUrl(input?.fallbackUrl) || canonicalUrl;
+  const title = singleLine(input?.title || '');
+  const deepLink = singleLine(input?.deepLink || '');
+  if (!canonicalUrl || !fallbackUrl || !title || !deepLink) {
+    return null;
+  }
+
+  return {
+    targetType,
+    targetId,
+    canonicalUrl,
+    deepLink,
+    fallbackUrl,
+    title,
+    subtitle: excerpt(input?.subtitle || '', 120) || null,
+    imageUrl: optionalHttpUrl(input?.imageUrl),
+    previewType: singleLine(input?.previewType || '') || 'content_card',
+    visibility: singleLine(input?.visibility || '') || 'public',
+  };
+};
 
 const buildRewardDecision = (
   status: RewardDecision['status'],
@@ -581,7 +653,7 @@ const mapShareLink = (shareLink: ShareLink): ShareLinkPayloadDTO => ({
   deepLink: shareLink.deepLink,
   fallbackUrl: shareLink.fallbackUrl,
   qrCodeUrl: buildShareQrCodeUrl(shareLink.code),
-  posterUrl: shareLink.posterUrl,
+  posterUrl: shareLink.posterUrl || buildSharePosterUrl(shareLink.code),
   title: shareLink.title,
   subtitle: shareLink.subtitle,
   imageUrl: shareLink.imageUrl,
@@ -600,6 +672,7 @@ export const resolveOrCreateShareLink = async (input: ResolveInput): Promise<Sha
   const preferPermanent = input.preferPermanent !== false;
   const expiresInHours = normalizeOptionalPositiveInteger(input.expiresInHours);
   const maxUses = normalizeOptionalPositiveInteger(input.maxUses);
+  const clientSeed = buildClientTargetSeed(targetType, targetId, input.targetSeed);
 
   if (expiresInHours !== null && expiresInHours > MAX_INVITE_EXPIRES_IN_HOURS) {
     throw new ShareLinkError(
@@ -726,7 +799,15 @@ export const resolveOrCreateShareLink = async (input: ResolveInput): Promise<Sha
     return mapShareLink(created);
   }
 
-  const seed = await buildTargetSeed(input.prisma, targetType, targetId);
+  let seed: ShareTargetSeed;
+  try {
+    seed = await buildTargetSeed(input.prisma, targetType, targetId);
+  } catch (error) {
+    if (!clientSeed) {
+      throw error;
+    }
+    seed = clientSeed;
+  }
 
   const existing = await input.prisma.shareLink.findFirst({
     where: {
@@ -1235,7 +1316,7 @@ export const recordShareLinkEvent = async (input: ShareEventInput): Promise<Shar
   if (eventType === 'scan') {
     updateData.scanCount = { increment: 1 };
   }
-  if (eventType === 'open' || eventType === 'redirect') {
+  if (eventType === 'open' || eventType === 'redirect' || eventType === 'app_open') {
     updateData.clickCount = { increment: 1 };
   }
 

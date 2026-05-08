@@ -148,19 +148,25 @@ struct LoadMyProfileDashboardUseCase {
 @MainActor
 final class ProfileViewModel: ObservableObject {
     enum Section: String, CaseIterable, Identifiable {
-        case recent
-        case likes
-        case reposts
+        case published
         case saves
+        case likes
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .recent: return L("近期动态", "Recent")
-            case .likes: return L("点赞历史", "Likes")
-            case .reposts: return L("转发历史", "Reposts")
-            case .saves: return L("收藏", "Saves")
+            case .published: return L("我发的帖子", "My Posts")
+            case .saves: return L("我收藏的帖子", "Saved")
+            case .likes: return L("我 Like 的帖子", "Liked")
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .published: return "square.and.pencil"
+            case .saves: return "star"
+            case .likes: return "heart"
             }
         }
     }
@@ -171,7 +177,7 @@ final class ProfileViewModel: ObservableObject {
     @Published var repostedItems: [ActivityPostItem] = []
     @Published var savedItems: [ActivityPostItem] = []
     @Published var recentCheckins: [WebCheckin] = []
-    @Published var selectedSection: Section = .recent
+    @Published var selectedSection: Section = .published
     @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
     @Published var isRefreshing = false
@@ -237,14 +243,12 @@ final class ProfileViewModel: ObservableObject {
 
         do {
             switch selectedSection {
-            case .recent:
+            case .published:
                 recentPosts = try await repository.fetchPostsByUser(userID: profile.id, cursor: nil).posts.filter { !$0.isRaverNews }
-            case .likes:
-                likedItems = try await repository.fetchMyLikeHistory(cursor: nil).items
-            case .reposts:
-                repostedItems = try await repository.fetchMyRepostHistory(cursor: nil).items
             case .saves:
                 savedItems = try await repository.fetchMySaveHistory(cursor: nil).items
+            case .likes:
+                likedItems = try await repository.fetchMyLikeHistory(cursor: nil).items
             }
             if let checkinPage = try? await repository.fetchUserCheckins(userID: profile.id, page: 1, limit: 6, type: nil) {
                 recentCheckins = checkinPage.items
@@ -254,6 +258,7 @@ final class ProfileViewModel: ObservableObject {
             bannerMessage = nil
             self.error = nil
         } catch {
+            guard !error.isUserInitiatedCancellation else { return }
             bannerMessage = error.userFacingMessage ?? L("当前内容刷新失败，请稍后重试", "Failed to refresh this section. Please try again later.")
         }
     }

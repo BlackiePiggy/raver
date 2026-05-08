@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 private enum AppFlow {
     case authenticated
@@ -49,11 +50,40 @@ struct AppCoordinatorView: View {
     }
 
     private func handleIncomingURL(_ url: URL) {
-        let deeplink = url.absoluteString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !deeplink.isEmpty else { return }
-        appState.systemDeepLinkEvent = SystemDeepLinkEvent(
-            deeplink: deeplink,
-            source: "open-url"
-        )
+        recordShareAppOpenIfNeeded(url)
+
+        Task {
+            let router = UniversalLinkRouter(service: AppEnvironment.makeShareLinkService())
+            let resolved = await router.resolve(url) ?? url.absoluteString
+            let deeplink = resolved.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !deeplink.isEmpty else { return }
+            await MainActor.run {
+                appState.systemDeepLinkEvent = SystemDeepLinkEvent(
+                    deeplink: deeplink,
+                    source: "open-url"
+                )
+            }
+        }
+    }
+
+    private func recordShareAppOpenIfNeeded(_ url: URL) {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let code = components.queryItems?.first(where: { $0.name == "shareCode" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !code.isEmpty else {
+            return
+        }
+
+        Task.detached {
+            try? await AppEnvironment.makeShareLinkService().recordEvent(
+                code: code,
+                eventType: "app_open",
+                channel: "universal_link",
+                anonymousId: nil,
+                metadata: [
+                    "source": "open-url",
+                    "incomingURL": url.absoluteString
+                ]
+            )
+        }
     }
 }

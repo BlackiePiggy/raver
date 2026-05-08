@@ -106,7 +106,7 @@ enum AppConfig {
     static func resolvedURLString(_ value: String?) -> String? {
         guard let value, !value.isEmpty else { return nil }
         if value.hasPrefix("http://") || value.hasPrefix("https://") {
-            return value
+            return rewrittenShareAssetURLString(value) ?? value
         }
         if value.hasPrefix("/") {
             let base = bffBaseURL.absoluteString.hasSuffix("/")
@@ -115,6 +115,51 @@ enum AppConfig {
             return "\(base)\(value)"
         }
         return value
+    }
+
+    private static func rewrittenShareAssetURLString(_ raw: String) -> String? {
+        guard let remote = URLComponents(string: raw),
+              let remoteHost = remote.host?.lowercased(),
+              remote.scheme?.hasPrefix("http") == true else {
+            return nil
+        }
+
+        guard remoteHost == "raver.app" || remoteHost == "www.raver.app" else {
+            return nil
+        }
+
+        let path = remote.path.lowercased()
+        let isShareAsset = path.hasPrefix("/qr/") || path.hasPrefix("/poster/") || path.hasPrefix("/s/")
+        guard isShareAsset else { return nil }
+
+        guard let local = localShareOriginURL(),
+              let localHost = local.host?.lowercased(),
+              localHost != remoteHost else {
+            return nil
+        }
+
+        var rewritten = URLComponents()
+        rewritten.scheme = local.scheme
+        rewritten.host = local.host
+        rewritten.port = local.port
+        rewritten.path = remote.path
+        rewritten.percentEncodedQuery = remote.percentEncodedQuery
+        rewritten.fragment = remote.fragment
+        return rewritten.string
+    }
+
+    private static func localShareOriginURL() -> URL? {
+        guard let components = URLComponents(url: bffBaseURL, resolvingAgainstBaseURL: false),
+              let host = components.host?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !host.isEmpty else {
+            return nil
+        }
+
+        var origin = URLComponents()
+        origin.scheme = components.scheme
+        origin.host = host
+        origin.port = components.port
+        return origin.url
     }
 
     static func resolvedDJAvatarURLString(_ value: String?, size: DJAvatarSize = .original) -> String? {

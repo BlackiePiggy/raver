@@ -40,7 +40,7 @@ enum EventVisualStatus: String {
         switch self {
         case .upcoming: return Color.orange.opacity(0.82)
         case .ongoing: return Color.green.opacity(0.84)
-        case .ended: return Color.white.opacity(0.24)
+        case .ended: return RaverTheme.secondaryText.opacity(0.95)
         case .cancelled: return Color(red: 1.0, green: 0.45, blue: 0.50).opacity(0.9)
         }
     }

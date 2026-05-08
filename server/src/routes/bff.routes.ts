@@ -1930,6 +1930,9 @@ router.post('/share-links/resolve', optionalAuth, async (req: Request, res: Resp
     const preferPermanent = body.preferPermanent !== false;
     const expiresInHours = typeof body.expiresInHours === 'number' ? body.expiresInHours : null;
     const maxUses = typeof body.maxUses === 'number' ? body.maxUses : null;
+    const targetSeed = typeof body.targetSeed === 'object' && body.targetSeed !== null
+      ? body.targetSeed as Record<string, unknown>
+      : null;
 
     const payload = await resolveOrCreateShareLink({
       prisma,
@@ -1941,6 +1944,16 @@ router.post('/share-links/resolve', optionalAuth, async (req: Request, res: Resp
       userId: authReq.user?.userId ?? null,
       expiresInHours,
       maxUses,
+      targetSeed: targetSeed ? {
+        canonicalUrl: typeof targetSeed.canonicalUrl === 'string' ? targetSeed.canonicalUrl.trim() : null,
+        deepLink: typeof targetSeed.deepLink === 'string' ? targetSeed.deepLink.trim() : null,
+        fallbackUrl: typeof targetSeed.fallbackUrl === 'string' ? targetSeed.fallbackUrl.trim() : null,
+        title: typeof targetSeed.title === 'string' ? targetSeed.title.trim() : null,
+        subtitle: typeof targetSeed.subtitle === 'string' ? targetSeed.subtitle.trim() : null,
+        imageUrl: typeof targetSeed.imageUrl === 'string' ? targetSeed.imageUrl.trim() : null,
+        previewType: typeof targetSeed.previewType === 'string' ? targetSeed.previewType.trim() : null,
+        visibility: typeof targetSeed.visibility === 'string' ? targetSeed.visibility.trim() : null,
+      } : null,
     });
 
     res.json(payload);

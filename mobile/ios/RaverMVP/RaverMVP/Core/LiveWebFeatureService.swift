@@ -338,6 +338,18 @@ final class LiveWebFeatureService: WebFeatureService {
         return localizedDJ(response.data)
     }
 
+    func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage {
+        let response: BFFEnvelope<BFFItems<WebDJ>> = try await request(
+            path: "/v1/djs/followed",
+            method: "GET",
+            queryItems: [
+                URLQueryItem(name: "page", value: "\(max(1, page))"),
+                URLQueryItem(name: "limit", value: "\(max(1, min(100, limit)))")
+            ]
+        )
+        return DJListPage(items: response.data.items.map(localizedDJ), pagination: response.pagination)
+    }
+
     func fetchDJSets(page: Int, limit: Int, sortBy: String, djID: String?) async throws -> DJSetListPage {
         var queryItems = [
             URLQueryItem(name: "page", value: "\(max(1, page))"),

@@ -60,6 +60,7 @@ protocol WebFeatureService {
     func fetchDJEvents(djID: String) async throws -> [WebEvent]
     func fetchDJFollowStatus(djID: String) async throws -> Bool
     func toggleDJFollow(djID: String, shouldFollow: Bool) async throws -> WebDJ
+    func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage
 
     func fetchDJSets(page: Int, limit: Int, sortBy: String, djID: String?) async throws -> DJSetListPage
     func fetchEventDJSets(eventName: String) async throws -> [WebDJSet]
