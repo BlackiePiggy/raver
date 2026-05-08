@@ -33,6 +33,9 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        NSPhotoLibraryAddUsageDescription: Raver 需要保存分享海报到你的相册。
+        NSPhotoLibraryUsageDescription: Raver 需要访问你的相册以保存分享海报。
+        TencentIMAPNSBusinessID: "48505"
         CFBundleURLTypes:
           - CFBundleURLName: com.raver.mvp.deeplink
             CFBundleURLSchemes:

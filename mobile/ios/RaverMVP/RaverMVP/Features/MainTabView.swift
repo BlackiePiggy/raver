@@ -23,6 +23,9 @@ struct MainTabView: View {
     @Namespace private var tabBarIndicatorNamespace
     private let tabs: [MainTab] = [.discover, .circle, .messages, .profile]
     @State private var loadedTabs: Set<MainTab> = [.discover]
+    @StateObject private var recentSearchStore = RecentSearchStore()
+    @State private var isGlobalSearchPresented = false
+    @State private var showsLoginRequiredPrompt = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -33,9 +36,32 @@ struct MainTabView: View {
                 customTabBar
                     .zIndex(2)
             }
+
+            if isGlobalSearchPresented {
+                GlobalSearchOverlayView(
+                    recentStore: recentSearchStore,
+                    onDismiss: {
+                        withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.88)) {
+                            isGlobalSearchPresented = false
+                        }
+                    },
+                    onSearch: { keyword in
+                        withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.88)) {
+                            isGlobalSearchPresented = false
+                        }
+                        router.push(.globalSearchResults(query: keyword))
+                    }
+                )
+                .zIndex(3)
+            }
         }
         .background(RaverTheme.background.ignoresSafeArea(.all))
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .alert(L("请先登录", "Login Required"), isPresented: $showsLoginRequiredPrompt) {
+            Button(L("知道了", "OK"), role: .cancel) {}
+        } message: {
+            Text(L("登录后才能使用全局聚合搜索。", "Log in to use global search."))
+        }
         .task {
             await appState.refreshUnreadMessages()
         }
@@ -151,6 +177,10 @@ struct MainTabView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(tab.accessibilityIdentifier)
+
+                if tab == .circle {
+                    globalSearchButton
+                }
             }
         }
         .animation(.interactiveSpring(response: 0.26, dampingFraction: 0.86), value: currentTab)
@@ -189,6 +219,44 @@ struct MainTabView: View {
         .padding(.horizontal)
         .padding(.bottom, bottomSafeAreaInset == 0 ? 4 : -14)
         .accessibilityIdentifier("mainTab.tabBar")
+    }
+
+    private var globalSearchButton: some View {
+        Button {
+            guard appState.isLoggedIn else {
+                showsLoginRequiredPrompt = true
+                return
+            }
+            withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                isGlobalSearchPresented = true
+            }
+        } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 21, weight: .bold))
+                .foregroundStyle(Color.white)
+                .frame(width: 56, height: 56)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            RaverTheme.accent,
+                            Color(red: 0.31, green: 0.22, blue: 0.88)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: Circle()
+                )
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.32), lineWidth: 1)
+                )
+                .shadow(color: RaverTheme.accent.opacity(0.36), radius: 14, x: 0, y: 8)
+                .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: 6)
+        }
+        .buttonStyle(.plain)
+        .frame(width: 52, height: 52)
+        .accessibilityIdentifier("mainTab.action.globalSearch")
+        .accessibilityLabel(L("搜索", "Search"))
     }
 
     private func tabIcon(for tab: MainTab) -> some View {

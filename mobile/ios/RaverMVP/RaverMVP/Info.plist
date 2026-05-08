@@ -31,17 +31,17 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Raver 需要保存分享海报到你的相册。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Raver 需要访问你的相册以保存分享海报。</string>
 	<key>TencentIMAPNSBusinessID</key>
 	<string>48505</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

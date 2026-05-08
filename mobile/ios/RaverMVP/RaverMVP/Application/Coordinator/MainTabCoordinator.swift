@@ -38,6 +38,7 @@ enum AppRoute: Hashable {
     case circleIDDetail(entryID: String)
     case ratingEventDetail(eventID: String)
     case ratingUnitDetail(unitID: String)
+    case globalSearchResults(query: String, initialTab: GlobalSearchTab? = nil)
 }
 
 extension AppRoute {
@@ -67,7 +68,8 @@ extension AppRoute {
              .squadManage,
              .circleIDDetail,
              .ratingEventDetail,
-             .ratingUnitDetail:
+             .ratingUnitDetail,
+             .globalSearchResults:
             return true
         }
     }
@@ -122,6 +124,8 @@ extension AppRoute {
             return "rating.event.detail"
         case .ratingUnitDetail:
             return "rating.unit.detail"
+        case .globalSearchResults:
+            return "global.search.results"
         }
     }
 
@@ -145,7 +149,7 @@ extension AppRoute {
             return .messages
         case .postDetail, .squadProfile, .squadManage, .circleIDDetail, .ratingEventDetail, .ratingUnitDetail:
             return .circle
-        case .eventDetail, .newsDetail, .eventSchedule, .eventRoute, .djDetail, .labelDetail, .festivalDetail, .setDetail, .rankingBoardDetail:
+        case .eventDetail, .newsDetail, .eventSchedule, .eventRoute, .djDetail, .labelDetail, .festivalDetail, .setDetail, .rankingBoardDetail, .globalSearchResults:
             return .discover
         case .userProfile:
             return .profile
@@ -245,6 +249,8 @@ final class AppRouter: ObservableObject {
                 return "ratingEventDetail(\(eventID))"
             case .ratingUnitDetail(let unitID):
                 return "ratingUnitDetail(\(unitID))"
+            case .globalSearchResults(let query, let initialTab):
+                return "globalSearchResults(query=\(query),initialTab=\(initialTab?.rawValue ?? "nil"))"
             case .userProfile(let userID):
                 return "userProfile(\(userID))"
             case .discover(let route):
@@ -658,6 +664,9 @@ struct MainTabCoordinatorView: View {
             .environment(\.circlePush) { circleRoute in
                 router.push(.circle(circleRoute))
             }
+
+        case let .globalSearchResults(query, initialTab):
+            GlobalSearchResultsPlaceholderView(query: query, initialTab: initialTab)
         }
     }
 
@@ -980,6 +989,8 @@ struct MainTabCoordinatorView: View {
             return "ratingEventDetail(\(eventID))"
         case .ratingUnitDetail(let unitID):
             return "ratingUnitDetail(\(unitID))"
+        case .globalSearchResults(let query, let initialTab):
+            return "globalSearchResults(query=\(query),initialTab=\(initialTab?.rawValue ?? "nil"))"
         case .squadProfile(let squadID):
             return "squadProfile(\(squadID))"
         case .userProfile(let userID):
