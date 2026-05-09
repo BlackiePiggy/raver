@@ -2551,6 +2551,24 @@ struct DJDetailView: View {
         }
     }
 
+    private struct DJCurrentPerformanceSnapshot: Identifiable {
+        let event: WebEvent
+        let slot: WebEventLineupSlot
+        let act: EventLineupResolvedAct
+        let stageName: String
+        let timeText: String
+        let stageSortIndex: Int
+
+        var id: String { "\(event.id)-\(slot.id)" }
+    }
+
+    private static let heroLiveTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
     var body: some View {
         detailBody
         .ignoresSafeArea(edges: .top)
@@ -3293,7 +3311,9 @@ struct DJDetailView: View {
     }
 
     private func heroSection(_ dj: WebDJ) -> some View {
-        ZStack(alignment: .top) {
+        let livePerformance = currentPerformanceSnapshot(for: dj)
+
+        return ZStack(alignment: .top) {
             GeometryReader { geo in
                 ZStack {
                     RaverTheme.card
@@ -3327,6 +3347,11 @@ struct DJDetailView: View {
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
                 VStack(alignment: .leading, spacing: 0) {
+                    if let livePerformance {
+                        currentPerformanceBadge(livePerformance)
+                            .padding(.bottom, 10)
+                    }
+
                     HStack(alignment: .center, spacing: 10) {
                         aliasPillsRow(for: dj)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -3355,7 +3380,7 @@ struct DJDetailView: View {
                         .fixedSize(horizontal: true, vertical: false)
                         .layoutPriority(2)
                     }
-                    .padding(.bottom, 6)
+                    .padding(.bottom, livePerformance == nil ? 6 : 8)
 
                     HStack(alignment: .center, spacing: 10) {
                         Text(dj.name)
@@ -3378,17 +3403,154 @@ struct DJDetailView: View {
                                 }
                             )
                     }
+
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(minHeight: djNameLineCount > 1 ? 85 : 70, alignment: .bottomLeading)
+                .frame(
+                    minHeight: livePerformance == nil
+                        ? (djNameLineCount > 1 ? 85 : 70)
+                        : (djNameLineCount > 1 ? 126 : 110),
+                    alignment: .bottomLeading
+                )
                 .padding(.horizontal, 16)
-                .padding(.bottom, djNameLineCount > 1 ? 40 : 8)
+                .padding(.bottom, livePerformance == nil ? (djNameLineCount > 1 ? 40 : 8) : 18)
             }
         }
         .frame(maxWidth: .infinity)
         .frame(height: 360)
         .clipped()
         .zIndex(1)
+    }
+
+    @ViewBuilder
+    private func currentPerformanceBadge(_ snapshot: DJCurrentPerformanceSnapshot) -> some View {
+        Button {
+            appPush(.eventDetail(eventID: snapshot.event.id))
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 7) {
+                    LiveActivityBarsView(
+                        color: Color(red: 0.18, green: 0.88, blue: 0.42),
+                        barWidth: 2.8,
+                        spacing: 2,
+                        minHeight: 4,
+                        maxHeight: 11,
+                        cornerRadius: 1.4
+                    )
+                    .frame(width: 14, height: 11)
+
+                    Text(localizedEventName(snapshot.event))
+                        .font(.caption.weight(.heavy))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+
+                HStack(spacing: 6) {
+                    Text(L("演出中", "DJ-ing"))
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color(red: 0.30, green: 1.0, blue: 0.54))
+                        .lineLimit(1)
+
+                    Text(snapshot.timeText)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.76))
+                        .lineLimit(1)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.black.opacity(0.22))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
+            )
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func currentPerformanceSnapshot(for dj: WebDJ) -> DJCurrentPerformanceSnapshot? {
+        let now = Date()
+
+        return djEvents
+            .flatMap { event in
+                event.lineupSlots.compactMap { slot -> DJCurrentPerformanceSnapshot? in
+                    guard slot.startTime <= now, now <= slot.endTime else { return nil }
+                    guard slotIncludesDJ(slot, dj: dj) else { return nil }
+
+                    return DJCurrentPerformanceSnapshot(
+                        event: event,
+                        slot: slot,
+                        act: EventLineupActCodec.parse(slot: slot),
+                        stageName: normalizedStageDisplayName(slot.stageName),
+                        timeText: "\(Self.heroLiveTimeFormatter.string(from: slot.startTime)) - \(Self.heroLiveTimeFormatter.string(from: slot.endTime))",
+                        stageSortIndex: stageSortIndex(slot.stageName, in: event)
+                    )
+                }
+            }
+            .sorted { lhs, rhs in
+                if lhs.slot.startTime != rhs.slot.startTime { return lhs.slot.startTime > rhs.slot.startTime }
+                if lhs.event.startDate != rhs.event.startDate { return lhs.event.startDate > rhs.event.startDate }
+                if lhs.stageSortIndex != rhs.stageSortIndex { return lhs.stageSortIndex < rhs.stageSortIndex }
+                return lhs.stageName.localizedCaseInsensitiveCompare(rhs.stageName) == .orderedAscending
+            }
+            .first
+    }
+
+    private func slotIncludesDJ(_ slot: WebEventLineupSlot, dj: WebDJ) -> Bool {
+        let normalizedDJID = dj.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedDJID.isEmpty {
+            let candidateIDs = ([slot.djId, slot.dj?.id].compactMap { $0 })
+                + (slot.djIds ?? [])
+                + (slot.djs ?? []).map(\.id)
+            if candidateIDs.contains(where: {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedDJID
+            }) {
+                return true
+            }
+        }
+
+        let djNameKeys = Set(
+            ([dj.name] + (dj.aliases ?? []))
+                .map(normalizedDJLookupKey)
+                .filter { !$0.isEmpty }
+        )
+        guard !djNameKeys.isEmpty else { return false }
+
+        let act = EventLineupActCodec.parse(slot: slot)
+        return act.performers.contains { performer in
+            let performerKey = normalizedDJLookupKey(performer.name)
+            if djNameKeys.contains(performerKey) {
+                return true
+            }
+            let performerID = performer.djID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return !normalizedDJID.isEmpty && performerID == normalizedDJID
+        }
+    }
+
+    private func normalizedStageDisplayName(_ stageName: String?) -> String {
+        let trimmed = stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? L("未知舞台", "Unknown stage") : trimmed
+    }
+
+    private func stageSortIndex(_ stageName: String?, in event: WebEvent) -> Int {
+        let normalized = stageName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        guard let order = event.stageOrder, !normalized.isEmpty else { return Int.max }
+        return order.firstIndex { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalized } ?? Int.max
+    }
+
+    private func localizedEventName(_ event: WebEvent) -> String {
+        let localized = (event.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !localized.isEmpty {
+            return localized
+        }
+        return event.name
     }
 
     private var immersiveTrailingAction: AnyView? {

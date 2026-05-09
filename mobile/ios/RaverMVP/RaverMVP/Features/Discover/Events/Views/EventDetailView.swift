@@ -26,6 +26,7 @@ private struct EventCardSharePresentation: Identifiable {
 
 struct EventLiveDiscussionView: View {
     @Environment(\.appPush) private var appPush
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
 
@@ -46,6 +47,7 @@ struct EventLiveDiscussionView: View {
     @State private var isSending = false
     @State private var errorMessage: String?
     @State private var showLiveStageOverlay = false
+    @State private var isLiveStagePanelCollapsed = false
 
     private struct EventStageTimelineEntry: Identifiable, Hashable {
         let id: String
@@ -92,6 +94,10 @@ struct EventLiveDiscussionView: View {
         return formatter
     }()
 
+    private var liveDiscussionHeaderHeight: CGFloat {
+         44
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             sortBar
@@ -121,7 +127,16 @@ struct EventLiveDiscussionView: View {
             composer
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: L("现场讨论区", "Live Discussion"))
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Color.clear
+                .frame(height: liveDiscussionHeaderHeight)
+        }
+        .overlay(alignment: .top) {
+            liveDiscussionHeaderBar
+        }
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .raverEnableCustomSwipeBack()
         .task {
             if phase == .idle {
                 await loadComments()
@@ -158,35 +173,106 @@ struct EventLiveDiscussionView: View {
     }
 
     private var sortBar: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                LiveActivityBarsView(color: Color(red: 0.18, green: 0.88, blue: 0.42))
-                    .frame(width: 15, height: 14)
-                Text(eventName)
-                    .font(.subheadline.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .foregroundStyle(RaverTheme.primaryText)
-
-            if let event {
-                liveStageSummaryScroller(event)
+        VStack(alignment: .center, spacing: 9) {
+            if let event, !liveStageSnapshots(for: event).isEmpty {
+                liveStageCollapsiblePanel(event)
             }
 
-            HStack {
-                Spacer(minLength: 0)
-
-                Picker("", selection: $sortMode) {
-                    ForEach(EventLiveCommentSortMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
+            Picker("", selection: $sortMode) {
+                ForEach(EventLiveCommentSortMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 190)
             }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 260)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
         .background(RaverTheme.background)
+        .animation(.interactiveSpring(response: 0.28, dampingFraction: 0.88), value: isLiveStagePanelCollapsed)
+    }
+
+    private func liveStageCollapsiblePanel(_ event: WebEvent) -> some View {
+        VStack(spacing: 5) {
+            if !isLiveStagePanelCollapsed {
+                liveStageSummaryScroller(event)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity.combined(with: .move(edge: .top))
+                    ))
+            }
+
+            liveStagePanelToggleHandle
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var liveStagePanelToggleHandle: some View {
+        Button {
+            withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.88)) {
+                isLiveStagePanelCollapsed.toggle()
+            }
+        } label: {
+            Image(systemName: isLiveStagePanelCollapsed ? "chevron.compact.down" : "chevron.compact.up")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(RaverTheme.secondaryText.opacity(colorScheme == .dark ? 0.82 : 0.68))
+                .frame(width: 58, height: 12)
+                .contentShape(Rectangle())
+                .background(
+                    Capsule()
+                        .fill(RaverTheme.card.opacity(colorScheme == .dark ? 0.52 : 0.70))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(RaverTheme.cardBorder.opacity(0.72), lineWidth: 0.6)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isLiveStagePanelCollapsed ? L("展开正在表演", "Expand now playing") : L("收起正在表演", "Collapse now playing"))
+    }
+
+    private var liveDiscussionHeaderBar: some View {
+        let safeTop = topSafeAreaInset()
+
+        return VStack(spacing: 0) {
+            Rectangle()
+                .fill(colorScheme == .dark ? Color.black : RaverTheme.background)
+                .frame(height: safeTop)
+
+            ZStack {
+                HStack(spacing: 6) {
+                    LiveActivityBarsView(color: Color(red: 0.18, green: 0.88, blue: 0.42))
+                        .frame(width: 15, height: 14)
+                    Text(eventName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 56)
+
+                HStack {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+            }
+            .frame(height: 44)
+            .padding(.horizontal, 14)
+            .background(colorScheme == .dark ? Color.black : RaverTheme.background)
+            .overlay(alignment: .bottom) {
+                Divider()
+            }
+        }
+        .ignoresSafeArea(edges: .top)
     }
 
     @ViewBuilder
@@ -487,21 +573,23 @@ struct EventLiveDiscussionView: View {
         VStack(alignment: .leading, spacing: 8) {
             liveStageProgressBar(snapshot)
 
-            HStack(spacing: 8) {
-                Text(snapshot.stageName)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(RaverTheme.accent)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                if snapshot.currentAct != nil {
-                    livePill(LL("LIVE"))
-                }
-            }
+            liveStageHeader(snapshot, titleFont: .caption.weight(.bold), titleColor: RaverTheme.accent)
 
             if let current = snapshot.currentAct {
-                liveActIdentityArea(current.act, timeText: current.timeText, avatarSize: 36, font: .subheadline.weight(.semibold))
+                liveActIdentityArea(
+                    current.act,
+                    timeText: current.timeText,
+                    avatarSize: 36,
+                    font: .subheadline.weight(.semibold),
+                    emphasizeAvatar: true
+                )
             } else if let next = snapshot.nextAct {
-                liveActIdentityArea(next.act, timeText: L("下一场 \(next.timeText)", "Next \(next.timeText)"), avatarSize: 36, font: .subheadline.weight(.semibold))
+                liveActIdentityArea(
+                    next.act,
+                    timeText: L("下一场 \(next.timeText)", "Next \(next.timeText)"),
+                    avatarSize: 36,
+                    font: .subheadline.weight(.semibold)
+                )
             } else {
                 Text(LL("当前暂无演出"))
                     .font(.subheadline.weight(.semibold))
@@ -511,19 +599,8 @@ struct EventLiveDiscussionView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .frame(width: 240, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(RaverTheme.card)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(RaverTheme.accent.opacity(colorScheme == .dark ? 0.055 : 0.035))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(RaverTheme.cardBorder, lineWidth: 1)
-                )
-        )
+        .frame(width: 246, alignment: .leading)
+        .background(liveStageCardBackground(cornerRadius: 16, elevated: false))
     }
 
     private func liveStageProgressState(_ snapshot: EventStageLiveSnapshot) -> LiveStageProgressState {
@@ -556,15 +633,25 @@ struct EventLiveDiscussionView: View {
         return GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(RaverTheme.accent.opacity(colorScheme == .dark ? 0.18 : 0.12))
+                    .fill(RaverTheme.accent.opacity(colorScheme == .dark ? 0.12 : 0.08))
                 Capsule()
-                    .fill(RaverTheme.accent.opacity(opacity))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                RaverTheme.accent.opacity(min(opacity, 0.96)),
+                                RaverTheme.accent.opacity(max(0.22, opacity * 0.34))
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                     .frame(width: max(6, proxy.size.width * progress))
                 if progress > 0 {
                     Circle()
-                        .fill(RaverTheme.accent.opacity(max(opacity, 0.36)))
-                        .frame(width: 7, height: 7)
-                        .offset(x: max(0, proxy.size.width * progress - 4))
+                        .fill(RaverTheme.accent.opacity(max(opacity, 0.48)))
+                        .frame(width: 6, height: 6)
+                        .shadow(color: RaverTheme.accent.opacity(colorScheme == .dark ? 0.42 : 0.24), radius: 4, y: 0)
+                        .offset(x: max(0, proxy.size.width * progress - 3))
                 }
             }
         }
@@ -575,12 +662,55 @@ struct EventLiveDiscussionView: View {
     private func livePill(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(RaverTheme.accent)
-            .padding(.horizontal, 6)
+            .foregroundStyle(liveStatusColor)
+            .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(
                 Capsule()
-                    .fill(RaverTheme.accent.opacity(colorScheme == .dark ? 0.18 : 0.10))
+                    .fill(liveStatusColor.opacity(colorScheme == .dark ? 0.18 : 0.10))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(liveStatusColor.opacity(colorScheme == .dark ? 0.34 : 0.20), lineWidth: 0.8)
+            )
+    }
+
+    private var liveStatusColor: Color {
+        Color(red: 0.27, green: 0.92, blue: 0.50)
+    }
+
+    private var liveAvatarGlowColor: Color {
+        Color(red: 0.66, green: 0.42, blue: 0.98)
+    }
+
+    private func liveStageHeader(_ snapshot: EventStageLiveSnapshot, titleFont: Font, titleColor: Color) -> some View {
+        HStack(spacing: 8) {
+            Text(snapshot.stageName)
+                .font(titleFont)
+                .foregroundStyle(titleColor)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            if snapshot.currentAct != nil {
+                livePill(LL("LIVE"))
+            }
+        }
+    }
+
+    private func liveStageCardBackground(cornerRadius: CGFloat, elevated: Bool) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(RaverTheme.card)
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(RaverTheme.accent.opacity(colorScheme == .dark ? 0.07 : 0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(RaverTheme.cardBorder, lineWidth: 1)
+            )
+            .shadow(
+                color: elevated ? Color.black.opacity(colorScheme == .dark ? 0.22 : 0.08) : .clear,
+                radius: elevated ? 16 : 0,
+                y: elevated ? 10 : 0
             )
     }
 
@@ -669,18 +799,36 @@ struct EventLiveDiscussionView: View {
         }
     }
 
-    private func liveActIdentityArea(_ act: EventLineupResolvedAct, timeText: String, avatarSize: CGFloat, font: Font) -> some View {
+    private func liveActIdentityArea(
+        _ act: EventLineupResolvedAct,
+        timeText: String,
+        avatarSize: CGFloat,
+        font: Font,
+        emphasizeAvatar: Bool = false
+    ) -> some View {
         VStack(alignment: .leading, spacing: act.isCollaborative ? 6 : 0) {
             ForEach(Array(act.performers.enumerated()), id: \.element.id) { _, performer in
-                livePerformerIdentityRow(performer, timeText: timeText, avatarSize: avatarSize, font: font)
+                livePerformerIdentityRow(
+                    performer,
+                    timeText: timeText,
+                    avatarSize: avatarSize,
+                    font: font,
+                    emphasizeAvatar: emphasizeAvatar
+                )
             }
         }
     }
 
     @ViewBuilder
-    private func livePerformerIdentityRow(_ performer: EventLineupPerformer, timeText: String, avatarSize: CGFloat, font: Font) -> some View {
+    private func livePerformerIdentityRow(
+        _ performer: EventLineupPerformer,
+        timeText: String,
+        avatarSize: CGFloat,
+        font: Font,
+        emphasizeAvatar: Bool = false
+    ) -> some View {
         let content = HStack(alignment: .center, spacing: 8) {
-            lineupPerformerAvatar(performer, size: avatarSize)
+            lineupPerformerAvatar(performer, size: avatarSize, emphasize: emphasizeAvatar)
             VStack(alignment: .leading, spacing: 2) {
                 Text(performer.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? LL("待公布 DJ") : performer.name)
                     .font(font)
@@ -709,19 +857,41 @@ struct EventLiveDiscussionView: View {
     }
 
     @ViewBuilder
-    private func lineupPerformerAvatar(_ performer: EventLineupPerformer?, size: CGFloat) -> some View {
+    private func lineupPerformerAvatar(_ performer: EventLineupPerformer?, size: CGFloat, emphasize: Bool = false) -> some View {
         let resolvedAvatar = AppConfig.resolvedDJAvatarURLString(performer?.avatarUrl, size: .small)
         if let resolvedAvatar, !resolvedAvatar.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             ImageLoaderView(urlString: resolvedAvatar, resizingMode: .fill)
                 .background(djAvatarPlaceholder(size: size))
                 .frame(width: size, height: size)
                 .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(
+                            RaverTheme.accent.opacity(
+                                emphasize
+                                ? (colorScheme == .dark ? 0.62 : 0.48)
+                                : (colorScheme == .dark ? 0.26 : 0.20)
+                            ),
+                            lineWidth: emphasize ? 1.4 : 1
+                        )
+                )
+                .overlay {
+                    if emphasize {
+                        liveAvatarGlowHalo(size: size)
+                    }
+                }
+                .shadow(
+                    color: emphasize
+                    ? liveAvatarGlowColor.opacity(colorScheme == .dark ? 0.34 : 0.22)
+                    : .clear,
+                    radius: emphasize ? 8 : 0
+                )
         } else {
-            djAvatarPlaceholder(size: size)
+            djAvatarPlaceholder(size: size, emphasize: emphasize)
         }
     }
 
-    private func djAvatarPlaceholder(size: CGFloat) -> some View {
+    private func djAvatarPlaceholder(size: CGFloat, emphasize: Bool = false) -> some View {
         Circle()
             .fill(RaverTheme.accent.opacity(colorScheme == .dark ? 0.22 : 0.12))
             .overlay(
@@ -729,7 +899,38 @@ struct EventLiveDiscussionView: View {
                     .font(.system(size: max(11, size * 0.42), weight: .semibold))
                     .foregroundStyle(RaverTheme.accent)
             )
+            .overlay(
+                Circle()
+                    .stroke(
+                        RaverTheme.accent.opacity(
+                            emphasize
+                            ? (colorScheme == .dark ? 0.62 : 0.46)
+                            : (colorScheme == .dark ? 0.28 : 0.22)
+                        ),
+                        lineWidth: emphasize ? 1.4 : 1
+                    )
+            )
+            .overlay {
+                if emphasize {
+                    liveAvatarGlowHalo(size: size)
+                }
+            }
+            .shadow(
+                color: emphasize
+                ? liveAvatarGlowColor.opacity(colorScheme == .dark ? 0.34 : 0.22)
+                : .clear,
+                radius: emphasize ? 8 : 0
+            )
             .frame(width: size, height: size)
+    }
+
+    private func liveAvatarGlowHalo(size: CGFloat) -> some View {
+        Circle()
+            .stroke(liveAvatarGlowColor.opacity(colorScheme == .dark ? 0.22 : 0.16), lineWidth: 0.8)
+            .padding(-2)
+            .blur(radius: 1.6)
+            .frame(width: size, height: size)
+            .allowsHitTesting(false)
     }
 
     private func liveStageOverlay(for event: WebEvent) -> some View {
@@ -820,24 +1021,14 @@ struct EventLiveDiscussionView: View {
         VStack(alignment: .leading, spacing: 14) {
             liveStageProgressBar(snapshot)
 
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(snapshot.currentAct == nil ? RaverTheme.secondaryText.opacity(0.5) : RaverTheme.accent)
-                    .frame(width: 10, height: 10)
-                Text(snapshot.stageName)
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                Spacer(minLength: 0)
-                Text(snapshot.currentAct == nil ? LL("下一场") : LL("进行中"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.secondaryText)
-            }
+            liveStageHeader(snapshot, titleFont: .headline.weight(.bold), titleColor: RaverTheme.primaryText)
 
             if let current = snapshot.currentAct {
                 liveStageOverlayTimelineRow(
                     title: L("现在", "Now"),
                     titleColor: RaverTheme.accent,
-                    entry: current
+                    entry: current,
+                    emphasizeAvatar: true
                 )
             } else {
                 Text(LL("当前暂无正在演出的 DJ"))
@@ -854,17 +1045,15 @@ struct EventLiveDiscussionView: View {
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(RaverTheme.background.opacity(colorScheme == .dark ? 0.72 : 0.86))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(RaverTheme.cardBorder, lineWidth: 0.8)
-                )
-        )
+        .background(liveStageCardBackground(cornerRadius: 22, elevated: true))
     }
 
-    private func liveStageOverlayTimelineRow(title: String, titleColor: Color, entry: EventStageTimelineEntry) -> some View {
+    private func liveStageOverlayTimelineRow(
+        title: String,
+        titleColor: Color,
+        entry: EventStageTimelineEntry,
+        emphasizeAvatar: Bool = false
+    ) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(title)
                 .font(.caption.weight(.bold))
@@ -873,7 +1062,13 @@ struct EventLiveDiscussionView: View {
                 .padding(.top, 10)
 
             VStack(alignment: .leading, spacing: 4) {
-                liveActIdentityArea(entry.act, timeText: entry.timeText, avatarSize: 42, font: .subheadline.weight(.semibold))
+                liveActIdentityArea(
+                    entry.act,
+                    timeText: entry.timeText,
+                    avatarSize: 42,
+                    font: .subheadline.weight(.semibold),
+                    emphasizeAvatar: emphasizeAvatar
+                )
             }
 
             Spacer(minLength: 0)
