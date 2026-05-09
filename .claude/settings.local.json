@@ -11,7 +11,9 @@
       "Bash(timeout:*)",
       "Bash(cat:*)",
       "Bash(sleep:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(grep -E \"\\\\.\\(ts|js|prisma\\)$\")",
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")"
     ]
   }
 }

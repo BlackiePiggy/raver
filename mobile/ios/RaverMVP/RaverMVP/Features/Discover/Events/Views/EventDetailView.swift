@@ -27,6 +27,7 @@ private struct EventCardSharePresentation: Identifiable {
 struct EventLiveDiscussionView: View {
     @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
 
     let eventID: String
     let eventName: String
@@ -34,6 +35,7 @@ struct EventLiveDiscussionView: View {
     let webService: WebFeatureService
 
     @State private var comments: [EventLiveComment] = []
+    @State private var event: WebEvent?
     @State private var phase: LoadPhase = .idle
     @State private var sortMode: EventLiveCommentSortMode = .oldest
     @State private var draft = ""
@@ -43,6 +45,37 @@ struct EventLiveDiscussionView: View {
     @State private var isUploadingImage = false
     @State private var isSending = false
     @State private var errorMessage: String?
+    @State private var showLiveStageOverlay = false
+
+    private struct EventStageTimelineEntry: Identifiable, Hashable {
+        let id: String
+        let act: EventLineupResolvedAct
+        let timeText: String
+        let startTime: Date
+        let endTime: Date
+
+        var actName: String {
+            let name = act.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return name.isEmpty ? LL("待公布 DJ") : name
+        }
+    }
+
+    private struct EventStageLiveSnapshot: Identifiable, Hashable {
+        let stageKey: String
+        let stageName: String
+        let sortIndex: Int
+        let firstStartTime: Date
+        let currentAct: EventStageTimelineEntry?
+        let nextAct: EventStageTimelineEntry?
+
+        var id: String { stageKey }
+    }
+
+    private enum LiveStageProgressState {
+        case active(Double)
+        case upcoming
+        case idle
+    }
 
     private var trimmedDraft: String {
         draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -51,6 +84,13 @@ struct EventLiveDiscussionView: View {
     private var canSend: Bool {
         (!trimmedDraft.isEmpty || !imageURLs.isEmpty) && !isSending && !isUploadingImage
     }
+
+    private static let liveStageTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -86,6 +126,9 @@ struct EventLiveDiscussionView: View {
             if phase == .idle {
                 await loadComments()
             }
+            if event == nil {
+                await loadEvent()
+            }
         }
         .onChange(of: sortMode) { _, _ in
             Task { await loadComments() }
@@ -102,6 +145,16 @@ struct EventLiveDiscussionView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .overlay {
+            if let event, showLiveStageOverlay {
+                liveStageOverlay(for: event)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.96, anchor: .center)),
+                        removal: .opacity
+                    ))
+            }
+        }
+        .animation(.spring(response: 0.36, dampingFraction: 0.88), value: showLiveStageOverlay)
     }
 
     private var sortBar: some View {
@@ -114,6 +167,10 @@ struct EventLiveDiscussionView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(RaverTheme.primaryText)
+
+            if let event {
+                liveStageSummaryScroller(event)
+            }
 
             HStack {
                 Spacer(minLength: 0)
@@ -379,6 +436,448 @@ struct EventLiveDiscussionView: View {
             ? Locale(identifier: "en_US_POSIX")
             : Locale(identifier: "zh_Hans_CN")
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    @MainActor
+    private func loadEvent() async {
+        do {
+            event = try await webService.fetchEvent(id: eventID)
+        } catch {
+            // Keep discussion usable even if event detail fails.
+        }
+    }
+
+    @ViewBuilder
+    private func liveStageSummaryScroller(_ event: WebEvent) -> some View {
+        let snapshots = liveStageSnapshots(for: event)
+        if !snapshots.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text(LL("正在表演"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    Spacer(minLength: 0)
+                    Button {
+                        showLiveStageOverlay = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(L("全部舞台", "All stages"))
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(snapshots) { snapshot in
+                            liveStageSummaryCard(snapshot)
+                        }
+                    }
+                    .padding(.horizontal, 1)
+                    .padding(.vertical, 1)
+                }
+            }
+        }
+    }
+
+    private func liveStageSummaryCard(_ snapshot: EventStageLiveSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            liveStageProgressBar(snapshot)
+
+            HStack(spacing: 8) {
+                Text(snapshot.stageName)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(RaverTheme.accent)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if snapshot.currentAct != nil {
+                    livePill(LL("LIVE"))
+                }
+            }
+
+            if let current = snapshot.currentAct {
+                liveActIdentityArea(current.act, timeText: current.timeText, avatarSize: 36, font: .subheadline.weight(.semibold))
+            } else if let next = snapshot.nextAct {
+                liveActIdentityArea(next.act, timeText: L("下一场 \(next.timeText)", "Next \(next.timeText)"), avatarSize: 36, font: .subheadline.weight(.semibold))
+            } else {
+                Text(LL("当前暂无演出"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(width: 240, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(RaverTheme.card)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(RaverTheme.accent.opacity(colorScheme == .dark ? 0.055 : 0.035))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                )
+        )
+    }
+
+    private func liveStageProgressState(_ snapshot: EventStageLiveSnapshot) -> LiveStageProgressState {
+        guard let current = snapshot.currentAct else {
+            return snapshot.nextAct == nil ? .idle : .upcoming
+        }
+        let duration = current.endTime.timeIntervalSince(current.startTime)
+        guard duration > 0 else { return .active(1) }
+        let progress = Date().timeIntervalSince(current.startTime) / duration
+        return .active(min(max(progress, 0), 1))
+    }
+
+    private func liveStageProgressBar(_ snapshot: EventStageLiveSnapshot) -> some View {
+        let state = liveStageProgressState(snapshot)
+        let progress: Double = {
+            switch state {
+            case .active(let value): return value
+            case .upcoming: return 0.08
+            case .idle: return 0
+            }
+        }()
+        let opacity: Double = {
+            switch state {
+            case .active: return 1
+            case .upcoming: return 0.36
+            case .idle: return 0.18
+            }
+        }()
+
+        return GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(RaverTheme.accent.opacity(colorScheme == .dark ? 0.18 : 0.12))
+                Capsule()
+                    .fill(RaverTheme.accent.opacity(opacity))
+                    .frame(width: max(6, proxy.size.width * progress))
+                if progress > 0 {
+                    Circle()
+                        .fill(RaverTheme.accent.opacity(max(opacity, 0.36)))
+                        .frame(width: 7, height: 7)
+                        .offset(x: max(0, proxy.size.width * progress - 4))
+                }
+            }
+        }
+        .frame(height: 7)
+        .accessibilityHidden(true)
+    }
+
+    private func livePill(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(RaverTheme.accent)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(
+                Capsule()
+                    .fill(RaverTheme.accent.opacity(colorScheme == .dark ? 0.18 : 0.10))
+            )
+    }
+
+    private func stageSortIndex(_ stageName: String?, event: WebEvent) -> Int {
+        let normalized = stageName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        guard let order = event.stageOrder, !normalized.isEmpty else { return Int.max }
+        return order.firstIndex { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalized } ?? Int.max
+    }
+
+    private func liveStageSnapshots(for event: WebEvent) -> [EventStageLiveSnapshot] {
+        let now = Date()
+        let stageBuckets = Dictionary(grouping: event.lineupSlots.filter { $0.endTime > $0.startTime }) { slot in
+            let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? "__unknown_stage__" : trimmed.lowercased()
+        }
+
+        return stageBuckets.compactMap { stageKey, slots in
+            let sortedSlots = slots.sorted { lhs, rhs in
+                if lhs.startTime == rhs.startTime { return lhs.endTime < rhs.endTime }
+                return lhs.startTime < rhs.startTime
+            }
+            guard let firstSlot = sortedSlots.first else { return nil }
+
+            let displayStageName: String = {
+                let raw = firstSlot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return raw.isEmpty ? LL("未知舞台") : raw
+            }()
+
+            let currentSlot = sortedSlots.first { $0.startTime <= now && now <= $0.endTime }
+            let anchorTime = currentSlot?.endTime ?? now
+            let currentDayIndex = EventLogicalDayResolver.dayIndex(
+                for: anchorTime,
+                eventStartDate: event.startDate,
+                dayRolloverHour: event.dayRolloverHour
+            )
+            let nextSlot = sortedSlots.first { slot in
+                guard slot.startTime > anchorTime else { return false }
+                return EventLogicalDayResolver.dayIndex(
+                    for: slot,
+                    eventStartDate: event.startDate,
+                    dayRolloverHour: event.dayRolloverHour
+                ) == currentDayIndex
+            }
+
+            return EventStageLiveSnapshot(
+                stageKey: stageKey,
+                stageName: displayStageName,
+                sortIndex: stageSortIndex(firstSlot.stageName, event: event),
+                firstStartTime: firstSlot.startTime,
+                currentAct: currentSlot.map(makeStageTimelineEntry(from:)),
+                nextAct: nextSlot.map(makeStageTimelineEntry(from:))
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
+            if lhs.firstStartTime != rhs.firstStartTime { return lhs.firstStartTime < rhs.firstStartTime }
+            return lhs.stageName.localizedCaseInsensitiveCompare(rhs.stageName) == .orderedAscending
+        }
+    }
+
+    private func makeStageTimelineEntry(from slot: WebEventLineupSlot) -> EventStageTimelineEntry {
+        EventStageTimelineEntry(
+            id: slot.id,
+            act: EventLineupActCodec.parse(slot: slot),
+            timeText: "\(Self.liveStageTimeFormatter.string(from: slot.startTime)) - \(Self.liveStageTimeFormatter.string(from: slot.endTime))",
+            startTime: slot.startTime,
+            endTime: slot.endTime
+        )
+    }
+
+    @ViewBuilder
+    private func liveActAvatarStack(_ act: EventLineupResolvedAct, primarySize: CGFloat, secondarySize: CGFloat) -> some View {
+        if act.type == .solo {
+            lineupPerformerAvatar(act.performers.first, size: primarySize)
+        } else {
+            HStack(spacing: -secondarySize * 0.22) {
+                ForEach(Array(act.performers.prefix(3).enumerated()), id: \.offset) { _, performer in
+                    lineupPerformerAvatar(performer, size: secondarySize)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.72), lineWidth: 1.2)
+                        )
+                }
+            }
+            .frame(height: secondarySize)
+        }
+    }
+
+    private func liveActIdentityArea(_ act: EventLineupResolvedAct, timeText: String, avatarSize: CGFloat, font: Font) -> some View {
+        VStack(alignment: .leading, spacing: act.isCollaborative ? 6 : 0) {
+            ForEach(Array(act.performers.enumerated()), id: \.element.id) { _, performer in
+                livePerformerIdentityRow(performer, timeText: timeText, avatarSize: avatarSize, font: font)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func livePerformerIdentityRow(_ performer: EventLineupPerformer, timeText: String, avatarSize: CGFloat, font: Font) -> some View {
+        let content = HStack(alignment: .center, spacing: 8) {
+            lineupPerformerAvatar(performer, size: avatarSize)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(performer.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? LL("待公布 DJ") : performer.name)
+                    .font(font)
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+                Text(timeText)
+                    .font(.caption2)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+
+        if let djID = performer.djID?.trimmingCharacters(in: .whitespacesAndNewlines), !djID.isEmpty {
+            Button {
+                appPush(.djDetail(djID: djID))
+            } label: {
+                content
+            }
+            .buttonStyle(.plain)
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder
+    private func lineupPerformerAvatar(_ performer: EventLineupPerformer?, size: CGFloat) -> some View {
+        let resolvedAvatar = AppConfig.resolvedDJAvatarURLString(performer?.avatarUrl, size: .small)
+        if let resolvedAvatar, !resolvedAvatar.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            ImageLoaderView(urlString: resolvedAvatar, resizingMode: .fill)
+                .background(djAvatarPlaceholder(size: size))
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+        } else {
+            djAvatarPlaceholder(size: size)
+        }
+    }
+
+    private func djAvatarPlaceholder(size: CGFloat) -> some View {
+        Circle()
+            .fill(RaverTheme.accent.opacity(colorScheme == .dark ? 0.22 : 0.12))
+            .overlay(
+                Image(systemName: "headphones")
+                    .font(.system(size: max(11, size * 0.42), weight: .semibold))
+                    .foregroundStyle(RaverTheme.accent)
+            )
+            .frame(width: size, height: size)
+    }
+
+    private func liveStageOverlay(for event: WebEvent) -> some View {
+        let snapshots = liveStageSnapshots(for: event)
+        return ZStack {
+            Rectangle()
+                .fill(colorScheme == .dark ? Color.black.opacity(0.46) : Color.black.opacity(0.18))
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.36, dampingFraction: 0.88)) {
+                        showLiveStageOverlay = false
+                    }
+                }
+
+            VStack(spacing: 0) {
+                Spacer(minLength: 24)
+
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(LL("舞台实时演出"))
+                                .font(.title3.weight(.bold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                            Text(event.name)
+                                .font(.footnote)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: 12)
+
+                        Button {
+                            withAnimation(.spring(response: 0.36, dampingFraction: 0.88)) {
+                                showLiveStageOverlay = false
+                            }
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .frame(width: 30, height: 30)
+                                .background(
+                                    Circle()
+                                        .fill(RaverTheme.cardBorder.opacity(colorScheme == .dark ? 0.7 : 0.55))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if snapshots.isEmpty {
+                        Text(LL("当前还没有可展示的舞台时间表。"))
+                            .font(.subheadline)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .padding(.vertical, 18)
+                    } else {
+                        ScrollView(showsIndicators: false) {
+                            VStack(spacing: 14) {
+                                ForEach(snapshots) { snapshot in
+                                    liveStageOverlayCard(snapshot)
+                                }
+                            }
+                            .padding(.bottom, 6)
+                        }
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                .padding(.bottom, 18)
+                .frame(maxWidth: 520)
+                .background(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(RaverTheme.card)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                        )
+                )
+                .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.42 : 0.14), radius: 24, y: 14)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 30)
+
+                Spacer(minLength: 24)
+            }
+        }
+        .zIndex(40)
+    }
+
+    private func liveStageOverlayCard(_ snapshot: EventStageLiveSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            liveStageProgressBar(snapshot)
+
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(snapshot.currentAct == nil ? RaverTheme.secondaryText.opacity(0.5) : RaverTheme.accent)
+                    .frame(width: 10, height: 10)
+                Text(snapshot.stageName)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer(minLength: 0)
+                Text(snapshot.currentAct == nil ? LL("下一场") : LL("进行中"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            if let current = snapshot.currentAct {
+                liveStageOverlayTimelineRow(
+                    title: L("现在", "Now"),
+                    titleColor: RaverTheme.accent,
+                    entry: current
+                )
+            } else {
+                Text(LL("当前暂无正在演出的 DJ"))
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            if let next = snapshot.nextAct {
+                liveStageOverlayTimelineRow(
+                    title: L("接下来", "Next"),
+                    titleColor: RaverTheme.secondaryText,
+                    entry: next
+                )
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(RaverTheme.background.opacity(colorScheme == .dark ? 0.72 : 0.86))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(RaverTheme.cardBorder, lineWidth: 0.8)
+                )
+        )
+    }
+
+    private func liveStageOverlayTimelineRow(title: String, titleColor: Color, entry: EventStageTimelineEntry) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(titleColor)
+                .frame(width: 42, alignment: .leading)
+                .padding(.top, 10)
+
+            VStack(alignment: .leading, spacing: 4) {
+                liveActIdentityArea(entry.act, timeText: entry.timeText, avatarSize: 42, font: .subheadline.weight(.semibold))
+            }
+
+            Spacer(minLength: 0)
+        }
     }
 
     @MainActor
@@ -673,6 +1172,31 @@ struct EventDetailView: View {
         let stageName: String
         let actName: String
         let timeText: String
+        let act: EventLineupResolvedAct
+    }
+
+    private struct EventStageTimelineEntry: Identifiable, Hashable {
+        let id: String
+        let act: EventLineupResolvedAct
+        let timeText: String
+        let startTime: Date
+        let endTime: Date
+
+        var actName: String {
+            let name = act.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return name.isEmpty ? LL("待公布 DJ") : name
+        }
+    }
+
+    private struct EventStageLiveSnapshot: Identifiable, Hashable {
+        let stageKey: String
+        let stageName: String
+        let sortIndex: Int
+        let firstStartTime: Date
+        let currentAct: EventStageTimelineEntry?
+        let nextAct: EventStageTimelineEntry?
+
+        var id: String { stageKey }
     }
 
     init(eventID: String, initialTabRawValue: String? = nil) {
@@ -1294,45 +1818,45 @@ struct EventDetailView: View {
         }
         .overlay {
             if let presentation = shareMorePresentation {
-                SharePanelOverlay(
-                    isVisible: isShareMorePanelVisible,
-                    onBackdropTap: { dismissShareMorePanel() }
-                ) {
-                    ShareActionPanel(
-                        primaryActions: sharePrimaryActions(),
-                        quickActions: shareMoreQuickActions(for: event),
-                        loadConversations: {
-                            try await loadSharePanelConversations()
-                        },
-                        onSendToConversation: { conversation, note in
-                            try await sendSharePayload(
-                                presentation.payload,
-                                to: conversation,
-                                note: note
+                    SharePanelOverlay(
+                        isVisible: isShareMorePanelVisible,
+                        onBackdropTap: { dismissShareMorePanel() }
+                    ) {
+                        ShareActionPanel(
+                            primaryActions: sharePrimaryActions(),
+                            quickActions: shareMoreQuickActions(for: event),
+                            loadConversations: {
+                                try await loadSharePanelConversations()
+                            },
+                            onSendToConversation: { conversation, note in
+                                try await sendSharePayload(
+                                    presentation.payload,
+                                    to: conversation,
+                                    note: note
+                                )
+                            },
+                            onDismiss: {
+                                dismissShareMorePanel()
+                            }
+                        ) { conversation in
+                            showWidgetStatusBanner(
+                                message: L(
+                                "已分享到 \(conversation.title)",
+                                "Shared to \(conversation.title)"
+                                ),
+                                conversation: conversation
                             )
-                        },
-                        onDismiss: {
-                            dismissShareMorePanel()
-                        }
-                    ) { conversation in
-                        showWidgetStatusBanner(
-                            message: L(
-                            "已分享到 \(conversation.title)",
-                            "Shared to \(conversation.title)"
-                            ),
-                            conversation: conversation
-                        )
-                    } onMoreChats: {
-                        dismissShareMorePanel {
-                            fullChatSharePresentation = presentation
+                        } onMoreChats: {
+                            dismissShareMorePanel {
+                                fullChatSharePresentation = presentation
+                            }
                         }
                     }
-                }
-                .onAppear {
-                    withAnimation(.sharePanelPresentSpring) {
-                        isShareMorePanelVisible = true
+                    .onAppear {
+                        withAnimation(.sharePanelPresentSpring) {
+                            isShareMorePanelVisible = true
+                        }
                     }
-                }
             }
         }
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
@@ -1649,9 +2173,12 @@ struct EventDetailView: View {
                                 .foregroundStyle(RaverTheme.accent)
                                 .frame(width: 82, alignment: .leading)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(act.actName)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(RaverTheme.primaryText)
+                                HStack(spacing: 8) {
+                                    liveActAvatarStack(act.act, primarySize: 28, secondarySize: 18)
+                                    Text(act.actName)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                }
                                 Text(act.timeText)
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
@@ -1675,32 +2202,89 @@ struct EventDetailView: View {
     }
 
     private func currentLiveStageActs(for event: WebEvent) -> [EventLiveStageAct] {
-        let now = Date()
-        return event.lineupSlots
-            .filter { $0.startTime <= now && now <= $0.endTime }
-            .sorted {
-                let lhsStage = stageSortIndex($0.stageName, event: event)
-                let rhsStage = stageSortIndex($1.stageName, event: event)
-                if lhsStage != rhsStage { return lhsStage < rhsStage }
-                return $0.startTime < $1.startTime
-            }
-            .map { slot in
-                let act = EventLineupActCodec.parse(slot: slot)
-                let stage = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines)
-                let stageName = stage?.isEmpty == false ? stage! : LL("未知舞台")
-                return EventLiveStageAct(
-                    id: slot.id,
-                    stageName: stageName,
-                    actName: act.displayName.isEmpty ? slot.djName : act.displayName,
-                    timeText: "\(Self.eventSlotTimeFormatter.string(from: slot.startTime)) - \(Self.eventSlotTimeFormatter.string(from: slot.endTime))"
-                )
-            }
+        liveStageSnapshots(for: event).compactMap { snapshot in
+            guard let current = snapshot.currentAct else { return nil }
+            return EventLiveStageAct(
+                id: current.id,
+                stageName: snapshot.stageName,
+                actName: current.actName,
+                timeText: current.timeText,
+                act: current.act
+            )
+        }
     }
 
     private func stageSortIndex(_ stageName: String?, event: WebEvent) -> Int {
         let normalized = stageName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         guard let order = event.stageOrder, !normalized.isEmpty else { return Int.max }
         return order.firstIndex { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalized } ?? Int.max
+    }
+
+    private func liveStageSnapshots(for event: WebEvent) -> [EventStageLiveSnapshot] {
+        let now = Date()
+        let stageBuckets = Dictionary(grouping: event.lineupSlots.filter { $0.endTime > $0.startTime }) { slot in
+            let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? "__unknown_stage__" : trimmed.lowercased()
+        }
+
+        return stageBuckets.compactMap { stageKey, slots in
+            let sortedSlots = slots.sorted { lhs, rhs in
+                if lhs.startTime == rhs.startTime { return lhs.endTime < rhs.endTime }
+                return lhs.startTime < rhs.startTime
+            }
+            guard let firstSlot = sortedSlots.first else { return nil }
+
+            let displayStageName: String = {
+                let raw = firstSlot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return raw.isEmpty ? LL("未知舞台") : raw
+            }()
+
+            let currentSlot = sortedSlots.first { $0.startTime <= now && now <= $0.endTime }
+            let anchorTime = currentSlot?.endTime ?? now
+            let nextSlot = sortedSlots.first { $0.startTime > anchorTime }
+
+            return EventStageLiveSnapshot(
+                stageKey: stageKey,
+                stageName: displayStageName,
+                sortIndex: stageSortIndex(firstSlot.stageName, event: event),
+                firstStartTime: firstSlot.startTime,
+                currentAct: currentSlot.map(makeStageTimelineEntry(from:)),
+                nextAct: nextSlot.map(makeStageTimelineEntry(from:))
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
+            if lhs.firstStartTime != rhs.firstStartTime { return lhs.firstStartTime < rhs.firstStartTime }
+            return lhs.stageName.localizedCaseInsensitiveCompare(rhs.stageName) == .orderedAscending
+        }
+    }
+
+    private func makeStageTimelineEntry(from slot: WebEventLineupSlot) -> EventStageTimelineEntry {
+        EventStageTimelineEntry(
+            id: slot.id,
+            act: EventLineupActCodec.parse(slot: slot),
+            timeText: "\(Self.eventSlotTimeFormatter.string(from: slot.startTime)) - \(Self.eventSlotTimeFormatter.string(from: slot.endTime))",
+            startTime: slot.startTime,
+            endTime: slot.endTime
+        )
+    }
+
+    @ViewBuilder
+    private func liveActAvatarStack(_ act: EventLineupResolvedAct, primarySize: CGFloat, secondarySize: CGFloat) -> some View {
+        if act.type == .solo {
+            lineupPerformerAvatar(act.performers.first, size: primarySize)
+        } else {
+            HStack(spacing: -secondarySize * 0.22) {
+                ForEach(Array(act.performers.prefix(3).enumerated()), id: \.offset) { _, performer in
+                    lineupPerformerAvatar(performer, size: secondarySize)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.72), lineWidth: 1.2)
+                        )
+                }
+            }
+            .frame(height: secondarySize)
+        }
     }
 
     @MainActor

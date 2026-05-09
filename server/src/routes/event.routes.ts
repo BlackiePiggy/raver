@@ -11,6 +11,18 @@ import {
   deleteEvent,
   uploadEventImage,
 } from '../controllers/event.controller';
+import {
+  getLineup,
+  addLineupArtist,
+  updateLineupArtist,
+  deleteLineupArtist,
+} from '../controllers/lineup.controller';
+import {
+  getTimetable,
+  addTimetableSlot,
+  updateTimetableSlot,
+  deleteTimetableSlot,
+} from '../controllers/timetable.controller';
 import { authenticate } from '../middleware/auth';
 
 const router: Router = Router();
@@ -46,6 +58,14 @@ const upload = multer({
 router.get('/', getEvents);
 router.get('/mine', authenticate, getMyEvents);
 router.post('/upload-image', authenticate, upload.single('image'), uploadEventImage);
+router.get('/:eventId/lineup', getLineup);
+router.post('/:eventId/lineup', authenticate, addLineupArtist);
+router.patch('/:eventId/lineup/:artistId', authenticate, updateLineupArtist);
+router.delete('/:eventId/lineup/:artistId', authenticate, deleteLineupArtist);
+router.get('/:eventId/timetable', getTimetable);
+router.post('/:eventId/timetable', authenticate, addTimetableSlot);
+router.patch('/:eventId/timetable/:slotId', authenticate, updateTimetableSlot);
+router.delete('/:eventId/timetable/:slotId', authenticate, deleteTimetableSlot);
 router.get('/:id', getEvent);
 router.post('/', authenticate, createEvent);
 router.put('/:id', authenticate, updateEvent);

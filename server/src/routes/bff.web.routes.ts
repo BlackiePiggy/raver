@@ -536,6 +536,13 @@ type NormalizedLineupSlot = {
   endTime: Date;
 };
 
+type NormalizedLineupArtistInput = {
+  djId: string | null;
+  djIds: string[];
+  djName: string;
+  sortOrder: number;
+};
+
 const parseDateInput = (value: unknown): Date | null => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value;
@@ -827,6 +834,163 @@ const normalizeLineupSlots = (
     .filter((slot): slot is NormalizedLineupSlot => slot !== null);
 };
 
+const buildLineupArtistsFromSlots = (slots: NormalizedLineupSlot[]): NormalizedLineupArtistInput[] => {
+  const byKey = new Map<string, NormalizedLineupArtistInput>();
+  for (const [index, slot] of slots.entries()) {
+    const djName = String(slot.djName || '').trim();
+    if (!djName) continue;
+    const djIds = Array.isArray(slot.djIds) ? slot.djIds.filter((id) => !isLineupDjIdPlaceholder(id)) : [];
+    const primaryDjId = slot.djId && !isLineupDjIdPlaceholder(slot.djId) ? slot.djId : (djIds[0] || null);
+    const key = primaryDjId ? `id:${primaryDjId}` : `name:${djName.toLowerCase()}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.djIds = Array.from(new Set([...(existing.djIds || []), ...djIds, ...(primaryDjId ? [primaryDjId] : [])])).filter(Boolean);
+      if (!existing.djId && primaryDjId) existing.djId = primaryDjId;
+      existing.sortOrder = Math.min(existing.sortOrder, slot.sortOrder || index + 1);
+      continue;
+    }
+    byKey.set(key, {
+      djId: primaryDjId,
+      djIds: Array.from(new Set([...djIds, ...(primaryDjId ? [primaryDjId] : [])])).filter(Boolean),
+      djName,
+      sortOrder: slot.sortOrder || index + 1,
+    });
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+};
+
+const normalizeLineupArtistsInput = (
+  artists: unknown,
+  fallbackSlots: NormalizedLineupSlot[] = []
+): NormalizedLineupArtistInput[] => {
+  const source = Array.isArray(artists) ? artists : null;
+  if (!source) return buildLineupArtistsFromSlots(fallbackSlots);
+  const byKey = new Map<string, NormalizedLineupArtistInput>();
+  for (const [index, raw] of source.entries()) {
+    if (!raw || typeof raw !== 'object') continue;
+    const row = raw as Record<string, unknown>;
+    const djName = String(row.djName ?? row.name ?? row.musician ?? row.artistName ?? '').trim();
+    if (!djName) continue;
+    const rawDjIds = Array.isArray(row.djIds) ? row.djIds : [];
+    const djIds = rawDjIds
+      .map((id) => String(id || '').trim())
+      .filter((id) => id && !isLineupDjIdPlaceholder(id));
+    const primaryRaw = String(row.djId || '').trim();
+    const djId = primaryRaw && !isLineupDjIdPlaceholder(primaryRaw) ? primaryRaw : (djIds[0] || null);
+    const mergedIds = Array.from(new Set([...djIds, ...(djId ? [djId] : [])])).filter(Boolean);
+    const sortOrder = typeof row.sortOrder === 'number' && Number.isFinite(row.sortOrder) ? row.sortOrder : index + 1;
+    const key = djId ? `id:${djId}` : `name:${djName.toLowerCase()}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.djIds = Array.from(new Set([...(existing.djIds || []), ...mergedIds])).filter(Boolean);
+      existing.sortOrder = Math.min(existing.sortOrder, sortOrder);
+      continue;
+    }
+    byKey.set(key, { djId, djIds: mergedIds, djName, sortOrder });
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+};
+
+const upsertLineupArtistsForTimetableSlots = async (
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  slots: NormalizedLineupSlot[],
+  explicitArtists: NormalizedLineupArtistInput[] = []
+): Promise<Map<string, string>> => {
+  const artistByKey = new Map<string, NormalizedLineupArtistInput>();
+  for (const artist of [...explicitArtists, ...buildLineupArtistsFromSlots(slots)]) {
+    const key = artist.djId ? `id:${artist.djId}` : `name:${artist.djName.toLowerCase()}`;
+    const existing = artistByKey.get(key);
+    if (existing) {
+      existing.djIds = Array.from(new Set([...(existing.djIds || []), ...(artist.djIds || [])])).filter(Boolean);
+      if (!existing.djId && artist.djId) existing.djId = artist.djId;
+      existing.sortOrder = Math.min(existing.sortOrder, artist.sortOrder);
+      continue;
+    }
+    artistByKey.set(key, { ...artist });
+  }
+
+  const resolved = new Map<string, string>();
+  const eventArtists = await tx.eventLineupArtist.findMany({ where: { eventId } });
+  for (const row of eventArtists) {
+    if (row.djId) resolved.set(`id:${row.djId}`, row.id);
+    resolved.set(`name:${String(row.djName || '').trim().toLowerCase()}`, row.id);
+  }
+
+  for (const artist of artistByKey.values()) {
+    const key = artist.djId ? `id:${artist.djId}` : `name:${artist.djName.toLowerCase()}`;
+    if (resolved.has(key)) continue;
+    const created = await tx.eventLineupArtist.create({
+      data: {
+        eventId,
+        djId: artist.djId,
+        djIds: artist.djIds,
+        djName: artist.djName,
+        sortOrder: artist.sortOrder,
+      },
+    });
+    resolved.set(key, created.id);
+    resolved.set(`name:${String(created.djName || '').trim().toLowerCase()}`, created.id);
+    if (created.djId) resolved.set(`id:${created.djId}`, created.id);
+  }
+
+  return resolved;
+};
+
+const syncEventLineupAndTimetable = async (
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  slots: NormalizedLineupSlot[],
+  artists: NormalizedLineupArtistInput[]
+): Promise<void> => {
+  await tx.eventTimetableSlot.deleteMany({ where: { eventId } });
+  await tx.eventLineupSlot.deleteMany({ where: { eventId } });
+  await tx.eventLineupArtist.deleteMany({ where: { eventId } });
+  if (artists.length) {
+    await tx.eventLineupArtist.createMany({
+      data: artists.map((artist) => ({
+        eventId,
+        djId: artist.djId,
+        djIds: artist.djIds,
+        djName: artist.djName,
+        sortOrder: artist.sortOrder,
+      })),
+    });
+  }
+  const artistMap = await upsertLineupArtistsForTimetableSlots(tx, eventId, slots, artists);
+  if (!slots.length) return;
+  await tx.eventTimetableSlot.createMany({
+    data: slots.map((slot, index) => {
+      const key = slot.djId ? `id:${slot.djId}` : `name:${slot.djName.toLowerCase()}`;
+      return {
+        eventId,
+        lineupArtistId: artistMap.get(key) || artistMap.get(`name:${slot.djName.toLowerCase()}`) || null,
+        djId: slot.djId,
+        djIds: slot.djIds,
+        djNameSnapshot: slot.djName,
+        stageName: slot.stageName,
+        festivalDayIndex: slot.festivalDayIndex,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        sortOrder: slot.sortOrder || index + 1,
+      };
+    }),
+  });
+  await tx.eventLineupSlot.createMany({
+    data: slots.map((slot, index) => ({
+      eventId,
+      djId: slot.djId,
+      djIds: slot.djIds,
+      djName: slot.djName,
+      stageName: slot.stageName,
+      festivalDayIndex: slot.festivalDayIndex,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      sortOrder: slot.sortOrder || index + 1,
+    })),
+  });
+};
+
 const resolveLineupSlotPerformerIds = (slot: any): string[] => {
   const ids = Array.isArray(slot?.djIds) ? slot.djIds : [];
   const result: string[] = [];
@@ -842,9 +1006,12 @@ const resolveLineupSlotPerformerIds = (slot: any): string[] => {
   return result;
 };
 
-const withLineupSlotPerformers = async <T extends { lineupSlots?: any[] }>(rows: T[]): Promise<T[]> => {
+const withLineupSlotPerformers = async <T extends { lineupSlots?: any[]; timetableSlots?: any[] }>(rows: T[]): Promise<T[]> => {
   const performerIds = Array.from(
-    new Set(rows.flatMap((row) => (Array.isArray(row.lineupSlots) ? row.lineupSlots : []).flatMap(resolveLineupSlotPerformerIds)))
+    new Set(rows.flatMap((row) => [
+      ...(Array.isArray(row.lineupSlots) ? row.lineupSlots : []),
+      ...(Array.isArray(row.timetableSlots) ? row.timetableSlots : []),
+    ].flatMap(resolveLineupSlotPerformerIds)))
   );
 
   if (performerIds.length === 0) {
@@ -874,11 +1041,68 @@ const withLineupSlotPerformers = async <T extends { lineupSlots?: any[] }>(rows:
             .filter((performer): performer is NonNullable<typeof performer> => Boolean(performer)),
         }))
       : [],
+    timetableSlots: Array.isArray(row.timetableSlots)
+      ? row.timetableSlots.map((slot: any) => ({
+          ...slot,
+          djs: resolveLineupSlotPerformerIds(slot)
+            .map((id) => performerById.get(id))
+            .filter((performer): performer is NonNullable<typeof performer> => Boolean(performer)),
+        }))
+      : [],
   }));
 };
 
-const withLineupSlotPerformersOne = async <T extends { lineupSlots?: any[] }>(row: T): Promise<T> =>
+const withLineupSlotPerformersOne = async <T extends { lineupSlots?: any[]; timetableSlots?: any[] }>(row: T): Promise<T> =>
   (await withLineupSlotPerformers([row]))[0];
+
+const includeEventForWeb = {
+  ticketTiers: {
+    orderBy: { sortOrder: 'asc' as const },
+  },
+  lineupArtists: {
+    orderBy: { sortOrder: 'asc' as const },
+    include: {
+      dj: {
+        select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+      },
+    },
+  },
+  timetableSlots: {
+    orderBy: { startTime: 'asc' as const },
+    include: {
+      dj: {
+        select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+      },
+      lineupArtist: {
+        select: { id: true, djId: true, djIds: true, djName: true, sortOrder: true },
+      },
+    },
+  },
+  lineupSlots: {
+    orderBy: { startTime: 'asc' as const },
+    include: {
+      dj: {
+        select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+      },
+    },
+  },
+  organizer: {
+    select: { id: true, username: true, displayName: true, avatarUrl: true },
+  },
+  wikiFestival: {
+    select: {
+      id: true,
+      name: true,
+      nameI18n: true,
+      country: true,
+      countryI18n: true,
+      city: true,
+      cityI18n: true,
+      avatarUrl: true,
+      backgroundUrl: true,
+    },
+  },
+};
 
 const normalizeName = (value: string): string => value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
 
@@ -2925,6 +3149,13 @@ const mapEvent = (row: any) => {
   const manualLocationRaw = normalizeEventManualLocationPayload(row.manualLocation ?? null);
   const manualLocation = mergeManualLocationFormattedWithBaseI18n(manualLocationRaw, cityI18n, countryI18n);
   const locationPoint = normalizeEventLocationPointPayload(row.locationPoint ?? null, locationFallback);
+  const sourceLineupSlots = Array.isArray(row.timetableSlots) && row.timetableSlots.length
+    ? row.timetableSlots.map((slot: any) => ({
+        ...slot,
+        djName: slot.djNameSnapshot,
+        lineupArtistId: slot.lineupArtistId ?? null,
+      }))
+    : (Array.isArray(row.lineupSlots) ? row.lineupSlots : []);
 
   return {
     id: row.id,
@@ -2991,10 +3222,63 @@ const mapEvent = (row: any) => {
           sortOrder: tier.sortOrder,
         }))
       : [],
-    lineupSlots: Array.isArray(row.lineupSlots)
-      ? row.lineupSlots.map((slot: any) => ({
+    lineupArtists: Array.isArray(row.lineupArtists)
+      ? row.lineupArtists.map((artist: any) => ({
+          id: artist.id,
+          eventId: artist.eventId,
+          djId: artist.djId,
+          djIds: Array.isArray(artist.djIds) ? artist.djIds : (artist.djId ? [artist.djId] : []),
+          djName: artist.djName,
+          sortOrder: artist.sortOrder,
+          createdAt: artist.createdAt,
+          updatedAt: artist.updatedAt,
+          dj: artist.dj
+            ? {
+                id: artist.dj.id,
+                name: artist.dj.name,
+                avatarUrl: artist.dj.avatarUrl,
+                avatarOriginalUrl: buildOssAvatarVariantUrl(artist.dj.avatarUrl, 'original'),
+                avatarMediumUrl: buildOssAvatarVariantUrl(artist.dj.avatarUrl, 'medium'),
+                avatarSmallUrl: buildOssAvatarVariantUrl(artist.dj.avatarUrl, 'small'),
+                bannerUrl: artist.dj.bannerUrl,
+                country: artist.dj.country,
+                soundCloudFollowers: artist.dj.soundCloudFollowers ?? null,
+              }
+            : null,
+        }))
+      : [],
+    timetableSlots: sourceLineupSlots.map((slot: any) => ({
+      id: slot.id,
+      eventId: slot.eventId,
+      lineupArtistId: slot.lineupArtistId ?? null,
+      djId: slot.djId,
+      djIds: Array.isArray(slot.djIds) ? slot.djIds : (slot.djId ? [slot.djId] : []),
+      djName: slot.djName,
+      djNameSnapshot: slot.djNameSnapshot ?? slot.djName,
+      festivalDayIndex: typeof slot.festivalDayIndex === 'number' ? slot.festivalDayIndex : null,
+      stageName: slot.stageName,
+      sortOrder: slot.sortOrder,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      dj: slot.dj
+        ? {
+            id: slot.dj.id,
+            name: slot.dj.name,
+            avatarUrl: slot.dj.avatarUrl,
+            avatarOriginalUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'original'),
+            avatarMediumUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'medium'),
+            avatarSmallUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'small'),
+            bannerUrl: slot.dj.bannerUrl,
+            country: slot.dj.country,
+            soundCloudFollowers: slot.dj.soundCloudFollowers ?? null,
+          }
+        : null,
+    })),
+    lineupSlots: sourceLineupSlots
+      .map((slot: any) => ({
           id: slot.id,
           eventId: slot.eventId,
+          lineupArtistId: slot.lineupArtistId ?? null,
           djId: slot.djId,
           djIds: Array.isArray(slot.djIds) ? slot.djIds : (slot.djId ? [slot.djId] : []),
           djs: Array.isArray(slot.djs)
@@ -3027,10 +3311,9 @@ const mapEvent = (row: any) => {
                 bannerUrl: slot.dj.bannerUrl,
                 country: slot.dj.country,
                 soundCloudFollowers: slot.dj.soundCloudFollowers ?? null,
-              }
+            }
             : null,
         }))
-      : [],
   };
 };
 
@@ -3794,6 +4077,7 @@ router.get('/events/recommendations', optionalAuth, async (req: Request, res: Re
       where: {
         id: { in: selectedIds },
       },
+      include: includeEventForWeb,
     });
     const rowById = new Map(rows.map((row) => [row.id, row]));
     const orderedRows = selectedIds
@@ -3887,35 +4171,7 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
         skip,
         take: limit,
         orderBy: { startDate: 'asc' },
-        include: {
-          ticketTiers: {
-            orderBy: { sortOrder: 'asc' },
-          },
-          lineupSlots: {
-            orderBy: { startTime: 'asc' },
-            include: {
-              dj: {
-                select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
-              },
-            },
-          },
-          organizer: {
-            select: { id: true, username: true, displayName: true, avatarUrl: true },
-          },
-          wikiFestival: {
-            select: {
-              id: true,
-              name: true,
-              nameI18n: true,
-              country: true,
-              countryI18n: true,
-              city: true,
-              cityI18n: true,
-              avatarUrl: true,
-              backgroundUrl: true,
-            },
-          },
-        },
+        include: includeEventForWeb,
       }),
       prisma.event.count({ where }),
     ]);
@@ -3946,35 +4202,7 @@ router.get('/events/my', optionalAuth, async (req: Request, res: Response): Prom
     const rows = await prisma.event.findMany({
       where: { organizerId: userId },
       orderBy: { createdAt: 'desc' },
-      include: {
-        ticketTiers: {
-          orderBy: { sortOrder: 'asc' },
-        },
-        lineupSlots: {
-          orderBy: { startTime: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
-            },
-          },
-        },
-        organizer: {
-          select: { id: true, username: true, displayName: true, avatarUrl: true },
-        },
-        wikiFestival: {
-          select: {
-            id: true,
-            name: true,
-            nameI18n: true,
-            country: true,
-            countryI18n: true,
-            city: true,
-            cityI18n: true,
-            avatarUrl: true,
-            backgroundUrl: true,
-          },
-        },
-      },
+      include: includeEventForWeb,
     });
 
     const rowsWithPerformers = await withLineupSlotPerformers(rows);
@@ -3991,35 +4219,7 @@ router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Pro
     const eventId = req.params.id as string;
     const row = await prisma.event.findUnique({
       where: { id: eventId },
-      include: {
-        ticketTiers: {
-          orderBy: { sortOrder: 'asc' },
-        },
-        lineupSlots: {
-          orderBy: { startTime: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
-            },
-          },
-        },
-        organizer: {
-          select: { id: true, username: true, displayName: true, avatarUrl: true },
-        },
-        wikiFestival: {
-          select: {
-            id: true,
-            name: true,
-            nameI18n: true,
-            country: true,
-            countryI18n: true,
-            city: true,
-            cityI18n: true,
-            avatarUrl: true,
-            backgroundUrl: true,
-          },
-        },
-      },
+      include: includeEventForWeb,
     });
 
     if (!row) {
@@ -4030,6 +4230,393 @@ router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Pro
     ok(res, mapEvent(await withLineupSlotPerformersOne(row)));
   } catch (error) {
     console.error('BFF web event detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/events/:id/lineup', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const eventId = req.params.id as string;
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        lineupArtists: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            dj: {
+              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+            },
+          },
+        },
+      },
+    });
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    ok(res, { items: mapEvent(event).lineupArtists });
+  } catch (error) {
+    console.error('BFF web event lineup error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/events/:id/lineup', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const eventId = req.params.id as string;
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true },
+    });
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    const canManage = await canUserManageEvent(userId, authReq.user?.role ?? null, event.organizerId, authReq.user?.email ?? null);
+    if (!canManage) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const [artist] = normalizeLineupArtistsInput([req.body || {}], []);
+    if (!artist) {
+      res.status(400).json({ error: 'djName is required' });
+      return;
+    }
+    const created = await prisma.eventLineupArtist.create({
+      data: {
+        eventId,
+        djId: artist.djId,
+        djIds: artist.djIds,
+        djName: artist.djName,
+        sortOrder: artist.sortOrder,
+      },
+      include: {
+        dj: {
+          select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+        },
+      },
+    });
+    ok(res, { item: mapEvent({ id: eventId, lineupArtists: [created] }).lineupArtists[0] });
+  } catch (error) {
+    console.error('BFF web add lineup artist error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/events/:id/lineup/:artistId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const eventId = req.params.id as string;
+    const artistId = req.params.artistId as string;
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true },
+    });
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    const canManage = await canUserManageEvent(userId, authReq.user?.role ?? null, event.organizerId, authReq.user?.email ?? null);
+    if (!canManage) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    const existing = await prisma.eventLineupArtist.findFirst({ where: { id: artistId, eventId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Lineup artist not found' });
+      return;
+    }
+    const body = req.body as Record<string, unknown>;
+    const [artist] = normalizeLineupArtistsInput([{ ...existing, ...body }], []);
+    if (!artist) {
+      res.status(400).json({ error: 'djName is required' });
+      return;
+    }
+    const updated = await prisma.eventLineupArtist.update({
+      where: { id: artistId },
+      data: {
+        djId: Object.prototype.hasOwnProperty.call(body, 'djId') || Object.prototype.hasOwnProperty.call(body, 'djIds') ? artist.djId : undefined,
+        djIds: Object.prototype.hasOwnProperty.call(body, 'djId') || Object.prototype.hasOwnProperty.call(body, 'djIds') ? artist.djIds : undefined,
+        djName: Object.prototype.hasOwnProperty.call(body, 'djName') || Object.prototype.hasOwnProperty.call(body, 'name') || Object.prototype.hasOwnProperty.call(body, 'musician') ? artist.djName : undefined,
+        sortOrder: Object.prototype.hasOwnProperty.call(body, 'sortOrder') ? artist.sortOrder : undefined,
+      },
+      include: {
+        dj: {
+          select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+        },
+      },
+    });
+    ok(res, { item: mapEvent({ id: eventId, lineupArtists: [updated] }).lineupArtists[0] });
+  } catch (error) {
+    console.error('BFF web update lineup artist error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/events/:id/lineup/:artistId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const eventId = req.params.id as string;
+    const artistId = req.params.artistId as string;
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true },
+    });
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    const canManage = await canUserManageEvent(userId, authReq.user?.role ?? null, event.organizerId, authReq.user?.email ?? null);
+    if (!canManage) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    const existing = await prisma.eventLineupArtist.findFirst({ where: { id: artistId, eventId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Lineup artist not found' });
+      return;
+    }
+    const slotCount = await prisma.eventTimetableSlot.count({ where: { eventId, lineupArtistId: artistId } });
+    if (slotCount > 0) {
+      res.status(409).json({ error: `该 DJ 下还有 ${slotCount} 条时间表演出，请先删除时间表条目后再删除阵容。` });
+      return;
+    }
+    await prisma.eventLineupArtist.delete({ where: { id: artistId } });
+    ok(res, { deleted: true });
+  } catch (error) {
+    console.error('BFF web delete lineup artist error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/events/:id/timetable', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const eventId = req.params.id as string;
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: includeEventForWeb,
+    });
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    ok(res, { items: mapEvent(event).timetableSlots });
+  } catch (error) {
+    console.error('BFF web event timetable error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+const resolveTimetableLineupArtist = async (
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  slot: NormalizedLineupSlot
+): Promise<string | null> => {
+  const keyName = slot.djName.trim().toLowerCase();
+  const existing = slot.djId
+    ? await tx.eventLineupArtist.findFirst({ where: { eventId, djId: slot.djId } })
+    : await tx.eventLineupArtist.findFirst({ where: { eventId, djName: { equals: slot.djName, mode: 'insensitive' } } });
+  if (existing) return existing.id;
+  const byName = await tx.eventLineupArtist.findFirst({ where: { eventId, djName: { equals: slot.djName, mode: 'insensitive' } } });
+  if (byName) return byName.id;
+  const count = await tx.eventLineupArtist.count({ where: { eventId } });
+  const created = await tx.eventLineupArtist.create({
+    data: {
+      eventId,
+      djId: slot.djId,
+      djIds: slot.djIds,
+      djName: slot.djName || keyName || 'Unknown DJ',
+      sortOrder: count + 1,
+    },
+  });
+  return created.id;
+};
+
+router.post('/events/:id/timetable', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const eventId = req.params.id as string;
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true, startDate: true, dayRolloverHour: true },
+    });
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    const canManage = await canUserManageEvent(userId, authReq.user?.role ?? null, event.organizerId, authReq.user?.email ?? null);
+    if (!canManage) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    const [slot] = normalizeLineupSlots([req.body || {}], event.startDate, event.dayRolloverHour ?? 6);
+    if (!slot) {
+      res.status(400).json({ error: 'Valid timetable slot is required' });
+      return;
+    }
+    const created = await prisma.$transaction(async (tx) => {
+      const lineupArtistId = await resolveTimetableLineupArtist(tx, eventId, slot);
+      const count = await tx.eventTimetableSlot.count({ where: { eventId } });
+      const timetableSlot = await tx.eventTimetableSlot.create({
+        data: {
+          eventId,
+          lineupArtistId,
+          djId: slot.djId,
+          djIds: slot.djIds,
+          djNameSnapshot: slot.djName,
+          stageName: slot.stageName,
+          festivalDayIndex: slot.festivalDayIndex,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          sortOrder: slot.sortOrder || count + 1,
+        },
+        include: includeEventForWeb.timetableSlots.include,
+      });
+      await tx.eventLineupSlot.create({
+        data: {
+          id: timetableSlot.id,
+          eventId,
+          djId: slot.djId,
+          djIds: slot.djIds,
+          djName: slot.djName,
+          stageName: slot.stageName,
+          festivalDayIndex: slot.festivalDayIndex,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          sortOrder: slot.sortOrder || count + 1,
+        },
+      });
+      return timetableSlot;
+    });
+    ok(res, { item: mapEvent({ id: eventId, timetableSlots: [created] }).timetableSlots[0] });
+  } catch (error) {
+    console.error('BFF web add timetable slot error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/events/:id/timetable/:slotId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const eventId = req.params.id as string;
+    const slotId = req.params.slotId as string;
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true, startDate: true, dayRolloverHour: true },
+    });
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    const canManage = await canUserManageEvent(userId, authReq.user?.role ?? null, event.organizerId, authReq.user?.email ?? null);
+    if (!canManage) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    const existing = await prisma.eventTimetableSlot.findFirst({ where: { id: slotId, eventId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Timetable slot not found' });
+      return;
+    }
+    const merged = {
+      djId: existing.djId,
+      djIds: existing.djIds,
+      djName: existing.djNameSnapshot,
+      stageName: existing.stageName,
+      festivalDayIndex: existing.festivalDayIndex,
+      startTime: existing.startTime,
+      endTime: existing.endTime,
+      sortOrder: existing.sortOrder,
+      ...(req.body || {}),
+    };
+    const [slot] = normalizeLineupSlots([merged], event.startDate, event.dayRolloverHour ?? 6);
+    if (!slot) {
+      res.status(400).json({ error: 'Valid timetable slot is required' });
+      return;
+    }
+    const updated = await prisma.$transaction(async (tx) => {
+      const lineupArtistId = await resolveTimetableLineupArtist(tx, eventId, slot);
+      await tx.eventLineupSlot.updateMany({
+        where: { id: slotId, eventId },
+        data: {
+          djId: slot.djId,
+          djIds: slot.djIds,
+          djName: slot.djName,
+          stageName: slot.stageName,
+          festivalDayIndex: slot.festivalDayIndex,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          sortOrder: slot.sortOrder,
+        },
+      });
+      return tx.eventTimetableSlot.update({
+        where: { id: slotId },
+        data: {
+          lineupArtistId,
+          djId: slot.djId,
+          djIds: slot.djIds,
+          djNameSnapshot: slot.djName,
+          stageName: slot.stageName,
+          festivalDayIndex: slot.festivalDayIndex,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          sortOrder: slot.sortOrder,
+        },
+        include: includeEventForWeb.timetableSlots.include,
+      });
+    });
+    ok(res, { item: mapEvent({ id: eventId, timetableSlots: [updated] }).timetableSlots[0] });
+  } catch (error) {
+    console.error('BFF web update timetable slot error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/events/:id/timetable/:slotId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const eventId = req.params.id as string;
+    const slotId = req.params.slotId as string;
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true },
+    });
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    const canManage = await canUserManageEvent(userId, authReq.user?.role ?? null, event.organizerId, authReq.user?.email ?? null);
+    if (!canManage) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    const existing = await prisma.eventTimetableSlot.findFirst({ where: { id: slotId, eventId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Timetable slot not found' });
+      return;
+    }
+    await prisma.$transaction([
+      prisma.eventTimetableSlot.delete({ where: { id: slotId } }),
+      prisma.eventLineupSlot.deleteMany({ where: { id: slotId, eventId } }),
+    ]);
+    ok(res, { deleted: true });
+  } catch (error) {
+    console.error('BFF web delete timetable slot error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -4145,6 +4732,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     const dayRolloverHour = normalizeDayRolloverHour(body.dayRolloverHour, 6);
     const rawSlots = Array.isArray(body.lineupSlots) ? body.lineupSlots : [];
     const lineupSlots = normalizeLineupSlots(rawSlots, parsedStartDate, dayRolloverHour);
+    const lineupArtists = normalizeLineupArtistsInput(body.lineupArtists, lineupSlots);
     const stageOrder = normalizeEventStageOrder(body.stageOrder ?? body.stage_order);
     const coverImageUrlInput =
       typeof body.coverImageUrl === 'string' && body.coverImageUrl.trim()
@@ -4284,42 +4872,22 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         ticketCurrency,
         ticketNotes: typeof body.ticketNotes === 'string' ? body.ticketNotes : null,
         officialWebsite: typeof body.officialWebsite === 'string' ? body.officialWebsite : null,
-        lineupSlots: lineupSlots.length ? { create: lineupSlots } : undefined,
         ticketTiers: ticketTiers.length ? { create: ticketTiers } : undefined,
       };
 
-    const created = await prisma.event.create({
-      data: createEventData,
-      include: {
-        ticketTiers: {
-          orderBy: { sortOrder: 'asc' },
-        },
-        lineupSlots: {
-          orderBy: { startTime: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
-            },
-          },
-        },
-        organizer: {
-          select: { id: true, username: true, displayName: true, avatarUrl: true },
-        },
-        wikiFestival: {
-          select: {
-            id: true,
-            name: true,
-            nameI18n: true,
-            country: true,
-            countryI18n: true,
-            city: true,
-            cityI18n: true,
-            avatarUrl: true,
-            backgroundUrl: true,
-          },
-        },
-      },
+    const created = await prisma.$transaction(async (tx) => {
+      const event = await tx.event.create({ data: createEventData });
+      await syncEventLineupAndTimetable(tx, event.id, lineupSlots, lineupArtists);
+      return tx.event.findUnique({
+        where: { id: event.id },
+        include: includeEventForWeb,
+      });
     });
+
+    if (!created) {
+      res.status(500).json({ error: 'Event was created but could not be loaded' });
+      return;
+    }
 
     ok(res, mapEvent(await withLineupSlotPerformersOne(created)));
   } catch (error) {
@@ -4528,6 +5096,9 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const effectiveStartDate = parsedStartDate ?? existing.startDate;
     const effectiveEndDate = parsedEndDate ?? existing.endDate;
     const lineupSlots = normalizeLineupSlots(rawSlots || [], lineupBaseDate, nextDayRolloverHour);
+    const rawArtists = Array.isArray(body.lineupArtists) ? body.lineupArtists : null;
+    const lineupArtists = normalizeLineupArtistsInput(rawArtists, lineupSlots);
+    const shouldSyncLineupTimetable = rawSlots !== null || rawArtists !== null;
     const shouldRebaseExistingLineupSlots =
       rawSlots === null
       && (body.startDate !== undefined || body.dayRolloverHour !== undefined)
@@ -4616,54 +5187,27 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         ticketNotes: typeof body.ticketNotes === 'string' ? body.ticketNotes : undefined,
         officialWebsite: typeof body.officialWebsite === 'string' ? body.officialWebsite : undefined,
         status: resolveEventStatus(effectiveStartDate, effectiveEndDate, typeof body.status === 'string' ? body.status : existing.status),
-        lineupSlots:
-          rawSlots !== null
-            ? {
-                deleteMany: {},
-                create: lineupSlots,
-              }
-            : undefined,
         ticketTiers:
           rawTicketTiers !== null
             ? {
                 deleteMany: {},
                 create: ticketTiers,
               }
-            : undefined,
+          : undefined,
       };
 
-    const updated = await prisma.event.update({
-      where: { id: eventId },
-      data: updateEventData,
-      include: {
-        ticketTiers: {
-          orderBy: { sortOrder: 'asc' },
-        },
-        lineupSlots: {
-          orderBy: { startTime: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
-            },
-          },
-        },
-        organizer: {
-          select: { id: true, username: true, displayName: true, avatarUrl: true },
-        },
-        wikiFestival: {
-          select: {
-            id: true,
-            name: true,
-            nameI18n: true,
-            country: true,
-            countryI18n: true,
-            city: true,
-            cityI18n: true,
-            avatarUrl: true,
-            backgroundUrl: true,
-          },
-        },
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.event.update({
+        where: { id: eventId },
+        data: updateEventData,
+      });
+      if (shouldSyncLineupTimetable) {
+        await syncEventLineupAndTimetable(tx, eventId, lineupSlots, lineupArtists);
+      }
+      return tx.event.findUnique({
+        where: { id: eventId },
+        include: includeEventForWeb,
+      });
     });
 
     if (shouldRebaseExistingLineupSlots) {
@@ -4686,6 +5230,11 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
           })
         )
       );
+    }
+
+    if (!updated) {
+      res.status(404).json({ error: 'Event not found after update' });
+      return;
     }
 
     if (hasCoverImageField && existing.coverImageUrl && existing.coverImageUrl !== updated.coverImageUrl) {
@@ -4715,35 +5264,7 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const finalEvent = shouldRebaseExistingLineupSlots
       ? await prisma.event.findUnique({
           where: { id: eventId },
-          include: {
-            ticketTiers: {
-              orderBy: { sortOrder: 'asc' },
-            },
-            lineupSlots: {
-              orderBy: { startTime: 'asc' },
-              include: {
-                dj: {
-                  select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
-                },
-              },
-            },
-            organizer: {
-              select: { id: true, username: true, displayName: true, avatarUrl: true },
-            },
-            wikiFestival: {
-              select: {
-                id: true,
-                name: true,
-                nameI18n: true,
-                country: true,
-                countryI18n: true,
-                city: true,
-                cityI18n: true,
-                avatarUrl: true,
-                backgroundUrl: true,
-              },
-            },
-          },
+          include: includeEventForWeb,
         })
       : updated;
 

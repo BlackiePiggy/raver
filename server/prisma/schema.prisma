@@ -164,6 +164,8 @@ model Event {
   wikiFestival    WikiFestival?      @relation(fields: [wikiFestivalId], references: [id], onDelete: SetNull)
   checkins        Checkin[]
   lineupSlots     EventLineupSlot[]
+  lineupArtists   EventLineupArtist[]
+  timetableSlots  EventTimetableSlot[]
   ticketTiers     EventTicketTier[]
   posts           Post[]
   liveComments    EventLiveComment[]
@@ -212,6 +214,51 @@ model EventLineupSlot {
   @@index([djId])
   @@index([startTime])
   @@map("event_lineup_slots")
+}
+
+model EventLineupArtist {
+  id               String   @id @default(uuid())
+  eventId          String   @map("event_id")
+  djId             String?  @map("dj_id")
+  djIds            String[] @default([]) @map("dj_ids")
+  djName           String   @map("dj_name")
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  event          Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  dj             DJ?                    @relation(fields: [djId], references: [id], onDelete: SetNull)
+  timetableSlots EventTimetableSlot[]
+
+  @@index([eventId])
+  @@index([djId])
+  @@map("event_lineup_artists")
+}
+
+model EventTimetableSlot {
+  id               String   @id @default(uuid())
+  eventId          String   @map("event_id")
+  lineupArtistId   String?  @map("lineup_artist_id")
+  djId             String?  @map("dj_id")
+  djIds            String[] @default([]) @map("dj_ids")
+  djNameSnapshot   String   @map("dj_name_snapshot")
+  stageName        String?  @map("stage_name")
+  festivalDayIndex Int?     @map("festival_day_index")
+  startTime        DateTime @map("start_time")
+  endTime          DateTime @map("end_time")
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  event         Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  lineupArtist  EventLineupArtist? @relation(fields: [lineupArtistId], references: [id], onDelete: SetNull)
+  dj            DJ?                @relation(fields: [djId], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
+  @@index([lineupArtistId])
+  @@index([djId])
+  @@index([startTime])
+  @@map("event_timetable_slots")
 }
 
 model DJ {
@@ -292,6 +339,8 @@ model DJ {
   follows       Follow[]
   sets          DJSet[]
   lineupSlots   EventLineupSlot[]
+  lineupArtists EventLineupArtist[]
+  timetableSlots EventTimetableSlot[]
   contributors  DJContributor[]
   foundedLabels Label[]           @relation("LabelFounderDJ")
 
