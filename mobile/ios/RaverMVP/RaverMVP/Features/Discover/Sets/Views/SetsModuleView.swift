@@ -2961,18 +2961,7 @@ struct DJSetDetailView: View {
     }
 
     private func webUserAvatarFallback(_ user: WebUserLite, size: CGFloat) -> some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: user.id,
-                username: user.username,
-                avatarURL: user.avatarUrl
-            )
-        )
-        .resizable()
-        .scaledToFill()
-        .frame(width: size, height: size)
-        .background(RaverTheme.card)
-        .clipShape(Circle())
+        AvatarPlaceholderView(size: size, backgroundColor: RaverTheme.card)
     }
 
     @ViewBuilder
@@ -2989,15 +2978,7 @@ struct DJSetDetailView: View {
     }
 
     private func contributorAvatarFallback(_ user: WebContributorProfile, size: CGFloat) -> some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: user.id,
-                username: user.username,
-                avatarURL: user.avatarUrl
-            )
-        )
-        .resizable()
-        .scaledToFill()
+        AvatarPlaceholderView(size: size, backgroundColor: RaverTheme.card)
         .frame(width: size, height: size)
         .background(RaverTheme.card)
         .clipShape(Circle())

@@ -51,58 +51,60 @@ model User {
   ratingComments      RatingComment[] @relation("RatingCommentAuthor")
 
   // Community & Squad
-  posts                     Post[]                     @relation("UserPosts")
-  eventLiveComments         EventLiveComment[]         @relation("UserEventLiveComments")
-  postLikes                 PostLike[]
-  postReposts               PostRepost[]
-  postSaves                 PostSave[]
-  postShares                PostShare[]
-  postHides                 PostHide[]
-  feedEvents                FeedEvent[]
-  postComments              PostComment[]
-  postCommentReplyTargets   PostComment[]              @relation("PostCommentReplyToUser")
-  ledSquads                 Squad[]                    @relation("SquadLeader")
-  squadMemberships          SquadMember[]
-  sentInvites               SquadInvite[]              @relation("SentInvites")
-  receivedInvites           SquadInvite[]              @relation("ReceivedInvites")
-  squadMessages             SquadMessage[]
-  directConversationsA      DirectConversation[]       @relation("DirectConversationUserA")
-  directConversationsB      DirectConversation[]       @relation("DirectConversationUserB")
-  directConversationReads   DirectConversationRead[]
-  directMessages            DirectMessage[]
-  notificationReads         NotificationRead[]
-  notificationSubscriptions NotificationSubscription[]
-  notificationInboxItems    NotificationInboxItem[]
-  devicePushTokens          DevicePushToken[]
-  notificationDeliveries    NotificationDelivery[]
-  createdActivities         SquadActivity[]
-  createdAlbums             SquadAlbum[]
-  uploadedPhotos            SquadAlbumPhoto[]
-  wikiFestivalContributions WikiFestivalContributor[]
-  authRefreshTokens         AuthRefreshToken[]
-  createdShareLinks         ShareLink[]                @relation("ShareLinkCreator")
-  shareLinkEvents           ShareLinkEvent[]
-  sentInviteReferrals       InviteReferral[]           @relation("InviteReferralInviter")
-  receivedInviteReferrals   InviteReferral[]           @relation("InviteReferralInvitee")
-  profileModerationJobs     UserProfileModerationJob[]
+  posts                        Post[]                     @relation("UserPosts")
+  eventLiveComments            EventLiveComment[]         @relation("UserEventLiveComments")
+  eventLiveCommentLikes        EventLiveCommentLike[]
+  eventLiveCommentReplyTargets EventLiveComment[]         @relation("EventLiveCommentReplyToUser")
+  postLikes                    PostLike[]
+  postReposts                  PostRepost[]
+  postSaves                    PostSave[]
+  postShares                   PostShare[]
+  postHides                    PostHide[]
+  feedEvents                   FeedEvent[]
+  postComments                 PostComment[]
+  postCommentReplyTargets      PostComment[]              @relation("PostCommentReplyToUser")
+  ledSquads                    Squad[]                    @relation("SquadLeader")
+  squadMemberships             SquadMember[]
+  sentInvites                  SquadInvite[]              @relation("SentInvites")
+  receivedInvites              SquadInvite[]              @relation("ReceivedInvites")
+  squadMessages                SquadMessage[]
+  directConversationsA         DirectConversation[]       @relation("DirectConversationUserA")
+  directConversationsB         DirectConversation[]       @relation("DirectConversationUserB")
+  directConversationReads      DirectConversationRead[]
+  directMessages               DirectMessage[]
+  notificationReads            NotificationRead[]
+  notificationSubscriptions    NotificationSubscription[]
+  notificationInboxItems       NotificationInboxItem[]
+  devicePushTokens             DevicePushToken[]
+  notificationDeliveries       NotificationDelivery[]
+  createdActivities            SquadActivity[]
+  createdAlbums                SquadAlbum[]
+  uploadedPhotos               SquadAlbumPhoto[]
+  wikiFestivalContributions    WikiFestivalContributor[]
+  authRefreshTokens            AuthRefreshToken[]
+  createdShareLinks            ShareLink[]                @relation("ShareLinkCreator")
+  shareLinkEvents              ShareLinkEvent[]
+  sentInviteReferrals          InviteReferral[]           @relation("InviteReferralInviter")
+  receivedInviteReferrals      InviteReferral[]           @relation("InviteReferralInvitee")
+  profileModerationJobs        UserProfileModerationJob[]
 
   @@map("users")
 }
 
 model UserProfileModerationJob {
-  id             String    @id @default(uuid())
-  userId         String    @map("user_id")
-  targetType     String    @map("target_type")
-  targetValue    String    @map("target_value") @db.Text
-  normalizedValue String?  @map("normalized_value")
-  status         String    @default("pending")
-  reason         String?
-  provider       String    @default("manual_review")
-  decisionDetail Json?     @map("decision_detail")
-  reviewedAt     DateTime? @map("reviewed_at")
-  reviewedBy     String?   @map("reviewed_by")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  targetType      String    @map("target_type")
+  targetValue     String    @map("target_value") @db.Text
+  normalizedValue String?   @map("normalized_value")
+  status          String    @default("pending")
+  reason          String?
+  provider        String    @default("manual_review")
+  decisionDetail  Json?     @map("decision_detail")
+  reviewedAt      DateTime? @map("reviewed_at")
+  reviewedBy      String?   @map("reviewed_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -158,8 +160,8 @@ model Event {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  organizer       User?             @relation("UserPublishedEvents", fields: [organizerId], references: [id], onDelete: SetNull)
-  wikiFestival    WikiFestival?     @relation(fields: [wikiFestivalId], references: [id], onDelete: SetNull)
+  organizer       User?              @relation("UserPublishedEvents", fields: [organizerId], references: [id], onDelete: SetNull)
+  wikiFestival    WikiFestival?      @relation(fields: [wikiFestivalId], references: [id], onDelete: SetNull)
   checkins        Checkin[]
   lineupSlots     EventLineupSlot[]
   ticketTiers     EventTicketTier[]
@@ -918,19 +920,50 @@ model Post {
 }
 
 model EventLiveComment {
-  id        String   @id @default(uuid())
-  eventId   String   @map("event_id")
-  userId    String   @map("user_id")
-  content   String   @db.Text
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(uuid())
+  eventId         String   @map("event_id")
+  userId          String   @map("user_id")
+  parentCommentId String?  @map("parent_comment_id")
+  rootCommentId   String?  @map("root_comment_id")
+  replyToUserId   String?  @map("reply_to_user_id")
+  depth           Int      @default(0)
+  content         String   @db.Text
+  imageUrls       String[] @default([]) @map("image_urls")
+  likeCount       Int      @default(0) @map("like_count")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user  User  @relation("UserEventLiveComments", fields: [userId], references: [id], onDelete: Cascade)
+  event          Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user           User                   @relation("UserEventLiveComments", fields: [userId], references: [id], onDelete: Cascade)
+  parentComment  EventLiveComment?      @relation("EventLiveCommentReplies", fields: [parentCommentId], references: [id], onDelete: SetNull)
+  childComments  EventLiveComment[]     @relation("EventLiveCommentReplies")
+  rootComment    EventLiveComment?      @relation("EventLiveCommentThreads", fields: [rootCommentId], references: [id], onDelete: SetNull)
+  threadComments EventLiveComment[]     @relation("EventLiveCommentThreads")
+  replyToUser    User?                  @relation("EventLiveCommentReplyToUser", fields: [replyToUserId], references: [id], onDelete: SetNull)
+  likes          EventLiveCommentLike[]
 
   @@index([eventId, createdAt])
+  @@index([eventId, likeCount, createdAt])
   @@index([userId, createdAt])
+  @@index([parentCommentId])
+  @@index([rootCommentId])
+  @@index([replyToUserId])
   @@map("event_live_comments")
+}
+
+model EventLiveCommentLike {
+  id        String   @id @default(uuid())
+  commentId String   @map("comment_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  comment EventLiveComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([commentId])
+  @@index([userId])
+  @@map("event_live_comment_likes")
 }
 
 model PostLike {

@@ -1146,18 +1146,46 @@ const mapEventLiveComment = (
   comment: {
     id: string;
     eventId: string;
+    parentCommentId?: string | null;
+    rootCommentId?: string | null;
+    depth?: number | null;
     user: BasicUser;
+    replyToUser?: BasicUser | null;
     content: string;
+    imageUrls?: string[] | null;
+    likeCount?: number | null;
     createdAt: Date;
   },
-  followingSet: Set<string>
+  followingSet: Set<string>,
+  likedCommentIds: Set<string> = new Set()
 ) => ({
   id: comment.id,
   eventID: comment.eventId,
+  parentCommentID: comment.parentCommentId ?? null,
+  rootCommentID: comment.rootCommentId ?? null,
+  depth: comment.depth ?? 0,
   author: toUserSummary(comment.user, followingSet.has(comment.user.id)),
+  replyToAuthor: comment.replyToUser ? toUserSummary(comment.replyToUser, followingSet.has(comment.replyToUser.id)) : null,
   content: comment.content,
+  imageURLs: comment.imageUrls ?? [],
+  likeCount: comment.likeCount ?? 0,
+  isLiked: likedCommentIds.has(comment.id),
   createdAt: comment.createdAt,
 });
+
+const buildLikedEventLiveCommentMap = async (viewerId: string | undefined, commentIds: string[]) => {
+  if (!viewerId || commentIds.length === 0) {
+    return new Set<string>();
+  }
+  const rows = await prisma.eventLiveCommentLike.findMany({
+    where: {
+      userId: viewerId,
+      commentId: { in: commentIds },
+    },
+    select: { commentId: true },
+  });
+  return new Set(rows.map((row) => row.commentId));
+};
 
 const buildLikedPostMap = async (viewerId: string | undefined, postIds: string[]) => {
   if (!viewerId || postIds.length === 0) {
@@ -3603,11 +3631,20 @@ router.get('/events/:id/live-comments', optionalAuth, async (req: Request, res: 
     const eventID = String(req.params.id || '').trim();
     const limit = normalizeLimit(req.query.limit, 50, 100);
     const cursorDate = parseCursorDate(req.query.cursor);
+    const sort = String(req.query.sort || 'oldest').trim().toLowerCase();
 
     if (!eventID) {
       res.status(400).json({ error: 'Event id is required' });
       return;
     }
+
+    const orderBy =
+      sort === 'hot'
+        ? [{ likeCount: 'desc' as const }, { createdAt: 'desc' as const }, { id: 'desc' as const }]
+        : sort === 'newest'
+          ? [{ createdAt: 'desc' as const }, { id: 'desc' as const }]
+          : [{ createdAt: 'asc' as const }, { id: 'asc' as const }];
+    const cursorDirection = sort === 'oldest' ? 'gt' : 'lt';
 
     const comments = await prisma.eventLiveComment.findMany({
       where: {
@@ -3615,7 +3652,7 @@ router.get('/events/:id/live-comments', optionalAuth, async (req: Request, res: 
         ...(cursorDate
           ? {
               createdAt: {
-                lt: cursorDate,
+                [cursorDirection]: cursorDate,
               },
             }
           : {}),
@@ -3629,21 +3666,36 @@ router.get('/events/:id/live-comments', optionalAuth, async (req: Request, res: 
             avatarUrl: true,
           },
         },
+        replyToUser: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
       },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      orderBy,
       take: limit + 1,
     });
 
     const hasMore = comments.length > limit;
     const pageComments = hasMore ? comments.slice(0, limit) : comments;
-    const authorIds = Array.from(new Set(pageComments.map((comment) => comment.user.id)));
-    const followingSet = await buildFollowingMap(viewerId, authorIds);
+    const authorIds = Array.from(
+      new Set(
+        pageComments
+          .flatMap((comment) => [comment.user.id, comment.replyToUser?.id ?? null])
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+    const commentIds = pageComments.map((comment) => comment.id);
+    const [followingSet, likedCommentIds] = await Promise.all([
+      buildFollowingMap(viewerId, authorIds),
+      buildLikedEventLiveCommentMap(viewerId, commentIds),
+    ]);
 
     res.json({
-      comments: pageComments
-        .slice()
-        .reverse()
-        .map((comment) => mapEventLiveComment(comment, followingSet)),
+      comments: pageComments.map((comment) => mapEventLiveComment(comment, followingSet, likedCommentIds)),
       nextCursor: hasMore ? pageComments[pageComments.length - 1]?.createdAt.toISOString() ?? null : null,
     });
   } catch (error) {
@@ -3658,15 +3710,35 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
     if (!userId) return;
 
     const eventID = String(req.params.id || '').trim();
-    const body = (req.body ?? {}) as { content?: unknown };
+    const body = (req.body ?? {}) as {
+      content?: unknown;
+      imageURLs?: unknown;
+      imageUrls?: unknown;
+      parentCommentID?: unknown;
+      parentCommentId?: unknown;
+      replyToCommentID?: unknown;
+      replyToCommentId?: unknown;
+    };
     const content = String(body.content || '').trim();
+    const rawImageURLs = Array.isArray(body.imageURLs) ? body.imageURLs : Array.isArray(body.imageUrls) ? body.imageUrls : [];
+    const imageUrls = rawImageURLs
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    const rawParentID =
+      body.parentCommentID ??
+      body.parentCommentId ??
+      body.replyToCommentID ??
+      body.replyToCommentId;
+    const parentCommentID = typeof rawParentID === 'string' ? rawParentID.trim() : '';
+    const normalizedParentCommentID = parentCommentID.length > 0 ? parentCommentID : null;
 
     if (!eventID) {
       res.status(400).json({ error: 'Event id is required' });
       return;
     }
-    if (!content) {
-      res.status(400).json({ error: 'content is required' });
+    if (!content && imageUrls.length === 0) {
+      res.status(400).json({ error: 'content or image is required' });
       return;
     }
 
@@ -3679,12 +3751,121 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
       return;
     }
 
-    const created = await prisma.eventLiveComment.create({
-      data: {
-        eventId: eventID,
-        userId,
-        content: content.slice(0, 500),
-      },
+    const created = await prisma.$transaction(async (tx) => {
+      let parentComment:
+        | {
+            id: string;
+            eventId: string;
+            userId: string;
+            rootCommentId: string | null;
+            depth: number;
+          }
+        | null = null;
+
+      if (normalizedParentCommentID) {
+        parentComment = await tx.eventLiveComment.findUnique({
+          where: { id: normalizedParentCommentID },
+          select: {
+            id: true,
+            eventId: true,
+            userId: true,
+            rootCommentId: true,
+            depth: true,
+          },
+        });
+
+        if (!parentComment || parentComment.eventId !== eventID) {
+          throw new Error('Parent comment not found');
+        }
+      }
+
+      const depth = parentComment ? Math.min((parentComment.depth ?? 0) + 1, 1) : 0;
+      const rootCommentId = parentComment ? parentComment.rootCommentId ?? parentComment.id : null;
+
+      return tx.eventLiveComment.create({
+        data: {
+          eventId: eventID,
+          userId,
+          parentCommentId: parentComment?.id ?? null,
+          rootCommentId,
+          replyToUserId: parentComment?.userId ?? null,
+          depth,
+          content: content.slice(0, 500),
+          imageUrls,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarUrl: true,
+            },
+          },
+          replyToUser: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarUrl: true,
+            },
+          },
+        },
+      });
+    });
+
+    const followingSet = await buildFollowingMap(userId, [created.user.id, created.replyToUser?.id].filter((id): id is string => Boolean(id)));
+    res.status(201).json(mapEventLiveComment(created, followingSet));
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Parent comment not found') {
+      res.status(404).json({ error: 'Parent comment not found' });
+      return;
+    }
+    console.error('BFF create event live comment error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/events/live-comments/:commentId/like', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const commentId = String(req.params.commentId || '').trim();
+    const comment = await prisma.eventLiveComment.findUnique({
+      where: { id: commentId },
+      select: { id: true },
+    });
+    if (!comment) {
+      res.status(404).json({ error: 'Comment not found' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.eventLiveCommentLike.findUnique({
+        where: {
+          commentId_userId: {
+            commentId,
+            userId,
+          },
+        },
+      });
+      if (!existing) {
+        await tx.eventLiveCommentLike.create({
+          data: {
+            commentId,
+            userId,
+          },
+        });
+        await tx.eventLiveComment.update({
+          where: { id: commentId },
+          data: { likeCount: { increment: 1 } },
+        });
+      }
+    });
+
+    const hydrated = await prisma.eventLiveComment.findUnique({
+      where: { id: commentId },
       include: {
         user: {
           select: {
@@ -3694,13 +3875,88 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
             avatarUrl: true,
           },
         },
+        replyToUser: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
       },
     });
-
-    const followingSet = await buildFollowingMap(userId, [created.user.id]);
-    res.status(201).json(mapEventLiveComment(created, followingSet));
+    if (!hydrated) {
+      res.status(404).json({ error: 'Comment not found' });
+      return;
+    }
+    const followingSet = await buildFollowingMap(userId, [hydrated.user.id, hydrated.replyToUser?.id].filter((id): id is string => Boolean(id)));
+    res.json(mapEventLiveComment(hydrated, followingSet, new Set([commentId])));
   } catch (error) {
-    console.error('BFF create event live comment error:', error);
+    console.error('BFF like event live comment error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/events/live-comments/:commentId/like', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const commentId = String(req.params.commentId || '').trim();
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.eventLiveCommentLike.findUnique({
+        where: {
+          commentId_userId: {
+            commentId,
+            userId,
+          },
+        },
+      });
+      if (existing) {
+        await tx.eventLiveCommentLike.delete({ where: { id: existing.id } });
+        await tx.eventLiveComment.updateMany({
+          where: {
+            id: commentId,
+            likeCount: { gt: 0 },
+          },
+          data: {
+            likeCount: {
+              decrement: 1,
+            },
+          },
+        });
+      }
+    });
+
+    const hydrated = await prisma.eventLiveComment.findUnique({
+      where: { id: commentId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+        replyToUser: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+    if (!hydrated) {
+      res.status(404).json({ error: 'Comment not found' });
+      return;
+    }
+    const followingSet = await buildFollowingMap(userId, [hydrated.user.id, hydrated.replyToUser?.id].filter((id): id is string => Boolean(id)));
+    res.json(mapEventLiveComment(hydrated, followingSet));
+  } catch (error) {
+    console.error('BFF unlike event live comment error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

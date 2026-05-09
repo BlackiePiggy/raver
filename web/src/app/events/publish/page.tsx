@@ -10,6 +10,7 @@ import { djAPI, DJ } from '@/lib/api/dj';
 
 interface LineupSlotForm {
   djId?: string;
+  festivalDayIndex: string;
   djName: string;
   stageName: string;
   startTime: string;
@@ -30,6 +31,78 @@ const slugify = (value: string) =>
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '') || 'event';
+
+const MAX_FESTIVAL_DAY_OPTIONS = 14;
+
+const parseLocalDate = (value: string): Date | null => {
+  if (!value.trim()) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const startOfDay = (date: Date): Date => {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+};
+
+const buildFestivalDayOptions = (startValue: string, endValue: string) => {
+  const start = parseLocalDate(startValue);
+  if (!start) {
+    return [{ value: '1', label: 'Day 1' }];
+  }
+
+  const end = parseLocalDate(endValue) || start;
+  const safeEnd = end >= start ? end : start;
+  const startDay = startOfDay(start);
+  const endDay = startOfDay(safeEnd);
+  const diffDays = Math.floor((endDay.getTime() - startDay.getTime()) / 86_400_000);
+  const totalDays = Math.min(MAX_FESTIVAL_DAY_OPTIONS, Math.max(1, diffDays + 1));
+
+  return Array.from({ length: totalDays }, (_, index) => {
+    const date = new Date(startDay);
+    date.setDate(date.getDate() + index);
+    return {
+      value: String(index + 1),
+      label: `Day ${index + 1} (${date.getMonth() + 1}.${date.getDate()})`,
+    };
+  });
+};
+
+const formatLocalDateTime = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  const second = String(date.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+};
+
+const buildLineupDateTime = (
+  eventStartValue: string,
+  festivalDayIndexValue: string,
+  timeValue: string,
+  extraDays = 0
+): string | null => {
+  const eventStart = parseLocalDate(eventStartValue);
+  if (!eventStart || !timeValue.trim()) return null;
+
+  const match = timeValue.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return null;
+  }
+
+  const festivalDayIndex = Math.max(1, Number(festivalDayIndexValue) || 1);
+  const result = startOfDay(eventStart);
+  result.setDate(result.getDate() + festivalDayIndex - 1 + extraDays);
+  result.setHours(hour, minute, 0, 0);
+  return formatLocalDateTime(result);
+};
 
 function UploadDropZone({
   label,
@@ -148,6 +221,7 @@ export default function PublishEventPage() {
   const canSubmit = useMemo(() => {
     return Boolean(name && startDate && endDate && city && country && venueName);
   }, [name, startDate, endDate, city, country, venueName]);
+  const festivalDayOptions = useMemo(() => buildFestivalDayOptions(startDate, endDate), [startDate, endDate]);
 
   const uploadImage = async (file: File, target: 'cover' | 'lineup') => {
     if (!token) {
@@ -181,6 +255,7 @@ export default function PublishEventPage() {
       ...prev,
       {
         djId: '',
+        festivalDayIndex: '1',
         djName: '',
         stageName: '',
         startTime: '',
@@ -268,15 +343,29 @@ export default function PublishEventPage() {
           })),
         officialWebsite: officialWebsite || null,
         lineupSlots: lineupSlots
-          .filter((slot) => slot.djName && slot.startTime && slot.endTime)
-          .map((slot, idx) => ({
-            djId: slot.djId || null,
-            djName: slot.djName,
-            stageName: slot.stageName || null,
-            sortOrder: idx + 1,
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-          })),
+          .map((slot, idx) => {
+            const startDateTime = buildLineupDateTime(startDate, slot.festivalDayIndex, slot.startTime);
+            const shouldRollEndToNextDay = !!startDateTime && !!slot.endTime && slot.endTime < slot.startTime;
+            const endDateTime = buildLineupDateTime(
+              startDate,
+              slot.festivalDayIndex,
+              slot.endTime,
+              shouldRollEndToNextDay ? 1 : 0
+            );
+            if (!slot.djName.trim() || !startDateTime || !endDateTime) {
+              return null;
+            }
+            return {
+              djId: slot.djId || null,
+              festivalDayIndex: Number(slot.festivalDayIndex) || 1,
+              djName: slot.djName,
+              stageName: slot.stageName || null,
+              sortOrder: idx + 1,
+              startTime: startDateTime,
+              endTime: endDateTime,
+            };
+          })
+          .filter((slot): slot is NonNullable<typeof slot> => slot !== null),
       };
 
       const created = await eventAPI.createEvent(payload as any, token);
@@ -332,12 +421,12 @@ export default function PublishEventPage() {
 
             <div>
               <label className="block text-sm text-text-secondary mb-1">开始时间</label>
-              <input type="datetime-local" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" required />
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" required />
             </div>
 
             <div>
               <label className="block text-sm text-text-secondary mb-1">结束时间</label>
-              <input type="datetime-local" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" required />
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" required />
             </div>
 
             <div>
@@ -418,11 +507,12 @@ export default function PublishEventPage() {
               <h2 className="text-xl font-semibold text-text-primary">参演DJ与演出时间段</h2>
               <button type="button" onClick={addLineupSlot} className="px-3 py-2 rounded-lg bg-primary-blue hover:bg-primary-purple text-white text-sm">+ 添加时段</button>
             </div>
+            <p className="text-xs text-text-tertiary mb-3">每个时段只选择 Day 和时间，具体日期会根据活动开始日期自动推导。</p>
 
             <div className="space-y-3">
               {lineupSlots.length === 0 && <p className="text-sm text-text-tertiary">还未添加DJ时段。</p>}
               {lineupSlots.map((slot, index) => (
-                <div key={index} className="rounded-lg border border-bg-primary bg-bg-tertiary p-3 grid grid-cols-1 md:grid-cols-5 gap-2">
+                <div key={index} className="rounded-lg border border-bg-primary bg-bg-tertiary p-3 grid grid-cols-1 md:grid-cols-6 gap-2">
                   <div>
                     <label className="block text-xs text-text-tertiary mb-1">选择DJ</label>
                     <select value={slot.djId || ''} onChange={(e) => updateLineupSlot(index, 'djId', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm">
@@ -441,13 +531,21 @@ export default function PublishEventPage() {
                     <input value={slot.stageName} onChange={(e) => updateLineupSlot(index, 'stageName', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
                   </div>
                   <div>
+                    <label className="block text-xs text-text-tertiary mb-1">演出日</label>
+                    <select value={slot.festivalDayIndex} onChange={(e) => updateLineupSlot(index, 'festivalDayIndex', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm">
+                      {festivalDayOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
                     <label className="block text-xs text-text-tertiary mb-1">开始</label>
-                    <input type="datetime-local" value={slot.startTime} onChange={(e) => updateLineupSlot(index, 'startTime', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
+                    <input type="time" value={slot.startTime} onChange={(e) => updateLineupSlot(index, 'startTime', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
                   </div>
                   <div>
                     <label className="block text-xs text-text-tertiary mb-1">结束</label>
                     <div className="flex items-center gap-2">
-                      <input type="datetime-local" value={slot.endTime} onChange={(e) => updateLineupSlot(index, 'endTime', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
+                      <input type="time" value={slot.endTime} onChange={(e) => updateLineupSlot(index, 'endTime', e.target.value)} className="w-full bg-bg-primary text-text-primary rounded-lg px-2 py-2 border border-bg-secondary text-sm" />
                       <button type="button" onClick={() => removeLineupSlot(index)} className="text-accent-red text-xs">删除</button>
                     </div>
                   </div>

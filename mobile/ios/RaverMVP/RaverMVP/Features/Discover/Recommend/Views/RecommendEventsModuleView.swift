@@ -206,10 +206,7 @@ struct RecommendEventsModuleView: View {
                             background: Color.white.opacity(0.15)
                         )
                         let visualStatus = EventVisualStatus.resolve(event: event)
-                        recommendationPill(
-                            title: visualStatus.title,
-                            background: visualStatus.badgeBackground
-                        )
+                        recommendationStatusPill(visualStatus)
                     }
 
                     HStack(spacing: 6) {
@@ -361,6 +358,31 @@ struct RecommendEventsModuleView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(background, in: Capsule())
+    }
+
+    private func recommendationStatusPill(_ status: EventVisualStatus) -> some View {
+        HStack(spacing: 6) {
+            if status == .ongoing {
+                LiveActivityBarsView(
+                    color: Color.white.opacity(0.98),
+                    barWidth: 2.6,
+                    minHeight: 3,
+                    maxHeight: 10,
+                    cornerRadius: 1.3
+                )
+                .frame(width: 13, height: 10)
+            }
+
+            Text(status.title)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .foregroundStyle(Color.white)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(status.badgeBackground, in: Capsule())
     }
 
     private func recommendationLocationText(for event: WebEvent) -> String {

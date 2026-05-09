@@ -363,17 +363,7 @@ struct CreateSquadView: View {
     }
 
     private func avatarFallback(for user: UserSummary) -> some View {
-        let asset = AppConfig.resolvedUserAvatarAssetName(
-            userID: user.id,
-            username: user.username,
-            avatarURL: user.avatarURL
-        )
-        return Image(asset)
-            .resizable()
-            .scaledToFill()
-            .background(RaverTheme.card)
-            .frame(width: 34, height: 34)
-            .clipShape(Circle())
+        AvatarPlaceholderView(size: 34, backgroundColor: RaverTheme.card)
     }
 
     @MainActor
@@ -484,12 +474,14 @@ struct CreateSquadView: View {
         var imageByUserID: [String: UIImage] = [:]
         for user in users {
             guard imageByUserID[user.id] == nil else { continue }
-            let asset = AppConfig.resolvedUserAvatarAssetName(
+            if let avatarURL = AppConfig.resolvedUserAvatarURLString(
                 userID: user.id,
                 username: user.username,
                 avatarURL: user.avatarURL
-            )
-            if let image = UIImage(named: asset) {
+            ),
+               let url = URL(string: avatarURL),
+               let (data, _) = try? await URLSession.shared.data(from: url),
+               let image = UIImage(data: data) {
                 imageByUserID[user.id] = image
             }
         }
@@ -1330,24 +1322,7 @@ struct MessagesHomeView: View {
     }
 
     private func fallbackConversationAvatar(_ conversation: Conversation) -> some View {
-        let avatarAsset: String = {
-            if conversation.type == .group {
-                return AppConfig.resolvedGroupAvatarAssetName(
-                    groupID: conversation.id,
-                    groupName: conversation.title,
-                    avatarURL: conversation.avatarURL
-                )
-            }
-            return AppConfig.resolvedUserAvatarAssetName(
-                userID: conversation.peer?.id,
-                username: conversation.peer?.username,
-                avatarURL: conversation.peer?.avatarURL ?? conversation.avatarURL
-            )
-        }()
-
-        return Image(avatarAsset)
-            .resizable()
-            .scaledToFill()
+        AvatarPlaceholderView(size: 52, isGroup: conversation.type == .group)
     }
 
     @MainActor
@@ -1451,18 +1426,7 @@ struct MessageAlertDetailView: View {
     }
 
     private func alertLeadingAvatarFallback(_ actor: UserSummary) -> some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: actor.id,
-                username: actor.username,
-                avatarURL: actor.avatarURL
-            )
-        )
-        .resizable()
-        .scaledToFill()
-        .frame(width: 30, height: 30)
-        .background(RaverTheme.cardBorder)
-        .clipShape(Circle())
+        AvatarPlaceholderView(size: 30)
     }
 @MainActor
 final class FollowedEventsInboxViewModel: ObservableObject {

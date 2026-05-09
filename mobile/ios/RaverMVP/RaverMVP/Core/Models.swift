@@ -580,14 +580,121 @@ struct FeedPage: Codable {
 struct EventLiveComment: Codable, Identifiable, Hashable {
     let id: String
     let eventID: String
+    var parentCommentID: String?
+    var rootCommentID: String?
+    var depth: Int
     var author: UserSummary
+    var replyToAuthor: UserSummary?
     var content: String
+    var imageURLs: [String]
+    var likeCount: Int
+    var isLiked: Bool
     var createdAt: Date
+
+    init(
+        id: String,
+        eventID: String,
+        parentCommentID: String? = nil,
+        rootCommentID: String? = nil,
+        depth: Int = 0,
+        author: UserSummary,
+        replyToAuthor: UserSummary? = nil,
+        content: String,
+        imageURLs: [String] = [],
+        likeCount: Int = 0,
+        isLiked: Bool = false,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.eventID = eventID
+        self.parentCommentID = parentCommentID
+        self.rootCommentID = rootCommentID
+        self.depth = depth
+        self.author = author
+        self.replyToAuthor = replyToAuthor
+        self.content = content
+        self.imageURLs = imageURLs
+        self.likeCount = likeCount
+        self.isLiked = isLiked
+        self.createdAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case eventID
+        case parentCommentID
+        case rootCommentID
+        case depth
+        case author
+        case replyToAuthor
+        case content
+        case imageURLs
+        case imageUrls
+        case likeCount
+        case isLiked
+        case createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        eventID = try container.decode(String.self, forKey: .eventID)
+        parentCommentID = try container.decodeIfPresent(String.self, forKey: .parentCommentID)
+        rootCommentID = try container.decodeIfPresent(String.self, forKey: .rootCommentID)
+        depth = try container.decodeIfPresent(Int.self, forKey: .depth) ?? 0
+        author = try container.decode(UserSummary.self, forKey: .author)
+        replyToAuthor = try container.decodeIfPresent(UserSummary.self, forKey: .replyToAuthor)
+        content = try container.decode(String.self, forKey: .content)
+        imageURLs = try container.decodeIfPresent([String].self, forKey: .imageURLs)
+            ?? container.decodeIfPresent([String].self, forKey: .imageUrls)
+            ?? []
+        likeCount = try container.decodeIfPresent(Int.self, forKey: .likeCount) ?? 0
+        isLiked = try container.decodeIfPresent(Bool.self, forKey: .isLiked) ?? false
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(eventID, forKey: .eventID)
+        try container.encodeIfPresent(parentCommentID, forKey: .parentCommentID)
+        try container.encodeIfPresent(rootCommentID, forKey: .rootCommentID)
+        try container.encode(depth, forKey: .depth)
+        try container.encode(author, forKey: .author)
+        try container.encodeIfPresent(replyToAuthor, forKey: .replyToAuthor)
+        try container.encode(content, forKey: .content)
+        try container.encode(imageURLs, forKey: .imageURLs)
+        try container.encode(likeCount, forKey: .likeCount)
+        try container.encode(isLiked, forKey: .isLiked)
+        try container.encode(createdAt, forKey: .createdAt)
+    }
 }
 
 struct EventLiveCommentPage: Codable {
     let comments: [EventLiveComment]
     let nextCursor: String?
+}
+
+struct EventLiveCommentCreateRequest: Codable {
+    let content: String
+    let imageURLs: [String]
+    let parentCommentID: String?
+}
+
+enum EventLiveCommentSortMode: String, Codable, CaseIterable, Identifiable, Hashable {
+    case hot
+    case newest
+    case oldest
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .hot: return L("热度", "Hot")
+        case .newest: return L("最新", "Newest")
+        case .oldest: return L("最早", "Oldest")
+        }
+    }
 }
 
 struct FeedEventInput: Codable {

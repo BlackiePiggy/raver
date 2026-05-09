@@ -16,7 +16,7 @@ enum EventCalendarViewFilter: String, CaseIterable, Hashable, Identifiable {
     var icon: String {
         switch self {
         case .all: return "calendar"
-        case .marked: return "bookmark.fill"
+        case .marked: return "postage.stamp.fill"
         }
     }
 }

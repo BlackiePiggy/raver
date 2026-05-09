@@ -198,6 +198,26 @@ const recencyBoost = (date: Date | null | undefined, maxBoost = 4): number => {
 
 const finalizeScore = (score: number): number => Math.round(Math.max(0, Math.min(100, score)) * 100) / 100;
 
+const formatSecondsLabel = (value: number | null | undefined): string | null => {
+  if (!Number.isFinite(value)) return null;
+  const seconds = Math.max(0, Math.floor(Number(value)));
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+const buildSetDeeplink = (setId: string, options?: { tracklistId?: string | null; startTime?: number | null }): string => {
+  const params = new URLSearchParams();
+  if (options?.tracklistId) {
+    params.set('tracklistId', options.tracklistId);
+  }
+  if (Number.isFinite(options?.startTime)) {
+    params.set('t', String(Math.max(0, Math.floor(Number(options?.startTime)))));
+  }
+  const query = params.toString();
+  return `raver://set/${setId}${query ? `?${query}` : ''}`;
+};
+
 const isTabRequested = (requested: GlobalSearchTab, tab: GlobalSearchTab): boolean =>
   requested === 'all' || requested === tab;
 
@@ -617,68 +637,157 @@ const searchDJs = async (query: string, limit: number): Promise<GlobalSearchItem
 };
 
 const searchSets = async (query: string, limit: number): Promise<GlobalSearchItem[]> => {
-  const rows = await prisma.dJSet.findMany({
-    where: {
-      OR: [
-        { title: containsInsensitive(query) },
-        { description: containsInsensitive(query) },
-        { venue: containsInsensitive(query) },
-        { eventName: containsInsensitive(query) },
-        { customDjNames: { has: query } },
-        { dj: { name: containsInsensitive(query) } },
-      ],
-    },
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      thumbnailUrl: true,
-      platform: true,
-      duration: true,
-      recordedAt: true,
-      venue: true,
-      eventName: true,
-      viewCount: true,
-      likeCount: true,
-      isVerified: true,
-      createdAt: true,
-      updatedAt: true,
-      customDjNames: true,
-      dj: {
-        select: { name: true, avatarUrl: true },
+  const [setRows, trackRows] = await Promise.all([
+    prisma.dJSet.findMany({
+      where: {
+        OR: [
+          { title: containsInsensitive(query) },
+          { description: containsInsensitive(query) },
+          { venue: containsInsensitive(query) },
+          { eventName: containsInsensitive(query) },
+          { customDjNames: { has: query } },
+          { dj: { name: containsInsensitive(query) } },
+        ],
       },
-    },
-    orderBy: [{ recordedAt: 'desc' }, { createdAt: 'desc' }],
-    take: Math.max(limit * 3, 20),
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        thumbnailUrl: true,
+        platform: true,
+        duration: true,
+        recordedAt: true,
+        venue: true,
+        eventName: true,
+        viewCount: true,
+        likeCount: true,
+        isVerified: true,
+        createdAt: true,
+        updatedAt: true,
+        customDjNames: true,
+        dj: {
+          select: { name: true, avatarUrl: true },
+        },
+      },
+      orderBy: [{ recordedAt: 'desc' }, { createdAt: 'desc' }],
+      take: Math.max(limit * 3, 20),
+    }),
+    prisma.tracklistTrack.findMany({
+      where: {
+        OR: [{ title: containsInsensitive(query) }, { artist: containsInsensitive(query) }],
+      },
+      select: {
+        id: true,
+        title: true,
+        artist: true,
+        startTime: true,
+        status: true,
+        position: true,
+        updatedAt: true,
+        createdAt: true,
+        tracklist: {
+          select: {
+            id: true,
+            title: true,
+            set: {
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                thumbnailUrl: true,
+                platform: true,
+                duration: true,
+                recordedAt: true,
+                venue: true,
+                eventName: true,
+                viewCount: true,
+                likeCount: true,
+                isVerified: true,
+                createdAt: true,
+                updatedAt: true,
+                customDjNames: true,
+                dj: {
+                  select: { name: true, avatarUrl: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      take: Math.max(limit * 4, 40),
+    }),
+  ]);
+
+  const setItems = setRows.map((row) => {
+    const performerNames = [row.dj.name, ...row.customDjNames];
+    const durationMinutes = row.duration ? `${Math.round(row.duration / 60)} min` : null;
+    const score = Math.max(
+      scoreText(query, row.title),
+      scoreTexts(query, performerNames, { exact: 84, prefix: 72, contains: 56 }),
+      scoreTexts(query, [row.eventName, row.venue], { exact: 72, prefix: 60, contains: 44 }),
+      scoreText(query, row.description, { exact: 56, prefix: 46, contains: 34 })
+    ) + (row.isVerified ? 3 : 0) + Math.min(4, Math.log10(Math.max(1, row.viewCount + row.likeCount + 1)));
+    return {
+      id: `set:${row.id}`,
+      type: 'set',
+      entityID: row.id,
+      title: row.title,
+      subtitle: compact([performerNames.join(', '), row.eventName, durationMinutes]),
+      summary: truncate(row.description || row.venue),
+      imageUrl: row.thumbnailUrl || row.dj.avatarUrl,
+      badgeText: row.platform,
+      deeplink: buildSetDeeplink(row.id),
+      relevanceScore: finalizeScore(score),
+      publishedAt: row.recordedAt || row.createdAt,
+      updatedAt: row.updatedAt,
+      rankingYear: null,
+    } satisfies GlobalSearchItem;
   });
 
-  return sortItems(
-    rows.map((row) => {
-      const performerNames = [row.dj.name, ...row.customDjNames];
-      const durationMinutes = row.duration ? `${Math.round(row.duration / 60)} min` : null;
-      const score = Math.max(
-        scoreText(query, row.title),
-        scoreTexts(query, performerNames, { exact: 84, prefix: 72, contains: 56 }),
-        scoreTexts(query, [row.eventName, row.venue], { exact: 72, prefix: 60, contains: 44 }),
-        scoreText(query, row.description, { exact: 56, prefix: 46, contains: 34 })
-      ) + (row.isVerified ? 3 : 0) + Math.min(4, Math.log10(Math.max(1, row.viewCount + row.likeCount + 1)));
-      return {
-        id: `set:${row.id}`,
-        type: 'set',
-        entityID: row.id,
-        title: row.title,
-        subtitle: compact([performerNames.join(', '), row.eventName, durationMinutes]),
-        summary: truncate(row.description || row.venue),
-        imageUrl: row.thumbnailUrl || row.dj.avatarUrl,
-        badgeText: row.platform,
-        deeplink: `raver://set/${row.id}`,
-        relevanceScore: finalizeScore(score),
-        publishedAt: row.recordedAt || row.createdAt,
-        updatedAt: row.updatedAt,
-        rankingYear: null,
-      } satisfies GlobalSearchItem;
-    })
-  ).slice(0, limit);
+  const trackItems = trackRows.map((row) => {
+    const set = row.tracklist.set;
+    const performerNames = [set.dj.name, ...set.customDjNames];
+    const timeLabel = formatSecondsLabel(row.startTime);
+    const score = Math.max(
+      scoreText(query, row.title, { exact: 100, prefix: 88, contains: 74 }),
+      scoreText(query, row.artist, { exact: 96, prefix: 84, contains: 70 }),
+      scoreText(query, set.title, { exact: 72, prefix: 60, contains: 48 }),
+      scoreTexts(query, performerNames, { exact: 68, prefix: 56, contains: 42 })
+    ) + (set.isVerified ? 2 : 0) + Math.min(4, Math.log10(Math.max(1, set.viewCount + set.likeCount + 1)));
+
+    return {
+      id: `set_track:${row.id}`,
+      type: 'set',
+      entityID: set.id,
+      title: row.title,
+      subtitle: compact([row.artist, set.title, performerNames.join(', ')]),
+      summary: truncate(
+        compact(
+          [
+            row.tracklist.title ? `Tracklist: ${row.tracklist.title}` : 'Tracklist 命中',
+            set.eventName,
+            set.venue,
+            timeLabel ? `跳转到 ${timeLabel}` : null,
+          ],
+          ' · '
+        ),
+        140
+      ),
+      imageUrl: set.thumbnailUrl || set.dj.avatarUrl,
+      badgeText: timeLabel ? `Tracklist ${timeLabel}` : 'Tracklist',
+      deeplink: buildSetDeeplink(set.id, {
+        tracklistId: row.tracklist.id,
+        startTime: row.startTime,
+      }),
+      relevanceScore: finalizeScore(score),
+      publishedAt: set.recordedAt || set.createdAt,
+      updatedAt: set.updatedAt,
+      rankingYear: null,
+    } satisfies GlobalSearchItem;
+  });
+
+  return sortItems([...setItems, ...trackItems]).slice(0, limit);
 };
 
 const searchRankings = async (query: string, limit: number): Promise<GlobalSearchItem[]> => {

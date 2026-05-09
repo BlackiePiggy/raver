@@ -543,26 +543,7 @@ struct ChatSettingsView: View {
                 .frame(width: size, height: size)
                 .clipShape(Circle())
         } else {
-            let assetName: String = {
-                if conversation.type == .group {
-                    return AppConfig.resolvedGroupAvatarAssetName(
-                        groupID: platformSquadID,
-                        groupName: squadProfile?.name ?? conversation.title,
-                        avatarURL: avatarURL
-                    )
-                }
-                return AppConfig.resolvedUserAvatarAssetName(
-                    userID: conversation.peer?.id,
-                    username: conversation.peer?.username,
-                    avatarURL: avatarURL
-                )
-            }()
-
-            Image(assetName)
-                .resizable()
-                .scaledToFill()
-                .frame(width: size, height: size)
-                .clipShape(Circle())
+            AvatarPlaceholderView(size: size, isGroup: conversation.type == .group)
         }
     }
 
@@ -1056,17 +1037,7 @@ struct ChatSettingsView: View {
                 .frame(width: size, height: size)
                 .clipShape(Circle())
         } else {
-            Image(
-                AppConfig.resolvedGroupAvatarAssetName(
-                    groupID: platformSquadID,
-                    groupName: squadProfile?.name ?? conversation.title,
-                    avatarURL: avatarURL
-                )
-            )
-            .resizable()
-            .scaledToFill()
-            .frame(width: size, height: size)
-            .clipShape(Circle())
+            AvatarPlaceholderView(size: size, isGroup: true)
         }
     }
 
@@ -1422,17 +1393,7 @@ private struct GroupMembersPreviewView: View {
                 .frame(width: size, height: size)
                 .clipShape(Circle())
         } else {
-            Image(
-                AppConfig.resolvedUserAvatarAssetName(
-                    userID: member.id,
-                    username: member.username,
-                    avatarURL: member.avatarURL
-                )
-            )
-            .resizable()
-            .scaledToFill()
-            .frame(width: size, height: size)
-            .clipShape(Circle())
+            AvatarPlaceholderView(size: size)
         }
     }
 }
@@ -1574,17 +1535,7 @@ private struct InviteSquadMembersView: View {
                 .frame(width: size, height: size)
                 .clipShape(Circle())
         } else {
-            Image(
-                AppConfig.resolvedUserAvatarAssetName(
-                    userID: user.id,
-                    username: user.username,
-                    avatarURL: user.avatarURL
-                )
-            )
-            .resizable()
-            .scaledToFill()
-            .frame(width: size, height: size)
-            .clipShape(Circle())
+            AvatarPlaceholderView(size: size)
         }
     }
 }
@@ -1959,17 +1910,7 @@ private struct GroupMemberListView: View {
                 .frame(width: size, height: size)
                 .clipShape(Circle())
         } else {
-            Image(
-                AppConfig.resolvedUserAvatarAssetName(
-                    userID: member.id,
-                    username: member.username,
-                    avatarURL: member.avatarURL
-                )
-            )
-            .resizable()
-            .scaledToFill()
-            .frame(width: size, height: size)
-            .clipShape(Circle())
+            AvatarPlaceholderView(size: size)
         }
     }
 }

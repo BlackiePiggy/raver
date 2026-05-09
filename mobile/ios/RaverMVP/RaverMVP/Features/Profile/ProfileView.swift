@@ -927,9 +927,9 @@ struct ProfileRecentCheckinsCard: View {
 
     private func checkinPreviewRow(_ item: WebCheckin) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: item.type == "event" ? "calendar.circle.fill" : "music.mic.circle.fill")
+            Image(systemName: "postage.stamp.fill")
                 .font(.title3)
-                .foregroundStyle(item.type == "event" ? Color(red: 0.88, green: 0.44, blue: 0.20) : Color(red: 0.26, green: 0.55, blue: 0.95))
+                .foregroundStyle(RaverTheme.accent)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(checkinTitle(item))
@@ -998,14 +998,7 @@ private struct ProfileAvatarImage: View {
     }
 
     private var fallbackAvatar: some View {
-        let asset = AppConfig.resolvedUserAvatarAssetName(
-            userID: profile.id,
-            username: profile.username,
-            avatarURL: profile.avatarURL
-        )
-        return Image(asset)
-            .resizable()
-            .scaledToFill()
+        AvatarPlaceholderView(size: size, backgroundColor: RaverTheme.card)
     }
 }
 
@@ -1076,14 +1069,7 @@ private struct ProfileAvatarSquareImage: View {
     }
 
     private var fallbackAvatar: some View {
-        let asset = AppConfig.resolvedUserAvatarAssetName(
-            userID: profile.id,
-            username: profile.username,
-            avatarURL: profile.avatarURL
-        )
-        return Image(asset)
-            .resizable()
-            .scaledToFill()
+        AvatarPlaceholderView(size: size, backgroundColor: Color(hex: "AFB3B8"))
     }
 }
 

@@ -231,8 +231,9 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
 
     func fetchComments(postID: String) async throws -> [Comment]
     func addComment(postID: String, content: String, parentCommentID: String?) async throws -> Comment
-    func fetchEventLiveComments(eventID: String, cursor: String?) async throws -> EventLiveCommentPage
-    func addEventLiveComment(eventID: String, content: String) async throws -> EventLiveComment
+    func fetchEventLiveComments(eventID: String, cursor: String?, sort: EventLiveCommentSortMode) async throws -> EventLiveCommentPage
+    func addEventLiveComment(eventID: String, content: String, imageURLs: [String], parentCommentID: String?) async throws -> EventLiveComment
+    func toggleEventLiveCommentLike(commentID: String, shouldLike: Bool) async throws -> EventLiveComment
 
     func searchUsers(query: String) async throws -> [UserSummary]
     func fetchUserProfile(userID: String) async throws -> UserProfile

@@ -24,6 +24,449 @@ private struct EventCardSharePresentation: Identifiable {
     let payload: EventShareCardPayload
 }
 
+struct EventLiveDiscussionView: View {
+    @Environment(\.appPush) private var appPush
+    @EnvironmentObject private var appState: AppState
+
+    let eventID: String
+    let eventName: String
+    let service: SocialService
+    let webService: WebFeatureService
+
+    @State private var comments: [EventLiveComment] = []
+    @State private var phase: LoadPhase = .idle
+    @State private var sortMode: EventLiveCommentSortMode = .oldest
+    @State private var draft = ""
+    @State private var replyTarget: EventLiveComment?
+    @State private var selectedImageItems: [PhotosPickerItem] = []
+    @State private var imageURLs: [String] = []
+    @State private var isUploadingImage = false
+    @State private var isSending = false
+    @State private var errorMessage: String?
+
+    private var trimmedDraft: String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSend: Bool {
+        (!trimmedDraft.isEmpty || !imageURLs.isEmpty) && !isSending && !isUploadingImage
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            sortBar
+
+            Divider()
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        contentView
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .refreshable {
+                    await loadComments()
+                }
+                .onChange(of: comments.count) { _, _ in
+                    guard sortMode == .oldest, let lastID = comments.last?.id else { return }
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(lastID, anchor: .bottom)
+                    }
+                }
+            }
+
+            composer
+        }
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: L("现场讨论区", "Live Discussion"))
+        .task {
+            if phase == .idle {
+                await loadComments()
+            }
+        }
+        .onChange(of: sortMode) { _, _ in
+            Task { await loadComments() }
+        }
+        .onChange(of: selectedImageItems) { _, newValue in
+            guard !newValue.isEmpty else { return }
+            Task { await uploadImages(from: newValue) }
+        }
+        .alert(L("提示", "Notice"), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(L("知道了", "OK"), role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var sortBar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                LiveActivityBarsView(color: Color(red: 0.18, green: 0.88, blue: 0.42))
+                    .frame(width: 15, height: 14)
+                Text(eventName)
+                    .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundStyle(RaverTheme.primaryText)
+
+            HStack {
+                Spacer(minLength: 0)
+
+                Picker("", selection: $sortMode) {
+                    ForEach(EventLiveCommentSortMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 190)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(RaverTheme.background)
+    }
+
+    @ViewBuilder
+    private var contentView: some View {
+        switch phase {
+        case .idle, .initialLoading:
+            CommentSectionSkeletonView(count: 5)
+        case .failure(let message), .offline(let message):
+            ScreenErrorCard(
+                title: L("讨论区加载失败", "Discussion Failed to Load"),
+                message: message
+            ) {
+                Task { await loadComments() }
+            }
+        case .empty:
+            ContentUnavailableView(
+                L("还没有现场讨论", "No Live Discussion Yet"),
+                systemImage: "bubble.left.and.bubble.right",
+                description: Text(L("发一条评论，和现场的人一起聊。", "Post a comment and chat with people at the event."))
+            )
+            .padding(.top, 44)
+        case .success:
+            ForEach(displayComments) { comment in
+                liveCommentRow(comment)
+                    .id(comment.id)
+            }
+        }
+    }
+
+    private var displayComments: [EventLiveComment] {
+        switch sortMode {
+        case .oldest:
+            return comments.sorted { $0.createdAt < $1.createdAt }
+        case .newest:
+            return comments.sorted { $0.createdAt > $1.createdAt }
+        case .hot:
+            return comments.sorted {
+                if $0.likeCount == $1.likeCount { return $0.createdAt > $1.createdAt }
+                return $0.likeCount > $1.likeCount
+            }
+        }
+    }
+
+    private func liveCommentRow(_ comment: EventLiveComment) -> some View {
+        let isMine = comment.author.id == appState.session?.user.id
+        return HStack(alignment: .top, spacing: 8) {
+            if isMine { Spacer(minLength: 42) }
+
+            if !isMine {
+                avatar(comment.author, size: 32)
+            }
+
+            VStack(alignment: isMine ? .trailing : .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    if !isMine {
+                        Text(comment.author.displayName)
+                    }
+                    Text(liveCommentTimeText(for: comment.createdAt))
+                    if isMine {
+                        Text(comment.author.displayName)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(RaverTheme.secondaryText)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    if let reply = comment.replyToAuthor {
+                        Text(L("回复 \(reply.displayName)", "Reply to \(reply.displayName)"))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+
+                    if !comment.content.isEmpty {
+                        Text(comment.content)
+                            .font(.subheadline)
+                            .foregroundStyle(isMine ? Color.white : RaverTheme.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    ForEach(comment.imageURLs, id: \.self) { imageURL in
+                        ImageLoaderView(urlString: AppConfig.resolvedURLString(imageURL) ?? imageURL)
+                            .frame(width: 168, height: 168)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(isMine ? RaverTheme.accent : RaverTheme.card)
+                )
+
+                HStack(spacing: 14) {
+                    Button {
+                        replyTarget = comment
+                    } label: {
+                        Text(L("回复", "Reply"))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        Task { await toggleLike(comment) }
+                    } label: {
+                        Label("\(comment.likeCount)", systemImage: comment.isLiked ? "heart.fill" : "heart")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(comment.isLiked ? Color(red: 0.95, green: 0.30, blue: 0.38) : RaverTheme.secondaryText)
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            }
+            .frame(maxWidth: 250, alignment: isMine ? .trailing : .leading)
+
+            if isMine {
+                avatar(comment.author, size: 32)
+            } else {
+                Spacer(minLength: 42)
+            }
+        }
+    }
+
+    private var composer: some View {
+        VStack(spacing: 8) {
+            if let replyTarget {
+                HStack(spacing: 8) {
+                    Text(L("回复 \(replyTarget.author.displayName)", "Reply to \(replyTarget.author.displayName)"))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(1)
+                    Spacer()
+                    Button {
+                        self.replyTarget = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+
+            if !imageURLs.isEmpty || isUploadingImage {
+                HStack(spacing: 8) {
+                    ForEach(imageURLs, id: \.self) { imageURL in
+                        ZStack(alignment: .topTrailing) {
+                            ImageLoaderView(urlString: AppConfig.resolvedURLString(imageURL) ?? imageURL)
+                                .frame(width: 54, height: 54)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            Button {
+                                imageURLs.removeAll { $0 == imageURL }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(Color.white, Color.black.opacity(0.65))
+                            }
+                            .buttonStyle(.plain)
+                            .offset(x: 6, y: -6)
+                        }
+                    }
+
+                    if isUploadingImage {
+                        ProgressView()
+                            .frame(width: 54, height: 54)
+                    }
+                    Spacer()
+                }
+            }
+
+            HStack(spacing: 8) {
+                PhotosPicker(selection: $selectedImageItems, maxSelectionCount: max(0, 3 - imageURLs.count), matching: .images) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 36, height: 36)
+                        .background(RaverTheme.card, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isUploadingImage || imageURLs.count >= 3)
+
+                TextField(L("发送现场评论...", "Send a live comment..."), text: $draft, axis: .vertical)
+                    .lineLimit(1...4)
+                    .submitLabel(.send)
+                    .onSubmit {
+                        Task { await sendComment() }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(RaverTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                Button {
+                    Task { await sendComment() }
+                } label: {
+                    if isSending {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                }
+                .frame(width: 38, height: 38)
+                .background(canSend ? RaverTheme.accent : RaverTheme.cardBorder, in: Circle())
+                .foregroundStyle(.white)
+                .disabled(!canSend)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RaverTheme.background)
+        .overlay(Divider(), alignment: .top)
+    }
+
+    private func avatar(_ user: UserSummary, size: CGFloat) -> some View {
+        Button {
+            appPush(.userProfile(userID: user.id))
+        } label: {
+            avatarContent(user, size: size)
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func avatarContent(_ user: UserSummary, size: CGFloat) -> some View {
+        if let resolved = AppConfig.resolvedURLString(user.avatarURL),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved, resizingMode: .fill)
+                .background(avatarFallback(user, size: size))
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+        } else {
+            avatarFallback(user, size: size)
+        }
+    }
+
+    private func avatarFallback(_ user: UserSummary, size: CGFloat) -> some View {
+        AvatarPlaceholderView(size: size)
+    }
+
+    private func liveCommentTimeText(for date: Date) -> String {
+        let seconds = max(0, Date().timeIntervalSince(date))
+        if seconds < 60 {
+            return L("刚刚", "Just now")
+        }
+
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        formatter.locale = AppLanguagePreference.current.effectiveLanguage == .en
+            ? Locale(identifier: "en_US_POSIX")
+            : Locale(identifier: "zh_Hans_CN")
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    @MainActor
+    private func loadComments() async {
+        if comments.isEmpty {
+            phase = .initialLoading
+        }
+        do {
+            let page = try await service.fetchEventLiveComments(eventID: eventID, cursor: nil, sort: sortMode)
+            comments = page.comments
+            phase = page.comments.isEmpty ? .empty : .success
+        } catch {
+            phase = .failure(message: error.userFacingMessage ?? L("讨论区加载失败，请稍后重试", "Failed to load discussion. Please try again later."))
+        }
+    }
+
+    @MainActor
+    private func sendComment() async {
+        guard canSend else { return }
+        isSending = true
+        defer { isSending = false }
+
+        do {
+            let created = try await service.addEventLiveComment(
+                eventID: eventID,
+                content: trimmedDraft,
+                imageURLs: imageURLs,
+                parentCommentID: replyTarget?.id
+            )
+            draft = ""
+            imageURLs = []
+            selectedImageItems = []
+            replyTarget = nil
+            mergeComment(created)
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    @MainActor
+    private func toggleLike(_ comment: EventLiveComment) async {
+        do {
+            let updated = try await service.toggleEventLiveCommentLike(commentID: comment.id, shouldLike: !comment.isLiked)
+            mergeComment(updated)
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    @MainActor
+    private func uploadImages(from items: [PhotosPickerItem]) async {
+        guard !isUploadingImage else { return }
+        isUploadingImage = true
+        defer {
+            isUploadingImage = false
+            selectedImageItems = []
+        }
+
+        for item in items where imageURLs.count < 3 {
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self) else { continue }
+                let upload = try await webService.uploadPostImage(
+                    imageData: normalizedImageData(from: data),
+                    fileName: "event-live-comment-\(UUID().uuidString).jpg",
+                    mimeType: "image/jpeg"
+                )
+                imageURLs.append(upload.url)
+            } catch {
+            errorMessage = error.userFacingMessage ?? L("图片上传失败", "Image upload failed.")
+        }
+    }
+    }
+
+    private func mergeComment(_ comment: EventLiveComment) {
+        comments.removeAll { $0.id == comment.id }
+        comments.append(comment)
+        phase = .success
+    }
+
+    private func normalizedImageData(from rawData: Data) -> Data {
+        if let image = UIImage(data: rawData),
+           let jpeg = image.jpegData(compressionQuality: 0.9) {
+            return jpeg
+        }
+        return rawData
+    }
+}
+
 private struct EventSharePreviewCard: View {
     let payload: EventShareCardPayload
 
@@ -188,12 +631,6 @@ struct EventDetailView: View {
     @State private var eventDiscussionPhase: LoadPhase = .idle
     @State private var isLoadingEventDiscussion = false
     @State private var eventDiscussionNextCursor: String?
-    @State private var eventLiveComments: [EventLiveComment] = []
-    @State private var eventLiveCommentsPhase: LoadPhase = .idle
-    @State private var eventLiveCommentInput = ""
-    @State private var isSendingEventLiveComment = false
-    @State private var eventLiveRefreshTask: Task<Void, Never>?
-    @State private var isEventLiveDiscussionPresented = false
 
     fileprivate enum EventDetailTab: String, CaseIterable, Identifiable {
         case info
@@ -759,10 +1196,6 @@ struct EventDetailView: View {
                     .sheet(item: $venueMapContext) { context in
                         EventVenueMapSheet(context: context)
                     }
-                    .sheet(isPresented: $isEventLiveDiscussionPresented) {
-                        eventLiveDiscussionSheet(event)
-                            .presentationDetents([.fraction(0.72), .large])
-                    }
                 } else {
                     ContentUnavailableView(LL("活动不存在"), systemImage: "calendar.badge.exclamationmark")
                 }
@@ -825,10 +1258,6 @@ struct EventDetailView: View {
             if event == nil {
                 await load()
             }
-        }
-        .onDisappear {
-            eventLiveRefreshTask?.cancel()
-            eventLiveRefreshTask = nil
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { notification in
             let savedEventID = notification.object as? String
@@ -1165,100 +1594,32 @@ struct EventDetailView: View {
 
     private func eventLiveHeroEntry(_ event: WebEvent) -> some View {
         Button {
-            isEventLiveDiscussionPresented = true
-            startEventLiveRefreshLoop(for: event)
+            appPush(.eventLiveDiscussion(eventID: event.id, eventName: event.name))
         } label: {
-            HStack(spacing: 7) {
-                Circle()
-                    .fill(Color.red)
-                    .frame(width: 7, height: 7)
-                Text(LL("直播讨论区"))
+            HStack(spacing: 6) {
+                LiveActivityBarsView(color: Color(red: 0.18, green: 0.88, blue: 0.42))
+                    .frame(width: 15, height: 14)
+
+                Text(LL("现场讨论区"))
                     .font(.caption.weight(.bold))
-                Text(currentLiveStageSummary(for: event))
-                    .font(.caption)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.up")
+
+                Image(systemName: "chevron.right")
                     .font(.caption2.weight(.bold))
+                    .accessibilityLabel(LL("进入现场讨论区"))
             }
             .foregroundStyle(Color.white)
-            .padding(.horizontal, 11)
+            .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background(
                 Capsule()
-                    .fill(Color.black.opacity(0.48))
+                    .fill(Color(red: 0.05, green: 0.42, blue: 0.20).opacity(0.82))
             )
             .overlay(
                 Capsule()
-                    .stroke(Color.white.opacity(0.22), lineWidth: 0.8)
+                    .stroke(Color(red: 0.32, green: 1.0, blue: 0.55).opacity(0.58), lineWidth: 0.8)
             )
         }
         .buttonStyle(.plain)
-        .task {
-            if eventLiveCommentsPhase == .idle {
-                await loadEventLiveComments()
-            }
-        }
-    }
-
-    private func eventLiveDiscussionSheet(_ event: WebEvent) -> some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        liveStageList(for: event)
-                        liveCommentsList
-                    }
-                    .padding(16)
-                }
-                .scrollDismissesKeyboard(.interactively)
-                .refreshable {
-                    await loadEventLiveComments()
-                }
-
-                Divider()
-
-                HStack(spacing: 8) {
-                    TextField(LL("发送实时评论..."), text: $eventLiveCommentInput)
-                        .submitLabel(.send)
-                        .onSubmit {
-                            Task { await submitEventLiveComment() }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(RaverTheme.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                    Button {
-                        Task { await submitEventLiveComment() }
-                    } label: {
-                        if isSendingEventLiveComment {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "paperplane.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                        }
-                    }
-                    .frame(width: 42, height: 42)
-                    .background(RaverTheme.accent, in: Circle())
-                    .foregroundStyle(.white)
-                    .disabled(eventLiveCommentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSendingEventLiveComment)
-                }
-                .padding(12)
-                .background(RaverTheme.background)
-            }
-            .background(RaverTheme.background)
-            .raverSystemNavigation(title: LL("直播讨论区"))
-            .task {
-                await loadEventLiveComments()
-                startEventLiveRefreshLoop(for: event)
-            }
-            .onDisappear {
-                eventLiveRefreshTask?.cancel()
-                eventLiveRefreshTask = nil
-            }
-        }
     }
 
     private func liveStageList(for event: WebEvent) -> some View {
@@ -1303,62 +1664,6 @@ struct EventDetailView: View {
         }
     }
 
-    private var liveCommentsList: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(LL("实时评论"))
-                    .font(.headline)
-
-                switch eventLiveCommentsPhase {
-                case .idle, .initialLoading:
-                    CommentSectionSkeletonView(count: 3)
-                case .failure(let message), .offline(let message):
-                    ScreenErrorCard(
-                        title: L("评论加载失败", "Comments Failed to Load"),
-                        message: message
-                    ) {
-                        Task { await loadEventLiveComments() }
-                    }
-                case .empty:
-                    Text(LL("还没有实时评论。"))
-                        .font(.subheadline)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                case .success:
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(eventLiveComments) { comment in
-                            eventLiveCommentRow(comment)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func eventLiveCommentRow(_ comment: EventLiveComment) -> some View {
-        HStack(alignment: .top, spacing: 9) {
-            ImageLoaderView(urlString: comment.author.avatarURL, resizingMode: .fill)
-                .background(Circle().fill(RaverTheme.cardBorder))
-                .frame(width: 28, height: 28)
-                .clipShape(Circle())
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(comment.author.displayName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(RaverTheme.primaryText)
-                    Text(comment.createdAt.feedTimeText)
-                        .font(.caption2)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                }
-                Text(comment.content)
-                    .font(.subheadline)
-                    .foregroundStyle(RaverTheme.primaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
     private func isEventLiveDiscussionActive(_ event: WebEvent) -> Bool {
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: event.startDate)
@@ -1367,14 +1672,6 @@ struct EventDetailView: View {
         }
         let now = Date()
         return now >= start && now <= end
-    }
-
-    private func currentLiveStageSummary(for event: WebEvent) -> String {
-        let acts = currentLiveStageActs(for: event)
-        guard !acts.isEmpty else {
-            return LL("等待演出时间表")
-        }
-        return acts.prefix(2).map { "\($0.stageName): \($0.actName)" }.joined(separator: " · ")
     }
 
     private func currentLiveStageActs(for event: WebEvent) -> [EventLiveStageAct] {
@@ -1489,52 +1786,6 @@ struct EventDetailView: View {
         }
     }
 
-    @MainActor
-    private func loadEventLiveComments() async {
-        if eventLiveComments.isEmpty {
-            eventLiveCommentsPhase = .initialLoading
-        }
-        do {
-            let page = try await appContainer.socialService.fetchEventLiveComments(eventID: eventID, cursor: nil)
-            eventLiveComments = page.comments
-            eventLiveCommentsPhase = page.comments.isEmpty ? .empty : .success
-        } catch {
-            eventLiveCommentsPhase = .failure(message: error.userFacingMessage ?? L("实时评论加载失败", "Failed to load live comments."))
-        }
-    }
-
-    @MainActor
-    private func submitEventLiveComment() async {
-        let content = eventLiveCommentInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty, !isSendingEventLiveComment else { return }
-
-        isSendingEventLiveComment = true
-        defer { isSendingEventLiveComment = false }
-
-        do {
-            let created = try await appContainer.socialService.addEventLiveComment(eventID: eventID, content: content)
-            eventLiveCommentInput = ""
-            eventLiveComments.removeAll { $0.id == created.id }
-            eventLiveComments.append(created)
-            eventLiveCommentsPhase = .success
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    @MainActor
-    private func startEventLiveRefreshLoop(for event: WebEvent) {
-        guard isEventLiveDiscussionActive(event) else { return }
-        eventLiveRefreshTask?.cancel()
-        eventLiveRefreshTask = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 8_000_000_000)
-                guard !Task.isCancelled else { break }
-                await loadEventLiveComments()
-            }
-        }
-    }
-
     @ViewBuilder
     private func eventInfoTabContent(_ event: WebEvent, cardWidth: CGFloat) -> some View {
         let status = EventVisualStatus.resolve(event: event)
@@ -1597,7 +1848,8 @@ struct EventDetailView: View {
             .frame(width: cardWidth, alignment: .leading)
         }
 
-        if !event.ticketTiers.isEmpty || ((event.ticketNotes ?? "").isEmpty == false) {
+        let ticketLinkURL = event.ticketUrl.flatMap { normalizedEventURL($0) }
+        if !event.ticketTiers.isEmpty || ((event.ticketNotes ?? "").isEmpty == false) || ticketLinkURL != nil {
             GlassCard {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(LL("票档信息"))
@@ -1624,6 +1876,17 @@ struct EventDetailView: View {
                         Text(notes)
                         .font(.subheadline)
                         .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    if let ticketLinkURL {
+                        Link(destination: ticketLinkURL) {
+                            eventInfoRow(
+                                icon: "ticket.fill",
+                                title: L("购票链接", "Ticket Link"),
+                                value: L("前往购票", "Buy Tickets"),
+                                linkStyle: true
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -2019,32 +2282,26 @@ struct EventDetailView: View {
             Spacer()   // 把内容推到底
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 8) {
+                        if isEventLiveDiscussionActive(event) {
+                            eventLiveHeroEntry(event)
+                        }
+
                         Spacer(minLength: 0)
+
                         Button {
                             Task { await beginEventCheckinFlow(for: event) }
                         } label: {
                             eventHeroActionButton(
                                 title: activeAttendanceCheckin == nil ? L("打卡", "Check-in") : L("编辑打卡", "Edit Check-in"),
-                                icon: "bookmark.fill",
+                                icon: "postage.stamp.fill",
                                 fill: RaverTheme.accent
                             )
                         }
                         .buttonStyle(.plain)
                         .disabled(isPreparingEventCheckinSheet)
 
-                        if let ticketURL = event.ticketUrl, let url = normalizedEventURL(ticketURL) {
-                            Link(destination: url) {
-                                eventHeroActionButton(title: L("购票", "Tickets"), icon: "ticket", fill: Color(red: 0.2, green: 0.56, blue: 0.98))
-                            }
-                            .buttonStyle(.plain)
-                        }
                     }
                     .padding(.bottom, 6)
-
-                    if isEventLiveDiscussionActive(event) {
-                        eventLiveHeroEntry(event)
-                            .padding(.bottom, 8)
-                    }
 
                     Text(event.name)
                         .font(.system(size: 28, weight: .bold))
@@ -3172,18 +3429,7 @@ struct EventDetailView: View {
     }
 
     private func organizerAvatarFallback(_ organizer: WebUserLite) -> some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: organizer.id,
-                username: organizer.username,
-                avatarURL: organizer.avatarUrl
-            )
-        )
-        .resizable()
-        .scaledToFill()
-        .frame(width: 32, height: 32)
-        .background(RaverTheme.card)
-        .clipShape(Circle())
+        AvatarPlaceholderView(size: 32, backgroundColor: RaverTheme.card)
     }
 
     @ViewBuilder

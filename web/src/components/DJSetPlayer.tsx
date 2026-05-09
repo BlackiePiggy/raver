@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import MusicPlayingIcon from './MusicPlayingIcon';
@@ -121,6 +121,7 @@ function ContributorChip({ label, contributor }: { label: string; contributor?: 
 
 export default function DJSetPlayer({ djSet }: DJSetPlayerProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, token } = useAuth();
   const [currentTime, setCurrentTime] = useState(0);
   const [activeSongId, setActiveSongId] = useState<string | null>(null);
@@ -135,6 +136,9 @@ export default function DJSetPlayer({ djSet }: DJSetPlayerProps) {
   const playerRef = useRef<any>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastPolledRef = useRef<number>(0);
+  const playerReadyRef = useRef(false);
+  const pendingSeekRef = useRef<{ time: number; play: boolean } | null>(null);
+  const initialRouteHandledRef = useRef(false);
   const songRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const tracklistContainerRef = useRef<HTMLDivElement | null>(null);
   const tracklistHeaderRef = useRef<HTMLDivElement | null>(null);
@@ -163,6 +167,17 @@ export default function DJSetPlayer({ djSet }: DJSetPlayerProps) {
   }, [currentTracks]);
 
   useEffect(() => {
+    initialRouteHandledRef.current = false;
+    pendingSeekRef.current = null;
+    playerReadyRef.current = false;
+    setCurrentTracks(djSet.tracks);
+    setSelectedTracklistId(null);
+    setCurrentTracklistInfo(null);
+    setCurrentTime(0);
+    setActiveSongId(null);
+  }, [djSet.id, djSet.tracks]);
+
+  useEffect(() => {
     const loadTracklists = async () => {
       try {
         const response = await fetch(getApiUrl(`/dj-sets/${djSet.id}/tracklists`));
@@ -177,13 +192,13 @@ export default function DJSetPlayer({ djSet }: DJSetPlayerProps) {
     loadTracklists();
   }, [djSet.id]);
 
-  const loadTracklistTracks = async (tracklistId: string | null) => {
+  const loadTracklistTracks = useCallback(async (tracklistId: string | null) => {
     if (tracklistId === null) {
       // Load default tracklist
       setCurrentTracks(djSet.tracks);
       setSelectedTracklistId(null);
       setCurrentTracklistInfo(null);
-      return;
+      return null;
     }
 
     try {
@@ -193,11 +208,13 @@ export default function DJSetPlayer({ djSet }: DJSetPlayerProps) {
         setCurrentTracks(data.tracks);
         setSelectedTracklistId(tracklistId);
         setCurrentTracklistInfo(data);
+        return data;
       }
     } catch (error) {
       console.error('Failed to load tracklist tracks:', error);
     }
-  };
+    return null;
+  }, [djSet.id, djSet.tracks]);
 
   const handleTracklistUploadSuccess = () => {
     // Reload tracklists
@@ -235,6 +252,30 @@ export default function DJSetPlayer({ djSet }: DJSetPlayerProps) {
       setActiveSongId((prev) => (prev === nextActiveId ? prev : nextActiveId));
     },
     [computeActiveSongId]
+  );
+
+  const seekToTimestamp = useCallback(
+    (time: number, play = false) => {
+      const normalizedTime = Math.max(0, Math.floor(time));
+      pendingSeekRef.current = { time: normalizedTime, play };
+
+      if (djSet.platform === 'youtube' && playerReadyRef.current && playerRef.current?.seekTo) {
+        playerRef.current.seekTo(normalizedTime, true);
+        if (play && playerRef.current?.playVideo) {
+          playerRef.current.playVideo();
+        }
+        pendingSeekRef.current = null;
+      }
+
+      if (djSet.platform === 'bilibili') {
+        setBilibiliStartAt(normalizedTime);
+        pendingSeekRef.current = null;
+      }
+
+      setCurrentTime(normalizedTime);
+      updateActiveSong(normalizedTime);
+    },
+    [djSet.platform, updateActiveSong]
   );
 
   const clearTimer = () => {
@@ -300,9 +341,21 @@ export default function DJSetPlayer({ djSet }: DJSetPlayerProps) {
     }
 
     setPlayerError(null);
+    playerReadyRef.current = false;
     playerRef.current = new window.YT.Player('youtube-player', {
       videoId: resolvedVideoId,
       events: {
+        onReady: () => {
+          playerReadyRef.current = true;
+          if (pendingSeekRef.current && playerRef.current?.seekTo) {
+            const pending = pendingSeekRef.current;
+            playerRef.current.seekTo(pending.time, true);
+            if (pending.play && playerRef.current?.playVideo) {
+              playerRef.current.playVideo();
+            }
+            pendingSeekRef.current = null;
+          }
+        },
         onStateChange: onPlayerStateChange,
         onError: () => {
           setPlayerError('YouTube 播放器加载失败，请打开原始链接播放。');
@@ -331,6 +384,7 @@ export default function DJSetPlayer({ djSet }: DJSetPlayerProps) {
 
     return () => {
       clearTimer();
+      playerReadyRef.current = false;
       if (playerRef.current?.destroy) {
         playerRef.current.destroy();
         playerRef.current = null;
@@ -369,17 +423,41 @@ export default function DJSetPlayer({ djSet }: DJSetPlayerProps) {
     scrollActiveTrackToCenter(activeSongId);
   }, [activeSongId, scrollActiveTrackToCenter]);
 
-  const seekToTrack = (track: Track) => {
-    if (djSet.platform === 'youtube' && playerRef.current?.seekTo) {
-      playerRef.current.seekTo(track.startTime, true);
-      playerRef.current.playVideo();
-    }
-    if (djSet.platform === 'bilibili') {
-      setBilibiliStartAt(track.startTime);
+  useEffect(() => {
+    updateActiveSong(currentTime);
+  }, [currentTime, orderedTracks, updateActiveSong]);
+
+  useEffect(() => {
+    if (initialRouteHandledRef.current) {
+      return;
     }
 
-    setCurrentTime(track.startTime);
-    updateActiveSong(track.startTime);
+    const tracklistId = searchParams.get('tracklistId')?.trim() || null;
+    const startTimeRaw = searchParams.get('t') || searchParams.get('startTime');
+    const parsedStartTime = startTimeRaw ? Number(startTimeRaw) : NaN;
+    const startTime = Number.isFinite(parsedStartTime) ? Math.max(0, Math.floor(parsedStartTime)) : null;
+
+    if (!tracklistId && startTime === null) {
+      initialRouteHandledRef.current = true;
+      return;
+    }
+
+    initialRouteHandledRef.current = true;
+
+    const applyRouteNavigation = async () => {
+      if (tracklistId) {
+        await loadTracklistTracks(tracklistId);
+      }
+      if (startTime !== null) {
+        seekToTimestamp(startTime, false);
+      }
+    };
+
+    void applyRouteNavigation();
+  }, [loadTracklistTracks, searchParams, seekToTimestamp]);
+
+  const seekToTrack = (track: Track) => {
+    seekToTimestamp(track.startTime, true);
   };
 
   const formatTime = (seconds: number) => {

@@ -940,18 +940,7 @@ private struct CircleIDHubView: View {
     }
 
     private func circleIDUserAvatarFallback(user: CircleIDUserSnapshot, size: CGFloat) -> some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: user.id,
-                username: user.username,
-                avatarURL: resolvedCircleIDAvatarURL(for: user)
-            )
-        )
-        .resizable()
-        .scaledToFill()
-        .frame(width: size, height: size)
-        .background(RaverTheme.cardBorder)
-        .clipShape(Circle())
+        AvatarPlaceholderView(size: size)
     }
 
     private func resolvedCircleIDAvatarURL(for user: CircleIDUserSnapshot) -> String? {
@@ -1696,18 +1685,7 @@ private struct CircleIDDetailView: View {
     }
 
     private func circleIDUserAvatarFallback(user: CircleIDUserSnapshot, size: CGFloat) -> some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: user.id,
-                username: user.username,
-                avatarURL: resolvedCircleIDAvatarURL(for: user)
-            )
-        )
-        .resizable()
-        .scaledToFill()
-        .frame(width: size, height: size)
-        .background(RaverTheme.cardBorder)
-        .clipShape(Circle())
+        AvatarPlaceholderView(size: size)
     }
 
     private func resolvedCircleIDAvatarURL(for user: CircleIDUserSnapshot) -> String? {
@@ -2900,16 +2878,7 @@ private struct SquadHallView: View {
     }
 
     private func leaderAvatarFallback(_ leader: UserSummary) -> some View {
-        let asset = AppConfig.resolvedUserAvatarAssetName(
-            userID: leader.id,
-            username: leader.username,
-            avatarURL: leader.avatarURL
-        )
-        return Image(asset)
-            .resizable()
-            .scaledToFill()
-            .background(Color.white.opacity(0.2))
-            .clipShape(Circle())
+        AvatarPlaceholderView(size: 32, backgroundColor: Color.white.opacity(0.2))
     }
 
     private func squadIPText(_ squad: SquadSummary) -> String {
@@ -4295,18 +4264,7 @@ struct CircleRatingUnitDetailView: View {
     }
 
     private func ratingCommentAvatarFallback(userID: String, username: String, avatarURL: String?) -> some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: userID,
-                username: username,
-                avatarURL: avatarURL
-            )
-        )
-        .resizable()
-        .scaledToFill()
-        .frame(width: 34, height: 34)
-        .background(RaverTheme.cardBorder)
-        .clipShape(Circle())
+        AvatarPlaceholderView(size: 34)
     }
 
     @MainActor

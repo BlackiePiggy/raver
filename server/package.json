@@ -17,6 +17,8 @@
     "labels:import": "ts-node prisma/import-labelsbase.ts",
     "djs:import:edmdd": "ts-node prisma/import-edmdancedirectory-djs.ts",
     "djs:avatars:oss": "ts-node prisma/upload-dj-avatars-to-oss.ts",
+    "avatars:defaults:oss": "ts-node prisma/upload-default-avatars-to-oss.ts",
+    "avatars:defaults:backfill": "ts-node prisma/backfill-default-avatar-urls.ts",
     "djs:avatars:spotify-placeholder-fix": "ts-node prisma/backfill-dj-placeholder-avatars-via-spotify.ts",
     "djs:backfill:soundcloud-links": "NODE_OPTIONS='--use-env-proxy' ts-node prisma/backfill-dj-soundcloud-links.ts",
     "djs:backfill:soundcloud-links:20s": "SOUNDCLOUD_MIN_REQUEST_INTERVAL_MS=20000 DJ_SC_BACKFILL_CONCURRENCY=1 NODE_OPTIONS='--use-env-proxy' ts-node prisma/backfill-dj-soundcloud-links.ts",

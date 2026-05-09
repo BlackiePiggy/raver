@@ -154,16 +154,7 @@ struct FollowListView: View {
     }
 
     private func userAvatarFallback(_ user: UserSummary) -> some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: user.id,
-                username: user.username,
-                avatarURL: user.avatarURL
-            )
-        )
-        .resizable()
-        .scaledToFill()
-        .frame(width: 48, height: 48)
+        AvatarPlaceholderView(size: 48)
         .background(RaverTheme.card)
         .clipShape(Circle())
     }

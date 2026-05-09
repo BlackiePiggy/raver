@@ -640,18 +640,7 @@ struct PostDetailView: View {
     }
 
     private func commentAvatarFallback(_ user: UserSummary, size: CGFloat) -> some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: user.id,
-                username: user.username,
-                avatarURL: user.avatarURL
-            )
-        )
-        .resizable()
-        .scaledToFill()
-        .frame(width: size, height: size)
-        .background(RaverTheme.card)
-        .clipShape(Circle())
+        AvatarPlaceholderView(size: size, backgroundColor: RaverTheme.card)
     }
 
     private func dismissKeyboard() {

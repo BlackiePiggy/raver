@@ -59,6 +59,14 @@ const parseOptionalDate = (value: unknown): Date | null => {
   if (!trimmed) {
     return null;
   }
+  const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1]);
+    const month = Number(dateOnlyMatch[2]);
+    const day = Number(dateOnlyMatch[3]);
+    const parsedLocalDate = new Date(year, month - 1, day);
+    return Number.isNaN(parsedLocalDate.getTime()) ? null : parsedLocalDate;
+  }
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
@@ -159,6 +167,56 @@ const inferFestivalDayIndex = (
   return Math.max(1, dayOffset + 1);
 };
 
+const applyFestivalDayIndexToDate = (
+  timeSource: Date,
+  eventStartDate: Date,
+  festivalDayIndex: number
+): Date => {
+  const targetDay = new Date(startOfDay(eventStartDate));
+  targetDay.setDate(targetDay.getDate() + Math.max(0, festivalDayIndex - 1));
+  targetDay.setHours(
+    timeSource.getHours(),
+    timeSource.getMinutes(),
+    timeSource.getSeconds(),
+    timeSource.getMilliseconds()
+  );
+  return targetDay;
+};
+
+type ExistingLineupSlotForRebase = {
+  id: string;
+  festivalDayIndex: number | null;
+  startTime: Date;
+  endTime: Date;
+};
+
+const rebaseExistingLineupSlotsToEventStart = (
+  slots: ExistingLineupSlotForRebase[],
+  previousEventStartDate: Date,
+  nextEventStartDate: Date,
+  dayRolloverHour: number
+): Array<{ id: string; festivalDayIndex: number; startTime: Date; endTime: Date }> =>
+  slots.map((slot) => {
+    const festivalDayIndex =
+      slot.festivalDayIndex
+      ?? inferFestivalDayIndex(slot.startTime, previousEventStartDate, dayRolloverHour)
+      ?? 1;
+    const endDayOffset = Math.max(0, diffDays(slot.startTime, slot.endTime));
+    const startTime = applyFestivalDayIndexToDate(slot.startTime, nextEventStartDate, festivalDayIndex);
+    let endTime = applyFestivalDayIndexToDate(slot.endTime, nextEventStartDate, festivalDayIndex + endDayOffset);
+
+    while (endTime < startTime) {
+      endTime = new Date(endTime.getTime() + 86_400_000);
+    }
+
+    return {
+      id: slot.id,
+      festivalDayIndex,
+      startTime,
+      endTime,
+    };
+  });
+
 const normalizeLineupSlots = (
   slots: unknown,
   eventStartDate: Date,
@@ -177,6 +235,10 @@ const normalizeLineupSlots = (
       const parsedStart = parseOptionalDate(slot.startTime);
       const parsedEnd = parseOptionalDate(slot.endTime);
       const fallbackBase = new Date(safeEventStart.getTime() + index * 60_000);
+      const explicitFestivalDayIndex =
+        typeof slot.festivalDayIndex === 'number' && Number.isFinite(slot.festivalDayIndex)
+          ? Math.max(1, Math.floor(slot.festivalDayIndex))
+          : null;
 
       let startTime = fallbackBase;
       let endTime = fallbackBase;
@@ -191,6 +253,14 @@ const normalizeLineupSlots = (
         startTime = new Date(parsedEnd.getTime() - 3_600_000);
       }
 
+      if (explicitFestivalDayIndex) {
+        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex);
+        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex);
+        if (endTime < startTime) {
+          endTime = new Date(endTime.getTime() + 86_400_000);
+        }
+      }
+
       const rawDjId = typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId.trim() : '';
       const djIds = Array.isArray(slot.djIds)
         ? slot.djIds
@@ -203,10 +273,6 @@ const normalizeLineupSlots = (
         ? djIds
         : (djId ? [djId] : []);
       const effectiveDjId = djId || firstBoundDjId;
-      const explicitFestivalDayIndex =
-        typeof slot.festivalDayIndex === 'number' && Number.isFinite(slot.festivalDayIndex)
-          ? Math.max(1, Math.floor(slot.festivalDayIndex))
-          : null;
       const festivalDayIndex =
         explicitFestivalDayIndex
         ?? inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour);
@@ -618,7 +684,24 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
 
     const existing = await prisma.event.findUnique({
       where: { id: id as string },
-      select: { id: true, organizerId: true, startDate: true, endDate: true, startTime: true, endTime: true, dayRolloverHour: true, status: true },
+      select: {
+        id: true,
+        organizerId: true,
+        startDate: true,
+        endDate: true,
+        startTime: true,
+        endTime: true,
+        dayRolloverHour: true,
+        status: true,
+        lineupSlots: {
+          select: {
+            id: true,
+            festivalDayIndex: true,
+            startTime: true,
+            endTime: true,
+          },
+        },
+      },
     });
     if (!existing) {
       res.status(404).json({ error: 'Event not found' });
@@ -654,8 +737,12 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       : (existing.dayRolloverHour ?? 6);
     const normalizedSlots = normalizeLineupSlots(lineupSlots, nextStartDate ?? existing.startDate, nextDayRolloverHour);
     const normalizedTicketTiers = normalizeTicketTiers(ticketTiers);
+    const shouldRebaseExistingLineupSlots =
+      !Array.isArray(lineupSlots)
+      && (startDate !== undefined || dayRolloverHour !== undefined)
+      && existing.lineupSlots.length > 0;
 
-    const event = await prisma.event.update({
+    await prisma.event.update({
       where: { id: id as string },
       data: {
         name: name ?? undefined,
@@ -716,6 +803,32 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
             }
           : undefined,
       },
+    });
+
+    if (shouldRebaseExistingLineupSlots) {
+      const rebasedSlots = rebaseExistingLineupSlotsToEventStart(
+        existing.lineupSlots,
+        existing.startDate,
+        effectiveStartDate,
+        nextDayRolloverHour
+      );
+
+      await prisma.$transaction(
+        rebasedSlots.map((slot) =>
+          prisma.eventLineupSlot.update({
+            where: { id: slot.id },
+            data: {
+              festivalDayIndex: slot.festivalDayIndex,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+            },
+          })
+        )
+      );
+    }
+
+    const event = await prisma.event.findUnique({
+      where: { id: id as string },
       include: {
         ticketTiers: {
           orderBy: { sortOrder: 'asc' },
@@ -738,6 +851,11 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         },
       },
     });
+
+    if (!event) {
+      res.status(404).json({ error: 'Event not found after update' });
+      return;
+    }
 
     res.json(withDerivedStatus(event));
   } catch (error) {

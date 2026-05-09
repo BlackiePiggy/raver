@@ -94,7 +94,6 @@ struct EditProfileView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingAvatarData: Data?
 
-    private let currentAvatarAsset: String
     private let currentAvatarURL: String?
 
     init(
@@ -104,11 +103,6 @@ struct EditProfileView: View {
     ) {
         _viewModel = StateObject(wrappedValue: EditProfileViewModel(repository: repository))
         self.onSaved = onSaved
-        self.currentAvatarAsset = AppConfig.resolvedUserAvatarAssetName(
-            userID: profile.id,
-            username: profile.username,
-            avatarURL: profile.avatarURL
-        )
         self.currentAvatarURL = profile.avatarURL
         _displayName = State(initialValue: profile.displayName)
         _bio = State(initialValue: profile.bio)
@@ -241,21 +235,11 @@ struct EditProfileView: View {
                   URL(string: resolved) != nil,
                   resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
             ImageLoaderView(urlString: resolved)
-                .background(
-                    Image(currentAvatarAsset)
-                        .resizable()
-                        .scaledToFill()
-                        .background(RaverTheme.card)
-                )
+                .background(AvatarPlaceholderView(size: 88, backgroundColor: RaverTheme.card))
             .frame(width: 88, height: 88)
             .clipShape(Circle())
         } else {
-            Image(currentAvatarAsset)
-                .resizable()
-                .scaledToFill()
-                .background(RaverTheme.card)
-                .frame(width: 88, height: 88)
-                .clipShape(Circle())
+            AvatarPlaceholderView(size: 88, backgroundColor: RaverTheme.card)
         }
     }
 

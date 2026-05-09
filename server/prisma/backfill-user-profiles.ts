@@ -1,8 +1,11 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const LOCAL_USER_AVATAR_POOL = 24;
 const LOCAL_GROUP_AVATAR_POOL = 12;
+const MANIFEST_FILE = path.join(__dirname, 'default-avatar-manifest.json');
 
 const RAVER_PREFIXES = [
   'warehouse',
@@ -40,29 +43,47 @@ const RAVER_SUFFIXES = [
   'head',
 ];
 
-function localUserAvatarToken(seed: string): string {
+type AvatarManifest = {
+  user: string[];
+  group: string[];
+};
+
+let manifestCache: AvatarManifest | null = null;
+
+async function loadManifest(): Promise<AvatarManifest> {
+  if (manifestCache) return manifestCache;
+  const raw = await fs.readFile(MANIFEST_FILE, 'utf-8');
+  manifestCache = JSON.parse(raw) as AvatarManifest;
+  return manifestCache;
+}
+
+async function defaultUserAvatarUrl(seed: string): Promise<string> {
+  const manifest = await loadManifest();
   const index = (hashString(seed) % LOCAL_USER_AVATAR_POOL) + 1;
-  const name = `LocalUserAvatar${String(index).padStart(2, '0')}`;
-  return `local-avatar://${name}`;
+  return manifest.user[index - 1]!;
 }
 
-function localGroupAvatarToken(seed: string): string {
+async function defaultGroupAvatarUrl(seed: string): Promise<string> {
+  const manifest = await loadManifest();
   const index = (hashString(seed) % LOCAL_GROUP_AVATAR_POOL) + 1;
-  const name = `LocalGroupAvatar${String(index).padStart(2, '0')}`;
-  return `local-avatar://${name}`;
+  return manifest.group[index - 1]!;
 }
 
-function isLocalAvatarToken(value?: string | null): boolean {
+function isManagedDefaultAvatar(value?: string | null): boolean {
   if (!value) return false;
-  return /^local-avatar:\/\/Local(User|Group)Avatar\d{2}$/i.test(value.trim());
+  const trimmed = value.trim();
+  return /^local-avatar:\/\/Local(User|Group)Avatar\d{2}$/i.test(trimmed) || /\/defaults\/avatars\/(user|group)\//i.test(trimmed);
 }
 
 function hashString(input: string): number {
-  let hash = 0;
-  for (const char of input) {
-    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  const normalized = input.toLowerCase();
+  let hash = BigInt('1469598103934665603');
+  const prime = BigInt('1099511628211');
+  for (const char of normalized) {
+    hash ^= BigInt(char.codePointAt(0) ?? 0);
+    hash *= prime;
   }
-  return hash;
+  return Number(hash & BigInt(0xffffffff));
 }
 
 function normalizeUsername(raw: string): string {
@@ -164,8 +185,8 @@ async function main() {
       avatarUrl?: string;
     } = { id: user.id };
 
-    const expectedAvatar = localUserAvatarToken(user.id);
-    if (!isLocalAvatarToken(user.avatarUrl) || user.avatarUrl !== expectedAvatar) {
+    const expectedAvatar = await defaultUserAvatarUrl(user.id);
+    if (!isManagedDefaultAvatar(user.avatarUrl) || user.avatarUrl !== expectedAvatar) {
       patch.avatarUrl = expectedAvatar;
     }
 
@@ -202,15 +223,17 @@ async function main() {
     },
   });
 
-  const squadUpdates = squads
-    .map((squad) => {
-      const expectedAvatar = localGroupAvatarToken(squad.id);
-      if (!isLocalAvatarToken(squad.avatarUrl) || squad.avatarUrl !== expectedAvatar) {
-        return { id: squad.id, avatarUrl: expectedAvatar };
-      }
-      return null;
-    })
-    .filter((item): item is { id: string; avatarUrl: string } => item !== null);
+  const squadUpdates = (
+    await Promise.all(
+      squads.map(async (squad) => {
+        const expectedAvatar = await defaultGroupAvatarUrl(squad.id);
+        if (!isManagedDefaultAvatar(squad.avatarUrl) || squad.avatarUrl !== expectedAvatar) {
+          return { id: squad.id, avatarUrl: expectedAvatar };
+        }
+        return null;
+      })
+    )
+  ).filter((item): item is { id: string; avatarUrl: string } => item !== null);
 
   console.log(`Squads to update: ${squadUpdates.length}`);
 

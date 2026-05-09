@@ -80,31 +80,49 @@ enum EventVisualStatus: String {
     }
 }
 
+struct LiveActivityBarsView: View {
+    let color: Color
+    var barCount: Int = 3
+    var barWidth: CGFloat = 3
+    var spacing: CGFloat = 2
+    var minHeight: CGFloat = 5
+    var maxHeight: CGFloat = 13
+    var animationSpeed: Double = 5.6
+    var phaseShift: Double = 1.35
+    var cornerRadius: CGFloat = 1.5
+    var minimumInterval: TimeInterval = 1.0 / 30.0
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: minimumInterval)) { timeline in
+            let time = timeline.date.timeIntervalSinceReferenceDate
+
+            HStack(alignment: .bottom, spacing: spacing) {
+                ForEach(0..<barCount, id: \.self) { index in
+                    let normalizedWave = (sin(time * animationSpeed + Double(index) * phaseShift) + 1) / 2
+                    let height = minHeight + CGFloat(normalizedWave) * (maxHeight - minHeight)
+
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(color)
+                        .frame(width: barWidth, height: height)
+                }
+            }
+            .frame(height: maxHeight, alignment: .bottom)
+        }
+        .frame(height: maxHeight)
+    }
+}
+
 struct OngoingStatusBars: View {
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.12)) { timeline in
-            let phase = timeline.date.timeIntervalSinceReferenceDate * 5.8
-
-            HStack(alignment: .bottom, spacing: 2) {
-                bar(height: animatedHeight(phase: phase))
-                bar(height: animatedHeight(phase: phase + 0.8))
-                bar(height: animatedHeight(phase: phase + 1.6))
-            }
-            .frame(height: 10)
-        }
+        LiveActivityBarsView(
+            color: Color.white.opacity(0.98),
+            barWidth: 2.6,
+            minHeight: 3,
+            maxHeight: 10,
+            cornerRadius: 1.3,
+            minimumInterval: 1.0 / 30.0
+        )
         .frame(width: 13, height: 10)
-    }
-
-    private func animatedHeight(phase: TimeInterval) -> CGFloat {
-        let base: CGFloat = 3
-        let amplitude: CGFloat = 6
-        return base + abs(CGFloat(sin(phase))) * amplitude
-    }
-
-    private func bar(height: CGFloat) -> some View {
-        Capsule()
-            .fill(Color.white.opacity(0.98))
-            .frame(width: 2.6, height: max(3, min(10, height)))
     }
 }
 

@@ -530,24 +530,7 @@ private struct SharePanelRecentConversationButton: View {
     }
 
     private var fallbackAvatar: some View {
-        let avatarAsset: String = {
-            if conversation.type == .group {
-                return AppConfig.resolvedGroupAvatarAssetName(
-                    groupID: conversation.id,
-                    groupName: conversation.title,
-                    avatarURL: conversation.avatarURL
-                )
-            }
-            return AppConfig.resolvedUserAvatarAssetName(
-                userID: conversation.peer?.id,
-                username: conversation.peer?.username,
-                avatarURL: conversation.peer?.avatarURL ?? conversation.avatarURL
-            )
-        }()
-
-        return Image(avatarAsset)
-            .resizable()
-            .scaledToFill()
+        AvatarPlaceholderView(size: size, isGroup: conversation.type == .group)
     }
 }
 

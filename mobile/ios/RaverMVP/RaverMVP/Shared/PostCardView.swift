@@ -349,18 +349,7 @@ struct PostCardView: View {
     }
 
     private var authorAvatarFallback: some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: post.author.id,
-                username: post.author.username,
-                avatarURL: post.author.avatarURL
-            )
-        )
-        .resizable()
-        .scaledToFill()
-        .frame(width: 34, height: 34)
-        .background(RaverTheme.card)
-        .clipShape(Circle())
+        AvatarPlaceholderView(size: 34, backgroundColor: RaverTheme.card)
     }
 
     private func dismissSharePanel() {

@@ -18,6 +18,7 @@ export interface Event {
   longitude: number | null;
   startDate: string;
   endDate: string;
+  dayRolloverHour?: number | null;
   ticketUrl: string | null;
   ticketPriceMin: number | null;
   ticketPriceMax: number | null;
@@ -48,6 +49,7 @@ export interface EventLineupSlot {
   id?: string;
   eventId?: string;
   djId?: string | null;
+  festivalDayIndex?: number | null;
   djName: string;
   stageName?: string | null;
   sortOrder?: number;

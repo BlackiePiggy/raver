@@ -12,8 +12,46 @@ enum AppConfig {
         case small
     }
 
-    private static let localUserAvatarAssets: [String] = (1...24).map { String(format: "LocalUserAvatar%02d", $0) }
-    private static let localGroupAvatarAssets: [String] = (1...12).map { String(format: "LocalGroupAvatar%02d", $0) }
+    private static let defaultUserAvatarURLs: [String] = [
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-01.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-02.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-03.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-04.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-05.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-06.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-07.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-08.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-09.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-10.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-11.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-12.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-13.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-14.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-15.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-16.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-17.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-18.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-19.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-20.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-21.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-22.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-23.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/user/user-avatar-24.png",
+    ]
+    private static let defaultGroupAvatarURLs: [String] = [
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/group/group-avatar-01.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/group/group-avatar-02.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/group/group-avatar-03.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/group/group-avatar-04.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/group/group-avatar-05.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/group/group-avatar-06.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/group/group-avatar-07.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/group/group-avatar-08.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/group/group-avatar-09.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/group/group-avatar-10.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/group/group-avatar-11.png",
+        "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/defaults/avatars/group/group-avatar-12.png",
+    ]
     private static let persistedRuntimeModeKey = "raver.persisted.runtimeMode"
     private static let persistedBFFBaseURLKey = "raver.persisted.bffBaseURL"
     private static let tencentIMAPNSBusinessIDInfoPlistKey = "TencentIMAPNSBusinessID"
@@ -105,6 +143,9 @@ enum AppConfig {
 
     static func resolvedURLString(_ value: String?) -> String? {
         guard let value, !value.isEmpty else { return nil }
+        if let mappedDefaultAvatarURL = explicitDefaultAvatarURL(from: value) {
+            return mappedDefaultAvatarURL
+        }
         if value.hasPrefix("http://") || value.hasPrefix("https://") {
             return rewrittenShareAssetURLString(value) ?? value
         }
@@ -191,53 +232,69 @@ enum AppConfig {
         return components.string ?? resolved
     }
 
-    static func resolvedUserAvatarAssetName(
+    static func resolvedUserAvatarURLString(
         userID: String?,
         username: String?,
         avatarURL: String?
-    ) -> String {
-        if let explicit = explicitLocalAvatarName(from: avatarURL, allowed: localUserAvatarAssets) {
-            return explicit
+    ) -> String? {
+        if let resolved = resolvedURLString(avatarURL),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            return resolved
         }
-        return avatarAssetName(from: userID ?? username ?? avatarURL ?? "user-default", pool: localUserAvatarAssets)
+        let seed = userID ?? username ?? avatarURL ?? "user-default"
+        return defaultAvatarURL(from: seed, pool: defaultUserAvatarURLs)
     }
 
-    static func resolvedGroupAvatarAssetName(
+    static func resolvedGroupAvatarURLString(
         groupID: String?,
         groupName: String?,
         avatarURL: String?
-    ) -> String {
-        if let explicit = explicitLocalAvatarName(from: avatarURL, allowed: localGroupAvatarAssets) {
-            return explicit
+    ) -> String? {
+        if let resolved = resolvedURLString(avatarURL),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            return resolved
         }
-        return avatarAssetName(from: groupID ?? groupName ?? avatarURL ?? "group-default", pool: localGroupAvatarAssets)
+        let seed = groupID ?? groupName ?? avatarURL ?? "group-default"
+        return defaultAvatarURL(from: seed, pool: defaultGroupAvatarURLs)
     }
 
-    private static func explicitLocalAvatarName(from raw: String?, allowed: [String]) -> String? {
+    private static func explicitDefaultAvatarURL(from raw: String?) -> String? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
         let localPrefixA = "local-avatar://"
         let localPrefixB = "local-avatar:"
-        let token: String?
+        let token: String
 
         if trimmed.hasPrefix(localPrefixA) {
             token = String(trimmed.dropFirst(localPrefixA.count))
         } else if trimmed.hasPrefix(localPrefixB) {
             token = String(trimmed.dropFirst(localPrefixB.count))
         } else {
-            token = nil
+            return nil
         }
 
-        if let token, allowed.contains(token) {
-            return token
+        if let userIndex = explicitAvatarIndex(token: token, prefix: "LocalUserAvatar"),
+           defaultUserAvatarURLs.indices.contains(userIndex - 1) {
+            return defaultUserAvatarURLs[userIndex - 1]
+        }
+        if let groupIndex = explicitAvatarIndex(token: token, prefix: "LocalGroupAvatar"),
+           defaultGroupAvatarURLs.indices.contains(groupIndex - 1) {
+            return defaultGroupAvatarURLs[groupIndex - 1]
         }
         return nil
     }
 
-    private static func avatarAssetName(from seed: String, pool: [String]) -> String {
-        guard !pool.isEmpty else { return "LocalUserAvatar01" }
+    private static func explicitAvatarIndex(token: String, prefix: String) -> Int? {
+        guard token.hasPrefix(prefix) else { return nil }
+        let suffix = String(token.dropFirst(prefix.count))
+        guard let parsed = Int(suffix), parsed > 0 else { return nil }
+        return parsed
+    }
+
+    private static func defaultAvatarURL(from seed: String, pool: [String]) -> String? {
+        guard !pool.isEmpty else { return nil }
         let normalized = seed.lowercased()
         var hash: UInt64 = 1469598103934665603
         let prime: UInt64 = 1099511628211

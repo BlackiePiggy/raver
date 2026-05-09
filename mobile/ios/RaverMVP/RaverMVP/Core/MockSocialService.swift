@@ -437,26 +437,60 @@ actor MockSocialService: SocialService {
         return newComment
     }
 
-    func fetchEventLiveComments(eventID: String, cursor: String?) async throws -> EventLiveCommentPage {
+    func fetchEventLiveComments(eventID: String, cursor: String?, sort: EventLiveCommentSortMode) async throws -> EventLiveCommentPage {
         _ = cursor
         let comments = eventLiveCommentsByEventID[eventID] ?? []
-        return EventLiveCommentPage(comments: comments.sorted(by: { $0.createdAt < $1.createdAt }), nextCursor: nil)
+        let sorted: [EventLiveComment]
+        switch sort {
+        case .hot:
+            sorted = comments.sorted {
+                if $0.likeCount == $1.likeCount { return $0.createdAt > $1.createdAt }
+                return $0.likeCount > $1.likeCount
+            }
+        case .newest:
+            sorted = comments.sorted(by: { $0.createdAt > $1.createdAt })
+        case .oldest:
+            sorted = comments.sorted(by: { $0.createdAt < $1.createdAt })
+        }
+        return EventLiveCommentPage(comments: sorted, nextCursor: nil)
     }
 
-    func addEventLiveComment(eventID: String, content: String) async throws -> EventLiveComment {
+    func addEventLiveComment(eventID: String, content: String, imageURLs: [String], parentCommentID: String?) async throws -> EventLiveComment {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
+        if trimmed.isEmpty && imageURLs.isEmpty {
             throw ServiceError.message("请输入评论内容")
+        }
+        let parent = parentCommentID.flatMap { parentID in
+            eventLiveCommentsByEventID[eventID]?.first(where: { $0.id == parentID })
         }
         let created = EventLiveComment(
             id: UUID().uuidString,
             eventID: eventID,
+            parentCommentID: parent?.id,
+            rootCommentID: parent?.rootCommentID ?? parent?.id,
+            depth: parent == nil ? 0 : min(parent!.depth + 1, 1),
             author: currentUser,
+            replyToAuthor: parent?.author,
             content: trimmed,
+            imageURLs: imageURLs,
             createdAt: Date()
         )
         eventLiveCommentsByEventID[eventID, default: []].append(created)
         return created
+    }
+
+    func toggleEventLiveCommentLike(commentID: String, shouldLike: Bool) async throws -> EventLiveComment {
+        for (eventID, comments) in eventLiveCommentsByEventID {
+            guard let index = comments.firstIndex(where: { $0.id == commentID }) else { continue }
+            var updated = comments[index]
+            if updated.isLiked != shouldLike {
+                updated.isLiked = shouldLike
+                updated.likeCount = max(0, updated.likeCount + (shouldLike ? 1 : -1))
+                eventLiveCommentsByEventID[eventID]?[index] = updated
+            }
+            return updated
+        }
+        throw ServiceError.message("评论不存在")
     }
 
     func searchUsers(query: String) async throws -> [UserSummary] {

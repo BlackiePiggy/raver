@@ -595,14 +595,7 @@ struct DiscoverNewsDetailView: View {
     }
 
     private func commentAvatarFallback(_ user: UserSummary) -> some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: user.id,
-                username: user.username,
-                avatarURL: user.avatarURL
-            )
-        )
-        .resizable()
+        AvatarPlaceholderView(size: 32, backgroundColor: RaverTheme.cardBorder)
         .scaledToFill()
         .background(RaverTheme.card)
         .clipShape(Circle())
@@ -1035,14 +1028,7 @@ struct DiscoverNewsDetailView: View {
     }
 
     private var avatarFallback: some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: article.authorID,
-                username: article.authorUsername,
-                avatarURL: article.authorAvatarURL
-            )
-        )
-        .resizable()
+        AvatarPlaceholderView(size: 44, backgroundColor: RaverTheme.cardBorder)
         .scaledToFill()
         .background(RaverTheme.cardBorder)
     }

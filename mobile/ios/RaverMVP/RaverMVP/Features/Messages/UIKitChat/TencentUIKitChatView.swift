@@ -1535,7 +1535,7 @@ struct TencentUIKitChatView: View {
                         return true
                     }
                     .map {
-                        let resolvedAvatarAsset = AppConfig.resolvedUserAvatarAssetName(
+                        let resolvedAvatarURL = AppConfig.resolvedUserAvatarURLString(
                             userID: $0.id,
                             username: $0.username,
                             avatarURL: $0.avatarURL
@@ -1544,7 +1544,7 @@ struct TencentUIKitChatView: View {
                             userID: $0.id,
                             username: $0.username,
                             displayName: $0.shownName,
-                            avatarURL: "local-avatar://\(resolvedAvatarAsset)"
+                            avatarURL: resolvedAvatarURL
                         )
                     }
                     .sorted { $0.mentionText.localizedCaseInsensitiveCompare($1.mentionText) == .orderedAscending }
@@ -1559,7 +1559,7 @@ struct TencentUIKitChatView: View {
         }
 
         mentionCandidates = composerMentionCandidates.map {
-            let resolvedAvatarAsset = AppConfig.resolvedUserAvatarAssetName(
+            let resolvedAvatarURL = AppConfig.resolvedUserAvatarURLString(
                 userID: nil,
                 username: $0.username,
                 avatarURL: nil
@@ -1568,7 +1568,7 @@ struct TencentUIKitChatView: View {
                 userID: $0.username.lowercased(),
                 username: $0.username,
                 displayName: $0.displayName ?? $0.username,
-                avatarURL: "local-avatar://\(resolvedAvatarAsset)"
+                avatarURL: resolvedAvatarURL
             )
         }
         allowMentionAll = false
@@ -4006,10 +4006,6 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             return .remote(url: url, cacheKey: user.avatarCacheKey)
         }
 
-        if let assetName = Self.localAvatarAssetName(from: user.avatarCacheKey) {
-            return .localAsset(name: assetName)
-        }
-
         return .initials(Self.initials(from: user.name))
     }
 
@@ -5099,34 +5095,26 @@ private final class ExyteChatConversationViewModel: ObservableObject {
         avatarURLString: String?,
         prefersGroupAsset: Bool
     ) -> ExyteAvatarPresentation {
-        if let localAssetName = Self.localAvatarAssetName(from: avatarURLString) {
-            return .localAsset(name: localAssetName)
-        }
-
         if let url = RaverChatMediaResolver.resolvedURL(from: avatarURLString) {
             return .remote(url: url, cacheKey: avatarURLString)
         }
 
-        let assetName = prefersGroupAsset
-            ? AppConfig.resolvedGroupAvatarAssetName(
+        let fallbackURL = prefersGroupAsset
+            ? AppConfig.resolvedGroupAvatarURLString(
                 groupID: userID,
                 groupName: displayName,
                 avatarURL: avatarURLString
             )
-            : AppConfig.resolvedUserAvatarAssetName(
+            : AppConfig.resolvedUserAvatarURLString(
                 userID: userID,
                 username: username,
                 avatarURL: avatarURLString
             )
-        return .localAsset(name: assetName)
-    }
-
-    private static func localAvatarAssetName(from cacheKey: String?) -> String? {
-        guard let cacheKey else { return nil }
-        let prefix = "local-avatar://"
-        guard cacheKey.hasPrefix(prefix) else { return nil }
-        let name = String(cacheKey.dropFirst(prefix.count))
-        return name.isEmpty ? nil : name
+        if let fallbackURL,
+           let url = RaverChatMediaResolver.resolvedURL(from: fallbackURL) {
+            return .remote(url: url, cacheKey: fallbackURL)
+        }
+        return .initials(Self.initials(from: displayName.isEmpty ? (username ?? "") : displayName))
     }
 
     private static func initials(from name: String) -> String {
@@ -5144,14 +5132,13 @@ private final class ExyteChatConversationViewModel: ObservableObject {
 
 private enum ExyteAvatarPresentation {
     case remote(url: URL, cacheKey: String?)
-    case localAsset(name: String)
     case initials(String)
 
     var url: URL? {
         switch self {
         case .remote(let url, _):
             return url
-        case .localAsset, .initials:
+        case .initials:
             return nil
         }
     }
@@ -5160,8 +5147,6 @@ private enum ExyteAvatarPresentation {
         switch self {
         case .remote(_, let cacheKey):
             return cacheKey
-        case .localAsset(let name):
-            return "local-avatar://\(name)"
         case .initials:
             return nil
         }
@@ -5240,10 +5225,6 @@ private struct ExyteAvatarView: View {
                         fallbackShape
                     }
                 }
-            case .localAsset(let name):
-                Image(name)
-                    .resizable()
-                    .scaledToFill()
             case .initials(let text):
                 ZStack {
                     fallbackShape

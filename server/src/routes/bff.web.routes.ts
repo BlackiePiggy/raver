@@ -547,6 +547,14 @@ const parseDateInput = (value: unknown): Date | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
+  const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1]);
+    const month = Number(dateOnlyMatch[2]);
+    const day = Number(dateOnlyMatch[3]);
+    const parsedLocalDate = new Date(year, month - 1, day);
+    return Number.isNaN(parsedLocalDate.getTime()) ? null : parsedLocalDate;
+  }
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
@@ -678,6 +686,56 @@ const inferFestivalDayIndex = (
   return Math.max(1, dayOffset + 1);
 };
 
+const applyFestivalDayIndexToDate = (
+  timeSource: Date,
+  eventStartDate: Date,
+  festivalDayIndex: number
+): Date => {
+  const targetDay = CalendarJS.startOfDay(eventStartDate);
+  targetDay.setDate(targetDay.getDate() + Math.max(0, festivalDayIndex - 1));
+  targetDay.setHours(
+    timeSource.getHours(),
+    timeSource.getMinutes(),
+    timeSource.getSeconds(),
+    timeSource.getMilliseconds()
+  );
+  return targetDay;
+};
+
+type ExistingLineupSlotForRebase = {
+  id: string;
+  festivalDayIndex: number | null;
+  startTime: Date;
+  endTime: Date;
+};
+
+const rebaseExistingLineupSlotsToEventStart = (
+  slots: ExistingLineupSlotForRebase[],
+  previousEventStartDate: Date,
+  nextEventStartDate: Date,
+  dayRolloverHour: number
+): Array<{ id: string; festivalDayIndex: number; startTime: Date; endTime: Date }> =>
+  slots.map((slot) => {
+    const festivalDayIndex =
+      slot.festivalDayIndex
+      ?? inferFestivalDayIndex(slot.startTime, previousEventStartDate, dayRolloverHour)
+      ?? 1;
+    const endDayOffset = Math.max(0, CalendarJS.diffDays(slot.startTime, slot.endTime));
+    const startTime = applyFestivalDayIndexToDate(slot.startTime, nextEventStartDate, festivalDayIndex);
+    let endTime = applyFestivalDayIndexToDate(slot.endTime, nextEventStartDate, festivalDayIndex + endDayOffset);
+
+    while (endTime < startTime) {
+      endTime = new Date(endTime.getTime() + 86_400_000);
+    }
+
+    return {
+      id: slot.id,
+      festivalDayIndex,
+      startTime,
+      endTime,
+    };
+  });
+
 const CalendarJS = {
   startOfDay(date: Date): Date {
     const out = new Date(date);
@@ -707,6 +765,10 @@ const normalizeLineupSlots = (
       const parsedStart = parseDateInput(slot.startTime);
       const parsedEnd = parseDateInput(slot.endTime);
       const fallbackBase = new Date(safeEventStart.getTime() + index * 60_000);
+      const explicitFestivalDayIndex =
+        typeof slot.festivalDayIndex === 'number' && Number.isFinite(slot.festivalDayIndex)
+          ? Math.max(1, Math.floor(slot.festivalDayIndex))
+          : null;
 
       let startTime = fallbackBase;
       let endTime = fallbackBase;
@@ -722,6 +784,14 @@ const normalizeLineupSlots = (
         startTime = new Date(parsedEnd.getTime() - 3_600_000);
       }
 
+      if (explicitFestivalDayIndex) {
+        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex);
+        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex);
+        if (endTime < startTime) {
+          endTime = new Date(endTime.getTime() + 86_400_000);
+        }
+      }
+
       const djName = typeof slot.djName === 'string' ? slot.djName.trim() : '';
       const rawDjId = typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId.trim() : '';
       const rawDjIds = Array.isArray(slot.djIds) ? slot.djIds : [];
@@ -731,11 +801,10 @@ const normalizeLineupSlots = (
       const normalizedRawDjId = rawDjId && !isLineupDjIdPlaceholder(rawDjId) ? rawDjId : '';
       const firstBoundDjId = cleanedDjIds.find((id) => !isLineupDjIdPlaceholder(id)) || '';
       const effectiveDjId = normalizedRawDjId || firstBoundDjId || null;
-      // Always recompute festivalDayIndex from the effective startTime.
-      // This prevents stale historical indices (e.g. previously imported Day7/Day8)
-      // from being preserved after users edit and save timetable rows.
       const festivalDayIndex =
-        inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour);
+        explicitFestivalDayIndex
+        // When the editor submits Day1/Day2 explicitly, that becomes the source of truth.
+        ?? inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour);
       const djIds = cleanedDjIds.length
         ? cleanedDjIds
         : (effectiveDjId ? [effectiveDjId] : []);
@@ -4281,6 +4350,14 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         coverImageUrl: true,
         lineupImageUrl: true,
         imageAssets: true,
+        lineupSlots: {
+          select: {
+            id: true,
+            festivalDayIndex: true,
+            startTime: true,
+            endTime: true,
+          },
+        },
       },
     });
 
@@ -4451,6 +4528,10 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const effectiveStartDate = parsedStartDate ?? existing.startDate;
     const effectiveEndDate = parsedEndDate ?? existing.endDate;
     const lineupSlots = normalizeLineupSlots(rawSlots || [], lineupBaseDate, nextDayRolloverHour);
+    const shouldRebaseExistingLineupSlots =
+      rawSlots === null
+      && (body.startDate !== undefined || body.dayRolloverHour !== undefined)
+      && existing.lineupSlots.length > 0;
 
     const ticketCurrency = typeof body.ticketCurrency === 'string' ? body.ticketCurrency : null;
     const ticketTiers = (rawTicketTiers || [])
@@ -4585,6 +4666,28 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       },
     });
 
+    if (shouldRebaseExistingLineupSlots) {
+      const rebasedSlots = rebaseExistingLineupSlotsToEventStart(
+        existing.lineupSlots,
+        existing.startDate,
+        effectiveStartDate,
+        nextDayRolloverHour
+      );
+
+      await prisma.$transaction(
+        rebasedSlots.map((slot) =>
+          prisma.eventLineupSlot.update({
+            where: { id: slot.id },
+            data: {
+              festivalDayIndex: slot.festivalDayIndex,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+            },
+          })
+        )
+      );
+    }
+
     if (hasCoverImageField && existing.coverImageUrl && existing.coverImageUrl !== updated.coverImageUrl) {
       await deleteSingleEventOssObjectIfOwned(existing.coverImageUrl, eventId);
     }
@@ -4609,7 +4712,47 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       }
     }
 
-    ok(res, mapEvent(await withLineupSlotPerformersOne(updated)));
+    const finalEvent = shouldRebaseExistingLineupSlots
+      ? await prisma.event.findUnique({
+          where: { id: eventId },
+          include: {
+            ticketTiers: {
+              orderBy: { sortOrder: 'asc' },
+            },
+            lineupSlots: {
+              orderBy: { startTime: 'asc' },
+              include: {
+                dj: {
+                  select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+                },
+              },
+            },
+            organizer: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true },
+            },
+            wikiFestival: {
+              select: {
+                id: true,
+                name: true,
+                nameI18n: true,
+                country: true,
+                countryI18n: true,
+                city: true,
+                cityI18n: true,
+                avatarUrl: true,
+                backgroundUrl: true,
+              },
+            },
+          },
+        })
+      : updated;
+
+    if (!finalEvent) {
+      res.status(404).json({ error: 'Event not found after update' });
+      return;
+    }
+
+    ok(res, mapEvent(await withLineupSlotPerformersOne(finalEvent)));
   } catch (error) {
     console.error('BFF web update event error:', error);
     res.status(500).json({ error: 'Internal server error' });

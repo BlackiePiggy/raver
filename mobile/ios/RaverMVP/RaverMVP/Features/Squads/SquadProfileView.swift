@@ -543,18 +543,7 @@ struct SquadProfileView: View {
     }
 
     private func squadAvatarFallback(squadID: String, urlString: String?) -> some View {
-        Image(
-            AppConfig.resolvedGroupAvatarAssetName(
-                groupID: squadID,
-                groupName: viewModel.profile?.name,
-                avatarURL: urlString
-            )
-        )
-        .resizable()
-        .scaledToFill()
-        .frame(width: 56, height: 56)
-        .background(RaverTheme.card)
-        .clipShape(Circle())
+        AvatarPlaceholderView(size: 56, isGroup: true, backgroundColor: RaverTheme.card)
     }
 
     @ViewBuilder
@@ -572,14 +561,7 @@ struct SquadProfileView: View {
     }
 
     private func avatarFallback(userID: String, username: String, urlString: String?, size: CGFloat) -> some View {
-        let asset = AppConfig.resolvedUserAvatarAssetName(
-            userID: userID,
-            username: username,
-            avatarURL: urlString
-        )
-        return Image(asset)
-            .resizable()
-            .scaledToFill()
+        AvatarPlaceholderView(size: size, backgroundColor: RaverTheme.card)
             .background(RaverTheme.card)
             .frame(width: size, height: size)
             .clipShape(Circle())

@@ -222,8 +222,8 @@ final class LiveSocialService: SocialService {
         return try await request(path: "/v1/feed/posts/\(postID)/comments", method: "POST", body: body)
     }
 
-    func fetchEventLiveComments(eventID: String, cursor: String?) async throws -> EventLiveCommentPage {
-        var queryItems = ["limit=50"]
+    func fetchEventLiveComments(eventID: String, cursor: String?, sort: EventLiveCommentSortMode) async throws -> EventLiveCommentPage {
+        var queryItems = ["limit=50", "sort=\(sort.rawValue)"]
         if let cursor {
             let encoded = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor
             queryItems.append("cursor=\(encoded)")
@@ -234,11 +234,22 @@ final class LiveSocialService: SocialService {
         )
     }
 
-    func addEventLiveComment(eventID: String, content: String) async throws -> EventLiveComment {
-        try await request(
+    func addEventLiveComment(eventID: String, content: String, imageURLs: [String], parentCommentID: String?) async throws -> EventLiveComment {
+        return try await request(
             path: "/v1/events/\(eventID)/live-comments",
             method: "POST",
-            body: ["content": content]
+            body: EventLiveCommentCreateRequest(
+                content: content,
+                imageURLs: imageURLs,
+                parentCommentID: parentCommentID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+            )
+        )
+    }
+
+    func toggleEventLiveCommentLike(commentID: String, shouldLike: Bool) async throws -> EventLiveComment {
+        try await request(
+            path: "/v1/events/live-comments/\(commentID)/like",
+            method: shouldLike ? "POST" : "DELETE"
         )
     }
 

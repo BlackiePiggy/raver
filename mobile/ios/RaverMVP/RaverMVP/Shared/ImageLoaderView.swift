@@ -70,6 +70,24 @@ struct ImageLoaderView: View {
     }
 }
 
+struct AvatarPlaceholderView: View {
+    let size: CGFloat
+    var isGroup: Bool = false
+    var backgroundColor: Color = RaverTheme.cardBorder
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(backgroundColor)
+            Image(systemName: isGroup ? "person.2.fill" : "person.fill")
+                .font(.system(size: size * 0.38, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.92))
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+}
+
 struct FullscreenMediaItem: Identifiable, Hashable {
     let id: String
     let rawURL: String

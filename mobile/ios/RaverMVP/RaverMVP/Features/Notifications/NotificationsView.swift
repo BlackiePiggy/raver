@@ -170,17 +170,6 @@ private struct NotificationsScreen: View {
     }
 
     private func notificationLeadingAvatarFallback(_ actor: UserSummary) -> some View {
-        Image(
-            AppConfig.resolvedUserAvatarAssetName(
-                userID: actor.id,
-                username: actor.username,
-                avatarURL: actor.avatarURL
-            )
-        )
-        .resizable()
-        .scaledToFill()
-        .frame(width: 30, height: 30)
-        .background(RaverTheme.cardBorder)
-        .clipShape(Circle())
+        AvatarPlaceholderView(size: 30)
     }
 }
