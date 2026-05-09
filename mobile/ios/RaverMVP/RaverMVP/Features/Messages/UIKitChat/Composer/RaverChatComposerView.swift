@@ -9,10 +9,7 @@ struct RaverChatMentionCandidate: Identifiable, Hashable {
 
     var title: String {
         let trimmed = displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if trimmed.isEmpty || trimmed.caseInsensitiveCompare(username) == .orderedSame {
-            return "@\(username)"
-        }
-        return "@\(username) · \(trimmed)"
+        return trimmed.isEmpty ? username : trimmed
     }
 }
 
@@ -633,7 +630,7 @@ struct RaverChatComposerView: View {
     private func applyMentionCandidate(_ candidate: RaverChatMentionCandidate) {
         guard let context = currentMentionContext else { return }
         let result = TencentEmojiCatalog.replace(
-            "@\(candidate.username) ",
+            "\(candidate.title) ",
             in: parameters.text.wrappedValue,
             selectedSourceRange: context.replacementRange
         )

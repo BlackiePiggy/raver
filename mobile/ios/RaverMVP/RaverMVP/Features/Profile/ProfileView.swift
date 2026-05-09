@@ -7,6 +7,7 @@ struct ProfileView: View {
     @Environment(\.profilePush) private var profilePush
     @ObservedObject private var viewModel: ProfileViewModel
     @Namespace private var profilePostTabNamespace
+    @State private var isShowingRealNameSheet = false
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
         ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
@@ -39,17 +40,18 @@ struct ProfileView: View {
             case .failure(let message), .offline(let message):
                 ScrollView {
                     VStack(spacing: 14) {
+                        profileTopActions
                         ScreenErrorCard(message: message) {
                             Task { await viewModel.load() }
                         }
                         profileQuickActions
                     }
                     .padding(16)
-                    .padding(.top, 40)
                 }
             case .empty:
                 ScrollView {
                     VStack(spacing: 14) {
+                        profileTopActions
                         ContentUnavailableView(
                             L("离线模式", "Offline Mode"),
                             systemImage: "wifi.slash",
@@ -64,10 +66,16 @@ struct ProfileView: View {
                 if let profile = viewModel.profile {
                     ScrollView {
                         VStack(spacing: 14) {
+                            profileTopActions
+
                             ProfileHeaderCard(
                                 profile: profile,
+                                realNameStatus: appState.realNameVerificationStatus,
                                 onAvatarTap: {
                                     profilePush(.avatarFullscreen)
+                                },
+                                onRealNameTap: {
+                                    isShowingRealNameSheet = true
                                 },
                                 onFollowersTap: {
                                     profilePush(.followList(userID: currentUserID, kind: .followers))
@@ -109,30 +117,14 @@ struct ProfileView: View {
         .background(RaverTheme.background)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.visible, for: .navigationBar)
-        .tint(RaverTheme.primaryText)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                if viewModel.profile != nil {
-                    Button {
-                        profilePush(.editProfile)
-                    } label: {
-                        Label(L("编辑", "Edit"), systemImage: "square.and.pencil")
-                    }
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                if viewModel.profile != nil {
-                    Button {
-                        profilePush(.settings)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                }
-            }
-        }
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             await viewModel.load()
+        }
+        .sheet(isPresented: $isShowingRealNameSheet) {
+            RealNameVerificationSheet()
+                .environmentObject(appState)
+                .presentationDetents([.large])
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { viewModel.error != nil },
@@ -142,6 +134,46 @@ struct ProfileView: View {
         } message: {
             Text(viewModel.error ?? "")
         }
+    }
+
+    @ViewBuilder
+    private var profileTopActions: some View {
+        if viewModel.profile != nil {
+            HStack {
+                profileTopIconButton(
+                    systemName: "square.and.pencil",
+                    accessibilityLabel: L("编辑", "Edit")
+                ) {
+                    profilePush(.editProfile)
+                }
+
+                Spacer()
+
+                profileTopIconButton(
+                    systemName: "ellipsis",
+                    accessibilityLabel: L("更多", "More")
+                ) {
+                    profilePush(.settings)
+                }
+            }
+            .frame(height: 36)
+        }
+    }
+
+    private func profileTopIconButton(
+        systemName: String,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     @MainActor
@@ -617,7 +649,9 @@ struct MySavesView: View {
 
 struct ProfileHeaderCard<Actions: View>: View {
     let profile: UserProfile
+    let realNameStatus: RealNameVerificationStatus?
     let onAvatarTap: (() -> Void)?
+    let onRealNameTap: (() -> Void)?
     let onFollowersTap: (() -> Void)?
     let onFollowingTap: (() -> Void)?
     let onFriendsTap: (() -> Void)?
@@ -625,14 +659,18 @@ struct ProfileHeaderCard<Actions: View>: View {
 
     init(
         profile: UserProfile,
+        realNameStatus: RealNameVerificationStatus? = nil,
         onAvatarTap: (() -> Void)? = nil,
+        onRealNameTap: (() -> Void)? = nil,
         onFollowersTap: (() -> Void)? = nil,
         onFollowingTap: (() -> Void)? = nil,
         onFriendsTap: (() -> Void)? = nil,
         @ViewBuilder actions: @escaping () -> Actions = { EmptyView() }
     ) {
         self.profile = profile
+        self.realNameStatus = realNameStatus
         self.onAvatarTap = onAvatarTap
+        self.onRealNameTap = onRealNameTap
         self.onFollowersTap = onFollowersTap
         self.onFollowingTap = onFollowingTap
         self.onFriendsTap = onFriendsTap
@@ -645,8 +683,10 @@ struct ProfileHeaderCard<Actions: View>: View {
 
             Text(profile.displayName)
                 .font(.title3.bold())
-            Text("@\(profile.username)")
-                .foregroundStyle(RaverTheme.secondaryText)
+
+            if let realNameStatus {
+                realNameBadge(status: realNameStatus)
+            }
 
             if !profile.bio.isEmpty {
                 Text(profile.bio)
@@ -669,6 +709,78 @@ struct ProfileHeaderCard<Actions: View>: View {
             actions()
         }
         .padding(16)
+    }
+
+    @ViewBuilder
+    private func realNameBadge(status: RealNameVerificationStatus) -> some View {
+        if let onRealNameTap {
+            Button(action: onRealNameTap) {
+                realNameBadgeContent(status: status)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(status.title)
+        } else {
+            realNameBadgeContent(status: status)
+        }
+    }
+
+    private func realNameBadgeContent(status: RealNameVerificationStatus) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: status.badgeIconName)
+                .font(.system(size: 12, weight: .semibold))
+            Text(status.title)
+                .font(.caption.weight(.semibold))
+        }
+        .foregroundStyle(realNameBadgeTextColor(status))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(realNameBadgeBackgroundColor(status))
+        )
+        .overlay(
+            Capsule()
+                .stroke(realNameBadgeStrokeColor(status), lineWidth: 1)
+        )
+    }
+
+    private func realNameBadgeTextColor(_ status: RealNameVerificationStatus) -> Color {
+        switch status {
+        case .verified:
+            return Color(red: 0.18, green: 0.70, blue: 0.46)
+        case .pending:
+            return Color(red: 0.85, green: 0.48, blue: 0.12)
+        case .rejected:
+            return Color(red: 0.90, green: 0.22, blue: 0.30)
+        case .unverified:
+            return RaverTheme.secondaryText
+        }
+    }
+
+    private func realNameBadgeBackgroundColor(_ status: RealNameVerificationStatus) -> Color {
+        switch status {
+        case .verified:
+            return Color(red: 0.18, green: 0.70, blue: 0.46).opacity(0.14)
+        case .pending:
+            return Color(red: 0.95, green: 0.60, blue: 0.18).opacity(0.16)
+        case .rejected:
+            return Color(red: 0.90, green: 0.22, blue: 0.30).opacity(0.14)
+        case .unverified:
+            return RaverTheme.card
+        }
+    }
+
+    private func realNameBadgeStrokeColor(_ status: RealNameVerificationStatus) -> Color {
+        switch status {
+        case .verified:
+            return Color(red: 0.18, green: 0.70, blue: 0.46).opacity(0.28)
+        case .pending:
+            return Color(red: 0.95, green: 0.60, blue: 0.18).opacity(0.30)
+        case .rejected:
+            return Color(red: 0.90, green: 0.22, blue: 0.30).opacity(0.28)
+        case .unverified:
+            return RaverTheme.cardBorder
+        }
     }
 
     @ViewBuilder
@@ -1695,6 +1807,8 @@ private struct WidgetLayoutStylePreviewCard: View {
 struct MovieBannerEditorView: View {
     @State private var configuration = MovieBannerConfiguration()
     @State private var showDisplay = false
+    @State private var displayPreparedLandscapeLock = false
+    @State private var prepareDisplayTask: Task<Void, Never>?
     @FocusState private var isInputFocused: Bool
 
     private var canStart: Bool {
@@ -1729,7 +1843,10 @@ struct MovieBannerEditorView: View {
 
                         Button {
                             isInputFocused = false
-                            showDisplay = true
+                            prepareDisplayTask?.cancel()
+                            prepareDisplayTask = Task {
+                                await prepareLandscapeDisplay()
+                            }
                         } label: {
                             HStack {
                                 Image(systemName: "play.fill")
@@ -1761,7 +1878,7 @@ struct MovieBannerEditorView: View {
                             title: L("字体大小", "Font Size"),
                             valueText: "\(Int(configuration.fontSize))",
                             value: $configuration.fontSize,
-                            range: 64 ... 220,
+                            range: MovieBannerConfiguration.fontSizeRange,
                             step: 2
                         )
 
@@ -1800,8 +1917,17 @@ struct MovieBannerEditorView: View {
         .fullScreenCover(isPresented: $showDisplay) {
             MovieBannerDisplayView(
                 configuration: $configuration,
-                isPresented: $showDisplay
+                isPresented: $showDisplay,
+                hasLandscapeLock: $displayPreparedLandscapeLock
             )
+        }
+        .onDisappear {
+            prepareDisplayTask?.cancel()
+            prepareDisplayTask = nil
+            if displayPreparedLandscapeLock, !showDisplay {
+                AppOrientationLock.shared.unlockLandscapeOnly(forcePortrait: true)
+                displayPreparedLandscapeLock = false
+            }
         }
     }
 
@@ -1830,11 +1956,35 @@ struct MovieBannerEditorView: View {
             .tint(RaverTheme.accent)
         }
     }
+
+    @MainActor
+    private func prepareLandscapeDisplay() async {
+        AppOrientationLock.shared.lockLandscapeOnly(forceRotate: true)
+        displayPreparedLandscapeLock = true
+
+        for _ in 0 ..< 8 {
+            if isLandscapeInterface() { break }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            guard !Task.isCancelled else { return }
+        }
+
+        guard !Task.isCancelled else { return }
+        showDisplay = true
+    }
+
+    private func isLandscapeInterface() -> Bool {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive })?
+            .interfaceOrientation
+            .isLandscape ?? false
+    }
 }
 
 private struct MovieBannerDisplayView: View {
     @Binding var configuration: MovieBannerConfiguration
     @Binding var isPresented: Bool
+    @Binding var hasLandscapeLock: Bool
 
     @State private var controlsVisible = false
     @State private var isPaused = false
@@ -1869,7 +2019,10 @@ private struct MovieBannerDisplayView: View {
         .toolbar(.hidden, for: .navigationBar)
         .statusBar(hidden: true)
         .onAppear {
-            AppOrientationLock.shared.lockLandscapeOnly(forceRotate: true)
+            if !hasLandscapeLock {
+                AppOrientationLock.shared.lockLandscapeOnly(forceRotate: true)
+                hasLandscapeLock = true
+            }
             resetScrollProgress()
             isPaused = !configuration.autoScroll
             showLockButtonTemporarily()
@@ -1879,7 +2032,10 @@ private struct MovieBannerDisplayView: View {
             controlsAutoHideTask = nil
             lockButtonFadeTask?.cancel()
             lockButtonFadeTask = nil
-            AppOrientationLock.shared.unlockLandscapeOnly(forcePortrait: true)
+            if hasLandscapeLock {
+                AppOrientationLock.shared.unlockLandscapeOnly(forcePortrait: true)
+                hasLandscapeLock = false
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             if !isLandscapeInterface() {
@@ -1899,6 +2055,9 @@ private struct MovieBannerDisplayView: View {
                 isPaused = !enabled
                 resetScrollProgress()
             }
+        }
+        .onChange(of: configuration.fontSize) { _, _ in
+            resetScrollProgress()
         }
     }
 
@@ -1929,18 +2088,15 @@ private struct MovieBannerDisplayView: View {
     private func scrollingTextView(renderDate: Date, size: CGSize) -> some View {
         let message = resolvedMessage
         let font = UIFont.systemFont(ofSize: CGFloat(configuration.fontSize), weight: .bold)
-        let textWidth = max(48, NSString(string: message).size(withAttributes: [.font: font]).width)
-        let gap = max(40, CGFloat(configuration.fontSize) * 0.55)
-        let cycle = textWidth + gap
+        let textWidth = max(1, NSString(string: message).size(withAttributes: [.font: font]).width)
+        let cycle = max(1, size.width + textWidth)
         let timelineDate = frozenDate(for: renderDate)
         let elapsed = max(0, timelineDate.timeIntervalSince(scrollStartDate) - pausedDuration)
         let travel = CGFloat((elapsed * configuration.scrollSpeed).truncatingRemainder(dividingBy: Double(cycle)))
         let leadingOffset = size.width - travel
 
-        return HStack(spacing: gap) {
-            bannerText.opacity(blinkOpacity(at: timelineDate))
-            bannerText.opacity(blinkOpacity(at: timelineDate))
-        }
+        return bannerText
+            .opacity(blinkOpacity(at: timelineDate))
         .lineLimit(1)
         .fixedSize(horizontal: true, vertical: true)
         .offset(x: leadingOffset)
@@ -2041,6 +2197,34 @@ private struct MovieBannerDisplayView: View {
                         }
                         .tint(.white)
                     }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(L("字号", "Size"))
+                            .font(.caption)
+                            .foregroundStyle(Color.white.opacity(0.85))
+                        Spacer(minLength: 8)
+                        Text("\(Int(configuration.fontSize))")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(Color.white.opacity(0.7))
+                    }
+                    Slider(
+                        value: $configuration.fontSize,
+                        in: MovieBannerConfiguration.fontSizeRange,
+                        step: 2
+                    ) {
+                        Text(L("字号", "Size"))
+                    } minimumValueLabel: {
+                        Text(L("小", "Small"))
+                            .font(.caption2)
+                    } maximumValueLabel: {
+                        Text(L("大", "Large"))
+                            .font(.caption2)
+                    } onEditingChanged: { _ in
+                        keepControlsVisible()
+                    }
+                    .tint(.white)
                 }
             }
             .padding(14)
@@ -2259,6 +2443,8 @@ private struct MovieBannerColorPickerRow: View {
 }
 
 private struct MovieBannerConfiguration {
+    static let fontSizeRange: ClosedRange<Double> = 64 ... 1200
+
     var message: String = ""
     var fontSize: Double = 120
     var scrollSpeed: Double = 90

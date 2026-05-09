@@ -33,7 +33,6 @@ struct LearnModuleView: View {
     @State private var selectedSection: LearnModuleSection = .rankings
     @State private var selectedSort: LearnLabelSortOption = .soundcloudFollowers
     @State private var sortOrder: LearnLabelSortOrder = .desc
-    @State private var searchKeyword = ""
     @State private var selectedGenreFilters: Set<String> = []
     @State private var selectedNationFilters: Set<String> = []
     @State private var activeFilterPanel: LearnLabelFilterPanelType?
@@ -188,159 +187,105 @@ struct LearnModuleView: View {
                 .fixedSize(horizontal: true, vertical: false)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            Button {
-                switch selectedSection {
-                case .rankings:
-                    discoverPush(
-                        .searchInput(
-                            domain: .djs,
-                            initialQuery: searchKeyword
-                        )
-                    )
-                case .genres, .labels, .festivals:
-                    discoverPush(
-                        .searchInput(
-                            domain: .wiki,
-                            initialQuery: searchKeyword,
-                            preferredWikiSectionRaw: selectedSection.rawValue
-                        )
-                    )
-                }
-            } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                    .frame(width: 32, height: 32)
-                    .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
         }
     }
 
     @ViewBuilder
     private var labelsToolbar: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Button {
-                    discoverPush(
-                        .searchInput(
-                            domain: .wiki,
-                            initialQuery: searchKeyword,
-                            preferredWikiSectionRaw: LearnModuleSection.labels.rawValue
-                        )
-                    )
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(RaverTheme.secondaryText)
-                        Text(LL("搜索厂牌名 / 简介"))
-                            .font(.subheadline)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(RaverTheme.card)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .buttonStyle(.plain)
-
-                Menu {
-                    ForEach(LearnLabelSortOption.allCases) { option in
-                        Button {
-                            selectedSort = option
-                        } label: {
-                            if option == selectedSort {
-                                Label(option.title, systemImage: "checkmark")
-                            } else {
-                                Text(option.title)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Menu {
+                        ForEach(LearnLabelSortOption.allCases) { option in
+                            Button {
+                                selectedSort = option
+                            } label: {
+                                if option == selectedSort {
+                                    Label(option.title, systemImage: "checkmark")
+                                } else {
+                                    Text(option.title)
+                                }
                             }
                         }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(selectedSort.title)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.down")
+                                .font(.caption2.weight(.semibold))
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .padding(.horizontal, 10)
+                        .frame(height: 32)
+                        .background(RaverTheme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(selectedSort.title)
-                            .lineLimit(1)
-                        Image(systemName: "chevron.down")
-                            .font(.caption2.weight(.semibold))
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(RaverTheme.card)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
 
-                Button {
-                    sortOrder = sortOrder == .desc ? .asc : .desc
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: sortOrder == .desc ? "arrow.down" : "arrow.up")
-                        Text(sortOrder == .desc ? L("降序", "Desc") : L("升序", "Asc"))
+                    Button {
+                        sortOrder = sortOrder == .desc ? .asc : .desc
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: sortOrder == .desc ? "arrow.down" : "arrow.up")
+                            Text(sortOrder == .desc ? L("降序", "Desc") : L("升序", "Asc"))
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .padding(.horizontal, 10)
+                        .frame(height: 32)
+                        .background(RaverTheme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(RaverTheme.card)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-            }
+                    .buttonStyle(.plain)
 
-            HStack(spacing: 8) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.16)) {
-                        activeFilterPanel = activeFilterPanel == .genres ? nil : .genres
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            activeFilterPanel = activeFilterPanel == .genres ? nil : .genres
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: activeFilterPanel == .genres ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                            Text(selectedGenreFilters.isEmpty ? L("风格", "Genres") : L("风格 \(selectedGenreFilters.count)", "Genres \(selectedGenreFilters.count)"))
+                                .lineLimit(1)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .padding(.horizontal, 10)
+                        .frame(height: 32)
+                        .background(RaverTheme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: activeFilterPanel == .genres ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                        Text(selectedGenreFilters.isEmpty ? L("筛选风格", "Filter Genres") : L("风格 \(selectedGenreFilters.count)", "Genres \(selectedGenreFilters.count)"))
-                            .lineLimit(1)
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(RaverTheme.card)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .buttonStyle(.plain)
+                    .buttonStyle(.plain)
 
-                Button {
-                    withAnimation(.easeInOut(duration: 0.16)) {
-                        activeFilterPanel = activeFilterPanel == .nations ? nil : .nations
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            activeFilterPanel = activeFilterPanel == .nations ? nil : .nations
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: activeFilterPanel == .nations ? "flag.fill" : "flag")
+                            Text(selectedNationFilters.isEmpty ? L("国家", "Countries") : L("国家 \(selectedNationFilters.count)", "Countries \(selectedNationFilters.count)"))
+                                .lineLimit(1)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .padding(.horizontal, 10)
+                        .frame(height: 32)
+                        .background(RaverTheme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: activeFilterPanel == .nations ? "flag.fill" : "flag")
-                        Text(selectedNationFilters.isEmpty ? L("筛选国家", "Filter Countries") : L("国家 \(selectedNationFilters.count)", "Countries \(selectedNationFilters.count)"))
-                            .lineLimit(1)
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(RaverTheme.card)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .buttonStyle(.plain)
+                    .buttonStyle(.plain)
 
-                if !selectedGenreFilters.isEmpty || !selectedNationFilters.isEmpty {
-                    Button(LL("清空全部")) {
-                        selectedGenreFilters.removeAll()
-                        selectedNationFilters.removeAll()
+                    if !selectedGenreFilters.isEmpty || !selectedNationFilters.isEmpty {
+                        Button(LL("清空全部")) {
+                            selectedGenreFilters.removeAll()
+                            selectedNationFilters.removeAll()
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
                     }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.secondaryText)
                 }
-
-                Spacer(minLength: 0)
+                .fixedSize(horizontal: true, vertical: false)
             }
 
             if activeFilterPanel == .genres {
@@ -389,35 +334,6 @@ struct LearnModuleView: View {
     @ViewBuilder
     private var festivalsToolbar: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Button {
-                    discoverPush(
-                        .searchInput(
-                            domain: .wiki,
-                            initialQuery: searchKeyword,
-                            preferredWikiSectionRaw: LearnModuleSection.festivals.rawValue
-                        )
-                    )
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(RaverTheme.secondaryText)
-                        Text(LL("搜索电音节名 / 城市 / 国家"))
-                            .font(.subheadline)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(RaverTheme.card)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
-
             HStack(spacing: 10) {
                 Text(L("筛选后 \(festivals.count) / 共 \(allFestivals.count) 个电音节 IP", "Filtered \(festivals.count) / Total \(allFestivals.count) festival IPs"))
                     .font(.caption)

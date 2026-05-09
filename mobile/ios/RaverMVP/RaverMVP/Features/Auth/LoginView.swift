@@ -1,17 +1,15 @@
 import SwiftUI
 import AVFoundation
 import UIKit
+import PhotosUI
 
 struct LoginView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var mode: AuthMode = .login
     @State private var loginMethod: LoginMethod = .account
     @State private var username = "uploadtester"
-    @State private var email = ""
-    @State private var displayName = ""
-    @State private var password = "123456"
+    @State private var password = ""
     @State private var phoneNumber = ""
     @State private var smsCode = ""
     @State private var isLoading = false
@@ -19,6 +17,7 @@ struct LoginView: View {
     @State private var smsCooldownTask: Task<Void, Never>?
     @State private var hasAgreedTerms = false
     @State private var showManualLogin = false
+    @State private var showRegistrationProfile = false
     @StateObject private var videoController = LoginBackgroundVideoController()
     @FocusState private var focusedField: ManualAuthField?
 
@@ -26,8 +25,6 @@ struct LoginView: View {
         case username
         case phoneNumber
         case smsCode
-        case email
-        case displayName
         case password
     }
 
@@ -113,7 +110,7 @@ struct LoginView: View {
                                 if isLoading {
                                     ProgressView().tint(.white)
                                 } else {
-                                    Text(LL("一键登录/注册"))
+                                    Text(LL("一键登录"))
                                         .font(.system(size: 17, weight: .semibold))
                                         .foregroundStyle(.white.opacity(0.96))
                                 }
@@ -128,6 +125,7 @@ struct LoginView: View {
                             withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
                                 showManualLogin.toggle()
                             }
+                            videoController.resumeIfNeeded()
                         } label: {
                             Text(LL("其他手机号登录"))
                                 .font(.system(size: 16, weight: .semibold))
@@ -136,6 +134,17 @@ struct LoginView: View {
                         .buttonStyle(.plain)
                         .padding(.top, 4)
                         .accessibilityIdentifier("login.showManualButton")
+
+                        Button {
+                            openRegistrationProfile()
+                        } label: {
+                            Text(LL("注册新账号"))
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.92))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isLoading)
+                        .accessibilityIdentifier("login.openRegisterButton")
 
                         if showManualLogin {
                             manualLoginPanel
@@ -179,10 +188,16 @@ struct LoginView: View {
             guard newPhase == .active else { return }
             videoController.resumeIfNeeded()
         }
-        .onChange(of: mode) { _, newMode in
-            if newMode == .register {
-                loginMethod = .account
+        .onChange(of: showManualLogin) { _, _ in
+            videoController.resumeIfNeeded()
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                videoController.resumeIfNeeded()
             }
+        }
+        .fullScreenCover(isPresented: $showRegistrationProfile) {
+            RegisterProfileView(hasAgreedTerms: $hasAgreedTerms)
+                .environmentObject(appState)
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -198,8 +213,8 @@ struct LoginView: View {
     @ViewBuilder
     private var manualLoginPanel: some View {
         VStack(spacing: 10) {
-            Picker(LL("模式"), selection: $mode) {
-                ForEach(AuthMode.allCases, id: \.self) { item in
+            Picker(L("登录方式", "Login Method"), selection: $loginMethod) {
+                ForEach(LoginMethod.allCases, id: \.self) { item in
                     Text(item.title).tag(item)
                 }
             }
@@ -210,21 +225,7 @@ struct LoginView: View {
                     .fill(Color.white.opacity(0.14))
             )
 
-            if mode == .login {
-                Picker(L("登录方式", "Login Method"), selection: $loginMethod) {
-                    ForEach(LoginMethod.allCases, id: \.self) { item in
-                        Text(item.title).tag(item)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(6)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.white.opacity(0.14))
-                )
-            }
-
-            if mode == .login, loginMethod == .sms {
+            if loginMethod == .sms {
                 TextField(L("手机号（含区号）", "Phone Number (with country code)"), text: $phoneNumber)
                     .keyboardType(.phonePad)
                     .textInputAutocapitalization(.never)
@@ -281,29 +282,7 @@ struct LoginView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .focused($focusedField, equals: .username)
-                    .submitLabel(mode == .register ? .next : .go)
-                    .onSubmit {
-                        focusedField = mode == .register ? .email : .password
-                    }
-                    .padding(14)
-                    .background(inputFieldBackground)
-            }
-
-            if mode == .register {
-                TextField(LL("邮箱"), text: $email)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .focused($focusedField, equals: .email)
-                    .submitLabel(.next)
-                    .onSubmit {
-                        focusedField = .displayName
-                    }
-                    .padding(14)
-                    .background(inputFieldBackground)
-
-                TextField(LL("显示名（可选）"), text: $displayName)
-                    .focused($focusedField, equals: .displayName)
-                    .submitLabel(.next)
+                    .submitLabel(.go)
                     .onSubmit {
                         focusedField = .password
                     }
@@ -311,7 +290,7 @@ struct LoginView: View {
                     .background(inputFieldBackground)
             }
 
-            if mode == .register || (mode == .login && loginMethod == .account) {
+            if loginMethod == .account {
                 SecureField(L("密码", "Password"), text: $password)
                     .focused($focusedField, equals: .password)
                     .submitLabel(.done)
@@ -339,6 +318,23 @@ struct LoginView: View {
             .disabled(!canSubmitManual || isLoading)
             .accessibilityIdentifier("login.manualSubmitButton")
 
+            Button {
+                openRegistrationProfile()
+            } label: {
+                HStack(spacing: 6) {
+                    Text(LL("还没有账号？注册"))
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.86))
+                .frame(maxWidth: .infinity)
+                .padding(.top, 2)
+            }
+            .buttonStyle(.plain)
+            .disabled(isLoading)
+            .accessibilityIdentifier("login.registerFromManualButton")
+
             if let error = appState.errorMessage, !error.isEmpty {
                 Text(error)
                     .font(.caption)
@@ -359,12 +355,6 @@ struct LoginView: View {
     }
 
     private var canSubmitManual: Bool {
-        if mode == .register {
-            return !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && !password.isEmpty
-                && !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-
         switch loginMethod {
         case .account:
             return !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty
@@ -375,9 +365,6 @@ struct LoginView: View {
     }
 
     private var submitTitle: String {
-        if mode == .register {
-            return L("注册并登录", "Register & Sign In")
-        }
         switch loginMethod {
         case .account:
             return L("账号登录", "Sign In")
@@ -507,6 +494,12 @@ struct LoginView: View {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
+    private func openRegistrationProfile() {
+        focusedField = nil
+        dismissKeyboard()
+        showRegistrationProfile = true
+    }
+
     private func startSmsCooldown(seconds: Int) {
         let normalized = max(1, min(120, seconds))
         smsCooldownTask?.cancel()
@@ -558,36 +551,394 @@ struct LoginView: View {
         isLoading = true
         defer { isLoading = false }
 
-        if mode == .login {
-            if loginMethod == .sms {
-                await appState.loginWithSms(
-                    phoneNumber: phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines),
-                    code: smsCode.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
-                return
-            }
-
-            await appState.login(
-                username: username.trimmingCharacters(in: .whitespacesAndNewlines),
-                password: password
+        if loginMethod == .sms {
+            await appState.loginWithSms(
+                phoneNumber: phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines),
+                code: smsCode.trimmingCharacters(in: .whitespacesAndNewlines)
             )
             return
         }
 
-        let resolvedEmail: String
-        if email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, oneTap {
-            let account = username.trimmingCharacters(in: .whitespacesAndNewlines)
-            resolvedEmail = "\(account)@ravehub.app"
-        } else {
-            resolvedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        await appState.login(
+            username: username.trimmingCharacters(in: .whitespacesAndNewlines),
+            password: password
+        )
+    }
+}
+
+private extension UIImage {
+    func resizedForRegistrationAvatar(maxPixel: CGFloat) -> UIImage? {
+        let longest = max(size.width, size.height)
+        guard longest > maxPixel else { return self }
+        let scale = maxPixel / longest
+        let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        return renderer.image { _ in
+            draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+    }
+}
+
+private struct RegisterProfileView: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+    @Binding var hasAgreedTerms: Bool
+
+    @State private var email = ""
+    @State private var displayName = ""
+    @State private var password = ""
+    @State private var confirmPassword = ""
+    @State private var selectedAvatarItem: PhotosPickerItem?
+    @State private var selectedAvatarData: Data?
+    @State private var selectedAvatarImage: UIImage?
+    @State private var isSubmitting = false
+
+    @FocusState private var focusedField: RegisterField?
+
+    private enum RegisterField {
+        case email
+        case displayName
+        case password
+        case confirmPassword
+    }
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.04, green: 0.04, blue: 0.05),
+                    Color(red: 0.12, green: 0.10, blue: 0.12),
+                    Color(red: 0.04, green: 0.04, blue: 0.05),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    header
+                    avatarPicker
+                    formFields
+                    termsToggle
+                    submitButton
+                    errorText
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 22)
+                .padding(.bottom, 34)
+            }
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .foregroundStyle(.white)
+        .onChange(of: selectedAvatarItem) { _, newItem in
+            Task { await loadSelectedAvatar(newItem) }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(L("收起", "Collapse")) {
+                    focusedField = nil
+                    dismissKeyboard()
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(Color.white.opacity(0.12)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("register.backButton")
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(LL("创建账号"))
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.98))
+                Text(LL("补充头像、昵称和登录信息，完成后即可进入 Raver。"))
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.66))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var avatarPicker: some View {
+        PhotosPicker(selection: $selectedAvatarItem, matching: .images) {
+            HStack(spacing: 16) {
+                avatarPreview
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(selectedAvatarImage == nil ? LL("上传头像") : LL("更换头像"))
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.97))
+                    Text(LL("上传头像"))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.62))
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.58))
+            }
+            .padding(16)
+            .background(fieldBackground)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("register.avatarPicker")
+    }
+
+    private var avatarPreview: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.14))
+                .frame(width: 72, height: 72)
+
+            if let selectedAvatarImage {
+                Image(uiImage: selectedAvatarImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 72, height: 72)
+                    .clipShape(Circle())
+            } else {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.82))
+            }
+        }
+        .overlay(
+            Circle()
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+        )
+    }
+
+    private var formFields: some View {
+        VStack(spacing: 12) {
+            TextField(text: $email, prompt: registerPlaceholder(LL("邮箱"))) {
+                Text(LL("邮箱"))
+            }
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($focusedField, equals: .email)
+                .submitLabel(.next)
+                .onSubmit { focusedField = .displayName }
+                .padding(15)
+                .background(fieldBackground)
+                .accessibilityIdentifier("register.emailField")
+
+            TextField(text: $displayName, prompt: registerPlaceholder(LL("昵称"))) {
+                Text(LL("昵称"))
+            }
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($focusedField, equals: .displayName)
+                .submitLabel(.next)
+                .onSubmit { focusedField = .password }
+                .padding(15)
+                .background(fieldBackground)
+                .accessibilityIdentifier("register.displayNameField")
+
+            Text(LL("昵称全平台唯一，不区分大小写，提交后进入审核。"))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.58))
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            SecureField(text: $password, prompt: registerPlaceholder(L("密码", "Password"))) {
+                Text(L("密码", "Password"))
+            }
+                .focused($focusedField, equals: .password)
+                .submitLabel(.next)
+                .onSubmit { focusedField = .confirmPassword }
+                .padding(15)
+                .background(fieldBackground)
+                .accessibilityIdentifier("register.passwordField")
+
+            SecureField(text: $confirmPassword, prompt: registerPlaceholder(LL("确认密码"))) {
+                Text(LL("确认密码"))
+            }
+                .focused($focusedField, equals: .confirmPassword)
+                .submitLabel(.done)
+                .onSubmit {
+                    focusedField = nil
+                    dismissKeyboard()
+                }
+                .padding(15)
+                .background(fieldBackground)
+                .accessibilityIdentifier("register.confirmPasswordField")
+        }
+    }
+
+    private var termsToggle: some View {
+        Button {
+            hasAgreedTerms.toggle()
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: hasAgreedTerms ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 18, weight: .regular))
+                    .foregroundStyle(hasAgreedTerms ? Color.white.opacity(0.96) : Color.white.opacity(0.56))
+                Text(LL("我同意《用户服务条款》《用户协议》《隐私政策》"))
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .multilineTextAlignment(.leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("register.agreeTermsButton")
+    }
+
+    private var submitButton: some View {
+        Button {
+            Task { await submitRegistration() }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(canSubmit ? Color.white.opacity(0.92) : Color.white.opacity(0.22))
+                if isSubmitting {
+                    ProgressView().tint(.black)
+                } else {
+                    Text(LL("完成注册"))
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(canSubmit ? Color.black.opacity(0.88) : Color.white.opacity(0.56))
+                }
+            }
+            .frame(height: 54)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canSubmit || isSubmitting)
+        .accessibilityIdentifier("register.submitButton")
+    }
+
+    @ViewBuilder
+    private var errorText: some View {
+        if let error = appState.errorMessage, !error.isEmpty {
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(Color(red: 1, green: 0.82, blue: 0.82))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("register.errorText")
+        }
+    }
+
+    private var canSubmit: Bool {
+        !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && password.count >= 6
+            && password == confirmPassword
+            && hasAgreedTerms
+    }
+
+    private var fieldBackground: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color.black.opacity(0.34))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.28), lineWidth: 1)
+            )
+    }
+
+    private func registerPlaceholder(_ title: String) -> Text {
+        Text(title).foregroundColor(.white.opacity(0.82))
+    }
+
+    private func loadSelectedAvatar(_ item: PhotosPickerItem?) async {
+        guard let item else {
+            selectedAvatarData = nil
+            selectedAvatarImage = nil
+            return
         }
 
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else { return }
+            let preparedData = Self.preparedAvatarData(from: data)
+            await MainActor.run {
+                selectedAvatarData = preparedData
+                selectedAvatarImage = UIImage(data: preparedData)
+            }
+        } catch {
+            await MainActor.run {
+                appState.errorMessage = L("头像读取失败，请重新选择", "Failed to read avatar. Please choose again.")
+            }
+        }
+    }
+
+    private static func preparedAvatarData(from data: Data) -> Data {
+        guard
+            let image = UIImage(data: data),
+            let resized = image.resizedForRegistrationAvatar(maxPixel: 1024),
+            let jpegData = resized.jpegData(compressionQuality: 0.86)
+        else {
+            return data
+        }
+        return jpegData
+    }
+
+    private func submitRegistration() async {
+        guard !isSubmitting else { return }
+
+        let resolvedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !resolvedEmail.isEmpty else {
+            appState.errorMessage = LL("请输入邮箱")
+            return
+        }
+
+        guard !resolvedDisplayName.isEmpty else {
+            appState.errorMessage = LL("请输入昵称")
+            return
+        }
+
+        guard password.count >= 6 else {
+            appState.errorMessage = LL("密码至少需要 6 位")
+            return
+        }
+
+        guard password == confirmPassword else {
+            appState.errorMessage = LL("两次输入的密码不一致")
+            return
+        }
+
+        guard hasAgreedTerms else {
+            appState.errorMessage = L("请先勾选并同意用户协议", "Please agree to the user terms first.")
+            return
+        }
+
+        isSubmitting = true
+        defer { isSubmitting = false }
+
         await appState.register(
-            username: username.trimmingCharacters(in: .whitespacesAndNewlines),
             email: resolvedEmail,
             password: password,
-            displayName: displayName
+            displayName: resolvedDisplayName
         )
+
+        if appState.errorMessage == nil, let selectedAvatarData {
+            do {
+                _ = try await appState.service.uploadMyAvatar(
+                    imageData: selectedAvatarData,
+                    fileName: "avatar-\(Int(Date().timeIntervalSince1970)).jpg",
+                    mimeType: "image/jpeg"
+                )
+            } catch {
+                appState.errorMessage = L("注册成功，但头像上传失败，请稍后在个人主页重试", "Registered, but avatar upload failed. Please retry from your profile later.")
+            }
+        }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
 
@@ -595,18 +946,6 @@ private enum ThirdPartyButtonStyle {
     case circle(Color)
     case assetCircle(background: Color, imageScale: CGFloat)
     case assetRoundedRect
-}
-
-private enum AuthMode: String, CaseIterable {
-    case login
-    case register
-
-    var title: String {
-        switch self {
-        case .login: return L("登录", "Login")
-        case .register: return L("注册", "Register")
-        }
-    }
 }
 
 private enum LoginMethod: String, CaseIterable {
@@ -624,7 +963,7 @@ private enum LoginMethod: String, CaseIterable {
 }
 
 private struct LoginBackgroundVideoView: UIViewRepresentable {
-    let player: AVQueuePlayer
+    let player: AVPlayer
 
     func makeUIView(context: Context) -> PlayerContainerView {
         let view = PlayerContainerView()
@@ -646,10 +985,10 @@ private struct LoginBackgroundVideoView: UIViewRepresentable {
 }
 
 private final class LoginBackgroundVideoController: ObservableObject {
-    let player = AVQueuePlayer()
-    private var looper: AVPlayerLooper?
+    let player = AVPlayer()
     private var shouldPlay = false
     private var appLifecycleObservers: [NSObjectProtocol] = []
+    private var videoEndObserver: NSObjectProtocol?
 
     init() {
         configure()
@@ -658,6 +997,9 @@ private final class LoginBackgroundVideoController: ObservableObject {
 
     deinit {
         appLifecycleObservers.forEach(NotificationCenter.default.removeObserver)
+        if let videoEndObserver {
+            NotificationCenter.default.removeObserver(videoEndObserver)
+        }
     }
 
     func start() {
@@ -682,8 +1024,11 @@ private final class LoginBackgroundVideoController: ObservableObject {
     }
 
     private func configure() {
-        player.removeAllItems()
-        looper = nil
+        if let videoEndObserver {
+            NotificationCenter.default.removeObserver(videoEndObserver)
+            self.videoEndObserver = nil
+        }
+
         player.isMuted = true
         player.actionAtItemEnd = .none
         player.preventsDisplaySleepDuringVideoPlayback = false
@@ -693,7 +1038,17 @@ private final class LoginBackgroundVideoController: ObservableObject {
         }
 
         let item = AVPlayerItem(url: url)
-        looper = AVPlayerLooper(player: player, templateItem: item)
+        player.replaceCurrentItem(with: item)
+        videoEndObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                self?.resumeIfNeeded()
+            }
+        }
     }
 
     private func observeAppLifecycle() {

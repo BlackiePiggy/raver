@@ -12,6 +12,11 @@ enum ComposePostMode {
     case edit(Post)
 }
 
+struct ComposePostEventTag: Hashable {
+    let id: String
+    let name: String
+}
+
 struct ComposePostView: View {
     @Environment(\.dismiss) private var dismiss
     private let service: SocialService
@@ -22,6 +27,7 @@ struct ComposePostView: View {
     private let onPostCreated: ((Post) -> Void)?
     private let onPostUpdated: ((Post) -> Void)?
     private let onPostDeleted: ((String) -> Void)?
+    private let initialEventTag: ComposePostEventTag?
 
     @State private var text: String
     @State private var mediaEntries: [ComposeMediaEntry]
@@ -41,6 +47,7 @@ struct ComposePostView: View {
         service: SocialService,
         webService: WebFeatureService,
         mode: ComposePostMode = .create,
+        initialEventTag: ComposePostEventTag? = nil,
         onPostCreated: ((Post) -> Void)? = nil,
         onPostUpdated: ((Post) -> Void)? = nil,
         onPostDeleted: ((String) -> Void)? = nil
@@ -48,6 +55,7 @@ struct ComposePostView: View {
         self.service = service
         self.webService = webService
         self.mode = mode
+        self.initialEventTag = initialEventTag
         self.onPostCreated = onPostCreated
         self.onPostUpdated = onPostUpdated
         self.onPostDeleted = onPostDeleted
@@ -227,6 +235,10 @@ struct ComposePostView: View {
 
             locationSection
 
+            if let initialEventTag {
+                eventTagSection(initialEventTag)
+            }
+
             Button {
                 Task { await submitPost() }
             } label: {
@@ -329,7 +341,8 @@ struct ComposePostView: View {
                     input: CreatePostInput(
                         content: trimmedText,
                         images: normalizedMediaURLs,
-                        location: normalizedLocationTag
+                        location: normalizedLocationTag,
+                        boundEventIDs: initialEventTag.map { [$0.id] } ?? []
                     )
                 )
                 onPostCreated?(created)
@@ -506,6 +519,29 @@ struct ComposePostView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private func eventTagSection(_ tag: ComposePostEventTag) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(LL("活动标签"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+
+            HStack(spacing: 8) {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.accent)
+                Text(tag.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(RaverTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
 }

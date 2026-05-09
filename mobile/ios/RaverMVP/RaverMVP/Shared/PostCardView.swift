@@ -9,6 +9,7 @@ struct PostCardView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appContainer: AppContainer
+    @EnvironmentObject private var appState: AppState
 
     let post: Post
     let currentUserId: String?
@@ -26,6 +27,7 @@ struct PostCardView: View {
     @State private var isShowingLocationMap = false
     @State private var isSharePanelVisible = false
     @State private var isShowingMoreChatsSheet = false
+    @State private var isShowingRealNameSheet = false
     @State private var shareErrorMessage: String?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
@@ -191,6 +193,7 @@ struct PostCardView: View {
 
                     if showsMoreButton {
                         Button {
+                            guard requireRealNameForSocialAction() else { return }
                             withAnimation(.sharePanelPresentSpring) {
                                 isSharePanelVisible = true
                             }
@@ -236,9 +239,11 @@ struct PostCardView: View {
                         primaryActions: sharePrimaryActions(),
                         quickActions: shareQuickActions(),
                         loadConversations: {
-                            try await loadSharePanelConversations()
+                            try requireRealNameForThrowingSocialAction()
+                            return try await loadSharePanelConversations()
                         },
                         onSendToConversation: { conversation, note in
+                            try requireRealNameForThrowingSocialAction()
                             try await sendPostSharePayload(to: conversation, note: note)
                         },
                         onDismiss: dismissSharePanel,
@@ -254,9 +259,11 @@ struct PostCardView: View {
         .sheet(isPresented: $isShowingMoreChatsSheet) {
             ChatShareSheet(
                 loadConversations: {
-                    try await loadSharePanelConversations()
+                    try requireRealNameForThrowingSocialAction()
+                    return try await loadSharePanelConversations()
                 },
                 onShareToConversation: { conversation in
+                    try requireRealNameForThrowingSocialAction()
                     try await sendPostSharePayload(to: conversation, note: nil)
                 }
             ) { _ in
@@ -265,6 +272,10 @@ struct PostCardView: View {
                 PostSharePreviewCard(payload: PostSharePayload(post: post))
             }
             .presentationDetents([.fraction(0.76), .large])
+        }
+        .sheet(isPresented: $isShowingRealNameSheet) {
+            RealNameVerificationSheet()
+                .presentationDetents([.medium])
         }
         .alert(L("提示", "Notice"), isPresented: Binding(
             get: { shareErrorMessage != nil },
@@ -316,7 +327,7 @@ struct PostCardView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(post.author.displayName)
                     .font(.subheadline.bold())
-                Text("@\(post.author.username) · \(post.createdAt.feedTimeText)")
+                Text(post.createdAt.feedTimeText)
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -355,6 +366,26 @@ struct PostCardView: View {
     private func dismissSharePanel() {
         withAnimation(.sharePanelDismissSpring) {
             isSharePanelVisible = false
+        }
+    }
+
+    private func requireRealNameForSocialAction() -> Bool {
+        guard appState.canUseSocialFeatures else {
+            shareErrorMessage = appState.socialFeatureUnavailableMessage
+            if appState.session != nil {
+                isShowingRealNameSheet = true
+            }
+            return false
+        }
+        return true
+    }
+
+    private func requireRealNameForThrowingSocialAction() throws {
+        guard appState.canUseSocialFeatures else {
+            if appState.session != nil {
+                isShowingRealNameSheet = true
+            }
+            throw ServiceError.message(appState.socialFeatureUnavailableMessage)
         }
     }
 

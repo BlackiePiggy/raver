@@ -111,6 +111,10 @@ final class IMChatStore: ObservableObject {
         return latestInputStatusByConversationID[conversation.id]
     }
 
+    func conversation(matching conversationID: String) -> Conversation? {
+        conversations.first { matchesConversation($0, id: conversationID) }
+    }
+
     func pruneExpiredInputStatus() {
         cleanupExpiredInputStatus()
     }
@@ -708,7 +712,8 @@ final class IMChatStore: ObservableObject {
                 username: normalizedText(preferred.username) ?? fallback.username,
                 displayName: normalizedText(preferred.displayName) ?? fallback.displayName,
                 avatarURL: normalizedText(preferred.avatarURL) ?? normalizedText(fallback.avatarURL),
-                isFollowing: preferred.isFollowing || fallback.isFollowing
+                isFollowing: preferred.isFollowing || fallback.isFollowing,
+                isFriend: preferred.isFriend ?? fallback.isFriend
             )
         case let (.some(existing), .none):
             return existing

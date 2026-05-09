@@ -77,6 +77,9 @@ struct UserSummary: Codable, Identifiable, Hashable {
     var displayName: String
     var avatarURL: String?
     var isFollowing: Bool
+    var isFriend: Bool? = nil
+    var conversationID: String? = nil
+    var friendMessage: String? = nil
 }
 
 struct UserProfile: Codable, Identifiable {
@@ -96,6 +99,7 @@ struct UserProfile: Codable, Identifiable {
     var friendsCount: Int
     var postsCount: Int
     var isFollowing: Bool?
+    var isFriend: Bool?
 }
 
 struct Post: Codable, Identifiable, Hashable {
@@ -570,6 +574,19 @@ struct ChatMessage: Codable, Identifiable, Hashable {
 
 struct FeedPage: Codable {
     let posts: [Post]
+    let nextCursor: String?
+}
+
+struct EventLiveComment: Codable, Identifiable, Hashable {
+    let id: String
+    let eventID: String
+    var author: UserSummary
+    var content: String
+    var createdAt: Date
+}
+
+struct EventLiveCommentPage: Codable {
+    let comments: [EventLiveComment]
     let nextCursor: String?
 }
 

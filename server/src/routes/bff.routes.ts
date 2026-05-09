@@ -2,8 +2,6 @@ import { Router, Request, Response, NextFunction, type CookieOptions } from 'exp
 import { Prisma, PrismaClient } from '@prisma/client';
 import OSS from 'ali-oss';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import crypto from 'crypto';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
@@ -18,6 +16,7 @@ import {
   type JWTPayload,
 } from '../utils/auth';
 import { tencentIMGroupService } from '../services/tencent-im/tencent-im-group.service';
+import { tencentIMFriendService } from '../services/tencent-im/tencent-im-friend.service';
 import { tencentIMUserService } from '../services/tencent-im/tencent-im-user.service';
 import { smsService } from '../services/sms/sms-provider';
 import { notificationCenterService } from '../services/notification-center';
@@ -32,22 +31,8 @@ import {
 
 const router: Router = Router();
 const prisma = new PrismaClient();
-const avatarUploadDir = path.join(process.cwd(), 'uploads', 'avatars');
-if (!fs.existsSync(avatarUploadDir)) {
-  fs.mkdirSync(avatarUploadDir, { recursive: true });
-}
-
-const avatarStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, avatarUploadDir),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || '').toLowerCase();
-    const safeExt = ext && ext.length <= 8 ? ext : '.jpg';
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${safeExt}`);
-  },
-});
-
 const avatarUpload = multer({
-  storage: avatarStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype.startsWith('image/')) {
@@ -70,8 +55,9 @@ const ossAccessKeySecret = cleanEnv(process.env.OSS_ACCESS_KEY_SECRET);
 const ossBucket = cleanEnv(process.env.OSS_BUCKET);
 const ossEndpoint = cleanEnv(process.env.OSS_ENDPOINT);
 const ossPostsPrefix = (cleanEnv(process.env.OSS_POSTS_PREFIX) || 'posts').replace(/^\/+|\/+$/g, '');
+const ossUserAvatarsPrefix = (cleanEnv(process.env.OSS_USER_AVATARS_PREFIX) || 'users/avatars').replace(/^\/+|\/+$/g, '');
 
-const postMediaOssClient =
+const ossClient =
   ossRegion && ossAccessKeyId && ossAccessKeySecret && ossBucket
     ? new OSS({
         region: ossRegion,
@@ -81,6 +67,99 @@ const postMediaOssClient =
         endpoint: ossEndpoint || undefined,
       })
     : null;
+
+const postMediaOssClient = ossClient;
+
+const normalizeDisplayName = (value: string | null | undefined): string => {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+};
+
+const normalizeDisplayNameForUniqueness = (value: string | null | undefined): string => {
+  return normalizeDisplayName(value).toLocaleLowerCase('zh-Hans-CN');
+};
+
+const createInternalUsername = async (seed: string): Promise<string> => {
+  const normalizedSeed = seed
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 24) || 'user';
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const suffix = crypto.randomBytes(4).toString('hex');
+    const candidate = `${normalizedSeed}_${suffix}`.slice(0, 40);
+    const exists = await prisma.user.findUnique({
+      where: { username: candidate },
+      select: { id: true },
+    });
+    if (!exists) {
+      return candidate;
+    }
+  }
+
+  return `user_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
+};
+
+const publicOssUrlForObjectKey = (objectKey: string): string => {
+  if (!ossBucket || !ossRegion) {
+    return `/${objectKey}`;
+  }
+
+  const endpointHost = ossEndpoint
+    ? ossEndpoint.replace(/^https?:\/\//, '').replace(/^\/+|\/+$/g, '')
+    : `${ossRegion}.aliyuncs.com`;
+  const bucketHost = endpointHost.startsWith(`${ossBucket}.`) ? endpointHost : `${ossBucket}.${endpointHost}`;
+  return `https://${bucketHost}/${objectKey}`;
+};
+
+const extensionForMimeType = (mimeType: string): string => {
+  const normalized = mimeType.toLowerCase();
+  if (normalized.includes('png')) return '.png';
+  if (normalized.includes('webp')) return '.webp';
+  if (normalized.includes('gif')) return '.gif';
+  return '.jpg';
+};
+
+const uploadUserAvatarToOss = async (
+  userId: string,
+  file: Express.Multer.File
+): Promise<{ url: string; objectKey: string }> => {
+  if (!ossClient) {
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  const ext = extensionForMimeType(file.mimetype);
+  const objectKey = `${ossUserAvatarsPrefix}/${userId}/avatar-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
+  const result = await ossClient.put(objectKey, file.buffer, {
+    headers: {
+      'Content-Type': file.mimetype,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  });
+  return {
+    url: result.url || publicOssUrlForObjectKey(objectKey),
+    objectKey,
+  };
+};
+
+const createProfileModerationJob = async (
+  userId: string,
+  targetType: 'display_name' | 'avatar',
+  targetValue: string,
+  normalizedValue?: string | null
+): Promise<void> => {
+  await prisma.userProfileModerationJob.create({
+    data: {
+      userId,
+      targetType,
+      targetValue,
+      normalizedValue: normalizedValue || null,
+      status: 'pending',
+      provider: 'manual_review',
+    },
+  });
+};
 
 const extractPostMediaOssKey = (raw: string): string | null => {
   const value = raw.trim();
@@ -184,6 +263,33 @@ const syncTencentIMUserBestEffort = async (userId: string, reason: string): Prom
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[tencent-im] user sync skipped during ${reason}: ${message}`, { userId });
+  }
+};
+
+const syncTencentIMFriendshipBestEffort = async (
+  userOneId: string,
+  userTwoId: string,
+  reason: string
+): Promise<void> => {
+  try {
+    await tencentIMFriendService.ensureMutualFriends(userOneId, userTwoId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[tencent-im] friend sync skipped during ${reason}: ${message}`, { userOneId, userTwoId });
+  }
+};
+
+const sendTencentIMFriendCreatedTipBestEffort = async (
+  userOneId: string,
+  userTwoId: string,
+  text: string,
+  reason: string
+): Promise<void> => {
+  try {
+    await tencentIMFriendService.sendFriendCreatedTip(userOneId, userTwoId, text);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[tencent-im] friend tip skipped during ${reason}: ${message}`, { userOneId, userTwoId });
   }
 };
 
@@ -849,6 +955,17 @@ const toUserSummary = (user: BasicUser, isFollowing: boolean) => {
   };
 };
 
+const toUserSummaryWithFriendship = (
+  user: BasicUser,
+  isFollowing: boolean,
+  isFriend: boolean
+) => {
+  return {
+    ...toUserSummary(user, isFollowing),
+    isFriend,
+  };
+};
+
 const toUserSummaryWithNickname = (
   user: BasicUser,
   isFollowing: boolean,
@@ -1025,6 +1142,23 @@ const mapPost = (
   };
 };
 
+const mapEventLiveComment = (
+  comment: {
+    id: string;
+    eventId: string;
+    user: BasicUser;
+    content: string;
+    createdAt: Date;
+  },
+  followingSet: Set<string>
+) => ({
+  id: comment.id,
+  eventID: comment.eventId,
+  author: toUserSummary(comment.user, followingSet.has(comment.user.id)),
+  content: comment.content,
+  createdAt: comment.createdAt,
+});
+
 const buildLikedPostMap = async (viewerId: string | undefined, postIds: string[]) => {
   if (!viewerId || postIds.length === 0) {
     return new Set<string>();
@@ -1196,6 +1330,82 @@ const normalizeDirectPair = (userOneId: string, userTwoId: string): [string, str
   return userOneId <= userTwoId ? [userOneId, userTwoId] : [userTwoId, userOneId];
 };
 
+const FRIEND_CHAT_GREETING = '你们已成功添加好友，现在可以开始聊天了';
+
+const isMutualFriend = async (userOneId: string, userTwoId: string): Promise<boolean> => {
+  const [outgoing, incoming] = await Promise.all([
+    prisma.follow.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId: userOneId,
+          followingId: userTwoId,
+        },
+      },
+      select: { id: true },
+    }),
+    prisma.follow.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId: userTwoId,
+          followingId: userOneId,
+        },
+      },
+      select: { id: true },
+    }),
+  ]);
+  return Boolean(outgoing && incoming);
+};
+
+const ensureFriendConversationWithGreeting = async (
+  userOneId: string,
+  userTwoId: string
+): Promise<{ conversationId: string; createdGreeting: boolean }> => {
+  const [userAId, userBId] = normalizeDirectPair(userOneId, userTwoId);
+
+  return prisma.$transaction(async (tx) => {
+    const conversation = await tx.directConversation.upsert({
+      where: {
+        userAId_userBId: { userAId, userBId },
+      },
+      update: {},
+      create: {
+        userAId,
+        userBId,
+      },
+      select: { id: true },
+    });
+
+    const existingGreeting = await tx.directMessage.findFirst({
+      where: {
+        conversationId: conversation.id,
+        senderId: userAId,
+        type: 'system_friend_created',
+      },
+      select: { id: true },
+    });
+
+    if (existingGreeting) {
+      return { conversationId: conversation.id, createdGreeting: false };
+    }
+
+    await tx.directMessage.create({
+      data: {
+        conversationId: conversation.id,
+        senderId: userAId,
+        content: FRIEND_CHAT_GREETING,
+        type: 'system_friend_created',
+      },
+    });
+
+    await tx.directConversation.update({
+      where: { id: conversation.id },
+      data: { updatedAt: new Date() },
+    });
+
+    return { conversationId: conversation.id, createdGreeting: true };
+  });
+};
+
 const mapDirectConversation = async (
   conversation: {
     id: string;
@@ -1210,7 +1420,10 @@ const mapDirectConversation = async (
   unreadCount = 0
 ) => {
   const targetUser = conversation.userAId === viewerId ? conversation.userB : conversation.userA;
-  const followingSet = await buildFollowingMap(viewerId, [targetUser.id]);
+  const [followingSet, friendSet] = await Promise.all([
+    buildFollowingMap(viewerId, [targetUser.id]),
+    buildFriendUserIds(viewerId, [targetUser.id]),
+  ]);
   const last = conversation.messages[0];
 
   return {
@@ -1222,7 +1435,11 @@ const mapDirectConversation = async (
     lastMessageSenderID: last?.sender?.username || last?.senderId || null,
     unreadCount,
     updatedAt: last?.createdAt || conversation.updatedAt,
-    peer: toUserSummary(targetUser, followingSet.has(targetUser.id)),
+    peer: toUserSummaryWithFriendship(
+      targetUser,
+      followingSet.has(targetUser.id),
+      friendSet.has(targetUser.id)
+    ),
   };
 };
 
@@ -2063,6 +2280,7 @@ router.post('/auth/login', async (req: Request, res: Response): Promise<void> =>
     };
 
     const loginIdentifier = String(username || identifier || email || '').trim();
+    const loginDisplayNameKey = normalizeDisplayNameForUniqueness(loginIdentifier);
     const nowMs = Date.now();
     const clientIp = getClientIp(req);
     const loginRateKey = buildRateKey(clientIp, loginIdentifier || 'unknown');
@@ -2106,7 +2324,7 @@ router.post('/auth/login', async (req: Request, res: Response): Promise<void> =>
         OR: [
           { username: { equals: loginIdentifier, mode: 'insensitive' } },
           { email: { equals: loginIdentifier, mode: 'insensitive' } },
-          { displayName: { equals: loginIdentifier, mode: 'insensitive' } },
+          { displayNameNormalized: loginDisplayNameKey },
         ],
       },
       orderBy: { createdAt: 'asc' },
@@ -2180,11 +2398,12 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
       displayName?: string;
     };
 
-    const normalizedUsername = String(username || '').trim().toLowerCase();
+    const requestedUsername = String(username || '').trim().toLowerCase();
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    const normalizedDisplayName = String(displayName || normalizedUsername).trim();
+    const normalizedDisplayName = normalizeDisplayName(displayName);
+    const normalizedDisplayNameKey = normalizeDisplayNameForUniqueness(normalizedDisplayName);
     const nowMs = Date.now();
-    const registerIdentifier = normalizedEmail || normalizedUsername || 'unknown';
+    const registerIdentifier = normalizedEmail || normalizedDisplayNameKey || requestedUsername || 'unknown';
     const registerRateKey = buildRateKey(getClientIp(req), registerIdentifier);
     const registerRateState = checkRateLimit(
       authRegisterRateBuckets,
@@ -2211,14 +2430,25 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
 
     registerRateAttempt(authRegisterRateBuckets, registerRateKey, authRegisterRateLimitWindowMs, nowMs);
 
-    if (!normalizedUsername || !normalizedEmail || !password) {
+    if (!normalizedDisplayName || !normalizedEmail || !password) {
       writeAuthAuditLog(req, {
         action: 'auth.register',
         outcome: 'failed',
         identifier: registerIdentifier,
         errorCode: 'AUTH_INVALID_REQUEST',
       });
-      res.status(400).json({ error: 'username, email, and password are required' });
+      res.status(400).json({ error: 'displayName, email, and password are required' });
+      return;
+    }
+
+    if (normalizedDisplayName.length < 2 || normalizedDisplayName.length > 24) {
+      writeAuthAuditLog(req, {
+        action: 'auth.register',
+        outcome: 'failed',
+        identifier: registerIdentifier,
+        errorCode: 'AUTH_DISPLAY_NAME_INVALID',
+      });
+      res.status(400).json({ error: '昵称需要 2-24 个字符' });
       return;
     }
 
@@ -2235,9 +2465,13 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
 
     const exists = await prisma.user.findFirst({
       where: {
-        OR: [{ username: normalizedUsername }, { email: normalizedEmail }],
+        OR: [
+          { email: normalizedEmail },
+          { displayNameNormalized: normalizedDisplayNameKey },
+          ...(requestedUsername ? [{ username: requestedUsername }] : []),
+        ],
       },
-      select: { id: true },
+      select: { id: true, email: true, displayNameNormalized: true, username: true },
     });
 
     if (exists) {
@@ -2247,16 +2481,21 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
         identifier: registerIdentifier,
         errorCode: 'AUTH_USER_EXISTS',
       });
-      res.status(409).json({ error: 'User already exists' });
+      res.status(409).json({
+        error: exists.displayNameNormalized === normalizedDisplayNameKey ? '昵称已被使用' : 'User already exists',
+      });
       return;
     }
 
+    const internalUsername = requestedUsername || await createInternalUsername(normalizedEmail.split('@')[0] || normalizedDisplayNameKey);
     const user = await prisma.user.create({
       data: {
-        username: normalizedUsername,
+        username: internalUsername,
         email: normalizedEmail,
         passwordHash: await hashPassword(password),
-        displayName: normalizedDisplayName || normalizedUsername,
+        displayName: normalizedDisplayName,
+        displayNameNormalized: normalizedDisplayNameKey,
+        displayNameStatus: 'pending',
       },
       select: {
         id: true,
@@ -2267,6 +2506,13 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
         role: true,
       },
     });
+
+    await createProfileModerationJob(
+      user.id,
+      'display_name',
+      normalizedDisplayName,
+      normalizedDisplayNameKey
+    );
 
     await syncTencentIMUserBestEffort(user.id, 'bff-auth-register');
     writeAuthAuditLog(req, {
@@ -2707,12 +2953,26 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
     const effectiveMode: FeedMode = requestedMode === 'following' && !viewerId ? 'latest' : requestedMode;
     const experimentBucket: FeedExperimentBucket = resolveFeedExperimentBucket(req, viewerId);
     const rankingWeights = buildFeedRankingWeights(experimentBucket);
+    const eventID =
+      typeof req.query.eventID === 'string'
+        ? req.query.eventID.trim()
+        : typeof req.query.eventId === 'string'
+          ? req.query.eventId.trim()
+          : '';
 
     const limit = normalizeLimit(req.query.limit, 20, 50);
     const cursorDate = parseCursorDate(req.query.cursor);
     const baseWhere = {
       visibility: 'public' as const,
       squadId: null,
+      ...(eventID
+        ? {
+            OR: [
+              { eventId: eventID },
+              { boundEventIds: { has: eventID } },
+            ],
+          }
+        : {}),
       ...(viewerId
         ? {
             hides: {
@@ -2750,6 +3010,39 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
     let sourcePosts: Array<Parameters<typeof mapPost>[0]> = [];
     let recallSourcesByPostId = new Map<string, Set<FeedRecallSource>>();
     let preloadedFollowedDjIds: Set<string> | null = null;
+
+    if (eventID) {
+      sourcePosts = await prisma.post.findMany({
+        where: baseWhere,
+        include: postInclude,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+      });
+
+      const hasMore = sourcePosts.length > limit;
+      const pagePosts = hasMore ? sourcePosts.slice(0, limit) : sourcePosts;
+      const authorIds = Array.from(new Set(pagePosts.map((post) => post.user.id)));
+      const postIds = pagePosts.map((post) => post.id);
+      const [followingSet, likedPostIds, repostedPostIds, savedPostIds, hiddenPostIds] = await Promise.all([
+        buildFollowingMap(viewerId, authorIds),
+        buildLikedPostMap(viewerId, postIds),
+        buildRepostedPostMap(viewerId, postIds),
+        buildSavedPostMap(viewerId, postIds),
+        buildHiddenPostMap(viewerId, postIds),
+      ]);
+
+      res.json({
+        mode: requestedMode,
+        effectiveMode,
+        eventID,
+        rankingExperiment: null,
+        posts: pagePosts.map((post) =>
+          mapPost(post, followingSet, likedPostIds, repostedPostIds, savedPostIds, hiddenPostIds)
+        ),
+        nextCursor: hasMore ? pagePosts[pagePosts.length - 1]?.createdAt.toISOString() ?? null : null,
+      });
+      return;
+    }
 
     const addRecallSource = (postId: string, source: FeedRecallSource) => {
       const bucket = recallSourcesByPostId.get(postId) || new Set<FeedRecallSource>();
@@ -3304,6 +3597,114 @@ router.post('/feed/events', optionalAuth, async (req: Request, res: Response): P
   }
 });
 
+router.get('/events/:id/live-comments', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const viewerId = (req as BFFAuthRequest).user?.userId;
+    const eventID = String(req.params.id || '').trim();
+    const limit = normalizeLimit(req.query.limit, 50, 100);
+    const cursorDate = parseCursorDate(req.query.cursor);
+
+    if (!eventID) {
+      res.status(400).json({ error: 'Event id is required' });
+      return;
+    }
+
+    const comments = await prisma.eventLiveComment.findMany({
+      where: {
+        eventId: eventID,
+        ...(cursorDate
+          ? {
+              createdAt: {
+                lt: cursorDate,
+              },
+            }
+          : {}),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+
+    const hasMore = comments.length > limit;
+    const pageComments = hasMore ? comments.slice(0, limit) : comments;
+    const authorIds = Array.from(new Set(pageComments.map((comment) => comment.user.id)));
+    const followingSet = await buildFollowingMap(viewerId, authorIds);
+
+    res.json({
+      comments: pageComments
+        .slice()
+        .reverse()
+        .map((comment) => mapEventLiveComment(comment, followingSet)),
+      nextCursor: hasMore ? pageComments[pageComments.length - 1]?.createdAt.toISOString() ?? null : null,
+    });
+  } catch (error) {
+    console.error('BFF event live comments error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const eventID = String(req.params.id || '').trim();
+    const body = (req.body ?? {}) as { content?: unknown };
+    const content = String(body.content || '').trim();
+
+    if (!eventID) {
+      res.status(400).json({ error: 'Event id is required' });
+      return;
+    }
+    if (!content) {
+      res.status(400).json({ error: 'content is required' });
+      return;
+    }
+
+    const eventExists = await prisma.event.findUnique({
+      where: { id: eventID },
+      select: { id: true },
+    });
+    if (!eventExists) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+
+    const created = await prisma.eventLiveComment.create({
+      data: {
+        eventId: eventID,
+        userId,
+        content: content.slice(0, 500),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    const followingSet = await buildFollowingMap(userId, [created.user.id]);
+    res.status(201).json(mapEventLiveComment(created, followingSet));
+  } catch (error) {
+    console.error('BFF create event live comment error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/feed/experiments/summary', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const authReq = req as BFFAuthRequest;
@@ -3586,7 +3987,7 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
       return;
     }
 
-    const [followersCount, followingCount, postsCount, followRow, friendIds] = await Promise.all([
+    const [followersCount, followingCount, postsCount, followRow, viewerFriendIds, targetFriendIds] = await Promise.all([
       prisma.follow.count({
         where: {
           followingId: targetUserId,
@@ -3617,6 +4018,7 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
             },
             select: { id: true },
           }),
+      viewerId === targetUserId ? Promise.resolve(new Set<string>()) : buildFriendUserIds(viewerId, [targetUserId]),
       buildFriendUserIds(targetUserId),
     ]);
 
@@ -3645,9 +4047,10 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
       canViewFollowingList,
       followersCount,
       followingCount,
-      friendsCount: friendIds.size,
+      friendsCount: targetFriendIds.size,
       postsCount,
       isFollowing: Boolean(followRow),
+      isFriend: viewerId === targetUserId ? false : viewerFriendIds.has(targetUserId),
       qrCodeURL: profileShareLink.qrCodeUrl,
     });
   } catch (error) {
@@ -6652,6 +7055,11 @@ router.post('/chat/direct/start', optionalAuth, async (req: Request, res: Respon
       return;
     }
 
+    if (!(await isMutualFriend(userId, target.id))) {
+      res.status(403).json({ error: '需要双方互相关注成为好友后才能聊天' });
+      return;
+    }
+
     const [userAId, userBId] = normalizeDirectPair(userId, target.id);
 
     const conversation = await prisma.directConversation.upsert({
@@ -6777,6 +7185,7 @@ router.get('/chat/conversations/:id/messages', optionalAuth, async (req: Request
           content: message.content,
           createdAt: message.createdAt,
           isMine: message.senderId === userId,
+          kind: message.type === 'system_friend_created' ? 'system' : 'text',
         }))
       );
       return;
@@ -6883,6 +7292,15 @@ router.post('/chat/conversations/:id/messages', optionalAuth, async (req: Reques
     });
 
     if (directConversation) {
+      const directTargetUserId = directConversation.userAId === userId
+        ? directConversation.userBId
+        : directConversation.userAId;
+
+      if (!(await isMutualFriend(userId, directTargetUserId))) {
+        res.status(403).json({ error: '需要双方互相关注成为好友后才能聊天' });
+        return;
+      }
+
       const created = await prisma.$transaction(async (tx) => {
         const message = await tx.directMessage.create({
           data: {
@@ -6925,9 +7343,6 @@ router.post('/chat/conversations/:id/messages', optionalAuth, async (req: Reques
         return message;
       });
 
-      const directTargetUserId = directConversation.userAId === userId
-        ? directConversation.userBId
-        : directConversation.userAId;
       const senderDisplayName = created.sender.displayName || created.sender.username || '新消息';
       publishChatMessageSafely({
         targetUserIds: [directTargetUserId],
@@ -7135,6 +7550,9 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
 
     const data: {
       displayName?: string;
+      displayNameNormalized?: string;
+      displayNameStatus?: string;
+      displayNameReviewNote?: string | null;
       bio?: string;
       favoriteGenres?: string[];
       isFollowersListPublic?: boolean;
@@ -7142,12 +7560,31 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
     } = {};
 
     if (typeof body.displayName === 'string') {
-      const trimmed = body.displayName.trim();
+      const trimmed = normalizeDisplayName(body.displayName);
       if (!trimmed) {
         res.status(400).json({ error: 'displayName cannot be empty' });
         return;
       }
+      if (trimmed.length < 2 || trimmed.length > 24) {
+        res.status(400).json({ error: '昵称需要 2-24 个字符' });
+        return;
+      }
+      const displayNameKey = normalizeDisplayNameForUniqueness(trimmed);
+      const existingDisplayNameUser = await prisma.user.findFirst({
+        where: {
+          displayNameNormalized: displayNameKey,
+          id: { not: userId },
+        },
+        select: { id: true },
+      });
+      if (existingDisplayNameUser) {
+        res.status(409).json({ error: '昵称已被使用' });
+        return;
+      }
       data.displayName = trimmed;
+      data.displayNameNormalized = displayNameKey;
+      data.displayNameStatus = 'pending';
+      data.displayNameReviewNote = null;
     }
 
     if (typeof body.bio === 'string') {
@@ -7172,6 +7609,15 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
         data,
         select: { id: true },
       });
+
+      if (data.displayName && data.displayNameNormalized) {
+        await createProfileModerationJob(
+          userId,
+          'display_name',
+          data.displayName,
+          data.displayNameNormalized
+        );
+      }
 
       await syncTencentIMUserBestEffort(userId, 'bff-profile-update');
     }
@@ -7252,12 +7698,24 @@ router.post(
         return;
       }
 
-      const avatarUrl = `/uploads/avatars/${file.filename}`;
+      const upload = await uploadUserAvatarToOss(userId, file);
+      const avatarUrl = upload.url;
       await prisma.user.update({
         where: { id: userId },
-        data: { avatarUrl },
+        data: {
+          avatarUrl,
+          avatarStatus: 'pending',
+          avatarReviewNote: null,
+        },
         select: { id: true },
       });
+
+      await createProfileModerationJob(
+        userId,
+        'avatar',
+        avatarUrl,
+        upload.objectKey
+      );
 
       await syncTencentIMUserBestEffort(userId, 'bff-profile-avatar');
 
@@ -7513,6 +7971,7 @@ router.post('/social/users/:id/follow', optionalAuth, async (req: Request, res: 
     });
 
     let createdFollowId: string | null = null;
+    let friendConversationResult: { conversationId: string; createdGreeting: boolean } | null = null;
     if (!existing) {
       const createdFollow = await prisma.follow.create({
         data: {
@@ -7523,6 +7982,20 @@ router.post('/social/users/:id/follow', optionalAuth, async (req: Request, res: 
         select: { id: true },
       });
       createdFollowId = createdFollow.id;
+    }
+
+    const becameFriends = await isMutualFriend(userId, targetUserId);
+    if (becameFriends) {
+      friendConversationResult = await ensureFriendConversationWithGreeting(userId, targetUserId);
+      await syncTencentIMFriendshipBestEffort(userId, targetUserId, 'bff-mutual-follow');
+      if (friendConversationResult.createdGreeting) {
+        await sendTencentIMFriendCreatedTipBestEffort(
+          userId,
+          targetUserId,
+          FRIEND_CHAT_GREETING,
+          'bff-mutual-follow'
+        );
+      }
     }
 
     if (createdFollowId) {
@@ -7540,7 +8013,12 @@ router.post('/social/users/:id/follow', optionalAuth, async (req: Request, res: 
       });
     }
 
-    res.json(toUserSummary(target, true));
+    res.json({
+      ...toUserSummary(target, true),
+      isFriend: becameFriends,
+      conversationID: friendConversationResult?.conversationId ?? null,
+      friendMessage: becameFriends ? FRIEND_CHAT_GREETING : null,
+    });
   } catch (error) {
     console.error('BFF follow user error:', error);
     res.status(500).json({ error: 'Internal server error' });

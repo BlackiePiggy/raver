@@ -16,6 +16,7 @@ actor MockSocialService: SocialService {
     private var profilesByID: [String: UserProfile] = [:]
     private var posts: [Post] = []
     private var commentsByPost: [String: [Comment]] = [:]
+    private var eventLiveCommentsByEventID: [String: [EventLiveComment]] = [:]
     private var conversations: [Conversation] = []
     private var messagesByConversation: [String: [ChatMessage]] = [:]
     private var squads: [SquadProfile] = []
@@ -98,12 +99,12 @@ actor MockSocialService: SocialService {
         return 300
     }
 
-    func register(username: String, email: String, password: String, displayName: String) async throws -> Session {
+    func register(email: String, password: String, displayName: String) async throws -> Session {
         _ = email
         _ = password
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        currentUser.username = username
-        currentUser.displayName = name.isEmpty ? username.capitalized : name
+        currentUser.username = name.isEmpty ? "mock_user" : name.lowercased().replacingOccurrences(of: " ", with: "_")
+        currentUser.displayName = name.isEmpty ? "Mock User" : name
         currentUser.avatarURL = Self.seededAvatarURL(for: currentUser.id)
 
         usersByID[currentUser.id] = currentUser
@@ -122,7 +123,8 @@ actor MockSocialService: SocialService {
             followingCount: followingByUserID[currentUser.id]?.count ?? 0,
             friendsCount: friendIDs(for: currentUser.id).count,
             postsCount: posts.filter { $0.author.id == currentUser.id }.count,
-            isFollowing: nil
+            isFollowing: nil,
+            isFriend: nil
         )
 
         applyCurrentFollowFlags()
@@ -151,10 +153,16 @@ actor MockSocialService: SocialService {
         )
     }
 
-    func fetchFeed(cursor: String?, mode: FeedMode?) async throws -> FeedPage {
+    func fetchFeed(cursor: String?, mode: FeedMode?, eventID: String? = nil) async throws -> FeedPage {
         _ = cursor
         let targetMode = mode ?? .recommended
-        let visible = posts.filter { !hiddenPostIDs.contains($0.id) }
+        let normalizedEventID = eventID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let visible = posts.filter { post in
+            !hiddenPostIDs.contains(post.id) &&
+            (normalizedEventID.isEmpty ||
+                post.eventID == normalizedEventID ||
+                post.boundEventIDs.contains(normalizedEventID))
+        }
         let sorted: [Post]
         switch targetMode {
         case .recommended:
@@ -429,6 +437,28 @@ actor MockSocialService: SocialService {
         return newComment
     }
 
+    func fetchEventLiveComments(eventID: String, cursor: String?) async throws -> EventLiveCommentPage {
+        _ = cursor
+        let comments = eventLiveCommentsByEventID[eventID] ?? []
+        return EventLiveCommentPage(comments: comments.sorted(by: { $0.createdAt < $1.createdAt }), nextCursor: nil)
+    }
+
+    func addEventLiveComment(eventID: String, content: String) async throws -> EventLiveComment {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            throw ServiceError.message("请输入评论内容")
+        }
+        let created = EventLiveComment(
+            id: UUID().uuidString,
+            eventID: eventID,
+            author: currentUser,
+            content: trimmed,
+            createdAt: Date()
+        )
+        eventLiveCommentsByEventID[eventID, default: []].append(created)
+        return created
+    }
+
     func searchUsers(query: String) async throws -> [UserSummary] {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if normalized.isEmpty {
@@ -456,6 +486,7 @@ actor MockSocialService: SocialService {
         profile.canViewFollowersList = (userID == currentUser.id) || profile.isFollowersListPublic
         profile.canViewFollowingList = (userID == currentUser.id) || profile.isFollowingListPublic
         profile.isFollowing = userID == currentUser.id ? nil : (followingByUserID[currentUser.id]?.contains(userID) ?? false)
+        profile.isFriend = userID == currentUser.id ? nil : friendIDs(for: currentUser.id).contains(userID)
 
         return profile
     }
@@ -543,21 +574,26 @@ actor MockSocialService: SocialService {
             throw ServiceError.message("请输入用户名")
         }
 
+        let targetUser = usersByID.values.first(where: { $0.id == identifier || $0.username.lowercased() == normalized })
+        guard let targetUser else {
+            throw ServiceError.message("用户不存在")
+        }
+        guard friendIDs(for: currentUser.id).contains(targetUser.id) else {
+            throw ServiceError.message("需要双方互相关注成为好友后才能聊天")
+        }
+
         if let existing = conversations.first(where: {
-            $0.type == .direct && $0.title.lowercased() == normalized
+            $0.type == .direct && $0.peer?.id == targetUser.id
         }) {
             return existing
         }
 
-        let targetUser = usersByID.values.first(where: { $0.username.lowercased() == normalized })
-        let title = targetUser?.displayName ?? identifier
-
         let conversation = Conversation(
             id: "dm_\(UUID().uuidString)",
             type: .direct,
-            title: title,
-            avatarURL: targetUser?.avatarURL,
-            lastMessage: "开始聊天吧",
+            title: targetUser.displayName,
+            avatarURL: targetUser.avatarURL,
+            lastMessage: "你们已成功添加好友，现在可以开始聊天了",
             lastMessageSenderID: nil,
             unreadCount: 0,
             updatedAt: Date(),
@@ -565,7 +601,17 @@ actor MockSocialService: SocialService {
         )
 
         conversations.append(conversation)
-        messagesByConversation[conversation.id] = []
+        messagesByConversation[conversation.id] = [
+            ChatMessage(
+                id: "friend_tip_\(UUID().uuidString)",
+                conversationID: conversation.id,
+                sender: currentUser,
+                content: "你们已成功添加好友，现在可以开始聊天了",
+                createdAt: conversation.updatedAt,
+                isMine: false,
+                kind: .system
+            )
+        ]
         return conversation
     }
 
@@ -1817,6 +1863,7 @@ actor MockSocialService: SocialService {
             targetProfile.followersCount = targetFollowers.count
             targetProfile.friendsCount = friendIDs(for: userID).count
             targetProfile.isFollowing = shouldFollow
+            targetProfile.isFriend = friendIDs(for: currentUser.id).contains(userID)
             profilesByID[userID] = targetProfile
         }
 
@@ -2194,7 +2241,8 @@ actor MockSocialService: SocialService {
                 followingCount: followingByUserID[currentUser.id]?.count ?? 0,
                 friendsCount: followingByUserID[currentUser.id]?.intersection(followersByUserID[currentUser.id] ?? []).count ?? 0,
                 postsCount: posts.filter { $0.author.id == currentUser.id }.count,
-                isFollowing: nil
+                isFollowing: nil,
+                isFriend: nil
             ),
             alice.id: UserProfile(
                 id: alice.id,
@@ -2211,7 +2259,8 @@ actor MockSocialService: SocialService {
                 followingCount: followingByUserID[alice.id]?.count ?? 0,
                 friendsCount: followingByUserID[alice.id]?.intersection(followersByUserID[alice.id] ?? []).count ?? 0,
                 postsCount: posts.filter { $0.author.id == alice.id }.count,
-                isFollowing: true
+                isFollowing: true,
+                isFriend: true
             ),
             bob.id: UserProfile(
                 id: bob.id,
@@ -2228,7 +2277,8 @@ actor MockSocialService: SocialService {
                 followingCount: followingByUserID[bob.id]?.count ?? 0,
                 friendsCount: followingByUserID[bob.id]?.intersection(followersByUserID[bob.id] ?? []).count ?? 0,
                 postsCount: posts.filter { $0.author.id == bob.id }.count,
-                isFollowing: false
+                isFollowing: false,
+                isFriend: false
             )
         ]
 

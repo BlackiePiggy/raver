@@ -28,7 +28,7 @@ enum GlobalSearchTab: String, CaseIterable, Codable, Hashable, Identifiable {
         case .sets: return "Sets"
         case .rankings: return L("榜单", "Rankings")
         case .ratings: return L("打分", "Ratings")
-        case .festivals: return L("音乐节(品牌)", "Festivals (Brand)")
+        case .festivals: return L("品牌", "Brand")
         case .labels: return L("厂牌", "Labels")
         case .genreTree: return L("风格树", "Genre Tree")
         }
@@ -243,10 +243,70 @@ struct GlobalSearchScopeHint: Identifiable, Hashable {
             GlobalSearchScopeHint(id: "rankings", title: L("榜单", "Rankings"), systemImage: "list.number", tint: Color(red: 0.98, green: 0.71, blue: 0.22)),
             GlobalSearchScopeHint(id: "ratings", title: L("打分", "Ratings"), systemImage: "star", tint: Color(red: 0.92, green: 0.42, blue: 0.80)),
             GlobalSearchScopeHint(id: "posts", title: L("圈子", "Posts"), systemImage: "bubble.left.and.bubble.right", tint: Color(red: 0.52, green: 0.76, blue: 0.34)),
-            GlobalSearchScopeHint(id: "festivals", title: L("音乐节(品牌)", "Festivals (Brand)"), systemImage: "sparkles", tint: Color(red: 0.76, green: 0.47, blue: 0.95)),
+            GlobalSearchScopeHint(id: "festivals", title: L("品牌", "Brand"), systemImage: "sparkles", tint: Color(red: 0.76, green: 0.47, blue: 0.95)),
             GlobalSearchScopeHint(id: "labels", title: L("厂牌", "Labels"), systemImage: "tag", tint: Color(red: 0.62, green: 0.50, blue: 0.92)),
             GlobalSearchScopeHint(id: "genreTree", title: L("风格树", "Genre Tree"), systemImage: "tree", tint: Color(red: 0.24, green: 0.70, blue: 0.78)),
             GlobalSearchScopeHint(id: "peopleSquads", title: L("用户/小队", "People & Squads"), systemImage: "person.2", tint: Color(red: 0.96, green: 0.45, blue: 0.28))
+        ]
+    }
+}
+
+struct GlobalSearchPlatformStatHint: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let systemImage: String
+    let tint: Color
+
+    static var all: [GlobalSearchPlatformStatHint] {
+        [
+            GlobalSearchPlatformStatHint(
+                id: "events",
+                title: L("探索 1000+ 场电音活动", "Explore 1,000+ electronic music events"),
+                systemImage: "calendar",
+                tint: Color(red: 0.95, green: 0.30, blue: 0.38)
+            ),
+            GlobalSearchPlatformStatHint(
+                id: "djs",
+                title: L("探索 10000+ 位 DJ", "Explore 10,000+ DJs"),
+                systemImage: "headphones",
+                tint: RaverTheme.accent
+            ),
+            GlobalSearchPlatformStatHint(
+                id: "sets",
+                title: L("探索 100+ 个现场 Set", "Explore 100+ live sets"),
+                systemImage: "play.rectangle",
+                tint: Color(red: 0.24, green: 0.70, blue: 0.78)
+            ),
+            GlobalSearchPlatformStatHint(
+                id: "rankings",
+                title: L("发现热门榜单与年度排名", "Discover charts and yearly rankings"),
+                systemImage: "list.number",
+                tint: Color(red: 0.98, green: 0.71, blue: 0.22)
+            ),
+            GlobalSearchPlatformStatHint(
+                id: "ratings",
+                title: L("查看打分活动与打分单位", "Browse rating events and rating units"),
+                systemImage: "star",
+                tint: Color(red: 0.92, green: 0.42, blue: 0.80)
+            ),
+            GlobalSearchPlatformStatHint(
+                id: "wiki",
+                title: L("探索音乐节、厂牌与风格树", "Explore festivals, labels, and genre trees"),
+                systemImage: "sparkles",
+                tint: Color(red: 0.76, green: 0.47, blue: 0.95)
+            ),
+            GlobalSearchPlatformStatHint(
+                id: "posts",
+                title: L("浏览圈子动态与玩家内容", "Browse circle posts and community content"),
+                systemImage: "bubble.left.and.bubble.right",
+                tint: Color(red: 0.52, green: 0.76, blue: 0.34)
+            ),
+            GlobalSearchPlatformStatHint(
+                id: "peopleSquads",
+                title: L("找到用户与小队", "Find users and squads"),
+                systemImage: "person.2",
+                tint: Color(red: 0.96, green: 0.45, blue: 0.28)
+            )
         ]
     }
 }

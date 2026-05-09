@@ -17,6 +17,7 @@ private actor AuthRefreshGate {
 }
 
 final class LiveSocialService: SocialService {
+    private let friendChatGreeting = "你们已成功添加好友，现在可以开始聊天了"
     private let baseURL: URL
     private let session: URLSession
     private let imSession = TencentIMSession.shared
@@ -96,9 +97,8 @@ final class LiveSocialService: SocialService {
         return max(0, response.expiresInSeconds)
     }
 
-    func register(username: String, email: String, password: String, displayName: String) async throws -> Session {
+    func register(email: String, password: String, displayName: String) async throws -> Session {
         let body = [
-            "username": username,
             "email": email,
             "password": password,
             "displayName": displayName
@@ -140,7 +140,7 @@ final class LiveSocialService: SocialService {
         try await request(path: "/v1/im/tencent/bootstrap", method: "GET")
     }
 
-    func fetchFeed(cursor: String?, mode: FeedMode?) async throws -> FeedPage {
+    func fetchFeed(cursor: String?, mode: FeedMode?, eventID: String? = nil) async throws -> FeedPage {
         var queryItems = ["limit=12"]
         if let cursor {
             let encoded = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor
@@ -148,6 +148,10 @@ final class LiveSocialService: SocialService {
         }
         if let mode {
             queryItems.append("mode=\(mode.rawValue)")
+        }
+        if let eventID, !eventID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let encoded = eventID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? eventID
+            queryItems.append("eventID=\(encoded)")
         }
         let path = "/v1/feed?\(queryItems.joined(separator: "&"))"
         return try await request(path: path, method: "GET")
@@ -218,6 +222,26 @@ final class LiveSocialService: SocialService {
         return try await request(path: "/v1/feed/posts/\(postID)/comments", method: "POST", body: body)
     }
 
+    func fetchEventLiveComments(eventID: String, cursor: String?) async throws -> EventLiveCommentPage {
+        var queryItems = ["limit=50"]
+        if let cursor {
+            let encoded = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor
+            queryItems.append("cursor=\(encoded)")
+        }
+        return try await request(
+            path: "/v1/events/\(eventID)/live-comments?\(queryItems.joined(separator: "&"))",
+            method: "GET"
+        )
+    }
+
+    func addEventLiveComment(eventID: String, content: String) async throws -> EventLiveComment {
+        try await request(
+            path: "/v1/events/\(eventID)/live-comments",
+            method: "POST",
+            body: ["content": content]
+        )
+    }
+
     func searchUsers(query: String) async throws -> [UserSummary] {
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
         return try await request(path: "/v1/users/search?q=\(encoded)", method: "GET")
@@ -261,7 +285,7 @@ final class LiveSocialService: SocialService {
 
     func fetchConversations(type: ConversationType) async throws -> [Conversation] {
         if let conversations = try await imSession.fetchConversations(type: type) {
-            return conversations
+            return try await hydratedDirectFriendship(in: conversations, type: type)
         }
         throw await tencentIMUnavailableError(for: "fetch conversations")
     }
@@ -374,6 +398,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendMessage(conversationID: String, content: String) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendTextMessage(
             conversationID: conversationID,
             content: content
@@ -388,6 +413,7 @@ final class LiveSocialService: SocialService {
         content: String,
         mentionedUserIDs: [String]
     ) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendTextMessage(
             conversationID: conversationID,
             content: content,
@@ -407,6 +433,7 @@ final class LiveSocialService: SocialService {
         fileURL: URL,
         onProgress: ((Int) -> Void)?
     ) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendImageMessage(
             conversationID: conversationID,
             fileURL: fileURL,
@@ -426,6 +453,7 @@ final class LiveSocialService: SocialService {
         fileURL: URL,
         onProgress: ((Int) -> Void)?
     ) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendVideoMessage(
             conversationID: conversationID,
             fileURL: fileURL,
@@ -437,6 +465,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendVoiceMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendVoiceMessage(
             conversationID: conversationID,
             fileURL: fileURL
@@ -447,6 +476,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendFileMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendFileMessage(
             conversationID: conversationID,
             fileURL: fileURL
@@ -457,6 +487,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendEventCardMessage(conversationID: String, payload: EventShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendEventCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -467,6 +498,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendDJCardMessage(conversationID: String, payload: DJShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendDJCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -477,6 +509,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendSetCardMessage(conversationID: String, payload: SetShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendSetCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -487,6 +520,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendBrandCardMessage(conversationID: String, payload: BrandShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendBrandCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -497,6 +531,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendLabelCardMessage(conversationID: String, payload: LabelShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendLabelCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -507,6 +542,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendNewsCardMessage(conversationID: String, payload: NewsShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendNewsCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -517,6 +553,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendRankingBoardCardMessage(conversationID: String, payload: RankingBoardShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendRankingBoardCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -527,6 +564,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendRatingEventCardMessage(conversationID: String, payload: RatingEventShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendRatingEventCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -537,6 +575,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendRatingUnitCardMessage(conversationID: String, payload: RatingUnitShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendRatingUnitCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -547,6 +586,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendPostCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -557,6 +597,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendCircleIDCardMessage(conversationID: String, payload: CircleIDShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendCircleIDCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -567,6 +608,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendMyCheckinsCardMessage(conversationID: String, payload: MyCheckinsShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendMyCheckinsCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -577,6 +619,7 @@ final class LiveSocialService: SocialService {
     }
 
     func sendEventRouteCardMessage(conversationID: String, payload: EventRouteShareCardPayload) async throws -> ChatMessage {
+        try await assertCanSendDirectMessage(conversationID: conversationID)
         if let message = try await imSession.sendEventRouteCardMessage(
             conversationID: conversationID,
             payload: payload
@@ -986,7 +1029,21 @@ final class LiveSocialService: SocialService {
     }
 
     func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary {
-        try await request(path: "/v1/social/users/\(userID)/follow", method: shouldFollow ? "POST" : "DELETE")
+        let updated: UserSummary = try await request(
+            path: "/v1/social/users/\(userID)/follow",
+            method: shouldFollow ? "POST" : "DELETE"
+        )
+        if shouldFollow,
+           updated.isFriend == true,
+           let conversationID = updated.conversationID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !conversationID.isEmpty {
+            stageFriendConversation(
+                conversationID: conversationID,
+                friend: updated,
+                message: updated.friendMessage ?? friendChatGreeting
+            )
+        }
+        return updated
     }
 
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post {
@@ -1086,7 +1143,9 @@ final class LiveSocialService: SocialService {
         }
 
         guard (200...299).contains(http.statusCode) else {
-            let message = String(data: data, encoding: .utf8) ?? "请求失败"
+            let message = (try? JSONDecoder.raver.decode(BFFErrorEnvelope.self, from: data).error)
+                ?? String(data: data, encoding: .utf8)
+                ?? "请求失败"
             throw ServiceError.message(message)
         }
 
@@ -1271,7 +1330,8 @@ final class LiveSocialService: SocialService {
                 username: $0.username,
                 displayName: $0.displayName,
                 avatarURL: $0.avatarURL,
-                isFollowing: $0.isFollowing
+                isFollowing: $0.isFollowing,
+                isFriend: $0.isFriend
             )
         }
         return Conversation(
@@ -1287,6 +1347,95 @@ final class LiveSocialService: SocialService {
             peer: peer,
             isPinned: raw.isPinned
         )
+    }
+
+    private func stageFriendConversation(
+        conversationID: String,
+        friend: UserSummary,
+        message: String
+    ) {
+        let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedMessage = trimmedMessage.isEmpty ? friendChatGreeting : trimmedMessage
+        let now = Date()
+        let tencentUserID = toTencentIMUserID(friend.id)
+        let staged = Conversation(
+            id: conversationID,
+            type: .direct,
+            title: friend.displayName,
+            avatarURL: friend.avatarURL,
+            sdkConversationID: "c2c_\(tencentUserID)",
+            lastMessage: normalizedMessage,
+            lastMessageSenderID: nil,
+            unreadCount: 0,
+            updatedAt: now,
+            peer: friend
+        )
+        Task { @MainActor in
+            IMChatStore.shared.stageConversation(staged)
+        }
+    }
+
+    private func assertCanSendDirectMessage(conversationID: String) async throws {
+        guard let conversation = await MainActor.run(body: {
+            IMChatStore.shared.conversation(matching: conversationID)
+        }) else {
+            return
+        }
+        guard conversation.type == .direct else {
+            return
+        }
+        guard let peerID = directPeerID(from: conversation) else {
+            return
+        }
+        let profile = try await fetchUserProfile(userID: peerID)
+        if profile.isFriend != true {
+            throw ServiceError.message("需要双方互相关注成为好友后才能聊天")
+        }
+    }
+
+    private func hydratedDirectFriendship(
+        in conversations: [Conversation],
+        type: ConversationType
+    ) async throws -> [Conversation] {
+        guard type == .direct else {
+            return conversations
+        }
+
+        var result = conversations
+        for index in result.indices {
+            guard result[index].peer?.isFriend == nil,
+                  let peerID = directPeerID(from: result[index]) else {
+                continue
+            }
+            if let profile = try? await fetchUserProfile(userID: peerID) {
+                result[index].peer?.isFriend = profile.isFriend
+            }
+        }
+        return result
+    }
+
+    private func directPeerID(from conversation: Conversation) -> String? {
+        let candidates = [
+            conversation.peer?.id,
+            conversation.id,
+            conversation.sdkConversationID
+        ]
+        for candidate in candidates {
+            guard let value = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else {
+                continue
+            }
+            let normalized = TencentIMIdentity.normalizePlatformUserIDForProfile(value)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !normalized.isEmpty, !TencentIMIdentity.isTencentIMUserID(normalized) {
+                return normalized
+            }
+        }
+        return nil
+    }
+
+    private struct BFFErrorEnvelope: Decodable {
+        let error: String?
     }
 
     private func toTencentIMUserID(_ raw: String) -> String {

@@ -1103,7 +1103,6 @@ const searchPeopleSquads = async (query: string, limit: number, userId: string):
   const userItems = users.map((row) => {
     const score = Math.max(
       scoreText(query, row.displayName),
-      scoreText(query, row.username),
       arrayScore(query, row.favoriteGenres),
       scoreTexts(query, [row.bio, row.location], { exact: 58, prefix: 46, contains: 34 })
     ) + (row.isVerified ? 4 : 0);
@@ -1112,7 +1111,7 @@ const searchPeopleSquads = async (query: string, limit: number, userId: string):
       type: 'user',
       entityID: row.id,
       title: row.displayName || row.username,
-      subtitle: compact([`@${row.username}`, row.location]),
+      subtitle: compact([row.location]),
       summary: truncate(row.bio || row.favoriteGenres.join(', ')),
       imageUrl: row.avatarUrl,
       badgeText: row.isVerified ? 'Verified User' : 'User',

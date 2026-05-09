@@ -13,7 +13,6 @@ struct NewsModuleView: View {
     @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
     @State private var isRefreshing = false
-    @State private var searchKeyword = ""
     @State private var bannerMessage: String?
     @State private var isSelectorDragging = false
 
@@ -59,7 +58,7 @@ struct NewsModuleView: View {
                                 selectedCategory = category
                             }
                         } label: {
-                            Text(category.rawValue)
+                            Text(category.title)
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(selectedCategory == category ? .white : RaverTheme.primaryText)
                                 .padding(.horizontal, 10)
@@ -75,29 +74,6 @@ struct NewsModuleView: View {
                 .padding(.leading, 16)
             }
             .frame(height: 34)
-
-            Button {
-                discoverPush(
-                    .searchInput(
-                        domain: .news,
-                        initialQuery: searchKeyword
-                    )
-                )
-            } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(RaverTheme.card)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(RaverTheme.secondaryText.opacity(0.12), lineWidth: 1)
-                    )
-            }
-            .buttonStyle(.plain)
 
             Button {
                 discoverPush(.newsPublish)

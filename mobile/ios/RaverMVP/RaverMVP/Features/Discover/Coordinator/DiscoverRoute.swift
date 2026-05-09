@@ -1,24 +1,6 @@
 import SwiftUI
 
-enum DiscoverSearchDomain: String, Hashable {
-    case events
-    case news
-    case djs
-    case sets
-    case wiki
-}
-
 enum DiscoverRoute: Hashable {
-    case searchInput(
-        domain: DiscoverSearchDomain,
-        initialQuery: String = "",
-        preferredWikiSectionRaw: String? = nil
-    )
-    case searchResults(
-        domain: DiscoverSearchDomain,
-        query: String,
-        preferredWikiSectionRaw: String? = nil
-    )
     case labelDetail(labelID: String)
     case festivalDetail(festivalID: String)
     case setDetail(setID: String)
@@ -52,39 +34,6 @@ extension EnvironmentValues {
     }
 }
 
-extension DiscoverSearchDomain {
-    var searchTitle: String {
-        switch self {
-        case .events:
-            return L("搜索活动", "Search Events")
-        case .news:
-            return L("搜索资讯", "Search News")
-        case .djs:
-            return L("搜索 DJ / 榜单", "Search DJs / Rankings")
-        case .sets:
-            return L("搜索 Sets", "Search Sets")
-        case .wiki:
-            return L("搜索 Wiki", "Search Wiki")
-        }
-    }
-
-    var searchPlaceholder: String {
-        switch self {
-        case .events:
-            return L("输入活动名称 / 城市 / 国家", "Enter event name / city / country")
-        case .news:
-            return L("输入资讯标题 / 来源 / 关键词", "Enter title / source / keyword")
-        case .djs:
-            return L("输入 DJ 名称或榜单关键词", "Enter DJ name or ranking keyword")
-        case .sets:
-            return L("输入 Sets 标题 / DJ 名称", "Enter set title / DJ name")
-        case .wiki:
-            return L("输入厂牌 / 电音节关键词", "Enter label / festival keyword")
-        }
-    }
-
-}
-
 @MainActor
 struct DiscoverRouteDestinationView: View {
     @EnvironmentObject private var appContainer: AppContainer
@@ -105,73 +54,6 @@ func makeDiscoverRouteDestination(
     appContainer: AppContainer
 ) -> some View {
     switch route {
-    case .searchInput(let domain, let initialQuery, let preferredWikiSectionRaw):
-        DiscoverFullScreenSearchInputView(
-            title: domain.searchTitle,
-            placeholder: domain.searchPlaceholder,
-            initialQuery: initialQuery
-        ) { keyword in
-            push(
-                .searchResults(
-                    domain: domain,
-                    query: keyword,
-                    preferredWikiSectionRaw: preferredWikiSectionRaw
-                )
-            )
-        }
-
-    case .searchResults(let domain, let query, let preferredWikiSectionRaw):
-        switch domain {
-        case .events:
-            EventsSearchResultsView(
-                viewModel: EventsSearchResultsViewModel(
-                    query: query,
-                    repository: appContainer.discoverEventsRepository
-                )
-            )
-
-        case .news:
-            NewsSearchResultsView(
-                viewModel: NewsSearchResultsViewModel(
-                    query: query,
-                    repository: appContainer.discoverNewsRepository
-                )
-            )
-
-        case .djs:
-            DJsSearchResultsView(
-                viewModel: DJsSearchResultsViewModel(
-                    query: query,
-                    repository: appContainer.discoverDJsRepository
-                )
-            )
-
-        case .sets:
-            SetsSearchResultsView(
-                viewModel: SetsSearchResultsViewModel(
-                    query: query,
-                    repository: appContainer.discoverSetsRepository
-                )
-            )
-
-        case .wiki:
-            WikiSearchResultsView(
-                viewModel: WikiSearchResultsViewModel(
-                    query: query,
-                    repository: appContainer.discoverWikiRepository
-                ),
-                preferredSection: {
-                    guard
-                        let raw = preferredWikiSectionRaw,
-                        let section = LearnModuleSection(rawValue: raw)
-                    else {
-                        return .labels
-                    }
-                    return section
-                }()
-            )
-        }
-
     case .labelDetail(let labelID):
         DiscoverLabelDetailLoaderView(labelID: labelID, repository: appContainer.discoverWikiRepository)
 

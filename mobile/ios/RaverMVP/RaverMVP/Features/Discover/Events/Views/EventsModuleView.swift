@@ -108,6 +108,11 @@ struct EventsModuleView: View {
             }
         }
         .background(RaverTheme.background)
+        .overlay(alignment: .bottomTrailing) {
+            uploadEventFloatingButton
+                .padding(.trailing, 20)
+                .padding(.bottom, max(0, tabBarReservedHeight) + 24)
+        }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showCalendar) {
@@ -243,37 +248,6 @@ struct EventsModuleView: View {
         VStack(spacing: 10) {
             eventTypeSelectorRow
 
-            HStack(spacing: 8) {
-                utilityChipButton(
-                    systemName: selectedScope == .mine ? "star.fill" : "star",
-                    title: selectedScope == .mine ? L("仅收藏", "Favorites") : L("全部", "All"),
-                    isActive: selectedScope == .mine
-                ) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedScope = selectedScope == .mine ? .all : .mine
-                    }
-                }
-
-                utilityChipButton(
-                    systemName: isCountryFilterActive
-                        ? "line.3.horizontal.decrease.circle.fill"
-                        : "line.3.horizontal.decrease.circle",
-                    title: filterButtonTitle,
-                    isActive: isCountryFilterActive
-                ) {
-                    showCountryFilter = true
-                }
-
-                utilityChipButton(systemName: "calendar", title: L("日历", "Calendar")) {
-                    showCalendar = true
-                }
-
-                utilityChipButton(systemName: "magnifyingglass", title: L("搜索", "Search")) {
-                    discoverPush(.searchInput(domain: .events, initialQuery: ""))
-                }
-            }
-            .padding(.horizontal, 2)
-
             if !activeFilterLabels.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -325,19 +299,34 @@ struct EventsModuleView: View {
             }
             .frame(height: 34)
 
-            Button {
-                discoverPush(.eventCreate)
-            } label: {
-                Image(systemName: "plus")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color(red: 0.96, green: 0.51, blue: 0.18))
-                    )
+            HStack(spacing: 8) {
+                utilityIconButton(
+                    systemName: selectedScope == .mine ? "star.fill" : "star",
+                    accessibilityLabel: selectedScope == .mine ? L("仅收藏", "Favorites") : L("全部活动", "All Events"),
+                    isActive: selectedScope == .mine
+                ) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedScope = selectedScope == .mine ? .all : .mine
+                    }
+                }
+
+                utilityIconButton(
+                    systemName: isCountryFilterActive
+                        ? "line.3.horizontal.decrease.circle.fill"
+                        : "line.3.horizontal.decrease.circle",
+                    accessibilityLabel: filterButtonTitle,
+                    isActive: isCountryFilterActive
+                ) {
+                    showCountryFilter = true
+                }
+
+                utilityIconButton(
+                    systemName: "calendar",
+                    accessibilityLabel: L("日历", "Calendar")
+                ) {
+                    showCalendar = true
+                }
             }
-            .buttonStyle(.plain)
             .padding(.trailing, 16)
         }
     }
@@ -499,35 +488,58 @@ struct EventsModuleView: View {
         }
     }
 
-    private func utilityChipButton(
+    private func utilityIconButton(
         systemName: String,
-        title: String,
+        accessibilityLabel: String,
         isActive: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: systemName)
-                    .font(.system(size: 13, weight: .semibold))
-                Text(title)
-                    .font(.caption.weight(.semibold))
-            }
-            .foregroundStyle(isActive ? RaverTheme.accent : RaverTheme.primaryText)
-            .padding(.horizontal, 10)
-            .frame(height: 32)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(RaverTheme.card)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(
-                        isActive ? RaverTheme.accent.opacity(0.4) : RaverTheme.secondaryText.opacity(0.12),
-                        lineWidth: 1
-                    )
-            )
+            Image(systemName: systemName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(isActive ? RaverTheme.accent : RaverTheme.primaryText)
+                .frame(width: 32, height: 32)
+                .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(
+                            isActive ? RaverTheme.accent.opacity(0.4) : RaverTheme.secondaryText.opacity(0.12),
+                            lineWidth: 1
+                        )
+                )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var uploadEventFloatingButton: some View {
+        Button {
+            discoverPush(.eventCreate)
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 23, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 58, height: 58)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            RaverTheme.accent,
+                            Color(red: 0.31, green: 0.22, blue: 0.88)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: Circle()
+                )
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.30), lineWidth: 1)
+                )
+                .shadow(color: RaverTheme.accent.opacity(0.32), radius: 16, x: 0, y: 8)
+                .shadow(color: Color.black.opacity(0.16), radius: 10, x: 0, y: 5)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L("上传活动", "Upload Event"))
     }
 
     private func activeFilterChip(_ title: String) -> some View {

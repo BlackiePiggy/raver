@@ -158,7 +158,6 @@ struct DJsModuleView: View {
     }
 
     @EnvironmentObject private var appContainer: AppContainer
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
     @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
@@ -174,7 +173,6 @@ struct DJsModuleView: View {
 
     @State private var selectedSection: DJsModuleSection = .spotlight
     @State private var errorMessage: String?
-    @State private var searchKeyword = ""
     @State private var showDJImportSheet = false
     @State private var importMode: DJsImportMode = .spotify
     @State private var spotifySearchKeyword = ""
@@ -256,8 +254,6 @@ struct DJsModuleView: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                spotlightSearchRow
-
                 if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if viewModel.isRefreshing {
@@ -379,64 +375,6 @@ struct DJsModuleView: View {
 
     private var topContentInset: CGFloat {
         14
-    }
-
-    private var spotlightSearchRow: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Spacer(minLength: 0)
-            Button {
-                discoverPush(
-                    .searchInput(
-                        domain: .djs,
-                        initialQuery: searchKeyword
-                    )
-                )
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(searchFieldIconColor)
-                    Text(L("探索1w+ DJ", "Explore 10k+ DJs"))
-                        .font(.system(size: 13, weight: .medium))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
-                        .foregroundStyle(searchFieldPlaceholderColor)
-                }
-                .padding(.horizontal, 12)
-                .frame(width: spotlightSearchFieldWidth, height: 34, alignment: .leading)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 17, style: .continuous)
-                        .strokeBorder(searchFieldBorderColor, lineWidth: 0.8)
-                )
-                .shadow(color: searchFieldShadowColor, radius: 8, x: 0, y: 4)
-            }
-            .buttonStyle(.plain)
-            Spacer(minLength: 0)
-        }
-        .frame(height: 40, alignment: .center)
-    }
-
-    private var spotlightSearchFieldWidth: CGFloat {
-        min(max(UIScreen.main.bounds.width * 0.34, 132), 168) + 20
-    }
-
-    private var searchFieldIconColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.84) : Color.black.opacity(0.68)
-    }
-
-    private var searchFieldPlaceholderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.56) : Color.black.opacity(0.44)
-    }
-
-    private var searchFieldBorderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.20) : Color.white.opacity(0.42)
-    }
-
-    private var searchFieldShadowColor: Color {
-        colorScheme == .dark
-            ? Color.black.opacity(0.18)
-            : Color.white.opacity(0.36)
     }
 
     private var marqueeWallHeight: CGFloat {

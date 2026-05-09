@@ -17,7 +17,12 @@ model User {
   phoneNumber           String?   @unique @map("phone_number")
   passwordHash          String    @map("password_hash")
   displayName           String?   @map("display_name")
+  displayNameNormalized String?   @unique @map("display_name_normalized")
+  displayNameStatus     String    @default("pending") @map("display_name_status")
+  displayNameReviewNote String?   @map("display_name_review_note")
   avatarUrl             String?   @map("avatar_url")
+  avatarStatus          String    @default("none") @map("avatar_status")
+  avatarReviewNote      String?   @map("avatar_review_note")
   bio                   String?
   location              String?
   favoriteDjIds         String[]  @default([]) @map("favorite_dj_ids")
@@ -47,6 +52,7 @@ model User {
 
   // Community & Squad
   posts                     Post[]                     @relation("UserPosts")
+  eventLiveComments         EventLiveComment[]         @relation("UserEventLiveComments")
   postLikes                 PostLike[]
   postReposts               PostRepost[]
   postSaves                 PostSave[]
@@ -78,8 +84,31 @@ model User {
   shareLinkEvents           ShareLinkEvent[]
   sentInviteReferrals       InviteReferral[]           @relation("InviteReferralInviter")
   receivedInviteReferrals   InviteReferral[]           @relation("InviteReferralInvitee")
+  profileModerationJobs     UserProfileModerationJob[]
 
   @@map("users")
+}
+
+model UserProfileModerationJob {
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  targetType     String    @map("target_type")
+  targetValue    String    @map("target_value") @db.Text
+  normalizedValue String?  @map("normalized_value")
+  status         String    @default("pending")
+  reason         String?
+  provider       String    @default("manual_review")
+  decisionDetail Json?     @map("decision_detail")
+  reviewedAt     DateTime? @map("reviewed_at")
+  reviewedBy     String?   @map("reviewed_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, targetType, createdAt])
+  @@index([status, createdAt])
+  @@map("user_profile_moderation_jobs")
 }
 
 model Event {
@@ -135,6 +164,7 @@ model Event {
   lineupSlots     EventLineupSlot[]
   ticketTiers     EventTicketTier[]
   posts           Post[]
+  liveComments    EventLiveComment[]
   squadActivities SquadActivity[]
 
   @@index([organizerId])
@@ -885,6 +915,22 @@ model Post {
   @@index([createdAt])
   @@index([type])
   @@map("posts")
+}
+
+model EventLiveComment {
+  id        String   @id @default(uuid())
+  eventId   String   @map("event_id")
+  userId    String   @map("user_id")
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation("UserEventLiveComments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, createdAt])
+  @@index([userId, createdAt])
+  @@map("event_live_comments")
 }
 
 model PostLike {

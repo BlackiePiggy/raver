@@ -27,9 +27,12 @@ struct GlobalSearchOverlayView: View {
                 .padding(.horizontal, 18)
                 .transition(.scale(scale: 0.96).combined(with: .opacity))
         }
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                isInputFocused = true
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(L("收起", "Dismiss")) {
+                    hideKeyboard()
+                }
             }
         }
     }
@@ -51,6 +54,11 @@ struct GlobalSearchOverlayView: View {
                 .strokeBorder(RaverTheme.cardBorder, lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.20), radius: 24, x: 0, y: 14)
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                hideKeyboard()
+            }
+        )
     }
 
     private var panelHeader: some View {
@@ -199,32 +207,41 @@ struct GlobalSearchOverlayView: View {
 
     private var scopeHints: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L("可以搜索", "Searchable Content"))
+            Text(L("在 Raver 探索", "Explore on Raver"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(RaverTheme.primaryText)
 
-            FlowLayout(spacing: 8, rowSpacing: 8) {
-                ForEach(GlobalSearchScopeHint.all) { item in
-                    HStack(spacing: 6) {
+            LazyVGrid(columns: platformStatColumns, spacing: 8) {
+                ForEach(GlobalSearchPlatformStatHint.all) { item in
+                    HStack(spacing: 8) {
                         Image(systemName: item.systemImage)
                             .font(.caption.weight(.bold))
                             .foregroundStyle(item.tint)
-                            .frame(width: 14)
+                            .frame(width: 16)
                         Text(item.title)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
-                            .lineLimit(1)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.9)
+                        Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 10)
-                    .frame(height: 30)
-                    .background(item.tint.opacity(0.12), in: Capsule())
+                    .frame(minHeight: 38, alignment: .leading)
+                    .background(item.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
-                        Capsule()
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(item.tint.opacity(0.18), lineWidth: 1)
                     )
                 }
             }
         }
+    }
+
+    private var platformStatColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: 8),
+            GridItem(.flexible(), spacing: 8)
+        ]
     }
 
     private func submit() {
@@ -243,6 +260,10 @@ struct GlobalSearchOverlayView: View {
     private func dismiss() {
         isInputFocused = false
         onDismiss()
+    }
+
+    private func hideKeyboard() {
+        isInputFocused = false
     }
 }
 

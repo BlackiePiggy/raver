@@ -19,6 +19,7 @@ struct PostDetailView: View {
     @State private var isSharePanelVisible = false
     @State private var isSharePanelMounted = false
     @State private var isShowingMoreChatsSheet = false
+    @State private var isShowingRealNameSheet = false
     @State private var replyTargetComment: Comment?
     @State private var commentSortMode: CommentSortMode = .hot
     @State private var visibleRootCount = 0
@@ -69,12 +70,12 @@ struct PostDetailView: View {
                                     .font(.headline)
                                 Spacer()
                                 if !comments.isEmpty {
-                                    Picker(LL("排序"), selection: $commentSortMode) {
-                                        ForEach(CommentSortMode.allCases) { mode in
-                                            Text(mode.title).tag(mode)
-                                        }
-                                    }
-                                    .pickerStyle(.segmented)
+                                    RaverSegmentedControl(
+                                        items: CommentSortMode.allCases,
+                                        selection: $commentSortMode,
+                                        title: { $0.title },
+                                        iconName: commentSortIconName
+                                    )
                                     .frame(maxWidth: 190)
                                 }
                             }
@@ -181,9 +182,11 @@ struct PostDetailView: View {
         .sheet(isPresented: $isShowingMoreChatsSheet) {
             ChatShareSheet(
                 loadConversations: {
-                    try await loadSharePanelConversations()
+                    try requireRealNameForThrowingSocialAction()
+                    return try await loadSharePanelConversations()
                 },
                 onShareToConversation: { conversation in
+                    try requireRealNameForThrowingSocialAction()
                     try await sendPostSharePayload(to: conversation, note: nil)
                 }
             ) { _ in
@@ -192,6 +195,10 @@ struct PostDetailView: View {
                 PostSharePreviewCard(payload: PostSharePayload(post: post))
             }
             .presentationDetents([.fraction(0.76), .large])
+        }
+        .sheet(isPresented: $isShowingRealNameSheet) {
+            RealNameVerificationSheet()
+                .presentationDetents([.medium])
         }
         .confirmationDialog(
             L("告诉我们原因", "Tell us why"),
@@ -219,6 +226,7 @@ struct PostDetailView: View {
 
     private var shareToolbarButton: some View {
         Button {
+            guard requireRealNameForSocialAction() else { return }
             presentSharePanel()
         } label: {
             Image(systemName: "ellipsis")
@@ -244,9 +252,11 @@ struct PostDetailView: View {
                     primaryActions: sharePrimaryActions(),
                     quickActions: shareQuickActions(),
                     loadConversations: {
-                        try await loadSharePanelConversations()
+                        try requireRealNameForThrowingSocialAction()
+                        return try await loadSharePanelConversations()
                     },
                     onSendToConversation: { conversation, note in
+                        try requireRealNameForThrowingSocialAction()
                         try await sendPostSharePayload(to: conversation, note: note)
                     },
                     onDismiss: {
@@ -276,6 +286,7 @@ struct PostDetailView: View {
             showsFollowButton: true,
             showsMoreButton: false,
             onLikeTap: {
+                guard requireRealNameForSocialAction() else { return }
                 Task {
                     do {
                         post = try await service.toggleLike(postID: post.id, shouldLike: !post.isLiked)
@@ -287,6 +298,7 @@ struct PostDetailView: View {
                 }
             },
             onRepostTap: {
+                guard requireRealNameForSocialAction() else { return }
                 Task {
                     do {
                         post = try await service.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
@@ -297,11 +309,8 @@ struct PostDetailView: View {
                 }
             },
             onSaveTap: {
+                guard requireRealNameForSocialAction() else { return }
                 Task {
-                    guard appState.session != nil else {
-                        self.error = L("请先登录后再收藏", "Please sign in before saving.")
-                        return
-                    }
                     do {
                         post = try await service.toggleSave(postID: post.id, shouldSave: !post.isSaved)
                         notifyPostUpdated()
@@ -313,6 +322,7 @@ struct PostDetailView: View {
             },
             onHideTap: nil,
             onFollowTap: {
+                guard requireRealNameForSocialAction() else { return }
                 Task {
                     do {
                         let author = try await service.toggleFollow(userID: post.author.id, shouldFollow: !post.author.isFollowing)
@@ -335,6 +345,35 @@ struct PostDetailView: View {
     private func presentSharePanel() {
         isSharePanelMounted = true
         isSharePanelVisible = false
+    }
+
+    private func requireRealNameForSocialAction() -> Bool {
+        guard appState.canUseSocialFeatures else {
+            error = appState.socialFeatureUnavailableMessage
+            if appState.session != nil {
+                isShowingRealNameSheet = true
+            }
+            return false
+        }
+        return true
+    }
+
+    private func requireRealNameForThrowingSocialAction() throws {
+        guard appState.canUseSocialFeatures else {
+            if appState.session != nil {
+                isShowingRealNameSheet = true
+            }
+            throw ServiceError.message(appState.socialFeatureUnavailableMessage)
+        }
+    }
+
+    private func commentSortIconName(_ mode: CommentSortMode) -> String? {
+        switch mode {
+        case .hot:
+            return "flame.fill"
+        case .timeline:
+            return "clock.fill"
+        }
     }
 
     private func dismissSharePanel(after completion: (() -> Void)? = nil) {
@@ -620,6 +659,7 @@ struct PostDetailView: View {
     }
 
     private func submitComment() {
+        guard requireRealNameForSocialAction() else { return }
         Task {
             let text = commentInput.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return }

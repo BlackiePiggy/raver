@@ -78,10 +78,6 @@ struct FollowListView: View {
                                         .font(.subheadline.bold())
                                         .foregroundStyle(RaverTheme.primaryText)
                                         .lineLimit(1)
-                                    Text("@\(user.username)")
-                                        .font(.caption)
-                                        .foregroundStyle(RaverTheme.secondaryText)
-                                        .lineLimit(1)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
 

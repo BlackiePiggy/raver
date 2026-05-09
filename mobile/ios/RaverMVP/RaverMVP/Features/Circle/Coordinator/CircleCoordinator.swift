@@ -3,6 +3,7 @@ import SwiftUI
 enum CircleRoute: Hashable {
     case ratingEventDetail(String)
     case postCreate
+    case eventPostCreate(eventID: String, eventName: String)
     case postEdit(postID: String)
     case idCreate
     case idDetail(entryID: String)
@@ -85,6 +86,16 @@ struct CircleCoordinatorView<Content: View>: View {
                 service: appContainer.socialService,
                 webService: appContainer.webService,
                 mode: .create,
+                onPostCreated: { created in
+                    NotificationCenter.default.post(name: .circlePostDidCreate, object: created)
+                }
+            )
+        case let .eventPostCreate(eventID, eventName):
+            ComposePostView(
+                service: appContainer.socialService,
+                webService: appContainer.webService,
+                mode: .create,
+                initialEventTag: ComposePostEventTag(id: eventID, name: eventName),
                 onPostCreated: { created in
                     NotificationCenter.default.post(name: .circlePostDidCreate, object: created)
                 }

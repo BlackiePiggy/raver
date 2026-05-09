@@ -71,6 +71,10 @@ Do not add new product scope during implementation unless the PRD is updated fir
 - [x] Accessibility labels added.
 - [x] Localization code strings checked.
 - [x] Empty/error states polished.
+- [x] Legacy Discover content search entry points removed.
+- [x] Legacy Discover search route and screens removed.
+- [x] Legacy generic Search screen removed.
+- [x] Legacy global chat search sheet removed.
 - [ ] Dark/light mode checked.
 - [ ] Small/large viewport checked.
 - [ ] Logged-out/deep-link manual QA completed.
@@ -441,3 +445,24 @@ Notes:
 - Personalized ranking experiments.
 - Highlight matched ranking entries inside ranking detail.
 - Event lineup text indexing if not included in V1.
+
+## 2026-05-08 Legacy Search Entry Cleanup
+
+Request:
+
+- Remove old search entry points now that the global aggregated search entry exists.
+- Keep UI layout reasonable after removing old buttons/search pills.
+
+Changes:
+
+- Removed old Discover user-facing content search entry points from recommended events, events, news, DJs, sets, and Learn/Wiki sections.
+- Removed the old Discover search route cases, `DiscoverSearchDomain`, old full-screen Discover search input, and old per-domain Discover search result screens/view models.
+- Removed the unused generic `SearchView` and `SearchViewModel`.
+- Removed the old Messages global chat search sheet and related `MessagesViewModel` global chat-search state/methods.
+- Preserved workflow-local search controls that are still required for creation, import, binding, sharing, location picking, and chat conversation-local search.
+
+Scope Control:
+
+- No new searchable domains or ranking strategy changes were added.
+- Chat-history search remains outside the global aggregated search scope.
+- Flow-local searches were intentionally kept because removing them would break compose/bind/import workflows.

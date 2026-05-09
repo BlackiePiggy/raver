@@ -1481,9 +1481,6 @@ private struct InviteSquadMembersView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(friend.displayName)
                                         .foregroundStyle(Color.primary)
-                                    Text("@\(friend.username)")
-                                        .font(.caption)
-                                        .foregroundStyle(RaverTheme.secondaryText)
                                 }
                                 Spacer(minLength: 0)
                                 Image(systemName: selectedUserIDs.contains(friend.id) ? "checkmark.circle.fill" : "circle")

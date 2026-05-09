@@ -135,7 +135,7 @@ struct DiscoverNewsRepositoryAdapter: DiscoverNewsRepository {
     }
 
     func fetchFeedPage(cursor: String?) async throws -> DiscoverNewsPage {
-        let page = try await socialService.fetchFeed(cursor: cursor, mode: .latest)
+        let page = try await socialService.fetchFeed(cursor: cursor, mode: .latest, eventID: nil)
         let items = page.posts.compactMap { DiscoverNewsCodec.decode(post: $0) }
         return DiscoverNewsPage(items: items, nextCursor: page.nextCursor)
     }

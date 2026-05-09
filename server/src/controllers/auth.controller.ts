@@ -1,9 +1,85 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import OSS from 'ali-oss';
+import crypto from 'crypto';
 import { hashPassword, comparePassword, generateToken } from '../utils/auth';
 import { tencentIMUserService } from '../services/tencent-im/tencent-im-user.service';
 
 const prisma = new PrismaClient();
+
+const cleanEnv = (value: string | undefined): string | null => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const ossRegion = cleanEnv(process.env.OSS_REGION);
+const ossAccessKeyId = cleanEnv(process.env.OSS_ACCESS_KEY_ID);
+const ossAccessKeySecret = cleanEnv(process.env.OSS_ACCESS_KEY_SECRET);
+const ossBucket = cleanEnv(process.env.OSS_BUCKET);
+const ossEndpoint = cleanEnv(process.env.OSS_ENDPOINT);
+const ossUserAvatarsPrefix = (cleanEnv(process.env.OSS_USER_AVATARS_PREFIX) || 'users/avatars').replace(/^\/+|\/+$/g, '');
+
+const ossClient =
+  ossRegion && ossAccessKeyId && ossAccessKeySecret && ossBucket
+    ? new OSS({
+        region: ossRegion,
+        accessKeyId: ossAccessKeyId,
+        accessKeySecret: ossAccessKeySecret,
+        bucket: ossBucket,
+        endpoint: ossEndpoint || undefined,
+      })
+    : null;
+
+const normalizeDisplayName = (value: string | null | undefined): string => {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+};
+
+const normalizeDisplayNameForUniqueness = (value: string | null | undefined): string => {
+  return normalizeDisplayName(value).toLocaleLowerCase('zh-Hans-CN');
+};
+
+const publicOssUrlForObjectKey = (objectKey: string): string => {
+  if (!ossBucket || !ossRegion) {
+    return `/${objectKey}`;
+  }
+
+  const endpointHost = ossEndpoint
+    ? ossEndpoint.replace(/^https?:\/\//, '').replace(/^\/+|\/+$/g, '')
+    : `${ossRegion}.aliyuncs.com`;
+  const bucketHost = endpointHost.startsWith(`${ossBucket}.`) ? endpointHost : `${ossBucket}.${endpointHost}`;
+  return `https://${bucketHost}/${objectKey}`;
+};
+
+const extensionForMimeType = (mimeType: string): string => {
+  const normalized = mimeType.toLowerCase();
+  if (normalized.includes('png')) return '.png';
+  if (normalized.includes('webp')) return '.webp';
+  if (normalized.includes('gif')) return '.gif';
+  return '.jpg';
+};
+
+const uploadUserAvatarToOss = async (
+  userId: string,
+  file: Express.Multer.File
+): Promise<{ url: string; objectKey: string }> => {
+  if (!ossClient) {
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  const ext = extensionForMimeType(file.mimetype);
+  const objectKey = `${ossUserAvatarsPrefix}/${userId}/avatar-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
+  const result = await ossClient.put(objectKey, file.buffer, {
+    headers: {
+      'Content-Type': file.mimetype,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  });
+  return {
+    url: result.url || publicOssUrlForObjectKey(objectKey),
+    objectKey,
+  };
+};
 
 const syncTencentIMUserBestEffort = async (userId: string, reason: string): Promise<void> => {
   try {
@@ -17,9 +93,11 @@ const syncTencentIMUserBestEffort = async (userId: string, reason: string): Prom
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const { username, email, password, displayName } = req.body;
+    const normalizedDisplayName = normalizeDisplayName(displayName);
+    const displayNameKey = normalizeDisplayNameForUniqueness(normalizedDisplayName);
 
-    if (!username || !email || !password) {
-      res.status(400).json({ error: 'Username, email, and password are required' });
+    if (!username || !email || !password || !normalizedDisplayName) {
+      res.status(400).json({ error: 'Username, email, password, and displayName are required' });
       return;
     }
 
@@ -39,6 +117,16 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    const existingDisplayName = await prisma.user.findFirst({
+      where: { displayNameNormalized: displayNameKey },
+      select: { id: true },
+    });
+
+    if (existingDisplayName) {
+      res.status(409).json({ error: '昵称已被使用' });
+      return;
+    }
+
     const passwordHash = await hashPassword(password);
 
     const user = await prisma.user.create({
@@ -46,7 +134,9 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         username,
         email,
         passwordHash,
-        displayName: displayName || username,
+        displayName: normalizedDisplayName,
+        displayNameNormalized: displayNameKey,
+        displayNameStatus: 'pending',
       },
       select: {
         id: true,
@@ -55,6 +145,17 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         displayName: true,
         avatarUrl: true,
         createdAt: true,
+      },
+    });
+
+    await prisma.userProfileModerationJob.create({
+      data: {
+        userId: user.id,
+        targetType: 'display_name',
+        targetValue: normalizedDisplayName,
+        normalizedValue: displayNameKey,
+        status: 'pending',
+        provider: 'manual_review',
       },
     });
 
@@ -96,7 +197,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         OR: [
           { email: { equals: loginIdentifier, mode: 'insensitive' } },
           { username: { equals: loginIdentifier, mode: 'insensitive' } },
-          { displayName: { equals: loginIdentifier, mode: 'insensitive' } },
+          { displayNameNormalized: normalizeDisplayNameForUniqueness(loginIdentifier) },
         ],
       },
       orderBy: { createdAt: 'asc' },
@@ -236,15 +337,49 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       favoriteGenres?: string[];
     };
 
+    const data: {
+      displayName?: string;
+      displayNameNormalized?: string;
+      displayNameStatus?: string;
+      displayNameReviewNote?: string | null;
+      bio?: string;
+      location?: string;
+      favoriteDjIds?: string[];
+      favoriteGenres?: string[];
+    } = {
+      bio: bio ?? undefined,
+      location: location ?? undefined,
+      favoriteDjIds: Array.isArray(favoriteDjIds) ? favoriteDjIds : undefined,
+      favoriteGenres: Array.isArray(favoriteGenres) ? favoriteGenres : undefined,
+    };
+
+    if (typeof displayName === 'string') {
+      const trimmedDisplayName = normalizeDisplayName(displayName);
+      if (!trimmedDisplayName) {
+        res.status(400).json({ error: 'displayName cannot be empty' });
+        return;
+      }
+      const displayNameKey = normalizeDisplayNameForUniqueness(trimmedDisplayName);
+      const existingDisplayName = await prisma.user.findFirst({
+        where: {
+          displayNameNormalized: displayNameKey,
+          id: { not: userId },
+        },
+        select: { id: true },
+      });
+      if (existingDisplayName) {
+        res.status(409).json({ error: '昵称已被使用' });
+        return;
+      }
+      data.displayName = trimmedDisplayName;
+      data.displayNameNormalized = displayNameKey;
+      data.displayNameStatus = 'pending';
+      data.displayNameReviewNote = null;
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: {
-        displayName: displayName ?? undefined,
-        bio: bio ?? undefined,
-        location: location ?? undefined,
-        favoriteDjIds: Array.isArray(favoriteDjIds) ? favoriteDjIds : undefined,
-        favoriteGenres: Array.isArray(favoriteGenres) ? favoriteGenres : undefined,
-      },
+      data,
       select: {
         id: true,
         username: true,
@@ -260,6 +395,19 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
         createdAt: true,
       },
     });
+
+    if (data.displayName && data.displayNameNormalized) {
+      await prisma.userProfileModerationJob.create({
+        data: {
+          userId,
+          targetType: 'display_name',
+          targetValue: data.displayName,
+          normalizedValue: data.displayNameNormalized,
+          status: 'pending',
+          provider: 'manual_review',
+        },
+      });
+    }
 
     await syncTencentIMUserBestEffort(userId, 'auth-update-profile');
 
@@ -284,11 +432,16 @@ export const uploadAvatar = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    const avatarUrl = `/uploads/avatars/${file.filename}`;
+    const upload = await uploadUserAvatarToOss(userId, file);
+    const avatarUrl = upload.url;
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: { avatarUrl },
+      data: {
+        avatarUrl,
+        avatarStatus: 'pending',
+        avatarReviewNote: null,
+      },
       select: {
         id: true,
         username: true,
@@ -302,6 +455,17 @@ export const uploadAvatar = async (req: Request, res: Response): Promise<void> =
         role: true,
         isVerified: true,
         createdAt: true,
+      },
+    });
+
+    await prisma.userProfileModerationJob.create({
+      data: {
+        userId,
+        targetType: 'avatar',
+        targetValue: avatarUrl,
+        normalizedValue: upload.objectKey,
+        status: 'pending',
+        provider: 'manual_review',
       },
     });
 

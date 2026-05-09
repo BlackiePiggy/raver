@@ -114,7 +114,6 @@ struct SetsModuleView: View {
     @State private var page = 1
     @State private var totalPages = 1
     @State private var sortBy = "latest"
-    @State private var searchKeyword = ""
     @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
     @State private var isRefreshing = false
@@ -198,29 +197,7 @@ struct SetsModuleView: View {
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top) {
                 HStack(spacing: 8) {
-                    Button {
-                        discoverPush(
-                            .searchInput(
-                                domain: .sets,
-                                initialQuery: searchKeyword
-                            )
-                        )
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                            Text(LL("搜索 Sets / DJ"))
-                                .font(.subheadline)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(RaverTheme.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
+                    Spacer(minLength: 0)
 
                     Menu {
                         Button(LL("最新")) {

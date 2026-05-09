@@ -178,23 +178,30 @@ struct GlobalSearchEmptyState: View {
                 .font(.title3.weight(.bold))
                 .foregroundStyle(RaverTheme.primaryText)
 
-            Text(L("换个关键词试试，比如 DJ 名称、活动城市、厂牌或榜单名称。", "Try another keyword, such as a DJ name, event city, label, or ranking name."))
+            Text(L("换个关键词试试，也可以从这些内容开始探索。", "Try another keyword, or start exploring from these content areas."))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
 
             GlobalSearchFlowLayout(spacing: 8, rowSpacing: 8) {
-                ForEach(GlobalSearchScopeHint.all) { hint in
-                    Text(hint.title)
+                ForEach(GlobalSearchPlatformStatHint.all) { hint in
+                    HStack(spacing: 6) {
+                        Image(systemName: hint.systemImage)
+                            .font(.caption2.weight(.bold))
+                        Text(hint.title)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.86)
+                    }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(hint.tint)
                         .padding(.horizontal, 10)
-                        .frame(height: 28)
+                        .frame(height: 30)
                         .background(hint.tint.opacity(0.12), in: Capsule())
                 }
             }
             .padding(.top, 2)
+            .padding(.horizontal, 16)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 44)

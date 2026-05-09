@@ -825,6 +825,13 @@ final class TencentIMSession: NSObject {
     private static let receiveNoNotifyRawValue = 2
     private static let typingBusinessID = "user_typing_status"
     private static let customCardBusinessID = "raver_custom_card"
+    private static let friendCreatedTipBusinessID = "raver_friend_created_tip"
+
+    private struct TencentFriendCreatedTipEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let text: String
+    }
 
     private struct TencentEventCardEnvelope: Codable {
         let businessID: String
@@ -3633,6 +3640,9 @@ final class TencentIMSession: NSObject {
                     ? L("正在输入...", "Typing...")
                     : L("停止输入", "Typing ended")
             }
+            if let friendTip = friendCreatedTipPayload(from: message.customElem?.data) {
+                return friendTip
+            }
             if let eventCard = customEventCardPayload(from: message.customElem?.data) {
                 return "\(L("[活动卡片]", "[Event Card]")) \(eventCard.eventName)"
             }
@@ -3753,6 +3763,9 @@ final class TencentIMSession: NSObject {
                 content = typingStatus == 1
                     ? L("正在输入...", "Typing...")
                     : L("停止输入", "Typing ended")
+            } else if let friendTip = friendCreatedTipPayload(from: message.customElem?.data) {
+                kind = .system
+                content = friendTip
             } else if let eventCard = customEventCardPayload(from: message.customElem?.data) {
                 kind = .card
                 content = (try? String(data: JSONEncoder().encode(eventCard), encoding: .utf8))
@@ -3984,6 +3997,16 @@ final class TencentIMSession: NSObject {
             return typingStatus.intValue
         }
         return nil
+    }
+
+    private func friendCreatedTipPayload(from data: Data?) -> String? {
+        guard let data,
+              let envelope = try? JSONDecoder().decode(TencentFriendCreatedTipEnvelope.self, from: data),
+              envelope.businessID == Self.friendCreatedTipBusinessID else {
+            return nil
+        }
+
+        return normalizedText(envelope.text)
     }
 
     private func customEventCardPayload(from data: Data?) -> EventShareCardPayload? {
@@ -4598,6 +4621,7 @@ final class AppState: ObservableObject {
     @Published var systemDeepLinkEvent: SystemDeepLinkEvent?
     @Published var preferredLanguage: AppLanguage = AppLanguagePreference.current
     @Published var preferredAppearance: AppAppearance = AppAppearancePreference.current
+    @Published var realNameVerificationStatus: RealNameVerificationStatus = .unverified
 
     let service: SocialService
     private var cancellables: Set<AnyCancellable> = []
@@ -4788,10 +4812,9 @@ final class AppState: ObservableObject {
         }
     }
 
-    func register(username: String, email: String, password: String, displayName: String) async {
+    func register(email: String, password: String, displayName: String) async {
         do {
             session = try await service.register(
-                username: username,
                 email: email,
                 password: password,
                 displayName: displayName
@@ -4809,6 +4832,7 @@ final class AppState: ObservableObject {
     func logout() {
         let shouldDeactivatePushToken = session != nil
         let deviceID = UIDevice.current.identifierForVendor?.uuidString ?? "ios-device-unknown"
+        realNameVerificationStatus = .unverified
         Task {
             if shouldDeactivatePushToken {
                 do {

@@ -91,31 +91,41 @@ private struct UserProfileScreen: View {
                                         }
                                         .buttonStyle(.borderedProminent)
 
-                                        Button {
-                                            Task {
-                                                guard !isStartingDirectChat else { return }
-                                                isStartingDirectChat = true
-                                                defer { isStartingDirectChat = false }
-                                                do {
-                                                    let identifier = profile.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                                        ? profile.username
-                                                        : profile.id
-                                                    let conversation = try await appContainer.socialService.startDirectConversation(identifier: identifier)
-                                                    IMChatStore.shared.stageConversation(conversation)
-                                                    appPush(.conversation(target: .fromConversation(conversation)))
-                                                } catch {
-                                                    viewModel.error = error.userFacingMessage
+                                        if profile.isFriend == true {
+                                            Button {
+                                                Task {
+                                                    guard !isStartingDirectChat else { return }
+                                                    isStartingDirectChat = true
+                                                    defer { isStartingDirectChat = false }
+                                                    do {
+                                                        let identifier = profile.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                                            ? profile.username
+                                                            : profile.id
+                                                        let conversation = try await appContainer.socialService.startDirectConversation(identifier: identifier)
+                                                        IMChatStore.shared.stageConversation(conversation)
+                                                        appPush(.conversation(target: .fromConversation(conversation)))
+                                                    } catch {
+                                                        viewModel.error = error.userFacingMessage
+                                                    }
+                                                }
+                                            } label: {
+                                                if isStartingDirectChat {
+                                                    ProgressView()
+                                                } else {
+                                                    Label(LL("私信"), systemImage: "paperplane")
                                                 }
                                             }
-                                        } label: {
-                                            if isStartingDirectChat {
-                                                ProgressView()
-                                            } else {
-                                                Label(LL("私信"), systemImage: "paperplane")
+                                            .buttonStyle(.bordered)
+                                            .disabled(isStartingDirectChat)
+                                        } else {
+                                            Button {
+                                                viewModel.error = L("需要双方互相关注成为好友后才能聊天", "You can chat after you both follow each other.")
+                                            } label: {
+                                                Label(LL("好友后私信"), systemImage: "person.2")
                                             }
+                                            .buttonStyle(.bordered)
+                                            .disabled(true)
                                         }
-                                        .buttonStyle(.bordered)
-                                        .disabled(isStartingDirectChat)
                                     }
                                 }
                             }

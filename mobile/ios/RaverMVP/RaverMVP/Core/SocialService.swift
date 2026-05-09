@@ -213,11 +213,11 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func login(username: String, password: String) async throws -> Session
     func loginWithSms(phoneNumber: String, code: String) async throws -> Session
     func sendLoginSmsCode(phoneNumber: String) async throws -> Int
-    func register(username: String, email: String, password: String, displayName: String) async throws -> Session
+    func register(email: String, password: String, displayName: String) async throws -> Session
     func logout() async
     func fetchTencentIMBootstrap() async throws -> TencentIMBootstrap
 
-    func fetchFeed(cursor: String?, mode: FeedMode?) async throws -> FeedPage
+    func fetchFeed(cursor: String?, mode: FeedMode?, eventID: String?) async throws -> FeedPage
     func searchFeed(query: String) async throws -> FeedPage
     func fetchPost(postID: String) async throws -> Post
     func createPost(input: CreatePostInput) async throws -> Post
@@ -231,6 +231,8 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
 
     func fetchComments(postID: String) async throws -> [Comment]
     func addComment(postID: String, content: String, parentCommentID: String?) async throws -> Comment
+    func fetchEventLiveComments(eventID: String, cursor: String?) async throws -> EventLiveCommentPage
+    func addEventLiveComment(eventID: String, content: String) async throws -> EventLiveComment
 
     func searchUsers(query: String) async throws -> [UserSummary]
     func fetchUserProfile(userID: String) async throws -> UserProfile

@@ -21,6 +21,7 @@ private struct FeedScreen: View {
     @StateObject private var viewModel: FeedViewModel
     @State private var editTapPostID: String?
     @State private var hideReasonTargetPost: Post?
+    @State private var isShowingRealNameSheet = false
 
     init(viewModel: FeedViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -28,12 +29,12 @@ private struct FeedScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker(LL("动态排序"), selection: $viewModel.selectedMode) {
-                ForEach(FeedMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
+            RaverSegmentedControl(
+                items: FeedMode.allCases,
+                selection: $viewModel.selectedMode,
+                title: { $0.title },
+                iconName: feedModeIconName
+            )
             .padding(.horizontal, 16)
             .padding(.top, 12)
             .padding(.bottom, 8)
@@ -87,16 +88,15 @@ private struct FeedScreen: View {
                                     showsFollowButton: false,
                                     showsMoreButton: false,
                                     onLikeTap: {
+                                        guard requireRealNameForSocialAction(messageTarget: &viewModel.error) else { return }
                                         Task { await viewModel.toggleLike(post: post, position: index) }
                                     },
                                     onRepostTap: {
+                                        guard requireRealNameForSocialAction(messageTarget: &viewModel.error) else { return }
                                         Task { await viewModel.toggleRepost(post: post) }
                                     },
                                     onSaveTap: {
-                                        guard appState.session != nil else {
-                                            viewModel.error = L("请先登录后再收藏", "Please sign in before saving.")
-                                            return
-                                        }
+                                        guard requireRealNameForSocialAction(messageTarget: &viewModel.error) else { return }
                                         Task { await viewModel.toggleSave(post: post, position: index) }
                                     },
                                     onHideTap: {
@@ -153,6 +153,7 @@ private struct FeedScreen: View {
         .background(RaverTheme.background)
         .overlay(alignment: .bottomTrailing) {
             Button {
+                guard requireRealNameForSocialAction(messageTarget: &viewModel.error) else { return }
                 circlePush(.postCreate)
             } label: {
                 Image(systemName: "plus")
@@ -187,6 +188,10 @@ private struct FeedScreen: View {
         }
         .onChange(of: viewModel.selectedMode) { _, newMode in
             Task { await viewModel.switchMode(newMode) }
+        }
+        .sheet(isPresented: $isShowingRealNameSheet) {
+            RealNameVerificationSheet()
+                .presentationDetents([.medium])
         }
         .task {
             await viewModel.load()
@@ -228,6 +233,28 @@ private struct FeedScreen: View {
             Button(L("取消", "Cancel"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
+        }
+    }
+
+    private func requireRealNameForSocialAction(messageTarget: inout String?) -> Bool {
+        guard appState.canUseSocialFeatures else {
+            messageTarget = appState.socialFeatureUnavailableMessage
+            if appState.session != nil {
+                isShowingRealNameSheet = true
+            }
+            return false
+        }
+        return true
+    }
+
+    private func feedModeIconName(_ mode: FeedMode) -> String? {
+        switch mode {
+        case .recommended:
+            return "sparkles"
+        case .following:
+            return "person.2.fill"
+        case .latest:
+            return "clock.fill"
         }
     }
 }

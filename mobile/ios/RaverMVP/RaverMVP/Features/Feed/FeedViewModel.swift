@@ -27,7 +27,7 @@ enum PostHideReasonOption: String, CaseIterable, Identifiable {
 }
 
 protocol CircleFeedRepository {
-    func fetchFeed(cursor: String?, mode: FeedMode?) async throws -> FeedPage
+    func fetchFeed(cursor: String?, mode: FeedMode?, eventID: String?) async throws -> FeedPage
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post
     func toggleSave(postID: String, shouldSave: Bool) async throws -> Post
@@ -44,8 +44,8 @@ struct CircleFeedRepositoryAdapter: CircleFeedRepository {
         self.service = service
     }
 
-    func fetchFeed(cursor: String?, mode: FeedMode?) async throws -> FeedPage {
-        try await service.fetchFeed(cursor: cursor, mode: mode)
+    func fetchFeed(cursor: String?, mode: FeedMode?, eventID: String? = nil) async throws -> FeedPage {
+        try await service.fetchFeed(cursor: cursor, mode: mode, eventID: eventID)
     }
 
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post {
@@ -89,6 +89,7 @@ final class FeedViewModel: ObservableObject {
     @Published var error: String?
 
     private let repository: CircleFeedRepository
+    private let eventID: String?
     private var nextCursor: String?
     private var hasMore = true
     private let localHiddenStorageKey = "circle.feed.localHiddenPostIds.v1"
@@ -96,8 +97,9 @@ final class FeedViewModel: ObservableObject {
     private var reportedImpressionPostIDs: Set<String> = []
     private let feedSessionID = UUID().uuidString
 
-    init(repository: CircleFeedRepository) {
+    init(repository: CircleFeedRepository, eventID: String? = nil) {
         self.repository = repository
+        self.eventID = eventID
         if let ids = UserDefaults.standard.array(forKey: localHiddenStorageKey) as? [String] {
             self.localHiddenPostIDs = Set(ids)
         } else {
@@ -118,7 +120,7 @@ final class FeedViewModel: ObservableObject {
         defer { isRefreshing = false }
 
         do {
-            let page = try await repository.fetchFeed(cursor: nil, mode: selectedMode)
+            let page = try await repository.fetchFeed(cursor: nil, mode: selectedMode, eventID: eventID)
             posts = page.posts.filter { !$0.isRaverNews && !localHiddenPostIDs.contains($0.id) }
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil
@@ -149,7 +151,7 @@ final class FeedViewModel: ObservableObject {
         defer { isLoadingMore = false }
 
         do {
-            let page = try await repository.fetchFeed(cursor: cursor, mode: selectedMode)
+            let page = try await repository.fetchFeed(cursor: cursor, mode: selectedMode, eventID: eventID)
             let existingIds = Set(posts.map(\.id))
             posts.append(contentsOf: page.posts.filter {
                 !existingIds.contains($0.id) &&

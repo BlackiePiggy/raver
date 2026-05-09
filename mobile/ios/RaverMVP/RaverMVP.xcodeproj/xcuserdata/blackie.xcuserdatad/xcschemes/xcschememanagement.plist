@@ -7,7 +7,7 @@
 		<key>RaverCountdownWidgets.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
-			<integer>19</integer>
+			<integer>25</integer>
 		</dict>
 		<key>RaverMVP.xcscheme_^#shared#^_</key>
 		<dict>
@@ -17,7 +17,7 @@
 		<key>RaverNotificationService.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
-			<integer>20</integer>
+			<integer>24</integer>
 		</dict>
 		<key>RaverSelectedEventCountdownWidget.xcscheme_^#shared#^_</key>
 		<dict>

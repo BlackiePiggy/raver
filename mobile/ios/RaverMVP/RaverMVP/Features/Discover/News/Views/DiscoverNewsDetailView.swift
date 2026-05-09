@@ -449,9 +449,6 @@ struct DiscoverNewsDetailView: View {
                     Text(article.authorName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
-                    Text("@\(article.authorUsername)")
-                        .font(.caption2)
-                        .foregroundStyle(RaverTheme.secondaryText)
                 }
 
                 Spacer(minLength: 0)
