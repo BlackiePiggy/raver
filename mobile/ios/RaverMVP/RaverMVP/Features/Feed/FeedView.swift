@@ -8,6 +8,10 @@ struct FeedView: View {
         FeedScreen(
             viewModel: FeedViewModel(
                 repository: appContainer.circleFeedRepository
+            ),
+            appearanceResolver: VirtualAssetListAppearanceResolver(
+                repository: appContainer.virtualAssetRepository,
+                surface: "feed"
             )
         )
     }
@@ -19,12 +23,17 @@ private struct FeedScreen: View {
     @Environment(\.circlePush) private var circlePush
     @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: FeedViewModel
+    @StateObject private var appearanceResolver: VirtualAssetListAppearanceResolver
     @State private var editTapPostID: String?
     @State private var hideReasonTargetPost: Post?
     @State private var isShowingRealNameSheet = false
 
-    init(viewModel: FeedViewModel) {
+    init(
+        viewModel: FeedViewModel,
+        appearanceResolver: VirtualAssetListAppearanceResolver
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        _appearanceResolver = StateObject(wrappedValue: appearanceResolver)
     }
 
     var body: some View {
@@ -113,7 +122,8 @@ private struct FeedScreen: View {
                                             editTapPostID = post.id
                                             circlePush(.postEdit(postID: post.id))
                                         }
-                                        : nil
+                                        : nil,
+                                    authorAppearance: appearanceResolver.appearance(userID: post.author.id)
                                 )
                                 .foregroundStyle(RaverTheme.primaryText)
                                 .contentShape(Rectangle())
@@ -195,6 +205,9 @@ private struct FeedScreen: View {
         }
         .task {
             await viewModel.load()
+        }
+        .onChange(of: viewModel.posts) { _, posts in
+            appearanceResolver.warmAppearances(for: posts.map(\.author.id))
         }
         .confirmationDialog(
             L("告诉我们原因", "Tell us why"),

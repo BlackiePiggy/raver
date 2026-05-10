@@ -177,6 +177,7 @@ final class ProfileViewModel: ObservableObject {
     @Published var repostedItems: [ActivityPostItem] = []
     @Published var savedItems: [ActivityPostItem] = []
     @Published var recentCheckins: [WebCheckin] = []
+    @Published var appearance: UserAssetAppearance?
     @Published var selectedSection: Section = .published
     @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
@@ -185,11 +186,16 @@ final class ProfileViewModel: ObservableObject {
     @Published var error: String?
 
     private let repository: ProfileSocialRepository
+    private let virtualAssetRepository: VirtualAssetRepository
     private let loadDashboardUseCase: LoadMyProfileDashboardUseCase
     private let offlineSnapshotStorageKey = "raver.profile.offlineSnapshot.v1"
 
-    init(repository: ProfileSocialRepository) {
+    init(
+        repository: ProfileSocialRepository,
+        virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
+    ) {
         self.repository = repository
+        self.virtualAssetRepository = virtualAssetRepository
         self.loadDashboardUseCase = LoadMyProfileDashboardUseCase(repository: repository)
     }
 
@@ -213,6 +219,7 @@ final class ProfileViewModel: ObservableObject {
             repostedItems = dashboard.repostedItems
             savedItems = dashboard.savedItems
             recentCheckins = dashboard.recentCheckins
+            await loadAppearance(for: dashboard.profile.id)
             persistOfflineSnapshot()
             phase = .success
             bannerMessage = nil
@@ -253,6 +260,7 @@ final class ProfileViewModel: ObservableObject {
             if let checkinPage = try? await repository.fetchUserCheckins(userID: profile.id, page: 1, limit: 6, type: nil) {
                 recentCheckins = checkinPage.items
             }
+            await loadAppearance(for: profile.id)
             persistOfflineSnapshot()
             phase = .success
             bannerMessage = nil
@@ -267,6 +275,11 @@ final class ProfileViewModel: ObservableObject {
         self.profile = profile
         phase = .success
         persistOfflineSnapshot()
+    }
+
+    func refreshAppearance() async {
+        guard let userID = profile?.id else { return }
+        await loadAppearance(for: userID, preferCache: false)
     }
 
     func toggleLike(post: Post) async {
@@ -358,6 +371,44 @@ final class ProfileViewModel: ObservableObject {
         repostedItems = snapshot.repostedItems
         savedItems = snapshot.savedItems
         recentCheckins = snapshot.recentCheckins
+        if appearance == nil {
+            appearance = virtualAssetRepository.cachedAppearance(userID: snapshot.profile.id)
+        }
         return true
+    }
+
+    private func loadAppearance(for userID: String, preferCache: Bool = true) async {
+        if preferCache, appearance == nil, let cached = virtualAssetRepository.cachedAppearance(userID: userID) {
+            appearance = cached
+        }
+
+        do {
+            appearance = try await virtualAssetRepository.fetchAppearance(userID: userID)
+            if let appearance {
+                recordProfileExposures(appearance)
+            }
+        } catch {
+            VirtualAssetTelemetry.record(event: "load_failed", surface: "profile", userID: userID)
+            if appearance == nil {
+                appearance = virtualAssetRepository.cachedAppearance(userID: userID) ?? .empty(userID: userID)
+            }
+        }
+    }
+
+    private func recordProfileExposures(_ appearance: UserAssetAppearance) {
+        let visibleAssets = [
+            appearance.avatarFrame,
+            appearance.titleMedal
+        ].compactMap { $0 } + appearance.profileBadges
+
+        for asset in visibleAssets {
+            VirtualAssetTelemetry.record(
+                event: "exposure",
+                surface: "profile",
+                userID: appearance.userID,
+                assetID: asset.id,
+                assetType: asset.type
+            )
+        }
     }
 }

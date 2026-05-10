@@ -70,6 +70,7 @@ struct ProfileView: View {
 
                             ProfileHeaderCard(
                                 profile: profile,
+                                appearance: viewModel.appearance,
                                 realNameStatus: appState.realNameVerificationStatus,
                                 onAvatarTap: {
                                     profilePush(.avatarFullscreen)
@@ -222,6 +223,11 @@ struct ProfileView: View {
                     }
                     quickActionTile(title: L("我的路线", "My Routes"), icon: "point.topleft.down.curvedto.point.bottomright.up") {
                         profilePush(.myRoutes)
+                    }
+                    if AppConfig.virtualAssetsEnabled {
+                        quickActionTile(title: L("装扮中心", "Style Center"), icon: "sparkles") {
+                            profilePush(.virtualAssetCenter)
+                        }
                     }
                     quickActionTile(title: L("小工具", "Tools"), icon: "wand.and.stars") {
                         profilePush(.tools)
@@ -649,6 +655,7 @@ struct MySavesView: View {
 
 struct ProfileHeaderCard<Actions: View>: View {
     let profile: UserProfile
+    let appearance: UserAssetAppearance?
     let realNameStatus: RealNameVerificationStatus?
     let onAvatarTap: (() -> Void)?
     let onRealNameTap: (() -> Void)?
@@ -659,6 +666,7 @@ struct ProfileHeaderCard<Actions: View>: View {
 
     init(
         profile: UserProfile,
+        appearance: UserAssetAppearance? = nil,
         realNameStatus: RealNameVerificationStatus? = nil,
         onAvatarTap: (() -> Void)? = nil,
         onRealNameTap: (() -> Void)? = nil,
@@ -668,6 +676,7 @@ struct ProfileHeaderCard<Actions: View>: View {
         @ViewBuilder actions: @escaping () -> Actions = { EmptyView() }
     ) {
         self.profile = profile
+        self.appearance = appearance
         self.realNameStatus = realNameStatus
         self.onAvatarTap = onAvatarTap
         self.onRealNameTap = onRealNameTap
@@ -681,8 +690,31 @@ struct ProfileHeaderCard<Actions: View>: View {
         VStack(spacing: 12) {
             avatarView
 
-            Text(profile.displayName)
-                .font(.title3.bold())
+            VStack(spacing: 7) {
+                HStack(spacing: 7) {
+                    Text(profile.displayName)
+                        .font(.title3.bold())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+
+                    if let titleMedal = appearance?.titleMedal {
+                        VirtualAssetTitleMedalView(asset: titleMedal, compact: true, maxWidth: 138)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
+                if let badges = appearance?.profileBadges, !badges.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(badges.prefix(5)) { badge in
+                                VirtualAssetBadgeView(asset: badge, compact: true, showTitle: true)
+                            }
+                        }
+                        .padding(.horizontal, 2)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
 
             if let realNameStatus {
                 realNameBadge(status: realNameStatus)
@@ -787,10 +819,16 @@ struct ProfileHeaderCard<Actions: View>: View {
     private var avatarView: some View {
         if let onAvatarTap {
             Button(action: onAvatarTap) {
-                ProfileAvatarImage(profile: profile, size: 84)
+                profileAvatarWithFrame
             }
             .buttonStyle(.plain)
         } else {
+            profileAvatarWithFrame
+        }
+    }
+
+    private var profileAvatarWithFrame: some View {
+        VirtualAssetAvatarView(size: 84, avatarFrame: appearance?.avatarFrame) {
             ProfileAvatarImage(profile: profile, size: 84)
         }
     }

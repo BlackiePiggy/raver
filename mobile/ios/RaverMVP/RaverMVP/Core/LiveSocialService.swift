@@ -679,7 +679,14 @@ final class LiveSocialService: SocialService {
     }
 
     func fetchSquadProfile(squadID: String) async throws -> SquadProfile {
-        try await imSession.fetchSquadProfile(squadID: squadID)
+        do {
+            return try await request(path: "/v1/squads/\(squadID)/profile", method: "GET")
+        } catch {
+            if case .connected = await imSession.connectionStateSnapshot() {
+                return try await imSession.fetchSquadProfile(squadID: squadID)
+            }
+            throw error
+        }
     }
 
     func joinSquad(squadID: String) async throws {
@@ -747,10 +754,11 @@ final class LiveSocialService: SocialService {
     }
 
     func updateSquadMemberRole(squadID: String, memberUserID: String, role: String) async throws {
-        if try await imSession.updateSquadMemberRole(squadID: squadID, memberUserID: memberUserID, role: role) {
-            return
-        }
-        throw await tencentIMUnavailableError(for: "update squad member role")
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/squads/\(squadID)/members/\(memberUserID)/role",
+            method: "PATCH",
+            body: UpdateSquadMemberRoleRequest(role: role)
+        )
     }
 
     func removeSquadMember(squadID: String, memberUserID: String) async throws {
@@ -773,6 +781,66 @@ final class LiveSocialService: SocialService {
 
     func fetchSquadMemberDirectory(squadID: String) async throws -> GroupMemberDirectory {
         try await imSession.fetchSquadMemberDirectory(squadID: squadID)
+    }
+
+    func fetchCurrentSquadOfflineActivity(squadID: String) async throws -> SquadOfflineActivity? {
+        try await request(path: "/v1/squads/\(squadID)/offline-activity/current", method: "GET")
+    }
+
+    func fetchSquadOfflineActivityHistory(squadID: String) async throws -> [SquadOfflineActivity] {
+        try await request(path: "/v1/squads/\(squadID)/offline-activities/history", method: "GET")
+    }
+
+    func startSquadOfflineActivity(squadID: String, input: StartSquadOfflineActivityInput) async throws -> SquadOfflineActivity {
+        try await request(path: "/v1/squads/\(squadID)/offline-activities", method: "POST", body: input)
+    }
+
+    func endSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity? {
+        try await request(
+            path: "/v1/squads/\(squadID)/offline-activities/\(activityID)/end",
+            method: "POST"
+        )
+    }
+
+    func joinSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity {
+        try await request(
+            path: "/v1/squads/\(squadID)/offline-activities/\(activityID)/join",
+            method: "POST"
+        )
+    }
+
+    func leaveSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity? {
+        try await request(
+            path: "/v1/squads/\(squadID)/offline-activities/\(activityID)/leave",
+            method: "POST"
+        )
+    }
+
+    func removeSquadOfflineActivityParticipant(squadID: String, activityID: String, participantUserID: String) async throws -> SquadOfflineActivity? {
+        try await request(
+            path: "/v1/squads/\(squadID)/offline-activities/\(activityID)/participants/\(participantUserID)/remove",
+            method: "POST"
+        )
+    }
+
+    func updateSquadOfflineActivityStatus(squadID: String, activityID: String, input: SquadOfflineActivityStatusInput) async throws -> SquadOfflineActivity? {
+        try await request(
+            path: "/v1/squads/\(squadID)/offline-activities/\(activityID)/status",
+            method: "POST",
+            body: input
+        )
+    }
+
+    func uploadSquadOfflineActivityLocation(
+        squadID: String,
+        activityID: String,
+        input: SquadOfflineLocationUploadInput
+    ) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/squads/\(squadID)/offline-activities/\(activityID)/location",
+            method: "POST",
+            body: input
+        )
     }
 
     func fetchNotifications(limit: Int) async throws -> NotificationInbox {
@@ -1460,6 +1528,10 @@ private struct JoinSquadResponse: Decodable {
 
 private struct GenericSuccessResponse: Decodable {
     let success: Bool
+}
+
+private struct UpdateSquadMemberRoleRequest: Encodable {
+    let role: String
 }
 
 private struct SmsCodeSendResponse: Decodable {

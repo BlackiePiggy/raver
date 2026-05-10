@@ -42,6 +42,9 @@ enum DemoAlignedChatScreenLifecycleCoordinatorFactory {
             resetSendFailureHint: { [weak failureFeedbackActions = dependencies.failureFeedbackActions] in
                 failureFeedbackActions?.reset()
             },
+            resetAppearanceCache: { [weak collectionDataSource = dependencies.collectionDataSource] in
+                collectionDataSource?.resetAppearanceCache()
+            },
             refreshSendButtonState: { [weak textSendCoordinator = dependencies.textSendCoordinator] in
                 textSendCoordinator?.refreshSendButtonState()
             },

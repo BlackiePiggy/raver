@@ -8,7 +8,8 @@ struct UserProfileView: View {
         UserProfileScreen(
             viewModel: UserProfileViewModel(
                 userID: userID,
-                repository: appContainer.profileSocialRepository
+                repository: appContainer.profileSocialRepository,
+                virtualAssetRepository: appContainer.virtualAssetRepository
             )
         )
     }
@@ -66,6 +67,7 @@ private struct UserProfileScreen: View {
                         if let profile = viewModel.profile {
                             ProfileHeaderCard(
                                 profile: profile,
+                                appearance: viewModel.appearance,
                                 onFollowersTap: {
                                     if profile.canViewFollowersList {
                                         profilePush(.followList(userID: profile.id, kind: .followers))

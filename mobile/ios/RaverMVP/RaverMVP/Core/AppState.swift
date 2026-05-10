@@ -924,6 +924,13 @@ final class TencentIMSession: NSObject {
         let payload: EventRouteShareCardPayload
     }
 
+    private struct TencentSquadOfflineActivityCardEnvelope: Codable {
+        let businessID: String
+        let version: Int
+        let cardType: String
+        let payload: SquadOfflineActivityCardPayload
+    }
+
     var onStateChange: ((TencentIMConnectionState) -> Void)?
     var onUnreadCountChange: ((Int) -> Void)?
     let messageSubject = PassthroughSubject<ChatMessage, Never>()
@@ -3861,6 +3868,14 @@ final class TencentIMSession: NSObject {
                 media = ChatMessageMediaPayload(
                     thumbnailURL: eventRouteCard.coverImageURL
                 )
+            } else if let offlineActivityCard = customSquadOfflineActivityCardPayload(from: message.customElem?.data) {
+                kind = .card
+                content = message.customElem?.data.flatMap { String(data: $0, encoding: .utf8) }
+                    ?? (try? String(data: JSONEncoder().encode(offlineActivityCard), encoding: .utf8))
+                    ?? offlineActivityCard.title
+                media = ChatMessageMediaPayload(
+                    thumbnailURL: offlineActivityCard.coverImageURL
+                )
             } else {
                 kind = .custom
                 content = normalizedText(message.customElem?.desc) ?? L("[自定义消息]", "[Custom Message]")
@@ -4134,6 +4149,16 @@ final class TencentIMSession: NSObject {
               let envelope = try? JSONDecoder().decode(TencentEventRouteCardEnvelope.self, from: data),
               envelope.businessID == Self.customCardBusinessID,
               envelope.cardType == "event_route" else {
+            return nil
+        }
+        return envelope.payload
+    }
+
+    private func customSquadOfflineActivityCardPayload(from data: Data?) -> SquadOfflineActivityCardPayload? {
+        guard let data,
+              let envelope = try? JSONDecoder.raverISO8601().decode(TencentSquadOfflineActivityCardEnvelope.self, from: data),
+              envelope.businessID == Self.customCardBusinessID,
+              envelope.cardType == "squad_offline_activity" else {
             return nil
         }
         return envelope.payload

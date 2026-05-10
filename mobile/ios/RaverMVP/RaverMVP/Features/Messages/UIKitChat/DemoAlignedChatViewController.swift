@@ -20,6 +20,7 @@ final class DemoAlignedChatViewController: UIViewController {
 
     private var conversation: Conversation
     private var service: SocialService
+    private let appearanceResolver: VirtualAssetChatAppearanceResolver
     private var onNavigate: ((AppRoute) -> Void)?
     private var onLeaveConversation: (() -> Void)?
     private var pendingFocusTask: Task<Void, Never>?
@@ -110,11 +111,13 @@ final class DemoAlignedChatViewController: UIViewController {
     init(
         conversation: Conversation,
         service: SocialService,
+        virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository(),
         onNavigate: ((AppRoute) -> Void)? = nil,
         onLeaveConversation: (() -> Void)? = nil
     ) {
         self.conversation = conversation
         self.service = service
+        self.appearanceResolver = VirtualAssetChatAppearanceResolver(repository: virtualAssetRepository)
         self.onNavigate = onNavigate
         self.onLeaveConversation = onLeaveConversation
         self.chatController = RaverChatController(
@@ -125,9 +128,13 @@ final class DemoAlignedChatViewController: UIViewController {
         )
         self.collectionDataSource = RaverChatCollectionDataSource(
             conversationType: conversation.type,
-            maxBubbleWidthRatio: UIConstants.maxBubbleWidthRatio
+            maxBubbleWidthRatio: UIConstants.maxBubbleWidthRatio,
+            appearanceResolver: appearanceResolver
         )
         super.init(nibName: nil, bundle: nil)
+        self.appearanceResolver.onAppearanceUpdated = { [weak self] in
+            self?.collectionView?.reloadData()
+        }
         self.collectionDataSource.onReplyPreviewTapped = { [weak self] message in
             guard let self else { return }
             _ = self.tryRevealReplyTargetIfNeeded(from: message)

@@ -14,10 +14,13 @@ struct RaverMVPApp: App {
 
         let socialService = AppEnvironment.makeService()
         let webService = AppEnvironment.makeWebService()
+        let virtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
+        VirtualAssetTelemetry.configure { socialService }
         _appContainer = StateObject(
             wrappedValue: AppContainer(
                 socialService: socialService,
-                webService: webService
+                webService: webService,
+                virtualAssetRepository: virtualAssetRepository
             )
         )
         _appState = StateObject(wrappedValue: AppState(service: socialService))

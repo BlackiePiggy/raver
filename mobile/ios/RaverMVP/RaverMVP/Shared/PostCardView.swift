@@ -24,6 +24,7 @@ struct PostCardView: View {
     let onAuthorTap: (() -> Void)?
     let onSquadTap: (() -> Void)?
     let onEditTap: (() -> Void)?
+    let authorAppearance: UserAssetAppearance?
     @State private var isShowingLocationMap = false
     @State private var isSharePanelVisible = false
     @State private var isShowingMoreChatsSheet = false
@@ -47,7 +48,8 @@ struct PostCardView: View {
         onMessageTap: (() -> Void)?,
         onAuthorTap: (() -> Void)?,
         onSquadTap: (() -> Void)?,
-        onEditTap: (() -> Void)? = nil
+        onEditTap: (() -> Void)? = nil,
+        authorAppearance: UserAssetAppearance? = nil
     ) {
         self.post = post
         self.currentUserId = currentUserId
@@ -62,6 +64,7 @@ struct PostCardView: View {
         self.onAuthorTap = onAuthorTap
         self.onSquadTap = onSquadTap
         self.onEditTap = onEditTap
+        self.authorAppearance = authorAppearance
     }
 
     var body: some View {
@@ -325,8 +328,17 @@ struct PostCardView: View {
             authorAvatar
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(post.author.displayName)
-                    .font(.subheadline.bold())
+                HStack(spacing: 6) {
+                    Text(post.author.displayName)
+                        .font(.subheadline.bold())
+                        .lineLimit(1)
+
+                    if let titleMedal = authorAppearance?.titleMedal {
+                        VirtualAssetTitleMedalView(asset: titleMedal, compact: true, maxWidth: 92)
+                    } else if let badge = authorAppearance?.profileBadges.first {
+                        VirtualAssetBadgeView(asset: badge, compact: true, showTitle: false)
+                    }
+                }
                 Text(post.createdAt.feedTimeText)
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
@@ -336,15 +348,16 @@ struct PostCardView: View {
 
     @ViewBuilder
     private var authorAvatar: some View {
-        if let resolved = AppConfig.resolvedURLString(post.author.avatarURL),
-           resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
-           URL(string: resolved) != nil {
-            ImageLoaderView(urlString: resolved)
-                .background(authorAvatarFallback)
-            .frame(width: 34, height: 34)
-            .clipShape(Circle())
-        } else {
-            authorAvatarFallback
+        VirtualAssetAvatarView(size: 34, avatarFrame: authorAppearance?.avatarFrame) {
+            if let resolved = AppConfig.resolvedURLString(post.author.avatarURL),
+               resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
+               URL(string: resolved) != nil {
+                ImageLoaderView(urlString: resolved)
+                    .background(authorAvatarFallback)
+                    .frame(width: 34, height: 34)
+            } else {
+                authorAvatarFallback
+            }
         }
     }
 

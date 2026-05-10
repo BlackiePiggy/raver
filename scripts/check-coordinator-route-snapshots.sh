@@ -4,8 +4,10 @@ set -euo pipefail
 
 ROOT_DIR="${1:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 FEATURES_DIR="$ROOT_DIR/mobile/ios/RaverMVP/RaverMVP/Features"
+APP_DIR="$ROOT_DIR/mobile/ios/RaverMVP/RaverMVP/Application"
 FIXTURE_FILE="$ROOT_DIR/scripts/fixtures/coordinator-route-snapshots.sh"
 
+MAIN_TAB_COORDINATOR="$APP_DIR/Coordinator/MainTabCoordinator.swift"
 DISCOVER_ROUTE="$FEATURES_DIR/Discover/Coordinator/DiscoverRoute.swift"
 CIRCLE_COORDINATOR="$FEATURES_DIR/Circle/Coordinator/CircleCoordinator.swift"
 MESSAGES_COORDINATOR="$FEATURES_DIR/Messages/Coordinator/MessagesCoordinator.swift"
@@ -97,6 +99,7 @@ compare_snapshot() {
 }
 
 require_file "$FIXTURE_FILE"
+require_file "$MAIN_TAB_COORDINATOR"
 require_file "$DISCOVER_ROUTE"
 require_file "$CIRCLE_COORDINATOR"
 require_file "$MESSAGES_COORDINATOR"
@@ -105,6 +108,7 @@ require_file "$PROFILE_COORDINATOR"
 # shellcheck disable=SC1090
 source "$FIXTURE_FILE"
 
+compare_snapshot "AppRoute" "$MAIN_TAB_COORDINATOR"
 compare_snapshot "DiscoverRoute" "$DISCOVER_ROUTE"
 compare_snapshot "CircleRoute" "$CIRCLE_COORDINATOR"
 compare_snapshot "MessagesRoute" "$MESSAGES_COORDINATOR"

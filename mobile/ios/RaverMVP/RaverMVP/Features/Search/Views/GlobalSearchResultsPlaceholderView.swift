@@ -10,7 +10,7 @@ struct GlobalSearchResultsView: View {
     @State private var searchText: String
     @FocusState private var isSearchFocused: Bool
 
-    init(query: String, initialTab: GlobalSearchTab? = nil, service: WebFeatureService = AppEnvironment.makeWebService()) {
+    init(query: String, initialTab: GlobalSearchTab? = nil, service: WebFeatureService) {
         self.query = query
         self.initialTab = initialTab
         _viewModel = StateObject(wrappedValue: GlobalSearchResultsViewModel(query: query, service: service))

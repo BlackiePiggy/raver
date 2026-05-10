@@ -4,6 +4,7 @@ import Foundation
 final class AppContainer: ObservableObject {
     let socialService: SocialService
     let webService: WebFeatureService
+    let virtualAssetRepository: VirtualAssetRepository
 
     var discoverEventsRepository: DiscoverEventsRepository {
         DiscoverEventsRepositoryAdapter(service: webService)
@@ -45,9 +46,11 @@ final class AppContainer: ObservableObject {
 
     init(
         socialService: SocialService = AppEnvironment.makeService(),
-        webService: WebFeatureService = AppEnvironment.makeWebService()
+        webService: WebFeatureService = AppEnvironment.makeWebService(),
+        virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
     ) {
         self.socialService = socialService
         self.webService = webService
+        self.virtualAssetRepository = virtualAssetRepository
     }
 }

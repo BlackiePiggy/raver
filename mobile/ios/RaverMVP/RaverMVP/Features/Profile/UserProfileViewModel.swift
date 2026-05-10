@@ -6,6 +6,7 @@ final class UserProfileViewModel: ObservableObject {
     @Published var profile: UserProfile?
     @Published var posts: [Post] = []
     @Published var recentCheckins: [WebCheckin] = []
+    @Published var appearance: UserAssetAppearance?
     @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
     @Published var isRefreshing = false
@@ -15,12 +16,18 @@ final class UserProfileViewModel: ObservableObject {
 
     private let userID: String
     private let repository: ProfileSocialRepository
+    private let virtualAssetRepository: VirtualAssetRepository
     private var nextCursor: String?
     private var hasMore = true
 
-    init(userID: String, repository: ProfileSocialRepository) {
+    init(
+        userID: String,
+        repository: ProfileSocialRepository,
+        virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
+    ) {
         self.userID = userID
         self.repository = repository
+        self.virtualAssetRepository = virtualAssetRepository
     }
 
     func load() async {
@@ -42,6 +49,7 @@ final class UserProfileViewModel: ObservableObject {
 
             profile = profileValue
             posts = page.posts.filter { !$0.isRaverNews }
+            await loadAppearance(for: profileValue.id)
             if let checkinPage = try? await repository.fetchUserCheckins(userID: userID, page: 1, limit: 6, type: nil) {
                 recentCheckins = checkinPage.items
             } else {
@@ -122,6 +130,41 @@ final class UserProfileViewModel: ObservableObject {
             }
         } catch {
             self.error = error.userFacingMessage
+        }
+    }
+
+    private func loadAppearance(for userID: String) async {
+        if appearance == nil, let cached = virtualAssetRepository.cachedAppearance(userID: userID) {
+            appearance = cached
+        }
+
+        do {
+            appearance = try await virtualAssetRepository.fetchAppearance(userID: userID)
+            if let appearance {
+                recordProfileExposures(appearance)
+            }
+        } catch {
+            VirtualAssetTelemetry.record(event: "load_failed", surface: "user_profile", userID: userID)
+            if appearance == nil {
+                appearance = virtualAssetRepository.cachedAppearance(userID: userID) ?? .empty(userID: userID)
+            }
+        }
+    }
+
+    private func recordProfileExposures(_ appearance: UserAssetAppearance) {
+        let visibleAssets = [
+            appearance.avatarFrame,
+            appearance.titleMedal
+        ].compactMap { $0 } + appearance.profileBadges
+
+        for asset in visibleAssets {
+            VirtualAssetTelemetry.record(
+                event: "exposure",
+                surface: "user_profile",
+                userID: appearance.userID,
+                assetID: asset.id,
+                assetType: asset.type
+            )
         }
     }
 }

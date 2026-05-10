@@ -10,6 +10,7 @@ final class DemoAlignedChatScreenLifecycleCoordinator {
     private let resetViewport: () -> Void
     private let resetMessageFlowState: () -> Void
     private let resetSendFailureHint: () -> Void
+    private let resetAppearanceCache: () -> Void
     private let refreshSendButtonState: () -> Void
     private let updateRouteContext: (
         Conversation,
@@ -28,6 +29,7 @@ final class DemoAlignedChatScreenLifecycleCoordinator {
         resetViewport: @escaping () -> Void,
         resetMessageFlowState: @escaping () -> Void,
         resetSendFailureHint: @escaping () -> Void,
+        resetAppearanceCache: @escaping () -> Void,
         refreshSendButtonState: @escaping () -> Void,
         updateRouteContext: @escaping (
             Conversation,
@@ -44,6 +46,7 @@ final class DemoAlignedChatScreenLifecycleCoordinator {
         self.resetViewport = resetViewport
         self.resetMessageFlowState = resetMessageFlowState
         self.resetSendFailureHint = resetSendFailureHint
+        self.resetAppearanceCache = resetAppearanceCache
         self.refreshSendButtonState = refreshSendButtonState
         self.updateRouteContext = updateRouteContext
     }
@@ -76,6 +79,7 @@ final class DemoAlignedChatScreenLifecycleCoordinator {
         resetPagination()
         resetViewport()
         resetMessageFlowState()
+        resetAppearanceCache()
         hasPerformedInitialStableScroll = false
         resetSendFailureHint()
         refreshSendButtonState()

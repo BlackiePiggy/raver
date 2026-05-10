@@ -4,6 +4,7 @@ enum ProfileRoute: Hashable {
     case followList(userID: String, kind: FollowListKind)
     case settings
     case tools
+    case virtualAssetCenter
     case widgetManager
     case movieBanner
     case myPublishes
@@ -51,14 +52,21 @@ extension EnvironmentValues {
 
 extension Notification.Name {
     static let profileDidUpdate = Notification.Name("profileDidUpdate")
+    static let virtualAssetAppearanceDidUpdate = Notification.Name("virtualAssetAppearanceDidUpdate")
 }
 
 struct ProfileCoordinatorView: View {
     @StateObject private var profileViewModel: ProfileViewModel
 
-    init(repository: ProfileSocialRepository) {
+    init(
+        repository: ProfileSocialRepository,
+        virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
+    ) {
         _profileViewModel = StateObject(
-            wrappedValue: ProfileViewModel(repository: repository)
+            wrappedValue: ProfileViewModel(
+                repository: repository,
+                virtualAssetRepository: virtualAssetRepository
+            )
         )
     }
 
@@ -68,6 +76,9 @@ struct ProfileCoordinatorView: View {
         .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
             guard let updated = notification.object as? UserProfile else { return }
             profileViewModel.applyUpdatedProfile(updated)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .virtualAssetAppearanceDidUpdate)) { _ in
+            Task { await profileViewModel.refreshAppearance() }
         }
     }
 }

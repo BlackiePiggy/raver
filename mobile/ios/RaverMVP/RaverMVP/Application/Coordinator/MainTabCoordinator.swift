@@ -36,6 +36,8 @@ enum AppRoute: Hashable {
     case userProfile(userID: String)
     case squadProfile(squadID: String)
     case squadManage(squadID: String)
+    case squadOfflineActivity(squadID: String)
+    case squadOfflineActivityHistory(squadID: String)
     case circleIDDetail(entryID: String)
     case ratingEventDetail(eventID: String)
     case ratingUnitDetail(unitID: String)
@@ -68,6 +70,8 @@ extension AppRoute {
              .userProfile,
              .squadProfile,
              .squadManage,
+             .squadOfflineActivity,
+             .squadOfflineActivityHistory,
              .circleIDDetail,
              .ratingEventDetail,
              .ratingUnitDetail,
@@ -122,6 +126,10 @@ extension AppRoute {
             return "squad.profile"
         case .squadManage:
             return "squad.manage"
+        case .squadOfflineActivity:
+            return "squad.offline.activity"
+        case .squadOfflineActivityHistory:
+            return "squad.offline.activity.history"
         case .circleIDDetail:
             return "circle.id.detail"
         case .ratingEventDetail:
@@ -153,6 +161,8 @@ extension AppRoute {
             return .messages
         case .postDetail, .squadProfile, .squadManage, .circleIDDetail, .ratingEventDetail, .ratingUnitDetail:
             return .circle
+        case .squadOfflineActivity, .squadOfflineActivityHistory:
+            return .messages
         case .eventDetail, .newsDetail, .eventSchedule, .eventLiveDiscussion, .eventRoute, .djDetail, .labelDetail, .festivalDetail, .setDetail, .rankingBoardDetail, .globalSearchResults:
             return .discover
         case .userProfile:
@@ -249,6 +259,10 @@ final class AppRouter: ObservableObject {
                 return "squadProfile(\(squadID))"
             case .squadManage(let squadID):
                 return "squadManage(\(squadID))"
+            case .squadOfflineActivity(let squadID):
+                return "squadOfflineActivity(\(squadID))"
+            case .squadOfflineActivityHistory(let squadID):
+                return "squadOfflineActivityHistory(\(squadID))"
             case .circleIDDetail(let entryID):
                 return "circleIDDetail(\(entryID))"
             case .ratingEventDetail(let eventID):
@@ -502,6 +516,16 @@ struct MainTabCoordinatorView: View {
                 SettingsView()
             case .tools:
                 ProfileToolsHubView()
+            case .virtualAssetCenter where AppConfig.virtualAssetsEnabled:
+                VirtualAssetCenterView(repository: appContainer.virtualAssetRepository) {
+                    NotificationCenter.default.post(name: .virtualAssetAppearanceDidUpdate, object: nil)
+                }
+            case .virtualAssetCenter:
+                ContentUnavailableView(
+                    L("装扮中心已关闭", "Style Center Disabled"),
+                    systemImage: "sparkles",
+                    description: Text(L("当前灰度开关已关闭，展示会回退为普通头像和昵称。", "The rollout flag is off. Display falls back to standard avatars and names."))
+                )
             case .widgetManager:
                 WidgetEventManagerView()
             case .movieBanner:
@@ -572,7 +596,9 @@ struct MainTabCoordinatorView: View {
         case let .conversation(target):
             ConversationLoaderView(
                 target: target,
-                service: appContainer.socialService
+                service: appContainer.socialService,
+                webService: appContainer.webService,
+                virtualAssetRepository: appContainer.virtualAssetRepository
             )
 
         case .followedEventsInbox:
@@ -585,7 +611,11 @@ struct MainTabCoordinatorView: View {
             FollowedBrandsInboxView(repository: appContainer.messagesRepository)
 
         case let .postDetail(postID):
-            PostDetailLoaderView(postID: postID, service: appContainer.socialService)
+            PostDetailLoaderView(
+                postID: postID,
+                service: appContainer.socialService,
+                virtualAssetRepository: appContainer.virtualAssetRepository
+            )
                 .environmentObject(appState)
 
         case .eventDetail(let eventID):
@@ -661,6 +691,18 @@ struct MainTabCoordinatorView: View {
                 squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
                 service: appContainer.socialService,
                 webService: appContainer.webService
+            )
+
+        case .squadOfflineActivity(let squadID):
+            SquadOfflineActivityView(
+                squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
+                service: appContainer.socialService
+            )
+
+        case .squadOfflineActivityHistory(let squadID):
+            SquadOfflineActivityHistoryView(
+                squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
+                service: appContainer.socialService
             )
 
         case .circleIDDetail(let entryID):
@@ -767,6 +809,7 @@ struct MainTabCoordinatorView: View {
         case .followList,
                 .settings,
                 .tools,
+                .virtualAssetCenter,
                 .widgetManager,
                 .movieBanner,
                 .myPublishes,
@@ -1027,6 +1070,10 @@ struct MainTabCoordinatorView: View {
             return "globalSearchResults(query=\(query),initialTab=\(initialTab?.rawValue ?? "nil"))"
         case .squadProfile(let squadID):
             return "squadProfile(\(squadID))"
+        case .squadOfflineActivity(let squadID):
+            return "squadOfflineActivity(\(squadID))"
+        case .squadOfflineActivityHistory(let squadID):
+            return "squadOfflineActivityHistory(\(squadID))"
         case .userProfile(let userID):
             return "userProfile(\(userID))"
         default:
@@ -1137,6 +1184,8 @@ private struct ConversationLoaderView: View {
 
     let target: ChatRouteTarget
     let service: SocialService
+    let webService: WebFeatureService
+    let virtualAssetRepository: VirtualAssetRepository
 
     @State private var conversation: Conversation?
     @State private var phase: LoadPhase = .idle
@@ -1152,7 +1201,12 @@ private struct ConversationLoaderView: View {
             }
         ) {
             if let conversation {
-                TencentUIKitChatView(conversation: conversation, service: service)
+                TencentUIKitChatView(
+                    conversation: conversation,
+                    service: service,
+                    webService: webService,
+                    virtualAssetRepository: virtualAssetRepository
+                )
                 .navigationBarTitleDisplayMode(.inline)
             } else {
                 EmptyView()
@@ -1489,6 +1543,7 @@ private struct ConversationLoaderView: View {
 private struct PostDetailLoaderView: View {
     let postID: String
     let service: SocialService
+    let virtualAssetRepository: VirtualAssetRepository
 
     @State private var post: Post?
     @State private var phase: LoadPhase = .idle
@@ -1507,7 +1562,11 @@ private struct PostDetailLoaderView: View {
             }
         ) {
             if let post {
-                PostDetailView(post: post, service: service)
+                PostDetailView(
+                    post: post,
+                    service: service,
+                    virtualAssetRepository: virtualAssetRepository
+                )
             } else {
                 EmptyView()
             }

@@ -271,6 +271,19 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func fetchSquadInviteOption(squadID: String) async throws -> GroupInviteOption
     func setSquadInviteOption(squadID: String, option: GroupInviteOption) async throws
     func fetchSquadMemberDirectory(squadID: String) async throws -> GroupMemberDirectory
+    func fetchCurrentSquadOfflineActivity(squadID: String) async throws -> SquadOfflineActivity?
+    func fetchSquadOfflineActivityHistory(squadID: String) async throws -> [SquadOfflineActivity]
+    func startSquadOfflineActivity(squadID: String, input: StartSquadOfflineActivityInput) async throws -> SquadOfflineActivity
+    func endSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity?
+    func joinSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity
+    func leaveSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity?
+    func removeSquadOfflineActivityParticipant(squadID: String, activityID: String, participantUserID: String) async throws -> SquadOfflineActivity?
+    func updateSquadOfflineActivityStatus(squadID: String, activityID: String, input: SquadOfflineActivityStatusInput) async throws -> SquadOfflineActivity?
+    func uploadSquadOfflineActivityLocation(
+        squadID: String,
+        activityID: String,
+        input: SquadOfflineLocationUploadInput
+    ) async throws
     func fetchNotifications(limit: Int) async throws -> NotificationInbox
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
     func markNotificationRead(notificationID: String) async throws
@@ -529,6 +542,65 @@ extension SocialService {
 
     func fetchSquadMemberDirectory(squadID: String) async throws -> GroupMemberDirectory {
         _ = squadID
+        throw ServiceError.message("Not supported")
+    }
+
+    func fetchCurrentSquadOfflineActivity(squadID: String) async throws -> SquadOfflineActivity? {
+        _ = squadID
+        return nil
+    }
+
+    func fetchSquadOfflineActivityHistory(squadID: String) async throws -> [SquadOfflineActivity] {
+        _ = squadID
+        return []
+    }
+
+    func startSquadOfflineActivity(squadID: String, input: StartSquadOfflineActivityInput) async throws -> SquadOfflineActivity {
+        _ = squadID
+        _ = input
+        throw ServiceError.message("Not supported")
+    }
+
+    func endSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity? {
+        _ = squadID
+        _ = activityID
+        throw ServiceError.message("Not supported")
+    }
+
+    func joinSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity {
+        _ = squadID
+        _ = activityID
+        throw ServiceError.message("Not supported")
+    }
+
+    func leaveSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity? {
+        _ = squadID
+        _ = activityID
+        throw ServiceError.message("Not supported")
+    }
+
+    func removeSquadOfflineActivityParticipant(squadID: String, activityID: String, participantUserID: String) async throws -> SquadOfflineActivity? {
+        _ = squadID
+        _ = activityID
+        _ = participantUserID
+        throw ServiceError.message("Not supported")
+    }
+
+    func updateSquadOfflineActivityStatus(squadID: String, activityID: String, input: SquadOfflineActivityStatusInput) async throws -> SquadOfflineActivity? {
+        _ = squadID
+        _ = activityID
+        _ = input
+        throw ServiceError.message("Not supported")
+    }
+
+    func uploadSquadOfflineActivityLocation(
+        squadID: String,
+        activityID: String,
+        input: SquadOfflineLocationUploadInput
+    ) async throws {
+        _ = squadID
+        _ = activityID
+        _ = input
         throw ServiceError.message("Not supported")
     }
 }

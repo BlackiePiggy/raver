@@ -3,8 +3,9 @@
 # Snapshot fixture for coordinator route enums.
 # Intentionally update these values only when route-shape changes are expected.
 
-SNAPSHOT_DiscoverRoute="djDetail eventCreate eventDetail eventEdit festivalDetail labelDetail learnFestivalCreate learnFestivalEdit newsDetail newsPublish searchInput searchResults setCreate setDetail setEdit"
-SNAPSHOT_CircleRoute="djDetail eventDetail idCreate postCreate postDetail postEdit ratingEventCreate ratingEventDetail ratingEventImportFromEvent ratingUnitCreate squadProfile userProfile"
-SNAPSHOT_MessagesRoute="alertCategory conversation userProfile"
+SNAPSHOT_AppRoute="circle circleIDDetail conversation discover djDetail eventDetail eventLiveDiscussion eventRoute eventSchedule festivalDetail followedBrandsInbox followedDJsInbox followedEventsInbox globalSearchResults labelDetail messages newsDetail postDetail profile rankingBoardDetail ratingEventDetail ratingUnitDetail setDetail squadManage squadProfile userProfile"
+SNAPSHOT_DiscoverRoute="djImport eventCreate eventEdit festivalDetail labelDetail learnFestivalCreate learnFestivalEdit newsDetail newsPublish setCreate setDetail setEdit"
+SNAPSHOT_CircleRoute="eventPostCreate idCreate idDetail postCreate postEdit ratingEventCreate ratingEventDetail ratingEventImportFromEvent ratingUnitCreate"
+SNAPSHOT_MessagesRoute="alertCategory chatSettings"
 SNAPSHOT_MessagesModalRoute="squadProfile"
-SNAPSHOT_ProfileRoute="avatarFullscreen conversation djDetail editEvent editProfile editRatingEvent editRatingUnit editSet eventDetail followList myCheckins myPublishes postDetail publishEvent settings squadProfile uploadSet userProfile"
+SNAPSHOT_ProfileRoute="avatarFullscreen editEvent editProfile editRatingEvent editRatingUnit editSet followList movieBanner myCheckins myPublishes myRoutes mySaves publishEvent settings shareAsset shareQRCode tools uploadSet virtualAssetCenter widgetManager"

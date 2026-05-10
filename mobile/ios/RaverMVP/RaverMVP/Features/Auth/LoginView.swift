@@ -581,6 +581,7 @@ private extension UIImage {
 
 private struct RegisterProfileView: View {
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.dismiss) private var dismiss
     @Binding var hasAgreedTerms: Bool
 
@@ -926,7 +927,7 @@ private struct RegisterProfileView: View {
 
         if appState.errorMessage == nil, let selectedAvatarData {
             do {
-                _ = try await appState.service.uploadMyAvatar(
+                _ = try await appContainer.socialService.uploadMyAvatar(
                     imageData: selectedAvatarData,
                     fileName: "avatar-\(Int(Date().timeIntervalSince1970)).jpg",
                     mimeType: "image/jpeg"

@@ -50,7 +50,8 @@
     "share-invites:smoke": "ts-node src/scripts/share-invite-smoke.ts",
     "tencent-im:sync:all-users": "NODE_OPTIONS='--use-env-proxy' ts-node src/scripts/tencent-im-sync-all-users.ts",
     "tencent-im:export:user-mapping": "ts-node src/scripts/tencent-im-export-user-mapping.ts",
-    "tencent-im:delete:openim-users": "NODE_OPTIONS='--use-env-proxy' ts-node src/scripts/tencent-im-delete-openim-users.ts"
+    "tencent-im:delete:openim-users": "NODE_OPTIONS='--use-env-proxy' ts-node src/scripts/tencent-im-delete-openim-users.ts",
+    "virtual-assets:seed": "ts-node prisma/seed-virtual-assets.ts"
   },
   "keywords": [
     "raver",

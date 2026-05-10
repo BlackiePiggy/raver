@@ -5,7 +5,11 @@ struct NotificationsView: View {
 
     var body: some View {
         NotificationsScreen(
-            viewModel: NotificationsViewModel(service: appContainer.socialService)
+            viewModel: NotificationsViewModel(service: appContainer.socialService),
+            appearanceResolver: VirtualAssetListAppearanceResolver(
+                repository: appContainer.virtualAssetRepository,
+                surface: "notifications"
+            )
         )
     }
 }
@@ -13,9 +17,14 @@ struct NotificationsView: View {
 private struct NotificationsScreen: View {
     @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: NotificationsViewModel
+    @StateObject private var appearanceResolver: VirtualAssetListAppearanceResolver
 
-    init(viewModel: NotificationsViewModel) {
+    init(
+        viewModel: NotificationsViewModel,
+        appearanceResolver: VirtualAssetListAppearanceResolver
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        _appearanceResolver = StateObject(wrappedValue: appearanceResolver)
     }
 
     var body: some View {
@@ -105,6 +114,9 @@ private struct NotificationsScreen: View {
         .task {
             await viewModel.load()
         }
+        .onChange(of: viewModel.notifications) { _, notifications in
+            appearanceResolver.warmAppearances(for: notifications.compactMap { $0.actor?.id })
+        }
         .alert(L("通知加载失败", "Failed to Load Notifications"), isPresented: Binding(
             get: { viewModel.error != nil },
             set: { if !$0 { viewModel.error = nil } }
@@ -136,15 +148,19 @@ private struct NotificationsScreen: View {
     @ViewBuilder
     private func notificationLeadingAvatar(for item: AppNotification) -> some View {
         if let actor = item.actor {
+            let appearance = appearanceResolver.appearance(userID: actor.id)
             if let resolved = AppConfig.resolvedURLString(actor.avatarURL),
                URL(string: resolved) != nil,
                resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-                ImageLoaderView(urlString: resolved)
-                    .background(notificationLeadingAvatarFallback(actor))
-                .frame(width: 30, height: 30)
-                .clipShape(Circle())
+                VirtualAssetAvatarView(size: 30, avatarFrame: appearance?.avatarFrame) {
+                    ImageLoaderView(urlString: resolved)
+                        .background(notificationLeadingAvatarFallback(actor))
+                        .frame(width: 30, height: 30)
+                }
             } else {
-                notificationLeadingAvatarFallback(actor)
+                VirtualAssetAvatarView(size: 30, avatarFrame: appearance?.avatarFrame) {
+                    notificationLeadingAvatarFallback(actor)
+                }
             }
         } else {
             Image(systemName: item.type.iconName)

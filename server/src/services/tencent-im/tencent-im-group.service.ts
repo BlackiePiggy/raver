@@ -253,4 +253,26 @@ export const tencentIMGroupService = {
       ],
     });
   },
+
+  async sendSquadCustomCardMessage(
+    squadId: string,
+    senderUserId: string,
+    data: Record<string, unknown>,
+    description: string
+  ): Promise<void> {
+    await tencentIMClient.post('v4/group_open_http_svc/send_group_msg', {
+      GroupId: toTencentIMSquadGroupID(squadId),
+      From_Account: toTencentIMUserID(senderUserId),
+      Random: Math.floor(Math.random() * 0x7fffffff),
+      MsgBody: [
+        {
+          MsgType: 'TIMCustomElem',
+          MsgContent: {
+            Data: JSON.stringify(data),
+            Desc: description,
+          },
+        },
+      ],
+    });
+  },
 };

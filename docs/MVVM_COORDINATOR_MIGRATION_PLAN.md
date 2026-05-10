@@ -525,6 +525,8 @@ P9.4 modal allowlist (frozen):
 - `Features/Discover/Events/Views/EventDetailView.swift`: check-in selector, venue map, and share sheet are in-context utility/system surfaces.
 - `Features/Discover/Sets/Views/SetsModuleView.swift`: audio-only set playback remains an immersive full-screen surface.
 - `Features/Feed/ComposePostView.swift` + `Shared/PostCardView.swift`: media preview and map preview are immersive preview surfaces; `ComposePostView` location picker full-screen route and `PostCardView` media/location full-screen preview routes remain modal as in-context utility/preview flows.
+- App root `MainTabCoordinator` sheet/full-screen routes remain coordinator-owned presentation channels for app-level modal surfaces.
+- Real-name, chat-share, conversation-search/audio preview, registration profile, and share/save utility sheets remain allowlisted as short-lived utility or preview flows rather than entity/detail navigation.
 
 P9.4 enforcement notes:
 
@@ -1098,5 +1100,6 @@ After finishing work:
 - 2026-04-10: Completed Q122 by re-opening post-wave cleanup and converting previously deferred modal routes to push: `MessagesCoordinator` squad profile route, `MainTabView` (`selectedDetailRoute`, event picker, DJ picker, create squad), `SquadProfileView` manage panel, `EventDetailView` rating detail + route planner, `DJsModuleView` import/edit/spotify routes, `SetsModuleView` tracklist/editor/event-binding routes, `LearnModuleView` ranking/image/full-screen detail routes, and `EventEditorView` lineup/location routes.
 - 2026-04-10: Q122 follow-up guard update: refreshed `scripts/modal-allowlist-signatures.txt` via `scripts/check-modal-allowlist.sh --write-allowlist` after modal-count reduction.
 - 2026-04-10: Q122 verification: simulator build passed (`xcodebuild -project mobile/ios/RaverMVP/RaverMVP.xcodeproj -scheme RaverMVP -destination 'generic/platform=iOS Simulator' build`) and modal allowlist check passed (`scripts/check-modal-allowlist.sh`).
+- 2026-05-10: Updated coordinator hardening guards to match the global `AppRoute` root-stack architecture: routing and deep-link checks now assert `MainTabCoordinator`/`AppRoute` for cross-module destinations, route snapshots include `AppRoute`, and `scripts/modal-allowlist-signatures.txt` was refreshed to the current intentional modal surface. Verification passed with `scripts/run-coordinator-hardening-preflight.sh`.
 - 2026-04-10: Added `docs/IOS_INCREMENTAL_FEATURE_DEVELOPMENT_GUIDE.md` as the default playbook for all future incremental feature delivery under MVVM+Coordinator, and linked it from this plan via `Companion Development Guide`.
 - 2026-04-10: Completed Discover recommend-surface structure split by moving `RecommendEventsModuleView` + `RecommendEventsViewModel` out of `Features/Discover/Events` into dedicated `Features/Discover/Recommend/{Views,ViewModels}` folder, and updated `RaverMVP.xcodeproj` group ownership accordingly; simulator build verification passed.

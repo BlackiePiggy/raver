@@ -4,6 +4,20 @@ struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
 
+    private var realNameEnforcementBinding: Binding<Bool> {
+        Binding(
+            get: { AppConfig.isRealNameEnforcementEnabled },
+            set: { AppConfig.setRealNameEnforcementEnabled($0) }
+        )
+    }
+
+    private var virtualAssetsEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { AppConfig.virtualAssetsEnabled },
+            set: { AppConfig.setVirtualAssetsEnabled($0) }
+        )
+    }
+
     var body: some View {
         List {
                 // 账号设置
@@ -104,6 +118,28 @@ struct SettingsView: View {
                         Label(L("下载设置", "Download Settings"), systemImage: "arrow.down.circle")
                     }
                 }
+
+#if DEBUG
+                Section(L("开发", "Development")) {
+                    Toggle(isOn: realNameEnforcementBinding) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label(LL("实名认证限制"), systemImage: "person.text.rectangle")
+                            Text(LL("关闭后，开发环境会绕过实名认证拦截；开启后恢复真实限制。"))
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                    }
+
+                    Toggle(isOn: virtualAssetsEnabledBinding) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label(LL("虚拟资产装扮"), systemImage: "sparkles")
+                            Text(LL("重启 App 后生效；关闭后装扮入口和展示会回退为普通头像/昵称。"))
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                    }
+                }
+#endif
 
                 // 关于
                 Section(L("关于", "About")) {

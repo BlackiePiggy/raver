@@ -57,6 +57,7 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
     override func layoutSubviews() {
         super.layoutSubviews()
         bubbleMaxWidthConstraint?.constant = bounds.width * 0.64
+        VirtualAssetChatBubbleRenderer.updateGradientFrame(in: bubbleView)
     }
 
     override func prepareForReuse() {
@@ -65,6 +66,9 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
         previewImageView.sd_cancelCurrentImageLoad()
         previewImageView.image = nil
         senderAvatarView.sd_cancelCurrentImageLoad()
+        VirtualAssetUIKitChatAvatarRenderer.removeFrameOverlay(from: senderAvatarView)
+        VirtualAssetUIKitChatMetaRenderer.removeDecorations(from: senderMetaRow)
+        VirtualAssetChatBubbleRenderer.removeGradientLayer(from: bubbleView)
         senderAvatarView.image = UIImage(systemName: "person.crop.circle.fill")
         senderNameLabel.text = nil
         senderMetaRow.isHidden = true
@@ -288,6 +292,7 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
     func configure(
         message: ChatMessage,
         maxBubbleWidthRatio: CGFloat,
+        senderAppearance: UserAssetAppearance?,
         showSenderMeta: Bool,
         isClusterStart: Bool,
         isClusterEnd: Bool,
@@ -315,7 +320,7 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
         bubbleTopToContentConstraint.isActive = !shouldShowSenderMeta
         bubbleTopToSenderConstraint.isActive = shouldShowSenderMeta
         if shouldShowSenderMeta {
-            configureSenderMeta(for: message.sender, isMine: message.isMine)
+            configureSenderMeta(for: message.sender, appearance: senderAppearance, isMine: message.isMine)
         }
 
         setBubbleAlignment(isMine: message.isMine)
@@ -345,12 +350,23 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
         applyVoiceBarWidthIfNeeded(for: message)
     }
 
-    private func configureSenderMeta(for sender: UserSummary, isMine: Bool) {
+    private func configureSenderMeta(
+        for sender: UserSummary,
+        appearance: UserAssetAppearance?,
+        isMine: Bool
+    ) {
+        VirtualAssetUIKitChatAvatarRenderer.removeFrameOverlay(from: senderAvatarView)
+        VirtualAssetUIKitChatMetaRenderer.removeDecorations(from: senderMetaRow)
         if isMine {
             senderNameLabel.text = L("我", "Me")
         } else {
             senderNameLabel.text = sender.displayName.isEmpty ? sender.username : sender.displayName
         }
+        VirtualAssetUIKitChatMetaRenderer.apply(
+            appearance: appearance,
+            to: senderMetaRow,
+            after: senderNameLabel
+        )
 
         let fallback = UIImage(systemName: "person.crop.circle.fill")
         senderAvatarView.image = fallback
@@ -359,7 +375,19 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
               let url = URL(string: resolved) else {
             return
         }
-        senderAvatarView.sd_setImage(with: url, placeholderImage: fallback)
+        senderAvatarView.sd_setImage(with: url, placeholderImage: fallback) { [weak self] _, _, _, _ in
+            guard let self else { return }
+            VirtualAssetUIKitChatAvatarRenderer.apply(
+                avatarFrame: appearance?.avatarFrame,
+                to: self.senderAvatarView,
+                size: 28
+            )
+        }
+        VirtualAssetUIKitChatAvatarRenderer.apply(
+            avatarFrame: appearance?.avatarFrame,
+            to: senderAvatarView,
+            size: 28
+        )
     }
 
     private func configureReplyPreview(for message: ChatMessage) {

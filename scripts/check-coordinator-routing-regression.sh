@@ -4,12 +4,14 @@ set -euo pipefail
 
 ROOT_DIR="${1:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 IOS_FEATURES_DIR="$ROOT_DIR/mobile/ios/RaverMVP/RaverMVP/Features"
+IOS_APP_DIR="$ROOT_DIR/mobile/ios/RaverMVP/RaverMVP/Application"
 
 CIRCLE_COORDINATOR="$IOS_FEATURES_DIR/Circle/Coordinator/CircleCoordinator.swift"
 MESSAGES_COORDINATOR="$IOS_FEATURES_DIR/Messages/Coordinator/MessagesCoordinator.swift"
 PROFILE_COORDINATOR="$IOS_FEATURES_DIR/Profile/Coordinator/ProfileCoordinator.swift"
 DISCOVER_COORDINATOR="$IOS_FEATURES_DIR/Discover/Coordinator/DiscoverCoordinator.swift"
 DISCOVER_ROUTE="$IOS_FEATURES_DIR/Discover/Coordinator/DiscoverRoute.swift"
+MAIN_TAB_COORDINATOR="$IOS_APP_DIR/Coordinator/MainTabCoordinator.swift"
 
 failed=0
 
@@ -121,22 +123,23 @@ require_file "$MESSAGES_COORDINATOR"
 require_file "$PROFILE_COORDINATOR"
 require_file "$DISCOVER_COORDINATOR"
 require_file "$DISCOVER_ROUTE"
+require_file "$MAIN_TAB_COORDINATOR"
 
+check_hashable_conformance "$MAIN_TAB_COORDINATOR" "AppRoute"
 check_hashable_conformance "$CIRCLE_COORDINATOR" "CircleRoute"
 check_hashable_conformance "$MESSAGES_COORDINATOR" "MessagesRoute"
 check_hashable_conformance "$MESSAGES_COORDINATOR" "MessagesModalRoute"
 check_hashable_conformance "$PROFILE_COORDINATOR" "ProfileRoute"
 check_hashable_conformance "$DISCOVER_ROUTE" "DiscoverRoute"
 
+check_destination_binding "$MAIN_TAB_COORDINATOR" "AppRoute"
 check_destination_binding "$CIRCLE_COORDINATOR" "CircleRoute"
-check_destination_binding "$MESSAGES_COORDINATOR" "MessagesRoute"
-check_destination_binding "$PROFILE_COORDINATOR" "ProfileRoute"
-check_destination_binding "$DISCOVER_COORDINATOR" "DiscoverRoute"
 
-check_case_mappings "CircleRoute" "$CIRCLE_COORDINATOR" "$CIRCLE_COORDINATOR"
-check_case_mappings "MessagesRoute" "$MESSAGES_COORDINATOR" "$MESSAGES_COORDINATOR"
-check_case_mappings "MessagesModalRoute" "$MESSAGES_COORDINATOR" "$MESSAGES_COORDINATOR"
-check_case_mappings "ProfileRoute" "$PROFILE_COORDINATOR" "$PROFILE_COORDINATOR"
+check_case_mappings "AppRoute" "$MAIN_TAB_COORDINATOR" "$MAIN_TAB_COORDINATOR"
+check_case_mappings "CircleRoute" "$CIRCLE_COORDINATOR" "$MAIN_TAB_COORDINATOR"
+check_case_mappings "MessagesRoute" "$MESSAGES_COORDINATOR" "$MAIN_TAB_COORDINATOR"
+check_case_mappings "MessagesModalRoute" "$MESSAGES_COORDINATOR" "$MAIN_TAB_COORDINATOR"
+check_case_mappings "ProfileRoute" "$PROFILE_COORDINATOR" "$MAIN_TAB_COORDINATOR"
 check_case_mappings "DiscoverRoute" "$DISCOVER_ROUTE" "$DISCOVER_ROUTE"
 
 if [[ "$failed" -ne 0 ]]; then

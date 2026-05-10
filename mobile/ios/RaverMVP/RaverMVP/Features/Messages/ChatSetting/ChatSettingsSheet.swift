@@ -440,6 +440,11 @@ struct ChatSettingsView: View {
                     editable: canManageInviteOption,
                     action: { beginEditingGroupInfo(.introduction) }
                 )
+                Button {
+                    pushRoute(.squadOfflineActivityHistory(squadID: platformSquadID))
+                } label: {
+                    Label(L("历史活动记录", "Activity History"), systemImage: "clock.arrow.circlepath")
+                }
                 HStack(spacing: 12) {
                     Label(L("我在本群的昵称", "My Group Nickname"), systemImage: "person.text.rectangle")
                     Spacer(minLength: 12)

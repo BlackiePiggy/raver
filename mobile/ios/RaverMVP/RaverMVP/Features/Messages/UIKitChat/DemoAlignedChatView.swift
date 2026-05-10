@@ -21,11 +21,13 @@ struct DemoAlignedChatView: UIViewControllerRepresentable {
     let conversation: Conversation
     let service: SocialService
     let navigationBridge: DemoAlignedChatNavigationBridge
+    var virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
 
     func makeUIViewController(context: Context) -> DemoAlignedChatViewController {
         let controller = DemoAlignedChatViewController(
             conversation: conversation,
             service: service,
+            virtualAssetRepository: virtualAssetRepository,
             onNavigate: { route in
                 appPush(route)
             },

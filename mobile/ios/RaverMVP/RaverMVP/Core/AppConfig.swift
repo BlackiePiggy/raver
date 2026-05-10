@@ -54,6 +54,8 @@ enum AppConfig {
     ]
     private static let persistedRuntimeModeKey = "raver.persisted.runtimeMode"
     private static let persistedBFFBaseURLKey = "raver.persisted.bffBaseURL"
+    private static let persistedRealNameEnforcementEnabledKey = "raver.persisted.realNameEnforcementEnabled"
+    private static let persistedVirtualAssetsEnabledKey = "raver.persisted.virtualAssetsEnabled"
     private static let tencentIMAPNSBusinessIDInfoPlistKey = "TencentIMAPNSBusinessID"
 
     static var runtimeMode: AppRuntimeMode {
@@ -105,6 +107,56 @@ enum AppConfig {
         return 0
     }
 
+    static var canOverrideRealNameEnforcement: Bool {
+#if DEBUG
+        true
+#else
+        false
+#endif
+    }
+
+    static var isRealNameEnforcementEnabled: Bool {
+#if DEBUG
+        if let env = normalizedBool(ProcessInfo.processInfo.environment["RAVER_REAL_NAME_ENFORCEMENT_ENABLED"]) {
+            UserDefaults.standard.set(env, forKey: persistedRealNameEnforcementEnabledKey)
+            return env
+        }
+
+        if UserDefaults.standard.object(forKey: persistedRealNameEnforcementEnabledKey) != nil {
+            return UserDefaults.standard.bool(forKey: persistedRealNameEnforcementEnabledKey)
+        }
+
+        return false
+#else
+        true
+#endif
+    }
+
+    static func setRealNameEnforcementEnabled(_ isEnabled: Bool) {
+#if DEBUG
+        UserDefaults.standard.set(isEnabled, forKey: persistedRealNameEnforcementEnabledKey)
+#endif
+    }
+
+    static var virtualAssetsEnabled: Bool {
+        if let env = normalizedBool(ProcessInfo.processInfo.environment["RAVER_VIRTUAL_ASSETS_ENABLED"]) {
+            UserDefaults.standard.set(env, forKey: persistedVirtualAssetsEnabledKey)
+            return env
+        }
+
+        if UserDefaults.standard.object(forKey: persistedVirtualAssetsEnabledKey) != nil {
+            return UserDefaults.standard.bool(forKey: persistedVirtualAssetsEnabledKey)
+        }
+
+        return true
+    }
+
+    static func setVirtualAssetsEnabled(_ isEnabled: Bool) {
+#if DEBUG
+        UserDefaults.standard.set(isEnabled, forKey: persistedVirtualAssetsEnabledKey)
+#endif
+    }
+
     private static func normalizedBaseURLString(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -124,6 +176,21 @@ enum AppConfig {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return trimmed
+    }
+
+    private static func normalizedBool(_ raw: String?) -> Bool? {
+        guard let raw else { return nil }
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+
+        switch normalized {
+        case "1", "true", "yes", "on", "enabled":
+            return true
+        case "0", "false", "no", "off", "disabled":
+            return false
+        default:
+            return nil
+        }
     }
 
     private static func runtimeModeFromEnvironmentValue(_ raw: String?) -> AppRuntimeMode? {

@@ -6,6 +6,7 @@ struct PostDetailView: View {
     @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appState: AppState
     @State private var post: Post
+    @StateObject private var appearanceResolver: VirtualAssetListAppearanceResolver
     private let service: SocialService
 
     @State private var comments: [Comment] = []
@@ -35,8 +36,18 @@ struct PostDetailView: View {
     private let replyPreviewCount = 3
     private let replyPageSize = 6
 
-    init(post: Post, service: SocialService) {
+    init(
+        post: Post,
+        service: SocialService,
+        virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
+    ) {
         self._post = State(initialValue: post)
+        self._appearanceResolver = StateObject(
+            wrappedValue: VirtualAssetListAppearanceResolver(
+                repository: virtualAssetRepository,
+                surface: "post_detail"
+            )
+        )
         self.service = service
     }
 
@@ -173,6 +184,15 @@ struct PostDetailView: View {
         .raverSystemNavigation(title: LL("动态详情"))
         .task {
             await loadComments()
+        }
+        .onAppear {
+            appearanceResolver.warmAppearances(for: [post.author.id])
+        }
+        .onChange(of: post.author.id) { _, userID in
+            appearanceResolver.warmAppearances(for: [userID])
+        }
+        .onChange(of: comments) { _, comments in
+            appearanceResolver.warmAppearances(for: comments.map(\.author.id))
         }
         .onChange(of: commentSortMode) { _, _ in
             resetRootPaging()
@@ -338,7 +358,8 @@ struct PostDetailView: View {
                 appPush(.userProfile(userID: post.author.id))
             },
             onSquadTap: nil,
-            onEditTap: nil
+            onEditTap: nil,
+            authorAppearance: appearanceResolver.appearance(userID: post.author.id)
         )
     }
 
@@ -630,12 +651,15 @@ struct PostDetailView: View {
         if let resolved = AppConfig.resolvedURLString(user.avatarURL),
            URL(string: resolved) != nil,
            resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-            ImageLoaderView(urlString: resolved)
-                .background(commentAvatarFallback(user, size: size))
-                .frame(width: size, height: size)
-                .clipShape(Circle())
+            VirtualAssetAvatarView(size: size, avatarFrame: appearanceResolver.appearance(userID: user.id)?.avatarFrame) {
+                ImageLoaderView(urlString: resolved)
+                    .background(commentAvatarFallback(user, size: size))
+                    .frame(width: size, height: size)
+            }
         } else {
-            commentAvatarFallback(user, size: size)
+            VirtualAssetAvatarView(size: size, avatarFrame: appearanceResolver.appearance(userID: user.id)?.avatarFrame) {
+                commentAvatarFallback(user, size: size)
+            }
         }
     }
 
@@ -849,9 +873,7 @@ struct PostDetailView: View {
                 Button {
                     appPush(.userProfile(userID: comment.author.id))
                 } label: {
-                    Text(comment.author.displayName)
-                        .font(authorFont)
-                        .foregroundStyle(RaverTheme.primaryText)
+                    commentAuthorMeta(comment.author, font: authorFont, isSecondary: isSecondary)
                 }
                 .buttonStyle(.plain)
 
@@ -880,6 +902,22 @@ struct PostDetailView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             replyTargetComment = comment
+        }
+    }
+
+    @ViewBuilder
+    private func commentAuthorMeta(_ author: UserSummary, font: Font, isSecondary: Bool) -> some View {
+        HStack(spacing: 5) {
+            Text(author.displayName)
+                .font(font)
+                .foregroundStyle(RaverTheme.primaryText)
+                .lineLimit(1)
+
+            if !isSecondary, let titleMedal = appearanceResolver.appearance(userID: author.id)?.titleMedal {
+                VirtualAssetTitleMedalView(asset: titleMedal, compact: true, maxWidth: 82)
+            } else if let badge = appearanceResolver.appearance(userID: author.id)?.profileBadges.first {
+                VirtualAssetBadgeView(asset: badge, compact: true, showTitle: false)
+            }
         }
     }
 

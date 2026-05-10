@@ -3,9 +3,14 @@ import UIKit
 
 final class RaverChatMessageCellFactory {
     private let maxBubbleWidthRatio: CGFloat
+    private let appearanceResolver: VirtualAssetChatAppearanceResolver?
 
-    init(maxBubbleWidthRatio: CGFloat) {
+    init(
+        maxBubbleWidthRatio: CGFloat,
+        appearanceResolver: VirtualAssetChatAppearanceResolver? = nil
+    ) {
         self.maxBubbleWidthRatio = maxBubbleWidthRatio
+        self.appearanceResolver = appearanceResolver
     }
 
     func registerCells(in collectionView: UICollectionView) {
@@ -65,6 +70,7 @@ final class RaverChatMessageCellFactory {
                 cell.configure(
                     message: message,
                     maxBubbleWidthRatio: maxBubbleWidthRatio,
+                    senderAppearance: appearanceResolver?.cachedAppearance(userID: message.sender.id),
                     showSenderMeta: presentation.showSenderMeta,
                     isClusterStart: presentation.isClusterStart,
                     isClusterEnd: presentation.isClusterEnd,
@@ -83,6 +89,7 @@ final class RaverChatMessageCellFactory {
                 cell.configure(
                     message: message,
                     maxBubbleWidthRatio: maxBubbleWidthRatio,
+                    senderAppearance: appearanceResolver?.cachedAppearance(userID: message.sender.id),
                     showSenderMeta: presentation.showSenderMeta,
                     isClusterStart: presentation.isClusterStart,
                     isClusterEnd: presentation.isClusterEnd,

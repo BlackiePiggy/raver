@@ -45,6 +45,9 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         senderAvatarView.sd_cancelCurrentImageLoad()
+        VirtualAssetUIKitChatAvatarRenderer.removeFrameOverlay(from: senderAvatarView)
+        VirtualAssetUIKitChatMetaRenderer.removeDecorations(from: senderMetaRow)
+        VirtualAssetChatBubbleRenderer.removeGradientLayer(from: bubbleView)
         senderAvatarView.image = UIImage(systemName: "person.crop.circle.fill")
         senderNameLabel.text = nil
         senderMetaRow.isHidden = true
@@ -62,6 +65,7 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
     override func layoutSubviews() {
         super.layoutSubviews()
         bubbleMaxWidthConstraint?.constant = bounds.width * 0.64
+        VirtualAssetChatBubbleRenderer.updateGradientFrame(in: bubbleView)
     }
 
     private func configureUI() {
@@ -197,6 +201,7 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
     func configure(
         message: ChatMessage,
         maxBubbleWidthRatio: CGFloat,
+        senderAppearance: UserAssetAppearance?,
         showSenderMeta: Bool,
         isClusterStart: Bool,
         isClusterEnd: Bool,
@@ -231,19 +236,29 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
         bubbleTopToContentConstraint.isActive = !shouldShowSenderMeta
         bubbleTopToSenderConstraint.isActive = shouldShowSenderMeta
         if shouldShowSenderMeta {
-            configureSenderMeta(for: message.sender, isMine: message.isMine)
+            configureSenderMeta(for: message.sender, appearance: senderAppearance, isMine: message.isMine)
         }
 
         setBubbleAlignment(isMine: message.isMine)
         if message.isMine {
-            bubbleView.backgroundColor = UIColor(RaverTheme.accent)
-            messageLabel.textColor = .white
-            timeLabel.textColor = UIColor.white.withAlphaComponent(0.85)
+            VirtualAssetChatBubbleRenderer.apply(
+                asset: senderAppearance?.chatBubbleSkin,
+                to: bubbleView,
+                primaryLabels: [messageLabel],
+                secondaryLabels: [timeLabel],
+                isMine: true,
+                traitCollection: traitCollection
+            )
             configureDeliveryStatus(message.deliveryStatus, isMine: true, message: message)
         } else {
-            bubbleView.backgroundColor = UIColor(RaverTheme.card)
-            messageLabel.textColor = UIColor(RaverTheme.primaryText)
-            timeLabel.textColor = UIColor(RaverTheme.secondaryText)
+            VirtualAssetChatBubbleRenderer.apply(
+                asset: nil,
+                to: bubbleView,
+                primaryLabels: [messageLabel],
+                secondaryLabels: [timeLabel],
+                isMine: false,
+                traitCollection: traitCollection
+            )
             configureDeliveryStatus(message.deliveryStatus, isMine: false, message: message)
         }
     }
@@ -311,12 +326,23 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
         return attributed
     }
 
-    private func configureSenderMeta(for sender: UserSummary, isMine: Bool) {
+    private func configureSenderMeta(
+        for sender: UserSummary,
+        appearance: UserAssetAppearance?,
+        isMine: Bool
+    ) {
+        VirtualAssetUIKitChatAvatarRenderer.removeFrameOverlay(from: senderAvatarView)
+        VirtualAssetUIKitChatMetaRenderer.removeDecorations(from: senderMetaRow)
         if isMine {
             senderNameLabel.text = L("我", "Me")
         } else {
             senderNameLabel.text = sender.displayName.isEmpty ? sender.username : sender.displayName
         }
+        VirtualAssetUIKitChatMetaRenderer.apply(
+            appearance: appearance,
+            to: senderMetaRow,
+            after: senderNameLabel
+        )
 
         let fallback = UIImage(systemName: "person.crop.circle.fill")
         senderAvatarView.image = fallback
@@ -325,7 +351,19 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
               let url = URL(string: resolved) else {
             return
         }
-        senderAvatarView.sd_setImage(with: url, placeholderImage: fallback)
+        senderAvatarView.sd_setImage(with: url, placeholderImage: fallback) { [weak self] _, _, _, _ in
+            guard let self else { return }
+            VirtualAssetUIKitChatAvatarRenderer.apply(
+                avatarFrame: appearance?.avatarFrame,
+                to: self.senderAvatarView,
+                size: 28
+            )
+        }
+        VirtualAssetUIKitChatAvatarRenderer.apply(
+            avatarFrame: appearance?.avatarFrame,
+            to: senderAvatarView,
+            size: 28
+        )
     }
 
     private func configureDeliveryStatus(_ status: ChatMessageDeliveryStatus, isMine: Bool, message: ChatMessage) {

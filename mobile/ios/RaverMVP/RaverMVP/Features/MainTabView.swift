@@ -130,7 +130,10 @@ struct MainTabView: View {
         case .messages:
             MessagesCoordinatorView(repository: appContainer.messagesRepository)
         case .profile:
-            ProfileCoordinatorView(repository: appContainer.profileSocialRepository)
+            ProfileCoordinatorView(
+                repository: appContainer.profileSocialRepository,
+                virtualAssetRepository: appContainer.virtualAssetRepository
+            )
         }
     }
 

@@ -35,6 +35,7 @@ targets:
           NSAllowsArbitraryLoads: true
         NSPhotoLibraryAddUsageDescription: Raver 需要保存分享海报到你的相册。
         NSPhotoLibraryUsageDescription: Raver 需要访问你的相册以保存分享海报。
+        NSLocationWhenInUseUsageDescription: 加入小队线下活动后，Raver 需要使用你的定位来展示队友位置并记录活动轨迹。
         TencentIMAPNSBusinessID: "48505"
         CFBundleURLTypes:
           - CFBundleURLName: com.raver.mvp.deeplink

@@ -18,15 +18,21 @@ final class RaverChatCollectionDataSource: NSObject, UICollectionViewDataSource 
     private var conversationType: ConversationType
     private var items: [RaverChatListItem] = []
     private let cellFactory: RaverChatMessageCellFactory
+    private let appearanceResolver: VirtualAssetChatAppearanceResolver?
     private var playingVoiceMessageID: String?
     var onReplyPreviewTapped: ((ChatMessage) -> Void)?
 
     init(
         conversationType: ConversationType,
-        maxBubbleWidthRatio: CGFloat = 0.64
+        maxBubbleWidthRatio: CGFloat = 0.64,
+        appearanceResolver: VirtualAssetChatAppearanceResolver? = nil
     ) {
         self.conversationType = conversationType
-        self.cellFactory = RaverChatMessageCellFactory(maxBubbleWidthRatio: maxBubbleWidthRatio)
+        self.appearanceResolver = appearanceResolver
+        self.cellFactory = RaverChatMessageCellFactory(
+            maxBubbleWidthRatio: maxBubbleWidthRatio,
+            appearanceResolver: appearanceResolver
+        )
         super.init()
     }
 
@@ -38,9 +44,14 @@ final class RaverChatCollectionDataSource: NSObject, UICollectionViewDataSource 
         conversationType = type
     }
 
+    func resetAppearanceCache() {
+        appearanceResolver?.reset()
+    }
+
     func updateMessages(_ messages: [ChatMessage], playingVoiceMessageID: String?) {
         self.playingVoiceMessageID = playingVoiceMessageID
         let renderMessages = messages.filter { $0.kind != .typing }
+        appearanceResolver?.warmAppearances(for: renderMessages.map(\.sender.id))
         var builtItems: [RaverChatListItem] = []
         for index in renderMessages.indices {
             let message = renderMessages[index]

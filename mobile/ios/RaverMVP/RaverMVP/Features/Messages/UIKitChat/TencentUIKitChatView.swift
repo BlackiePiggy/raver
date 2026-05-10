@@ -84,6 +84,7 @@ struct TencentUIKitChatView: View {
 
     let conversation: Conversation
     let service: SocialService
+    let webService: WebFeatureService
 
     @StateObject private var viewModel: ExyteChatConversationViewModel
     @State private var scrollToID: String?
@@ -96,6 +97,9 @@ struct TencentUIKitChatView: View {
     @State private var mentionCandidates: [InputMentionCandidate] = []
     @State private var allowMentionAll = false
     @State private var recentCardNavigation: RecentCardNavigation?
+    @State private var offlineActivity: SquadOfflineActivity?
+    @State private var canManageOfflineActivity = false
+    @State private var isShowingOfflineActivityStarter = false
 
     private let recorderSettings = RecorderSettings(
         sampleRate: 16000,
@@ -103,13 +107,20 @@ struct TencentUIKitChatView: View {
         linearPCMBitDepth: 16
     )
 
-    init(conversation: Conversation, service: SocialService) {
+    init(
+        conversation: Conversation,
+        service: SocialService,
+        webService: WebFeatureService,
+        virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
+    ) {
         self.conversation = conversation
         self.service = service
+        self.webService = webService
         _viewModel = StateObject(
             wrappedValue: ExyteChatConversationViewModel(
                 conversation: conversation,
-                service: service
+                service: service,
+                virtualAssetRepository: virtualAssetRepository
             )
         )
     }
@@ -117,7 +128,10 @@ struct TencentUIKitChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             chatHeader
-            chatContent
+            ZStack(alignment: .top) {
+                chatContent
+                offlineActivityBanner
+            }
         }
         .background(chatLifecycleBridge)
         .tint(RaverTheme.accent)
@@ -142,6 +156,18 @@ struct TencentUIKitChatView: View {
             ChatAudioFilePlayerSheet(item: item)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isShowingOfflineActivityStarter) {
+            SquadOfflineActivityStarterSheet(
+                squadID: resolvedHeaderSquadID(),
+                service: service,
+                webService: webService
+            ) { created in
+                offlineActivity = created
+                appNavigate(.squadOfflineActivity(squadID: resolvedHeaderSquadID()))
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .alert(
             L("未定位到消息", "Message Not Located"),
@@ -193,6 +219,12 @@ struct TencentUIKitChatView: View {
         }
         .task(id: conversation.id) {
             await refreshMentionCandidates()
+        }
+        .task(id: conversation.id) {
+            await refreshOfflineActivity()
+        }
+        .task(id: conversation.id) {
+            await refreshOfflineActivityPermission()
         }
     }
 
@@ -253,8 +285,9 @@ struct TencentUIKitChatView: View {
                         }
                     }
                 } label: {
-                    ExyteAvatarView(
+                    ExyteAssetAvatarView(
                         presentation: viewModel.chatHeaderAvatar,
+                        appearance: viewModel.chatHeaderAppearance(),
                         size: 36
                     )
                 }
@@ -281,6 +314,19 @@ struct TencentUIKitChatView: View {
                 }
 
                 Spacer(minLength: 0)
+
+                if conversation.type == .group, canManageOfflineActivity, offlineActivity == nil {
+                    Button {
+                        isShowingOfflineActivityStarter = true
+                    } label: {
+                        Image(systemName: "location.north.line.fill")
+                            .font(.system(size: 20, weight: .regular))
+                            .foregroundStyle(RaverTheme.accent)
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text(L("开启线下活动", "Start Offline Activity")))
+                }
 
                 Button {
                     appPush(.messages(.chatSettings(conversation)))
@@ -350,8 +396,9 @@ struct TencentUIKitChatView: View {
         .setMediaPickerLiveCameraStyle(.prominant)
         .setRecorderSettings(recorderSettings)
         .avatarBuilder { user in
-            ExyteAvatarView(
+            ExyteAssetAvatarView(
                 presentation: viewModel.avatarPresentation(for: user),
+                appearance: viewModel.appearance(for: user),
                 size: 32
             )
         }
@@ -385,6 +432,42 @@ struct TencentUIKitChatView: View {
     }
 
     @ViewBuilder
+    private var offlineActivityBanner: some View {
+        if conversation.type == .group, let offlineActivity {
+            SquadOfflineActivityBanner(activity: offlineActivity) {
+                appNavigate(.squadOfflineActivity(squadID: resolvedHeaderSquadID()))
+            }
+            .padding(.top, 6)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    private func refreshOfflineActivity() async {
+        guard conversation.type == .group else {
+            offlineActivity = nil
+            return
+        }
+        do {
+            offlineActivity = try await service.fetchCurrentSquadOfflineActivity(squadID: resolvedHeaderSquadID())
+        } catch {
+            offlineActivity = nil
+        }
+    }
+
+    private func refreshOfflineActivityPermission() async {
+        guard conversation.type == .group else {
+            canManageOfflineActivity = false
+            return
+        }
+        do {
+            let profile = try await service.fetchSquadProfile(squadID: resolvedHeaderSquadID())
+            canManageOfflineActivity = profile.canEditGroup || profile.myRole == "leader" || profile.myRole == "admin"
+        } catch {
+            canManageOfflineActivity = false
+        }
+    }
+
+    @ViewBuilder
     private func groupMessageContent(_ params: MessageBuilderParameters) -> some View {
         if let ratingEventCard = ratingEventCardPayload(from: params.message) {
             ratingEventCardMessageContent(params, payload: ratingEventCard)
@@ -412,16 +495,15 @@ struct TencentUIKitChatView: View {
             myCheckinsCardMessageContent(params, payload: myCheckinsCard)
         } else if let eventRouteCard = eventRouteCardPayload(from: params.message) {
             eventRouteCardMessageContent(params, payload: eventRouteCard)
+        } else if let offlineActivityCard = squadOfflineActivityCardPayload(from: params.message) {
+            squadOfflineActivityCardMessageContent(params, payload: offlineActivityCard)
         } else if let audioFile = audioFilePayload(from: params.message) {
             audioFileMessageContent(params, payload: audioFile)
         } else if conversation.type == .group,
            params.message.user.type == .other,
            params.positionInGroup == .single || params.positionInGroup == .first {
             VStack(alignment: .leading, spacing: 1) {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
                 highlightedMessageContainer(messageID: params.message.id) {
                     params.defaultMessageView()
                 }
@@ -449,10 +531,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -515,10 +594,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -574,10 +650,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -636,10 +709,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -698,10 +768,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -760,10 +827,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -822,10 +886,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -884,10 +945,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -946,10 +1004,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -1008,10 +1063,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -1077,10 +1129,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -1139,10 +1188,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -1209,10 +1255,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -1264,6 +1307,60 @@ struct TencentUIKitChatView: View {
     }
 
     @ViewBuilder
+    private func squadOfflineActivityCardMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: SquadOfflineActivityCardPayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        VStack(
+            alignment: isMine ? .trailing : .leading,
+            spacing: showGroupName ? 1 : 0
+        ) {
+            if showGroupName {
+                groupSenderMeta(for: params.message.user)
+            }
+
+            highlightedMessageContainer(messageID: params.message.id) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if !isMine {
+                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                    }
+
+                    if isMine {
+                        fileMessageTimeView(for: params.message, isMine: true)
+                    }
+
+                    interactiveBubble {
+                        appNavigate(.squadOfflineActivityHistory(squadID: payload.squadID))
+                    } onLongPress: {
+                        params.showContextMenuClosure()
+                    } content: {
+                        ChatSquadOfflineActivityCardBubbleView(payload: payload)
+                    }
+
+                    if !isMine {
+                        fileMessageTimeView(for: params.message, isMine: false)
+                    }
+
+                    if isMine {
+                        fileMessageStatusView(for: params.message.status)
+                    }
+                }
+                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
+                .padding(.horizontal, 12)
+                .padding(.leading, isMine ? 72 : 0)
+                .padding(.trailing, isMine ? 0 : 72)
+                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
     private func newsCardMessageContent(
         _ params: MessageBuilderParameters,
         payload: ChatNewsCardPayload
@@ -1279,10 +1376,7 @@ struct TencentUIKitChatView: View {
             spacing: showGroupName ? 1 : 0
         ) {
             if showGroupName {
-                Text(params.message.user.name)
-                    .font(.caption)
-                    .foregroundColor(Color(hex: "AFB3B8"))
-                    .padding(.leading, 44)
+                groupSenderMeta(for: params.message.user)
             }
 
             highlightedMessageContainer(messageID: params.message.id) {
@@ -1372,6 +1466,25 @@ struct TencentUIKitChatView: View {
                     )
             }
             .animation(.easeOut(duration: 0.25), value: highlightedMessageID == messageID)
+    }
+
+    @ViewBuilder
+    private func groupSenderMeta(for user: User) -> some View {
+        HStack(spacing: 6) {
+            Text(user.name)
+                .font(.caption)
+                .foregroundColor(Color(hex: "AFB3B8"))
+                .lineLimit(1)
+
+            if let titleMedal = viewModel.appearance(for: user)?.titleMedal {
+                VirtualAssetTitleMedalView(asset: titleMedal, compact: true, maxWidth: 96)
+            }
+
+            if let badge = viewModel.appearance(for: user)?.profileBadges.first {
+                VirtualAssetBadgeView(asset: badge, compact: true, showTitle: false)
+            }
+        }
+        .padding(.leading, 44)
     }
 
     @ViewBuilder
@@ -2001,6 +2114,39 @@ struct TencentUIKitChatView: View {
         )
     }
 
+    private func squadOfflineActivityCardPayload(from message: Message) -> SquadOfflineActivityCardPayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String,
+              sourceKind == ChatMessageKind.card.rawValue,
+              let cardType = message.customData["cardType"] as? String,
+              cardType == "squad_offline_activity",
+              let activityID = (message.customData["offlineActivityID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !activityID.isEmpty,
+              let squadID = (message.customData["offlineActivitySquadID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !squadID.isEmpty,
+              let title = (message.customData["offlineActivityTitle"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty,
+              let startedAt = message.customData["offlineActivityStartedAt"] as? Date,
+              let endedAt = message.customData["offlineActivityEndedAt"] as? Date else {
+            return nil
+        }
+
+        return SquadOfflineActivityCardPayload(
+            activityID: activityID,
+            squadID: squadID,
+            eventID: (message.customData["offlineActivityEventID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+            title: title,
+            eventName: (message.customData["offlineActivityEventName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+            venueName: (message.customData["offlineActivityVenueName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+            city: (message.customData["offlineActivityCity"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+            coverImageURL: (message.customData["offlineActivityCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSeconds: (message.customData["offlineActivityDurationSeconds"] as? Int) ?? 0,
+            durationText: (message.customData["offlineActivityDurationText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            participantCount: (message.customData["offlineActivityParticipantCount"] as? Int) ?? 0
+        )
+    }
+
     private func shouldShowAvatar(for params: MessageBuilderParameters) -> Bool {
         params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .last)
@@ -2030,8 +2176,9 @@ struct TencentUIKitChatView: View {
                     }
                 }
             } label: {
-                ExyteAvatarView(
+                ExyteAssetAvatarView(
                     presentation: viewModel.avatarPresentation(for: user),
+                    appearance: viewModel.appearance(for: user),
                     size: 32
                 )
             }
@@ -2948,6 +3095,113 @@ private struct ChatEventRouteCardBubbleView: View {
     }
 }
 
+private struct ChatSquadOfflineActivityCardBubbleView: View {
+    let payload: SquadOfflineActivityCardPayload
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("线下活动", "Offline Activity"))
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(RaverTheme.accent)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(RaverTheme.accent.opacity(0.12), in: Capsule())
+                        .lineLimit(1)
+
+                    cover
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(payload.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(2)
+
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(1)
+
+                    Text(startDateLabel)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 10)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            HStack(spacing: 12) {
+                Label(durationLabel, systemImage: "clock")
+                Label(L("\(payload.participantCount) 人次", "\(payload.participantCount) participants"), systemImage: "person.2")
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(RaverTheme.secondaryText)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: 272, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(RaverTheme.card)
+        )
+    }
+
+    @ViewBuilder
+    private var cover: some View {
+        if let resolved = AppConfig.resolvedURLString(payload.coverImageURL),
+           !resolved.isEmpty {
+            ImageLoaderView(urlString: resolved)
+                .frame(width: 46, height: 46)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(RaverTheme.accent.opacity(0.15))
+                .frame(width: 46, height: 46)
+                .overlay(
+                    Image(systemName: "figure.walk.motion")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                )
+        }
+    }
+
+    private var subtitle: String {
+        let venue = [payload.venueName, payload.city]
+            .compactMap { $0?.nilIfBlank }
+            .joined(separator: " · ")
+        if !venue.isEmpty {
+            return venue
+        }
+        return payload.endedAt.formatted(date: .numeric, time: .shortened)
+    }
+
+    private var startDateLabel: String {
+        payload.startedAt.formatted(date: .numeric, time: .omitted)
+    }
+
+    private var durationLabel: String {
+        if !payload.durationText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return payload.durationText
+        }
+        let hours = payload.durationSeconds / 3600
+        let minutes = (payload.durationSeconds % 3600) / 60
+        if hours > 0 {
+            return L("\(hours) 小时 \(minutes) 分钟", "\(hours)h \(minutes)m")
+        }
+        if minutes > 0 {
+            return L("\(minutes) 分钟", "\(minutes)m")
+        }
+        return L("<1 分钟", "<1m")
+    }
+}
+
 private struct ChatPosterCardBubble: View {
     enum BadgePlacement {
         case infoSection
@@ -3352,6 +3606,9 @@ private struct ConversationMessageSearchSheet: View {
         if let payload = parseEventRouteCardPayloadForPreview(from: rawText) {
             return "\(L("[路线卡片]", "[Route Card]")) \(payload.title)"
         }
+        if let payload = parseSquadOfflineActivityCardPayloadForPreview(from: rawText) {
+            return "\(L("[线下活动]", "[Offline Activity]")) \(payload.title)"
+        }
         return nil
     }
 
@@ -3557,6 +3814,24 @@ private struct ConversationMessageSearchSheet: View {
         }
 
         return try? JSONDecoder().decode(EventRouteShareCardPayload.self, from: data)
+    }
+
+    private func parseSquadOfflineActivityCardPayloadForPreview(from rawText: String) -> SquadOfflineActivityCardPayload? {
+        guard let data = rawText.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let cardType: String?
+            let payload: SquadOfflineActivityCardPayload?
+        }
+
+        let decoder = JSONDecoder.raverISO8601()
+        if let envelope = try? decoder.decode(Envelope.self, from: data),
+           envelope.cardType == "squad_offline_activity",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? decoder.decode(SquadOfflineActivityCardPayload.self, from: data)
     }
 }
 
@@ -3902,6 +4177,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
 
     private var conversation: Conversation
     private let service: SocialService
+    private let appearanceResolver: VirtualAssetChatAppearanceResolver
     private let chatController: RaverChatController
     private var cancellables = Set<AnyCancellable>()
     private var hasStarted = false
@@ -3909,6 +4185,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
     private var currentSessionUser: UserSummary?
     private var latestSourceMessages: [ChatMessage] = []
     private var avatarPresentationsByUserID: [String: ExyteAvatarPresentation] = [:]
+    private var headerAppearanceUserID: String?
     private var lastRequestedReadMessageID: String?
     private var typingResetTask: Task<Void, Never>?
     private var lastSentTypingAt: Date?
@@ -3916,9 +4193,14 @@ private final class ExyteChatConversationViewModel: ObservableObject {
     private var mentionCandidates: [InputMentionCandidate] = []
     private var allowMentionAll = false
 
-    init(conversation: Conversation, service: SocialService) {
+    init(
+        conversation: Conversation,
+        service: SocialService,
+        virtualAssetRepository: VirtualAssetRepository
+    ) {
         self.conversation = conversation
         self.service = service
+        self.appearanceResolver = VirtualAssetChatAppearanceResolver(repository: virtualAssetRepository)
         self.chatTitle = conversation.title
         self.chatStatus = ExyteChatConversationViewModel.buildStatus(for: conversation)
         self.chatHeaderAvatar = .initials(
@@ -3930,6 +4212,9 @@ private final class ExyteChatConversationViewModel: ObservableObject {
                 service: service
             )
         )
+        self.appearanceResolver.onAppearanceUpdated = { [weak self] in
+            self?.objectWillChange.send()
+        }
         refreshConversationIdentity()
         bindController()
     }
@@ -4007,6 +4292,19 @@ private final class ExyteChatConversationViewModel: ObservableObject {
         }
 
         return .initials(Self.initials(from: user.name))
+    }
+
+    func appearance(for user: User) -> UserAssetAppearance? {
+        guard user.type != .system else { return nil }
+        return appearanceResolver.cachedAppearance(userID: user.id)
+    }
+
+    func chatHeaderAppearance() -> UserAssetAppearance? {
+        guard conversation.type == .direct,
+              let headerAppearanceUserID else {
+            return nil
+        }
+        return appearanceResolver.cachedAppearance(userID: headerAppearanceUserID)
     }
 
     var canOpenHeaderProfile: Bool {
@@ -4200,6 +4498,10 @@ private final class ExyteChatConversationViewModel: ObservableObject {
 
     private func rebuildMessages() {
         avatarPresentationsByUserID.removeAll(keepingCapacity: true)
+        let userIDs = latestSourceMessages
+            .filter { $0.kind != .system && $0.kind != .typing }
+            .map { resolvedMessageIdentity(for: $0).id }
+        appearanceResolver.warmAppearances(for: userIDs)
         messages = mapMessages(latestSourceMessages)
     }
 
@@ -4227,6 +4529,10 @@ private final class ExyteChatConversationViewModel: ObservableObject {
 
     private func refreshConversationIdentity() {
         let headerIdentity = resolvedHeaderIdentity()
+        headerAppearanceUserID = conversation.type == .direct ? headerIdentity.id : nil
+        if conversation.type == .direct {
+            appearanceResolver.warmAppearances(for: [headerIdentity.id])
+        }
         chatTitle = headerIdentity.displayName
         refreshChatStatus()
         chatHeaderAvatar = makeAvatarPresentation(
@@ -4495,6 +4801,23 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             data["eventRouteSelectedDayID"] = payload.selectedDayID ?? ""
             data["eventRouteSelectedSlotIDs"] = payload.selectedSlotIDs
             data["canCopy"] = false
+        } else if source.kind == .card,
+                  let payload = parseSquadOfflineActivityCardPayload(from: source.content) {
+            data["cardType"] = "squad_offline_activity"
+            data["offlineActivityID"] = payload.activityID
+            data["offlineActivitySquadID"] = payload.squadID
+            data["offlineActivityEventID"] = payload.eventID ?? ""
+            data["offlineActivityTitle"] = payload.title
+            data["offlineActivityEventName"] = payload.eventName ?? ""
+            data["offlineActivityVenueName"] = payload.venueName ?? ""
+            data["offlineActivityCity"] = payload.city ?? ""
+            data["offlineActivityCoverImageURL"] = payload.coverImageURL ?? ""
+            data["offlineActivityStartedAt"] = payload.startedAt
+            data["offlineActivityEndedAt"] = payload.endedAt
+            data["offlineActivityDurationSeconds"] = payload.durationSeconds
+            data["offlineActivityDurationText"] = payload.durationText
+            data["offlineActivityParticipantCount"] = payload.participantCount
+            data["canCopy"] = false
         }
 
         return data
@@ -4612,6 +4935,26 @@ private final class ExyteChatConversationViewModel: ObservableObject {
         }
 
         return try? JSONDecoder().decode(EventRouteShareCardPayload.self, from: data)
+    }
+
+    private func parseSquadOfflineActivityCardPayload(from rawContent: String) -> SquadOfflineActivityCardPayload? {
+        guard let data = rawContent.data(using: .utf8) else { return nil }
+
+        struct Envelope: Decodable {
+            let businessID: String?
+            let version: Int?
+            let cardType: String?
+            let payload: SquadOfflineActivityCardPayload?
+        }
+
+        let decoder = JSONDecoder.raverISO8601()
+        if let envelope = try? decoder.decode(Envelope.self, from: data),
+           envelope.cardType == "squad_offline_activity",
+           let payload = envelope.payload {
+            return payload
+        }
+
+        return try? decoder.decode(SquadOfflineActivityCardPayload.self, from: data)
     }
 
     private func parseDJCardPayload(from rawContent: String) -> DJShareCardPayload? {
@@ -5207,11 +5550,19 @@ private struct TencentChatLifecycleBridge: UIViewControllerRepresentable {
     }
 }
 
-private struct ExyteAvatarView: View {
+private struct ExyteAssetAvatarView: View {
     let presentation: ExyteAvatarPresentation
+    let appearance: UserAssetAppearance?
     let size: CGFloat
 
     var body: some View {
+        VirtualAssetAvatarView(size: size, avatarFrame: appearance?.avatarFrame) {
+            avatarContent
+        }
+    }
+
+    @ViewBuilder
+    private var avatarContent: some View {
         Group {
             switch presentation {
             case .remote(let url, _):

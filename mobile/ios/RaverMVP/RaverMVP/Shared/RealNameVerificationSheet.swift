@@ -240,7 +240,11 @@ extension RealNameVerificationStatus {
 
 extension AppState {
     var canUseSocialFeatures: Bool {
-        session != nil && realNameVerificationStatus == .verified
+        guard session != nil else { return false }
+        if !AppConfig.isRealNameEnforcementEnabled {
+            return true
+        }
+        return realNameVerificationStatus == .verified
     }
 
     var socialFeatureUnavailableMessage: String {

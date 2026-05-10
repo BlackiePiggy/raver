@@ -983,6 +983,18 @@ const canManageSquad = (role: string | null | undefined): boolean => {
   return role === 'leader' || role === 'admin';
 };
 
+const canManageSquadAsMember = (
+  membership: { role: string | null } | null | undefined,
+  squad: { leaderId: string | null },
+  userId: string
+): boolean => {
+  return Boolean(membership) && (canManageSquad(membership?.role) || squad.leaderId === userId);
+};
+
+const ACTIVE_SQUAD_OFFLINE_ACTIVITY_STATUS = 'active';
+const SQUAD_OFFLINE_ACTIVITY_CARD_TYPE = 'squad_offline_activity';
+const CUSTOM_CARD_BUSINESS_ID = 'raver_custom_card';
+
 const canRemoveSquadMember = (operatorRole: string | null | undefined, targetRole: string | null | undefined): boolean => {
   if (operatorRole === 'leader') {
     return targetRole === 'admin' || targetRole === 'member';
@@ -1017,6 +1029,447 @@ const syncSquadGroupInfo = async (squadId: string): Promise<void> => {
 
 const MIN_SQUAD_INITIAL_MEMBERS = 3;
 const MIN_SQUAD_INVITED_MEMBERS = MIN_SQUAD_INITIAL_MEMBERS - 1;
+
+const normalizeFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeCoordinate = (
+  value: unknown,
+  min: number,
+  max: number
+): number | null => {
+  const parsed = normalizeFiniteNumber(value);
+  if (parsed === null || parsed < min || parsed > max) return null;
+  return parsed;
+};
+
+const normalizeOptionalBoolean = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true;
+  if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false;
+  return null;
+};
+
+const readJsonNumber = (value: unknown, keys: string[]): number | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  let current: unknown = value;
+  for (const key of keys) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return null;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return normalizeFiniteNumber(current);
+};
+
+const readJsonString = (value: unknown, keys: string[]): string | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  let current: unknown = value;
+  for (const key of keys) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return null;
+    current = (current as Record<string, unknown>)[key];
+  }
+  if (typeof current !== 'string') return null;
+  const normalized = current.trim();
+  return normalized.length > 0 ? normalized : null;
+};
+
+const readLocalizedJsonString = (value: unknown, keys: string[]): string | null => {
+  return readJsonString(value, [...keys, 'zhHans'])
+    ?? readJsonString(value, [...keys, 'zh-Hans'])
+    ?? readJsonString(value, [...keys, 'zh'])
+    ?? readJsonString(value, [...keys, 'en'])
+    ?? readJsonString(value, keys);
+};
+
+const resolveEventCoordinate = (event: {
+  latitude?: Prisma.Decimal | null;
+  longitude?: Prisma.Decimal | null;
+  locationPoint?: Prisma.JsonValue | null;
+  manualLocation?: Prisma.JsonValue | null;
+} | null | undefined): { latitude: number; longitude: number } | null => {
+  if (!event) return null;
+  const lat = event.latitude === null || event.latitude === undefined ? null : Number(event.latitude);
+  const lng = event.longitude === null || event.longitude === undefined ? null : Number(event.longitude);
+  if (lat !== null && lng !== null && Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { latitude: lat, longitude: lng };
+  }
+
+  const pointLat = readJsonNumber(event.locationPoint, ['location', 'lat']);
+  const pointLng = readJsonNumber(event.locationPoint, ['location', 'lng']);
+  if (pointLat !== null && pointLng !== null) {
+    return { latitude: pointLat, longitude: pointLng };
+  }
+
+  const manualLat = readJsonNumber(event.manualLocation, ['coordinate', 'lat'])
+    ?? readJsonNumber(event.manualLocation, ['location', 'lat']);
+  const manualLng = readJsonNumber(event.manualLocation, ['coordinate', 'lng'])
+    ?? readJsonNumber(event.manualLocation, ['location', 'lng']);
+  if (manualLat !== null && manualLng !== null) {
+    return { latitude: manualLat, longitude: manualLng };
+  }
+
+  return null;
+};
+
+const compactUniqueTextParts = (parts: Array<string | null | undefined>): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const part of parts) {
+    const normalized = String(part || '').trim();
+    if (!normalized) continue;
+    const key = normalized.toLocaleLowerCase('zh-Hans-CN');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(normalized);
+  }
+  return result;
+};
+
+const resolveEventAddressText = (event: {
+  venueName?: string | null;
+  venueAddress?: string | null;
+  city?: string | null;
+  country?: string | null;
+  manualLocation?: Prisma.JsonValue | null;
+  locationPoint?: Prisma.JsonValue | null;
+} | null | undefined): string | null => {
+  if (!event) return null;
+  const formatted = readLocalizedJsonString(event.manualLocation, ['formattedAddressI18n'])
+    ?? readLocalizedJsonString(event.locationPoint, ['formattedAddressI18n'])
+    ?? readLocalizedJsonString(event.manualLocation, ['detailAddressI18n']);
+  const parts = compactUniqueTextParts([
+    event.venueName,
+    event.venueAddress,
+    formatted,
+    event.city,
+    event.country,
+  ]);
+  return parts.length > 0 ? parts.join(' · ') : null;
+};
+
+type SquadOfflineActivityWithDetails = Prisma.SquadOfflineActivityGetPayload<{
+  include: {
+    createdBy: {
+      select: {
+        id: true;
+        username: true;
+        displayName: true;
+        avatarUrl: true;
+      };
+    };
+    event: {
+      select: {
+        id: true;
+        name: true;
+        coverImageUrl: true;
+        venueName: true;
+        venueAddress: true;
+        city: true;
+        country: true;
+        latitude: true;
+        longitude: true;
+        locationPoint: true;
+        manualLocation: true;
+      };
+    };
+    participants: {
+      include: {
+        user: {
+          select: {
+            id: true;
+            username: true;
+            displayName: true;
+            avatarUrl: true;
+          };
+        };
+      };
+      orderBy: { joinedAt: 'asc' };
+    };
+  };
+}>;
+
+const fetchActiveSquadOfflineActivity = async (squadId: string): Promise<SquadOfflineActivityWithDetails | null> => {
+  return prisma.squadOfflineActivity.findFirst({
+    where: {
+      squadId,
+      status: ACTIVE_SQUAD_OFFLINE_ACTIVITY_STATUS,
+      endedAt: null,
+    },
+    include: {
+      createdBy: {
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          avatarUrl: true,
+        },
+      },
+      event: {
+        select: {
+          id: true,
+          name: true,
+          coverImageUrl: true,
+          venueName: true,
+          venueAddress: true,
+          city: true,
+          country: true,
+          latitude: true,
+          longitude: true,
+          locationPoint: true,
+          manualLocation: true,
+        },
+      },
+      participants: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarUrl: true,
+            },
+          },
+        },
+        orderBy: { joinedAt: 'asc' },
+      },
+    },
+    orderBy: { startedAt: 'desc' },
+  });
+};
+
+const fetchSquadOfflineActivityById = async (activityId: string): Promise<SquadOfflineActivityWithDetails | null> => {
+  return prisma.squadOfflineActivity.findUnique({
+    where: { id: activityId },
+    include: {
+      createdBy: {
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          avatarUrl: true,
+        },
+      },
+      event: {
+        select: {
+          id: true,
+          name: true,
+          coverImageUrl: true,
+          venueName: true,
+          venueAddress: true,
+          city: true,
+          country: true,
+          latitude: true,
+          longitude: true,
+          locationPoint: true,
+          manualLocation: true,
+        },
+      },
+      participants: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarUrl: true,
+            },
+          },
+        },
+        orderBy: { joinedAt: 'asc' },
+      },
+    },
+  });
+};
+
+const toSquadOfflineActivityResponse = async (
+  activity: SquadOfflineActivityWithDetails | null,
+  viewerUserId: string,
+  viewerCanManage = false
+) => {
+  if (!activity) return null;
+
+  const latestLocations = await prisma.squadOfflineActivityLocation.findMany({
+    where: {
+      activityId: activity.id,
+      userId: { in: activity.participants.map((participant) => participant.userId) },
+    },
+    distinct: ['userId'],
+    orderBy: [
+      { userId: 'asc' },
+      { capturedAt: 'desc' },
+    ],
+    select: {
+      userId: true,
+      latitude: true,
+      longitude: true,
+      accuracy: true,
+      capturedAt: true,
+    },
+  });
+  const latestLocationMap = new Map(latestLocations.map((item) => [item.userId, item]));
+  const viewerRoute = await prisma.squadOfflineActivityLocation.findMany({
+    where: {
+      activityId: activity.id,
+      userId: viewerUserId,
+    },
+    orderBy: { capturedAt: 'asc' },
+    select: {
+      latitude: true,
+      longitude: true,
+      accuracy: true,
+      capturedAt: true,
+    },
+  });
+  const statusCounts = await prisma.squadOfflineActivityStatusEvent.groupBy({
+    by: ['statusType'],
+    where: {
+      activityId: activity.id,
+      userId: viewerUserId,
+      isActive: true,
+    },
+    _count: { _all: true },
+  });
+  const viewerSummary = {
+    restroomCount: statusCounts.find((item) => item.statusType === 'restroom')?._count._all ?? 0,
+    buyingDrinkCount: statusCounts.find((item) => item.statusType === 'buying_drink')?._count._all ?? 0,
+  };
+  const eventCoordinate = resolveEventCoordinate(activity.event);
+  const hasEnded = activity.status !== ACTIVE_SQUAD_OFFLINE_ACTIVITY_STATUS || Boolean(activity.endedAt);
+
+  return {
+    id: activity.id,
+    squadID: activity.squadId,
+    eventID: activity.eventId,
+    eventName: activity.event?.name ?? activity.title,
+    eventCoverImageURL: activity.event?.coverImageUrl ?? null,
+    eventVenueName: activity.event?.venueName ?? null,
+    eventVenueAddress: activity.event?.venueAddress ?? null,
+    eventAddressText: resolveEventAddressText(activity.event),
+    eventCity: activity.event?.city ?? null,
+    eventCoordinate,
+    title: activity.title,
+    status: activity.status,
+    startedAt: activity.startedAt,
+    endedAt: activity.endedAt,
+    createdBy: toUserSummary(activity.createdBy, false),
+    isCreatedByMe: activity.createdById === viewerUserId,
+    canManage: viewerCanManage || activity.createdById === viewerUserId,
+    participantCount: hasEnded
+      ? activity.participants.length
+      : activity.participants.filter((participant) => !participant.leftAt).length,
+    isJoined: activity.participants.some((participant) => participant.userId === viewerUserId && !participant.leftAt),
+    uploadIntervalSeconds: 300,
+    viewerSummary,
+    viewerRoute: viewerRoute.map((location) => ({
+      latitude: Number(location.latitude),
+      longitude: Number(location.longitude),
+      accuracy: location.accuracy,
+      capturedAt: location.capturedAt,
+    })),
+    participants: activity.participants.map((participant) => {
+      const location = latestLocationMap.get(participant.userId);
+      return {
+        id: participant.userId,
+        username: participant.user.username,
+        displayName: participant.user.displayName || participant.user.username,
+        avatarURL: participant.user.avatarUrl,
+        isFollowing: false,
+        joinedAt: participant.joinedAt,
+        leftAt: participant.leftAt,
+        isInRestroom: participant.isInRestroom,
+        isBuyingDrink: participant.isBuyingDrink,
+        latestLocation: location
+          ? {
+              latitude: Number(location.latitude),
+              longitude: Number(location.longitude),
+              accuracy: location.accuracy,
+              capturedAt: location.capturedAt,
+            }
+          : null,
+      };
+    }),
+  };
+};
+
+const offlineActivityDurationSeconds = (startedAt: Date, endedAt: Date): number => {
+  return Math.max(0, Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000));
+};
+
+const formatDurationZh = (durationSeconds: number): string => {
+  const hours = Math.floor(durationSeconds / 3600);
+  const minutes = Math.floor((durationSeconds % 3600) / 60);
+  if (hours > 0) return `${hours} 小时 ${minutes} 分钟`;
+  if (minutes > 0) return `${minutes} 分钟`;
+  return '<1 分钟';
+};
+
+const buildSquadOfflineActivityCardPayload = (activity: {
+  id: string;
+  squadId: string;
+  title: string | null;
+  eventId: string | null;
+  event?: {
+    name: string;
+    venueName: string | null;
+    city: string | null;
+    coverImageUrl: string | null;
+  } | null;
+  startedAt: Date;
+  endedAt: Date | null;
+  participants: Array<{ userId: string }>;
+}) => {
+  const endedAt = activity.endedAt ?? new Date();
+  const durationSeconds = offlineActivityDurationSeconds(activity.startedAt, endedAt);
+  const participantCount = new Set(activity.participants.map((participant) => participant.userId)).size;
+  const title = activity.event?.name || activity.title || '小队线下活动';
+  return {
+    activityID: activity.id,
+    squadID: activity.squadId,
+    eventID: activity.eventId,
+    title,
+    eventName: activity.event?.name ?? null,
+    venueName: activity.event?.venueName ?? null,
+    city: activity.event?.city ?? null,
+    coverImageURL: activity.event?.coverImageUrl ?? null,
+    startedAt: activity.startedAt,
+    endedAt,
+    durationSeconds,
+    durationText: formatDurationZh(durationSeconds),
+    participantCount,
+  };
+};
+
+const encodeSquadOfflineActivityCardContent = (payload: ReturnType<typeof buildSquadOfflineActivityCardPayload>): string => {
+  return JSON.stringify({
+    businessID: CUSTOM_CARD_BUSINESS_ID,
+    version: 1,
+    cardType: SQUAD_OFFLINE_ACTIVITY_CARD_TYPE,
+    payload,
+  });
+};
+
+const sendSquadOfflineActivityCardToTencentIM = async (
+  squadId: string,
+  senderUserId: string,
+  payload: ReturnType<typeof buildSquadOfflineActivityCardPayload>
+): Promise<void> => {
+  await tencentIMGroupService.sendSquadCustomCardMessage(
+    squadId,
+    senderUserId,
+    {
+      businessID: CUSTOM_CARD_BUSINESS_ID,
+      version: 1,
+      cardType: SQUAD_OFFLINE_ACTIVITY_CARD_TYPE,
+      payload,
+    },
+    `线下活动结束：${payload.title}`
+  );
+};
 
 const buildFollowingMap = async (viewerId: string | undefined, targetUserIds: string[]) => {
   if (!viewerId || targetUserIds.length === 0) {
@@ -5024,6 +5477,666 @@ router.get('/squads/:id/profile', optionalAuth, async (req: Request, res: Respon
     });
   } catch (error) {
     console.error('BFF squad profile error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/squads/:id/offline-activity/current', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const squadId = req.params.id as string;
+    const [squad, membership] = await Promise.all([
+      prisma.squad.findUnique({
+        where: { id: squadId },
+        select: { id: true, leaderId: true },
+      }),
+      prisma.squadMember.findUnique({
+        where: {
+          squadId_userId: {
+            squadId,
+            userId,
+          },
+        },
+        select: { id: true, role: true },
+      }),
+    ]);
+
+    if (!squad) {
+      res.status(404).json({ error: 'Squad not found' });
+      return;
+    }
+
+    if (!membership) {
+      res.status(403).json({ error: 'Join squad before viewing offline activity' });
+      return;
+    }
+
+    const activity = await fetchActiveSquadOfflineActivity(squadId);
+    res.json(await toSquadOfflineActivityResponse(activity, userId, canManageSquadAsMember(membership, squad, userId)));
+  } catch (error) {
+    console.error('BFF current squad offline activity error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/squads/:id/offline-activities/history', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const squadId = req.params.id as string;
+    const limitParam = Number(req.query.limit);
+    const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(50, Math.floor(limitParam))) : 30;
+
+    const membership = await prisma.squadMember.findUnique({
+      where: {
+        squadId_userId: {
+          squadId,
+          userId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!membership) {
+      res.status(403).json({ error: 'Join squad before viewing offline activity history' });
+      return;
+    }
+
+    const activities = await prisma.squadOfflineActivity.findMany({
+      where: {
+        squadId,
+        status: { not: ACTIVE_SQUAD_OFFLINE_ACTIVITY_STATUS },
+        endedAt: { not: null },
+      },
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+        event: {
+          select: {
+            id: true,
+            name: true,
+            coverImageUrl: true,
+            venueName: true,
+            venueAddress: true,
+            city: true,
+            country: true,
+            latitude: true,
+            longitude: true,
+            locationPoint: true,
+            manualLocation: true,
+          },
+        },
+        participants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
+          },
+          orderBy: { joinedAt: 'asc' },
+        },
+      },
+      orderBy: { endedAt: 'desc' },
+      take: limit,
+    });
+
+    res.json(await Promise.all(activities.map((activity) => toSquadOfflineActivityResponse(activity, userId, false))));
+  } catch (error) {
+    console.error('BFF squad offline activity history error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/squads/:id/offline-activities', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const squadId = req.params.id as string;
+    const body = req.body as { eventID?: unknown; eventId?: unknown; title?: unknown };
+    const eventId = typeof body.eventID === 'string'
+      ? body.eventID.trim()
+      : typeof body.eventId === 'string'
+        ? body.eventId.trim()
+        : '';
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+
+    const [squad, membership, existingActive] = await Promise.all([
+      prisma.squad.findUnique({
+        where: { id: squadId },
+        select: { id: true, name: true, leaderId: true },
+      }),
+      prisma.squadMember.findUnique({
+        where: {
+          squadId_userId: {
+            squadId,
+            userId,
+          },
+        },
+        select: { role: true },
+      }),
+      fetchActiveSquadOfflineActivity(squadId),
+    ]);
+
+    if (!squad) {
+      res.status(404).json({ error: 'Squad not found' });
+      return;
+    }
+
+    if (!canManageSquadAsMember(membership, squad, userId)) {
+      console.warn('BFF create squad offline activity forbidden', {
+        squadId,
+        userId,
+        memberRole: membership?.role ?? null,
+        leaderId: squad.leaderId,
+      });
+      res.status(403).json({ error: 'Only squad leader/admin can start offline activity' });
+      return;
+    }
+
+    if (existingActive) {
+      res.status(409).json({ error: 'Squad already has an active offline activity' });
+      return;
+    }
+
+    let eventSnapshot: { id: string; name: string } | null = null;
+    if (eventId) {
+      eventSnapshot = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { id: true, name: true },
+      });
+      if (!eventSnapshot) {
+        res.status(404).json({ error: 'Event not found' });
+        return;
+      }
+    }
+
+    await prisma.squadOfflineActivity.create({
+      data: {
+        squadId,
+        eventId: eventSnapshot?.id ?? null,
+        title: title || eventSnapshot?.name || null,
+        createdById: userId,
+        participants: {
+          create: {
+            userId,
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    await prisma.squadMessage.create({
+      data: {
+        squadId,
+        userId,
+        content: eventSnapshot ? `开启了线下活动：${eventSnapshot.name}` : '开启了线下活动',
+        type: 'system',
+      },
+    });
+
+    const activity = await fetchActiveSquadOfflineActivity(squadId);
+    res.status(201).json(await toSquadOfflineActivityResponse(activity, userId, canManageSquadAsMember(membership, squad, userId)));
+  } catch (error) {
+    console.error('BFF create squad offline activity error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/squads/:id/offline-activities/:activityId/end', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const squadId = req.params.id as string;
+    const activityId = req.params.activityId as string;
+    const [activity, squad, membership] = await Promise.all([
+      prisma.squadOfflineActivity.findUnique({
+        where: { id: activityId },
+        include: {
+          event: {
+            select: {
+              name: true,
+              coverImageUrl: true,
+              venueName: true,
+              venueAddress: true,
+              city: true,
+              country: true,
+            },
+          },
+          participants: {
+            select: { userId: true },
+          },
+        },
+      }),
+      prisma.squad.findUnique({
+        where: { id: squadId },
+        select: { id: true, leaderId: true },
+      }),
+      prisma.squadMember.findUnique({
+        where: {
+          squadId_userId: {
+            squadId,
+            userId,
+          },
+        },
+        select: { role: true },
+      }),
+    ]);
+
+    if (!activity || activity.squadId !== squadId || !squad) {
+      res.status(404).json({ error: 'Offline activity not found' });
+      return;
+    }
+
+    const canEndActivity = activity.createdById === userId || canManageSquadAsMember(membership, squad, userId);
+    if (!canEndActivity) {
+      console.warn('BFF end squad offline activity forbidden', {
+        squadId,
+        activityId,
+        userId,
+        createdById: activity.createdById,
+        memberRole: membership?.role ?? null,
+        leaderId: squad.leaderId,
+      });
+      res.status(403).json({ error: 'Only activity creator or squad leader/admin can end offline activity' });
+      return;
+    }
+
+    const endedAt = new Date();
+    const endedActivity = {
+      ...activity,
+      endedAt,
+    };
+    const cardPayload = buildSquadOfflineActivityCardPayload(endedActivity);
+    const cardContent = encodeSquadOfflineActivityCardContent(cardPayload);
+    await prisma.$transaction(async (tx) => {
+      await tx.squadOfflineActivity.update({
+        where: { id: activityId },
+        data: {
+          status: 'ended',
+          endedAt,
+          summary: {
+            status: 'pending_ai_summary',
+            generatedAt: null,
+          },
+        },
+      });
+      await tx.squadOfflineActivityParticipant.updateMany({
+        where: {
+          activityId,
+          leftAt: null,
+        },
+        data: { leftAt: endedAt, isInRestroom: false, isBuyingDrink: false },
+      });
+      await tx.squadMessage.create({
+        data: {
+          squadId,
+          userId: activity.createdById,
+          content: cardContent,
+          type: 'card',
+        },
+      });
+    });
+
+    try {
+      await sendSquadOfflineActivityCardToTencentIM(squadId, activity.createdById, cardPayload);
+    } catch (error) {
+      console.warn('BFF send squad offline activity card to Tencent IM failed:', error);
+    }
+
+    const current = await fetchSquadOfflineActivityById(activityId);
+    res.json(await toSquadOfflineActivityResponse(current, userId, canManageSquadAsMember(membership, squad, userId)));
+  } catch (error) {
+    console.error('BFF end squad offline activity error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/squads/:id/offline-activities/:activityId/join', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const squadId = req.params.id as string;
+    const activityId = req.params.activityId as string;
+    const [activity, membership] = await Promise.all([
+      prisma.squadOfflineActivity.findUnique({
+        where: { id: activityId },
+        select: { id: true, squadId: true, status: true, endedAt: true },
+      }),
+      prisma.squadMember.findUnique({
+        where: {
+          squadId_userId: {
+            squadId,
+            userId,
+          },
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!membership) {
+      res.status(403).json({ error: 'Join squad before joining offline activity' });
+      return;
+    }
+
+    if (!activity || activity.squadId !== squadId || activity.status !== ACTIVE_SQUAD_OFFLINE_ACTIVITY_STATUS || activity.endedAt) {
+      res.status(404).json({ error: 'Active offline activity not found' });
+      return;
+    }
+
+    await prisma.squadOfflineActivityParticipant.upsert({
+      where: {
+        activityId_userId: {
+          activityId,
+          userId,
+        },
+      },
+      create: {
+        activityId,
+        userId,
+      },
+      update: {
+        leftAt: null,
+        isInRestroom: false,
+        isBuyingDrink: false,
+      },
+    });
+
+    const current = await fetchActiveSquadOfflineActivity(squadId);
+    res.json(await toSquadOfflineActivityResponse(current, userId));
+  } catch (error) {
+    console.error('BFF join squad offline activity error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/squads/:id/offline-activities/:activityId/leave', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const squadId = req.params.id as string;
+    const activityId = req.params.activityId as string;
+    const activity = await prisma.squadOfflineActivity.findUnique({
+      where: { id: activityId },
+      select: { id: true, squadId: true },
+    });
+
+    if (!activity || activity.squadId !== squadId) {
+      res.status(404).json({ error: 'Offline activity not found' });
+      return;
+    }
+
+    await prisma.squadOfflineActivityParticipant.updateMany({
+      where: {
+        activityId,
+        userId,
+        leftAt: null,
+      },
+      data: {
+        leftAt: new Date(),
+        isInRestroom: false,
+        isBuyingDrink: false,
+      },
+    });
+
+    const current = await fetchActiveSquadOfflineActivity(squadId);
+    res.json(await toSquadOfflineActivityResponse(current, userId));
+  } catch (error) {
+    console.error('BFF leave squad offline activity error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/squads/:id/offline-activities/:activityId/status', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const squadId = req.params.id as string;
+    const activityId = req.params.activityId as string;
+    const body = req.body as Record<string, unknown>;
+    const isInRestroom = normalizeOptionalBoolean(body.isInRestroom);
+    const isBuyingDrink = normalizeOptionalBoolean(body.isBuyingDrink);
+
+    if (isInRestroom === null && isBuyingDrink === null) {
+      res.status(400).json({ error: 'Invalid offline activity status payload' });
+      return;
+    }
+
+    const [activity, squad, membership, participant] = await Promise.all([
+      prisma.squadOfflineActivity.findUnique({
+        where: { id: activityId },
+        select: { id: true, squadId: true, status: true, endedAt: true },
+      }),
+      prisma.squad.findUnique({
+        where: { id: squadId },
+        select: { id: true, leaderId: true },
+      }),
+      prisma.squadMember.findUnique({
+        where: {
+          squadId_userId: {
+            squadId,
+            userId,
+          },
+        },
+        select: { role: true },
+      }),
+      prisma.squadOfflineActivityParticipant.findUnique({
+        where: {
+          activityId_userId: {
+            activityId,
+            userId,
+          },
+        },
+        select: { id: true, leftAt: true, isInRestroom: true, isBuyingDrink: true },
+      }),
+    ]);
+
+    if (!activity || activity.squadId !== squadId || !squad || activity.status !== ACTIVE_SQUAD_OFFLINE_ACTIVITY_STATUS || activity.endedAt) {
+      res.status(404).json({ error: 'Active offline activity not found' });
+      return;
+    }
+
+    if (!membership) {
+      res.status(403).json({ error: 'Join squad before updating offline activity status' });
+      return;
+    }
+
+    if (!participant || participant.leftAt) {
+      res.status(403).json({ error: 'Join offline activity before updating status' });
+      return;
+    }
+
+    const capturedAt = new Date();
+    const statusEvents: Array<{ statusType: string; isActive: boolean }> = [];
+    if (isInRestroom !== null && isInRestroom !== participant.isInRestroom) {
+      statusEvents.push({ statusType: 'restroom', isActive: isInRestroom });
+    }
+    if (isBuyingDrink !== null && isBuyingDrink !== participant.isBuyingDrink) {
+      statusEvents.push({ statusType: 'buying_drink', isActive: isBuyingDrink });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.squadOfflineActivityParticipant.update({
+        where: { id: participant.id },
+        data: {
+          ...(isInRestroom !== null ? { isInRestroom } : {}),
+          ...(isBuyingDrink !== null ? { isBuyingDrink } : {}),
+        },
+        select: { id: true },
+      });
+
+      if (statusEvents.length > 0) {
+        await tx.squadOfflineActivityStatusEvent.createMany({
+          data: statusEvents.map((event) => ({
+            activityId,
+            userId,
+            statusType: event.statusType,
+            isActive: event.isActive,
+            capturedAt,
+          })),
+        });
+      }
+    });
+
+    const current = await fetchActiveSquadOfflineActivity(squadId);
+    res.json(await toSquadOfflineActivityResponse(current, userId, canManageSquadAsMember(membership, squad, userId)));
+  } catch (error) {
+    console.error('BFF update squad offline activity status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/squads/:id/offline-activities/:activityId/participants/:participantUserId/remove', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const squadId = req.params.id as string;
+    const activityId = req.params.activityId as string;
+    const participantUserId = req.params.participantUserId as string;
+
+    const [activity, squad, membership, participant] = await Promise.all([
+      prisma.squadOfflineActivity.findUnique({
+        where: { id: activityId },
+        select: { id: true, squadId: true, status: true, endedAt: true },
+      }),
+      prisma.squad.findUnique({
+        where: { id: squadId },
+        select: { id: true, leaderId: true },
+      }),
+      prisma.squadMember.findUnique({
+        where: {
+          squadId_userId: {
+            squadId,
+            userId,
+          },
+        },
+        select: { role: true },
+      }),
+      prisma.squadOfflineActivityParticipant.findUnique({
+        where: {
+          activityId_userId: {
+            activityId,
+            userId: participantUserId,
+          },
+        },
+        select: { id: true, leftAt: true },
+      }),
+    ]);
+
+    if (!activity || activity.squadId !== squadId || !squad || activity.status !== ACTIVE_SQUAD_OFFLINE_ACTIVITY_STATUS || activity.endedAt) {
+      res.status(404).json({ error: 'Active offline activity not found' });
+      return;
+    }
+
+    if (!canManageSquadAsMember(membership, squad, userId)) {
+      res.status(403).json({ error: 'Only squad leader/admin can remove offline activity participant' });
+      return;
+    }
+
+    if (!participant || participant.leftAt) {
+      res.status(404).json({ error: 'Offline activity participant not found' });
+      return;
+    }
+
+    await prisma.squadOfflineActivityParticipant.update({
+      where: { id: participant.id },
+      data: { leftAt: new Date(), isInRestroom: false, isBuyingDrink: false },
+      select: { id: true },
+    });
+
+    const current = await fetchActiveSquadOfflineActivity(squadId);
+    res.json(await toSquadOfflineActivityResponse(current, userId, true));
+  } catch (error) {
+    console.error('BFF remove squad offline activity participant error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/squads/:id/offline-activities/:activityId/location', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const squadId = req.params.id as string;
+    const activityId = req.params.activityId as string;
+    const body = req.body as Record<string, unknown>;
+    const latitude = normalizeCoordinate(body.latitude, -90, 90);
+    const longitude = normalizeCoordinate(body.longitude, -180, 180);
+    const capturedAtText = typeof body.capturedAt === 'string' ? body.capturedAt : '';
+    const capturedAt = capturedAtText ? new Date(capturedAtText) : new Date();
+
+    if (latitude === null || longitude === null || Number.isNaN(capturedAt.getTime())) {
+      res.status(400).json({ error: 'Invalid location payload' });
+      return;
+    }
+
+    const [activity, participant] = await Promise.all([
+      prisma.squadOfflineActivity.findUnique({
+        where: { id: activityId },
+        select: { id: true, squadId: true, status: true, endedAt: true },
+      }),
+      prisma.squadOfflineActivityParticipant.findUnique({
+        where: {
+          activityId_userId: {
+            activityId,
+            userId,
+          },
+        },
+        select: { id: true, leftAt: true },
+      }),
+    ]);
+
+    if (!activity || activity.squadId !== squadId || activity.status !== ACTIVE_SQUAD_OFFLINE_ACTIVITY_STATUS || activity.endedAt) {
+      res.status(404).json({ error: 'Active offline activity not found' });
+      return;
+    }
+
+    if (!participant || participant.leftAt) {
+      res.status(403).json({ error: 'Join offline activity before uploading location' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.squadOfflineActivityLocation.create({
+        data: {
+          activityId,
+          userId,
+          latitude,
+          longitude,
+          accuracy: normalizeFiniteNumber(body.accuracy),
+          altitude: normalizeFiniteNumber(body.altitude),
+          speed: normalizeFiniteNumber(body.speed),
+          heading: normalizeFiniteNumber(body.heading),
+          capturedAt,
+        },
+      });
+      await tx.squadOfflineActivityParticipant.update({
+        where: { id: participant.id },
+        data: { lastLocationAt: capturedAt },
+      });
+    });
+
+    res.status(201).json({ success: true });
+  } catch (error) {
+    console.error('BFF upload squad offline activity location error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

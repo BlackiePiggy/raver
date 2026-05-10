@@ -55,6 +55,10 @@ model User {
   eventLiveComments            EventLiveComment[]         @relation("UserEventLiveComments")
   eventLiveCommentLikes        EventLiveCommentLike[]
   eventLiveCommentReplyTargets EventLiveComment[]         @relation("EventLiveCommentReplyToUser")
+  createdSquadOfflineActivities SquadOfflineActivity[]     @relation("SquadOfflineActivityCreator")
+  squadOfflineActivityJoins     SquadOfflineActivityParticipant[]
+  squadOfflineActivityLocations SquadOfflineActivityLocation[]
+  squadOfflineActivityStatusEvents SquadOfflineActivityStatusEvent[]
   postLikes                    PostLike[]
   postReposts                  PostRepost[]
   postSaves                    PostSave[]
@@ -87,6 +91,8 @@ model User {
   sentInviteReferrals          InviteReferral[]           @relation("InviteReferralInviter")
   receivedInviteReferrals      InviteReferral[]           @relation("InviteReferralInvitee")
   profileModerationJobs        UserProfileModerationJob[]
+  virtualAssets                UserVirtualAsset[]
+  virtualAssetEquips           UserVirtualAssetEquip[]
 
   @@map("users")
 }
@@ -170,6 +176,7 @@ model Event {
   posts           Post[]
   liveComments    EventLiveComment[]
   squadActivities SquadActivity[]
+  squadOfflineActivities SquadOfflineActivity[]
 
   @@index([organizerId])
   @@index([wikiFestivalId])
@@ -1172,6 +1179,7 @@ model Squad {
   messages        SquadMessage[]
   posts           Post[]
   inviteReferrals InviteReferral[]
+  offlineActivities SquadOfflineActivity[]
 
   @@index([leaderId])
   @@index([isPublic])
@@ -1332,6 +1340,89 @@ model SquadActivity {
   @@index([eventId])
   @@index([date])
   @@map("squad_activities")
+}
+
+model SquadOfflineActivity {
+  id          String    @id @default(uuid())
+  squadId     String    @map("squad_id")
+  eventId     String?   @map("event_id")
+  createdById String    @map("created_by_id")
+  title       String?
+  status      String    @default("active")
+  startedAt   DateTime  @default(now()) @map("started_at")
+  endedAt     DateTime? @map("ended_at")
+  summary     Json?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  squad       Squad     @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  event       Event?    @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  createdBy   User      @relation("SquadOfflineActivityCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  participants SquadOfflineActivityParticipant[]
+  locations   SquadOfflineActivityLocation[]
+  statusEvents SquadOfflineActivityStatusEvent[]
+
+  @@index([squadId, status])
+  @@index([eventId])
+  @@index([startedAt])
+  @@map("squad_offline_activities")
+}
+
+model SquadOfflineActivityParticipant {
+  id             String    @id @default(uuid())
+  activityId     String    @map("activity_id")
+  userId         String    @map("user_id")
+  joinedAt       DateTime  @default(now()) @map("joined_at")
+  leftAt         DateTime? @map("left_at")
+  lastLocationAt DateTime? @map("last_location_at")
+  isInRestroom   Boolean   @default(false) @map("is_in_restroom")
+  isBuyingDrink  Boolean   @default(false) @map("is_buying_drink")
+
+  activity       SquadOfflineActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, userId])
+  @@index([userId])
+  @@index([activityId, leftAt])
+  @@map("squad_offline_activity_participants")
+}
+
+model SquadOfflineActivityStatusEvent {
+  id         String   @id @default(uuid())
+  activityId String   @map("activity_id")
+  userId     String   @map("user_id")
+  statusType String   @map("status_type")
+  isActive   Boolean  @map("is_active")
+  capturedAt DateTime @default(now()) @map("captured_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  activity   SquadOfflineActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([activityId, userId, capturedAt])
+  @@index([activityId, statusType, isActive])
+  @@map("squad_offline_activity_status_events")
+}
+
+model SquadOfflineActivityLocation {
+  id         String   @id @default(uuid())
+  activityId String   @map("activity_id")
+  userId     String   @map("user_id")
+  latitude   Decimal  @db.Decimal(10, 8)
+  longitude  Decimal  @db.Decimal(11, 8)
+  accuracy   Float?
+  altitude   Float?
+  speed      Float?
+  heading    Float?
+  capturedAt DateTime @default(now()) @map("captured_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  activity   SquadOfflineActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([activityId, capturedAt])
+  @@index([activityId, userId, capturedAt])
+  @@map("squad_offline_activity_locations")
 }
 
 model SquadAlbum {
@@ -1830,4 +1921,60 @@ model AuthPhoneAuthState {
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
   @@map("auth_phone_auth_states")
+}
+
+model VirtualAssetDefinition {
+  id              String    @id @default(uuid())
+  code            String    @unique
+  type            String
+  name            String
+  description     String?   @db.Text
+  status          String    @default("draft")
+  renderPayload   Json      @map("render_payload")
+  previewImageUrl String?   @map("preview_image_url")
+  source          String    @default("system")
+  themeTags       String[]  @default([]) @map("theme_tags")
+  startsAt        DateTime? @map("starts_at")
+  endsAt          DateTime? @map("ends_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  userAssets UserVirtualAsset[]
+
+  @@index([type, status])
+  @@index([source])
+  @@map("virtual_asset_definitions")
+}
+
+model UserVirtualAsset {
+  id                String    @id @default(uuid())
+  userId            String    @map("user_id")
+  assetId           String    @map("asset_id")
+  acquisitionSource String    @default("default") @map("acquisition_source")
+  status            String    @default("active")
+  acquiredAt        DateTime  @default(now()) @map("acquired_at")
+  expiresAt         DateTime? @map("expires_at")
+  metadata          Json?
+
+  user  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset VirtualAssetDefinition @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, assetId])
+  @@index([userId, status])
+  @@index([assetId])
+  @@map("user_virtual_assets")
+}
+
+model UserVirtualAssetEquip {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  assetType String   @map("asset_type")
+  assetIds  String[] @default([]) @map("asset_ids")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, assetType])
+  @@index([userId])
+  @@map("user_virtual_asset_equips")
 }

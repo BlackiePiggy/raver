@@ -28,6 +28,18 @@ enum AppEnvironment {
         }
     }()
 
+    static func makeVirtualAssetRepository() -> VirtualAssetRepository {
+        guard AppConfig.virtualAssetsEnabled else {
+            return DisabledVirtualAssetRepository()
+        }
+        switch AppConfig.runtimeMode {
+        case .mock:
+            return MockVirtualAssetRepository()
+        case .live:
+            return LiveVirtualAssetRepository(baseURL: AppConfig.bffBaseURL)
+        }
+    }
+
     static func makeService() -> SocialService {
         sharedService
     }
@@ -39,4 +51,5 @@ enum AppEnvironment {
     static func makeShareLinkService() -> ShareLinkService {
         sharedShareLinkService
     }
+
 }

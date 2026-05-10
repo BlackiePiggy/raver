@@ -4,11 +4,13 @@ set -euo pipefail
 
 ROOT_DIR="${1:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 FEATURES_DIR="$ROOT_DIR/mobile/ios/RaverMVP/RaverMVP/Features"
+APP_DIR="$ROOT_DIR/mobile/ios/RaverMVP/RaverMVP/Application"
 
 DISCOVER_ROUTE="$FEATURES_DIR/Discover/Coordinator/DiscoverRoute.swift"
 CIRCLE_COORDINATOR="$FEATURES_DIR/Circle/Coordinator/CircleCoordinator.swift"
 MESSAGES_COORDINATOR="$FEATURES_DIR/Messages/Coordinator/MessagesCoordinator.swift"
 PROFILE_COORDINATOR="$FEATURES_DIR/Profile/Coordinator/ProfileCoordinator.swift"
+MAIN_TAB_COORDINATOR="$APP_DIR/Coordinator/MainTabCoordinator.swift"
 
 failed=0
 
@@ -38,26 +40,17 @@ require_pattern() {
   fi
 }
 
-# Critical route cases must exist and keep destination mapping.
-require_pattern "$DISCOVER_ROUTE" "case[[:space:]]+eventDetail\\(" "DiscoverRoute keeps eventDetail route case."
-require_pattern "$DISCOVER_ROUTE" "case[[:space:]]+\\.eventDetail\\(" "Discover route destination maps eventDetail."
-
-require_pattern "$CIRCLE_COORDINATOR" "case[[:space:]]+squadProfile\\(" "CircleRoute keeps squadProfile route case."
-require_pattern "$CIRCLE_COORDINATOR" "case[[:space:]]+userProfile\\(" "CircleRoute keeps userProfile route case."
-require_pattern "$CIRCLE_COORDINATOR" "case[[:space:]]+eventDetail\\(" "CircleRoute keeps eventDetail route case."
-require_pattern "$CIRCLE_COORDINATOR" "case[[:space:]]+let[[:space:]]+\\.squadProfile\\(" "Circle destination maps squadProfile."
-require_pattern "$CIRCLE_COORDINATOR" "case[[:space:]]+let[[:space:]]+\\.userProfile\\(" "Circle destination maps userProfile."
-require_pattern "$CIRCLE_COORDINATOR" "case[[:space:]]+let[[:space:]]+\\.eventDetail\\(" "Circle destination maps eventDetail."
-
-require_pattern "$MESSAGES_COORDINATOR" "case[[:space:]]+userProfile\\(" "MessagesRoute keeps userProfile route case."
-require_pattern "$MESSAGES_COORDINATOR" "case[[:space:]]+squadProfile\\(" "MessagesModalRoute keeps squadProfile route case."
-require_pattern "$MESSAGES_COORDINATOR" "case[[:space:]]+let[[:space:]]+\\.userProfile\\(" "Messages destination maps userProfile."
-require_pattern "$MESSAGES_COORDINATOR" "case[[:space:]]+let[[:space:]]+\\.squadProfile\\(" "Messages modal destination maps squadProfile."
-
-require_pattern "$PROFILE_COORDINATOR" "case[[:space:]]+userProfile\\(" "ProfileRoute keeps userProfile route case."
-require_pattern "$PROFILE_COORDINATOR" "case[[:space:]]+eventDetail\\(" "ProfileRoute keeps eventDetail route case."
-require_pattern "$PROFILE_COORDINATOR" "case[[:space:]]+let[[:space:]]+\\.userProfile\\(" "Profile destination maps userProfile."
-require_pattern "$PROFILE_COORDINATOR" "case[[:space:]]+let[[:space:]]+\\.eventDetail\\(" "Profile destination maps eventDetail."
+# Critical cross-module routes are centralized in AppRoute and MainTabCoordinator.
+require_pattern "$MAIN_TAB_COORDINATOR" "case[[:space:]]+eventDetail\\(" "AppRoute keeps eventDetail route case."
+require_pattern "$MAIN_TAB_COORDINATOR" "case[[:space:]]+userProfile\\(" "AppRoute keeps userProfile route case."
+require_pattern "$MAIN_TAB_COORDINATOR" "case[[:space:]]+squadProfile\\(" "AppRoute keeps squadProfile route case."
+require_pattern "$MAIN_TAB_COORDINATOR" "case[[:space:]]+conversation\\(" "AppRoute keeps conversation route case."
+require_pattern "$MAIN_TAB_COORDINATOR" "case[[:space:]]+let[[:space:]]+\\.eventDetail\\(|case[[:space:]]+\\.eventDetail\\(" "MainTabCoordinator destination maps eventDetail."
+require_pattern "$MAIN_TAB_COORDINATOR" "case[[:space:]]+\\.eventDetail\\(" "MainTabCoordinator maps event deep links."
+require_pattern "$MAIN_TAB_COORDINATOR" "case[[:space:]]+\\.userProfile\\(" "MainTabCoordinator destination maps userProfile."
+require_pattern "$MAIN_TAB_COORDINATOR" "case[[:space:]]+\\.squadProfile\\(" "MainTabCoordinator destination maps squadProfile."
+require_pattern "$MAIN_TAB_COORDINATOR" "case[[:space:]]+\\.conversation\\(" "MainTabCoordinator destination maps conversation."
+require_pattern "$MESSAGES_COORDINATOR" "case[[:space:]]+squadProfile\\(" "MessagesModalRoute keeps squadProfile modal route case."
 
 # Deep-link <-> route token round-trip checks for critical entry paths.
 if ! swift - <<'SWIFT'
@@ -67,6 +60,7 @@ enum CriticalRouteToken: Equatable {
     case eventDetail(String)
     case userProfile(String)
     case squadProfile(String)
+    case conversation(String)
 
     init?(url: URL) {
         guard (url.scheme ?? "").lowercased() == "raver" else { return nil }
@@ -74,33 +68,24 @@ enum CriticalRouteToken: Equatable {
         let parts = url.pathComponents.filter { $0 != "/" }
 
         switch host {
-        case "discover", "circle", "profile":
-            guard parts.count == 2 else { return nil }
-            if parts[0] == "event" {
-                self = .eventDetail(parts[1])
-                return
-            }
-            if parts[0] == "user" {
-                self = .userProfile(parts[1])
-                return
-            }
+        case "event":
+            guard parts.count == 1 else { return nil }
+            self = .eventDetail(parts[0])
+            return
+        case "profile":
+            guard parts.count == 1 else { return nil }
+            self = .userProfile(parts[0])
+            return
+        case "squad":
+            guard parts.count == 1 else { return nil }
+            self = .squadProfile(parts[0])
+            return
         case "messages":
-            guard parts.count == 2 else { return nil }
-            if parts[0] == "user" {
-                self = .userProfile(parts[1])
-                return
-            }
-            if parts[0] == "squad" {
-                self = .squadProfile(parts[1])
-                return
-            }
+            guard parts.count == 2, parts[0] == "conversation" else { return nil }
+            self = .conversation(parts[1])
+            return
         default:
             break
-        }
-
-        if host == "circle", parts.count == 2, parts[0] == "squad" {
-            self = .squadProfile(parts[1])
-            return
         }
 
         return nil
@@ -113,24 +98,28 @@ enum CriticalRouteToken: Equatable {
 
         switch self {
         case let .eventDetail(eventID):
-            host = hostOverride ?? "discover"
-            pathPrefix = "event"
+            host = hostOverride ?? "event"
+            pathPrefix = ""
             rawID = eventID
         case let .userProfile(userID):
             host = hostOverride ?? "profile"
-            pathPrefix = "user"
+            pathPrefix = ""
             rawID = userID
         case let .squadProfile(squadID):
-            host = hostOverride ?? "circle"
-            pathPrefix = "squad"
+            host = hostOverride ?? "squad"
+            pathPrefix = ""
             rawID = squadID
+        case let .conversation(conversationID):
+            host = hostOverride ?? "messages"
+            pathPrefix = "conversation"
+            rawID = conversationID
         }
 
         let encodedID = rawID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? rawID
         var components = URLComponents()
         components.scheme = "raver"
         components.host = host
-        components.path = "/\(pathPrefix)/\(encodedID)"
+        components.path = pathPrefix.isEmpty ? "/\(encodedID)" : "/\(pathPrefix)/\(encodedID)"
         return components.url
     }
 }
@@ -138,11 +127,13 @@ enum CriticalRouteToken: Equatable {
 let eventID = "evt_123-abc"
 let userID = "usr_456-def"
 let squadID = "sqd_789-ghi"
+let conversationID = "c2c_usr_456-def"
 
 let roundTripCases: [(CriticalRouteToken, [String])] = [
-    (.eventDetail(eventID), ["discover", "circle", "profile"]),
-    (.userProfile(userID), ["profile", "circle", "messages"]),
-    (.squadProfile(squadID), ["circle", "messages"]),
+    (.eventDetail(eventID), ["event"]),
+    (.userProfile(userID), ["profile"]),
+    (.squadProfile(squadID), ["squad"]),
+    (.conversation(conversationID), ["messages"]),
 ]
 
 for (token, hosts) in roundTripCases {
@@ -163,9 +154,9 @@ for (token, hosts) in roundTripCases {
 }
 
 let invalidLinks = [
-    "https://discover/event/abc",
-    "raver://discover/event",
-    "raver://circle/unknown/abc",
+    "https://event/abc",
+    "raver://event",
+    "raver://messages/user/abc",
 ]
 
 for raw in invalidLinks {
