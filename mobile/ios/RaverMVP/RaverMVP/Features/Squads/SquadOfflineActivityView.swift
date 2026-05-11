@@ -42,6 +42,7 @@ struct SquadOfflineActivityView: View {
     @State private var mapFocusMode: SquadOfflineMapFocusMode = .smartCluster
     @State private var panelDragOffset: CGFloat = 0
     @State private var shouldPreserveCameraOnNextActivityRefresh = false
+    @State private var lastHandledAutomaticUploadAt: Date?
     @State private var configuredLocationUploadKey: String?
     @State private var errorMessage: String?
     @State private var showEndConfirm = false
@@ -96,6 +97,12 @@ struct SquadOfflineActivityView: View {
         }
         .onChange(of: mapFocusMode) { _, _ in
             updateCamera(for: activity)
+        }
+        .onChange(of: locationUploader.lastUploadAt) { _, uploadAt in
+            guard let uploadAt else { return }
+            Task {
+                await refreshAfterAutomaticLocationUpload(uploadAt)
+            }
         }
         .confirmationDialog(
             L("结束线下活动？", "End Offline Activity?"),
@@ -279,7 +286,7 @@ struct SquadOfflineActivityView: View {
         if let activity, activity.isJoined, !activity.isEnded, let participant = currentParticipant {
             HStack(spacing: 8) {
                 presenceToggleButton(
-                    systemImage: "toilet.fill",
+                    imageName: "SquadRestroomStatusIcon",
                     title: L("厕所", "Restroom"),
                     selectedColor: .green,
                     selectedForegroundColor: .white,
@@ -294,7 +301,7 @@ struct SquadOfflineActivityView: View {
                 }
 
                 presenceToggleButton(
-                    systemImage: "mug.fill",
+                    imageName: "SquadBuyingDrinkStatusIcon",
                     title: L("买酒", "Buying Drinks"),
                     selectedColor: .yellow,
                     selectedForegroundColor: .black,
@@ -312,7 +319,7 @@ struct SquadOfflineActivityView: View {
     }
 
     private func presenceToggleButton(
-        systemImage: String,
+        imageName: String,
         title: String,
         selectedColor: Color,
         selectedForegroundColor: Color,
@@ -320,9 +327,12 @@ struct SquadOfflineActivityView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .bold))
+            Image(imageName)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
                 .foregroundStyle(isSelected ? selectedForegroundColor : .white)
+                .frame(width: 24, height: 24)
                 .frame(width: 42, height: 42)
                 .background(isSelected ? selectedColor : Color.black.opacity(0.66), in: Circle())
                 .overlay(Circle().stroke(Color.white.opacity(isSelected ? 0.0 : 0.18), lineWidth: 1))
@@ -702,10 +712,16 @@ struct SquadOfflineActivityView: View {
         if !chips.isEmpty {
             HStack(spacing: 6) {
                 ForEach(chips, id: \.title) { chip in
-                    Label(chip.title, systemImage: chip.systemImage)
+                    HStack(spacing: 3) {
+                        Image(chip.imageName)
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 11, height: 11)
+                        Text(chip.title)
+                    }
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(chip.foregroundColor)
-                        .labelStyle(.titleAndIcon)
                         .padding(.horizontal, 6)
                         .frame(height: 20)
                         .background(chip.backgroundColor, in: Capsule())
@@ -716,13 +732,13 @@ struct SquadOfflineActivityView: View {
         }
     }
 
-    private func participantPresenceChips(_ participant: SquadOfflineActivityParticipant) -> [(title: String, systemImage: String, backgroundColor: Color, foregroundColor: Color)] {
-        var chips: [(title: String, systemImage: String, backgroundColor: Color, foregroundColor: Color)] = []
+    private func participantPresenceChips(_ participant: SquadOfflineActivityParticipant) -> [(title: String, imageName: String, backgroundColor: Color, foregroundColor: Color)] {
+        var chips: [(title: String, imageName: String, backgroundColor: Color, foregroundColor: Color)] = []
         if participant.isInRestroom == true {
-            chips.append((L("厕所", "Restroom"), "toilet.fill", .green.opacity(0.88), .white))
+            chips.append((L("厕所", "Restroom"), "SquadRestroomStatusIcon", .green.opacity(0.88), .white))
         }
         if participant.isBuyingDrink == true {
-            chips.append((L("买东西", "Buying"), "mug.fill", .yellow.opacity(0.9), .black.opacity(0.86)))
+            chips.append((L("买东西", "Buying"), "SquadBuyingDrinkStatusIcon", .yellow.opacity(0.9), .black.opacity(0.86)))
         }
         return chips
     }
@@ -842,6 +858,19 @@ struct SquadOfflineActivityView: View {
         } else {
             errorMessage = locationUploader.errorMessage ?? L("定位更新失败", "Failed to update location")
         }
+    }
+
+    private func refreshAfterAutomaticLocationUpload(_ uploadAt: Date) async {
+        guard lastHandledAutomaticUploadAt != uploadAt,
+              let activity,
+              activity.isJoined,
+              !activity.isEnded,
+              !centerOnJoinedUserLocation(in: activity) else {
+            return
+        }
+        lastHandledAutomaticUploadAt = uploadAt
+        await loadActivity()
+        _ = centerOnJoinedUserLocation(in: self.activity)
     }
 
     @discardableResult

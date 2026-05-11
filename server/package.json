@@ -48,6 +48,7 @@
     "auth:integration": "ts-node src/scripts/auth-integration.ts",
     "share-links:smoke": "ts-node src/scripts/share-link-smoke.ts",
     "share-invites:smoke": "ts-node src/scripts/share-invite-smoke.ts",
+    "squad:offline-demo": "ts-node src/scripts/seed-squad-offline-activity-demo.ts",
     "tencent-im:sync:all-users": "NODE_OPTIONS='--use-env-proxy' ts-node src/scripts/tencent-im-sync-all-users.ts",
     "tencent-im:export:user-mapping": "ts-node src/scripts/tencent-im-export-user-mapping.ts",
     "tencent-im:delete:openim-users": "NODE_OPTIONS='--use-env-proxy' ts-node src/scripts/tencent-im-delete-openim-users.ts",

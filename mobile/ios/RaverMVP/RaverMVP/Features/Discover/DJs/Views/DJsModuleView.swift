@@ -2553,19 +2553,22 @@ struct DJDetailView: View {
 
     private struct DJCurrentPerformanceSnapshot: Identifiable {
         let event: WebEvent
-        let slot: WebEventLineupSlot
-        let act: EventLineupResolvedAct
-        let stageName: String
         let timeText: String
-        let stageSortIndex: Int
 
-        var id: String { "\(event.id)-\(slot.id)" }
+        var id: String { event.id }
     }
 
     private static let heroLiveTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    private static let heroLiveDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MM/dd"
         return formatter
     }()
 
@@ -3311,7 +3314,8 @@ struct DJDetailView: View {
     }
 
     private func heroSection(_ dj: WebDJ) -> some View {
-        let livePerformance = currentPerformanceSnapshot(for: dj)
+        let livePerformances = currentPerformanceSnapshots(for: dj)
+        let hasLivePerformances = !livePerformances.isEmpty
 
         return ZStack(alignment: .top) {
             GeometryReader { geo in
@@ -3347,8 +3351,8 @@ struct DJDetailView: View {
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
                 VStack(alignment: .leading, spacing: 0) {
-                    if let livePerformance {
-                        currentPerformanceBadge(livePerformance)
+                    if hasLivePerformances {
+                        currentPerformanceBadges(livePerformances)
                             .padding(.bottom, 10)
                     }
 
@@ -3380,7 +3384,7 @@ struct DJDetailView: View {
                         .fixedSize(horizontal: true, vertical: false)
                         .layoutPriority(2)
                     }
-                    .padding(.bottom, livePerformance == nil ? 6 : 8)
+                    .padding(.bottom, hasLivePerformances ? 8 : 6)
 
                     HStack(alignment: .center, spacing: 10) {
                         Text(dj.name)
@@ -3407,19 +3411,32 @@ struct DJDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(
-                    minHeight: livePerformance == nil
+                    minHeight: !hasLivePerformances
                         ? (djNameLineCount > 1 ? 85 : 70)
                         : (djNameLineCount > 1 ? 126 : 110),
                     alignment: .bottomLeading
                 )
                 .padding(.horizontal, 16)
-                .padding(.bottom, livePerformance == nil ? (djNameLineCount > 1 ? 40 : 8) : 18)
+                .padding(.bottom, !hasLivePerformances ? (djNameLineCount > 1 ? 40 : 8) : 18)
             }
         }
         .frame(maxWidth: .infinity)
         .frame(height: 360)
         .clipped()
         .zIndex(1)
+    }
+
+    @ViewBuilder
+    private func currentPerformanceBadges(_ snapshots: [DJCurrentPerformanceSnapshot]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(snapshots) { snapshot in
+                    currentPerformanceBadge(snapshot)
+                }
+            }
+            .padding(.horizontal, 1)
+        }
+        .scrollClipDisabled()
     }
 
     @ViewBuilder
@@ -3447,7 +3464,7 @@ struct DJDetailView: View {
                 .fixedSize(horizontal: true, vertical: false)
 
                 HStack(spacing: 6) {
-                    Text(L("演出中", "DJ-ing"))
+                    Text(L("活动进行中", "Live now"))
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(Color(red: 0.30, green: 1.0, blue: 0.54))
                         .lineLimit(1)
@@ -3456,6 +3473,10 @@ struct DJDetailView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.white.opacity(0.76))
                         .lineLimit(1)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color.white.opacity(0.62))
                 }
                 .fixedSize(horizontal: true, vertical: false)
             }
@@ -3474,32 +3495,53 @@ struct DJDetailView: View {
         .buttonStyle(.plain)
     }
 
-    private func currentPerformanceSnapshot(for dj: WebDJ) -> DJCurrentPerformanceSnapshot? {
+    private func currentPerformanceSnapshots(for dj: WebDJ) -> [DJCurrentPerformanceSnapshot] {
         let now = Date()
+        var seenEventIDs = Set<String>()
 
         return djEvents
-            .flatMap { event in
-                event.lineupSlots.compactMap { slot -> DJCurrentPerformanceSnapshot? in
-                    guard slot.startTime <= now, now <= slot.endTime else { return nil }
-                    guard slotIncludesDJ(slot, dj: dj) else { return nil }
-
-                    return DJCurrentPerformanceSnapshot(
-                        event: event,
-                        slot: slot,
-                        act: EventLineupActCodec.parse(slot: slot),
-                        stageName: normalizedStageDisplayName(slot.stageName),
-                        timeText: "\(Self.heroLiveTimeFormatter.string(from: slot.startTime)) - \(Self.heroLiveTimeFormatter.string(from: slot.endTime))",
-                        stageSortIndex: stageSortIndex(slot.stageName, in: event)
-                    )
-                }
+            .filter { event in
+                guard seenEventIDs.insert(event.id).inserted else { return false }
+                return eventIsOngoing(event, at: now) && eventLineupIncludesDJ(event, dj: dj)
             }
             .sorted { lhs, rhs in
-                if lhs.slot.startTime != rhs.slot.startTime { return lhs.slot.startTime > rhs.slot.startTime }
-                if lhs.event.startDate != rhs.event.startDate { return lhs.event.startDate > rhs.event.startDate }
-                if lhs.stageSortIndex != rhs.stageSortIndex { return lhs.stageSortIndex < rhs.stageSortIndex }
-                return lhs.stageName.localizedCaseInsensitiveCompare(rhs.stageName) == .orderedAscending
+                if lhs.startDate != rhs.startDate { return lhs.startDate > rhs.startDate }
+                return localizedEventName(lhs).localizedCaseInsensitiveCompare(localizedEventName(rhs)) == .orderedAscending
             }
-            .first
+            .map { event in
+                DJCurrentPerformanceSnapshot(
+                    event: event,
+                    timeText: heroLiveEventTimeText(for: event)
+                )
+            }
+    }
+
+    private func eventIsOngoing(_ event: WebEvent, at date: Date) -> Bool {
+        let normalizedStatus = event.status?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if normalizedStatus == "cancelled" || normalizedStatus == "canceled" {
+            return false
+        }
+        if normalizedStatus == "ongoing" {
+            return true
+        }
+        if normalizedStatus == "ended" || normalizedStatus == "upcoming" {
+            return false
+        }
+        return event.startDate <= date && date <= event.endDate
+    }
+
+    private func eventLineupIncludesDJ(_ event: WebEvent, dj: WebDJ) -> Bool {
+        event.lineupSlots.contains { slotIncludesDJ($0, dj: dj) }
+    }
+
+    private func heroLiveEventTimeText(for event: WebEvent) -> String {
+        let calendar = Calendar.current
+        if calendar.isDate(event.startDate, inSameDayAs: event.endDate) {
+            return "\(Self.heroLiveTimeFormatter.string(from: event.startDate)) - \(Self.heroLiveTimeFormatter.string(from: event.endDate))"
+        }
+        return "\(Self.heroLiveDateFormatter.string(from: event.startDate))-\(Self.heroLiveDateFormatter.string(from: event.endDate))"
     }
 
     private func slotIncludesDJ(_ slot: WebEventLineupSlot, dj: WebDJ) -> Bool {
@@ -3531,17 +3573,6 @@ struct DJDetailView: View {
             let performerID = performer.djID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return !normalizedDJID.isEmpty && performerID == normalizedDJID
         }
-    }
-
-    private func normalizedStageDisplayName(_ stageName: String?) -> String {
-        let trimmed = stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? L("未知舞台", "Unknown stage") : trimmed
-    }
-
-    private func stageSortIndex(_ stageName: String?, in event: WebEvent) -> Int {
-        let normalized = stageName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-        guard let order = event.stageOrder, !normalized.isEmpty else { return Int.max }
-        return order.firstIndex { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalized } ?? Int.max
     }
 
     private func localizedEventName(_ event: WebEvent) -> String {
