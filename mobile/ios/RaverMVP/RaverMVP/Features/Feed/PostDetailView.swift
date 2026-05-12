@@ -7,7 +7,7 @@ struct PostDetailView: View {
     @EnvironmentObject private var appState: AppState
     @State private var post: Post
     @StateObject private var appearanceResolver: VirtualAssetListAppearanceResolver
-    private let service: SocialService
+    private let repository: CircleFeedRepository
 
     @State private var comments: [Comment] = []
     @State private var commentInput = ""
@@ -38,7 +38,7 @@ struct PostDetailView: View {
 
     init(
         post: Post,
-        service: SocialService,
+        repository: CircleFeedRepository,
         virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
     ) {
         self._post = State(initialValue: post)
@@ -48,7 +48,7 @@ struct PostDetailView: View {
                 surface: "post_detail"
             )
         )
-        self.service = service
+        self.repository = repository
     }
 
     var body: some View {
@@ -309,7 +309,7 @@ struct PostDetailView: View {
                 guard requireRealNameForSocialAction() else { return }
                 Task {
                     do {
-                        post = try await service.toggleLike(postID: post.id, shouldLike: !post.isLiked)
+                        post = try await repository.toggleLike(postID: post.id, shouldLike: !post.isLiked)
                         notifyPostUpdated()
                         await trackFeedEvent(eventType: "feed_like")
                     } catch {
@@ -321,7 +321,7 @@ struct PostDetailView: View {
                 guard requireRealNameForSocialAction() else { return }
                 Task {
                     do {
-                        post = try await service.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
+                        post = try await repository.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
                         notifyPostUpdated()
                     } catch {
                         self.error = error.userFacingMessage
@@ -332,7 +332,7 @@ struct PostDetailView: View {
                 guard requireRealNameForSocialAction() else { return }
                 Task {
                     do {
-                        post = try await service.toggleSave(postID: post.id, shouldSave: !post.isSaved)
+                        post = try await repository.toggleSave(postID: post.id, shouldSave: !post.isSaved)
                         notifyPostUpdated()
                         await trackFeedEvent(eventType: "feed_save")
                     } catch {
@@ -345,7 +345,7 @@ struct PostDetailView: View {
                 guard requireRealNameForSocialAction() else { return }
                 Task {
                     do {
-                        let author = try await service.toggleFollow(userID: post.author.id, shouldFollow: !post.author.isFollowing)
+                        let author = try await repository.toggleFollow(userID: post.author.id, shouldFollow: !post.author.isFollowing)
                         post.author = author
                         notifyPostUpdated()
                     } catch {
@@ -409,8 +409,8 @@ struct PostDetailView: View {
     }
 
     private func loadSharePanelConversations() async throws -> [Conversation] {
-        async let directs = service.fetchConversations(type: .direct)
-        async let groups = service.fetchConversations(type: .group)
+        async let directs = repository.fetchConversations(type: .direct)
+        async let groups = repository.fetchConversations(type: .group)
         let merged = try await directs + groups
         let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
             partialResult[conversation.id] = conversation
@@ -422,20 +422,20 @@ struct PostDetailView: View {
     }
 
     private func sendPostSharePayload(to conversation: Conversation, note: String?) async throws {
-        _ = try await service.sendPostCardMessage(
+        _ = try await repository.sendPostCardMessage(
             conversationID: conversation.id,
             payload: PostSharePayload(post: post).cardPayload
         )
 
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmedNote.isEmpty {
-            _ = try await service.sendMessage(
+            _ = try await repository.sendMessage(
                 conversationID: conversation.id,
                 content: trimmedNote
             )
         }
 
-        post = try await service.recordShare(postID: post.id, channel: "in_app_chat", status: "completed")
+        post = try await repository.recordShare(postID: post.id, channel: "in_app_chat", status: "completed")
         notifyPostUpdated()
         await trackFeedEvent(eventType: "feed_share", metadata: ["channel": "in_app_chat"])
     }
@@ -627,8 +627,8 @@ struct PostDetailView: View {
         defer { isRefreshing = false }
 
         do {
-            async let postTask = service.fetchPost(postID: post.id)
-            async let commentsTask = service.fetchComments(postID: post.id)
+            async let postTask = repository.fetchPost(postID: post.id)
+            async let commentsTask = repository.fetchComments(postID: post.id)
             let (loadedPost, loadedComments) = try await (postTask, commentsTask)
             post = loadedPost
             comments = loadedComments
@@ -677,7 +677,7 @@ struct PostDetailView: View {
             let text = commentInput.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return }
             do {
-                let comment = try await service.addComment(
+                let comment = try await repository.addComment(
                     postID: post.id,
                     content: text,
                     parentCommentID: replyTargetComment?.id
@@ -997,7 +997,7 @@ struct PostDetailView: View {
             return
         }
         do {
-            try await service.hidePost(postID: post.id, reason: reason)
+            try await repository.hidePost(postID: post.id, reason: reason)
             await trackFeedEvent(eventType: "feed_hide", metadata: ["reason": reason])
             NotificationCenter.default.post(name: .circlePostDidHide, object: post.id)
             dismiss()
@@ -1009,7 +1009,7 @@ struct PostDetailView: View {
     @MainActor
     private func trackFeedEvent(eventType: String, metadata: [String: String]? = nil) async {
         do {
-            try await service.recordFeedEvent(
+            try await repository.recordFeedEvent(
                 input: FeedEventInput(
                     sessionID: feedSessionID,
                     eventType: eventType,

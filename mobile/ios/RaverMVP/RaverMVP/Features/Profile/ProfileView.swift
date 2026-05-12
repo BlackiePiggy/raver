@@ -441,11 +441,9 @@ final class MySavesViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let repository: ProfileSocialRepository
-    private let webService: WebFeatureService
 
-    init(repository: ProfileSocialRepository, webService: WebFeatureService) {
+    init(repository: ProfileSocialRepository) {
         self.repository = repository
-        self.webService = webService
     }
 
     func load(force: Bool = false) async {
@@ -460,7 +458,7 @@ final class MySavesViewModel: ObservableObject {
 
         do {
             async let eventsTask = loadMarkedEvents()
-            async let djsTask = webService.fetchFollowedDJs(page: 1, limit: 100).items
+            async let djsTask = repository.fetchFollowedDJs(page: 1, limit: 100).items
 
             markedEvents = try await eventsTask
             followedDJs = try await djsTask
@@ -472,7 +470,7 @@ final class MySavesViewModel: ObservableObject {
     }
 
     private func loadMarkedEvents() async throws -> [WebEvent] {
-        let page = try await webService.fetchMyCheckins(page: 1, limit: 200, type: "event")
+        let page = try await repository.fetchMyCheckins(page: 1, limit: 200, type: "event")
         let eventIDs = page.items
             .filter { $0.type.lowercased() == "event" && $0.eventId != nil && $0.isMarkedCheckin }
             .compactMap(\.eventId)
@@ -481,7 +479,7 @@ final class MySavesViewModel: ObservableObject {
         try await withThrowingTaskGroup(of: WebEvent.self) { group in
             for eventID in Set(eventIDs) {
                 group.addTask {
-                    try await self.webService.fetchEvent(id: eventID)
+                    try await self.repository.fetchEvent(id: eventID)
                 }
             }
             for try await event in group {
@@ -520,8 +518,8 @@ struct MySavesView: View {
         }
     }
 
-    init(repository: ProfileSocialRepository, webService: WebFeatureService) {
-        _viewModel = StateObject(wrappedValue: MySavesViewModel(repository: repository, webService: webService))
+    init(repository: ProfileSocialRepository) {
+        _viewModel = StateObject(wrappedValue: MySavesViewModel(repository: repository))
     }
 
     var body: some View {

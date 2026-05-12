@@ -10,10 +10,10 @@ final class NotificationsViewModel: ObservableObject {
     @Published var bannerMessage: String?
     @Published var error: String?
 
-    private let service: SocialService
+    private let repository: NotificationRepository
 
-    init(service: SocialService) {
-        self.service = service
+    init(repository: NotificationRepository) {
+        self.repository = repository
     }
 
     func load() async {
@@ -29,7 +29,7 @@ final class NotificationsViewModel: ObservableObject {
         defer { isRefreshing = false }
 
         do {
-            let inbox = try await service.fetchNotifications(limit: 30)
+            let inbox = try await repository.fetchNotifications(limit: 30)
             notifications = inbox.items
             unreadCount = inbox.unreadCount
             publishCommunityUnreadDidChange()
@@ -56,7 +56,7 @@ final class NotificationsViewModel: ObservableObject {
         publishCommunityUnreadDidChange()
 
         do {
-            try await service.markNotificationRead(notificationID: item.id)
+            try await repository.markNotificationRead(notificationID: item.id)
             bannerMessage = nil
             error = nil
         } catch {

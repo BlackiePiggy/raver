@@ -1310,8 +1310,8 @@ struct MyCheckinsView: View {
     }
 
     private func loadSharePanelConversations() async throws -> [Conversation] {
-        async let directs = appContainer.socialService.fetchConversations(type: .direct)
-        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        async let directs = appContainer.shareMessageRepository.fetchConversations(type: .direct)
+        async let groups = appContainer.shareMessageRepository.fetchConversations(type: .group)
         let merged = try await directs + groups
         let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
             partialResult[conversation.id] = conversation
@@ -1327,14 +1327,14 @@ struct MyCheckinsView: View {
         to conversation: Conversation,
         note: String?
     ) async throws {
-        _ = try await appContainer.socialService.sendMyCheckinsCardMessage(
+        _ = try await appContainer.shareMessageRepository.sendMyCheckinsCardMessage(
             conversationID: conversation.id,
             payload: payload
         )
 
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmedNote.isEmpty {
-            _ = try await appContainer.socialService.sendMessage(
+            _ = try await appContainer.shareMessageRepository.sendMessage(
                 conversationID: conversation.id,
                 content: trimmedNote
             )

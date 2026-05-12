@@ -3,22 +3,20 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { verifyToken, type JWTPayload } from '../utils/auth';
 import {
   ReadModelMaybe,
+  rebuildUserCheckinProjection,
+  getCheckinProjectionStatus,
   fetchCheckinGalleryArtistsPageReadModelStrict,
   fetchCheckinGalleryEventsPageReadModelStrict,
   fetchCheckinOverviewReadModelStrict,
   fetchCheckinStatsReadModelStrict,
   fetchCheckinTimelinePageReadModelStrict,
-} from '../services/checkin-projection-read-model';
-import { rebuildUserCheckinProjection } from '../services/checkin-projection';
-import { getCheckinProjectionStatus } from '../services/checkin-projection-status';
-import {
   createSnapshotData,
   hydrateStoredSelections,
   normalizeBiText,
   normalizeInt,
   normalizeNullableText,
   normalizeSelections,
-} from '../services/checkin-domain';
+} from '../modules/checkins';
 
 const router: Router = Router();
 const prisma = new PrismaClient();

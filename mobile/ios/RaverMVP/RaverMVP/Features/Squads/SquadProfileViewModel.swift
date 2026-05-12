@@ -15,11 +15,11 @@ final class SquadProfileViewModel: ObservableObject {
     @Published var error: String?
 
     private let squadID: String
-    private let service: SocialService
+    private let repository: SquadProfileRepository
 
-    init(squadID: String, service: SocialService) {
+    init(squadID: String, repository: SquadProfileRepository) {
         self.squadID = squadID
-        self.service = service
+        self.repository = repository
     }
 
     func load() async {
@@ -35,7 +35,7 @@ final class SquadProfileViewModel: ObservableObject {
         defer { isRefreshing = false }
 
         do {
-            profile = try await service.fetchSquadProfile(squadID: squadID)
+            profile = try await repository.fetchSquadProfile(squadID: squadID)
             phase = profile == nil ? .empty : .success
             bannerMessage = nil
             error = nil
@@ -58,8 +58,8 @@ final class SquadProfileViewModel: ObservableObject {
         defer { isProcessingJoin = false }
 
         do {
-            try await service.joinSquad(squadID: profile.id)
-            self.profile = try await service.fetchSquadProfile(squadID: profile.id)
+            try await repository.joinSquad(squadID: profile.id)
+            self.profile = try await repository.fetchSquadProfile(squadID: profile.id)
             phase = .success
             bannerMessage = nil
             return true
@@ -92,14 +92,14 @@ final class SquadProfileViewModel: ObservableObject {
         defer { isSavingMySettings = false }
 
         do {
-            try await service.updateSquadMySettings(
+            try await repository.updateSquadMySettings(
                 squadID: profile.id,
                 input: UpdateSquadMySettingsInput(
                     nickname: nickname,
                     notificationsEnabled: notificationsEnabled
                 )
             )
-            self.profile = try await service.fetchSquadProfile(squadID: profile.id)
+            self.profile = try await repository.fetchSquadProfile(squadID: profile.id)
             phase = .success
             bannerMessage = nil
             error = nil
@@ -118,8 +118,8 @@ final class SquadProfileViewModel: ObservableObject {
         defer { isSavingGroupInfo = false }
 
         do {
-            try await service.updateSquadInfo(squadID: profile.id, input: input)
-            self.profile = try await service.fetchSquadProfile(squadID: profile.id)
+            try await repository.updateSquadInfo(squadID: profile.id, input: input)
+            self.profile = try await repository.fetchSquadProfile(squadID: profile.id)
             phase = .success
             bannerMessage = nil
             error = nil
@@ -138,8 +138,8 @@ final class SquadProfileViewModel: ObservableObject {
         defer { memberActionInFlightUserID = nil }
 
         do {
-            try await service.updateSquadMemberRole(squadID: profile.id, memberUserID: memberUserID, role: role)
-            self.profile = try await service.fetchSquadProfile(squadID: profile.id)
+            try await repository.updateSquadMemberRole(squadID: profile.id, memberUserID: memberUserID, role: role)
+            self.profile = try await repository.fetchSquadProfile(squadID: profile.id)
             phase = .success
             bannerMessage = nil
             error = nil
@@ -158,8 +158,8 @@ final class SquadProfileViewModel: ObservableObject {
         defer { memberActionInFlightUserID = nil }
 
         do {
-            try await service.removeSquadMember(squadID: profile.id, memberUserID: memberUserID)
-            self.profile = try await service.fetchSquadProfile(squadID: profile.id)
+            try await repository.removeSquadMember(squadID: profile.id, memberUserID: memberUserID)
+            self.profile = try await repository.fetchSquadProfile(squadID: profile.id)
             phase = .success
             bannerMessage = nil
             error = nil

@@ -1961,8 +1961,8 @@ struct DJSetDetailView: View {
     }
 
     private func loadSharePanelConversations() async throws -> [Conversation] {
-        async let directTask = appContainer.socialService.fetchConversations(type: .direct)
-        async let groupTask = appContainer.socialService.fetchConversations(type: .group)
+        async let directTask = appContainer.shareMessageRepository.fetchConversations(type: .direct)
+        async let groupTask = appContainer.shareMessageRepository.fetchConversations(type: .group)
         let direct = try await directTask
         let groups = try await groupTask
         return (direct + groups).sorted { lhs, rhs in
@@ -1981,7 +1981,7 @@ struct DJSetDetailView: View {
         note: String?
     ) async throws {
         _ = note
-        _ = try await appContainer.socialService.sendSetCardMessage(
+        _ = try await appContainer.shareMessageRepository.sendSetCardMessage(
             conversationID: conversation.id,
             payload: payload
         )

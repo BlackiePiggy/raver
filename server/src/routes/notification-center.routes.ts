@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
-import { getNotificationCenterAPNSStatus, notificationCenterService } from '../services/notification-center';
+import { getNotificationCenterAPNSStatus, notificationCenterService } from '../modules/notifications';
 
 const router: Router = Router();
 const prisma = new PrismaClient();

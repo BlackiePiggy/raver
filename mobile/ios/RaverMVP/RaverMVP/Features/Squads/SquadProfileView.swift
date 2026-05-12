@@ -15,9 +15,9 @@ struct SquadProfileView: View {
         ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
     }
 
-    init(squadID: String, service: SocialService) {
+    init(squadID: String, service: SocialService, repository: SquadProfileRepository) {
         self.service = service
-        _viewModel = StateObject(wrappedValue: SquadProfileViewModel(squadID: squadID, service: service))
+        _viewModel = StateObject(wrappedValue: SquadProfileViewModel(squadID: squadID, repository: repository))
     }
 
     var body: some View {

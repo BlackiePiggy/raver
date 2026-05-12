@@ -16,12 +16,12 @@ final class GlobalSearchResultsViewModel: ObservableObject {
     @Published private(set) var partialFailureTabs: Set<GlobalSearchTab> = []
     @Published private(set) var countsByTab: [GlobalSearchTab: Int] = [:]
 
-    private let service: WebFeatureService
+    private let repository: GlobalSearchRepository
     private let resultLimit = 60
 
-    init(query: String, service: WebFeatureService) {
+    init(query: String, repository: GlobalSearchRepository) {
         self.query = query
-        self.service = service
+        self.repository = repository
         GlobalSearchTab.allCases.forEach { phaseByTab[$0] = .idle }
         GlobalSearchTab.allCases.forEach { countsByTab[$0] = 0 }
     }
@@ -94,7 +94,7 @@ final class GlobalSearchResultsViewModel: ObservableObject {
         }
 
         do {
-            let response = try await service.searchGlobal(query: nextQuery, tab: requestedTab, limit: resultLimit)
+            let response = try await repository.searchGlobal(query: nextQuery, tab: requestedTab, limit: resultLimit)
             apply(response, requestedTab: requestedTab)
             GlobalSearchTelemetry.loadSucceeded(
                 query: response.query,

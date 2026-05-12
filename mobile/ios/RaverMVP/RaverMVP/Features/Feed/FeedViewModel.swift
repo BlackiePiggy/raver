@@ -28,6 +28,10 @@ enum PostHideReasonOption: String, CaseIterable, Identifiable {
 
 protocol CircleFeedRepository {
     func fetchFeed(cursor: String?, mode: FeedMode?, eventID: String?) async throws -> FeedPage
+    func fetchPost(postID: String) async throws -> Post
+    func createPost(input: CreatePostInput) async throws -> Post
+    func updatePost(postID: String, input: UpdatePostInput) async throws -> Post
+    func deletePost(postID: String) async throws
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post
     func toggleSave(postID: String, shouldSave: Bool) async throws -> Post
@@ -35,45 +39,102 @@ protocol CircleFeedRepository {
     func hidePost(postID: String, reason: String?) async throws
     func recordFeedEvent(input: FeedEventInput) async throws
     func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary
+    func fetchComments(postID: String) async throws -> [Comment]
+    func addComment(postID: String, content: String, parentCommentID: String?) async throws -> Comment
+    func fetchConversations(type: ConversationType) async throws -> [Conversation]
+    func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage
+    func sendMessage(conversationID: String, content: String) async throws -> ChatMessage
+    func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
+    func uploadPostVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
 }
 
 struct CircleFeedRepositoryAdapter: CircleFeedRepository {
-    private let service: SocialService
+    private let socialService: SocialService
+    private let webService: WebFeatureService
+
+    init(socialService: SocialService, webService: WebFeatureService) {
+        self.socialService = socialService
+        self.webService = webService
+    }
 
     init(service: SocialService) {
-        self.service = service
+        self.init(socialService: service, webService: AppEnvironment.makeWebService())
     }
 
     func fetchFeed(cursor: String?, mode: FeedMode?, eventID: String? = nil) async throws -> FeedPage {
-        try await service.fetchFeed(cursor: cursor, mode: mode, eventID: eventID)
+        try await socialService.fetchFeed(cursor: cursor, mode: mode, eventID: eventID)
+    }
+
+    func fetchPost(postID: String) async throws -> Post {
+        try await socialService.fetchPost(postID: postID)
+    }
+
+    func createPost(input: CreatePostInput) async throws -> Post {
+        try await socialService.createPost(input: input)
+    }
+
+    func updatePost(postID: String, input: UpdatePostInput) async throws -> Post {
+        try await socialService.updatePost(postID: postID, input: input)
+    }
+
+    func deletePost(postID: String) async throws {
+        try await socialService.deletePost(postID: postID)
     }
 
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post {
-        try await service.toggleLike(postID: postID, shouldLike: shouldLike)
+        try await socialService.toggleLike(postID: postID, shouldLike: shouldLike)
     }
 
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post {
-        try await service.toggleRepost(postID: postID, shouldRepost: shouldRepost)
+        try await socialService.toggleRepost(postID: postID, shouldRepost: shouldRepost)
     }
 
     func toggleSave(postID: String, shouldSave: Bool) async throws -> Post {
-        try await service.toggleSave(postID: postID, shouldSave: shouldSave)
+        try await socialService.toggleSave(postID: postID, shouldSave: shouldSave)
     }
 
     func recordShare(postID: String, channel: String, status: String) async throws -> Post {
-        try await service.recordShare(postID: postID, channel: channel, status: status)
+        try await socialService.recordShare(postID: postID, channel: channel, status: status)
     }
 
     func hidePost(postID: String, reason: String?) async throws {
-        try await service.hidePost(postID: postID, reason: reason)
+        try await socialService.hidePost(postID: postID, reason: reason)
     }
 
     func recordFeedEvent(input: FeedEventInput) async throws {
-        try await service.recordFeedEvent(input: input)
+        try await socialService.recordFeedEvent(input: input)
     }
 
     func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary {
-        try await service.toggleFollow(userID: userID, shouldFollow: shouldFollow)
+        try await socialService.toggleFollow(userID: userID, shouldFollow: shouldFollow)
+    }
+
+    func fetchComments(postID: String) async throws -> [Comment] {
+        try await socialService.fetchComments(postID: postID)
+    }
+
+    func addComment(postID: String, content: String, parentCommentID: String?) async throws -> Comment {
+        try await socialService.addComment(postID: postID, content: content, parentCommentID: parentCommentID)
+    }
+
+    func fetchConversations(type: ConversationType) async throws -> [Conversation] {
+        try await socialService.fetchConversations(type: type)
+    }
+
+    func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage {
+        try await socialService.sendPostCardMessage(conversationID: conversationID, payload: payload)
+    }
+
+    func sendMessage(conversationID: String, content: String) async throws -> ChatMessage {
+        try await socialService.sendMessage(conversationID: conversationID, content: content)
+    }
+
+    func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
+        try await webService.uploadPostImage(imageData: imageData, fileName: fileName, mimeType: mimeType)
+    }
+
+    func uploadPostVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
+        try await webService.uploadPostVideo(videoData: videoData, fileName: fileName, mimeType: mimeType)
     }
 }
 

@@ -4,7 +4,7 @@
 > Owner: Architecture / Backend / iOS  
 > Last Updated: 2026-05-12  
 > Applies To: `server/`、`mobile/ios/RaverMVP/`、`web/`、`server/prisma/schema.prisma`、`docs/`  
-> Related: `docs/RAVER_PLATFORM_ARCHITECTURE.md`
+> Related: `docs/RAVER_PLATFORM_ARCHITECTURE.md`、`docs/RAVER_COMMERCIAL_ARCHITECTURE_RESTRUCTURE_TRACKER.md`
 
 ## 0. 需求对齐
 
@@ -36,6 +36,11 @@
 5. 历史路线明确标注和隔离，如 OpenIM、旧 notification、Check-in v1、旧 Web 主线。
 6. 不做一次性大爆炸重构，而是按阶段渐进迁移。
 7. 每一阶段都可验证、可回滚、可继续开发。
+8. 使用 checkbox 跟踪大步骤和小步骤，任何阶段都能知道当前进度。
+9. 使用独立 tracker / log 文档记录需求、进度、开发路径、风险和变更日志。
+10. 改造过程始终围绕核心路线，避免新增外扩需求导致路线漂移。
+11. 任何数据库结构变更、数据迁移、批量回填、清理动作前，必须先备份已有数据并验证备份可用。
+12. iOS 编译验证复用固定 xcodebuild DerivedData 路径，默认不清理 `/tmp/raver-xcodebuild-derived`，避免每轮都触发全量编译；其他一次性过程文件仍及时清理。
 
 ### 0.3 本次不做什么
 
@@ -96,6 +101,89 @@
 ### 1.5 渐进式迁移
 
 每次只迁移一个领域或一个边界，保留旧入口代理到新模块，验证后再删除旧入口。
+
+### 1.6 可跟踪执行
+
+本方案只定义蓝图；实际执行进度统一记录在：
+
+```text
+docs/RAVER_COMMERCIAL_ARCHITECTURE_RESTRUCTURE_TRACKER.md
+```
+
+执行规则：
+
+- 每个 Phase 必须拆成 checkbox。
+- 每个 checkbox 完成后更新 tracker。
+- 每次实际改代码或改数据前，在 tracker 的 log 区记录目的、范围、风险和验证方式。
+- 每次完成后记录结果、验证命令和后续动作。
+
+### 1.7 核心路线防漂移
+
+重构过程中只允许处理以下核心路线：
+
+- 后端模块化收束
+- iOS feature / repository 收束
+- 数据库领域分组和访问边界
+- API 分区和 legacy 隔离
+- IM 当前主线确认
+- Notification / Check-in / Share / VirtualAsset 等已存在核心能力的结构化迁移
+- Web/Admin 作为运营台的结构收束
+
+以下需求默认不进入本次改造，除非单独确认：
+
+- 新产品功能
+- 新推荐算法
+- 新商业化玩法
+- 新 UI 大改版
+- 新第三方平台接入
+- 微服务拆分
+- 大规模数据库表重命名
+- 与架构收束无关的性能优化
+
+新增需求判断规则：
+
+1. 是否直接服务当前阶段的架构收束目标。
+2. 是否会扩大当前阶段的验证范围。
+3. 是否会影响数据库、IM、通知、登录等核心链路稳定性。
+4. 是否可以放入 backlog，而不是阻塞当前 Phase。
+
+如果答案不明确，先记录到 tracker 的 `Backlog / Deferred`，不进入当前执行。
+
+### 1.8 数据库备份门禁
+
+在进行以下任何动作之前，必须先做数据备份：
+
+- Prisma migration
+- 手写 SQL 修改结构
+- 批量 update / delete / insert
+- backfill
+- reproject apply
+- snapshot rebuild
+- 数据清洗
+- 删除 legacy 表或字段
+
+最低备份要求：
+
+```bash
+pg_dump "$DATABASE_URL" --format=custom --file backups/raver_$(date +%Y%m%d_%H%M%S).dump
+```
+
+执行前必须在 tracker 中记录：
+
+- 备份文件路径
+- 备份时间
+- 目标数据库环境
+- 操作人
+- 本次数据动作范围
+- 回滚方式
+
+备份完成后必须至少做一个验证：
+
+- 确认备份文件存在且大小合理
+- 在临时库执行 restore smoke test
+- 或至少执行 `pg_restore --list <dump-file>` 验证 dump 可读
+
+没有备份记录，不进入数据库改造阶段。
 
 ---
 
@@ -800,23 +888,29 @@ Accepted / Deprecated / Superseded
 
 ## 9. 分阶段执行计划
 
+实际进度以 tracker 为准；本节是执行蓝图。每个 Phase 都必须在 tracker 中使用 checkbox 记录大步骤和小步骤。
+
 ### Phase 0：架构冻结与命名对齐
 
 目标：先定规则，不动大代码。
 
 任务：
 
-- 确认本文档作为架构整理蓝图。
-- 新增 docs 入口和 ADR 目录。
-- 更新 README 中过时口径。
-- 列出 legacy 清单。
-- 建立后端 module ownership 表。
-- 建立 iOS repository 命名规范。
+- [ ] 确认本文档作为架构整理蓝图。
+- [ ] 新增 tracker / log 文档并开始记录。
+- [ ] 新增 docs 入口和 ADR 目录。
+- [ ] 更新 README 中过时口径。
+- [ ] 列出 legacy 清单。
+- [ ] 建立后端 module ownership 表。
+- [ ] 建立 iOS repository 命名规范。
+- [ ] 建立数据库备份门禁规则。
+- [ ] 建立新增需求防漂移规则。
 
 验收：
 
-- 新人能通过 docs README 找到当前主线。
-- 每个核心领域都有 owner、核心表、核心 API、核心 service 说明。
+- [ ] 新人能通过 docs README 找到当前主线。
+- [ ] 每个核心领域都有 owner、核心表、核心 API、核心 service 说明。
+- [ ] tracker 中能看到当前阶段进度、日志、风险和 deferred backlog。
 
 ### Phase 1：后端模块骨架
 
@@ -824,18 +918,20 @@ Accepted / Deprecated / Superseded
 
 任务：
 
-- 新增 `server/src/modules/`。
-- 新增 `server/src/shared/`。
-- 新增 `server/src/infrastructure/`。
-- 新增 `server/src/jobs/`。
-- 将 `notification-center` 作为第一个模块迁移试点。
-- 旧 routes 继续保留，但调用新 module service。
+- [ ] 新增 `server/src/modules/`。
+- [ ] 新增 `server/src/shared/`。
+- [ ] 新增 `server/src/infrastructure/`。
+- [ ] 新增 `server/src/jobs/`。
+- [ ] 将 `notification-center` 作为第一个模块迁移试点。
+- [ ] 旧 routes 继续保留，但调用新 module service。
+- [ ] 更新 tracker log，记录迁移范围和验证方式。
 
 验收：
 
-- 通知中心 API 行为不变。
-- notification worker 仍可运行。
-- 新模块结构被验证可用。
+- [ ] 通知中心 API 行为不变。
+- [ ] notification worker 仍可运行。
+- [ ] 新模块结构被验证可用。
+- [ ] 没有引入新产品功能或额外需求。
 
 ### Phase 2：Check-in 和 Share 收束
 
@@ -843,16 +939,19 @@ Accepted / Deprecated / Superseded
 
 任务：
 
-- 迁移 `checkins` module。
-- 将 projection worker 放入 `jobs/checkin-projection/`。
-- 迁移 `share` module。
-- 明确 v2 projection read model ownership。
+- [ ] 执行数据库备份并验证备份可读。
+- [ ] 在 tracker 记录备份文件、数据库环境和回滚方式。
+- [ ] 迁移 `checkins` module。
+- [ ] 将 projection worker 放入 `jobs/checkin-projection/`。
+- [ ] 迁移 `share` module。
+- [ ] 明确 v2 projection read model ownership。
 
 验收：
 
-- `checkins:projection:freshness` 正常。
-- `checkins:projection:run` 正常。
-- share link smoke 正常。
+- [ ] `checkins:projection:freshness` 正常。
+- [ ] `checkins:projection:run` 正常。
+- [ ] share link smoke 正常。
+- [ ] 若执行过 reproject / rebuild / backfill，tracker 中有备份记录和结果记录。
 
 ### Phase 3：iOS Repository 层收束
 
@@ -860,16 +959,18 @@ Accepted / Deprecated / Superseded
 
 任务：
 
-- 建立 `Modules/*/Repositories/`。
-- 从 Notifications、VirtualAssets、Share 开始迁移。
-- 为 Event、DJ、Set、Feed、Squad 定义 repository protocol。
-- `SocialService` 和 `WebFeatureService` 暂时降级为底层 API client。
+- [ ] 建立 `Modules/*/Repositories/`。
+- [ ] 从 Notifications、VirtualAssets、Share 开始迁移。
+- [ ] 为 Event、DJ、Set、Feed、Squad 定义 repository protocol。
+- [ ] `SocialService` 和 `WebFeatureService` 暂时降级为底层 API client。
+- [ ] 更新 tracker log，记录每个迁移模块的 ViewModel 调整范围。
 
 验收：
 
-- 新 ViewModel 依赖 Repository protocol。
-- 旧 service 调用逐步减少。
-- 单个模块可 mock repository 做预览和测试。
+- [ ] 新 ViewModel 依赖 Repository protocol。
+- [ ] 旧 service 调用逐步减少。
+- [ ] 单个模块可 mock repository 做预览和测试。
+- [ ] iOS 编译通过。
 
 ### Phase 4：IM 和 Squad 收束
 
@@ -877,18 +978,20 @@ Accepted / Deprecated / Superseded
 
 任务：
 
-- 后端 `im` module 收拢 Tencent IM integration。
-- OpenIM 相关模型和服务标记为 legacy / migration。
-- iOS `Infrastructure/TencentIM/` 收拢 SDK 会话、store、media resolver。
-- `Messages` module 保留 UIKitChat，但收束 custom card、repository、route target。
-- Squad offline activity 与 IM group sync 分清边界。
+- [ ] 后端 `im` module 收拢 Tencent IM integration。
+- [ ] OpenIM 相关模型和服务标记为 legacy / migration。
+- [ ] iOS `Infrastructure/TencentIM/` 收拢 SDK 会话、store、media resolver。
+- [ ] `Messages` module 保留 UIKitChat，但收束 custom card、repository、route target。
+- [ ] Squad offline activity 与 IM group sync 分清边界。
+- [ ] 若涉及 IM 数据迁移或同步 job apply，先执行数据库备份并记录。
 
 验收：
 
-- IM bootstrap 正常。
-- 会话列表正常。
-- 群组同步路径清楚。
-- OpenIM 文件不再被误认为当前主线。
+- [ ] IM bootstrap 正常。
+- [ ] 会话列表正常。
+- [ ] 群组同步路径清楚。
+- [ ] OpenIM 文件不再被误认为当前主线。
+- [ ] 没有把 OpenIM 历史方案继续扩展为新主线。
 
 ### Phase 5：Feed / Events / Music 大领域收束
 
@@ -896,17 +999,19 @@ Accepted / Deprecated / Superseded
 
 任务：
 
-- 迁移 `feed` module。
-- 将 `FeedEvent`、Post interactions 和 comment tree 收束。
-- 迁移 `events` module。
-- 迁移 `music` module。
-- iOS Discover 拆分 Events / DJs / Sets / Wiki。
+- [ ] 迁移 `feed` module。
+- [ ] 将 `FeedEvent`、Post interactions 和 comment tree 收束。
+- [ ] 迁移 `events` module。
+- [ ] 迁移 `music` module。
+- [ ] iOS Discover 拆分 Events / DJs / Sets / Wiki。
+- [ ] 若涉及数据回填、索引调整或 schema migration，先执行数据库备份并记录。
 
 验收：
 
-- Feed 发布、点赞、收藏、评论正常。
-- 活动详情、DJ 详情、Set 详情正常。
-- Discover 内部领域边界清楚。
+- [ ] Feed 发布、点赞、收藏、评论正常。
+- [ ] 活动详情、DJ 详情、Set 详情正常。
+- [ ] Discover 内部领域边界清楚。
+- [ ] 没有顺手加入推荐算法、内容商业化等外扩需求。
 
 ### Phase 6：Admin / Operations 商用化
 
@@ -914,17 +1019,19 @@ Accepted / Deprecated / Superseded
 
 任务：
 
-- Admin API 统一到 `/api/admin/v1`。
-- 补后台 RBAC。
-- 补 AdminAuditLog。
-- 建立运营看板入口。
-- 接入 notification、pre-registration、projection、IM moderation。
+- [ ] Admin API 统一到 `/api/admin/v1`。
+- [ ] 补后台 RBAC。
+- [ ] 补 AdminAuditLog。
+- [ ] 建立运营看板入口。
+- [ ] 接入 notification、pre-registration、projection、IM moderation。
+- [ ] 若涉及运营数据迁移或批量修复，先执行数据库备份并记录。
 
 验收：
 
-- 后台敏感操作有权限和审计。
-- 运营入口不再散落。
-- 能查关键 worker / projection / notification 状态。
+- [ ] 后台敏感操作有权限和审计。
+- [ ] 运营入口不再散落。
+- [ ] 能查关键 worker / projection / notification 状态。
+- [ ] Admin 改造没有改变 App 核心用户链路。
 
 ---
 

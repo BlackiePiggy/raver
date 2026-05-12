@@ -226,13 +226,19 @@ protocol DiscoverWikiRepository {
         brandID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse
+    func fetchFollowedBrandUpdatePreference() async throws -> FollowedBrandUpdatePreference
+    func updateFollowedBrandUpdatePreference(
+        _ input: FollowedBrandUpdatePreferenceInput
+    ) async throws -> FollowedBrandUpdatePreference
 }
 
 struct DiscoverWikiRepositoryAdapter: DiscoverWikiRepository {
     private let service: WebFeatureService
+    private let socialService: SocialService
 
-    init(service: WebFeatureService) {
+    init(service: WebFeatureService, socialService: SocialService) {
         self.service = service
+        self.socialService = socialService
     }
 
     func fetchLearnGenres() async throws -> [LearnGenreNode] {
@@ -285,5 +291,15 @@ struct DiscoverWikiRepositoryAdapter: DiscoverWikiRepository {
             brandID: brandID,
             usage: usage
         )
+    }
+
+    func fetchFollowedBrandUpdatePreference() async throws -> FollowedBrandUpdatePreference {
+        try await socialService.fetchFollowedBrandUpdatePreference()
+    }
+
+    func updateFollowedBrandUpdatePreference(
+        _ input: FollowedBrandUpdatePreferenceInput
+    ) async throws -> FollowedBrandUpdatePreference {
+        try await socialService.updateFollowedBrandUpdatePreference(input)
     }
 }

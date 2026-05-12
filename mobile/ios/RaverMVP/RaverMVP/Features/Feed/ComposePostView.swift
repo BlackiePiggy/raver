@@ -19,8 +19,7 @@ struct ComposePostEventTag: Hashable {
 
 struct ComposePostView: View {
     @Environment(\.dismiss) private var dismiss
-    private let service: SocialService
-    private let webService: WebFeatureService
+    private let repository: CircleFeedRepository
     private let maxContentLength = 500
     private let maxMediaCount = 9
     private let mode: ComposePostMode
@@ -44,16 +43,14 @@ struct ComposePostView: View {
     @State private var showLocationPicker = false
 
     init(
-        service: SocialService,
-        webService: WebFeatureService,
+        repository: CircleFeedRepository,
         mode: ComposePostMode = .create,
         initialEventTag: ComposePostEventTag? = nil,
         onPostCreated: ((Post) -> Void)? = nil,
         onPostUpdated: ((Post) -> Void)? = nil,
         onPostDeleted: ((String) -> Void)? = nil
     ) {
-        self.service = service
-        self.webService = webService
+        self.repository = repository
         self.mode = mode
         self.initialEventTag = initialEventTag
         self.onPostCreated = onPostCreated
@@ -327,7 +324,7 @@ struct ComposePostView: View {
 
         do {
             if let editingPost {
-                let updated = try await service.updatePost(
+                let updated = try await repository.updatePost(
                     postID: editingPost.id,
                     input: UpdatePostInput(
                         content: trimmedText,
@@ -337,7 +334,7 @@ struct ComposePostView: View {
                 )
                 onPostUpdated?(updated)
             } else {
-                let created = try await service.createPost(
+                let created = try await repository.createPost(
                     input: CreatePostInput(
                         content: trimmedText,
                         images: normalizedMediaURLs,
@@ -362,7 +359,7 @@ struct ComposePostView: View {
         defer { isDeleting = false }
 
         do {
-            try await service.deletePost(postID: editingPost.id)
+            try await repository.deletePost(postID: editingPost.id)
             onPostDeleted?(editingPost.id)
             dismiss()
         } catch {
@@ -391,14 +388,14 @@ struct ComposePostView: View {
                 if let contentType, contentType.conforms(to: .movie) {
                     let ext = contentType.preferredFilenameExtension ?? "mp4"
                     let mime = contentType.preferredMIMEType ?? "video/mp4"
-                    let upload = try await webService.uploadPostVideo(
+                    let upload = try await repository.uploadPostVideo(
                         videoData: data,
                         fileName: "post-video-\(UUID().uuidString).\(ext)",
                         mimeType: mime
                     )
                     mediaEntries.append(ComposeMediaEntry(url: upload.url))
                 } else {
-                    let upload = try await webService.uploadPostImage(
+                    let upload = try await repository.uploadPostImage(
                         imageData: normalizedImageData(from: data),
                         fileName: "post-image-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg"

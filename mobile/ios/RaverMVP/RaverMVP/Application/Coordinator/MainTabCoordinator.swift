@@ -425,8 +425,7 @@ struct MainTabCoordinatorView: View {
 
             case .postCreate:
                 ComposePostView(
-                    service: appContainer.socialService,
-                    webService: appContainer.webService,
+                    repository: appContainer.circleFeedRepository,
                     mode: .create,
                     onPostCreated: { created in
                         NotificationCenter.default.post(name: .circlePostDidCreate, object: created)
@@ -435,8 +434,7 @@ struct MainTabCoordinatorView: View {
 
             case let .eventPostCreate(eventID, eventName):
                 ComposePostView(
-                    service: appContainer.socialService,
-                    webService: appContainer.webService,
+                    repository: appContainer.circleFeedRepository,
                     mode: .create,
                     initialEventTag: ComposePostEventTag(id: eventID, name: eventName),
                     onPostCreated: { created in
@@ -447,8 +445,7 @@ struct MainTabCoordinatorView: View {
             case let .postEdit(postID):
                 CirclePostEditorLoaderView(
                     postID: postID,
-                    service: appContainer.socialService,
-                    webService: appContainer.webService,
+                    repository: appContainer.circleFeedRepository
                 )
 
             case .idCreate:
@@ -532,13 +529,11 @@ struct MainTabCoordinatorView: View {
                 MovieBannerEditorView()
             case .myPublishes:
                 MyPublishesView(
-                    service: appContainer.webService,
-                    socialService: appContainer.socialService
+                    repository: appContainer.profileSocialRepository
                 )
             case .mySaves:
                 MySavesView(
-                    repository: appContainer.profileSocialRepository,
-                    webService: appContainer.webService
+                    repository: appContainer.profileSocialRepository
                 )
             case .myRoutes:
                 MyRoutesView()
@@ -613,7 +608,7 @@ struct MainTabCoordinatorView: View {
         case let .postDetail(postID):
             PostDetailLoaderView(
                 postID: postID,
-                service: appContainer.socialService,
+                repository: appContainer.circleFeedRepository,
                 virtualAssetRepository: appContainer.virtualAssetRepository
             )
                 .environmentObject(appState)
@@ -682,7 +677,8 @@ struct MainTabCoordinatorView: View {
         case .squadProfile(let squadID):
             SquadProfileView(
                 squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
-                service: appContainer.socialService
+                service: appContainer.socialService,
+                repository: appContainer.squadProfileRepository
             )
                 .environmentObject(appState)
 
@@ -735,7 +731,7 @@ struct MainTabCoordinatorView: View {
                 GlobalSearchResultsPlaceholderView(
                     query: query,
                     initialTab: initialTab,
-                    service: appContainer.webService
+                    repository: appContainer.globalSearchRepository
                 )
             } else {
                 GlobalSearchLoginRequiredView()
@@ -750,7 +746,8 @@ struct MainTabCoordinatorView: View {
             NavigationStack {
                 SquadProfileView(
                     squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
-                    service: appContainer.socialService
+                    service: appContainer.socialService,
+                    repository: appContainer.squadProfileRepository
                 )
                     .environmentObject(appState)
             }
@@ -1542,7 +1539,7 @@ private struct ConversationLoaderView: View {
 
 private struct PostDetailLoaderView: View {
     let postID: String
-    let service: SocialService
+    let repository: CircleFeedRepository
     let virtualAssetRepository: VirtualAssetRepository
 
     @State private var post: Post?
@@ -1564,7 +1561,7 @@ private struct PostDetailLoaderView: View {
             if let post {
                 PostDetailView(
                     post: post,
-                    service: service,
+                    repository: repository,
                     virtualAssetRepository: virtualAssetRepository
                 )
             } else {
@@ -1583,7 +1580,7 @@ private struct PostDetailLoaderView: View {
         phase = .initialLoading
         defer { isLoading = false }
         do {
-            post = try await service.fetchPost(postID: postID)
+            post = try await repository.fetchPost(postID: postID)
             phase = post == nil ? .empty : .success
         } catch {
             phase = .failure(
@@ -1595,8 +1592,7 @@ private struct PostDetailLoaderView: View {
 
 private struct CirclePostEditorLoaderView: View {
     let postID: String
-    let service: SocialService
-    let webService: WebFeatureService
+    let repository: CircleFeedRepository
 
     @State private var post: Post?
     @State private var phase: LoadPhase = .idle
@@ -1616,8 +1612,7 @@ private struct CirclePostEditorLoaderView: View {
         ) {
             if let post {
                 ComposePostView(
-                    service: service,
-                    webService: webService,
+                    repository: repository,
                     mode: .edit(post),
                     onPostUpdated: { updated in
                         NotificationCenter.default.post(name: .circlePostDidUpdate, object: updated)
@@ -1642,7 +1637,7 @@ private struct CirclePostEditorLoaderView: View {
         phase = .initialLoading
         defer { isLoading = false }
         do {
-            post = try await service.fetchPost(postID: postID)
+            post = try await repository.fetchPost(postID: postID)
             phase = post == nil ? .empty : .success
         } catch {
             phase = .failure(

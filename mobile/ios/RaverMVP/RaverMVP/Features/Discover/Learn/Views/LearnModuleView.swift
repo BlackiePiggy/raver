@@ -1869,8 +1869,8 @@ struct LearnLabelDetailView: View {
     }
 
     private func loadSharePanelConversations() async throws -> [Conversation] {
-        async let directs = appContainer.socialService.fetchConversations(type: .direct)
-        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        async let directs = appContainer.shareMessageRepository.fetchConversations(type: .direct)
+        async let groups = appContainer.shareMessageRepository.fetchConversations(type: .group)
         let merged = try await directs + groups
         let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
             partialResult[conversation.id] = conversation
@@ -1886,14 +1886,14 @@ struct LearnLabelDetailView: View {
         to conversation: Conversation,
         note: String?
     ) async throws {
-        _ = try await appContainer.socialService.sendLabelCardMessage(
+        _ = try await appContainer.shareMessageRepository.sendLabelCardMessage(
             conversationID: conversation.id,
             payload: payload
         )
 
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmedNote.isEmpty {
-            _ = try await appContainer.socialService.sendMessage(
+            _ = try await appContainer.shareMessageRepository.sendMessage(
                 conversationID: conversation.id,
                 content: trimmedNote
             )
@@ -3001,7 +3001,7 @@ struct LearnFestivalDetailView: View {
         defer { isLoadingFollowedBrandPreference = false }
 
         do {
-            followedBrandUpdatePreference = try await appContainer.socialService.fetchFollowedBrandUpdatePreference()
+            followedBrandUpdatePreference = try await wikiRepository.fetchFollowedBrandUpdatePreference()
         } catch {
             followedBrandUpdatePreference = .empty
         }
@@ -3023,7 +3023,7 @@ struct LearnFestivalDetailView: View {
             if isLoadingFollowedBrandPreference {
                 currentPreference = followedBrandUpdatePreference
             } else if followedBrandUpdatePreference == .empty {
-                currentPreference = try await appContainer.socialService.fetchFollowedBrandUpdatePreference()
+                currentPreference = try await wikiRepository.fetchFollowedBrandUpdatePreference()
             } else {
                 currentPreference = followedBrandUpdatePreference
             }
@@ -3040,7 +3040,7 @@ struct LearnFestivalDetailView: View {
             ) as? [String] ?? watchedBrandIDs
 
             let shouldEnable = normalizedBrandIDs.contains(currentFestival.id) ? true : currentPreference.enabled
-            followedBrandUpdatePreference = try await appContainer.socialService.updateFollowedBrandUpdatePreference(
+            followedBrandUpdatePreference = try await wikiRepository.updateFollowedBrandUpdatePreference(
                 FollowedBrandUpdatePreferenceInput(
                     enabled: shouldEnable,
                     reminderHours: nil,
@@ -3116,8 +3116,8 @@ struct LearnFestivalDetailView: View {
     }
 
     private func loadSharePanelConversations() async throws -> [Conversation] {
-        async let directs = appContainer.socialService.fetchConversations(type: .direct)
-        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        async let directs = appContainer.shareMessageRepository.fetchConversations(type: .direct)
+        async let groups = appContainer.shareMessageRepository.fetchConversations(type: .group)
         let merged = try await directs + groups
         let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
             partialResult[conversation.id] = conversation
@@ -3133,14 +3133,14 @@ struct LearnFestivalDetailView: View {
         to conversation: Conversation,
         note: String?
     ) async throws {
-        _ = try await appContainer.socialService.sendBrandCardMessage(
+        _ = try await appContainer.shareMessageRepository.sendBrandCardMessage(
             conversationID: conversation.id,
             payload: payload
         )
 
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmedNote.isEmpty {
-            _ = try await appContainer.socialService.sendMessage(
+            _ = try await appContainer.shareMessageRepository.sendMessage(
                 conversationID: conversation.id,
                 content: trimmedNote
             )
@@ -5361,8 +5361,8 @@ struct RankingBoardDetailView: View {
     }
 
     private func loadSharePanelConversations() async throws -> [Conversation] {
-        async let directs = appContainer.socialService.fetchConversations(type: .direct)
-        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        async let directs = appContainer.shareMessageRepository.fetchConversations(type: .direct)
+        async let groups = appContainer.shareMessageRepository.fetchConversations(type: .group)
         let merged = try await directs + groups
         let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
             partialResult[conversation.id] = conversation
@@ -5378,14 +5378,14 @@ struct RankingBoardDetailView: View {
         to conversation: Conversation,
         note: String?
     ) async throws {
-        _ = try await appContainer.socialService.sendRankingBoardCardMessage(
+        _ = try await appContainer.shareMessageRepository.sendRankingBoardCardMessage(
             conversationID: conversation.id,
             payload: payload
         )
 
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmedNote.isEmpty {
-            _ = try await appContainer.socialService.sendMessage(
+            _ = try await appContainer.shareMessageRepository.sendMessage(
                 conversationID: conversation.id,
                 content: trimmedNote
             )

@@ -33,7 +33,7 @@ import {
   startNotificationFollowedDJUpdateScheduler,
   startNotificationFollowedBrandUpdateScheduler,
   startNotificationOutboxWorker,
-} from './services/notification-center';
+} from './modules/notifications';
 
 const app: Express = express();
 const port = process.env.PORT || 3901;

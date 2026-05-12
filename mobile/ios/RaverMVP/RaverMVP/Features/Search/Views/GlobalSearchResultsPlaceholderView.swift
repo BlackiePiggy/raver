@@ -10,10 +10,10 @@ struct GlobalSearchResultsView: View {
     @State private var searchText: String
     @FocusState private var isSearchFocused: Bool
 
-    init(query: String, initialTab: GlobalSearchTab? = nil, service: WebFeatureService) {
+    init(query: String, initialTab: GlobalSearchTab? = nil, repository: GlobalSearchRepository) {
         self.query = query
         self.initialTab = initialTab
-        _viewModel = StateObject(wrappedValue: GlobalSearchResultsViewModel(query: query, service: service))
+        _viewModel = StateObject(wrappedValue: GlobalSearchResultsViewModel(query: query, repository: repository))
         _searchText = State(initialValue: query)
         _selectedTab = State(initialValue: initialTab ?? .all)
     }

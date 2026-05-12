@@ -26,15 +26,37 @@ final class AppContainer: ObservableObject {
     }
 
     var discoverWikiRepository: DiscoverWikiRepository {
-        DiscoverWikiRepositoryAdapter(service: webService)
+        DiscoverWikiRepositoryAdapter(
+            service: webService,
+            socialService: socialService
+        )
     }
 
     var messagesRepository: MessagesRepository {
         MessagesRepositoryAdapter(service: socialService)
     }
 
+    var notificationRepository: NotificationRepository {
+        NotificationRepositoryAdapter(service: socialService)
+    }
+
+    var shareMessageRepository: ShareMessageRepository {
+        ShareMessageRepositoryAdapter(service: socialService)
+    }
+
     var circleFeedRepository: CircleFeedRepository {
-        CircleFeedRepositoryAdapter(service: socialService)
+        CircleFeedRepositoryAdapter(
+            socialService: socialService,
+            webService: webService
+        )
+    }
+
+    var globalSearchRepository: GlobalSearchRepository {
+        GlobalSearchRepositoryAdapter(service: webService)
+    }
+
+    var squadProfileRepository: SquadProfileRepository {
+        SquadProfileRepositoryAdapter(service: socialService)
     }
 
     var profileSocialRepository: ProfileSocialRepository {

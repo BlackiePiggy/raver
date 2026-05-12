@@ -5,7 +5,7 @@ struct NotificationsView: View {
 
     var body: some View {
         NotificationsScreen(
-            viewModel: NotificationsViewModel(service: appContainer.socialService),
+            viewModel: NotificationsViewModel(repository: appContainer.notificationRepository),
             appearanceResolver: VirtualAssetListAppearanceResolver(
                 repository: appContainer.virtualAssetRepository,
                 surface: "notifications"

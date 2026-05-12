@@ -83,8 +83,7 @@ struct CircleCoordinatorView<Content: View>: View {
             )
         case .postCreate:
             ComposePostView(
-                service: appContainer.socialService,
-                webService: appContainer.webService,
+                repository: appContainer.circleFeedRepository,
                 mode: .create,
                 onPostCreated: { created in
                     NotificationCenter.default.post(name: .circlePostDidCreate, object: created)
@@ -92,8 +91,7 @@ struct CircleCoordinatorView<Content: View>: View {
             )
         case let .eventPostCreate(eventID, eventName):
             ComposePostView(
-                service: appContainer.socialService,
-                webService: appContainer.webService,
+                repository: appContainer.circleFeedRepository,
                 mode: .create,
                 initialEventTag: ComposePostEventTag(id: eventID, name: eventName),
                 onPostCreated: { created in
@@ -103,8 +101,7 @@ struct CircleCoordinatorView<Content: View>: View {
         case let .postEdit(postID):
             CirclePostEditorLoaderView(
                 postID: postID,
-                service: appContainer.socialService,
-                webService: appContainer.webService
+                repository: appContainer.circleFeedRepository
             )
         case .idCreate:
             CircleIDComposerSheet { entry in
@@ -190,8 +187,7 @@ private struct CircleRouteLoaderScaffold<Content: View>: View {
 
 private struct CirclePostEditorLoaderView: View {
     let postID: String
-    let service: SocialService
-    let webService: WebFeatureService
+    let repository: CircleFeedRepository
 
     @State private var post: Post?
     @State private var phase: LoadPhase = .idle
@@ -211,8 +207,7 @@ private struct CirclePostEditorLoaderView: View {
         ) {
             if let post {
                 ComposePostView(
-                    service: service,
-                    webService: webService,
+                    repository: repository,
                     mode: .edit(post),
                     onPostUpdated: { updated in
                         NotificationCenter.default.post(name: .circlePostDidUpdate, object: updated)
@@ -237,7 +232,7 @@ private struct CirclePostEditorLoaderView: View {
         phase = .initialLoading
         defer { isLoading = false }
         do {
-            post = try await service.fetchPost(postID: postID)
+            post = try await repository.fetchPost(postID: postID)
             phase = post == nil ? .empty : .success
         } catch {
             phase = .failure(

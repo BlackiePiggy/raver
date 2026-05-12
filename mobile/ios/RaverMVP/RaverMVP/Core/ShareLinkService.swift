@@ -426,7 +426,15 @@ struct ShareResolvedResult: Hashable {
 }
 
 struct ShareLinkCoordinator {
-    let service: ShareLinkService
+    let repository: ShareLinkRepository
+
+    init(repository: ShareLinkRepository) {
+        self.repository = repository
+    }
+
+    init(service: ShareLinkService) {
+        self.init(repository: ShareLinkRepositoryAdapter(service: service))
+    }
 
     func resolveLink(
         target: ShareTarget,
@@ -437,7 +445,7 @@ struct ShareLinkCoordinator {
         maxUses: Int? = nil
     ) async throws -> ShareResolvedResult {
         do {
-            let payload = try await service.resolve(
+            let payload = try await repository.resolve(
                 target: target,
                 channel: channel,
                 campaign: campaign,
@@ -463,7 +471,7 @@ struct ShareLinkCoordinator {
         maxUses: Int? = nil
     ) async throws -> ShareCopyResult {
         do {
-            let payload = try await service.resolve(
+            let payload = try await repository.resolve(
                 target: target,
                 channel: channel,
                 campaign: campaign,
@@ -476,7 +484,7 @@ struct ShareLinkCoordinator {
                 UIPasteboard.general.string = payload.shortURL
             }
 
-            try? await service.recordEvent(
+            try? await repository.recordEvent(
                 code: payload.code,
                 eventType: "copy",
                 channel: channel,

@@ -10,7 +10,7 @@ import {
   getRawShareLinkByCode,
   recordShareLinkEvent,
   ShareLinkError,
-} from '../services/share-link.service';
+} from '../modules/share';
 
 const router: Router = Router();
 const prisma = new PrismaClient();

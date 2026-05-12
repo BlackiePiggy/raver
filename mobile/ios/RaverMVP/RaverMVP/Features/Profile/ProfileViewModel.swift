@@ -9,6 +9,10 @@ protocol ProfileSocialRepository {
     func fetchMyRepostHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage
+    func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage
+    func fetchEvent(id: String) async throws -> WebEvent
+    func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage
+    func fetchMyPublishes() async throws -> MyPublishes
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post
     func toggleSave(postID: String, shouldSave: Bool) async throws -> Post
@@ -18,6 +22,10 @@ protocol ProfileSocialRepository {
     func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary
     func uploadMyAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> AvatarUploadResponse
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile
+    func deleteDJSet(id: String) async throws
+    func deleteEvent(id: String) async throws
+    func deleteRatingEvent(id: String) async throws
+    func deleteRatingUnit(id: String) async throws
 }
 
 struct ProfileSocialRepositoryAdapter: ProfileSocialRepository {
@@ -60,6 +68,22 @@ struct ProfileSocialRepositoryAdapter: ProfileSocialRepository {
         try await webService.fetchUserCheckins(userID: userID, page: page, limit: limit, type: type)
     }
 
+    func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
+        try await webService.fetchMyCheckins(page: page, limit: limit, type: type)
+    }
+
+    func fetchEvent(id: String) async throws -> WebEvent {
+        try await webService.fetchEvent(id: id)
+    }
+
+    func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage {
+        try await webService.fetchFollowedDJs(page: page, limit: limit)
+    }
+
+    func fetchMyPublishes() async throws -> MyPublishes {
+        try await webService.fetchMyPublishes()
+    }
+
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post {
         try await socialService.toggleLike(postID: postID, shouldLike: shouldLike)
     }
@@ -94,6 +118,22 @@ struct ProfileSocialRepositoryAdapter: ProfileSocialRepository {
 
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile {
         try await socialService.updateMyProfile(input: input)
+    }
+
+    func deleteDJSet(id: String) async throws {
+        try await webService.deleteDJSet(id: id)
+    }
+
+    func deleteEvent(id: String) async throws {
+        try await webService.deleteEvent(id: id)
+    }
+
+    func deleteRatingEvent(id: String) async throws {
+        try await webService.deleteRatingEvent(id: id)
+    }
+
+    func deleteRatingUnit(id: String) async throws {
+        try await webService.deleteRatingUnit(id: id)
     }
 }
 

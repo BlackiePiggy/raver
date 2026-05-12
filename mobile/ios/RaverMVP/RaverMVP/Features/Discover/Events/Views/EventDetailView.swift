@@ -1238,7 +1238,9 @@ struct EventDetailView: View {
     @EnvironmentObject private var appContainer: AppContainer
 
     private var eventsRepository: DiscoverEventsRepository { appContainer.discoverEventsRepository }
+    private var feedRepository: CircleFeedRepository { appContainer.circleFeedRepository }
     private var newsRepository: DiscoverNewsRepository { appContainer.discoverNewsRepository }
+    private var shareMessageRepository: ShareMessageRepository { appContainer.shareMessageRepository }
     private var shareLinkCoordinator: ShareLinkCoordinator { ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService()) }
 
     let eventID: String
@@ -2496,7 +2498,7 @@ struct EventDetailView: View {
         defer { isLoadingEventDiscussion = false }
 
         do {
-            let page = try await appContainer.socialService.fetchFeed(cursor: nil, mode: .latest, eventID: eventID)
+            let page = try await feedRepository.fetchFeed(cursor: nil, mode: .latest, eventID: eventID)
             eventDiscussionPosts = page.posts
             eventDiscussionNextCursor = page.nextCursor
             eventDiscussionPhase = page.posts.isEmpty ? .empty : .success
@@ -2512,7 +2514,7 @@ struct EventDetailView: View {
         defer { isLoadingEventDiscussion = false }
 
         do {
-            let page = try await appContainer.socialService.fetchFeed(cursor: cursor, mode: .latest, eventID: eventID)
+            let page = try await feedRepository.fetchFeed(cursor: cursor, mode: .latest, eventID: eventID)
             let existing = Set(eventDiscussionPosts.map(\.id))
             eventDiscussionPosts.append(contentsOf: page.posts.filter { !existing.contains($0.id) })
             eventDiscussionNextCursor = page.nextCursor
@@ -2538,7 +2540,7 @@ struct EventDetailView: View {
     @MainActor
     private func toggleEventDiscussionLike(post: Post) async {
         do {
-            let updated = try await appContainer.socialService.toggleLike(postID: post.id, shouldLike: !post.isLiked)
+            let updated = try await feedRepository.toggleLike(postID: post.id, shouldLike: !post.isLiked)
             replaceEventDiscussionPost(updated)
         } catch {
             errorMessage = error.userFacingMessage
@@ -2548,7 +2550,7 @@ struct EventDetailView: View {
     @MainActor
     private func toggleEventDiscussionRepost(post: Post) async {
         do {
-            let updated = try await appContainer.socialService.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
+            let updated = try await feedRepository.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
             replaceEventDiscussionPost(updated)
         } catch {
             errorMessage = error.userFacingMessage
@@ -2558,7 +2560,7 @@ struct EventDetailView: View {
     @MainActor
     private func toggleEventDiscussionSave(post: Post) async {
         do {
-            let updated = try await appContainer.socialService.toggleSave(postID: post.id, shouldSave: !post.isSaved)
+            let updated = try await feedRepository.toggleSave(postID: post.id, shouldSave: !post.isSaved)
             replaceEventDiscussionPost(updated)
         } catch {
             errorMessage = error.userFacingMessage
@@ -3362,8 +3364,8 @@ struct EventDetailView: View {
     }
 
     private func loadSharePanelConversations() async throws -> [Conversation] {
-        async let directs = appContainer.socialService.fetchConversations(type: .direct)
-        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        async let directs = shareMessageRepository.fetchConversations(type: .direct)
+        async let groups = shareMessageRepository.fetchConversations(type: .group)
         let merged = try await directs + groups
         let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
             partialResult[conversation.id] = conversation
@@ -3379,14 +3381,14 @@ struct EventDetailView: View {
         to conversation: Conversation,
         note: String?
     ) async throws {
-        _ = try await appContainer.socialService.sendEventCardMessage(
+        _ = try await shareMessageRepository.sendEventCardMessage(
             conversationID: conversation.id,
             payload: payload
         )
 
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmedNote.isEmpty {
-            _ = try await appContainer.socialService.sendMessage(
+            _ = try await shareMessageRepository.sendMessage(
                 conversationID: conversation.id,
                 content: trimmedNote
             )
@@ -6003,6 +6005,7 @@ private struct EventRoutePlannerView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @EnvironmentObject private var appState: AppState
     @ObservedObject private var routeStore = EventRouteStore.shared
+    private var shareMessageRepository: ShareMessageRepository { appContainer.shareMessageRepository }
 
     @State private var selectedDayID: String
     @State private var selectedSlotIDs: Set<String> = []
@@ -6403,8 +6406,8 @@ private struct EventRoutePlannerView: View {
     }
 
     private func loadSharePanelConversations() async throws -> [Conversation] {
-        async let directs = appContainer.socialService.fetchConversations(type: .direct)
-        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        async let directs = shareMessageRepository.fetchConversations(type: .direct)
+        async let groups = shareMessageRepository.fetchConversations(type: .group)
         let merged = try await directs + groups
         let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
             partialResult[conversation.id] = conversation
@@ -6420,14 +6423,14 @@ private struct EventRoutePlannerView: View {
         to conversation: Conversation,
         note: String?
     ) async throws {
-        _ = try await appContainer.socialService.sendEventRouteCardMessage(
+        _ = try await shareMessageRepository.sendEventRouteCardMessage(
             conversationID: conversation.id,
             payload: payload
         )
 
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmedNote.isEmpty {
-            _ = try await appContainer.socialService.sendMessage(
+            _ = try await shareMessageRepository.sendMessage(
                 conversationID: conversation.id,
                 content: trimmedNote
             )

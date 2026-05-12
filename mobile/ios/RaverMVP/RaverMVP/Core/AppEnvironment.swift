@@ -52,4 +52,8 @@ enum AppEnvironment {
         sharedShareLinkService
     }
 
+    static func makeShareLinkRepository() -> ShareLinkRepository {
+        ShareLinkRepositoryAdapter(service: sharedShareLinkService)
+    }
+
 }
