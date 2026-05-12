@@ -13,6 +13,12 @@ protocol DiscoverEventsRepository {
     func fetchEvents(request: DiscoverEventsPageRequest) async throws -> EventListPage
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent]
     func fetchEvent(id: String) async throws -> WebEvent
+    func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent
+    func createRatingEventFromEvent(eventID: String) async throws -> WebRatingEvent
+    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit
+    func fetchEventLiveComments(eventID: String, cursor: String?, sort: EventLiveCommentSortMode) async throws -> EventLiveCommentPage
+    func addEventLiveComment(eventID: String, content: String, imageURLs: [String], parentCommentID: String?) async throws -> EventLiveComment
+    func toggleEventLiveCommentLike(commentID: String, shouldLike: Bool) async throws -> EventLiveComment
     func createEvent(input: CreateEventInput) async throws -> WebEvent
     func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent
     func uploadEventImage(
@@ -20,6 +26,15 @@ protocol DiscoverEventsRepository {
         fileName: String,
         mimeType: String,
         eventID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse
+    func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
+    func uploadRatingImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        ratingEventID: String?,
+        ratingUnitID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse
     func importEventLineupFromImage(
@@ -41,9 +56,11 @@ protocol DiscoverEventsRepository {
 
 struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
     private let service: WebFeatureService
+    private let socialService: SocialService
 
-    init(service: WebFeatureService) {
+    init(service: WebFeatureService, socialService: SocialService) {
         self.service = service
+        self.socialService = socialService
     }
 
     func fetchEvents(request: DiscoverEventsPageRequest) async throws -> EventListPage {
@@ -62,6 +79,44 @@ struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
 
     func fetchEvent(id: String) async throws -> WebEvent {
         try await service.fetchEvent(id: id)
+    }
+
+    func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent {
+        try await service.createRatingEvent(input: input)
+    }
+
+    func createRatingEventFromEvent(eventID: String) async throws -> WebRatingEvent {
+        try await service.createRatingEventFromEvent(eventID: eventID)
+    }
+
+    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit {
+        try await service.createRatingUnit(eventID: eventID, input: input)
+    }
+
+    func fetchEventLiveComments(
+        eventID: String,
+        cursor: String?,
+        sort: EventLiveCommentSortMode
+    ) async throws -> EventLiveCommentPage {
+        try await socialService.fetchEventLiveComments(eventID: eventID, cursor: cursor, sort: sort)
+    }
+
+    func addEventLiveComment(
+        eventID: String,
+        content: String,
+        imageURLs: [String],
+        parentCommentID: String?
+    ) async throws -> EventLiveComment {
+        try await socialService.addEventLiveComment(
+            eventID: eventID,
+            content: content,
+            imageURLs: imageURLs,
+            parentCommentID: parentCommentID
+        )
+    }
+
+    func toggleEventLiveCommentLike(commentID: String, shouldLike: Bool) async throws -> EventLiveComment {
+        try await socialService.toggleEventLiveCommentLike(commentID: commentID, shouldLike: shouldLike)
     }
 
     func createEvent(input: CreateEventInput) async throws -> WebEvent {
@@ -84,6 +139,32 @@ struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
             fileName: fileName,
             mimeType: mimeType,
             eventID: eventID,
+            usage: usage
+        )
+    }
+
+    func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
+        try await service.uploadPostImage(
+            imageData: imageData,
+            fileName: fileName,
+            mimeType: mimeType
+        )
+    }
+
+    func uploadRatingImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        ratingEventID: String?,
+        ratingUnitID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse {
+        try await service.uploadRatingImage(
+            imageData: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
+            ratingEventID: ratingEventID,
+            ratingUnitID: ratingUnitID,
             usage: usage
         )
     }

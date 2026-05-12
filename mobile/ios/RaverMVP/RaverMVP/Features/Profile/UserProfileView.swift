@@ -24,7 +24,7 @@ private struct UserProfileScreen: View {
     @State private var isStartingDirectChat = false
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
     init(viewModel: UserProfileViewModel) {
@@ -103,7 +103,7 @@ private struct UserProfileScreen: View {
                                                         let identifier = profile.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                                             ? profile.username
                                                             : profile.id
-                                                        let conversation = try await appContainer.socialService.startDirectConversation(identifier: identifier)
+                                                        let conversation = try await appContainer.messagesRepository.startDirectConversation(identifier: identifier)
                                                         IMChatStore.shared.stageConversation(conversation)
                                                         appPush(.conversation(target: .fromConversation(conversation)))
                                                     } catch {

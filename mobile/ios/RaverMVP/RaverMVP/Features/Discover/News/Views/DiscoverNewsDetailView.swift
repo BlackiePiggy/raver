@@ -104,7 +104,7 @@ struct DiscoverNewsDetailView: View {
     @State private var errorMessage: String?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
     private var newsRepository: DiscoverNewsRepository {

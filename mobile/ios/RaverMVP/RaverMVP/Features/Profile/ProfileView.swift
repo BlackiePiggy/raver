@@ -10,7 +10,7 @@ struct ProfileView: View {
     @State private var isShowingRealNameSheet = false
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
     init(viewModel: ProfileViewModel) {

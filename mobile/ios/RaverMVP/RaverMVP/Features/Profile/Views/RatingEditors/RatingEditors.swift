@@ -34,7 +34,7 @@ final class RatingEventEditorViewModel: ObservableObject {
         }
     }
 
-    func save(service: WebFeatureService) async -> Bool {
+    func save(repository: ProfileSocialRepository) async -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
             errorMessage = L("名称不能为空", "Name cannot be empty.")
@@ -48,7 +48,7 @@ final class RatingEventEditorViewModel: ObservableObject {
             if let selectedCoverData {
                 isUploadingCover = true
                 defer { isUploadingCover = false }
-                let upload = try await service.uploadRatingImage(
+                let upload = try await repository.uploadRatingImage(
                     imageData: jpegData(from: selectedCoverData),
                     fileName: "rating-event-edit-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -58,7 +58,7 @@ final class RatingEventEditorViewModel: ObservableObject {
                 )
                 finalImageURL = upload.url
             }
-            _ = try await service.updateRatingEvent(
+            _ = try await repository.updateRatingEvent(
                 id: eventID,
                 input: UpdateRatingEventInput(
                     name: trimmedName,
@@ -114,7 +114,7 @@ final class RatingUnitEditorViewModel: ObservableObject {
         }
     }
 
-    func save(service: WebFeatureService) async -> Bool {
+    func save(repository: ProfileSocialRepository) async -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
             errorMessage = L("名称不能为空", "Name cannot be empty.")
@@ -128,7 +128,7 @@ final class RatingUnitEditorViewModel: ObservableObject {
             if let selectedCoverData {
                 isUploadingCover = true
                 defer { isUploadingCover = false }
-                let upload = try await service.uploadRatingImage(
+                let upload = try await repository.uploadRatingImage(
                     imageData: jpegData(from: selectedCoverData),
                     fileName: "rating-unit-edit-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -138,7 +138,7 @@ final class RatingUnitEditorViewModel: ObservableObject {
                 )
                 finalImageURL = upload.url
             }
-            _ = try await service.updateRatingUnit(
+            _ = try await repository.updateRatingUnit(
                 id: unitID,
                 input: UpdateRatingUnitInput(
                     name: trimmedName,
@@ -165,7 +165,7 @@ final class RatingUnitEditorViewModel: ObservableObject {
 struct RatingEventEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var service: WebFeatureService { appContainer.webService }
+    private var repository: ProfileSocialRepository { appContainer.profileSocialRepository }
 
     let event: WebRatingEvent
     let onSaved: () -> Void
@@ -222,7 +222,7 @@ struct RatingEventEditorSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(viewModel.isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
                         Task {
-                            if await viewModel.save(service: service) {
+                            if await viewModel.save(repository: repository) {
                                 onSaved()
                                 dismiss()
                             }
@@ -264,7 +264,7 @@ struct RatingEventEditorSheet: View {
 struct RatingUnitEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var service: WebFeatureService { appContainer.webService }
+    private var repository: ProfileSocialRepository { appContainer.profileSocialRepository }
 
     let unit: WebRatingUnit
     let onSaved: () -> Void
@@ -321,7 +321,7 @@ struct RatingUnitEditorSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(viewModel.isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
                         Task {
-                            if await viewModel.save(service: service) {
+                            if await viewModel.save(repository: repository) {
                                 onSaved()
                                 dismiss()
                             }

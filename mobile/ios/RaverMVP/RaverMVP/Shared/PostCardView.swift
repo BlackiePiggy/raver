@@ -32,7 +32,7 @@ struct PostCardView: View {
     @State private var shareErrorMessage: String?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
     init(

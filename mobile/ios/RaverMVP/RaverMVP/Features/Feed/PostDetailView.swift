@@ -29,7 +29,7 @@ struct PostDetailView: View {
     @State private var feedSessionID = UUID().uuidString
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
     private let rootPageSize = 12

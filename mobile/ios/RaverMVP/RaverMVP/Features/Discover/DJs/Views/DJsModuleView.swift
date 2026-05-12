@@ -2499,7 +2499,7 @@ struct DJDetailView: View {
     @State private var fullChatSharePresentation: DJCardSharePresentation?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
     fileprivate enum DJDetailTab: String, CaseIterable, Identifiable {

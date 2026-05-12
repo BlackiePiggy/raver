@@ -42,9 +42,14 @@ final class MyCheckinsViewModel: ObservableObject {
     private var galleryArtistsUseOverviewSummary = true
     private let timelinePageLimit = 20
     private let galleryPageLimit = 20
+    private let repository: ProfileSocialRepository
 
-    init(targetUserID: String? = nil) {
+    init(
+        targetUserID: String? = nil,
+        repository: ProfileSocialRepository
+    ) {
         self.targetUserID = targetUserID
+        self.repository = repository
     }
 
     func invalidateLoadedState() {
@@ -53,7 +58,7 @@ final class MyCheckinsViewModel: ObservableObject {
         lastRequestedTimelinePage = nil
     }
 
-    func reload(service: WebFeatureService, force: Bool = false) async {
+    func reload(force: Bool = false) async {
         if !force, didLoadInitialPage, !timelineItems.isEmpty, !isRefreshing {
             return
         }
@@ -85,17 +90,17 @@ final class MyCheckinsViewModel: ObservableObject {
             lastRequestedTimelinePage = nil
         }
         defer { isRefreshing = false }
-        await loadMore(service: service, reset: true)
+        await loadMore(reset: true)
     }
 
-    func loadMore(service: WebFeatureService, reset: Bool = false) async {
+    func loadMore(reset: Bool = false) async {
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
 
         do {
             if reset {
-                let overview = try await fetchOverview(service: service)
+                let overview = try await fetchOverview()
                 timelineDJIdentityByName = [:]
                 timelineDJIdentityByID = [:]
                 timelineLocalizedEventByID = [:]
@@ -123,7 +128,7 @@ final class MyCheckinsViewModel: ObservableObject {
             guard lastRequestedTimelinePage != requestedPage else { return }
             lastRequestedTimelinePage = requestedPage
             print("[CheckinProjection] MyCheckins timeline loadMore request page=\(requestedPage) totalPages=\(totalPages) currentItems=\(timelineItems.count)")
-            let timelinePage = try await fetchTimelinePage(service: service, page: requestedPage, limit: timelinePageLimit)
+            let timelinePage = try await fetchTimelinePage(page: requestedPage, limit: timelinePageLimit)
             let nextItems = applyTimelinePage(timelinePage)
 
             if nextPaginationSource == .overviewPrefetched {
@@ -161,17 +166,17 @@ final class MyCheckinsViewModel: ObservableObject {
         timelineLoadToken
     }
 
-    func ensureGalleryEventsLoaded(service: WebFeatureService) async {
+    func ensureGalleryEventsLoaded() async {
         guard galleryEventsUseOverviewSummary || galleryEventsPhase == .idle else { return }
-        await loadMoreGalleryEvents(service: service, reset: true)
+        await loadMoreGalleryEvents(reset: true)
     }
 
-    func ensureGalleryArtistsLoaded(service: WebFeatureService) async {
+    func ensureGalleryArtistsLoaded() async {
         guard galleryArtistsUseOverviewSummary || galleryArtistsPhase == .idle else { return }
-        await loadMoreGalleryArtists(service: service, reset: true)
+        await loadMoreGalleryArtists(reset: true)
     }
 
-    func loadMoreGalleryEvents(service: WebFeatureService, reset: Bool = false) async {
+    func loadMoreGalleryEvents(reset: Bool = false) async {
         guard !isLoadingGalleryEvents else { return }
         isLoadingGalleryEvents = true
         defer { isLoadingGalleryEvents = false }
@@ -183,7 +188,7 @@ final class MyCheckinsViewModel: ObservableObject {
 
         do {
             let requestedPage = shouldReplace ? 1 : galleryEventsPage
-            let page = try await fetchGalleryEventsPage(service: service, page: requestedPage, limit: galleryPageLimit)
+            let page = try await fetchGalleryEventsPage(page: requestedPage, limit: galleryPageLimit)
             galleryEvents = shouldReplace
                 ? page.items
                 : mergeUniqueGalleryEvents(galleryEvents, with: page.items)
@@ -203,7 +208,7 @@ final class MyCheckinsViewModel: ObservableObject {
         }
     }
 
-    func loadMoreGalleryArtists(service: WebFeatureService, reset: Bool = false) async {
+    func loadMoreGalleryArtists(reset: Bool = false) async {
         guard !isLoadingGalleryArtists else { return }
         isLoadingGalleryArtists = true
         defer { isLoadingGalleryArtists = false }
@@ -215,7 +220,7 @@ final class MyCheckinsViewModel: ObservableObject {
 
         do {
             let requestedPage = shouldReplace ? 1 : galleryArtistsPage
-            let page = try await fetchGalleryArtistsPage(service: service, page: requestedPage, limit: galleryPageLimit)
+            let page = try await fetchGalleryArtistsPage(page: requestedPage, limit: galleryPageLimit)
             galleryArtists = shouldReplace
                 ? page.items
                 : mergeUniqueGalleryArtists(galleryArtists, with: page.items)
@@ -235,37 +240,37 @@ final class MyCheckinsViewModel: ObservableObject {
         }
     }
 
-    private func fetchOverview(service: WebFeatureService) async throws -> MyCheckinsOverviewResponse {
+    private func fetchOverview() async throws -> MyCheckinsOverviewResponse {
         if let targetUserID {
-            return try await service.fetchUserCheckinsOverview(userID: targetUserID)
+            return try await repository.fetchUserCheckinsOverview(userID: targetUserID)
         }
-        return try await service.fetchMyCheckinsOverview()
+        return try await repository.fetchMyCheckinsOverview()
     }
 
-    private func fetchTimelinePage(service: WebFeatureService, page: Int, limit: Int) async throws -> MyCheckinsTimelinePage {
+    private func fetchTimelinePage(page: Int, limit: Int) async throws -> MyCheckinsTimelinePage {
         if let targetUserID {
-            return try await service.fetchUserCheckinsTimeline(userID: targetUserID, page: page, limit: limit)
+            return try await repository.fetchUserCheckinsTimeline(userID: targetUserID, page: page, limit: limit)
         }
-        return try await service.fetchMyCheckinsTimeline(page: page, limit: limit)
+        return try await repository.fetchMyCheckinsTimeline(page: page, limit: limit)
     }
 
-    private func fetchGalleryEventsPage(service: WebFeatureService, page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage {
+    private func fetchGalleryEventsPage(page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage {
         if let targetUserID {
-            return try await service.fetchUserCheckinsGalleryEvents(userID: targetUserID, page: page, limit: limit)
+            return try await repository.fetchUserCheckinsGalleryEvents(userID: targetUserID, page: page, limit: limit)
         }
-        return try await service.fetchMyCheckinsGalleryEvents(page: page, limit: limit)
+        return try await repository.fetchMyCheckinsGalleryEvents(page: page, limit: limit)
     }
 
-    private func fetchGalleryArtistsPage(service: WebFeatureService, page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage {
+    private func fetchGalleryArtistsPage(page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage {
         if let targetUserID {
-            return try await service.fetchUserCheckinsGalleryArtists(userID: targetUserID, page: page, limit: limit)
+            return try await repository.fetchUserCheckinsGalleryArtists(userID: targetUserID, page: page, limit: limit)
         }
-        return try await service.fetchMyCheckinsGalleryArtists(page: page, limit: limit)
+        return try await repository.fetchMyCheckinsGalleryArtists(page: page, limit: limit)
     }
 
-    func delete(id: String, service: WebFeatureService) async {
+    func delete(id: String) async {
         do {
-            try await service.deleteCheckin(id: id)
+            try await repository.deleteCheckin(id: id)
             timelineItems.removeAll { $0.id == id }
         } catch {
             errorMessage = error.userFacingMessage
@@ -826,7 +831,6 @@ struct MyCheckinsView: View {
     private let targetUserID: String?
     private let navigationTitleText: String
     private let ownerDisplayName: String?
-    private var service: WebFeatureService { appContainer.webService }
 
     @State private var displayMode: DisplayMode = .timeline
     @State private var galleryMode: GalleryMode = .event
@@ -839,11 +843,21 @@ struct MyCheckinsView: View {
     @State private var didTriggerGalleryAutoLoadInVisibleCycle = false
     @StateObject private var viewModel: MyCheckinsViewModel
 
-    init(targetUserID: String? = nil, title: String = "", ownerDisplayName: String? = nil) {
+    init(
+        repository: ProfileSocialRepository,
+        targetUserID: String? = nil,
+        title: String = "",
+        ownerDisplayName: String? = nil
+    ) {
         self.targetUserID = targetUserID
         self.navigationTitleText = title.isEmpty ? L("我的打卡", "My Check-ins") : title
         self.ownerDisplayName = ownerDisplayName
-        _viewModel = StateObject(wrappedValue: MyCheckinsViewModel(targetUserID: targetUserID))
+        _viewModel = StateObject(
+            wrappedValue: MyCheckinsViewModel(
+                targetUserID: targetUserID,
+                repository: repository
+            )
+        )
     }
 
     var body: some View {
@@ -860,7 +874,7 @@ struct MyCheckinsView: View {
                                 style: .error,
                                 actionTitle: L("重试", "Retry")
                             ) {
-                                Task { await viewModel.reload(service: service, force: true) }
+                                Task { await viewModel.reload(force: true) }
                             }
                         }
                     }
@@ -892,7 +906,7 @@ struct MyCheckinsView: View {
                         title: L("打卡记录加载失败", "Check-ins Failed to Load"),
                         message: message
                     ) {
-                        Task { await viewModel.reload(service: service, force: true) }
+                        Task { await viewModel.reload(force: true) }
                     }
                     .frame(maxWidth: .infinity, minHeight: 260)
                 } else if case .offline(let message) = viewModel.phase {
@@ -900,7 +914,7 @@ struct MyCheckinsView: View {
                         title: L("网络不可用", "Network Unavailable"),
                         message: message
                     ) {
-                        Task { await viewModel.reload(service: service, force: true) }
+                        Task { await viewModel.reload(force: true) }
                     }
                     .frame(maxWidth: .infinity, minHeight: 260)
                 } else if isCurrentViewEmpty {
@@ -933,7 +947,7 @@ struct MyCheckinsView: View {
             dismiss()
         }
         .task(id: targetUserID ?? "me") {
-            await viewModel.reload(service: service)
+            await viewModel.reload()
             if targetUserID == nil, !CheckinProjectionMutationStore.hasUnconsumedMutation {
                 CheckinProjectionMutationStore.markConsumed(CheckinProjectionMutationStore.token)
             }
@@ -955,14 +969,14 @@ struct MyCheckinsView: View {
             print("[CheckinProjection] MyCheckins received raverCheckinsDidMutate checkinId=\(checkinId); invalidating loaded state and refreshing v2 read model")
             viewModel.invalidateLoadedState()
             Task {
-                await viewModel.reload(service: service, force: true)
+                await viewModel.reload(force: true)
                 await ensureActiveGalleryLoaded()
                 CheckinProjectionMutationStore.markConsumed(CheckinProjectionMutationStore.token)
                 print("[CheckinProjection] MyCheckins refresh finished after mutation checkinId=\(checkinId) phase=\(viewModel.phase) timelineItems=\(viewModel.timelineItems.count) galleryEvents=\(viewModel.galleryEvents.count) galleryArtists=\(viewModel.galleryArtists.count)")
             }
         }
         .refreshable {
-            await viewModel.reload(service: service, force: true)
+            await viewModel.reload(force: true)
             await ensureActiveGalleryLoaded()
         }
         .sheet(item: $fullChatSharePresentation) { presentation in
@@ -1205,9 +1219,9 @@ struct MyCheckinsView: View {
         guard displayMode == .gallery else { return }
         switch galleryMode {
         case .event:
-            await viewModel.ensureGalleryEventsLoaded(service: service)
+            await viewModel.ensureGalleryEventsLoaded()
         case .dj:
-            await viewModel.ensureGalleryArtistsLoaded(service: service)
+            await viewModel.ensureGalleryArtistsLoaded()
         }
     }
 
@@ -1222,7 +1236,7 @@ struct MyCheckinsView: View {
             try? await Task.sleep(nanoseconds: 120_000_000)
         }
         viewModel.invalidateLoadedState()
-        await viewModel.reload(service: service, force: true)
+        await viewModel.reload(force: true)
         await ensureActiveGalleryLoaded()
         CheckinProjectionMutationStore.markConsumed(currentToken)
         print("[CheckinProjection] MyCheckins refresh finished after missed mutation token=\(currentToken) phase=\(viewModel.phase) timelineItems=\(viewModel.timelineItems.count) galleryEvents=\(viewModel.galleryEvents.count) galleryArtists=\(viewModel.galleryArtists.count)")
@@ -1231,9 +1245,9 @@ struct MyCheckinsView: View {
     private func loadMoreActiveGallery() async {
         switch galleryMode {
         case .event:
-            await viewModel.loadMoreGalleryEvents(service: service)
+            await viewModel.loadMoreGalleryEvents()
         case .dj:
-            await viewModel.loadMoreGalleryArtists(service: service)
+            await viewModel.loadMoreGalleryArtists()
         }
     }
 
@@ -1248,7 +1262,7 @@ struct MyCheckinsView: View {
                 timelineAutoLoadTask = nil
                 return
             }
-            await viewModel.loadMore(service: service)
+            await viewModel.loadMore()
             timelineAutoLoadTask = nil
         }
     }
@@ -1266,9 +1280,9 @@ struct MyCheckinsView: View {
     private func reloadActiveGallery() async {
         switch galleryMode {
         case .event:
-            await viewModel.loadMoreGalleryEvents(service: service, reset: true)
+            await viewModel.loadMoreGalleryEvents(reset: true)
         case .dj:
-            await viewModel.loadMoreGalleryArtists(service: service, reset: true)
+            await viewModel.loadMoreGalleryArtists(reset: true)
         }
     }
 

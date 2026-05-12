@@ -437,7 +437,7 @@ struct DJSetDetailView: View {
     @State private var fullChatSharePresentation: SetCardSharePresentation?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
     init(setID: String, playbackMode: PlaybackMode = .video) {

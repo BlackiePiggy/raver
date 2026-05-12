@@ -5,18 +5,16 @@ import UIKit
 struct SquadProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appPush) private var appPush
-    private let service: SocialService
     @StateObject private var viewModel: SquadProfileViewModel
     @State private var myNicknameDraft = ""
     @State private var myNotificationsEnabled = true
     @State private var pendingRemoveMember: SquadMemberProfile?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
-    init(squadID: String, service: SocialService, repository: SquadProfileRepository) {
-        self.service = service
+    init(squadID: String, repository: SquadProfileRepository) {
         _viewModel = StateObject(wrappedValue: SquadProfileViewModel(squadID: squadID, repository: repository))
     }
 
@@ -619,8 +617,7 @@ struct SquadManageRouteView: View {
     @Environment(\.dismiss) private var dismiss
 
     let squadID: String
-    let service: SocialService
-    let webService: WebFeatureService
+    let repository: SquadProfileRepository
 
     @State private var profile: SquadProfile?
     @State private var isLoading = false
@@ -636,8 +633,7 @@ struct SquadManageRouteView: View {
                 SquadManageFormView(
                     profile: profile,
                     isSaving: isSaving,
-                    webService: webService,
-                    socialService: service
+                    repository: repository
                 ) { input in
                     Task {
                         await save(input: input)
@@ -680,7 +676,7 @@ struct SquadManageRouteView: View {
         defer { isLoading = false }
 
         do {
-            profile = try await service.fetchSquadProfile(squadID: squadID)
+            profile = try await repository.fetchSquadProfile(squadID: squadID)
             errorMessage = nil
         } catch {
             errorMessage = error.userFacingMessage
@@ -695,7 +691,7 @@ struct SquadManageRouteView: View {
         defer { isSaving = false }
 
         do {
-            try await service.updateSquadInfo(squadID: squadID, input: input)
+            try await repository.updateSquadInfo(squadID: squadID, input: input)
             NotificationCenter.default.post(name: .squadProfileDidUpdate, object: squadID)
             dismiss()
         } catch {
@@ -735,20 +731,17 @@ private struct SquadManageFormView: View {
     @State private var isUploadingAvatar = false
     @State private var isUploadingFlag = false
     @State private var uploadError: String?
-    private let webService: WebFeatureService
-    private let socialService: SocialService
+    private let repository: SquadProfileRepository
 
     init(
         profile: SquadProfile,
         isSaving: Bool,
-        webService: WebFeatureService,
-        socialService: SocialService,
+        repository: SquadProfileRepository,
         onSave: @escaping (UpdateSquadInfoInput) -> Void
     ) {
         self.squadID = profile.id
         self.isSaving = isSaving
-        self.webService = webService
-        self.socialService = socialService
+        self.repository = repository
         self.onSave = onSave
         _name = State(initialValue: profile.name)
         _descriptionText = State(initialValue: profile.description ?? "")
@@ -889,7 +882,7 @@ private struct SquadManageFormView: View {
             } else {
                 uploadData = data
             }
-            let uploaded = try await socialService.uploadSquadAvatar(
+            let uploaded = try await repository.uploadSquadAvatar(
                 squadID: squadID,
                 imageData: uploadData,
                 fileName: "squad-avatar-\(Int(Date().timeIntervalSince1970)).jpg",
@@ -906,7 +899,7 @@ private struct SquadManageFormView: View {
         isUploadingFlag = true
         defer { isUploadingFlag = false }
         do {
-            let uploaded = try await webService.uploadEventImage(
+            let uploaded = try await repository.uploadSquadBannerImage(
                 imageData: data,
                 fileName: "squad-flag-\(Int(Date().timeIntervalSince1970)).jpg",
                 mimeType: "image/jpeg"

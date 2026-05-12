@@ -113,17 +113,17 @@ struct CircleCoordinatorView<Content: View>: View {
                 .environmentObject(appState)
         case .ratingEventCreate:
             CreateRatingEventSheet { input in
-                let created = try await appContainer.webService.createRatingEvent(input: input)
+                let created = try await appContainer.discoverEventsRepository.createRatingEvent(input: input)
                 NotificationCenter.default.post(name: .circleRatingEventDidCreate, object: created)
             }
         case .ratingEventImportFromEvent:
             CreateRatingEventFromEventSheet { sourceEventID in
-                let created = try await appContainer.webService.createRatingEventFromEvent(eventID: sourceEventID)
+                let created = try await appContainer.discoverEventsRepository.createRatingEventFromEvent(eventID: sourceEventID)
                 NotificationCenter.default.post(name: .circleRatingEventDidCreate, object: created)
             }
         case let .ratingUnitCreate(eventID):
             CreateRatingUnitSheet(eventID: eventID) { input in
-                let created = try await appContainer.webService.createRatingUnit(eventID: eventID, input: input)
+                let created = try await appContainer.discoverEventsRepository.createRatingUnit(eventID: eventID, input: input)
                 NotificationCenter.default.post(
                     name: .circleRatingUnitDidCreate,
                     object: created,

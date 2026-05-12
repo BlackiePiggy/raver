@@ -22,6 +22,25 @@ protocol ProfileSocialRepository {
     func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary
     func uploadMyAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> AvatarUploadResponse
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile
+    func fetchMyCheckinsOverview() async throws -> MyCheckinsOverviewResponse
+    func fetchUserCheckinsOverview(userID: String) async throws -> MyCheckinsOverviewResponse
+    func fetchMyCheckinsTimeline(page: Int, limit: Int) async throws -> MyCheckinsTimelinePage
+    func fetchUserCheckinsTimeline(userID: String, page: Int, limit: Int) async throws -> MyCheckinsTimelinePage
+    func fetchMyCheckinsGalleryEvents(page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage
+    func fetchUserCheckinsGalleryEvents(userID: String, page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage
+    func fetchMyCheckinsGalleryArtists(page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage
+    func fetchUserCheckinsGalleryArtists(userID: String, page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage
+    func deleteCheckin(id: String) async throws
+    func uploadRatingImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        ratingEventID: String?,
+        ratingUnitID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse
+    func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent
+    func updateRatingUnit(id: String, input: UpdateRatingUnitInput) async throws -> WebRatingUnit
     func deleteDJSet(id: String) async throws
     func deleteEvent(id: String) async throws
     func deleteRatingEvent(id: String) async throws
@@ -118,6 +137,68 @@ struct ProfileSocialRepositoryAdapter: ProfileSocialRepository {
 
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile {
         try await socialService.updateMyProfile(input: input)
+    }
+
+    func fetchMyCheckinsOverview() async throws -> MyCheckinsOverviewResponse {
+        try await webService.fetchMyCheckinsOverview()
+    }
+
+    func fetchUserCheckinsOverview(userID: String) async throws -> MyCheckinsOverviewResponse {
+        try await webService.fetchUserCheckinsOverview(userID: userID)
+    }
+
+    func fetchMyCheckinsTimeline(page: Int, limit: Int) async throws -> MyCheckinsTimelinePage {
+        try await webService.fetchMyCheckinsTimeline(page: page, limit: limit)
+    }
+
+    func fetchUserCheckinsTimeline(userID: String, page: Int, limit: Int) async throws -> MyCheckinsTimelinePage {
+        try await webService.fetchUserCheckinsTimeline(userID: userID, page: page, limit: limit)
+    }
+
+    func fetchMyCheckinsGalleryEvents(page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage {
+        try await webService.fetchMyCheckinsGalleryEvents(page: page, limit: limit)
+    }
+
+    func fetchUserCheckinsGalleryEvents(userID: String, page: Int, limit: Int) async throws -> MyCheckinsGalleryEventPage {
+        try await webService.fetchUserCheckinsGalleryEvents(userID: userID, page: page, limit: limit)
+    }
+
+    func fetchMyCheckinsGalleryArtists(page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage {
+        try await webService.fetchMyCheckinsGalleryArtists(page: page, limit: limit)
+    }
+
+    func fetchUserCheckinsGalleryArtists(userID: String, page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage {
+        try await webService.fetchUserCheckinsGalleryArtists(userID: userID, page: page, limit: limit)
+    }
+
+    func deleteCheckin(id: String) async throws {
+        try await webService.deleteCheckin(id: id)
+    }
+
+    func uploadRatingImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        ratingEventID: String?,
+        ratingUnitID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse {
+        try await webService.uploadRatingImage(
+            imageData: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
+            ratingEventID: ratingEventID,
+            ratingUnitID: ratingUnitID,
+            usage: usage
+        )
+    }
+
+    func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent {
+        try await webService.updateRatingEvent(id: id, input: input)
+    }
+
+    func updateRatingUnit(id: String, input: UpdateRatingUnitInput) async throws -> WebRatingUnit {
+        try await webService.updateRatingUnit(id: id, input: input)
     }
 
     func deleteDJSet(id: String) async throws {

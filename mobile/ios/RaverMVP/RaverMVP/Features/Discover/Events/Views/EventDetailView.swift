@@ -32,8 +32,7 @@ struct EventLiveDiscussionView: View {
 
     let eventID: String
     let eventName: String
-    let service: SocialService
-    let webService: WebFeatureService
+    let repository: DiscoverEventsRepository
 
     @State private var comments: [EventLiveComment] = []
     @State private var event: WebEvent?
@@ -527,7 +526,7 @@ struct EventLiveDiscussionView: View {
     @MainActor
     private func loadEvent() async {
         do {
-            event = try await webService.fetchEvent(id: eventID)
+            event = try await repository.fetchEvent(id: eventID)
         } catch {
             // Keep discussion usable even if event detail fails.
         }
@@ -1081,7 +1080,7 @@ struct EventLiveDiscussionView: View {
             phase = .initialLoading
         }
         do {
-            let page = try await service.fetchEventLiveComments(eventID: eventID, cursor: nil, sort: sortMode)
+            let page = try await repository.fetchEventLiveComments(eventID: eventID, cursor: nil, sort: sortMode)
             comments = page.comments
             phase = page.comments.isEmpty ? .empty : .success
         } catch {
@@ -1096,7 +1095,7 @@ struct EventLiveDiscussionView: View {
         defer { isSending = false }
 
         do {
-            let created = try await service.addEventLiveComment(
+            let created = try await repository.addEventLiveComment(
                 eventID: eventID,
                 content: trimmedDraft,
                 imageURLs: imageURLs,
@@ -1115,7 +1114,7 @@ struct EventLiveDiscussionView: View {
     @MainActor
     private func toggleLike(_ comment: EventLiveComment) async {
         do {
-            let updated = try await service.toggleEventLiveCommentLike(commentID: comment.id, shouldLike: !comment.isLiked)
+            let updated = try await repository.toggleEventLiveCommentLike(commentID: comment.id, shouldLike: !comment.isLiked)
             mergeComment(updated)
         } catch {
             errorMessage = error.userFacingMessage
@@ -1134,7 +1133,7 @@ struct EventLiveDiscussionView: View {
         for item in items where imageURLs.count < 3 {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self) else { continue }
-                let upload = try await webService.uploadPostImage(
+                let upload = try await repository.uploadPostImage(
                     imageData: normalizedImageData(from: data),
                     fileName: "event-live-comment-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg"
@@ -1241,7 +1240,7 @@ struct EventDetailView: View {
     private var feedRepository: CircleFeedRepository { appContainer.circleFeedRepository }
     private var newsRepository: DiscoverNewsRepository { appContainer.discoverNewsRepository }
     private var shareMessageRepository: ShareMessageRepository { appContainer.shareMessageRepository }
-    private var shareLinkCoordinator: ShareLinkCoordinator { ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService()) }
+    private var shareLinkCoordinator: ShareLinkCoordinator { ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository()) }
 
     let eventID: String
 

@@ -1436,7 +1436,7 @@ struct LearnLabelDetailView: View {
     @State private var errorMessage: String?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
     var body: some View {
@@ -2782,7 +2782,7 @@ struct LearnFestivalDetailView: View {
     @State private var fullChatSharePresentation: BrandCardSharePresentation?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
     init(festival: LearnFestival, onFestivalUpdated: ((LearnFestival) -> Void)? = nil) {
@@ -5116,7 +5116,7 @@ struct RankingBoardDetailView: View {
     @State private var isShareMorePanelVisible = false
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
     init(board: RankingBoard, initialYear: Int? = nil) {

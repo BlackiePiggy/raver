@@ -927,7 +927,7 @@ private struct RegisterProfileView: View {
 
         if appState.errorMessage == nil, let selectedAvatarData {
             do {
-                _ = try await appContainer.socialService.uploadMyAvatar(
+                _ = try await appContainer.profileSocialRepository.uploadMyAvatar(
                     imageData: selectedAvatarData,
                     fileName: "avatar-\(Int(Date().timeIntervalSince1970)).jpg",
                     mimeType: "image/jpeg"

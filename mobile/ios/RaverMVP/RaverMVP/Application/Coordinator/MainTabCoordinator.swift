@@ -460,19 +460,19 @@ struct MainTabCoordinatorView: View {
 
             case .ratingEventCreate:
                 CreateRatingEventSheet { input in
-                    let created = try await appContainer.webService.createRatingEvent(input: input)
+                    let created = try await appContainer.discoverEventsRepository.createRatingEvent(input: input)
                     NotificationCenter.default.post(name: .circleRatingEventDidCreate, object: created)
                 }
 
             case .ratingEventImportFromEvent:
                 CreateRatingEventFromEventSheet { sourceEventID in
-                    let created = try await appContainer.webService.createRatingEventFromEvent(eventID: sourceEventID)
+                    let created = try await appContainer.discoverEventsRepository.createRatingEventFromEvent(eventID: sourceEventID)
                     NotificationCenter.default.post(name: .circleRatingEventDidCreate, object: created)
                 }
 
             case let .ratingUnitCreate(eventID):
                 CreateRatingUnitSheet(eventID: eventID) { input in
-                    let created = try await appContainer.webService.createRatingUnit(eventID: eventID, input: input)
+                    let created = try await appContainer.discoverEventsRepository.createRatingUnit(eventID: eventID, input: input)
                     NotificationCenter.default.post(
                         name: .circleRatingUnitDidCreate,
                         object: created,
@@ -545,6 +545,7 @@ struct MainTabCoordinatorView: View {
                 }
             case let .myCheckins(targetUserID, title, ownerDisplayName):
                 MyCheckinsView(
+                    repository: appContainer.profileSocialRepository,
                     targetUserID: targetUserID,
                     title: title,
                     ownerDisplayName: ownerDisplayName
@@ -630,8 +631,7 @@ struct MainTabCoordinatorView: View {
             EventLiveDiscussionView(
                 eventID: eventID,
                 eventName: eventName,
-                service: appContainer.socialService,
-                webService: appContainer.webService
+                repository: appContainer.discoverEventsRepository
             )
             .environmentObject(appState)
 
@@ -677,7 +677,6 @@ struct MainTabCoordinatorView: View {
         case .squadProfile(let squadID):
             SquadProfileView(
                 squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
-                service: appContainer.socialService,
                 repository: appContainer.squadProfileRepository
             )
                 .environmentObject(appState)
@@ -685,8 +684,7 @@ struct MainTabCoordinatorView: View {
         case .squadManage(let squadID):
             SquadManageRouteView(
                 squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
-                service: appContainer.socialService,
-                webService: appContainer.webService
+                repository: appContainer.squadProfileRepository
             )
 
         case .squadOfflineActivity(let squadID):

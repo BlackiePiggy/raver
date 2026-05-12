@@ -595,8 +595,8 @@ private struct CircleIDHubView: View {
     @State private var fullChatSharePresentation: CircleIDShareCardPresentation?
     @State private var isShareMorePanelVisible = false
 
-    private var socialService: SocialService { appContainer.socialService }
-    private var shareLinkCoordinator: ShareLinkCoordinator { ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService()) }
+    private var shareMessageRepository: ShareMessageRepository { appContainer.shareMessageRepository }
+    private var shareLinkCoordinator: ShareLinkCoordinator { ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository()) }
 
     private var sortedEntries: [CircleIDEntry] {
         entries.sorted { lhs, rhs in
@@ -683,12 +683,12 @@ private struct CircleIDHubView: View {
         .sheet(item: $fullChatSharePresentation) { presentation in
             ChatShareSheet(
                 loadConversations: {
-                    try await loadCircleIDSharePanelConversations(using: socialService)
+                    try await loadCircleIDSharePanelConversations(using: shareMessageRepository)
                 },
                 onShareToConversation: { conversation in
                     try await sendCircleIDSharePayload(
                         presentation.payload,
-                        using: socialService,
+                        using: shareMessageRepository,
                         to: conversation,
                         note: nil
                     )
@@ -714,12 +714,12 @@ private struct CircleIDHubView: View {
                         primaryActions: sharePrimaryActions(),
                         quickActions: shareMoreQuickActions(for: presentation.payload),
                         loadConversations: {
-                            try await loadCircleIDSharePanelConversations(using: socialService)
+                            try await loadCircleIDSharePanelConversations(using: shareMessageRepository)
                         },
                         onSendToConversation: { conversation, note in
                             try await sendCircleIDSharePayload(
                                 presentation.payload,
-                                using: socialService,
+                                using: shareMessageRepository,
                                 to: conversation,
                                 note: note
                             )
@@ -1272,8 +1272,8 @@ private struct CircleIDDetailView: View {
     @State private var fullChatSharePresentation: CircleIDShareCardPresentation?
     @State private var isShareMorePanelVisible = false
 
-    private var socialService: SocialService { appContainer.socialService }
-    private var shareLinkCoordinator: ShareLinkCoordinator { ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService()) }
+    private var shareMessageRepository: ShareMessageRepository { appContainer.shareMessageRepository }
+    private var shareLinkCoordinator: ShareLinkCoordinator { ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository()) }
 
     var body: some View {
         ScrollView {
@@ -1477,12 +1477,12 @@ private struct CircleIDDetailView: View {
         .sheet(item: $fullChatSharePresentation) { presentation in
             ChatShareSheet(
                 loadConversations: {
-                    try await loadCircleIDSharePanelConversations(using: socialService)
+                    try await loadCircleIDSharePanelConversations(using: shareMessageRepository)
                 },
                 onShareToConversation: { conversation in
                     try await sendCircleIDSharePayload(
                         presentation.payload,
-                        using: socialService,
+                        using: shareMessageRepository,
                         to: conversation,
                         note: nil
                     )
@@ -1508,12 +1508,12 @@ private struct CircleIDDetailView: View {
                         primaryActions: sharePrimaryActions(),
                         quickActions: shareMoreQuickActions(for: presentation.payload),
                         loadConversations: {
-                            try await loadCircleIDSharePanelConversations(using: socialService)
+                            try await loadCircleIDSharePanelConversations(using: shareMessageRepository)
                         },
                         onSendToConversation: { conversation, note in
                             try await sendCircleIDSharePayload(
                                 presentation.payload,
-                                using: socialService,
+                                using: shareMessageRepository,
                                 to: conversation,
                                 note: note
                             )
@@ -2246,7 +2246,7 @@ struct CircleIDComposerSheet: View {
 private struct CircleIDEventPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var webService: WebFeatureService { appContainer.webService }
+    private var repository: DiscoverEventsRepository { appContainer.discoverEventsRepository }
 
     let onSelect: (WebEvent) -> Void
 
@@ -2353,12 +2353,14 @@ private struct CircleIDEventPickerSheet: View {
             var page = 1
             var merged: [WebEvent] = []
             while page <= 6 {
-                let result = try await webService.fetchEvents(
-                    page: page,
-                    limit: 50,
-                    search: nil,
-                    eventType: nil,
-                    status: nil
+                let result = try await repository.fetchEvents(
+                    request: DiscoverEventsPageRequest(
+                        page: page,
+                        limit: 50,
+                        search: nil,
+                        eventType: nil,
+                        status: nil
+                    )
                 )
                 merged.append(contentsOf: result.items)
                 let totalPages = result.pagination?.totalPages ?? page
@@ -3287,7 +3289,7 @@ struct CircleRatingEventDetailView: View {
     @State private var resolvedEventID: String?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
     var body: some View {
@@ -3419,12 +3421,12 @@ struct CircleRatingEventDetailView: View {
         .sheet(item: $fullChatSharePresentation) { presentation in
             ChatShareSheet(
                 loadConversations: {
-                    try await loadRatingSharePanelConversations(using: appContainer.socialService)
+                    try await loadRatingSharePanelConversations(using: appContainer.shareMessageRepository)
                 },
                 onShareToConversation: { conversation in
                     try await sendRatingSharePayload(
                         presentation.payload,
-                        using: appContainer.socialService,
+                        using: appContainer.shareMessageRepository,
                         to: conversation,
                         note: nil
                     )
@@ -3450,12 +3452,12 @@ struct CircleRatingEventDetailView: View {
                         primaryActions: sharePrimaryActions(),
                         quickActions: shareMoreQuickActions(),
                         loadConversations: {
-                            try await loadRatingSharePanelConversations(using: appContainer.socialService)
+                            try await loadRatingSharePanelConversations(using: appContainer.shareMessageRepository)
                         },
                         onSendToConversation: { conversation, note in
                             try await sendRatingSharePayload(
                                 presentation.payload,
-                                using: appContainer.socialService,
+                                using: appContainer.shareMessageRepository,
                                 to: conversation,
                                 note: note
                             )
@@ -3904,7 +3906,7 @@ struct CircleRatingUnitDetailView: View {
     @State private var isShareMorePanelVisible = false
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
-        ShareLinkCoordinator(service: AppEnvironment.makeShareLinkService())
+        ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
     var body: some View {
@@ -4155,12 +4157,12 @@ struct CircleRatingUnitDetailView: View {
         .sheet(item: $fullChatSharePresentation) { presentation in
             ChatShareSheet(
                 loadConversations: {
-                    try await loadRatingSharePanelConversations(using: appContainer.socialService)
+                    try await loadRatingSharePanelConversations(using: appContainer.shareMessageRepository)
                 },
                 onShareToConversation: { conversation in
                     try await sendRatingSharePayload(
                         presentation.payload,
-                        using: appContainer.socialService,
+                        using: appContainer.shareMessageRepository,
                         to: conversation,
                         note: nil
                     )
@@ -4186,12 +4188,12 @@ struct CircleRatingUnitDetailView: View {
                         primaryActions: sharePrimaryActions(),
                         quickActions: shareMoreQuickActions(),
                         loadConversations: {
-                            try await loadRatingSharePanelConversations(using: appContainer.socialService)
+                            try await loadRatingSharePanelConversations(using: appContainer.shareMessageRepository)
                         },
                         onSendToConversation: { conversation, note in
                             try await sendRatingSharePayload(
                                 presentation.payload,
-                                using: appContainer.socialService,
+                                using: appContainer.shareMessageRepository,
                                 to: conversation,
                                 note: note
                             )
@@ -4638,9 +4640,9 @@ private func circleIDSharePayload(from entry: CircleIDEntry) -> CircleIDShareCar
     )
 }
 
-private func loadCircleIDSharePanelConversations(using service: SocialService) async throws -> [Conversation] {
-    async let directs = service.fetchConversations(type: .direct)
-    async let groups = service.fetchConversations(type: .group)
+private func loadCircleIDSharePanelConversations(using repository: ShareMessageRepository) async throws -> [Conversation] {
+    async let directs = repository.fetchConversations(type: .direct)
+    async let groups = repository.fetchConversations(type: .group)
     let merged = try await directs + groups
     let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
         partialResult[conversation.id] = conversation
@@ -4653,18 +4655,18 @@ private func loadCircleIDSharePanelConversations(using service: SocialService) a
 
 private func sendCircleIDSharePayload(
     _ payload: CircleIDShareCardPayload,
-    using service: SocialService,
+    using repository: ShareMessageRepository,
     to conversation: Conversation,
     note: String?
 ) async throws {
-    _ = try await service.sendCircleIDCardMessage(
+    _ = try await repository.sendCircleIDCardMessage(
         conversationID: conversation.id,
         payload: payload
     )
 
     let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !trimmedNote.isEmpty {
-        _ = try await service.sendMessage(
+        _ = try await repository.sendMessage(
             conversationID: conversation.id,
             content: trimmedNote
         )
@@ -4795,9 +4797,9 @@ private func circleIDSharePreviewSubtitle(_ payload: CircleIDShareCardPayload) -
     return parts.isEmpty ? L("未发行歌曲分享", "Unreleased track share") : parts.joined(separator: " · ")
 }
 
-private func loadRatingSharePanelConversations(using service: SocialService) async throws -> [Conversation] {
-    async let directs = service.fetchConversations(type: .direct)
-    async let groups = service.fetchConversations(type: .group)
+private func loadRatingSharePanelConversations(using repository: ShareMessageRepository) async throws -> [Conversation] {
+    async let directs = repository.fetchConversations(type: .direct)
+    async let groups = repository.fetchConversations(type: .group)
     let merged = try await directs + groups
     let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
         partialResult[conversation.id] = conversation
@@ -4810,22 +4812,22 @@ private func loadRatingSharePanelConversations(using service: SocialService) asy
 
 private func sendRatingSharePayload(
     _ payload: RatingDetailSharePayload,
-    using service: SocialService,
+    using repository: ShareMessageRepository,
     to conversation: Conversation,
     note: String?
 ) async throws {
     if let eventPayload = payload.ratingEventCardPayload {
-        _ = try await service.sendRatingEventCardMessage(
+        _ = try await repository.sendRatingEventCardMessage(
             conversationID: conversation.id,
             payload: eventPayload
         )
     } else if let unitPayload = payload.ratingUnitCardPayload {
-        _ = try await service.sendRatingUnitCardMessage(
+        _ = try await repository.sendRatingUnitCardMessage(
             conversationID: conversation.id,
             payload: unitPayload
         )
     } else {
-        _ = try await service.sendMessage(
+        _ = try await repository.sendMessage(
             conversationID: conversation.id,
             content: payload.summaryText
         )
@@ -4833,7 +4835,7 @@ private func sendRatingSharePayload(
 
     let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !trimmedNote.isEmpty {
-        _ = try await service.sendMessage(
+        _ = try await repository.sendMessage(
             conversationID: conversation.id,
             content: trimmedNote
         )
@@ -4843,7 +4845,7 @@ private func sendRatingSharePayload(
 struct CreateRatingEventSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var webService: WebFeatureService { appContainer.webService }
+    private var repository: DiscoverEventsRepository { appContainer.discoverEventsRepository }
     let onSubmit: (CreateRatingEventInput) async throws -> Void
 
     @State private var name = ""
@@ -4915,7 +4917,7 @@ struct CreateRatingEventSheet: View {
             if let selectedCoverData {
                 isUploadingCover = true
                 defer { isUploadingCover = false }
-                let upload = try await webService.uploadRatingImage(
+                let upload = try await repository.uploadRatingImage(
                     imageData: jpegData(from: selectedCoverData),
                     fileName: "rating-event-cover-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -4965,7 +4967,7 @@ struct CreateRatingEventSheet: View {
 struct CreateRatingEventFromEventSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var webService: WebFeatureService { appContainer.webService }
+    private var repository: DiscoverEventsRepository { appContainer.discoverEventsRepository }
     let onSubmit: (String) async throws -> Void
 
     @State private var searchKeyword = ""
@@ -5083,12 +5085,14 @@ struct CreateRatingEventFromEventSheet: View {
         phase = .initialLoading
         defer { isLoading = false }
         do {
-            let response = try await webService.fetchEvents(
-                page: 1,
-                limit: 100,
-                search: searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines),
-                eventType: nil,
-                status: "all"
+            let response = try await repository.fetchEvents(
+                request: DiscoverEventsPageRequest(
+                    page: 1,
+                    limit: 100,
+                    search: searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines),
+                    eventType: nil,
+                    status: "all"
+                )
             )
             events = response.items.sorted(by: { $0.startDate < $1.startDate })
             if let selectedEventID, !events.contains(where: { $0.id == selectedEventID }) {
@@ -5121,7 +5125,7 @@ struct CreateRatingEventFromEventSheet: View {
 struct CreateRatingUnitSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var webService: WebFeatureService { appContainer.webService }
+    private var repository: DiscoverEventsRepository { appContainer.discoverEventsRepository }
     let eventID: String?
     let onSubmit: (CreateRatingUnitInput) async throws -> Void
 
@@ -5194,7 +5198,7 @@ struct CreateRatingUnitSheet: View {
             if let selectedCoverData {
                 isUploadingCover = true
                 defer { isUploadingCover = false }
-                let upload = try await webService.uploadRatingImage(
+                let upload = try await repository.uploadRatingImage(
                     imageData: jpegData(from: selectedCoverData),
                     fileName: "rating-unit-cover-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",

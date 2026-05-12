@@ -7,7 +7,10 @@ final class AppContainer: ObservableObject {
     let virtualAssetRepository: VirtualAssetRepository
 
     var discoverEventsRepository: DiscoverEventsRepository {
-        DiscoverEventsRepositoryAdapter(service: webService)
+        DiscoverEventsRepositoryAdapter(
+            service: webService,
+            socialService: socialService
+        )
     }
 
     var discoverNewsRepository: DiscoverNewsRepository {
@@ -56,7 +59,10 @@ final class AppContainer: ObservableObject {
     }
 
     var squadProfileRepository: SquadProfileRepository {
-        SquadProfileRepositoryAdapter(service: socialService)
+        SquadProfileRepositoryAdapter(
+            socialService: socialService,
+            webService: webService
+        )
     }
 
     var profileSocialRepository: ProfileSocialRepository {

@@ -3,6 +3,7 @@ import Combine
 import SwiftUI
 
 protocol MessagesRepository: IMChatConversationDataSource {
+    func startDirectConversation(identifier: String) async throws -> Conversation
     func fetchNotifications(limit: Int) async throws -> NotificationInbox
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
     func markNotificationRead(notificationID: String) async throws
@@ -43,6 +44,10 @@ struct MessagesRepositoryAdapter: MessagesRepository {
 
     func hideConversation(conversationID: String) async throws {
         try await service.hideConversation(conversationID: conversationID)
+    }
+
+    func startDirectConversation(identifier: String) async throws -> Conversation {
+        try await service.startDirectConversation(identifier: identifier)
     }
 
     func fetchNotifications(limit: Int) async throws -> NotificationInbox {
