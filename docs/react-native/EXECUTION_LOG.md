@@ -201,3 +201,71 @@ Next:
 
 - Commit RN scaffold checkpoint.
 - Continue Phase 1 with HTTP client, env config, secure storage and MMKV.
+
+## 2026-05-14 - Phase 1 Network Storage Foundation
+
+Phase: Phase 1 - RN 工程底座
+
+Scope:
+
+- 安装 Keychain/MMKV/NitroModules 原生依赖。
+- 建立 HTTP request wrapper。
+- 建立 secure token storage。
+- 建立 MMKV preferences storage。
+
+iOS source reviewed:
+
+- `Core/AppConfig.swift`
+- `Core/SessionTokenStore.swift`
+- `Core/LiveSocialService.swift`
+- `Core/LiveWebFeatureService.swift`
+- `Core/WebFeatureService.swift`
+
+User confirmations:
+
+- No extra confirmation needed. This follows the confirmed Phase 1 foundation route.
+
+Decisions:
+
+- Use `fetch` for the first HTTP wrapper, not Axios.
+- Use `react-native-keychain` for token storage.
+- Use `react-native-mmkv` for preferences.
+- Add `react-native-nitro-modules@0.35.0` because `react-native-mmkv@4.3.1` requires it as a peer dependency.
+
+Changed docs:
+
+- `docs/react-native/implementation/phase-01-foundation/02_NETWORK_STORAGE_FOUNDATION.md`
+- `docs/react-native/EXECUTION_ROUTE_GUIDE.md`
+- `docs/react-native/EXECUTION_LOG.md`
+
+Changed code:
+
+- `mobile/react_native_raver/app/src/services/http/errors.ts`
+- `mobile/react_native_raver/app/src/services/http/client.ts`
+- `mobile/react_native_raver/app/src/services/storage/secureStorage.ts`
+- `mobile/react_native_raver/app/src/services/storage/preferencesStorage.ts`
+- `mobile/react_native_raver/app/package.json`
+- `mobile/react_native_raver/app/package-lock.json`
+- `mobile/react_native_raver/app/ios/Podfile.lock`
+
+Validation:
+
+- `pod install` initially timed out on CocoaPods CDN for MMKVCore.
+- Retried with `127.0.0.1:7897` proxy.
+- `pod install` passed after adding `react-native-nitro-modules`.
+
+Deferred:
+
+- Refresh token queue and 401 session expired handling. Revisit phase: Phase 2.
+- Multipart upload service. Revisit phase: Phase 4.
+- Zod response schemas. Revisit phase: first real API feature.
+
+Risks:
+
+- MMKV v4 depends on NitroModules; iOS pod install is heavier than the scaffold baseline.
+- iOS/Android native builds still need simulator/emulator validation.
+
+Next:
+
+- Run typecheck/lint/test.
+- Commit network/storage foundation checkpoint if validation passes.

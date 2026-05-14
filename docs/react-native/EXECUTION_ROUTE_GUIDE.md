@@ -327,10 +327,10 @@ docs/react-native/implementation/phase-03-discover-events-music/02_EVENT_DETAIL.
 - [ ] 配置路径别名。
 - [x] 建立 AppProviders。
 - [x] 建立 ThemeProvider。
-- [ ] 建立 HTTP client。
+- [x] 建立 HTTP client。
 - [x] 建立 QueryClient。
-- [ ] 建立 secure storage。
-- [ ] 建立 MMKV preferences。
+- [x] 建立 secure storage。
+- [x] 建立 MMKV preferences。
 - [ ] 建立 shared feedback 组件。
 
 ### Phase 2: Auth + App Shell + Navigation
