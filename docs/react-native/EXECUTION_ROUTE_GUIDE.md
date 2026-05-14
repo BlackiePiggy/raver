@@ -321,14 +321,14 @@ docs/react-native/implementation/phase-03-discover-events-music/02_EVENT_DETAIL.
 
 ### Phase 1: RN 工程底座
 
-- [ ] 创建 RN 工程。
-- [ ] 配置 TypeScript。
-- [ ] 配置 lint/format/test。
+- [x] 创建 RN 工程。
+- [x] 配置 TypeScript。
+- [x] 配置 lint/format/test。
 - [ ] 配置路径别名。
-- [ ] 建立 AppProviders。
-- [ ] 建立 ThemeProvider。
+- [x] 建立 AppProviders。
+- [x] 建立 ThemeProvider。
 - [ ] 建立 HTTP client。
-- [ ] 建立 QueryClient。
+- [x] 建立 QueryClient。
 - [ ] 建立 secure storage。
 - [ ] 建立 MMKV preferences。
 - [ ] 建立 shared feedback 组件。
