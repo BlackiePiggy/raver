@@ -3,7 +3,7 @@ import SwiftUI
 
 struct SquadOfflineActivityHistoryView: View {
     let squadID: String
-    let service: SocialService
+    let repository: SquadActivityRepository
 
     @State private var activities: [SquadOfflineActivity] = []
     @State private var isLoading = true
@@ -58,7 +58,7 @@ struct SquadOfflineActivityHistoryView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            activities = try await service.fetchSquadOfflineActivityHistory(squadID: squadID)
+            activities = try await repository.fetchSquadOfflineActivityHistory(squadID: squadID)
             errorMessage = nil
         } catch {
             errorMessage = error.userFacingMessage ?? L("历史活动加载失败", "Failed to load activity history")

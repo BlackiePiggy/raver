@@ -5,11 +5,16 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import djSetService from '../services/djset.service';
-import commentService from '../services/comment.service';
-import spotifyArtistService, { SpotifyUpstreamError } from '../services/spotify-artist.service';
-import discogsArtistService, { DiscogsUpstreamError } from '../services/discogs-artist.service';
-import soundcloudArtistService, { SoundCloudUpstreamError } from '../services/soundcloud-artist.service';
+import { commentService } from '../modules/feed';
+import {
+  djSetService,
+  spotifyArtistService,
+  SpotifyUpstreamError,
+  discogsArtistService,
+  DiscogsUpstreamError,
+  soundcloudArtistService,
+  SoundCloudUpstreamError,
+} from '../modules/music';
 import { verifyToken, type JWTPayload } from '../utils/auth';
 import { rebuildUserCheckinProjection } from '../services/checkin-projection';
 import {
@@ -1094,6 +1099,8 @@ const includeEventForWeb = {
       id: true,
       name: true,
       nameI18n: true,
+      abbreviation: true,
+      aliases: true,
       country: true,
       countryI18n: true,
       city: true,
@@ -3159,6 +3166,8 @@ const mapEvent = (row: any) => {
 
   return {
     id: row.id,
+    favoriteId: row.favoriteId ?? null,
+    isFavorited: Boolean(row.favoriteId),
     name: row.name,
     nameI18n: row.nameI18n ?? null,
     wikiFestivalId: row.wikiFestivalId ?? null,
@@ -3205,6 +3214,8 @@ const mapEvent = (row: any) => {
           id: row.wikiFestival.id,
           name: row.wikiFestival.name,
           nameI18n: row.wikiFestival.nameI18n ?? null,
+          abbreviation: row.wikiFestival.abbreviation ?? null,
+          aliases: row.wikiFestival.aliases ?? [],
           country: row.wikiFestival.country,
           countryI18n: row.wikiFestival.countryI18n ?? null,
           city: row.wikiFestival.city,
@@ -3316,6 +3327,31 @@ const mapEvent = (row: any) => {
         }))
   };
 };
+
+const resolveEventFavoriteIds = async (userId: string | undefined, eventIds: string[]): Promise<Map<string, string>> => {
+  if (!userId || eventIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = await prisma.eventFavorite.findMany({
+    where: {
+      userId,
+      eventId: { in: Array.from(new Set(eventIds)) },
+    },
+    select: {
+      id: true,
+      eventId: true,
+    },
+  });
+
+  return new Map(rows.map((row) => [row.eventId, row.id]));
+};
+
+const attachEventFavoriteState = <T extends { id: string }>(rows: T[], favoriteIdsByEventId: Map<string, string>): Array<T & { favoriteId: string | null }> =>
+  rows.map((row) => ({
+    ...row,
+    favoriteId: favoriteIdsByEventId.get(row.id) ?? null,
+  }));
 
 const mapTrack = (track: any) => ({
   id: track.id,
@@ -4014,6 +4050,7 @@ const popRandomItem = <T>(items: T[]): T | null => {
 
 router.get('/events/recommendations', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = (req as BFFAuthRequest).user?.userId;
     const limit = normalizeLimit(req.query.limit, 10, 20);
     const requestedStatuses = parseEventRecommendationStatuses(req.query.statuses);
     const now = new Date();
@@ -4084,8 +4121,11 @@ router.get('/events/recommendations', optionalAuth, async (req: Request, res: Re
       .map((id) => rowById.get(id))
       .filter((row): row is NonNullable<typeof row> => Boolean(row));
 
+    const favoriteIdsByEventId = await resolveEventFavoriteIds(userId, orderedRows.map((row) => row.id));
+    const rowsWithFavorites = attachEventFavoriteState(orderedRows, favoriteIdsByEventId);
+
     ok(res, {
-      items: orderedRows.map(mapEvent),
+      items: rowsWithFavorites.map(mapEvent),
       meta: {
         limit,
         selected: orderedRows.length,
@@ -4100,6 +4140,7 @@ router.get('/events/recommendations', optionalAuth, async (req: Request, res: Re
 
 router.get('/events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = (req as BFFAuthRequest).user?.userId;
     const page = normalizePage(req.query.page, 1);
     const limit = normalizeLimit(req.query.limit, 20, 100);
     const skip = (page - 1) * limit;
@@ -4131,6 +4172,19 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
       where.status = status;
     }
     if (search) {
+      const aliasMatchedBrands = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id"
+        FROM "wiki_festivals"
+        WHERE "is_active" = true
+          AND cardinality("aliases") > 0
+          AND EXISTS (
+            SELECT 1
+            FROM unnest("aliases") AS alias
+            WHERE alias ILIKE ${`%${search}%`}
+          )
+        LIMIT 100
+      `);
+      const aliasMatchedBrandIDs = aliasMatchedBrands.map((brand) => brand.id);
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
@@ -4139,6 +4193,18 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
         { country: { contains: search, mode: 'insensitive' } },
         { organizerName: { contains: search, mode: 'insensitive' } },
         { wikiFestivalId: { contains: search, mode: 'insensitive' } },
+        {
+          wikiFestival: {
+            is: {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { abbreviation: { contains: search, mode: 'insensitive' } },
+                { aliases: { has: search } },
+              ],
+            },
+          },
+        },
+        ...(aliasMatchedBrandIDs.length > 0 ? [{ wikiFestivalId: { in: aliasMatchedBrandIDs } }] : []),
         { nameI18n: { path: ['zh'], string_contains: search } },
         { nameI18n: { path: ['en'], string_contains: search } },
         { descriptionI18n: { path: ['zh'], string_contains: search } },
@@ -4177,10 +4243,12 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
     ]);
 
     const rowsWithPerformers = await withLineupSlotPerformers(rows);
+    const favoriteIdsByEventId = await resolveEventFavoriteIds(userId, rowsWithPerformers.map((row) => row.id));
+    const rowsWithFavorites = attachEventFavoriteState(rowsWithPerformers, favoriteIdsByEventId);
 
     ok(
       res,
-      { items: rowsWithPerformers.map(mapEvent) },
+      { items: rowsWithFavorites.map(mapEvent) },
       {
         page,
         limit,
@@ -4206,16 +4274,153 @@ router.get('/events/my', optionalAuth, async (req: Request, res: Response): Prom
     });
 
     const rowsWithPerformers = await withLineupSlotPerformers(rows);
+    const favoriteIdsByEventId = await resolveEventFavoriteIds(userId, rowsWithPerformers.map((row) => row.id));
+    const rowsWithFavorites = attachEventFavoriteState(rowsWithPerformers, favoriteIdsByEventId);
 
-    ok(res, { items: rowsWithPerformers.map(mapEvent) });
+    ok(res, { items: rowsWithFavorites.map(mapEvent) });
   } catch (error) {
     console.error('BFF web my events error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
+router.get('/events/favorites', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const skip = (page - 1) * limit;
+
+    const [favoriteRows, total] = await Promise.all([
+      prisma.eventFavorite.findMany({
+        where: { userId },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          event: {
+            include: includeEventForWeb,
+          },
+        },
+      }),
+      prisma.eventFavorite.count({ where: { userId } }),
+    ]);
+
+    const events = favoriteRows.map((row) => ({
+      ...row.event,
+      favoriteId: row.id,
+    }));
+    const rowsWithPerformers = await withLineupSlotPerformers(events);
+
+    ok(
+      res,
+      { items: rowsWithPerformers.map(mapEvent) },
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      }
+    );
+  } catch (error) {
+    console.error('BFF web event favorites error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/events/:id/favorite', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const eventId = req.params.id as string;
+    const row = await prisma.eventFavorite.findUnique({
+      where: {
+        userId_eventId: {
+          userId,
+          eventId,
+        },
+      },
+    });
+
+    ok(res, {
+      id: row?.id ?? null,
+      eventId,
+      isFavorited: Boolean(row),
+      createdAt: row?.createdAt ?? null,
+    });
+  } catch (error) {
+    console.error('BFF web event favorite status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/events/:id/favorite', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const eventId = req.params.id as string;
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true },
+    });
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+
+    const row = await prisma.eventFavorite.upsert({
+      where: {
+        userId_eventId: {
+          userId,
+          eventId,
+        },
+      },
+      create: {
+        userId,
+        eventId,
+      },
+      update: {},
+    });
+
+    ok(res, {
+      id: row.id,
+      eventId: row.eventId,
+      isFavorited: true,
+      createdAt: row.createdAt,
+    });
+  } catch (error) {
+    console.error('BFF web event favorite create error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/events/:id/favorite', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const eventId = req.params.id as string;
+    await prisma.eventFavorite.deleteMany({
+      where: {
+        userId,
+        eventId,
+      },
+    });
+
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF web event favorite delete error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = (req as BFFAuthRequest).user?.userId;
     const eventId = req.params.id as string;
     const row = await prisma.event.findUnique({
       where: { id: eventId },
@@ -4227,7 +4432,11 @@ router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Pro
       return;
     }
 
-    ok(res, mapEvent(await withLineupSlotPerformersOne(row)));
+    const rowWithPerformers = await withLineupSlotPerformersOne(row);
+    const favoriteIdsByEventId = await resolveEventFavoriteIds(userId, [rowWithPerformers.id]);
+    const rowWithFavorite = attachEventFavoriteState([rowWithPerformers], favoriteIdsByEventId)[0];
+
+    ok(res, mapEvent(rowWithFavorite));
   } catch (error) {
     console.error('BFF web event detail error:', error);
     res.status(500).json({ error: 'Internal server error' });

@@ -35,6 +35,14 @@ struct PostCardView: View {
         ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
 
+    private var postInteractionRepository: PostInteractionRepository {
+        appContainer.postInteractionRepository
+    }
+
+    private var shareMessageRepository: ShareMessageRepository {
+        appContainer.shareMessageRepository
+    }
+
     init(
         post: Post,
         currentUserId: String?,
@@ -392,8 +400,8 @@ struct PostCardView: View {
     }
 
     private func loadSharePanelConversations() async throws -> [Conversation] {
-        async let directs = appContainer.socialService.fetchConversations(type: .direct)
-        async let groups = appContainer.socialService.fetchConversations(type: .group)
+        async let directs = shareMessageRepository.fetchConversations(type: .direct)
+        async let groups = shareMessageRepository.fetchConversations(type: .group)
         let merged = try await directs + groups
         let deduped = merged.reduce(into: [String: Conversation]()) { partialResult, conversation in
             partialResult[conversation.id] = conversation
@@ -405,20 +413,20 @@ struct PostCardView: View {
     }
 
     private func sendPostSharePayload(to conversation: Conversation, note: String?) async throws {
-        _ = try await appContainer.socialService.sendPostCardMessage(
+        _ = try await shareMessageRepository.sendPostCardMessage(
             conversationID: conversation.id,
             payload: PostSharePayload(post: post).cardPayload
         )
 
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmedNote.isEmpty {
-            _ = try await appContainer.socialService.sendMessage(
+            _ = try await shareMessageRepository.sendMessage(
                 conversationID: conversation.id,
                 content: trimmedNote
             )
         }
 
-        _ = try? await appContainer.socialService.recordShare(postID: post.id, channel: "in_app_chat", status: "completed")
+        _ = try? await postInteractionRepository.recordShare(postID: post.id, channel: "in_app_chat", status: "completed")
     }
 
     private func sharePrimaryActions() -> [SharePanelPrimaryAction] {
@@ -441,7 +449,6 @@ struct PostCardView: View {
     }
 
     private func shareQuickActions() -> [SharePanelQuickAction] {
-        let payload = PostSharePayload(post: post)
         var actions: [SharePanelQuickAction] = [
             SharePanelQuickAction(
                 title: L("复制链接", "Copy Link"),

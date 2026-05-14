@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
+import { adminAuditService, buildAdminAuditLogCreateData } from '../modules/admin/admin-audit.service';
 
 const prisma = new PrismaClient();
 
@@ -278,16 +279,14 @@ export const createPreRegistrationBatch = async (req: AuthRequest, res: Response
       },
     });
 
-    await prisma.adminAuditLog.create({
-      data: {
-        actorId,
-        action: 'pre_registration.batch.create',
-        targetType: 'pre_registration_batch',
-        targetId: created.id,
-        detail: {
-          batchName: created.batchName,
-          plannedSlots: created.plannedSlots,
-        },
+    await adminAuditService.createAction({
+      actorId,
+      action: 'pre_registration.batch.create',
+      targetType: 'pre_registration_batch',
+      targetId: created.id,
+      detail: {
+        batchName: created.batchName,
+        plannedSlots: created.plannedSlots,
       },
     });
 
@@ -434,7 +433,7 @@ export const applyPreRegistrationDecisions = async (req: AuthRequest, res: Respo
 
     operations.push(
       prisma.adminAuditLog.create({
-        data: {
+        data: buildAdminAuditLogCreateData({
           actorId,
           action: 'pre_registration.batch.apply_decision',
           targetType: 'pre_registration_batch',
@@ -445,7 +444,7 @@ export const applyPreRegistrationDecisions = async (req: AuthRequest, res: Respo
             affectedCount: registrationIds.length,
             registrationIds,
           },
-        },
+        }),
       })
     );
 
@@ -586,18 +585,16 @@ export const createPreRegistrationNotifications = async (req: AuthRequest, res: 
       })),
     });
 
-    await prisma.adminAuditLog.create({
-      data: {
-        actorId,
-        action: 'pre_registration.notification.enqueue',
-        targetType: 'pre_registration_notification',
-        targetId: batchId || 'manual',
-        detail: {
-          channel,
-          templateKey,
-          batchId: batchId ?? null,
-          affectedCount: registrationIds.length,
-        },
+    await adminAuditService.createAction({
+      actorId,
+      action: 'pre_registration.notification.enqueue',
+      targetType: 'pre_registration_notification',
+      targetId: batchId || 'manual',
+      detail: {
+        channel,
+        templateKey,
+        batchId: batchId ?? null,
+        affectedCount: registrationIds.length,
       },
     });
 

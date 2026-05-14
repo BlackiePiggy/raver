@@ -36,8 +36,8 @@ final class RaverChatController: ObservableObject {
         }
     }
 
-    func updateContext(conversation: Conversation, service: SocialService) {
-        dataProvider.updateContext(conversation: conversation, service: service)
+    func updateContext(conversation: Conversation, repository: ChatMessageRepository) {
+        dataProvider.updateContext(conversation: conversation, repository: repository)
         resetTencentState()
         start()
     }
@@ -54,7 +54,7 @@ final class RaverChatController: ObservableObject {
         }
 
         do {
-            let page = try await dataProvider.currentService.fetchMessages(
+            let page = try await dataProvider.currentRepository.fetchMessages(
                 conversationID: dataProvider.currentConversation.id,
                 startClientMsgID: oldestLoadedMessageID,
                 count: Pagination.olderPageCount
@@ -84,7 +84,7 @@ final class RaverChatController: ObservableObject {
             candidates: mentionCandidates,
             allowMentionAll: allowMentionAll
         )
-        let sent = try await dataProvider.currentService.sendMessage(
+        let sent = try await dataProvider.currentRepository.sendMessage(
             conversationID: dataProvider.currentConversation.id,
             content: transportText,
             mentionedUserIDs: resolvedMentionedUserIDs
@@ -102,7 +102,7 @@ final class RaverChatController: ObservableObject {
 
     @discardableResult
     func sendEventCardMessage(_ payload: EventShareCardPayload) async throws -> ChatMessage {
-        let sent = try await dataProvider.currentService.sendEventCardMessage(
+        let sent = try await dataProvider.currentRepository.sendEventCardMessage(
             conversationID: dataProvider.currentConversation.id,
             payload: payload
         )
@@ -112,7 +112,7 @@ final class RaverChatController: ObservableObject {
 
     @discardableResult
     func sendSetCardMessage(_ payload: SetShareCardPayload) async throws -> ChatMessage {
-        let sent = try await dataProvider.currentService.sendSetCardMessage(
+        let sent = try await dataProvider.currentRepository.sendSetCardMessage(
             conversationID: dataProvider.currentConversation.id,
             payload: payload
         )
@@ -122,7 +122,7 @@ final class RaverChatController: ObservableObject {
 
     @discardableResult
     func sendBrandCardMessage(_ payload: BrandShareCardPayload) async throws -> ChatMessage {
-        let sent = try await dataProvider.currentService.sendBrandCardMessage(
+        let sent = try await dataProvider.currentRepository.sendBrandCardMessage(
             conversationID: dataProvider.currentConversation.id,
             payload: payload
         )
@@ -132,7 +132,7 @@ final class RaverChatController: ObservableObject {
 
     @discardableResult
     func sendLabelCardMessage(_ payload: LabelShareCardPayload) async throws -> ChatMessage {
-        let sent = try await dataProvider.currentService.sendLabelCardMessage(
+        let sent = try await dataProvider.currentRepository.sendLabelCardMessage(
             conversationID: dataProvider.currentConversation.id,
             payload: payload
         )
@@ -142,7 +142,7 @@ final class RaverChatController: ObservableObject {
 
     @discardableResult
     func sendNewsCardMessage(_ payload: NewsShareCardPayload) async throws -> ChatMessage {
-        let sent = try await dataProvider.currentService.sendNewsCardMessage(
+        let sent = try await dataProvider.currentRepository.sendNewsCardMessage(
             conversationID: dataProvider.currentConversation.id,
             payload: payload
         )
@@ -152,7 +152,7 @@ final class RaverChatController: ObservableObject {
 
     @discardableResult
     func sendRankingBoardCardMessage(_ payload: RankingBoardShareCardPayload) async throws -> ChatMessage {
-        let sent = try await dataProvider.currentService.sendRankingBoardCardMessage(
+        let sent = try await dataProvider.currentRepository.sendRankingBoardCardMessage(
             conversationID: dataProvider.currentConversation.id,
             payload: payload
         )
@@ -162,7 +162,7 @@ final class RaverChatController: ObservableObject {
 
     @discardableResult
     func sendMyCheckinsCardMessage(_ payload: MyCheckinsShareCardPayload) async throws -> ChatMessage {
-        let sent = try await dataProvider.currentService.sendMyCheckinsCardMessage(
+        let sent = try await dataProvider.currentRepository.sendMyCheckinsCardMessage(
             conversationID: dataProvider.currentConversation.id,
             payload: payload
         )
@@ -172,7 +172,7 @@ final class RaverChatController: ObservableObject {
 
     @discardableResult
     func sendEventRouteCardMessage(_ payload: EventRouteShareCardPayload) async throws -> ChatMessage {
-        let sent = try await dataProvider.currentService.sendEventRouteCardMessage(
+        let sent = try await dataProvider.currentRepository.sendEventRouteCardMessage(
             conversationID: dataProvider.currentConversation.id,
             payload: payload
         )
@@ -185,7 +185,7 @@ final class RaverChatController: ObservableObject {
         fileURL: URL,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> ChatMessage {
-        let sent = try await dataProvider.currentService.sendImageMessage(
+        let sent = try await dataProvider.currentRepository.sendImageMessage(
             conversationID: dataProvider.currentConversation.id,
             fileURL: fileURL
         )
@@ -199,7 +199,7 @@ final class RaverChatController: ObservableObject {
         fileURL: URL,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> ChatMessage {
-        let sent = try await dataProvider.currentService.sendVideoMessage(
+        let sent = try await dataProvider.currentRepository.sendVideoMessage(
             conversationID: dataProvider.currentConversation.id,
             fileURL: fileURL
         )
@@ -210,7 +210,7 @@ final class RaverChatController: ObservableObject {
 
     @discardableResult
     func sendVoiceMessage(fileURL: URL) async throws -> ChatMessage {
-        let sent = try await dataProvider.currentService.sendVoiceMessage(
+        let sent = try await dataProvider.currentRepository.sendVoiceMessage(
             conversationID: dataProvider.currentConversation.id,
             fileURL: fileURL
         )
@@ -220,7 +220,7 @@ final class RaverChatController: ObservableObject {
 
     @discardableResult
     func sendFileMessage(fileURL: URL) async throws -> ChatMessage {
-        let sent = try await dataProvider.currentService.sendFileMessage(
+        let sent = try await dataProvider.currentRepository.sendFileMessage(
             conversationID: dataProvider.currentConversation.id,
             fileURL: fileURL
         )
@@ -243,7 +243,7 @@ final class RaverChatController: ObservableObject {
             guard !text.isEmpty else {
                 throw ServiceError.message(L("文本内容为空，无法重发", "Empty text message cannot be resent"))
             }
-            let resent = try await dataProvider.currentService.sendMessage(
+            let resent = try await dataProvider.currentRepository.sendMessage(
                 conversationID: dataProvider.currentConversation.id,
                 content: text,
                 mentionedUserIDs: message.mentionedUserIDs
@@ -257,28 +257,28 @@ final class RaverChatController: ObservableObject {
             replaceLocalFailedMessage(messageID: messageID, with: decorated)
             return decorated
         case .image:
-            let resent = try await dataProvider.currentService.sendImageMessage(
+            let resent = try await dataProvider.currentRepository.sendImageMessage(
                 conversationID: dataProvider.currentConversation.id,
                 fileURL: try localMediaFileURL(from: message)
             )
             replaceLocalFailedMessage(messageID: messageID, with: resent)
             return resent
         case .video:
-            let resent = try await dataProvider.currentService.sendVideoMessage(
+            let resent = try await dataProvider.currentRepository.sendVideoMessage(
                 conversationID: dataProvider.currentConversation.id,
                 fileURL: try localMediaFileURL(from: message)
             )
             replaceLocalFailedMessage(messageID: messageID, with: resent)
             return resent
         case .voice:
-            let resent = try await dataProvider.currentService.sendVoiceMessage(
+            let resent = try await dataProvider.currentRepository.sendVoiceMessage(
                 conversationID: dataProvider.currentConversation.id,
                 fileURL: try localMediaFileURL(from: message)
             )
             replaceLocalFailedMessage(messageID: messageID, with: resent)
             return resent
         case .file:
-            let resent = try await dataProvider.currentService.sendFileMessage(
+            let resent = try await dataProvider.currentRepository.sendFileMessage(
                 conversationID: dataProvider.currentConversation.id,
                 fileURL: try localMediaFileURL(from: message)
             )
@@ -334,7 +334,7 @@ final class RaverChatController: ObservableObject {
             throw ServiceError.message(L("消息尚未发送完成，暂不可撤回", "This message cannot be revoked yet"))
         }
 
-        let displayText = try await dataProvider.currentService.revokeMessage(
+        let displayText = try await dataProvider.currentRepository.revokeMessage(
             conversationID: dataProvider.currentConversation.id,
             messageID: messageID
         )
@@ -352,7 +352,7 @@ final class RaverChatController: ObservableObject {
             return
         }
 
-        try await dataProvider.currentService.deleteMessage(
+        try await dataProvider.currentRepository.deleteMessage(
             conversationID: dataProvider.currentConversation.id,
             messageID: messageID
         )
@@ -460,7 +460,7 @@ final class RaverChatController: ObservableObject {
         }
 
         do {
-            let page = try await dataProvider.currentService.fetchMessages(
+            let page = try await dataProvider.currentRepository.fetchMessages(
                 conversationID: dataProvider.currentConversation.id,
                 startClientMsgID: nil,
                 count: Pagination.initialPageCount

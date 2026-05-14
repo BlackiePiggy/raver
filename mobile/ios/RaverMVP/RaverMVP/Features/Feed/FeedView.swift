@@ -7,7 +7,9 @@ struct FeedView: View {
     var body: some View {
         FeedScreen(
             viewModel: FeedViewModel(
-                repository: appContainer.circleFeedRepository
+                streamRepository: appContainer.feedStreamRepository,
+                interactionRepository: appContainer.postInteractionRepository,
+                eventTrackingRepository: appContainer.feedEventTrackingRepository
             ),
             appearanceResolver: VirtualAssetListAppearanceResolver(
                 repository: appContainer.virtualAssetRepository,

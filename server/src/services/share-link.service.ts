@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { Prisma, PrismaClient, ShareLink } from '@prisma/client';
-import { tencentIMGroupService } from './tencent-im/tencent-im-group.service';
+import { tencentIMGroupService } from '../modules/im';
 
 const SHARE_BASE_URL = 'https://raver.app';
 const SHARE_CODE_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';

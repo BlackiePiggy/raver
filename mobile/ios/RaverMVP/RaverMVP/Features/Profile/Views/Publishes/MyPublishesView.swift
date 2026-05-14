@@ -7,10 +7,15 @@ final class MyPublishesViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    private let repository: ProfileSocialRepository
+    private let userRepository: ProfileUserRepository
+    private let contentRepository: ProfileContentRepository
 
-    init(repository: ProfileSocialRepository) {
-        self.repository = repository
+    init(
+        userRepository: ProfileUserRepository,
+        contentRepository: ProfileContentRepository
+    ) {
+        self.userRepository = userRepository
+        self.contentRepository = contentRepository
     }
 
     func load() async {
@@ -19,7 +24,7 @@ final class MyPublishesViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            async let publishesTask = repository.fetchMyPublishes()
+            async let publishesTask = contentRepository.fetchMyPublishes()
             async let newsTask = loadMyNewsPublishes()
             publishes = try await publishesTask
             newsPublishes = try await newsTask
@@ -31,7 +36,7 @@ final class MyPublishesViewModel: ObservableObject {
 
     func deleteSet(id: String) async {
         do {
-            try await repository.deleteDJSet(id: id)
+            try await contentRepository.deleteDJSet(id: id)
             publishes.djSets.removeAll { $0.id == id }
         } catch {
             errorMessage = error.userFacingMessage
@@ -40,7 +45,7 @@ final class MyPublishesViewModel: ObservableObject {
 
     func deleteEvent(id: String) async {
         do {
-            try await repository.deleteEvent(id: id)
+            try await contentRepository.deleteEvent(id: id)
             publishes.events.removeAll { $0.id == id }
         } catch {
             errorMessage = error.userFacingMessage
@@ -49,7 +54,7 @@ final class MyPublishesViewModel: ObservableObject {
 
     func deleteRatingEvent(id: String) async {
         do {
-            try await repository.deleteRatingEvent(id: id)
+            try await contentRepository.deleteRatingEvent(id: id)
             publishes.ratingEvents.removeAll { $0.id == id }
             publishes.ratingUnits.removeAll { $0.eventId == id }
         } catch {
@@ -59,7 +64,7 @@ final class MyPublishesViewModel: ObservableObject {
 
     func deleteRatingUnit(id: String) async {
         do {
-            try await repository.deleteRatingUnit(id: id)
+            try await contentRepository.deleteRatingUnit(id: id)
             publishes.ratingUnits.removeAll { $0.id == id }
         } catch {
             errorMessage = error.userFacingMessage
@@ -67,14 +72,14 @@ final class MyPublishesViewModel: ObservableObject {
     }
 
     private func loadMyNewsPublishes() async throws -> [Post] {
-        let profile = try await repository.fetchMyProfile()
+        let profile = try await userRepository.fetchMyProfile()
         var cursor: String?
         var rounds = 0
         var merged: [Post] = []
         var seen: Set<String> = []
 
         repeat {
-            let page = try await repository.fetchPostsByUser(userID: profile.id, cursor: cursor)
+            let page = try await contentRepository.fetchPostsByUser(userID: profile.id, cursor: cursor)
             for post in page.posts where post.isRaverNews && !seen.contains(post.id) {
                 seen.insert(post.id)
                 merged.append(post)
@@ -93,9 +98,15 @@ struct MyPublishesView: View {
     @StateObject private var viewModel: MyPublishesViewModel
     @State private var selectedTab = 0
 
-    init(repository: ProfileSocialRepository) {
+    init(
+        userRepository: ProfileUserRepository,
+        contentRepository: ProfileContentRepository
+    ) {
         _viewModel = StateObject(
-            wrappedValue: MyPublishesViewModel(repository: repository)
+            wrappedValue: MyPublishesViewModel(
+                userRepository: userRepository,
+                contentRepository: contentRepository
+            )
         )
     }
 

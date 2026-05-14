@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import OSS from 'ali-oss';
 import crypto from 'crypto';
 import { hashPassword, comparePassword, generateToken } from '../utils/auth';
-import { tencentIMUserService } from '../services/tencent-im/tencent-im-user.service';
+import { tencentIMUserService } from '../modules/im';
 
 const prisma = new PrismaClient();
 

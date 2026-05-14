@@ -38,9 +38,9 @@ Tencent IM。
 
 ```text
 server/src/routes/tencent-im.routes.ts
+server/src/modules/im/
 server/src/services/tencent-im/
-mobile/ios/RaverMVP/RaverMVP/Core/IMSession.swift
-mobile/ios/RaverMVP/RaverMVP/Core/IMChatStore.swift
+mobile/ios/RaverMVP/RaverMVP/Infrastructure/TencentIM/
 mobile/ios/RaverMVP/RaverMVP/Features/Messages/
 ```
 
@@ -60,6 +60,8 @@ OpenIM。
 
 ```text
 server/src/services/openim/
+server/src/services/openim/README.md
+mobile/ios/RaverMVP/RaverMVP/Infrastructure/LegacyOpenIM/
 thirdparty/openimApp/
 docs/OPENIM_*.md
 docs/reports/openim-*
@@ -69,7 +71,7 @@ docs/reports/openim-*
 
 - 不再为 OpenIM 扩展新业务能力。
 - 保留迁移、排障和历史参考价值。
-- Phase 4 中将 OpenIM 相关文件和文档明确标记为 legacy / migration。
+- Phase 4 已在 `server/src/services/openim/README.md` 和 `mobile/ios/RaverMVP/RaverMVP/Infrastructure/LegacyOpenIM/README.md` 标记 legacy / migration；后续只整理 OpenIM 文档索引和第三方目录，不扩展新能力。
 
 ## 4. 通知路线
 
@@ -292,7 +294,7 @@ MockWebFeatureService
 
 ## 11. 当前待处理
 
-- [ ] 为 OpenIM 文档和相关目录补充 legacy 标记。
+- [x] 为 OpenIM 服务目录和 iOS legacy runtime 目录补充 legacy 标记。
 - [ ] 将旧 notification 路线标记为 compat。
 - [ ] 将 Check-in v1 路线标记为 compat / legacy。
 - [ ] 将 Web 页面逐步分为 Admin / Public / Legacy。

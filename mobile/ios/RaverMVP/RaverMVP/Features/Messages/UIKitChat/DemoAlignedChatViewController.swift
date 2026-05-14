@@ -20,6 +20,7 @@ final class DemoAlignedChatViewController: UIViewController {
 
     private var conversation: Conversation
     private var service: SocialService
+    private var messageRepository: ChatMessageRepository
     private let appearanceResolver: VirtualAssetChatAppearanceResolver
     private var onNavigate: ((AppRoute) -> Void)?
     private var onLeaveConversation: (() -> Void)?
@@ -117,13 +118,15 @@ final class DemoAlignedChatViewController: UIViewController {
     ) {
         self.conversation = conversation
         self.service = service
+        let messageRepository = ChatMessageRepositoryAdapter(service: service)
+        self.messageRepository = messageRepository
         self.appearanceResolver = VirtualAssetChatAppearanceResolver(repository: virtualAssetRepository)
         self.onNavigate = onNavigate
         self.onLeaveConversation = onLeaveConversation
         self.chatController = RaverChatController(
             dataProvider: RaverChatDataProvider(
                 conversation: conversation,
-                service: service
+                repository: messageRepository
             )
         )
         self.collectionDataSource = RaverChatCollectionDataSource(
@@ -169,7 +172,7 @@ final class DemoAlignedChatViewController: UIViewController {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await self.service.markConversationRead(conversationID: self.conversation.id)
+                try await self.messageRepository.markConversationRead(conversationID: self.conversation.id)
             } catch {
                 // Keep UX stable; unread will continue syncing from IM callbacks.
             }
@@ -196,6 +199,7 @@ final class DemoAlignedChatViewController: UIViewController {
     ) {
         messageActionCoordinator?.stopVoicePlaybackIfNeeded()
         self.service = service
+        self.messageRepository = ChatMessageRepositoryAdapter(service: service)
         self.onNavigate = onNavigate
         self.onLeaveConversation = onLeaveConversation
         if let chatScreenLifecycleCoordinator {
@@ -203,6 +207,7 @@ final class DemoAlignedChatViewController: UIViewController {
                 currentConversation: self.conversation,
                 nextConversation: conversation,
                 service: service,
+                messageRepository: messageRepository,
                 onNavigate: onNavigate,
                 onLeaveConversation: onLeaveConversation
             )
@@ -485,7 +490,7 @@ final class DemoAlignedChatViewController: UIViewController {
             dependencies: DemoAlignedChatRouteCoordinatorFactoryDependencies(
                 presenter: self,
                 conversation: conversation,
-                service: service,
+                repository: ChatSettingsRepositoryAdapter(service: service),
                 onNavigate: onNavigate,
                 onLeaveConversation: onLeaveConversation
             )

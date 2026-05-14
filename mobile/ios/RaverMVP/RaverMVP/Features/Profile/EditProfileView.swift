@@ -3,9 +3,9 @@ import PhotosUI
 import UIKit
 
 struct SaveProfileUseCase {
-    private let repository: ProfileSocialRepository
+    private let repository: ProfileUserRepository
 
-    init(repository: ProfileSocialRepository) {
+    init(repository: ProfileUserRepository) {
         self.repository = repository
     }
 
@@ -47,7 +47,7 @@ final class EditProfileViewModel: ObservableObject {
 
     private let saveProfileUseCase: SaveProfileUseCase
 
-    init(repository: ProfileSocialRepository) {
+    init(repository: ProfileUserRepository) {
         self.saveProfileUseCase = SaveProfileUseCase(repository: repository)
     }
 
@@ -98,7 +98,7 @@ struct EditProfileView: View {
 
     init(
         profile: UserProfile,
-        repository: ProfileSocialRepository,
+        repository: ProfileUserRepository,
         onSaved: @escaping (UserProfile) -> Void
     ) {
         _viewModel = StateObject(wrappedValue: EditProfileViewModel(repository: repository))

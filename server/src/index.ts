@@ -25,6 +25,7 @@ import notificationCenterRoutes from './routes/notification-center.routes';
 import checkinsV2Routes from './routes/checkins-v2.routes';
 import searchRoutes from './routes/search.routes';
 import virtualAssetRoutes from './routes/virtual-asset.routes';
+import { adminRoutes } from './modules/admin';
 import {
   registerNotificationCenterAPNSHandler,
   startNotificationEventCountdownScheduler,
@@ -99,6 +100,7 @@ app.use('/api/music', musicRoutes);
 app.use('/api/squads', squadRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/labels', labelRoutes);
+app.use('/api/admin/v1', adminRoutes);
 app.use('/api', preRegistrationRoutes);
 app.use('/', shareRoutes);
 app.use('/v1', bffRoutes);
@@ -127,6 +129,7 @@ app.get('/api', (_req: Request, res: Response) => {
       squads: '/api/squads',
       notifications: '/api/notifications',
       labels: '/api/labels',
+      adminV1: '/api/admin/v1',
       preRegistrations: '/api/pre-registrations',
       preRegistrationAdmin: '/api/admin/pre-registrations',
       bffV1: '/v1',

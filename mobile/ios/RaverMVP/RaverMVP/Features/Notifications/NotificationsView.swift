@@ -189,3 +189,17 @@ private struct NotificationsScreen: View {
         AvatarPlaceholderView(size: 30)
     }
 }
+
+#if DEBUG
+#Preview("Notifications Repository Seam") {
+    NavigationStack {
+        NotificationsScreen(
+            viewModel: NotificationsViewModel(repository: MockNotificationRepository()),
+            appearanceResolver: VirtualAssetListAppearanceResolver(
+                repository: MockVirtualAssetRepository(),
+                surface: "notifications-preview"
+            )
+        )
+    }
+}
+#endif

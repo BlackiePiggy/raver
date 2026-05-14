@@ -57,6 +57,42 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data.items.map(localizedEvent)
     }
 
+    func fetchFavoriteEvents(page: Int, limit: Int) async throws -> EventListPage {
+        let queryItems = [
+            URLQueryItem(name: "page", value: "\(max(1, page))"),
+            URLQueryItem(name: "limit", value: "\(max(1, min(100, limit)))")
+        ]
+        let response: BFFEnvelope<BFFItems<WebEvent>> = try await request(
+            path: "/v1/events/favorites",
+            method: "GET",
+            queryItems: queryItems
+        )
+        return EventListPage(items: response.data.items.map(localizedEvent), pagination: response.pagination)
+    }
+
+    func fetchEventFavoriteStatus(eventID: String) async throws -> EventFavoriteStatus {
+        let response: BFFEnvelope<EventFavoriteStatus> = try await request(
+            path: "/v1/events/\(eventID)/favorite",
+            method: "GET"
+        )
+        return response.data
+    }
+
+    func favoriteEvent(eventID: String) async throws -> EventFavoriteStatus {
+        let response: BFFEnvelope<EventFavoriteStatus> = try await request(
+            path: "/v1/events/\(eventID)/favorite",
+            method: "POST"
+        )
+        return response.data
+    }
+
+    func unfavoriteEvent(eventID: String) async throws {
+        let _: BFFEnvelope<GenericSuccess> = try await request(
+            path: "/v1/events/\(eventID)/favorite",
+            method: "DELETE"
+        )
+    }
+
     func createEvent(input: CreateEventInput) async throws -> WebEvent {
         let response: BFFEnvelope<WebEvent> = try await request(path: "/v1/events", method: "POST", body: input)
         return localizedEvent(response.data)
@@ -984,6 +1020,14 @@ final class LiveWebFeatureService: WebFeatureService {
         if let countryI18n = event.countryI18n {
             let next = countryI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
             if !next.isEmpty { localized.country = next }
+        }
+        if let festival = event.wikiFestival, let nameI18n = festival.nameI18n {
+            let next = nameI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !next.isEmpty {
+                var localizedFestival = festival
+                localizedFestival.name = next
+                localized.wikiFestival = localizedFestival
+            }
         }
         return localized
     }

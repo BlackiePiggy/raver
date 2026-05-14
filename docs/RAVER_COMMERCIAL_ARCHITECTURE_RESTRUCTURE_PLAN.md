@@ -959,18 +959,21 @@ Accepted / Deprecated / Superseded
 
 任务：
 
-- [ ] 建立 `Modules/*/Repositories/`。
-- [ ] 从 Notifications、VirtualAssets、Share 开始迁移。
-- [ ] 为 Event、DJ、Set、Feed、Squad 定义 repository protocol。
-- [ ] `SocialService` 和 `WebFeatureService` 暂时降级为底层 API client。
-- [ ] 更新 tracker log，记录每个迁移模块的 ViewModel 调整范围。
+- [x] 建立 repository 逻辑边界；物理 `Modules/*/Repositories/` 大搬迁 deferred。
+- [x] 从 Notifications、VirtualAssets、Share 开始迁移。
+- [x] 为 Event、DJ、Set、Feed、Squad 定义 repository protocol。
+- [x] `SocialService` 和 `WebFeatureService` 在 Phase 3 目标范围内降级为底层 API client；IM/Realtime/Rating detail 剩余直连转 Phase 4/5。
+- [x] 标记 Fat Repository 风险，避免从 God Service 演变成新的巨型 Repository。
+- [x] 更新 tracker log，记录每个迁移模块的 ViewModel 调整范围。
 
 验收：
 
-- [ ] 新 ViewModel 依赖 Repository protocol。
-- [ ] 旧 service 调用逐步减少。
-- [ ] 单个模块可 mock repository 做预览和测试。
-- [ ] iOS 编译通过。
+- [x] 新 ViewModel 依赖 Repository protocol。
+- [x] 旧 service 调用逐步减少，剩余直连已归类到 Phase 4 / Phase 5 / infrastructure adapter。
+- [x] 单个模块可 mock repository 做预览和测试；Notifications 已补 `MockNotificationRepository` preview seam。
+- [x] 偏胖 repository 有明确拆分候选和后续 Phase，不再继续承载无关领域新能力。
+- [x] 新增 repository 方法通过领域归属检查；跨领域编排进入 UseCase，不把 God Service 平移成 Fat Repository。
+- [x] iOS 编译通过。
 
 ### Phase 4：IM 和 Squad 收束
 

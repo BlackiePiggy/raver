@@ -1,0 +1,131 @@
+# Raver React Native Execution Log
+
+> Purpose: 记录 RN 复现过程中的需求确认、路线决策、开发进度、收口动作和延期项。  
+> Rule: 这里只写影响路线的信息，不写流水账。
+
+## 2026-05-14 - Execution Route Documents
+
+Phase: Phase 0 - 执行基线与范围冻结
+
+Scope:
+
+- 建立 RN 复现的执行路线指导文档。
+- 建立日志文件。
+- 建立延期需求 backlog 文件。
+- 将文档入口接入 RN README。
+
+iOS source reviewed:
+
+- 本轮没有新增读取 iOS 代码；执行路线基于上一轮已梳理的 iOS AppCoordinator、MainTabCoordinator、AppContainer、Feature 目录、Backend 和 Flutter 复刻文档。
+
+User confirmations:
+
+- 用户要求执行过程中每次结合现有 iOS 原生代码给出策略。
+- 用户要求明确哪些需求必须确认。
+- 用户要求每一部分都有具体改造路线落地文档。
+- 用户要求 checkbox 跟踪进度。
+- 用户要求日志记录到新的 Markdown 文件。
+- 用户要求开发中始终保持核心路线，避免新增外扩需求导致路线漂移。
+- 用户要求能收口的部分及时收口。
+
+Decisions:
+
+- 新增 `EXECUTION_ROUTE_GUIDE.md` 作为日常执行主文档。
+- 新增 `EXECUTION_LOG.md` 作为执行日志。
+- 新增 `DEFERRED_BACKLOG.md` 作为延期和路线漂移控制入口。
+- 每个执行单元必须先读取 iOS 来源，再写局部 implementation 文档，再实现。
+- 每轮开发结束必须更新日志和 checkbox。
+
+Changed docs:
+
+- `docs/react-native/EXECUTION_ROUTE_GUIDE.md`
+- `docs/react-native/EXECUTION_LOG.md`
+- `docs/react-native/DEFERRED_BACKLOG.md`
+- `docs/react-native/README.md`
+
+Changed code:
+
+- None.
+
+Validation:
+
+- 文档路径已建立。
+- 后续可按 Phase 和 checkbox 推进。
+
+Deferred:
+
+- 尚未创建 RN 工程。Revisit phase: Phase 1。
+- 尚未确认 Expo Dev Client / RN CLI。Revisit phase: Phase 0。
+- 尚未确认首期是否 Android 优先或双端。Revisit phase: Phase 0。
+
+Risks:
+
+- 如果未先确认 RN 工程路线，后续 native integration 的成本和目录结构会摇摆。
+- 如果首期范围不冻结，IM、Widget、小队定位、视频发布容易把 P0 主线拖散。
+
+Next:
+
+- 先完成 Phase 0 首次确认清单。
+- 确认后进入 RN 工程底座 implementation 文档。
+
+## 2026-05-14 - Phase 0 Decisions Confirmed
+
+Phase: Phase 0 - 执行基线与范围冻结
+
+Scope:
+
+- 记录用户对 RN 复现路线的关键确认。
+- 更新执行路线 checkbox。
+- 建立 implementation 文档目录入口。
+
+iOS source reviewed:
+
+- 本轮未新增读取 iOS 文件；下一轮创建 RN 工程底座前，需要固定当前 iOS 分支提交作为复刻基线。
+
+User confirmations:
+
+- RN 工程路线：RN CLI。
+- 首期目标：iOS + Android 双端并行复现。
+- 首期范围：按当前 Master Plan 推荐范围推进。
+- 状态管理：TanStack Query + Zustand。
+- BFF 策略：允许新增不破坏 iOS 当前接口的兼容型 RN 聚合 BFF。
+- 完整 Tencent IM、小队实时定位、Widget、视频发帖、Tracklist 编辑器默认后置。
+
+Decisions:
+
+- 当前分支提交后作为 RN 复现前的基线快照。
+- 新建 `codex/` 前缀分支专门进行 RN 开发。
+- Phase 1 的第一份局部落地文档应为 `RN_PROJECT_BOOTSTRAP`。
+
+Changed docs:
+
+- `docs/react-native/EXECUTION_ROUTE_GUIDE.md`
+- `docs/react-native/EXECUTION_LOG.md`
+- `docs/react-native/implementation/README.md`
+
+Changed code:
+
+- None.
+
+Validation:
+
+- Phase 0 关键路线已记录。
+- implementation 文档入口已建立。
+
+Deferred:
+
+- 完整 Tencent IM。Revisit phase: Phase 7。
+- 小队实时定位。Revisit phase: Phase 7。
+- Widget。Revisit phase: Phase 8。
+- 视频发帖。Revisit phase: Phase 4 close / Phase 8。
+- Tracklist 编辑器。Revisit phase: Phase 3 close / Phase 8。
+
+Risks:
+
+- 当前工作树包含大量既有 iOS/server/web 改动，本次提交应被视为基线快照，不代表 RN 实现已经开始。
+
+Next:
+
+- 提交当前分支。
+- 切出 RN 开发分支。
+- 在新分支创建 `phase-01-foundation/01_RN_PROJECT_BOOTSTRAP.md`。

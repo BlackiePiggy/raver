@@ -34,6 +34,8 @@
 		178744701447AE633BED79EE /* CellLayoutContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35457D074679C6AA4ED63059 /* CellLayoutContainerView.swift */; };
 		17CCA035DDDA6B5CF413E6BC /* Pods_RaverMVP.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B7541941E84F41B093463E9 /* Pods_RaverMVP.framework */; };
 		17E4A54DAD079B944F9E16C1 /* VirtualAssetCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 918CC540D2667709C2E22AEE /* VirtualAssetCenterView.swift */; };
+		17F8894D0F0DB4597545AF64 /* ChatCustomCardCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F85C73E23CFE3CFCFB0EF9D /* ChatCustomCardCodec.swift */; };
+		1834A3DC91501339C37F8F2F /* ChatCardRouteTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4337D912C5F72B7C2C06311 /* ChatCardRouteTarget.swift */; };
 		18508B1A81F5037FBA65A4CC /* DemoAlignedMediaMessageSendCoordinatorFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14B8DEE5661D47AABAB7F519 /* DemoAlignedMediaMessageSendCoordinatorFactory.swift */; };
 		1878B0EE35DEC4F5052FD47D /* CountdownEventIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E13ABD9EE466C03068DACF1 /* CountdownEventIntent.swift */; };
 		1929ADB9FBFB4BE0E1C54F5A /* MessagesHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02D93C1E9013AE51657CE508 /* MessagesHomeView.swift */; };
@@ -165,6 +167,8 @@
 		9EF4A90A6D55911135CE0485 /* ContainerCollectionViewCellDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72D6B2D628A4B93199C40642 /* ContainerCollectionViewCellDelegate.swift */; };
 		9F8893AFA19B054BD725064E /* ChangeItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99093EDA988E884D4232568F /* ChangeItem.swift */; };
 		9F9C2601B5A899D79DECD36D /* MessageContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11FE8F45CD825ADAD927181 /* MessageContainerView.swift */; };
+		9E51D03754E4410E8E4D5A7F /* TencentIMIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E51D03754E4410E8E4D5A81 /* TencentIMIdentity.swift */; };
+		9E51D03754E4410E8E4D5A80 /* TencentIMSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E51D03754E4410E8E4D5A82 /* TencentIMSession.swift */; };
 		A06952FE52CED9C6EAF76B70 /* DemoAlignedChatRouteCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32F9ED6A7DF28DE0663E8289 /* DemoAlignedChatRouteCoordinator.swift */; };
 		A2796198E6E7EDA041720686 /* CollectionViewChatLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AA05995D82C1FC190CD72F5 /* CollectionViewChatLayout.swift */; };
 		A2E8023158676A4021EA3140 /* LayoutModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 993AC76E289F1FA6EA08059B /* LayoutModel.swift */; };
@@ -456,11 +460,15 @@
 		93F03BC5D8661326C73E0C34 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		94A818FEAAB56139A7847EAC /* Pods-RaverMVP.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RaverMVP.release.xcconfig"; path = "Target Support Files/Pods-RaverMVP/Pods-RaverMVP.release.xcconfig"; sourceTree = "<group>"; };
 		961463E6BC6F60F0B156107F /* RecentSearchStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentSearchStore.swift; sourceTree = "<group>"; };
+		C4337D912C5F72B7C2C06311 /* ChatCardRouteTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCardRouteTarget.swift; sourceTree = "<group>"; };
 		98F0C459C7EE8A2A3F7CDB3A /* EventEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEditorView.swift; sourceTree = "<group>"; };
 		99093EDA988E884D4232568F /* ChangeItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChangeItem.swift; sourceTree = "<group>"; };
 		993AC76E289F1FA6EA08059B /* LayoutModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutModel.swift; sourceTree = "<group>"; };
 		996D0C385A7DF3B8D363EE3C /* DemoAlignedChatScreenAssemblyActionHandlerDependenciesFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedChatScreenAssemblyActionHandlerDependenciesFactory.swift; sourceTree = "<group>"; };
 		9C43786D310669E3CF5E932A /* ImageMaskedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageMaskedView.swift; sourceTree = "<group>"; };
+		9E51D03754E4410E8E4D5A81 /* TencentIMIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TencentIMIdentity.swift; sourceTree = "<group>"; };
+		9E51D03754E4410E8E4D5A82 /* TencentIMSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TencentIMSession.swift; sourceTree = "<group>"; };
+		9F85C73E23CFE3CFCFB0EF9D /* ChatCustomCardCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCustomCardCodec.swift; sourceTree = "<group>"; };
 		A03F9296DCB3496F609829E5 /* VirtualAssetCacheStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualAssetCacheStore.swift; sourceTree = "<group>"; };
 		A0A1FBDA5A960C7207719A16 /* GlobalSearchResultsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSearchResultsViewModel.swift; sourceTree = "<group>"; };
 		A1CA9289D06A15BD43DE57EF /* DemoAlignedChatUIAssemblyFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedChatUIAssemblyFactory.swift; sourceTree = "<group>"; };
@@ -725,6 +733,8 @@
 		33432F949456AEC2CC9F5087 /* UIKitChat */ = {
 			isa = PBXGroup;
 			children = (
+				C4337D912C5F72B7C2C06311 /* ChatCardRouteTarget.swift */,
+				9F85C73E23CFE3CFCFB0EF9D /* ChatCustomCardCodec.swift */,
 				C62AC15B6C3AA3846D5F6847 /* DemoAlignedChatView.swift */,
 				2E4DC2C3FBF429A857DE5513 /* DemoAlignedChatViewController.swift */,
 				1DD043D6D7706F23E3EB672D /* DemoAlignedMediaMessageCell.swift */,
@@ -733,7 +743,6 @@
 				11785751273F1910086A0B62 /* RaverChatCollectionDataSource.swift */,
 				FFA78BD25FB8C570DE219ACD /* RaverChatController.swift */,
 				CBDA608BC22DE2C0A8ED43CF /* RaverChatDataProvider.swift */,
-				0CE4B00E79B922A7713B42E6 /* RaverChatMediaResolver.swift */,
 				7A5CC23094B4AFCDC1EF9FEC /* RaverChatMessageCellFactory.swift */,
 				C76C77C05E0E45D051C4D7D1 /* RaverChatScrollCoordinator.swift */,
 				D2DC784466A1D44E3F586DA3 /* TencentUIKitChatView.swift */,
@@ -754,7 +763,6 @@
 		369A949439B72235482D21AF /* Support */ = {
 			isa = PBXGroup;
 			children = (
-				C194ABE02C3044FD290C8708 /* ChatMediaTempFileStore.swift */,
 				24198B7A3409789A67778017 /* DemoAlignedChatAssemblyDependencyResolver.swift */,
 				E8D644C3BAFC8C422FA8F62A /* DemoAlignedChatContextProvider.swift */,
 				C9EDC9510607066D1DF18E8D /* DemoAlignedChatContextProviderFactory.swift */,
@@ -1060,6 +1068,54 @@
 			path = Search;
 			sourceTree = "<group>";
 		};
+		9E51D03754E4410E8E4D5A7B /* Infrastructure */ = {
+			isa = PBXGroup;
+			children = (
+				9E51D03754E4410E8E4D5A7C /* LegacyOpenIM */,
+				9E51D03754E4410E8E4D5A7D /* TencentIM */,
+			);
+			path = Infrastructure;
+			sourceTree = "<group>";
+		};
+		9E51D03754E4410E8E4D5A7C /* LegacyOpenIM */ = {
+			isa = PBXGroup;
+			children = (
+				7BB167312CD5C6B680C47039 /* IMSession.swift */,
+			);
+			path = LegacyOpenIM;
+			sourceTree = "<group>";
+		};
+		9E51D03754E4410E8E4D5A7D /* TencentIM */ = {
+			isa = PBXGroup;
+			children = (
+				659BED590438C596C9DBAE62 /* ChatMessageSearchIndex.swift */,
+				E36A325E50808586554DB362 /* IMChatStore.swift */,
+				55C4D760AC532AB103A8EA63 /* IMProbeLogger.swift */,
+				7BB5FA65511E334820962494 /* IMStorageGovernance.swift */,
+				9E51D03754E4410E8E4D5A7E /* Media */,
+				9E51D03754E4410E8E4D5A83 /* Session */,
+				9E51D03754E4410E8E4D5A81 /* TencentIMIdentity.swift */,
+			);
+			path = TencentIM;
+			sourceTree = "<group>";
+		};
+		9E51D03754E4410E8E4D5A7E /* Media */ = {
+			isa = PBXGroup;
+			children = (
+				C194ABE02C3044FD290C8708 /* ChatMediaTempFileStore.swift */,
+				0CE4B00E79B922A7713B42E6 /* RaverChatMediaResolver.swift */,
+			);
+			path = Media;
+			sourceTree = "<group>";
+		};
+		9E51D03754E4410E8E4D5A83 /* Session */ = {
+			isa = PBXGroup;
+			children = (
+				9E51D03754E4410E8E4D5A82 /* TencentIMSession.swift */,
+			);
+			path = Session;
+			sourceTree = "<group>";
+		};
 		95FDF3C7AC9A0EFBE860AD3E /* Classes */ = {
 			isa = PBXGroup;
 			children = (
@@ -1264,6 +1320,7 @@
 				027A9F883E02CF838F5E891D /* Application */,
 				D9D7E1B82939CDF2FFA560D7 /* Core */,
 				30A73257F74CD2F5361FA93A /* Features */,
+				9E51D03754E4410E8E4D5A7B /* Infrastructure */,
 				363A09259AB8E1EF37F49338 /* Preview Content */,
 				43D5604B0FEB56EE6A48A025 /* Resources */,
 				FA80CD43F58C7BD6F40AAAB4 /* Shared */,
@@ -1357,13 +1414,8 @@
 				BC843EFC9D73D6230383E286 /* AppConfig.swift */,
 				029F1F7A11F8D9328FC2637E /* AppEnvironment.swift */,
 				C313C382D0F686C910F91FAE /* AppState.swift */,
-				659BED590438C596C9DBAE62 /* ChatMessageSearchIndex.swift */,
 				65BB3130C75701FCEA9E70AA /* Date+Formatting.swift */,
 				BEC23F3353BC4547694231A0 /* ImageCacheBootstrap.swift */,
-				E36A325E50808586554DB362 /* IMChatStore.swift */,
-				55C4D760AC532AB103A8EA63 /* IMProbeLogger.swift */,
-				7BB167312CD5C6B680C47039 /* IMSession.swift */,
-				7BB5FA65511E334820962494 /* IMStorageGovernance.swift */,
 				76E16068958F9015F96D65E5 /* LiveSocialService.swift */,
 				0AAC35F9B28761A61B44E06D /* LiveWebFeatureService.swift */,
 				3E10177408B284AD6125716B /* MockSocialService.swift */,
@@ -1812,6 +1864,8 @@
 				32A01133868E3AB7694FA3B0 /* IMProbeLogger.swift in Sources */,
 				705C8316D13ECFF468ED995F /* IMSession.swift in Sources */,
 				89F2C4DF970BEA03CFFF319B /* IMStorageGovernance.swift in Sources */,
+				9E51D03754E4410E8E4D5A7F /* TencentIMIdentity.swift in Sources */,
+				9E51D03754E4410E8E4D5A80 /* TencentIMSession.swift in Sources */,
 				EC339CD9AD3C63511278D18E /* ImageCacheBootstrap.swift in Sources */,
 				3B7AF8D25BBC7664722974CB /* ImageLoaderView.swift in Sources */,
 				B7B6140D6FB5F0D1228262DA /* ImageMaskedView.swift in Sources */,
@@ -1855,6 +1909,8 @@
 				CF9E654D840B750EB13AB543 /* ProfileViewModel.swift in Sources */,
 				1300EAE9C13C3EB8C46AC6F7 /* RandomAccessCollection+Extension.swift in Sources */,
 				F1B1E665970E97935516AC9A /* RatingEditors.swift in Sources */,
+				1834A3DC91501339C37F8F2F /* ChatCardRouteTarget.swift in Sources */,
+				17F8894D0F0DB4597545AF64 /* ChatCustomCardCodec.swift in Sources */,
 				33E8D93830AF2054D9B15A77 /* RaverChatCollectionDataSource.swift in Sources */,
 				05D51415080A4765B9A60C2F /* RaverChatComposerCoordinator.swift in Sources */,
 				24AE914A726A3BD45FB15934 /* RaverChatComposerState.swift in Sources */,

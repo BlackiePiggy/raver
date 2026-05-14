@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import { tencentIMConfig } from '../services/tencent-im/tencent-im-config';
-import { tencentIMUserService } from '../services/tencent-im/tencent-im-user.service';
+import { tencentIMConfig, tencentIMUserService } from '../modules/im';
 
 const prisma = new PrismaClient();
 

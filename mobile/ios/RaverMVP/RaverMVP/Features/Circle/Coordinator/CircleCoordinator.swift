@@ -83,7 +83,8 @@ struct CircleCoordinatorView<Content: View>: View {
             )
         case .postCreate:
             ComposePostView(
-                repository: appContainer.circleFeedRepository,
+                commandRepository: appContainer.postCommandRepository,
+                mediaRepository: appContainer.postMediaRepository,
                 mode: .create,
                 onPostCreated: { created in
                     NotificationCenter.default.post(name: .circlePostDidCreate, object: created)
@@ -91,7 +92,8 @@ struct CircleCoordinatorView<Content: View>: View {
             )
         case let .eventPostCreate(eventID, eventName):
             ComposePostView(
-                repository: appContainer.circleFeedRepository,
+                commandRepository: appContainer.postCommandRepository,
+                mediaRepository: appContainer.postMediaRepository,
                 mode: .create,
                 initialEventTag: ComposePostEventTag(id: eventID, name: eventName),
                 onPostCreated: { created in
@@ -101,7 +103,9 @@ struct CircleCoordinatorView<Content: View>: View {
         case let .postEdit(postID):
             CirclePostEditorLoaderView(
                 postID: postID,
-                repository: appContainer.circleFeedRepository
+                postReadRepository: appContainer.postReadRepository,
+                commandRepository: appContainer.postCommandRepository,
+                mediaRepository: appContainer.postMediaRepository
             )
         case .idCreate:
             CircleIDComposerSheet { entry in
@@ -113,17 +117,20 @@ struct CircleCoordinatorView<Content: View>: View {
                 .environmentObject(appState)
         case .ratingEventCreate:
             CreateRatingEventSheet { input in
-                let created = try await appContainer.discoverEventsRepository.createRatingEvent(input: input)
+                let repository: RatingRepository = appContainer.ratingRepository
+                let created = try await repository.createRatingEvent(input: input)
                 NotificationCenter.default.post(name: .circleRatingEventDidCreate, object: created)
             }
         case .ratingEventImportFromEvent:
             CreateRatingEventFromEventSheet { sourceEventID in
-                let created = try await appContainer.discoverEventsRepository.createRatingEventFromEvent(eventID: sourceEventID)
+                let repository: RatingRepository = appContainer.ratingRepository
+                let created = try await repository.createRatingEventFromEvent(eventID: sourceEventID)
                 NotificationCenter.default.post(name: .circleRatingEventDidCreate, object: created)
             }
         case let .ratingUnitCreate(eventID):
             CreateRatingUnitSheet(eventID: eventID) { input in
-                let created = try await appContainer.discoverEventsRepository.createRatingUnit(eventID: eventID, input: input)
+                let repository: RatingRepository = appContainer.ratingRepository
+                let created = try await repository.createRatingUnit(eventID: eventID, input: input)
                 NotificationCenter.default.post(
                     name: .circleRatingUnitDidCreate,
                     object: created,
@@ -187,7 +194,9 @@ private struct CircleRouteLoaderScaffold<Content: View>: View {
 
 private struct CirclePostEditorLoaderView: View {
     let postID: String
-    let repository: CircleFeedRepository
+    let postReadRepository: PostReadRepository
+    let commandRepository: PostCommandRepository
+    let mediaRepository: PostMediaRepository
 
     @State private var post: Post?
     @State private var phase: LoadPhase = .idle
@@ -207,7 +216,8 @@ private struct CirclePostEditorLoaderView: View {
         ) {
             if let post {
                 ComposePostView(
-                    repository: repository,
+                    commandRepository: commandRepository,
+                    mediaRepository: mediaRepository,
                     mode: .edit(post),
                     onPostUpdated: { updated in
                         NotificationCenter.default.post(name: .circlePostDidUpdate, object: updated)
@@ -232,7 +242,7 @@ private struct CirclePostEditorLoaderView: View {
         phase = .initialLoading
         defer { isLoading = false }
         do {
-            post = try await repository.fetchPost(postID: postID)
+            post = try await postReadRepository.fetchPost(postID: postID)
             phase = post == nil ? .empty : .success
         } catch {
             phase = .failure(

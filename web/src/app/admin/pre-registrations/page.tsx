@@ -225,8 +225,18 @@ export default function PreRegistrationAdminPage() {
       <Navigation />
       <section className="mx-auto max-w-7xl px-6 pb-12 pt-24">
         <div className="mb-6">
-          <h1 className="text-3xl font-semibold">预登记管理后台</h1>
-          <p className="mt-2 text-text-secondary">查看登记、创建抽取批次、人工决定资格，并创建多端通知任务。</p>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="text-3xl font-semibold">预登记管理后台</h1>
+              <p className="mt-2 text-text-secondary">查看登记、创建抽取批次、人工决定资格，并创建多端通知任务。</p>
+            </div>
+            <Link
+              href="/admin"
+              className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+            >
+              运营总览
+            </Link>
+          </div>
         </div>
 
         {error && <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-red-300">{error}</div>}

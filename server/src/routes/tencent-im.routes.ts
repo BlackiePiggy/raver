@@ -1,9 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { Router, Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
-import { tencentIMGroupService } from '../services/tencent-im/tencent-im-group.service';
-import { tencentIMTokenService } from '../services/tencent-im/tencent-im-token.service';
-import { tencentIMUserService } from '../services/tencent-im/tencent-im-user.service';
+import { tencentIMGroupService, tencentIMTokenService, tencentIMUserService } from '../modules/im';
 
 const router: Router = Router();
 const prisma = new PrismaClient();

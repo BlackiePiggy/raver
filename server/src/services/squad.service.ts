@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { tencentIMGroupService } from './tencent-im/tencent-im-group.service';
+import { tencentIMGroupService } from '../modules/im';
 import { notificationCenterService } from './notification-center';
 
 const prisma = new PrismaClient();

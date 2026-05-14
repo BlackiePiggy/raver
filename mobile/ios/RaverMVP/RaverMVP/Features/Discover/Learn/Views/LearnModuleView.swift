@@ -19,8 +19,8 @@ struct LearnModuleView: View {
         appContainer.discoverWikiRepository
     }
 
-    private var djsRepository: DiscoverDJsRepository {
-        appContainer.discoverDJsRepository
+    private var djRankingRepository: DJRankingRepository {
+        appContainer.djRankingRepository
     }
 
     @State private var genres: [LearnGenreNode] = []
@@ -617,7 +617,7 @@ struct LearnModuleView: View {
         defer { isRefreshingRankings = false }
 
         do {
-            rankingBoards = try await djsRepository.fetchRankingBoards()
+            rankingBoards = try await djRankingRepository.fetchRankingBoards()
             rankingsPhase = rankingBoards.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
@@ -2738,8 +2738,8 @@ struct LearnFestivalDetailView: View {
         appContainer.discoverWikiRepository
     }
 
-    private var eventsRepository: DiscoverEventsRepository {
-        appContainer.discoverEventsRepository
+    private var eventListRepository: EventListRepository {
+        appContainer.eventListRepository
     }
 
     private var newsRepository: DiscoverNewsRepository {
@@ -4278,7 +4278,7 @@ struct LearnFestivalDetailView: View {
         var seen = Set<String>()
 
         for query in queries {
-            let page = try await eventsRepository.fetchEvents(
+            let page = try await eventListRepository.fetchEvents(
                 request: DiscoverEventsPageRequest(
                     page: 1,
                     limit: 120,
@@ -5101,8 +5101,8 @@ struct RankingBoardDetailView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.appPush) private var appPush
 
-    private var djsRepository: DiscoverDJsRepository {
-        appContainer.discoverDJsRepository
+    private var djRankingRepository: DJRankingRepository {
+        appContainer.djRankingRepository
     }
 
     let board: RankingBoard
@@ -5312,7 +5312,7 @@ struct RankingBoardDetailView: View {
         defer { isLoading = false }
 
         do {
-            detail = try await djsRepository.fetchRankingBoardDetail(boardID: board.id, year: selectedYear)
+            detail = try await djRankingRepository.fetchRankingBoardDetail(boardID: board.id, year: selectedYear)
         } catch {
             errorMessage = error.userFacingMessage
         }

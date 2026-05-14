@@ -3,7 +3,7 @@ import type { IRouter } from 'express';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
-import djSetService from '../services/djset.service';
+import { djSetService } from '../modules/music';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router: IRouter = Router();

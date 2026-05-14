@@ -128,10 +128,15 @@ struct MainTabView: View {
         case .circle:
             CircleHomeView()
         case .messages:
-            MessagesCoordinatorView(repository: appContainer.messagesRepository)
+            MessagesCoordinatorView(
+                conversationRepository: appContainer.conversationRepository,
+                notificationRepository: appContainer.messageNotificationRepository
+            )
         case .profile:
             ProfileCoordinatorView(
-                repository: appContainer.profileSocialRepository,
+                userRepository: appContainer.profileUserRepository,
+                contentRepository: appContainer.profileContentRepository,
+                checkinRepository: appContainer.profileCheckinRepository,
                 virtualAssetRepository: appContainer.virtualAssetRepository
             )
         }
@@ -2246,7 +2251,7 @@ struct CircleIDComposerSheet: View {
 private struct CircleIDEventPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var repository: DiscoverEventsRepository { appContainer.discoverEventsRepository }
+    private var eventListRepository: EventListRepository { appContainer.eventListRepository }
 
     let onSelect: (WebEvent) -> Void
 
@@ -2353,7 +2358,7 @@ private struct CircleIDEventPickerSheet: View {
             var page = 1
             var merged: [WebEvent] = []
             while page <= 6 {
-                let result = try await repository.fetchEvents(
+                let result = try await eventListRepository.fetchEvents(
                     request: DiscoverEventsPageRequest(
                         page: page,
                         limit: 50,
@@ -2387,7 +2392,7 @@ private struct CircleIDEventPickerSheet: View {
 private struct CircleIDDJPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var webService: WebFeatureService { appContainer.webService }
+    private var djListRepository: DJListRepository { appContainer.djListRepository }
 
     let selected: [CircleIDDJSnapshot]
     let onDone: ([CircleIDDJSnapshot]) -> Void
@@ -2568,7 +2573,7 @@ private struct CircleIDDJPickerSheet: View {
             var page = 1
             var merged: [WebDJ] = []
             while page <= 6 {
-                let result = try await webService.fetchDJs(
+                let result = try await djListRepository.fetchDJs(
                     page: page,
                     limit: 50,
                     search: nil,
@@ -3048,7 +3053,7 @@ private struct TriangleTailShape: Shape {
 private struct CircleRatingHubView: View {
     @Environment(\.circlePush) private var circlePush
     @EnvironmentObject private var appContainer: AppContainer
-    private var service: WebFeatureService { appContainer.webService }
+    private var ratingRepository: RatingRepository { appContainer.ratingRepository }
 
     @State private var events: [WebRatingEvent] = []
     @State private var phase: LoadPhase = .idle
@@ -3250,7 +3255,7 @@ private struct CircleRatingHubView: View {
         defer { isLoading = false }
         defer { isRefreshing = false }
         do {
-            events = try await service.fetchRatingEvents()
+            events = try await ratingRepository.fetchRatingEvents()
             phase = events.isEmpty ? .empty : .success
             bannerMessage = nil
             errorMessage = nil
@@ -3271,7 +3276,7 @@ struct CircleRatingEventDetailView: View {
     @Environment(\.appPush) private var appPush
     @Environment(\.circlePush) private var circlePush
     @EnvironmentObject private var appContainer: AppContainer
-    private var service: WebFeatureService { appContainer.webService }
+    private var ratingRepository: RatingRepository { appContainer.ratingRepository }
 
     let eventID: String
     let onClose: () -> Void
@@ -3671,7 +3676,7 @@ struct CircleRatingEventDetailView: View {
 
     private func resolveRatingEvent(for requestedID: String) async throws -> WebRatingEvent {
         do {
-            let direct = try await service.fetchRatingEvent(id: requestedID)
+            let direct = try await ratingRepository.fetchRatingEvent(id: requestedID)
 #if DEBUG
             print("[RatingEventResolve] direct-hit requestedID=\(requestedID) resolvedID=\(direct.id) sourceEventId=\(direct.sourceEventId ?? "nil")")
 #endif
@@ -3682,7 +3687,7 @@ struct CircleRatingEventDetailView: View {
 #endif
         }
 
-        let related = try await service.fetchEventRatingEvents(eventID: requestedID)
+        let related = try await ratingRepository.fetchEventRatingEvents(eventID: requestedID)
         if let exactSourceMatch = related.first(where: {
             ($0.sourceEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") == requestedID
         }) {
@@ -3886,7 +3891,7 @@ struct CircleRatingUnitDetailView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
     private var socialService: SocialService { appContainer.socialService }
-    private var webService: WebFeatureService { appContainer.webService }
+    private var ratingRepository: RatingRepository { appContainer.ratingRepository }
 
     let unitID: String
     let onSubmitted: () -> Void
@@ -4292,7 +4297,7 @@ struct CircleRatingUnitDetailView: View {
         defer { isLoading = false }
         defer { isRefreshing = false }
         do {
-            unit = try await webService.fetchRatingUnit(id: unitID)
+            unit = try await ratingRepository.fetchRatingUnit(id: unitID)
             phase = unit == nil ? .empty : .success
             loadBannerMessage = nil
         } catch {
@@ -4320,7 +4325,7 @@ struct CircleRatingUnitDetailView: View {
         defer { isSubmitting = false }
 
         do {
-            let created = try await webService.addRatingComment(
+            let created = try await ratingRepository.addRatingComment(
                 unitID: unitID,
                 input: CreateRatingCommentInput(score: score, content: content)
             )
@@ -4845,7 +4850,7 @@ private func sendRatingSharePayload(
 struct CreateRatingEventSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var repository: DiscoverEventsRepository { appContainer.discoverEventsRepository }
+    private var ratingRepository: RatingRepository { appContainer.ratingRepository }
     let onSubmit: (CreateRatingEventInput) async throws -> Void
 
     @State private var name = ""
@@ -4917,7 +4922,7 @@ struct CreateRatingEventSheet: View {
             if let selectedCoverData {
                 isUploadingCover = true
                 defer { isUploadingCover = false }
-                let upload = try await repository.uploadRatingImage(
+                let upload = try await ratingRepository.uploadRatingImage(
                     imageData: jpegData(from: selectedCoverData),
                     fileName: "rating-event-cover-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -4967,7 +4972,7 @@ struct CreateRatingEventSheet: View {
 struct CreateRatingEventFromEventSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var repository: DiscoverEventsRepository { appContainer.discoverEventsRepository }
+    private var eventListRepository: EventListRepository { appContainer.eventListRepository }
     let onSubmit: (String) async throws -> Void
 
     @State private var searchKeyword = ""
@@ -5085,7 +5090,7 @@ struct CreateRatingEventFromEventSheet: View {
         phase = .initialLoading
         defer { isLoading = false }
         do {
-            let response = try await repository.fetchEvents(
+            let response = try await eventListRepository.fetchEvents(
                 request: DiscoverEventsPageRequest(
                     page: 1,
                     limit: 100,
@@ -5125,7 +5130,7 @@ struct CreateRatingEventFromEventSheet: View {
 struct CreateRatingUnitSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var repository: DiscoverEventsRepository { appContainer.discoverEventsRepository }
+    private var ratingRepository: RatingRepository { appContainer.ratingRepository }
     let eventID: String?
     let onSubmit: (CreateRatingUnitInput) async throws -> Void
 
@@ -5198,7 +5203,7 @@ struct CreateRatingUnitSheet: View {
             if let selectedCoverData {
                 isUploadingCover = true
                 defer { isUploadingCover = false }
-                let upload = try await repository.uploadRatingImage(
+                let upload = try await ratingRepository.uploadRatingImage(
                     imageData: jpegData(from: selectedCoverData),
                     fileName: "rating-unit-cover-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import type { IRouter } from 'express';
-import musicSearchService from '../services/music-search.service';
+import { musicSearchService } from '../modules/music';
 
 const router: IRouter = Router();
 

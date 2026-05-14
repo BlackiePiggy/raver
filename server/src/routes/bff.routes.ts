@@ -3,6 +3,8 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import OSS from 'ali-oss';
 import multer from 'multer';
 import crypto from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_MS,
@@ -15,11 +17,31 @@ import {
   verifyToken,
   type JWTPayload,
 } from '../utils/auth';
-import { tencentIMGroupService } from '../services/tencent-im/tencent-im-group.service';
-import { tencentIMFriendService } from '../services/tencent-im/tencent-im-friend.service';
-import { tencentIMUserService } from '../services/tencent-im/tencent-im-user.service';
+import { tencentIMFriendService, tencentIMGroupService, tencentIMUserService } from '../modules/im';
 import { smsService } from '../services/sms/sms-provider';
 import { notificationCenterService } from '../services/notification-center';
+import {
+  FEED_RANKING_WEIGHTS_VERSION,
+  FeedEventValidationError,
+  type FeedExperimentBucket,
+  buildFeedRankingWeights,
+  createPostComment,
+  fetchPostComments,
+  hidePost,
+  likePost,
+  PostCommentNotFoundError,
+  PostCommentValidationError,
+  recordFeedEvent,
+  repostPost,
+  resolveFeedExperimentBucket as resolveFeedExperimentBucketFromModule,
+  savePost,
+  sharePost,
+  PostInteractionNotFoundError,
+  unhidePost,
+  unlikePost,
+  unrepostPost,
+  unsavePost,
+} from '../modules/feed';
 import {
   getShareLinkByCode,
   recordShareLinkEvent,
@@ -56,6 +78,7 @@ const ossBucket = cleanEnv(process.env.OSS_BUCKET);
 const ossEndpoint = cleanEnv(process.env.OSS_ENDPOINT);
 const ossPostsPrefix = (cleanEnv(process.env.OSS_POSTS_PREFIX) || 'posts').replace(/^\/+|\/+$/g, '');
 const ossUserAvatarsPrefix = (cleanEnv(process.env.OSS_USER_AVATARS_PREFIX) || 'users/avatars').replace(/^\/+|\/+$/g, '');
+const ossSquadAvatarsPrefix = (cleanEnv(process.env.OSS_SQUAD_AVATARS_PREFIX) || 'squads/avatars').replace(/^\/+|\/+$/g, '');
 
 const ossClient =
   ossRegion && ossAccessKeyId && ossAccessKeySecret && ossBucket
@@ -140,6 +163,36 @@ const uploadUserAvatarToOss = async (
   return {
     url: result.url || publicOssUrlForObjectKey(objectKey),
     objectKey,
+  };
+};
+
+const uploadSquadAvatarAsset = async (
+  squadId: string,
+  file: Express.Multer.File
+): Promise<{ url: string; objectKey: string | null }> => {
+  const ext = extensionForMimeType(file.mimetype);
+
+  if (ossClient) {
+    const objectKey = `${ossSquadAvatarsPrefix}/${squadId}/avatar-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
+    const result = await ossClient.put(objectKey, file.buffer, {
+      headers: {
+        'Content-Type': file.mimetype,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+    return {
+      url: result.url || publicOssUrlForObjectKey(objectKey),
+      objectKey,
+    };
+  }
+
+  const fileName = `squad-${squadId}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
+  const uploadDir = path.join(process.cwd(), 'uploads', 'avatars');
+  await fs.mkdir(uploadDir, { recursive: true });
+  await fs.writeFile(path.join(uploadDir, fileName), file.buffer);
+  return {
+    url: `/uploads/avatars/${fileName}`,
+    objectKey: null,
   };
 };
 
@@ -727,149 +780,11 @@ const parseCursorDate = (cursor: unknown): Date | null => {
 };
 
 type FeedMode = 'recommended' | 'following' | 'latest';
-type FeedEventType =
-  | 'feed_impression'
-  | 'feed_open_post'
-  | 'feed_like'
-  | 'feed_save'
-  | 'feed_share'
-  | 'feed_hide';
 type FeedRecallSource = 'trending' | 'followed_author' | 'followed_dj' | 'behavior_similar';
-type FeedExperimentBucket = 'control' | 'engagement_heavy' | 'freshness_heavy';
-type FeedRankingWeights = {
-  freshnessBase: number;
-  freshnessHalfLifeHours: number;
-  likeWeight: number;
-  commentWeight: number;
-  repostWeight: number;
-  saveWeight: number;
-  shareWeight: number;
-  recallFollowedAuthorWeight: number;
-  recallFollowedDjWeight: number;
-  recallBehaviorSimilarWeight: number;
-  recallTrendingWeight: number;
-  followedDjBonus: number;
-  followingAuthorBonus: number;
-  mutedAuthorPenalty: number;
-  globalHidePenalty: number;
-  seenTooOftenPenaltyFactor: number;
-  seenTooOftenPenaltyMax: number;
-  exposureLimit: number;
-  exploreMinFreshness: number;
-};
-
-const feedExperimentBucketSet = new Set<FeedExperimentBucket>([
-  'control',
-  'engagement_heavy',
-  'freshness_heavy',
-]);
-
-const FEED_RANKING_WEIGHTS_VERSION = 'feed-rank-v2-ab';
-const FEED_AB_ENABLED = parseBool(process.env.FEED_AB_ENABLED, true);
-const FEED_AB_CONTROL_PERCENT = normalizePositiveInt(process.env.FEED_AB_CONTROL_PERCENT, 40, 1, 100);
-const FEED_AB_ENGAGEMENT_PERCENT = normalizePositiveInt(process.env.FEED_AB_ENGAGEMENT_PERCENT, 30, 0, 100);
-const FEED_AB_FRESHNESS_PERCENT = Math.max(
-  0,
-  Math.min(100, 100 - FEED_AB_CONTROL_PERCENT - FEED_AB_ENGAGEMENT_PERCENT)
-);
-
-const FEED_RANKING_BASE_WEIGHTS: FeedRankingWeights = {
-  freshnessBase: 80,
-  freshnessHalfLifeHours: 20,
-  likeWeight: 1,
-  commentWeight: 1.8,
-  repostWeight: 2.2,
-  saveWeight: 2.4,
-  shareWeight: 2,
-  recallFollowedAuthorWeight: 24,
-  recallFollowedDjWeight: 30,
-  recallBehaviorSimilarWeight: 28,
-  recallTrendingWeight: 6,
-  followedDjBonus: 40,
-  followingAuthorBonus: 35,
-  mutedAuthorPenalty: 120,
-  globalHidePenalty: 0.8,
-  seenTooOftenPenaltyFactor: 0.5,
-  seenTooOftenPenaltyMax: 8,
-  exposureLimit: 2,
-  exploreMinFreshness: 40,
-};
-
-const buildFeedRankingWeights = (bucket: FeedExperimentBucket): FeedRankingWeights => {
-  const base = FEED_RANKING_BASE_WEIGHTS;
-  if (bucket === 'engagement_heavy') {
-    return {
-      ...base,
-      freshnessBase: base.freshnessBase * 0.78,
-      likeWeight: base.likeWeight * 1.35,
-      commentWeight: base.commentWeight * 1.35,
-      repostWeight: base.repostWeight * 1.3,
-      saveWeight: base.saveWeight * 1.3,
-      shareWeight: base.shareWeight * 1.3,
-      recallBehaviorSimilarWeight: base.recallBehaviorSimilarWeight * 1.12,
-    };
-  }
-  if (bucket === 'freshness_heavy') {
-    return {
-      ...base,
-      freshnessBase: base.freshnessBase * 1.28,
-      freshnessHalfLifeHours: base.freshnessHalfLifeHours * 0.8,
-      likeWeight: base.likeWeight * 0.85,
-      commentWeight: base.commentWeight * 0.88,
-      repostWeight: base.repostWeight * 0.85,
-      saveWeight: base.saveWeight * 0.88,
-      shareWeight: base.shareWeight * 0.88,
-      recallTrendingWeight: base.recallTrendingWeight * 1.4,
-      exploreMinFreshness: 48,
-    };
-  }
-  return base;
-};
-
-const normalizeFeedExperimentBucket = (value: unknown): FeedExperimentBucket | null | 'invalid' => {
-  if (value === null || value === undefined) return null;
-  const normalized = String(value || '')
-    .trim()
-    .toLowerCase();
-  if (!normalized) return null;
-  return feedExperimentBucketSet.has(normalized as FeedExperimentBucket)
-    ? (normalized as FeedExperimentBucket)
-    : 'invalid';
-};
-
-const stableBucketPercentFromSeed = (seed: string): number => {
-  const hash = crypto.createHash('sha256').update(seed).digest();
-  const value = hash.readUInt32BE(0);
-  return value % 100;
-};
 
 const resolveFeedExperimentBucket = (req: Request, viewerId: string | undefined): FeedExperimentBucket => {
-  const override = normalizeFeedExperimentBucket((req.query.expBucket ?? req.query.experimentBucket) as unknown);
-  if (override && override !== 'invalid') {
-    return override;
-  }
-
-  if (!FEED_AB_ENABLED || !viewerId) {
-    return 'control';
-  }
-
-  const bucketValue = stableBucketPercentFromSeed(`feed-ab:${viewerId}`);
-  if (bucketValue < FEED_AB_CONTROL_PERCENT) return 'control';
-  if (bucketValue < FEED_AB_CONTROL_PERCENT + FEED_AB_ENGAGEMENT_PERCENT) return 'engagement_heavy';
-  if (bucketValue < FEED_AB_CONTROL_PERCENT + FEED_AB_ENGAGEMENT_PERCENT + FEED_AB_FRESHNESS_PERCENT) {
-    return 'freshness_heavy';
-  }
-  return 'freshness_heavy';
+  return resolveFeedExperimentBucketFromModule(req.query.expBucket ?? req.query.experimentBucket, viewerId);
 };
-
-const feedEventTypeSet = new Set<FeedEventType>([
-  'feed_impression',
-  'feed_open_post',
-  'feed_like',
-  'feed_save',
-  'feed_share',
-  'feed_hide',
-]);
 
 const normalizeFeedMode = (value: unknown): FeedMode => {
   const normalized = String(value || '')
@@ -878,52 +793,6 @@ const normalizeFeedMode = (value: unknown): FeedMode => {
   if (normalized === 'following') return 'following';
   if (normalized === 'latest') return 'latest';
   return 'recommended';
-};
-
-const normalizeOptionalFeedMode = (value: unknown): FeedMode | null | 'invalid' => {
-  if (value === null || value === undefined) return null;
-  const normalized = String(value || '')
-    .trim()
-    .toLowerCase();
-  if (!normalized) return null;
-  if (normalized === 'recommended') return 'recommended';
-  if (normalized === 'following') return 'following';
-  if (normalized === 'latest') return 'latest';
-  return 'invalid';
-};
-
-const normalizeFeedEventSessionID = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim();
-  if (!normalized) return null;
-  return normalized.slice(0, 128);
-};
-
-const normalizeFeedEventType = (value: unknown): FeedEventType | null => {
-  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  return feedEventTypeSet.has(normalized as FeedEventType) ? (normalized as FeedEventType) : null;
-};
-
-const normalizeFeedEventPosition = (value: unknown): number | null | 'invalid' => {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 'invalid';
-  const rounded = Math.floor(parsed);
-  if (rounded < 0 || rounded > 10_000) return 'invalid';
-  return rounded;
-};
-
-const normalizeFeedEventMetadata = (value: unknown): Prisma.InputJsonValue | null | 'invalid' => {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== 'object') return 'invalid';
-  try {
-    const serialized = JSON.stringify(value);
-    if (!serialized) return null;
-    if (serialized.length > 8_000) return 'invalid';
-    return JSON.parse(serialized) as Prisma.InputJsonValue;
-  } catch {
-    return 'invalid';
-  }
 };
 
 const parseFeedPostDateInput = (value: unknown): Date | null | 'invalid' => {
@@ -1784,29 +1653,6 @@ const normalizePostBindingIDs = (input: unknown, maxCount = 50): string[] => {
   return deduped.slice(0, maxCount);
 };
 
-const normalizeShareChannel = (input: unknown): string => {
-  const value = typeof input === 'string' ? input.trim().toLowerCase() : '';
-  const allowed = new Set(['system', 'copy_link', 'wechat', 'moments', 'other']);
-  return allowed.has(value) ? value : 'system';
-};
-
-const normalizeShareStatus = (input: unknown): string => {
-  const value = typeof input === 'string' ? input.trim().toLowerCase() : '';
-  return value === 'intent' ? 'intent' : 'completed';
-};
-
-const normalizeHideReason = (input: unknown): string => {
-  const value = typeof input === 'string' ? input.trim().toLowerCase() : '';
-  const allowed = new Set(['not_relevant', 'seen_too_often', 'low_quality', 'author', 'other']);
-  return allowed.has(value) ? value : 'not_relevant';
-};
-
-const normalizeHideNote = (input: unknown): string | null => {
-  if (typeof input !== 'string') return null;
-  const value = input.trim().slice(0, 500);
-  return value || null;
-};
-
 const normalizeDirectPair = (userOneId: string, userTwoId: string): [string, string] => {
   return userOneId <= userTwoId ? [userOneId, userTwoId] : [userTwoId, userOneId];
 };
@@ -2123,11 +1969,9 @@ const publishFavoritedEventNewsSafely = async (params: {
     const eventName = eventNameByID.get(eventID);
     if (!eventName) continue;
 
-    const rows = await prisma.checkin.findMany({
+    const rows = await prisma.eventFavorite.findMany({
       where: {
         eventId: eventID,
-        type: 'event',
-        note: 'marked',
       },
       select: {
         userId: true,
@@ -3988,91 +3832,19 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
 router.post('/feed/events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const viewerId = (req as BFFAuthRequest).user?.userId;
-    const body = (req.body ?? {}) as {
-      sessionId?: unknown;
-      sessionID?: unknown;
-      eventType?: unknown;
-      postID?: unknown;
-      postId?: unknown;
-      feedMode?: unknown;
-      position?: unknown;
-      metadata?: unknown;
-    };
-
-    const sessionId = normalizeFeedEventSessionID(body.sessionId ?? body.sessionID);
-    if (!sessionId) {
-      res.status(400).json({ error: 'sessionId is required' });
-      return;
-    }
-
-    const eventType = normalizeFeedEventType(body.eventType);
-    if (!eventType) {
-      res.status(400).json({ error: 'eventType is invalid' });
-      return;
-    }
-
-    const feedMode = normalizeOptionalFeedMode(body.feedMode);
-    if (feedMode === 'invalid') {
-      res.status(400).json({ error: 'feedMode is invalid' });
-      return;
-    }
-
-    const position = normalizeFeedEventPosition(body.position);
-    if (position === 'invalid') {
-      res.status(400).json({ error: 'position is invalid' });
-      return;
-    }
-
-    const metadata = normalizeFeedEventMetadata(body.metadata);
-    if (metadata === 'invalid') {
-      res.status(400).json({ error: 'metadata is invalid' });
-      return;
-    }
-
-    let persistedMetadata: Prisma.InputJsonValue | undefined = metadata ?? undefined;
-    if (feedMode === 'recommended') {
-      const eventBucket = resolveFeedExperimentBucket(req, viewerId);
-      const metadataObject: Prisma.JsonObject =
-        metadata && typeof metadata === 'object' && !Array.isArray(metadata)
-          ? { ...(metadata as Prisma.JsonObject) }
-          : {};
-      metadataObject.experimentBucket = eventBucket;
-      metadataObject.weightsVersion = FEED_RANKING_WEIGHTS_VERSION;
-      persistedMetadata = metadataObject;
-    }
-
-    const rawPostId =
-      typeof body.postID === 'string'
-        ? body.postID.trim()
-        : typeof body.postId === 'string'
-          ? body.postId.trim()
-          : '';
-    const postId = rawPostId || null;
-    if (postId) {
-      const exists = await prisma.post.findUnique({
-        where: { id: postId },
-        select: { id: true },
-      });
-      if (!exists) {
-        res.status(404).json({ error: 'Post not found' });
-        return;
-      }
-    }
-
-    await prisma.feedEvent.create({
-      data: {
-        userId: viewerId ?? null,
-        sessionId,
-        eventType,
-        postId,
-        feedMode,
-        position,
-        metadata: persistedMetadata,
-      },
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    await recordFeedEvent({
+      ...body,
+      viewerId,
+      experimentBucketOverride: req.query.expBucket ?? req.query.experimentBucket,
     });
 
     res.status(201).json({ success: true });
   } catch (error) {
+    if (error instanceof FeedEventValidationError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
     console.error('BFF feed event error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -6512,7 +6284,8 @@ router.post(
         },
       });
 
-      const avatarUrl = `/uploads/avatars/${file.filename}`;
+      const upload = await uploadSquadAvatarAsset(squadId, file);
+      const avatarUrl = upload.url;
       await prisma.squad.update({
         where: { id: squadId },
         data: { avatarUrl },
@@ -7407,42 +7180,7 @@ router.post('/feed/posts/:id/like', optionalAuth, async (req: Request, res: Resp
     if (!userId) return;
 
     const postId = req.params.id as string;
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
-      select: { id: true, userId: true, content: true },
-    });
-    if (!post) {
-      res.status(404).json({ error: 'Post not found' });
-      return;
-    }
-
-    let createdLikeId: string | null = null;
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.postLike.findUnique({
-        where: {
-          postId_userId: {
-            postId,
-            userId,
-          },
-        },
-      });
-
-      if (!existing) {
-        const createdLike = await tx.postLike.create({
-          data: {
-            postId,
-            userId,
-          },
-          select: { id: true },
-        });
-        createdLikeId = createdLike.id;
-
-        await tx.post.update({
-          where: { id: postId },
-          data: { likeCount: { increment: 1 } },
-        });
-      }
-    });
+    const { post, createdLikeId } = await likePost(postId, userId);
 
     const hydrated = await prisma.post.findUnique({
       where: { id: postId },
@@ -7496,6 +7234,10 @@ router.post('/feed/posts/:id/like', optionalAuth, async (req: Request, res: Resp
 
     res.json(mapped);
   } catch (error) {
+    if (error instanceof PostInteractionNotFoundError) {
+      res.status(404).json({ error: error.message });
+      return;
+    }
     console.error('BFF like post error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -7507,29 +7249,7 @@ router.delete('/feed/posts/:id/like', optionalAuth, async (req: Request, res: Re
     if (!userId) return;
 
     const postId = req.params.id as string;
-
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.postLike.findUnique({
-        where: {
-          postId_userId: {
-            postId,
-            userId,
-          },
-        },
-      });
-
-      if (existing) {
-        await tx.postLike.delete({ where: { id: existing.id } });
-        await tx.post.update({
-          where: { id: postId },
-          data: {
-            likeCount: {
-              decrement: 1,
-            },
-          },
-        });
-      }
-    });
+    await unlikePost(postId, userId);
 
     const hydrated = await prisma.post.findUnique({
       where: { id: postId },
@@ -7577,39 +7297,7 @@ router.post('/feed/posts/:id/repost', optionalAuth, async (req: Request, res: Re
     if (!userId) return;
 
     const postId = req.params.id as string;
-    const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
-    if (!post) {
-      res.status(404).json({ error: 'Post not found' });
-      return;
-    }
-
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.postRepost.findUnique({
-        where: {
-          postId_userId: {
-            postId,
-            userId,
-          },
-        },
-      });
-
-      if (!existing) {
-        await tx.postRepost.create({
-          data: {
-            postId,
-            userId,
-          },
-        });
-        await tx.post.update({
-          where: { id: postId },
-          data: {
-            repostCount: {
-              increment: 1,
-            },
-          },
-        });
-      }
-    });
+    await repostPost(postId, userId);
 
     const hydrated = await prisma.post.findUnique({
       where: { id: postId },
@@ -7646,6 +7334,10 @@ router.post('/feed/posts/:id/repost', optionalAuth, async (req: Request, res: Re
     const mapped = mapPost(hydrated, followingSet, likedPostIds, new Set([postId]), savedPostIds, hiddenPostIds);
     res.json(mapped);
   } catch (error) {
+    if (error instanceof PostInteractionNotFoundError) {
+      res.status(404).json({ error: error.message });
+      return;
+    }
     console.error('BFF repost post error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -7657,36 +7349,7 @@ router.delete('/feed/posts/:id/repost', optionalAuth, async (req: Request, res: 
     if (!userId) return;
 
     const postId = req.params.id as string;
-
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.postRepost.findUnique({
-        where: {
-          postId_userId: {
-            postId,
-            userId,
-          },
-        },
-      });
-
-      if (existing) {
-        await tx.postRepost.delete({
-          where: {
-            id: existing.id,
-          },
-        });
-        await tx.post.updateMany({
-          where: {
-            id: postId,
-            repostCount: { gt: 0 },
-          },
-          data: {
-            repostCount: {
-              decrement: 1,
-            },
-          },
-        });
-      }
-    });
+    await unrepostPost(postId, userId);
 
     const hydrated = await prisma.post.findUnique({
       where: { id: postId },
@@ -7734,35 +7397,7 @@ router.post('/feed/posts/:id/save', optionalAuth, async (req: Request, res: Resp
     if (!userId) return;
 
     const postId = req.params.id as string;
-    const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
-    if (!post) {
-      res.status(404).json({ error: 'Post not found' });
-      return;
-    }
-
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.postSave.findUnique({
-        where: {
-          postId_userId: {
-            postId,
-            userId,
-          },
-        },
-      });
-
-      if (!existing) {
-        await tx.postSave.create({
-          data: {
-            postId,
-            userId,
-          },
-        });
-        await tx.post.update({
-          where: { id: postId },
-          data: { saveCount: { increment: 1 } },
-        });
-      }
-    });
+    await savePost(postId, userId);
 
     const mapped = await hydratePostForViewer(postId, userId);
     if (!mapped) {
@@ -7771,6 +7406,10 @@ router.post('/feed/posts/:id/save', optionalAuth, async (req: Request, res: Resp
     }
     res.json(mapped);
   } catch (error) {
+    if (error instanceof PostInteractionNotFoundError) {
+      res.status(404).json({ error: error.message });
+      return;
+    }
     console.error('BFF save post error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -7782,28 +7421,7 @@ router.delete('/feed/posts/:id/save', optionalAuth, async (req: Request, res: Re
     if (!userId) return;
 
     const postId = req.params.id as string;
-
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.postSave.findUnique({
-        where: {
-          postId_userId: {
-            postId,
-            userId,
-          },
-        },
-      });
-
-      if (existing) {
-        await tx.postSave.delete({ where: { id: existing.id } });
-        await tx.post.updateMany({
-          where: {
-            id: postId,
-            saveCount: { gt: 0 },
-          },
-          data: { saveCount: { decrement: 1 } },
-        });
-      }
-    });
+    await unsavePost(postId, userId);
 
     const mapped = await hydratePostForViewer(postId, userId);
     if (!mapped) {
@@ -7823,33 +7441,8 @@ router.post('/feed/posts/:id/share', optionalAuth, async (req: Request, res: Res
     if (!userId) return;
 
     const postId = req.params.id as string;
-    const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
-    if (!post) {
-      res.status(404).json({ error: 'Post not found' });
-      return;
-    }
-
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const channel = normalizeShareChannel(body.channel);
-    const status = normalizeShareStatus(body.status);
-
-    await prisma.$transaction(async (tx) => {
-      await tx.postShare.create({
-        data: {
-          postId,
-          userId,
-          channel,
-          status,
-        },
-      });
-
-      if (status === 'completed') {
-        await tx.post.update({
-          where: { id: postId },
-          data: { shareCount: { increment: 1 } },
-        });
-      }
-    });
+    await sharePost(postId, userId, body);
 
     const mapped = await hydratePostForViewer(postId, userId);
     if (!mapped) {
@@ -7858,6 +7451,10 @@ router.post('/feed/posts/:id/share', optionalAuth, async (req: Request, res: Res
     }
     res.json(mapped);
   } catch (error) {
+    if (error instanceof PostInteractionNotFoundError) {
+      res.status(404).json({ error: error.message });
+      return;
+    }
     console.error('BFF share post error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -7869,49 +7466,15 @@ router.post('/feed/posts/:id/hide', optionalAuth, async (req: Request, res: Resp
     if (!userId) return;
 
     const postId = req.params.id as string;
-    const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
-    if (!post) {
-      res.status(404).json({ error: 'Post not found' });
-      return;
-    }
-
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const reason = normalizeHideReason(body.reason);
-    const note = normalizeHideNote(body.note);
-
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.postHide.findUnique({
-        where: {
-          postId_userId: {
-            postId,
-            userId,
-          },
-        },
-      });
-
-      if (existing) {
-        await tx.postHide.update({
-          where: { id: existing.id },
-          data: { reason, note },
-        });
-      } else {
-        await tx.postHide.create({
-          data: {
-            postId,
-            userId,
-            reason,
-            note,
-          },
-        });
-        await tx.post.update({
-          where: { id: postId },
-          data: { hideCount: { increment: 1 } },
-        });
-      }
-    });
+    await hidePost(postId, userId, body);
 
     res.json({ success: true, hiddenPostId: postId });
   } catch (error) {
+    if (error instanceof PostInteractionNotFoundError) {
+      res.status(404).json({ error: error.message });
+      return;
+    }
     console.error('BFF hide post error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -7923,28 +7486,7 @@ router.delete('/feed/posts/:id/hide', optionalAuth, async (req: Request, res: Re
     if (!userId) return;
 
     const postId = req.params.id as string;
-
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.postHide.findUnique({
-        where: {
-          postId_userId: {
-            postId,
-            userId,
-          },
-        },
-      });
-
-      if (existing) {
-        await tx.postHide.delete({ where: { id: existing.id } });
-        await tx.post.updateMany({
-          where: {
-            id: postId,
-            hideCount: { gt: 0 },
-          },
-          data: { hideCount: { decrement: 1 } },
-        });
-      }
-    });
+    await unhidePost(postId, userId);
 
     res.json({ success: true, hiddenPostId: postId });
   } catch (error) {
@@ -7958,28 +7500,7 @@ router.get('/feed/posts/:id/comments', optionalAuth, async (req: Request, res: R
     const viewerId = (req as BFFAuthRequest).user?.userId;
     const postId = req.params.id as string;
 
-    const comments = await prisma.postComment.findMany({
-      where: { postId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-          },
-        },
-        replyToUser: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    const comments = await fetchPostComments(postId);
 
     const authorIds = Array.from(
       new Set(
@@ -8024,98 +7545,7 @@ router.post('/feed/posts/:id/comments', optionalAuth, async (req: Request, res: 
       replyToCommentID?: unknown;
       replyToCommentId?: unknown;
     };
-    const content = String(body.content || '').trim();
-    const rawParentID =
-      body.parentCommentID ??
-      body.parentCommentId ??
-      body.replyToCommentID ??
-      body.replyToCommentId;
-    const parentCommentID = typeof rawParentID === 'string' ? rawParentID.trim() : '';
-    const normalizedParentCommentID = parentCommentID.length > 0 ? parentCommentID : null;
-
-    if (!content) {
-      res.status(400).json({ error: 'content is required' });
-      return;
-    }
-
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
-      select: { id: true, userId: true, content: true },
-    });
-    if (!post) {
-      res.status(404).json({ error: 'Post not found' });
-      return;
-    }
-
-    const comment = await prisma.$transaction(async (tx) => {
-      let parentComment:
-        | {
-            id: string;
-            postId: string;
-            userId: string;
-            rootCommentId: string | null;
-            depth: number;
-          }
-        | null = null;
-
-      if (normalizedParentCommentID) {
-        parentComment = await tx.postComment.findUnique({
-          where: { id: normalizedParentCommentID },
-          select: {
-            id: true,
-            postId: true,
-            userId: true,
-            rootCommentId: true,
-            depth: true,
-          },
-        });
-
-        if (!parentComment || parentComment.postId !== postId) {
-          throw new Error('PARENT_COMMENT_INVALID');
-        }
-      }
-
-      const rootCommentId = parentComment ? parentComment.rootCommentId ?? parentComment.id : null;
-      const depth = parentComment ? Math.min((parentComment.depth ?? 0) + 1, 2) : 0;
-      const replyToUserId = parentComment?.userId ?? null;
-
-      const created = await tx.postComment.create({
-        data: {
-          postId,
-          userId,
-          content,
-          parentCommentId: parentComment?.id ?? null,
-          rootCommentId,
-          depth,
-          replyToUserId,
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              displayName: true,
-              avatarUrl: true,
-            },
-          },
-          replyToUser: {
-            select: {
-              id: true,
-              username: true,
-              displayName: true,
-              avatarUrl: true,
-            },
-          },
-        },
-      });
-
-      await tx.post.update({
-        where: { id: postId },
-        data: { commentCount: { increment: 1 } },
-      });
-
-      return created;
-    });
+    const { post, comment } = await createPostComment(postId, userId, body);
 
     if (post.userId !== userId) {
       publishCommunityInteractionSafely({
@@ -8164,8 +7594,12 @@ router.post('/feed/posts/:id/comments', optionalAuth, async (req: Request, res: 
       createdAt: comment.createdAt,
     });
   } catch (error) {
-    if (error instanceof Error && error.message === 'PARENT_COMMENT_INVALID') {
-      res.status(400).json({ error: 'parentCommentID is invalid' });
+    if (error instanceof PostCommentValidationError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    if (error instanceof PostCommentNotFoundError) {
+      res.status(404).json({ error: error.message });
       return;
     }
     console.error('BFF add comment error:', error);

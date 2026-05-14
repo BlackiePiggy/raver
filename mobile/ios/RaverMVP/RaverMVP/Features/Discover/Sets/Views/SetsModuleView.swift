@@ -106,8 +106,8 @@ struct SetsModuleView: View {
         GridItem(.flexible(), spacing: 12),
     ]
 
-    private var repository: DiscoverSetsRepository {
-        appContainer.discoverSetsRepository
+    private var repository: SetListRepository {
+        appContainer.setListRepository
     }
 
     @State private var sets: [WebDJSet] = []
@@ -383,8 +383,24 @@ struct DJSetDetailView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
 
-    private var repository: DiscoverSetsRepository {
-        appContainer.discoverSetsRepository
+    private var setReadRepository: SetReadRepository {
+        appContainer.setReadRepository
+    }
+
+    private var setCommentRepository: SetCommentRepository {
+        appContainer.setCommentRepository
+    }
+
+    private var setCommandRepository: SetCommandRepository {
+        appContainer.setCommandRepository
+    }
+
+    private var tracklistRepository: TracklistRepository {
+        appContainer.tracklistRepository
+    }
+
+    private var setEventLookupRepository: SetEventLookupRepository {
+        appContainer.setEventLookupRepository
     }
 
     let setID: String
@@ -2238,9 +2254,9 @@ struct DJSetDetailView: View {
 
         do {
             relatedEvent = nil
-            async let setTask = repository.fetchDJSet(id: setID)
-            async let commentsTask = repository.fetchSetComments(setID: setID)
-            async let tracklistsTask = repository.fetchTracklists(setID: setID)
+            async let setTask = setReadRepository.fetchDJSet(id: setID)
+            async let commentsTask = setCommentRepository.fetchSetComments(setID: setID)
+            async let tracklistsTask = tracklistRepository.fetchTracklists(setID: setID)
             let loadedSet = try await setTask
             set = loadedSet
             relatedEvent = try? await resolveRelatedEvent(for: loadedSet)
@@ -2282,7 +2298,7 @@ struct DJSetDetailView: View {
         let eventName = (set.eventName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !eventName.isEmpty else { return nil }
 
-        let page = try await repository.fetchEvents(
+        let page = try await setEventLookupRepository.fetchEvents(
             page: 1,
             limit: 200,
             search: eventName,
@@ -2311,7 +2327,7 @@ struct DJSetDetailView: View {
 
     private func refreshTracklists() async {
         do {
-            tracklists = try await repository.fetchTracklists(setID: setID)
+            tracklists = try await tracklistRepository.fetchTracklists(setID: setID)
             if let selectedTracklistID,
                !tracklists.contains(where: { $0.id == selectedTracklistID }) {
                 await switchTracklist(nil)
@@ -2339,7 +2355,7 @@ struct DJSetDetailView: View {
 
         guard let targetID = tracklistID else { return }
         do {
-            let detail = try await repository.fetchTracklistDetail(setID: set.id, tracklistID: targetID)
+            let detail = try await tracklistRepository.fetchTracklistDetail(setID: set.id, tracklistID: targetID)
             currentTracklistInfo = detail
             selectedTracklistID = targetID
             currentTracks = detail.tracks
@@ -2775,9 +2791,9 @@ struct DJSetDetailView: View {
         guard !content.isEmpty else { return }
 
         do {
-            _ = try await repository.addSetComment(setID: setID, input: CreateSetCommentInput(content: content, parentId: nil))
+            _ = try await setCommentRepository.addSetComment(setID: setID, input: CreateSetCommentInput(content: content, parentId: nil))
             inputComment = ""
-            comments = try await repository.fetchSetComments(setID: setID)
+            comments = try await setCommentRepository.fetchSetComments(setID: setID)
         } catch {
             errorMessage = error.userFacingMessage
         }
@@ -2785,7 +2801,7 @@ struct DJSetDetailView: View {
 
     private func deleteSet() async {
         do {
-            try await repository.deleteDJSet(id: setID)
+            try await setCommandRepository.deleteDJSet(id: setID)
             errorMessage = L("Set 已删除，请返回列表刷新", "Set deleted. Please return to the list and refresh.")
         } catch {
             errorMessage = error.userFacingMessage
@@ -3539,8 +3555,8 @@ private struct UploadTracklistSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
 
-    private var repository: DiscoverSetsRepository {
-        appContainer.discoverSetsRepository
+    private var repository: TracklistRepository {
+        appContainer.tracklistRepository
     }
 
     let set: WebDJSet
@@ -3768,8 +3784,12 @@ struct DJSetEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
 
-    private var repository: DiscoverSetsRepository {
-        appContainer.discoverSetsRepository
+    private var setCommandRepository: SetCommandRepository {
+        appContainer.setCommandRepository
+    }
+
+    private var setMediaRepository: SetMediaRepository {
+        appContainer.setMediaRepository
     }
 
     let mode: Mode
@@ -3918,7 +3938,7 @@ struct DJSetEditorView: View {
             return
         }
         do {
-            let data = try await repository.previewVideo(videoURL: url)
+            let data = try await setMediaRepository.previewVideo(videoURL: url)
             let title = data["title"] ?? ""
             let platform = data["platform"] ?? ""
             previewText = "\(platform) \(title)"
@@ -3949,7 +3969,7 @@ struct DJSetEditorView: View {
         do {
             if let selectedPhoto,
                let data = try await selectedPhoto.loadTransferable(type: Data.self) {
-                let upload = try await repository.uploadSetThumbnail(
+                let upload = try await setMediaRepository.uploadSetThumbnail(
                     imageData: data,
                     fileName: "set-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg"
@@ -3963,7 +3983,7 @@ struct DJSetEditorView: View {
                 guard let videoData = try await selectedVideo.loadTransferable(type: Data.self) else {
                     throw ServiceError.message(L("读取视频文件失败，请重新选择", "Failed to read video file. Please reselect."))
                 }
-                let upload = try await repository.uploadSetVideo(
+                let upload = try await setMediaRepository.uploadSetVideo(
                     videoData: videoData,
                     fileName: "set-video-\(UUID().uuidString).mp4",
                     mimeType: "video/mp4"
@@ -3977,7 +3997,7 @@ struct DJSetEditorView: View {
 
             switch mode {
             case .create:
-                _ = try await repository.createDJSet(
+                _ = try await setCommandRepository.createDJSet(
                     input: CreateDJSetInput(
                         djId: trimmedDJID,
                         title: trimmedTitle,
@@ -3990,7 +4010,7 @@ struct DJSetEditorView: View {
                     )
                 )
             case .edit(let set):
-                _ = try await repository.updateDJSet(
+                _ = try await setCommandRepository.updateDJSet(
                     id: set.id,
                     input: UpdateDJSetInput(
                         djId: trimmedDJID,
@@ -4016,8 +4036,8 @@ private struct SetEventBindingSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
 
-    private var repository: DiscoverSetsRepository {
-        appContainer.discoverSetsRepository
+    private var repository: SetEventLookupRepository {
+        appContainer.setEventLookupRepository
     }
 
     let initialEventName: String
@@ -4155,8 +4175,8 @@ private struct TracklistEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
 
-    private var repository: DiscoverSetsRepository {
-        appContainer.discoverSetsRepository
+    private var repository: TracklistRepository {
+        appContainer.tracklistRepository
     }
 
     let set: WebDJSet

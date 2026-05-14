@@ -12,11 +12,11 @@ final class DJsModuleViewModel: ObservableObject {
     @Published var bannerMessage: String?
     @Published var errorMessage: String?
 
-    private let repository: DiscoverDJsRepository
+    private let repository: DJListRepository
     private let hotDJBatchSize: Int
     private var hasLoadedInitial = false
 
-    init(repository: DiscoverDJsRepository, hotDJBatchSize: Int = 25) {
+    init(repository: DJListRepository, hotDJBatchSize: Int = 25) {
         self.repository = repository
         self.hotDJBatchSize = hotDJBatchSize
     }

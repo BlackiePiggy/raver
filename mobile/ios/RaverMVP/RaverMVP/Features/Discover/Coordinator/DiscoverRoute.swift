@@ -72,11 +72,11 @@ func makeDiscoverRouteDestination(
         }
 
     case .eventEdit(let eventID):
-        DiscoverEventEditorLoaderView(eventID: eventID, repository: appContainer.discoverEventsRepository)
+        DiscoverEventEditorLoaderView(eventID: eventID, eventReadRepository: appContainer.eventReadRepository)
 
     case .djImport(let initialName):
         DJsModuleView(
-            viewModel: DJsModuleViewModel(repository: appContainer.discoverDJsRepository),
+            viewModel: DJsModuleViewModel(repository: appContainer.djListRepository),
             initialImportName: initialName,
             openImportOnAppear: true
         )
@@ -103,7 +103,7 @@ func makeDiscoverRouteDestination(
         }
 
     case .setEdit(let setID):
-        DiscoverSetEditorLoaderView(setID: setID, repository: appContainer.discoverSetsRepository)
+        DiscoverSetEditorLoaderView(setID: setID, setReadRepository: appContainer.setReadRepository)
     }
 }
 
@@ -140,7 +140,12 @@ private struct DiscoverRouteLoaderScaffold<Content: View>: View {
 
 private struct DiscoverEventEditorLoaderView: View {
     let eventID: String
-    let repository: DiscoverEventsRepository
+    let eventReadRepository: EventReadRepository
+
+    init(eventID: String, eventReadRepository: EventReadRepository) {
+        self.eventID = eventID
+        self.eventReadRepository = eventReadRepository
+    }
 
     @State private var event: WebEvent?
     @State private var phase: LoadPhase = .idle
@@ -167,7 +172,7 @@ private struct DiscoverEventEditorLoaderView: View {
         if event != nil && !force { return }
         phase = .initialLoading
         do {
-            event = try await repository.fetchEvent(id: eventID)
+            event = try await eventReadRepository.fetchEvent(id: eventID)
             phase = .success
         } catch {
             phase = .failure(message: error.userFacingMessage ?? L("活动加载失败，请稍后重试", "Failed to load event. Please try again later."))
@@ -177,7 +182,12 @@ private struct DiscoverEventEditorLoaderView: View {
 
 private struct DiscoverSetEditorLoaderView: View {
     let setID: String
-    let repository: DiscoverSetsRepository
+    let setReadRepository: SetReadRepository
+
+    init(setID: String, setReadRepository: SetReadRepository) {
+        self.setID = setID
+        self.setReadRepository = setReadRepository
+    }
 
     @State private var set: WebDJSet?
     @State private var phase: LoadPhase = .idle
@@ -204,7 +214,7 @@ private struct DiscoverSetEditorLoaderView: View {
         if set != nil && !force { return }
         phase = .initialLoading
         do {
-            set = try await repository.fetchDJSet(id: setID)
+            set = try await setReadRepository.fetchDJSet(id: setID)
             phase = .success
         } catch {
             phase = .failure(message: error.userFacingMessage ?? L("Set 加载失败，请稍后重试", "Failed to load set. Please try again later."))

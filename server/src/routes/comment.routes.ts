@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import type { IRouter } from 'express';
-import commentService from '../services/comment.service';
+import { commentService } from '../modules/feed';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router: IRouter = Router();

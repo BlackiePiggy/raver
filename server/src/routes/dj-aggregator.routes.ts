@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import type { IRouter } from 'express';
-import djAggregatorService from '../services/dj-aggregator.service';
+import { djAggregatorService } from '../modules/music';
 
 const router: IRouter = Router();
 

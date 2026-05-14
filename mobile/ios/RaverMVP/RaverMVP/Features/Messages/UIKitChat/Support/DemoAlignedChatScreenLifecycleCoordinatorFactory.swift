@@ -48,10 +48,10 @@ enum DemoAlignedChatScreenLifecycleCoordinatorFactory {
             refreshSendButtonState: { [weak textSendCoordinator = dependencies.textSendCoordinator] in
                 textSendCoordinator?.refreshSendButtonState()
             },
-            updateRouteContext: { [weak chatRouteCoordinator = dependencies.chatRouteCoordinator] conversation, service, onNavigate, onLeaveConversation in
+            updateRouteContext: { [weak chatRouteCoordinator = dependencies.chatRouteCoordinator] conversation, repository, onNavigate, onLeaveConversation in
                 chatRouteCoordinator?.updateContext(
                     conversation: conversation,
-                    service: service,
+                    repository: repository,
                     onNavigate: onNavigate,
                     onLeaveConversation: onLeaveConversation
                 )

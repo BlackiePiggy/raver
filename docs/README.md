@@ -1,38 +1,50 @@
 # Raver Documentation Index
 
-> Status: Active  
-> Last Updated: 2026-05-12  
+> Status: Active
+> Last Updated: 2026-05-13
 > Purpose: Raver 项目的统一文档入口，用于区分当前主线、架构改造、运行手册、历史方案和阶段性记录。
 
 ## 1. 当前主线
 
 如果你是第一次阅读项目，建议按这个顺序看：
 
-1. [Raver Platform Architecture](./RAVER_PLATFORM_ARCHITECTURE.md)  
+1. [Raver 技术架构请教文档](./RAVER_ARCHITECTURE_REVIEW_BRIEF.md)
+   向有经验的技术负责人请教架构和技术选型合理性的入口文档，可配合 App 功能演示视频阅读，重点说明视频中的核心功能如何对应到 iOS 客户端、后端、数据库、IM、通知、异步任务和 Web/Admin 设计。
+
+2. [Raver Platform Architecture](./RAVER_PLATFORM_ARCHITECTURE.md)
    当前项目的平台级架构总览，解释产品定位、领域架构、iOS、后端、实时系统、内容系统和工程亮点。
 
-2. [Raver 商用级架构整理与重构方案](./RAVER_COMMERCIAL_ARCHITECTURE_RESTRUCTURE_PLAN.md)  
+3. [Raver 商用级架构整理与重构方案](./RAVER_COMMERCIAL_ARCHITECTURE_RESTRUCTURE_PLAN.md)
    架构收束目标、后端/iOS/数据库/Web 改造方案、分阶段路线和验收标准。
 
-3. [Raver 商用级架构改造进度与日志](./RAVER_COMMERCIAL_ARCHITECTURE_RESTRUCTURE_TRACKER.md)  
+4. [Raver 商用级架构改造进度与日志](./RAVER_COMMERCIAL_ARCHITECTURE_RESTRUCTURE_TRACKER.md)
    当前改造进度、checkbox、日志、数据库备份记录、风险和 deferred backlog。
 
-4. [Raver Legacy And Current Mainline Inventory](./RAVER_LEGACY_AND_CURRENT_MAINLINE_INVENTORY.md)  
+5. [Raver 商用级架构改造总结](./RAVER_COMMERCIAL_ARCHITECTURE_RESTRUCTURE_SUMMARY.md)
+   本轮 Phase 0-7 改造的完整总结、执行结果、验证方式和后续路线。
+
+6. [Raver Legacy And Current Mainline Inventory](./RAVER_LEGACY_AND_CURRENT_MAINLINE_INVENTORY.md)
    当前主线、历史兼容、迁移中路线和后续处理策略。
 
-5. [Raver Backend Module Ownership](./RAVER_BACKEND_MODULE_OWNERSHIP.md)  
+7. [Raver Backend Module Ownership](./RAVER_BACKEND_MODULE_OWNERSHIP.md)
    后端模块 owner、当前 routes/services/scripts、核心模型和目标目录。
 
-6. [iOS Repository Naming And Module Guide](./IOS_REPOSITORY_NAMING_AND_MODULE_GUIDE.md)  
+8. [iOS Repository Naming And Module Guide](./IOS_REPOSITORY_NAMING_AND_MODULE_GUIDE.md)
    iOS Repository 命名规范、模块落位规则和旧 Service 迁移方向。
 
-7. [Database Backup Gatekeeper](./DATABASE_BACKUP_GATEKEEPER.md)  
+9. [Database Backup Gatekeeper](./DATABASE_BACKUP_GATEKEEPER.md)
    数据库迁移、回填、reproject、snapshot rebuild 和批量修复前的备份门禁。
 
-8. [Architecture Scope Control](./ARCHITECTURE_SCOPE_CONTROL.md)  
+10. [Architecture Scope Control](./ARCHITECTURE_SCOPE_CONTROL.md)
    架构改造期间的核心路线约束和新增需求防漂移规则。
 
-9. [Raver App 端后端概述](./RAVER_APP_BACKEND_OVERVIEW_FOR_ENGINEER.md)  
+11. [Raver Phase 6 Admin / Operations Inventory](./RAVER_ADMIN_OPERATIONS_PHASE6_INVENTORY.md)
+   Phase 6 后台运营系统清点、ownership、迁移顺序和 scope guard。
+
+12. [Raver Content CMS Unified Admin Plan](./RAVER_CONTENT_CMS_UNIFIED_ADMIN_PLAN.md)
+   Phase 7 内容后台统一入口、角色模型和 festival-viewer 接入方案。
+
+13. [Raver App 端后端概述](./RAVER_APP_BACKEND_OVERVIEW_FOR_ENGINEER.md)
    给后端工程师看的 App 端后端能力概述。
 
 ## 2. 核心架构专题
@@ -68,11 +80,15 @@
 
 ## 3. 运营与运行手册
 
+- [Raver Phase 6 Admin / Operations Inventory](./RAVER_ADMIN_OPERATIONS_PHASE6_INVENTORY.md)
+- [Raver Content CMS Unified Admin Plan](./RAVER_CONTENT_CMS_UNIFIED_ADMIN_PLAN.md)
 - [APNs Real Device Setup And E2E Runbook](./APNS_REAL_DEVICE_SETUP_AND_E2E_RUNBOOK.md)
 - [OpenIM Chat UIKit Rollout Runbook](./OPENIM_CHAT_UIKIT_ROLLOUT_RUNBOOK.md)
 - [OpenIM Storage Governance Runbook](./OPENIM_STORAGE_GOVERNANCE_RUNBOOK.md)
 - [Dev Proxy DB Runbook](./DEV_PROXY_DB_RUNBOOK.md)
 - [Test Environment Deployment Plan](./TEST_ENV_DEPLOYMENT_PLAN.md)
+
+OpenIM runbooks are legacy / migration references. Current Admin / IM operations should use the Phase 6 Admin inventory and Tencent IM mainline unless a cleanup task explicitly targets OpenIM history.
 
 ## 4. 架构决策记录
 

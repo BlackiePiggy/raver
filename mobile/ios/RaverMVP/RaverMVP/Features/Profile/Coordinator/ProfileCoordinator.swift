@@ -59,12 +59,16 @@ struct ProfileCoordinatorView: View {
     @StateObject private var profileViewModel: ProfileViewModel
 
     init(
-        repository: ProfileSocialRepository,
+        userRepository: ProfileUserRepository,
+        contentRepository: ProfileContentRepository,
+        checkinRepository: ProfileCheckinRepository,
         virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
     ) {
         _profileViewModel = StateObject(
             wrappedValue: ProfileViewModel(
-                repository: repository,
+                userRepository: userRepository,
+                contentRepository: contentRepository,
+                checkinRepository: checkinRepository,
                 virtualAssetRepository: virtualAssetRepository
             )
         )

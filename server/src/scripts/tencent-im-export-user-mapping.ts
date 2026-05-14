@@ -2,7 +2,7 @@ import 'dotenv/config';
 import fs from 'fs/promises';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
-import { toTencentIMUserID } from '../services/tencent-im/tencent-im-id';
+import { toTencentIMUserID } from '../modules/im';
 
 const prisma = new PrismaClient();
 

@@ -24,6 +24,7 @@ actor MockWebFeatureService: WebFeatureService {
     )
 
     private var events: [WebEvent]
+    private var favoriteEventIDs: Set<String> = []
     private var djs: [WebDJ]
     private var sets: [WebDJSet]
     private var tracklistsBySetID: [String: [WebTracklistDetail]]
@@ -493,6 +494,43 @@ actor MockWebFeatureService: WebFeatureService {
 
     func fetchMyEvents() async throws -> [WebEvent] {
         events.filter { $0.organizer?.id == currentUser.id }.sorted(by: { $0.createdAt > $1.createdAt })
+    }
+
+    func fetchFavoriteEvents(page: Int, limit: Int) async throws -> EventListPage {
+        let sorted = events
+            .filter { favoriteEventIDs.contains($0.id) }
+            .sorted(by: { $0.startDate < $1.startDate })
+        return paginateEvents(sorted, page: page, limit: limit)
+    }
+
+    func fetchEventFavoriteStatus(eventID: String) async throws -> EventFavoriteStatus {
+        guard events.contains(where: { $0.id == eventID }) else {
+            throw ServiceError.message("活动不存在")
+        }
+        let isFavorited = favoriteEventIDs.contains(eventID)
+        return EventFavoriteStatus(
+            id: isFavorited ? "favorite_\(eventID)" : nil,
+            eventId: eventID,
+            isFavorited: isFavorited,
+            createdAt: isFavorited ? Date() : nil
+        )
+    }
+
+    func favoriteEvent(eventID: String) async throws -> EventFavoriteStatus {
+        guard events.contains(where: { $0.id == eventID }) else {
+            throw ServiceError.message("活动不存在")
+        }
+        favoriteEventIDs.insert(eventID)
+        return EventFavoriteStatus(
+            id: "favorite_\(eventID)",
+            eventId: eventID,
+            isFavorited: true,
+            createdAt: Date()
+        )
+    }
+
+    func unfavoriteEvent(eventID: String) async throws {
+        favoriteEventIDs.remove(eventID)
     }
 
     func createEvent(input: CreateEventInput) async throws -> WebEvent {

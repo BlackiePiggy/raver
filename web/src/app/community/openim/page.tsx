@@ -135,8 +135,15 @@ export default function OpenIMAdminPage() {
         <div className="max-w-[1200px] mx-auto px-6 py-8 space-y-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-text-primary">OpenIM 管理台</h1>
-              <p className="text-sm text-text-secondary mt-2">举报、图片审核、Webhook 与同步任务总览</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-bold text-text-primary">OpenIM Legacy 管理台</h1>
+                <span className="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-1 text-xs font-semibold text-yellow-300">
+                  Legacy / Deferred
+                </span>
+              </div>
+              <p className="text-sm text-text-secondary mt-2">
+                历史 OpenIM 兼容与迁移检查入口；当前 IM / Admin 主线为 Tencent IM 与 /api/admin/v1。
+              </p>
             </div>
             <button
               onClick={() => void loadData()}

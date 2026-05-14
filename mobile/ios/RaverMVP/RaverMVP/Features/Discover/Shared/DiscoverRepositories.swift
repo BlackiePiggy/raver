@@ -1,22 +1,43 @@
 import Foundation
 
-protocol DiscoverDJsRepository {
+protocol DJListRepository {
     func fetchDJs(page: Int, limit: Int, search: String?, sortBy: String) async throws -> DJListPage
+}
+
+protocol DJReadRepository {
     func fetchDJ(id: String) async throws -> WebDJ
+}
+
+protocol DJLinkedContentRepository {
     func fetchDJSets(djID: String) async throws -> [WebDJSet]
     func fetchDJEvents(djID: String) async throws -> [WebEvent]
     func fetchDJRatingUnits(djID: String) async throws -> [WebRatingUnit]
     func fetchMyDJCheckinCount(djID: String) async throws -> Int
+}
+
+protocol DJRelationRepository {
     func toggleDJFollow(djID: String, shouldFollow: Bool) async throws -> WebDJ
+}
+
+protocol DJCommandRepository {
     func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ
+}
+
+protocol DJRankingRepository {
     func fetchRankingBoards() async throws -> [RankingBoard]
     func fetchRankingBoardDetail(boardID: String, year: Int?) async throws -> RankingBoardDetail
+}
+
+protocol DJImportRepository {
     func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate]
     func searchDiscogsDJs(query: String, limit: Int) async throws -> [DiscogsDJCandidate]
     func fetchDiscogsDJArtist(id: Int) async throws -> DiscogsDJArtistDetail
     func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportSpotifyDJResponse
     func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDiscogsDJResponse
     func importManualDJ(input: ImportManualDJInput) async throws -> ImportManualDJResponse
+}
+
+protocol DJMediaRepository {
     func uploadDJImage(
         imageData: Data,
         fileName: String,
@@ -26,7 +47,7 @@ protocol DiscoverDJsRepository {
     ) async throws -> UploadMediaResponse
 }
 
-struct DiscoverDJsRepositoryAdapter: DiscoverDJsRepository {
+struct DJListRepositoryAdapter: DJListRepository {
     private let service: WebFeatureService
 
     init(service: WebFeatureService) {
@@ -36,9 +57,25 @@ struct DiscoverDJsRepositoryAdapter: DiscoverDJsRepository {
     func fetchDJs(page: Int, limit: Int, search: String?, sortBy: String) async throws -> DJListPage {
         try await service.fetchDJs(page: page, limit: limit, search: search, sortBy: sortBy)
     }
+}
+
+struct DJReadRepositoryAdapter: DJReadRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
+    }
 
     func fetchDJ(id: String) async throws -> WebDJ {
         try await service.fetchDJ(id: id)
+    }
+}
+
+struct DJLinkedContentRepositoryAdapter: DJLinkedContentRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
     }
 
     func fetchDJSets(djID: String) async throws -> [WebDJSet] {
@@ -56,13 +93,37 @@ struct DiscoverDJsRepositoryAdapter: DiscoverDJsRepository {
     func fetchMyDJCheckinCount(djID: String) async throws -> Int {
         try await service.fetchMyDJCheckinCount(djID: djID)
     }
+}
+
+struct DJRelationRepositoryAdapter: DJRelationRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
+    }
 
     func toggleDJFollow(djID: String, shouldFollow: Bool) async throws -> WebDJ {
         try await service.toggleDJFollow(djID: djID, shouldFollow: shouldFollow)
     }
+}
+
+struct DJCommandRepositoryAdapter: DJCommandRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
+    }
 
     func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ {
         try await service.updateDJ(id: id, input: input)
+    }
+}
+
+struct DJRankingRepositoryAdapter: DJRankingRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
     }
 
     func fetchRankingBoards() async throws -> [RankingBoard] {
@@ -71,6 +132,14 @@ struct DiscoverDJsRepositoryAdapter: DiscoverDJsRepository {
 
     func fetchRankingBoardDetail(boardID: String, year: Int?) async throws -> RankingBoardDetail {
         try await service.fetchRankingBoardDetail(boardID: boardID, year: year)
+    }
+}
+
+struct DJImportRepositoryAdapter: DJImportRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
     }
 
     func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate] {
@@ -96,6 +165,14 @@ struct DiscoverDJsRepositoryAdapter: DiscoverDJsRepository {
     func importManualDJ(input: ImportManualDJInput) async throws -> ImportManualDJResponse {
         try await service.importManualDJ(input: input)
     }
+}
+
+struct DJMediaRepositoryAdapter: DJMediaRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
+    }
 
     func uploadDJImage(
         imageData: Data,
@@ -114,26 +191,44 @@ struct DiscoverDJsRepositoryAdapter: DiscoverDJsRepository {
     }
 }
 
-protocol DiscoverSetsRepository {
+protocol SetListRepository {
     func fetchDJSets(page: Int, limit: Int, sortBy: String, djID: String?) async throws -> DJSetListPage
+}
+
+protocol SetReadRepository {
     func fetchDJSet(id: String) async throws -> WebDJSet
+}
+
+protocol SetCommentRepository {
     func fetchSetComments(setID: String) async throws -> [WebSetComment]
     func addSetComment(setID: String, input: CreateSetCommentInput) async throws -> WebSetComment
+}
+
+protocol SetCommandRepository {
     func deleteDJSet(id: String) async throws
-    func fetchTracklists(setID: String) async throws -> [WebTracklistSummary]
-    func fetchTracklistDetail(setID: String, tracklistID: String) async throws -> WebTracklistDetail
-    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage
-    func createTracklist(setID: String, input: CreateTracklistInput) async throws -> WebTracklistDetail
-    func previewVideo(videoURL: String) async throws -> [String: String]
-    func uploadSetThumbnail(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
-    func uploadSetVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
     func createDJSet(input: CreateDJSetInput) async throws -> WebDJSet
     func updateDJSet(id: String, input: UpdateDJSetInput) async throws -> WebDJSet
+}
+
+protocol TracklistRepository {
+    func fetchTracklists(setID: String) async throws -> [WebTracklistSummary]
+    func fetchTracklistDetail(setID: String, tracklistID: String) async throws -> WebTracklistDetail
+    func createTracklist(setID: String, input: CreateTracklistInput) async throws -> WebTracklistDetail
     func replaceTracks(setID: String, tracks: [CreateTrackInput]) async throws -> WebDJSet
     func autoLinkTracks(setID: String) async throws
 }
 
-struct DiscoverSetsRepositoryAdapter: DiscoverSetsRepository {
+protocol SetEventLookupRepository {
+    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage
+}
+
+protocol SetMediaRepository {
+    func previewVideo(videoURL: String) async throws -> [String: String]
+    func uploadSetThumbnail(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
+    func uploadSetVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
+}
+
+struct SetListRepositoryAdapter: SetListRepository {
     private let service: WebFeatureService
 
     init(service: WebFeatureService) {
@@ -143,9 +238,25 @@ struct DiscoverSetsRepositoryAdapter: DiscoverSetsRepository {
     func fetchDJSets(page: Int, limit: Int, sortBy: String, djID: String?) async throws -> DJSetListPage {
         try await service.fetchDJSets(page: page, limit: limit, sortBy: sortBy, djID: djID)
     }
+}
+
+struct SetReadRepositoryAdapter: SetReadRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
+    }
 
     func fetchDJSet(id: String) async throws -> WebDJSet {
         try await service.fetchDJSet(id: id)
+    }
+}
+
+struct SetCommentRepositoryAdapter: SetCommentRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
     }
 
     func fetchSetComments(setID: String) async throws -> [WebSetComment] {
@@ -155,9 +266,33 @@ struct DiscoverSetsRepositoryAdapter: DiscoverSetsRepository {
     func addSetComment(setID: String, input: CreateSetCommentInput) async throws -> WebSetComment {
         try await service.addSetComment(setID: setID, input: input)
     }
+}
+
+struct SetCommandRepositoryAdapter: SetCommandRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
+    }
 
     func deleteDJSet(id: String) async throws {
         try await service.deleteDJSet(id: id)
+    }
+
+    func createDJSet(input: CreateDJSetInput) async throws -> WebDJSet {
+        try await service.createDJSet(input: input)
+    }
+
+    func updateDJSet(id: String, input: UpdateDJSetInput) async throws -> WebDJSet {
+        try await service.updateDJSet(id: id, input: input)
+    }
+}
+
+struct TracklistRepositoryAdapter: TracklistRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
     }
 
     func fetchTracklists(setID: String) async throws -> [WebTracklistSummary] {
@@ -168,12 +303,36 @@ struct DiscoverSetsRepositoryAdapter: DiscoverSetsRepository {
         try await service.fetchTracklistDetail(setID: setID, tracklistID: tracklistID)
     }
 
+    func createTracklist(setID: String, input: CreateTracklistInput) async throws -> WebTracklistDetail {
+        try await service.createTracklist(setID: setID, input: input)
+    }
+
+    func replaceTracks(setID: String, tracks: [CreateTrackInput]) async throws -> WebDJSet {
+        try await service.replaceTracks(setID: setID, tracks: tracks)
+    }
+
+    func autoLinkTracks(setID: String) async throws {
+        try await service.autoLinkTracks(setID: setID)
+    }
+}
+
+struct SetEventLookupRepositoryAdapter: SetEventLookupRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
+    }
+
     func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage {
         try await service.fetchEvents(page: page, limit: limit, search: search, eventType: eventType, status: status)
     }
+}
 
-    func createTracklist(setID: String, input: CreateTracklistInput) async throws -> WebTracklistDetail {
-        try await service.createTracklist(setID: setID, input: input)
+struct SetMediaRepositoryAdapter: SetMediaRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
     }
 
     func previewVideo(videoURL: String) async throws -> [String: String] {
@@ -186,22 +345,6 @@ struct DiscoverSetsRepositoryAdapter: DiscoverSetsRepository {
 
     func uploadSetVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
         try await service.uploadSetVideo(videoData: videoData, fileName: fileName, mimeType: mimeType)
-    }
-
-    func createDJSet(input: CreateDJSetInput) async throws -> WebDJSet {
-        try await service.createDJSet(input: input)
-    }
-
-    func updateDJSet(id: String, input: UpdateDJSetInput) async throws -> WebDJSet {
-        try await service.updateDJSet(id: id, input: input)
-    }
-
-    func replaceTracks(setID: String, tracks: [CreateTrackInput]) async throws -> WebDJSet {
-        try await service.replaceTracks(setID: setID, tracks: tracks)
-    }
-
-    func autoLinkTracks(setID: String) async throws {
-        try await service.autoLinkTracks(setID: setID)
     }
 }
 

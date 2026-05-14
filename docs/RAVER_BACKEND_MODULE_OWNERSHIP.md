@@ -2,7 +2,7 @@
 
 > Status: Active  
 > Owner: Backend Architecture  
-> Last Updated: 2026-05-12  
+> Last Updated: 2026-05-13
 > Applies To: `server/src/`、`server/prisma/schema.prisma`  
 > Purpose: 为后端模块化收束建立 owner、当前文件位置、核心模型和目标目录，避免 routes/services/scripts 继续横向膨胀。
 
@@ -33,18 +33,18 @@ server/src/
 | --- | --- | --- | --- | --- | --- | --- |
 | `auth` | Current | 注册、登录、短信、refresh token、会话恢复 | `auth.routes.ts` | `auth-smoke.ts`、`auth-integration.ts` | `User`、`AuthRefreshToken`、`AuthSmsCode`、`AuthPhoneAuthState` | `server/src/modules/auth/` |
 | `users` | Current | 用户资料、头像、公开主页、关注用户/DJ、资料审核 | `auth.routes.ts`、`follow.routes.ts` | 现散落在 controllers 和 BFF | `User`、`Follow`、`UserProfileModerationJob` | `server/src/modules/users/` |
-| `events` | Current | 活动、阵容、时间表、票档、现场评论 | `event.routes.ts` | `event.controller.ts`、`lineup.controller.ts`、`timetable.controller.ts` | `Event`、`EventLineupArtist`、`EventTimetableSlot`、`EventTicketTier`、`EventLiveComment` | `server/src/modules/events/` |
-| `music` | Current | DJ、Set、Tracklist、Track、Label、Genre、外部音乐数据 | `dj.routes.ts`、`djset.routes.ts`、`label.routes.ts`、`music.routes.ts`、`dj-aggregator.routes.ts` | `djset.service.ts`、`dj-aggregator.service.ts`、`spotify-artist.service.ts`、`discogs-artist.service.ts`、`soundcloud-artist.service.ts`、`music-search.service.ts` | `DJ`、`DJSet`、`Tracklist`、`Track`、`TracklistTrack`、`Label`、`Genre` | `server/src/modules/music/` |
-| `feed` | Current | Post、评论、点赞、收藏、转发、隐藏、FeedEvent | `bff.routes.ts`、`bff.web.routes.ts`、`comment.routes.ts` | `comment.service.ts`、`seed-rich-feed.ts` | `Post`、`PostLike`、`PostRepost`、`PostSave`、`PostShare`、`PostHide`、`FeedEvent`、`PostComment` | `server/src/modules/feed/` |
+| `events` | Current + Compat | 活动、阵容、时间表、票档、现场评论 | `event.routes.ts` | `modules/events` facade、`event.controller.ts`、`lineup.controller.ts`、`timetable.controller.ts` | `Event`、`EventLineupArtist`、`EventTimetableSlot`、`EventTicketTier`、`EventLiveComment` | `server/src/modules/events/` |
+| `music` | Current + Compat | DJ、Set、Tracklist、Track、Label、Genre、外部音乐数据 | `dj.routes.ts`、`djset.routes.ts`、`label.routes.ts`、`music.routes.ts`、`dj-aggregator.routes.ts` | `modules/music` facade、`djset.service.ts`、`dj-aggregator.service.ts`、`spotify-artist.service.ts`、`discogs-artist.service.ts`、`soundcloud-artist.service.ts`、`music-search.service.ts` | `DJ`、`DJSet`、`Tracklist`、`Track`、`TracklistTrack`、`Label`、`Genre` | `server/src/modules/music/` |
+| `feed` | Current + Compat | Post、评论、点赞、收藏、转发、隐藏、FeedEvent | `bff.routes.ts`、`bff.web.routes.ts`、`comment.routes.ts` | `modules/feed` facade、`comment.service.ts`、`seed-rich-feed.ts` | `Post`、`PostLike`、`PostRepost`、`PostSave`、`PostShare`、`PostHide`、`FeedEvent`、`PostComment` | `server/src/modules/feed/` |
 | `squads` | Current | 小队、成员、邀请、小队消息、线下活动、定位状态 | `squad.routes.ts` | `squad.service.ts`、`seed-squad-offline-activity-demo.ts` | `Squad`、`SquadMember`、`SquadInvite`、`SquadActivity`、`SquadOfflineActivity`、`SquadOfflineActivityLocation` | `server/src/modules/squads/` |
-| `im` | Current + Migration | Tencent IM bootstrap、usersig、用户/群同步、IM 迁移和治理 | `tencent-im.routes.ts` | `services/tencent-im/*`、`tencent-im-*.ts` scripts、`services/openim/*` legacy | `OpenIMSyncJob`、`OpenIMWebhookEvent`、`OpenIMMessageReport`、`OpenIMImageModerationJob`、`OpenIMMessageMigration` | `server/src/modules/im/` |
+| `im` | Current + Migration | Tencent IM bootstrap、usersig、用户/群同步、IM 迁移和治理 | `tencent-im.routes.ts` | `modules/im` facade、`services/tencent-im/*` provider、`tencent-im-*.ts` scripts、`services/openim/*` legacy | `OpenIMSyncJob`、`OpenIMWebhookEvent`、`OpenIMMessageReport`、`OpenIMImageModerationJob`、`OpenIMMessageMigration` | `server/src/modules/im/` |
 | `notifications` | Current | Notification Center、APNs、Inbox、Delivery、Template、Scheduler | `notification-center.routes.ts`、`notification.routes.ts` compat | `services/notification-center/*`、`notification-*.ts` scripts、`notification.service.ts` compat | `NotificationEvent`、`NotificationInboxItem`、`NotificationDelivery`、`DevicePushToken`、`NotificationSubscription`、`NotificationTemplate` | `server/src/modules/notifications/` |
 | `checkins` | Current + Compat | Check-in v2、snapshot、projection、outbox、v1 compat | `checkins-v2.routes.ts`、`checkin.routes.ts` compat | `checkin-*.ts` services/scripts | `Checkin`、`CheckinSnapshot`、`CheckinSelection`、`UserCheckinTimelineEntry`、`UserCheckinStat`、`CheckinOutboxEvent` | `server/src/modules/checkins/` |
 | `virtual-assets` | Current | 虚拟资产、装备、外观 | `virtual-asset.routes.ts` | `virtual-asset.service.ts`、`virtual-assets:seed` | `VirtualAssetDefinition`、`UserVirtualAsset`、`UserVirtualAssetEquip` | `server/src/modules/virtual-assets/` |
 | `share` | Current | 短链、二维码、海报、分享事件、邀请 referral | `share.routes.ts` | `share-link.service.ts`、`share-*.ts` scripts | `ShareLink`、`ShareLinkEvent`、`InviteReferral` | `server/src/modules/share/` |
 | `search` | Current | 全局搜索、跨领域聚合搜索 | `search.routes.ts` | `global-search.service.ts`、`music-search.service.ts` | 多领域读取 | `server/src/modules/search/` |
 | `pre-registrations` | Current | 预报名、批次、审核、通知 | `pre-registration.routes.ts` | `pre-registration.controller.ts` | `PreRegistration`、`PreRegistrationBatch`、`PreRegistrationDecision`、`PreRegistrationNotification` | `server/src/modules/pre-registrations/` |
-| `admin` | Target | 后台权限、运营配置、审计、审核入口 | 散落在 notification-center、pre-registration、checkins-v2 | 待收束 | `AdminAuditLog`、各 moderation job | `server/src/modules/admin/` |
+| `admin` | Current + Facade | 后台权限、运营入口、运营配置、审计、状态聚合 | `/api/admin/v1` facade；旧入口仍散落在 notification-center、pre-registration、checkins-v2、virtual-assets | `modules/admin` facade，后续补 shared admin auth / audit / status | `AdminAuditLog`、各 ops action 审计 | `server/src/modules/admin/` |
 | `bff` | Compat / Migration | 当前 App/Web 聚合接口 | `bff.routes.ts`、`bff.web.routes.ts` | 大量内联逻辑 | 多领域聚合 | 逐步拆回各 module 或 `modules/bff/` |
 
 ## 3. Module 内部标准
@@ -101,7 +101,19 @@ server/src/modules/<module>/
 - 不绕过目标 module 直接跨领域写表。
 - 不在未备份数据库的情况下执行 migration、backfill、reproject apply 或批量数据修复。
 
-## 7. Phase 0 待办
+## 7. Phase 5 Content Module Facades
+
+2026-05-13 已建立内容域 current facade：
+
+| Module | Facade | 当前 route 入口 | 仍属 compat 的实现 |
+| --- | --- | --- | --- |
+| `feed` | `server/src/modules/feed/index.ts` | `comment.routes.ts`、`bff.routes.ts`、`bff.web.routes.ts` 的 feed/comment 入口 | `bff.routes.ts` 中 feed stream、post create/update/delete、DTO mapping、notification orchestration 仍为 compat；FeedEvent、Post interactions、PostComment 写入已进入 module service |
+| `events` | `server/src/modules/events/index.ts` | `event.routes.ts` | `controllers/event.controller.ts`、`lineup.controller.ts`、`timetable.controller.ts` 尚未物理迁移 |
+| `music` | `server/src/modules/music/index.ts` | `dj.routes.ts`、`djset.routes.ts`、`music.routes.ts`、`dj-aggregator.routes.ts`、`bff.web.routes.ts` 的 DJSet / external artist provider 入口 | `label.routes.ts` 内联 Prisma 逻辑、BFF web 中 DJ/Set 聚合逻辑 |
+
+本批只收束 import boundary，不改变 API 行为，不做数据库动作。后续 deeper extraction 应以 service/repository 小切片推进，避免把 BFF 大文件整体平移成新的 module God Service。
+
+## 8. Phase 0 待办
 
 - [ ] 为每个 module 建立 README 或 owner 注释。
 - [ ] 建立 `server/src/modules/` 骨架。

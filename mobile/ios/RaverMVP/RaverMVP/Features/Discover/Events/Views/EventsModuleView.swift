@@ -10,7 +10,11 @@ struct DiscoverEventsRootView: View {
 
     var body: some View {
         EventsModuleView(
-            viewModel: EventsModuleViewModel(repository: appContainer.discoverEventsRepository),
+            viewModel: EventsModuleViewModel(
+                listRepository: appContainer.eventListRepository,
+                eventReadRepository: appContainer.eventReadRepository,
+                checkinRepository: appContainer.eventCheckinRepository
+            ),
             onHorizontalDragStateChanged: onHorizontalDragStateChanged
         )
     }

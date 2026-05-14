@@ -21,7 +21,7 @@ struct FollowListView: View {
     @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: FollowListViewModel
 
-    init(userID: String, kind: FollowListKind, repository: ProfileSocialRepository) {
+    init(userID: String, kind: FollowListKind, repository: ProfileUserRepository) {
         _viewModel = StateObject(wrappedValue: FollowListViewModel(
             userID: userID,
             kind: kind,

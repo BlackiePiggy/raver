@@ -1,5 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3901/api';
-const V1_BASE_URL = API_URL.endsWith('/api') ? `${API_URL.slice(0, -4)}/v1` : `${API_URL}/v1`;
+import { getApiUrl } from '@/lib/config';
 
 type NotificationChannel = 'in_app' | 'apns' | 'openim';
 type NotificationCategory =
@@ -161,7 +160,7 @@ const getToken = (): string => {
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const token = getToken();
-  const response = await fetch(`${V1_BASE_URL}${path}`, {
+  const response = await fetch(getApiUrl(`/admin/v1${path}`), {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -181,7 +180,7 @@ export const notificationCenterAdminApi = {
   async getStatus(windowHours = 24): Promise<NotificationCenterStatusResponse> {
     const query = new URLSearchParams({ windowHours: String(windowHours) });
     const result = await request<{ success: boolean; status: NotificationCenterStatusResponse }>(
-      `/notification-center/admin/status?${query.toString()}`
+      `/notifications/status?${query.toString()}`
     );
     return result.status;
   },
@@ -201,21 +200,21 @@ export const notificationCenterAdminApi = {
     if (input?.eventId) query.set('eventId', input.eventId);
 
     const result = await request<{ success: boolean; items: NotificationCenterDeliveryItem[] }>(
-      `/notification-center/admin/deliveries?${query.toString()}`
+      `/notifications/deliveries?${query.toString()}`
     );
     return result.items;
   },
 
   async getConfig(): Promise<NotificationCenterGlobalConfig> {
     const result = await request<{ success: boolean; config: NotificationCenterGlobalConfig }>(
-      '/notification-center/admin/config'
+      '/notifications/config'
     );
     return result.config;
   },
 
   async updateConfig(config: NotificationCenterGlobalConfig): Promise<NotificationCenterGlobalConfig> {
     const result = await request<{ success: boolean; config: NotificationCenterGlobalConfig }>(
-      '/notification-center/admin/config',
+      '/notifications/config',
       {
         method: 'PUT',
         body: JSON.stringify({ config }),
@@ -238,7 +237,7 @@ export const notificationCenterAdminApi = {
     if (input?.channel) query.set('channel', input.channel);
     if (typeof input?.isActive === 'boolean') query.set('isActive', String(input.isActive));
     const result = await request<{ success: boolean; items: NotificationCenterTemplateItem[] }>(
-      `/notification-center/admin/templates?${query.toString()}`
+      `/notifications/templates?${query.toString()}`
     );
     return result.items;
   },
@@ -254,7 +253,7 @@ export const notificationCenterAdminApi = {
     isActive?: boolean;
   }): Promise<NotificationCenterTemplateItem> {
     const result = await request<{ success: boolean; item: NotificationCenterTemplateItem }>(
-      '/notification-center/admin/templates',
+      '/notifications/templates',
       {
         method: 'PUT',
         body: JSON.stringify(input),

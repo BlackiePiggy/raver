@@ -115,7 +115,7 @@ class PreRegistrationAPI {
     }
 
     const suffix = search.toString() ? `?${search.toString()}` : '';
-    const response = await fetch(getApiUrl(`/admin/pre-registrations${suffix}`), {
+    const response = await fetch(getApiUrl(`/admin/v1/pre-registrations${suffix}`), {
       headers: this.getHeaders(token),
     });
 
@@ -126,7 +126,7 @@ class PreRegistrationAPI {
   }
 
   async listAdminBatches(token: string): Promise<{ items: PreRegistrationBatch[] }> {
-    const response = await fetch(getApiUrl('/admin/pre-registration-batches'), {
+    const response = await fetch(getApiUrl('/admin/v1/pre-registration-batches'), {
       headers: this.getHeaders(token),
     });
     if (!response.ok) {
@@ -139,7 +139,7 @@ class PreRegistrationAPI {
     token: string,
     data: { batchName: string; plannedSlots?: number; note?: string }
   ): Promise<PreRegistrationBatch> {
-    const response = await fetch(getApiUrl('/admin/pre-registration-batches'), {
+    const response = await fetch(getApiUrl('/admin/v1/pre-registration-batches'), {
       method: 'POST',
       headers: this.getHeaders(token),
       body: JSON.stringify(data),
@@ -155,7 +155,7 @@ class PreRegistrationAPI {
     batchId: string,
     data: { decision: 'SELECTED' | 'NOT_SELECTED' | 'WAITLIST'; registrationIds: string[]; decisionReason?: string }
   ): Promise<{ message: string; affectedCount: number; decision: string }> {
-    const response = await fetch(getApiUrl(`/admin/pre-registration-batches/${batchId}/decisions`), {
+    const response = await fetch(getApiUrl(`/admin/v1/pre-registration-batches/${batchId}/decisions`), {
       method: 'POST',
       headers: this.getHeaders(token),
       body: JSON.stringify(data),
@@ -175,7 +175,7 @@ class PreRegistrationAPI {
       batchId?: string;
     }
   ): Promise<{ message: string; createdCount: number }> {
-    const response = await fetch(getApiUrl('/admin/pre-registration-notifications'), {
+    const response = await fetch(getApiUrl('/admin/v1/pre-registration-notifications'), {
       method: 'POST',
       headers: this.getHeaders(token),
       body: JSON.stringify(data),

@@ -425,7 +425,8 @@ struct MainTabCoordinatorView: View {
 
             case .postCreate:
                 ComposePostView(
-                    repository: appContainer.circleFeedRepository,
+                    commandRepository: appContainer.postCommandRepository,
+                    mediaRepository: appContainer.postMediaRepository,
                     mode: .create,
                     onPostCreated: { created in
                         NotificationCenter.default.post(name: .circlePostDidCreate, object: created)
@@ -434,7 +435,8 @@ struct MainTabCoordinatorView: View {
 
             case let .eventPostCreate(eventID, eventName):
                 ComposePostView(
-                    repository: appContainer.circleFeedRepository,
+                    commandRepository: appContainer.postCommandRepository,
+                    mediaRepository: appContainer.postMediaRepository,
                     mode: .create,
                     initialEventTag: ComposePostEventTag(id: eventID, name: eventName),
                     onPostCreated: { created in
@@ -445,7 +447,9 @@ struct MainTabCoordinatorView: View {
             case let .postEdit(postID):
                 CirclePostEditorLoaderView(
                     postID: postID,
-                    repository: appContainer.circleFeedRepository
+                    postReadRepository: appContainer.postReadRepository,
+                    commandRepository: appContainer.postCommandRepository,
+                    mediaRepository: appContainer.postMediaRepository
                 )
 
             case .idCreate:
@@ -460,19 +464,22 @@ struct MainTabCoordinatorView: View {
 
             case .ratingEventCreate:
                 CreateRatingEventSheet { input in
-                    let created = try await appContainer.discoverEventsRepository.createRatingEvent(input: input)
+                    let repository: RatingRepository = appContainer.ratingRepository
+                    let created = try await repository.createRatingEvent(input: input)
                     NotificationCenter.default.post(name: .circleRatingEventDidCreate, object: created)
                 }
 
             case .ratingEventImportFromEvent:
                 CreateRatingEventFromEventSheet { sourceEventID in
-                    let created = try await appContainer.discoverEventsRepository.createRatingEventFromEvent(eventID: sourceEventID)
+                    let repository: RatingRepository = appContainer.ratingRepository
+                    let created = try await repository.createRatingEventFromEvent(eventID: sourceEventID)
                     NotificationCenter.default.post(name: .circleRatingEventDidCreate, object: created)
                 }
 
             case let .ratingUnitCreate(eventID):
                 CreateRatingUnitSheet(eventID: eventID) { input in
-                    let created = try await appContainer.discoverEventsRepository.createRatingUnit(eventID: eventID, input: input)
+                    let repository: RatingRepository = appContainer.ratingRepository
+                    let created = try await repository.createRatingUnit(eventID: eventID, input: input)
                     NotificationCenter.default.post(
                         name: .circleRatingUnitDidCreate,
                         object: created,
@@ -486,7 +493,7 @@ struct MainTabCoordinatorView: View {
             case let .alertCategory(category):
                 MessagesAlertDetailContainerView(
                     category: category,
-                    repository: appContainer.messagesRepository
+                    repository: appContainer.messageNotificationRepository
                 ) {
                     NotificationCenter.default.post(name: .raverMessageAlertsDidMutate, object: nil)
                     Task {
@@ -496,7 +503,7 @@ struct MainTabCoordinatorView: View {
             case let .chatSettings(conversation):
                 ChatSettingsView(
                     conversation: conversation,
-                    service: appContainer.socialService,
+                    repository: appContainer.chatSettingsRepository,
                     chatStore: IMChatStore.shared
                 )
             }
@@ -507,7 +514,7 @@ struct MainTabCoordinatorView: View {
                 FollowListView(
                     userID: userID,
                     kind: kind,
-                    repository: appContainer.profileSocialRepository
+                    repository: appContainer.profileUserRepository
                 )
             case .settings:
                 SettingsView()
@@ -529,29 +536,31 @@ struct MainTabCoordinatorView: View {
                 MovieBannerEditorView()
             case .myPublishes:
                 MyPublishesView(
-                    repository: appContainer.profileSocialRepository
+                    userRepository: appContainer.profileUserRepository,
+                    contentRepository: appContainer.profileContentRepository
                 )
             case .mySaves:
                 MySavesView(
-                    repository: appContainer.profileSocialRepository
+                    contentRepository: appContainer.profileContentRepository,
+                    checkinRepository: appContainer.profileCheckinRepository
                 )
             case .myRoutes:
                 MyRoutesView()
             case .editProfile:
-                CurrentUserProfileLoaderView(repository: appContainer.profileSocialRepository) { profile in
-                    EditProfileView(profile: profile, repository: appContainer.profileSocialRepository) { updated in
+                CurrentUserProfileLoaderView(repository: appContainer.profileUserRepository) { profile in
+                    EditProfileView(profile: profile, repository: appContainer.profileUserRepository) { updated in
                         NotificationCenter.default.post(name: .profileDidUpdate, object: updated)
                     }
                 }
             case let .myCheckins(targetUserID, title, ownerDisplayName):
                 MyCheckinsView(
-                    repository: appContainer.profileSocialRepository,
+                    repository: appContainer.profileCheckinRepository,
                     targetUserID: targetUserID,
                     title: title,
                     ownerDisplayName: ownerDisplayName
                 )
             case .avatarFullscreen:
-                CurrentUserProfileLoaderView(repository: appContainer.profileSocialRepository) { profile in
+                CurrentUserProfileLoaderView(repository: appContainer.profileUserRepository) { profile in
                     AvatarFullscreenView(profile: profile)
                         .toolbar(.hidden, for: .navigationBar)
                 }
@@ -560,13 +569,13 @@ struct MainTabCoordinatorView: View {
             case .uploadSet:
                 DJSetEditorView(mode: .create) {}
             case let .editEvent(eventID):
-                ProfileEventEditorLoaderView(eventID: eventID, service: appContainer.webService)
+                ProfileEventEditorLoaderView(eventID: eventID, eventReadRepository: appContainer.eventReadRepository)
             case let .editSet(setID):
-                ProfileSetEditorLoaderView(setID: setID, service: appContainer.webService)
+                ProfileSetEditorLoaderView(setID: setID, setReadRepository: appContainer.setReadRepository)
             case let .editRatingEvent(eventID):
-                ProfileRatingEventEditorLoaderView(eventID: eventID, service: appContainer.webService)
+                ProfileRatingEventEditorLoaderView(eventID: eventID, ratingRepository: appContainer.ratingRepository)
             case let .editRatingUnit(unitID):
-                ProfileRatingUnitEditorLoaderView(unitID: unitID, service: appContainer.webService)
+                ProfileRatingUnitEditorLoaderView(unitID: unitID, ratingRepository: appContainer.ratingRepository)
             case let .shareQRCode(title, subtitle, imageURL, shortURL, qrCodeURL):
                 ShareQRCodeDetailView(
                     title: title,
@@ -598,18 +607,22 @@ struct MainTabCoordinatorView: View {
             )
 
         case .followedEventsInbox:
-            FollowedEventsInboxView(repository: appContainer.messagesRepository)
+            FollowedEventsInboxView(repository: appContainer.messageNotificationRepository)
 
         case .followedDJsInbox:
-            FollowedDJsInboxView(repository: appContainer.messagesRepository)
+            FollowedDJsInboxView(repository: appContainer.messageNotificationRepository)
 
         case .followedBrandsInbox:
-            FollowedBrandsInboxView(repository: appContainer.messagesRepository)
+            FollowedBrandsInboxView(repository: appContainer.messageNotificationRepository)
 
         case let .postDetail(postID):
             PostDetailLoaderView(
                 postID: postID,
-                repository: appContainer.circleFeedRepository,
+                postReadRepository: appContainer.postReadRepository,
+                interactionRepository: appContainer.postInteractionRepository,
+                commentRepository: appContainer.postCommentRepository,
+                eventTrackingRepository: appContainer.feedEventTrackingRepository,
+                shareMessageRepository: appContainer.shareMessageRepository,
                 virtualAssetRepository: appContainer.virtualAssetRepository
             )
                 .environmentObject(appState)
@@ -631,13 +644,16 @@ struct MainTabCoordinatorView: View {
             EventLiveDiscussionView(
                 eventID: eventID,
                 eventName: eventName,
-                repository: appContainer.discoverEventsRepository
+                eventReadRepository: appContainer.eventReadRepository,
+                discussionRepository: appContainer.eventLiveDiscussionRepository,
+                discussionMediaRepository: appContainer.eventDiscussionMediaRepository
             )
             .environmentObject(appState)
 
         case let .eventRoute(eventID, ownerUserID, ownerDisplayName, selectedDayID, selectedSlotIDs):
             EventRoutePlannerLoaderView(
                 eventID: eventID,
+                eventReadRepository: appContainer.eventReadRepository,
                 ownerUserID: ownerUserID,
                 ownerDisplayName: ownerDisplayName,
                 selectedDayID: selectedDayID,
@@ -690,13 +706,14 @@ struct MainTabCoordinatorView: View {
         case .squadOfflineActivity(let squadID):
             SquadOfflineActivityView(
                 squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
-                service: appContainer.socialService
+                activityRepository: appContainer.squadActivityRepository,
+                locationRepository: appContainer.locationSyncRepository
             )
 
         case .squadOfflineActivityHistory(let squadID):
             SquadOfflineActivityHistoryView(
                 squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
-                service: appContainer.socialService
+                repository: appContainer.squadActivityRepository
             )
 
         case .circleIDDetail(let entryID):
@@ -744,7 +761,6 @@ struct MainTabCoordinatorView: View {
             NavigationStack {
                 SquadProfileView(
                     squadID: TencentIMIdentity.normalizePlatformSquadID(squadID),
-                    service: appContainer.socialService,
                     repository: appContainer.squadProfileRepository
                 )
                     .environmentObject(appState)
@@ -757,7 +773,7 @@ struct MainTabCoordinatorView: View {
     private func fullScreenDestination(for route: AppFullScreenRoute) -> some View {
         switch route {
         case .avatarFullscreen:
-            CurrentUserProfileLoaderView(repository: appContainer.profileSocialRepository) { profile in
+            CurrentUserProfileLoaderView(repository: appContainer.profileUserRepository) { profile in
                 AvatarFullscreenView(profile: profile)
             }
         }
@@ -1101,7 +1117,7 @@ private struct MessagesAlertDetailContainerView: View {
 
     init(
         category: MessageAlertCategory,
-        repository: MessagesRepository,
+        repository: MessageNotificationRepository,
         onReadChange: @escaping () -> Void
     ) {
         self.category = category
@@ -1537,7 +1553,11 @@ private struct ConversationLoaderView: View {
 
 private struct PostDetailLoaderView: View {
     let postID: String
-    let repository: CircleFeedRepository
+    let postReadRepository: PostReadRepository
+    let interactionRepository: PostInteractionRepository
+    let commentRepository: PostCommentRepository
+    let eventTrackingRepository: FeedEventTrackingRepository
+    let shareMessageRepository: ShareMessageRepository
     let virtualAssetRepository: VirtualAssetRepository
 
     @State private var post: Post?
@@ -1559,7 +1579,11 @@ private struct PostDetailLoaderView: View {
             if let post {
                 PostDetailView(
                     post: post,
-                    repository: repository,
+                    postReadRepository: postReadRepository,
+                    interactionRepository: interactionRepository,
+                    commentRepository: commentRepository,
+                    eventTrackingRepository: eventTrackingRepository,
+                    shareMessageRepository: shareMessageRepository,
                     virtualAssetRepository: virtualAssetRepository
                 )
             } else {
@@ -1578,7 +1602,7 @@ private struct PostDetailLoaderView: View {
         phase = .initialLoading
         defer { isLoading = false }
         do {
-            post = try await repository.fetchPost(postID: postID)
+            post = try await postReadRepository.fetchPost(postID: postID)
             phase = post == nil ? .empty : .success
         } catch {
             phase = .failure(
@@ -1590,7 +1614,9 @@ private struct PostDetailLoaderView: View {
 
 private struct CirclePostEditorLoaderView: View {
     let postID: String
-    let repository: CircleFeedRepository
+    let postReadRepository: PostReadRepository
+    let commandRepository: PostCommandRepository
+    let mediaRepository: PostMediaRepository
 
     @State private var post: Post?
     @State private var phase: LoadPhase = .idle
@@ -1610,7 +1636,8 @@ private struct CirclePostEditorLoaderView: View {
         ) {
             if let post {
                 ComposePostView(
-                    repository: repository,
+                    commandRepository: commandRepository,
+                    mediaRepository: mediaRepository,
                     mode: .edit(post),
                     onPostUpdated: { updated in
                         NotificationCenter.default.post(name: .circlePostDidUpdate, object: updated)
@@ -1635,7 +1662,7 @@ private struct CirclePostEditorLoaderView: View {
         phase = .initialLoading
         defer { isLoading = false }
         do {
-            post = try await repository.fetchPost(postID: postID)
+            post = try await postReadRepository.fetchPost(postID: postID)
             phase = post == nil ? .empty : .success
         } catch {
             phase = .failure(
@@ -1693,13 +1720,13 @@ private struct ProfileResourceLoaderView<Resource, Content: View>: View {
 
 private struct ProfileEventEditorLoaderView: View {
     let eventID: String
-    let service: WebFeatureService
+    let eventReadRepository: EventReadRepository
 
     var body: some View {
         ProfileResourceLoaderView(
             loadingText: L("加载活动中...", "Loading event...")
         ) {
-            try await service.fetchEvent(id: eventID)
+            try await eventReadRepository.fetchEvent(id: eventID)
         } content: { event in
             EventEditorView(mode: .edit(event)) {}
         }
@@ -1708,13 +1735,13 @@ private struct ProfileEventEditorLoaderView: View {
 
 private struct ProfileSetEditorLoaderView: View {
     let setID: String
-    let service: WebFeatureService
+    let setReadRepository: SetReadRepository
 
     var body: some View {
         ProfileResourceLoaderView(
             loadingText: L("加载 Set 中...", "Loading set...")
         ) {
-            try await service.fetchDJSet(id: setID)
+            try await setReadRepository.fetchDJSet(id: setID)
         } content: { set in
             DJSetEditorView(mode: .edit(set)) {}
         }
@@ -1723,13 +1750,13 @@ private struct ProfileSetEditorLoaderView: View {
 
 private struct ProfileRatingEventEditorLoaderView: View {
     let eventID: String
-    let service: WebFeatureService
+    let ratingRepository: RatingRepository
 
     var body: some View {
         ProfileResourceLoaderView(
             loadingText: L("加载打分事件中...", "Loading rating event...")
         ) {
-            try await service.fetchRatingEvent(id: eventID)
+            try await ratingRepository.fetchRatingEvent(id: eventID)
         } content: { event in
             RatingEventEditorSheet(event: event) {}
         }
@@ -1738,13 +1765,13 @@ private struct ProfileRatingEventEditorLoaderView: View {
 
 private struct ProfileRatingUnitEditorLoaderView: View {
     let unitID: String
-    let service: WebFeatureService
+    let ratingRepository: RatingRepository
 
     var body: some View {
         ProfileResourceLoaderView(
             loadingText: L("加载打分单位中...", "Loading rating unit...")
         ) {
-            try await service.fetchRatingUnit(id: unitID)
+            try await ratingRepository.fetchRatingUnit(id: unitID)
         } content: { unit in
             RatingUnitEditorSheet(unit: unit) {}
         }
@@ -1752,14 +1779,14 @@ private struct ProfileRatingUnitEditorLoaderView: View {
 }
 
 private struct CurrentUserProfileLoaderView<Content: View>: View {
-    let repository: ProfileSocialRepository
+    let repository: ProfileUserRepository
     let content: (UserProfile) -> Content
 
     @State private var profile: UserProfile?
     @State private var phase: LoadPhase = .idle
 
     init(
-        repository: ProfileSocialRepository,
+        repository: ProfileUserRepository,
         @ViewBuilder content: @escaping (UserProfile) -> Content
     ) {
         self.repository = repository

@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { Prisma, PrismaClient } from '@prisma/client';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, AuthRequest } from '../middleware/auth';
+import { adminAuditService } from '../modules/admin/admin-audit.service';
+import { requireAdmin } from '../modules/admin/admin-auth.policy';
 import { getNotificationCenterAPNSStatus, notificationCenterService } from '../modules/notifications';
 
 const router: Router = Router();
@@ -1202,7 +1204,7 @@ router.put('/preferences/followed-brand-update', authenticate, async (req: AuthR
   }
 });
 
-router.post('/admin/major-news/publish', authenticate, authorize('admin'), async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/admin/major-news/publish', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const actorUserId = req.user?.userId;
     if (!actorUserId) {
@@ -1303,7 +1305,7 @@ router.post('/admin/major-news/publish', authenticate, authorize('admin'), async
   }
 });
 
-router.post('/admin/publish-test', authenticate, authorize('admin'), async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/admin/publish-test', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const actorUserId = req.user?.userId;
     if (!actorUserId) {
@@ -1362,7 +1364,7 @@ router.post('/admin/publish-test', authenticate, authorize('admin'), async (req:
   }
 });
 
-router.get('/admin/status', authenticate, authorize('admin'), async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/admin/status', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const windowHours = parseWindowHours((req.query as Request['query']).windowHours, 24, 24 * 30);
     const stats = await notificationCenterService.fetchDeliveryStats(windowHours);
@@ -1381,7 +1383,7 @@ router.get('/admin/status', authenticate, authorize('admin'), async (req: AuthRe
   }
 });
 
-router.get('/admin/deliveries', authenticate, authorize('admin'), async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/admin/deliveries', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const query = req.query as Request['query'];
     const channelRaw = typeof query.channel === 'string' ? query.channel.trim().toLowerCase() : '';
@@ -1406,7 +1408,7 @@ router.get('/admin/deliveries', authenticate, authorize('admin'), async (req: Au
   }
 });
 
-router.get('/admin/config', authenticate, authorize('admin'), async (_req: AuthRequest, res: Response): Promise<void> => {
+router.get('/admin/config', authenticate, requireAdmin, async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     const config = await notificationCenterService.fetchAdminGlobalConfig();
     res.json({ success: true, config });
@@ -1416,7 +1418,7 @@ router.get('/admin/config', authenticate, authorize('admin'), async (_req: AuthR
   }
 });
 
-router.put('/admin/config', authenticate, authorize('admin'), async (req: AuthRequest, res: Response): Promise<void> => {
+router.put('/admin/config', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
@@ -1425,6 +1427,18 @@ router.put('/admin/config', authenticate, authorize('admin'), async (req: AuthRe
     }
     const body = (req.body ?? {}) as { config?: unknown };
     const config = await notificationCenterService.updateAdminGlobalConfig(body.config ?? {}, userId);
+    await adminAuditService.createAction({
+      actorId: userId,
+      action: 'notification.config.update',
+      targetType: 'notification_admin_config',
+      targetId: 'global',
+      detail: {
+        categorySwitches: config.categorySwitches,
+        channelSwitches: config.channelSwitches,
+        grayRelease: config.grayRelease,
+        governance: config.governance,
+      },
+    });
     res.json({ success: true, config });
   } catch (error) {
     console.error('Update notification center config error:', error);
@@ -1432,7 +1446,7 @@ router.put('/admin/config', authenticate, authorize('admin'), async (req: AuthRe
   }
 });
 
-router.get('/admin/templates', authenticate, authorize('admin'), async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/admin/templates', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const query = req.query as Request['query'];
     const channelRaw = typeof query.channel === 'string' ? query.channel.trim().toLowerCase() : '';
@@ -1451,8 +1465,14 @@ router.get('/admin/templates', authenticate, authorize('admin'), async (req: Aut
   }
 });
 
-router.put('/admin/templates', authenticate, authorize('admin'), async (req: AuthRequest, res: Response): Promise<void> => {
+router.put('/admin/templates', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const actorUserId = req.user?.userId;
+    if (!actorUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
     const body = (req.body ?? {}) as {
       category?: unknown;
       locale?: unknown;
@@ -1487,6 +1507,18 @@ router.put('/admin/templates', authenticate, authorize('admin'), async (req: Aut
       deeplinkTemplate: typeof body.deeplinkTemplate === 'string' ? body.deeplinkTemplate.trim() : null,
       variables: Array.isArray(body.variables) ? body.variables : [],
       isActive: parseBoolean(body.isActive),
+    });
+    await adminAuditService.createAction({
+      actorId: actorUserId,
+      action: 'notification.template.upsert',
+      targetType: 'notification_template',
+      targetId: item.id,
+      detail: {
+        category: item.category,
+        locale: item.locale,
+        channel: item.channel,
+        isActive: item.isActive,
+      },
     });
     res.json({ success: true, item });
   } catch (error) {

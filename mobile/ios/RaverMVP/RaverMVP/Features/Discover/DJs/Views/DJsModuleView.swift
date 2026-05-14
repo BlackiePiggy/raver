@@ -93,7 +93,7 @@ struct DiscoverDJsRootView: View {
 
     var body: some View {
         DJsModuleView(
-            viewModel: DJsModuleViewModel(repository: appContainer.discoverDJsRepository),
+            viewModel: DJsModuleViewModel(repository: appContainer.djListRepository),
             onHorizontalDragStateChanged: onHorizontalDragStateChanged
         )
     }
@@ -167,8 +167,12 @@ struct DJsModuleView: View {
     private let openImportOnAppear: Bool
     @StateObject private var viewModel: DJsModuleViewModel
 
-    private var repository: DiscoverDJsRepository {
-        appContainer.discoverDJsRepository
+    private var djImportRepository: DJImportRepository {
+        appContainer.djImportRepository
+    }
+
+    private var djMediaRepository: DJMediaRepository {
+        appContainer.djMediaRepository
     }
 
     @State private var selectedSection: DJsModuleSection = .spotlight
@@ -702,7 +706,7 @@ struct DJsModuleView: View {
         defer { isSearchingSpotify = false }
 
         do {
-            let items = try await repository.searchSpotifyDJs(query: keyword, limit: 10)
+            let items = try await djImportRepository.searchSpotifyDJs(query: keyword, limit: 10)
             spotifyCandidates = items
             if let first = items.first {
                 applySpotifyCandidate(first)
@@ -727,7 +731,7 @@ struct DJsModuleView: View {
         defer { isSearchingDiscogs = false }
 
         do {
-            let items = try await repository.searchDiscogsDJs(query: keyword, limit: 12)
+            let items = try await djImportRepository.searchDiscogsDJs(query: keyword, limit: 12)
             discogsCandidates = items
             if let first = items.first {
                 applyDiscogsCandidate(first)
@@ -751,7 +755,7 @@ struct DJsModuleView: View {
         defer { isSearchingDiscogsLinkedSpotify = false }
 
         do {
-            let items = try await repository.searchSpotifyDJs(query: keyword, limit: 8)
+            let items = try await djImportRepository.searchSpotifyDJs(query: keyword, limit: 8)
             discogsLinkedSpotifyCandidates = items
         } catch {
             errorMessage = L("Spotify 搜索失败：\(error.userFacingMessage ?? "")", "Spotify search failed: \(error.userFacingMessage ?? "")")
@@ -797,7 +801,7 @@ struct DJsModuleView: View {
         defer { isLoadingDiscogsDetail = false }
 
         do {
-            let detail = try await repository.fetchDiscogsDJArtist(id: artistId)
+            let detail = try await djImportRepository.fetchDiscogsDJArtist(id: artistId)
             if !detail.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 discogsDraftName = detail.name
             }
@@ -939,7 +943,7 @@ struct DJsModuleView: View {
         defer { isImportingDJ = false }
 
         do {
-            let result = try await repository.importSpotifyDJ(
+            let result = try await djImportRepository.importSpotifyDJ(
                 input: ImportSpotifyDJInput(
                     spotifyId: selected.spotifyId,
                     name: finalName,
@@ -989,7 +993,7 @@ struct DJsModuleView: View {
         defer { isImportingDJ = false }
 
         do {
-            let result = try await repository.importDiscogsDJ(
+            let result = try await djImportRepository.importDiscogsDJ(
                 input: ImportDiscogsDJInput(
                     discogsArtistId: selected.artistId,
                     name: finalName,
@@ -1035,7 +1039,7 @@ struct DJsModuleView: View {
         defer { isImportingDJ = false }
 
         do {
-            let imported = try await repository.importManualDJ(
+            let imported = try await djImportRepository.importManualDJ(
                 input: ImportManualDJInput(
                     name: finalName,
                     spotifyId: nil,
@@ -1050,7 +1054,7 @@ struct DJsModuleView: View {
             )
 
             if let manualAvatarData {
-                _ = try await repository.uploadDJImage(
+                _ = try await djMediaRepository.uploadDJImage(
                     imageData: jpegDataForDJImport(from: manualAvatarData),
                     fileName: "dj-avatar-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -1060,7 +1064,7 @@ struct DJsModuleView: View {
             }
 
             if let manualBannerData {
-                _ = try await repository.uploadDJImage(
+                _ = try await djMediaRepository.uploadDJImage(
                     imageData: jpegDataForDJImport(from: manualBannerData),
                     fileName: "dj-banner-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -2430,8 +2434,28 @@ struct DJDetailView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
 
-    private var djsRepository: DiscoverDJsRepository {
-        appContainer.discoverDJsRepository
+    private var djReadRepository: DJReadRepository {
+        appContainer.djReadRepository
+    }
+
+    private var djLinkedContentRepository: DJLinkedContentRepository {
+        appContainer.djLinkedContentRepository
+    }
+
+    private var djRelationRepository: DJRelationRepository {
+        appContainer.djRelationRepository
+    }
+
+    private var djImportRepository: DJImportRepository {
+        appContainer.djImportRepository
+    }
+
+    private var djCommandRepository: DJCommandRepository {
+        appContainer.djCommandRepository
+    }
+
+    private var djMediaRepository: DJMediaRepository {
+        appContainer.djMediaRepository
     }
 
     private var newsRepository: DiscoverNewsRepository {
@@ -2789,11 +2813,11 @@ struct DJDetailView: View {
 
         do {
             isLoadingRelatedArticles = true
-            async let djTask = djsRepository.fetchDJ(id: djID)
-            async let setsTask = djsRepository.fetchDJSets(djID: djID)
-            async let eventsTask = djsRepository.fetchDJEvents(djID: djID)
-            async let ratingUnitsTask = djsRepository.fetchDJRatingUnits(djID: djID)
-            async let watchedCountTask = djsRepository.fetchMyDJCheckinCount(djID: djID)
+            async let djTask = djReadRepository.fetchDJ(id: djID)
+            async let setsTask = djLinkedContentRepository.fetchDJSets(djID: djID)
+            async let eventsTask = djLinkedContentRepository.fetchDJEvents(djID: djID)
+            async let ratingUnitsTask = djLinkedContentRepository.fetchDJRatingUnits(djID: djID)
+            async let watchedCountTask = djLinkedContentRepository.fetchMyDJCheckinCount(djID: djID)
             async let relatedArticlesTask = fetchRelatedNewsArticlesForDJ(djID: djID)
             let loadedDJ = try await djTask
             let loadedSets = try await setsTask
@@ -2883,7 +2907,7 @@ struct DJDetailView: View {
     }
 
     private func reloadDJRatingUnits() async {
-        ratingUnits = (try? await djsRepository.fetchDJRatingUnits(djID: djID)) ?? []
+        ratingUnits = (try? await djLinkedContentRepository.fetchDJRatingUnits(djID: djID)) ?? []
         await persistCurrentDJManualCacheSnapshotIfPossible()
     }
 
@@ -2902,9 +2926,9 @@ struct DJDetailView: View {
 
         do {
             let djForCache = try await resolveDJForManualCache()
-            async let setsTask = djsRepository.fetchDJSets(djID: djID)
-            async let eventsTask = djsRepository.fetchDJEvents(djID: djID)
-            async let ratingUnitsTask = djsRepository.fetchDJRatingUnits(djID: djID)
+            async let setsTask = djLinkedContentRepository.fetchDJSets(djID: djID)
+            async let eventsTask = djLinkedContentRepository.fetchDJEvents(djID: djID)
+            async let ratingUnitsTask = djLinkedContentRepository.fetchDJRatingUnits(djID: djID)
             async let relatedArticlesTask = fetchRelatedNewsArticlesForDJ(djID: djID)
 
             let snapshot = makeDJManualCacheSnapshot(
@@ -2937,7 +2961,7 @@ struct DJDetailView: View {
 
     @MainActor
     private func resolveDJForManualCache() async throws -> WebDJ {
-        if let latest = try? await djsRepository.fetchDJ(id: djID) {
+        if let latest = try? await djReadRepository.fetchDJ(id: djID) {
             return latest
         }
         if let dj {
@@ -3052,7 +3076,7 @@ struct DJDetailView: View {
 
     private func toggleFollow(_ item: WebDJ) async {
         do {
-            dj = try await djsRepository.toggleDJFollow(djID: item.id, shouldFollow: !(item.isFollowing ?? false))
+            dj = try await djRelationRepository.toggleDJFollow(djID: item.id, shouldFollow: !(item.isFollowing ?? false))
             await persistCurrentDJManualCacheSnapshotIfPossible()
             await appState.refreshUnreadMessages()
         } catch {
@@ -3073,7 +3097,7 @@ struct DJDetailView: View {
         defer { isSearchingSpotify = false }
 
         do {
-            let items = try await djsRepository.searchSpotifyDJs(query: keyword, limit: 10)
+            let items = try await djImportRepository.searchSpotifyDJs(query: keyword, limit: 10)
             spotifyCandidates = items
             if let first = items.first {
                 applySpotifyCandidate(first)
@@ -3165,7 +3189,7 @@ struct DJDetailView: View {
         defer { isImportingSpotifyDJ = false }
 
         do {
-            let result = try await djsRepository.importSpotifyDJ(
+            let result = try await djImportRepository.importSpotifyDJ(
                 input: ImportSpotifyDJInput(
                     spotifyId: selected.spotifyId,
                     name: finalName,
@@ -3226,7 +3250,7 @@ struct DJDetailView: View {
         defer { isSavingDJProfile = false }
 
         do {
-            _ = try await djsRepository.updateDJ(
+            _ = try await djCommandRepository.updateDJ(
                 id: currentDJ.id,
                 input: UpdateDJInput(
                     name: finalName,
@@ -3243,7 +3267,7 @@ struct DJDetailView: View {
             )
 
             if let editAvatarData {
-                _ = try await djsRepository.uploadDJImage(
+                _ = try await djMediaRepository.uploadDJImage(
                     imageData: jpegDataForDJImport(from: editAvatarData),
                     fileName: "dj-avatar-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
@@ -3253,7 +3277,7 @@ struct DJDetailView: View {
             }
 
             if let editBannerData {
-                _ = try await djsRepository.uploadDJImage(
+                _ = try await djMediaRepository.uploadDJImage(
                     imageData: jpegDataForDJImport(from: editBannerData),
                     fileName: "dj-banner-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",

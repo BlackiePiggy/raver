@@ -91,3 +91,12 @@ export const stopNotificationOutboxWorker = (): void => {
   timer = null;
   console.log('[notification-center][outbox-worker] stopped');
 };
+
+export const getNotificationOutboxWorkerStatus = () => ({
+  asyncModeEnabled: OUTBOX_CONFIG.asyncModeEnabled,
+  workerEnabled: OUTBOX_CONFIG.workerEnabled,
+  intervalMs: OUTBOX_CONFIG.intervalMs,
+  eventLimit: OUTBOX_CONFIG.eventLimit,
+  running: Boolean(timer),
+  inFlight,
+});

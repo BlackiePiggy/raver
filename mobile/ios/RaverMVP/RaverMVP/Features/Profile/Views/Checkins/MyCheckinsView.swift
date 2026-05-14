@@ -42,11 +42,11 @@ final class MyCheckinsViewModel: ObservableObject {
     private var galleryArtistsUseOverviewSummary = true
     private let timelinePageLimit = 20
     private let galleryPageLimit = 20
-    private let repository: ProfileSocialRepository
+    private let repository: ProfileCheckinRepository
 
     init(
         targetUserID: String? = nil,
-        repository: ProfileSocialRepository
+        repository: ProfileCheckinRepository
     ) {
         self.targetUserID = targetUserID
         self.repository = repository
@@ -844,7 +844,7 @@ struct MyCheckinsView: View {
     @StateObject private var viewModel: MyCheckinsViewModel
 
     init(
-        repository: ProfileSocialRepository,
+        repository: ProfileCheckinRepository,
         targetUserID: String? = nil,
         title: String = "",
         ownerDisplayName: String? = nil

@@ -4,7 +4,7 @@ import UIKit
 struct DemoAlignedChatRouteCoordinatorFactoryDependencies {
     let presenter: UIViewController
     let conversation: Conversation
-    let service: SocialService
+    let repository: ChatSettingsRepository
     let onNavigate: ((AppRoute) -> Void)?
     let onLeaveConversation: (() -> Void)?
 }
@@ -17,7 +17,7 @@ enum DemoAlignedChatRouteCoordinatorFactory {
         DemoAlignedChatRouteCoordinator(
             presenter: dependencies.presenter,
             conversation: dependencies.conversation,
-            service: dependencies.service,
+            repository: dependencies.repository,
             onNavigate: dependencies.onNavigate,
             onLeaveConversation: dependencies.onLeaveConversation
         )

@@ -2,8 +2,8 @@ import SwiftUI
 
 struct SquadOfflineActivityStarterSheet: View {
     let squadID: String
-    let service: SocialService
-    let webService: WebFeatureService
+    let activityRepository: SquadActivityRepository
+    let eventListRepository: EventListRepository
     let onStarted: (SquadOfflineActivity) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -110,7 +110,15 @@ struct SquadOfflineActivityStarterSheet: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let page = try await webService.fetchEvents(page: 1, limit: 30, search: nil, eventType: nil, status: nil)
+            let page = try await eventListRepository.fetchEvents(
+                request: DiscoverEventsPageRequest(
+                    page: 1,
+                    limit: 30,
+                    search: nil,
+                    eventType: nil,
+                    status: nil
+                )
+            )
             events = page.items
             errorMessage = nil
         } catch {
@@ -124,7 +132,7 @@ struct SquadOfflineActivityStarterSheet: View {
         defer { isStarting = false }
         do {
             let selected = events.first { $0.id == selectedEventID }
-            let created = try await service.startSquadOfflineActivity(
+            let created = try await activityRepository.startSquadOfflineActivity(
                 squadID: squadID,
                 input: StartSquadOfflineActivityInput(
                     eventID: selectedEventID,

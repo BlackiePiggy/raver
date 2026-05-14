@@ -15,18 +15,24 @@ final class UserProfileViewModel: ObservableObject {
     @Published var error: String?
 
     private let userID: String
-    private let repository: ProfileSocialRepository
+    private let userRepository: ProfileUserRepository
+    private let contentRepository: ProfileContentRepository
+    private let checkinRepository: ProfileCheckinRepository
     private let virtualAssetRepository: VirtualAssetRepository
     private var nextCursor: String?
     private var hasMore = true
 
     init(
         userID: String,
-        repository: ProfileSocialRepository,
+        userRepository: ProfileUserRepository,
+        contentRepository: ProfileContentRepository,
+        checkinRepository: ProfileCheckinRepository,
         virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
     ) {
         self.userID = userID
-        self.repository = repository
+        self.userRepository = userRepository
+        self.contentRepository = contentRepository
+        self.checkinRepository = checkinRepository
         self.virtualAssetRepository = virtualAssetRepository
     }
 
@@ -43,14 +49,14 @@ final class UserProfileViewModel: ObservableObject {
         defer { isRefreshing = false }
 
         do {
-            async let profileTask = repository.fetchUserProfile(userID: userID)
-            async let postsTask = repository.fetchPostsByUser(userID: userID, cursor: nil)
+            async let profileTask = userRepository.fetchUserProfile(userID: userID)
+            async let postsTask = contentRepository.fetchPostsByUser(userID: userID, cursor: nil)
             let (profileValue, page) = try await (profileTask, postsTask)
 
             profile = profileValue
             posts = page.posts.filter { !$0.isRaverNews }
             await loadAppearance(for: profileValue.id)
-            if let checkinPage = try? await repository.fetchUserCheckins(userID: userID, page: 1, limit: 6, type: nil) {
+            if let checkinPage = try? await checkinRepository.fetchUserCheckins(userID: userID, page: 1, limit: 6, type: nil) {
                 recentCheckins = checkinPage.items
             } else {
                 recentCheckins = []
@@ -84,7 +90,7 @@ final class UserProfileViewModel: ObservableObject {
         defer { isLoadingMore = false }
 
         do {
-            let page = try await repository.fetchPostsByUser(userID: userID, cursor: cursor)
+            let page = try await contentRepository.fetchPostsByUser(userID: userID, cursor: cursor)
             let existing = Set(posts.map(\.id))
             posts.append(contentsOf: page.posts.filter { !existing.contains($0.id) && !$0.isRaverNews })
             nextCursor = page.nextCursor
@@ -99,8 +105,8 @@ final class UserProfileViewModel: ObservableObject {
     func toggleFollow() async {
         guard let profile else { return }
         do {
-            let updated = try await repository.toggleFollow(userID: profile.id, shouldFollow: !(profile.isFollowing ?? false))
-            var refreshed = try await repository.fetchUserProfile(userID: profile.id)
+            let updated = try await userRepository.toggleFollow(userID: profile.id, shouldFollow: !(profile.isFollowing ?? false))
+            var refreshed = try await userRepository.fetchUserProfile(userID: profile.id)
             refreshed.isFollowing = updated.isFollowing
             self.profile = refreshed
             for index in posts.indices where posts[index].author.id == updated.id {
@@ -113,7 +119,7 @@ final class UserProfileViewModel: ObservableObject {
 
     func toggleLike(post: Post) async {
         do {
-            let updated = try await repository.toggleLike(postID: post.id, shouldLike: !post.isLiked)
+            let updated = try await contentRepository.toggleLike(postID: post.id, shouldLike: !post.isLiked)
             if let index = posts.firstIndex(where: { $0.id == updated.id }) {
                 posts[index] = updated
             }
@@ -124,7 +130,7 @@ final class UserProfileViewModel: ObservableObject {
 
     func toggleRepost(post: Post) async {
         do {
-            let updated = try await repository.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
+            let updated = try await contentRepository.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
             if let index = posts.firstIndex(where: { $0.id == updated.id }) {
                 posts[index] = updated
             }

@@ -7,7 +7,11 @@ struct DiscoverRecommendEventsRootView: View {
 
     var body: some View {
         RecommendEventsModuleView(
-            viewModel: RecommendEventsViewModel(repository: appContainer.discoverEventsRepository),
+            viewModel: RecommendEventsViewModel(
+                recommendationRepository: appContainer.eventRecommendationRepository,
+                listRepository: appContainer.eventListRepository,
+                checkinRepository: appContainer.eventCheckinRepository
+            ),
             onHorizontalDragStateChanged: onHorizontalDragStateChanged,
             onRequestMoveToNextDiscoverSection: onRequestMoveToNextDiscoverSection
         )

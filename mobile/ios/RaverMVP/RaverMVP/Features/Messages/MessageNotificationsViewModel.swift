@@ -8,9 +8,9 @@ final class MessageNotificationsViewModel: ObservableObject {
     @Published var bannerMessage: String?
     @Published var error: String?
 
-    private let repository: MessagesRepository
+    private let repository: MessageNotificationRepository
 
-    init(repository: MessagesRepository) {
+    init(repository: MessageNotificationRepository) {
         self.repository = repository
     }
 

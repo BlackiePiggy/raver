@@ -10,19 +10,19 @@ import {
   updateEvent,
   deleteEvent,
   uploadEventImage,
-} from '../controllers/event.controller';
+} from '../modules/events';
 import {
   getLineup,
   addLineupArtist,
   updateLineupArtist,
   deleteLineupArtist,
-} from '../controllers/lineup.controller';
+} from '../modules/events';
 import {
   getTimetable,
   addTimetableSlot,
   updateTimetableSlot,
   deleteTimetableSlot,
-} from '../controllers/timetable.controller';
+} from '../modules/events';
 import { authenticate } from '../middleware/auth';
 
 const router: Router = Router();

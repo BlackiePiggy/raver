@@ -39,6 +39,7 @@ model User {
   profileShareQrCodeUrl String?   @map("profile_share_qr_code_url")
 
   checkins            Checkin[]
+  eventFavorites      EventFavorite[]
   follows             Follow[]        @relation("UserFollows")
   followers           Follow[]        @relation("UserFollowers")
   uploadedSets        DJSet[]         @relation("UserUploadedSets")
@@ -169,6 +170,7 @@ model Event {
   organizer       User?              @relation("UserPublishedEvents", fields: [organizerId], references: [id], onDelete: SetNull)
   wikiFestival    WikiFestival?      @relation(fields: [wikiFestivalId], references: [id], onDelete: SetNull)
   checkins        Checkin[]
+  favorites       EventFavorite[]
   lineupSlots     EventLineupSlot[]
   lineupArtists   EventLineupArtist[]
   timetableSlots  EventTimetableSlot[]
@@ -181,6 +183,22 @@ model Event {
   @@index([organizerId])
   @@index([wikiFestivalId])
   @@map("events")
+}
+
+model EventFavorite {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  eventId   String   @map("event_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@index([userId, createdAt])
+  @@index([eventId, createdAt])
+  @@map("event_favorites")
 }
 
 model EventTicketTier {

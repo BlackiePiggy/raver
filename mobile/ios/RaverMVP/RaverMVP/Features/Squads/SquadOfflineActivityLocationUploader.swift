@@ -33,7 +33,7 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
     }
 
     func start(
-        service: SocialService,
+        repository: LocationSyncRepository,
         squadID: String,
         activityID: String,
         intervalSeconds: Int
@@ -46,7 +46,7 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
         uploadTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.uploadFreshLocation(
-                    service: service,
+                    repository: repository,
                     squadID: squadID,
                     activityID: activityID
                 )
@@ -62,7 +62,7 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
         manager.stopUpdatingLocation()
     }
 
-    func uploadNow(service: SocialService, squadID: String, activityID: String) async -> Bool {
+    func uploadNow(repository: LocationSyncRepository, squadID: String, activityID: String) async -> Bool {
         if !hasLocationAuthorization {
             if authorizationStatus == .notDetermined {
                 manager.requestWhenInUseAuthorization()
@@ -71,7 +71,7 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
             return false
         }
         let location = await requestFreshLocation(allowsCachedLocation: false)
-        return await uploadLocation(location, service: service, squadID: squadID, activityID: activityID)
+        return await uploadLocation(location, repository: repository, squadID: squadID, activityID: activityID)
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -109,18 +109,18 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
 
     @discardableResult
     private func uploadFreshLocation(
-        service: SocialService,
+        repository: LocationSyncRepository,
         squadID: String,
         activityID: String
     ) async -> Bool {
         let location = await requestFreshLocation(allowsCachedLocation: true)
-        return await uploadLocation(location, service: service, squadID: squadID, activityID: activityID)
+        return await uploadLocation(location, repository: repository, squadID: squadID, activityID: activityID)
     }
 
     @discardableResult
     private func uploadLocation(
         _ location: CLLocation?,
-        service: SocialService,
+        repository: LocationSyncRepository,
         squadID: String,
         activityID: String
     ) async -> Bool {
@@ -139,7 +139,7 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
         isUploading = true
         defer { isUploading = false }
         do {
-            try await service.uploadSquadOfflineActivityLocation(
+            try await repository.uploadSquadOfflineActivityLocation(
                 squadID: squadID,
                 activityID: activityID,
                 input: SquadOfflineLocationUploadInput(

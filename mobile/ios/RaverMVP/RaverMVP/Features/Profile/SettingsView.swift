@@ -23,8 +23,8 @@ struct SettingsView: View {
                 // 账号设置
                 Section(L("账号", "Account")) {
                     NavigationLink {
-                        SettingsCurrentUserProfileLoaderView(repository: appContainer.profileSocialRepository) { profile in
-                            EditProfileView(profile: profile, repository: appContainer.profileSocialRepository) { updated in
+                        SettingsCurrentUserProfileLoaderView(repository: appContainer.profileUserRepository) { profile in
+                            EditProfileView(profile: profile, repository: appContainer.profileUserRepository) { updated in
                                 NotificationCenter.default.post(name: .profileDidUpdate, object: updated)
                             }
                         }
@@ -252,14 +252,14 @@ private struct ThemeSettingsView: View {
 }
 
 private struct SettingsCurrentUserProfileLoaderView<Content: View>: View {
-    let repository: ProfileSocialRepository
+    let repository: ProfileUserRepository
     let content: (UserProfile) -> Content
 
     @State private var profile: UserProfile?
     @State private var errorMessage: String?
 
     init(
-        repository: ProfileSocialRepository,
+        repository: ProfileUserRepository,
         @ViewBuilder content: @escaping (UserProfile) -> Content
     ) {
         self.repository = repository

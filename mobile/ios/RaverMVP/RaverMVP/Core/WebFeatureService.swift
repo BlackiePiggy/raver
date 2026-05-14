@@ -5,6 +5,10 @@ protocol WebFeatureService {
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent]
     func fetchEvent(id: String) async throws -> WebEvent
     func fetchMyEvents() async throws -> [WebEvent]
+    func fetchFavoriteEvents(page: Int, limit: Int) async throws -> EventListPage
+    func fetchEventFavoriteStatus(eventID: String) async throws -> EventFavoriteStatus
+    func favoriteEvent(eventID: String) async throws -> EventFavoriteStatus
+    func unfavoriteEvent(eventID: String) async throws
     func createEvent(input: CreateEventInput) async throws -> WebEvent
     func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent
     func deleteEvent(id: String) async throws

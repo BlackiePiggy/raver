@@ -14,7 +14,7 @@ final class DemoAlignedChatScreenLifecycleCoordinator {
     private let refreshSendButtonState: () -> Void
     private let updateRouteContext: (
         Conversation,
-        SocialService,
+        ChatSettingsRepository,
         ((AppRoute) -> Void)?,
         (() -> Void)?
     ) -> Void
@@ -33,7 +33,7 @@ final class DemoAlignedChatScreenLifecycleCoordinator {
         refreshSendButtonState: @escaping () -> Void,
         updateRouteContext: @escaping (
             Conversation,
-            SocialService,
+            ChatSettingsRepository,
             ((AppRoute) -> Void)?,
             (() -> Void)?
         ) -> Void
@@ -65,6 +65,7 @@ final class DemoAlignedChatScreenLifecycleCoordinator {
         currentConversation: Conversation,
         nextConversation: Conversation,
         service: SocialService,
+        messageRepository: ChatMessageRepository,
         onNavigate: ((AppRoute) -> Void)?,
         onLeaveConversation: (() -> Void)?
     ) -> Conversation {
@@ -83,8 +84,8 @@ final class DemoAlignedChatScreenLifecycleCoordinator {
         hasPerformedInitialStableScroll = false
         resetSendFailureHint()
         refreshSendButtonState()
-        updateRouteContext(nextConversation, service, onNavigate, onLeaveConversation)
-        chatController.updateContext(conversation: nextConversation, service: service)
+        updateRouteContext(nextConversation, ChatSettingsRepositoryAdapter(service: service), onNavigate, onLeaveConversation)
+        chatController.updateContext(conversation: nextConversation, repository: messageRepository)
         return nextConversation
     }
 }

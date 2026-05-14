@@ -13,6 +13,13 @@ struct EventListPage: Codable {
     var pagination: BFFPagination?
 }
 
+struct EventFavoriteStatus: Codable, Hashable {
+    var id: String?
+    var eventId: String
+    var isFavorited: Bool
+    var createdAt: Date?
+}
+
 struct DJListPage: Codable {
     var items: [WebDJ]
     var pagination: BFFPagination?
@@ -443,6 +450,8 @@ struct WebEventFestivalLite: Codable, Identifiable, Hashable {
     let id: String
     var name: String
     var nameI18n: WebBiText? = nil
+    var abbreviation: String? = nil
+    var aliases: [String]? = nil
     var country: String?
     var countryI18n: WebBiText? = nil
     var city: String?
@@ -492,6 +501,8 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var wikiFestival: WebEventFestivalLite? = nil
     var ticketTiers: [WebEventTicketTier]
     var lineupSlots: [WebEventLineupSlot]
+    var favoriteId: String? = nil
+    var isFavorited: Bool? = nil
 
     var unifiedAddress: String {
         resolveEventUnifiedAddress(

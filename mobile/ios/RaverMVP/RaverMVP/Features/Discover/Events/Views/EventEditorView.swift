@@ -680,8 +680,12 @@ private struct DJCheckinBindingSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
 
-    private var eventsRepository: DiscoverEventsRepository {
-        appContainer.discoverEventsRepository
+    private var eventListRepository: EventListRepository {
+        appContainer.eventListRepository
+    }
+
+    private var eventCheckinRepository: EventCheckinRepository {
+        appContainer.eventCheckinRepository
     }
 
     let djName: String
@@ -905,7 +909,7 @@ private struct DJCheckinBindingSheet: View {
         defer { isLoadingHistory = false }
 
         do {
-            let page = try await eventsRepository.fetchMyCheckins(page: 1, limit: 200, type: nil)
+            let page = try await eventCheckinRepository.fetchMyCheckins(page: 1, limit: 200, type: nil)
             var latestByEventID: [String: DJCheckinEventBindingOption] = [:]
 
             for item in page.items {
@@ -953,7 +957,7 @@ private struct DJCheckinBindingSheet: View {
         defer { isSearchingEvents = false }
 
         do {
-            let page = try await eventsRepository.fetchEvents(
+            let page = try await eventListRepository.fetchEvents(
                 request: DiscoverEventsPageRequest(
                     page: 1,
                     limit: 20,
@@ -1107,12 +1111,16 @@ struct EventEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
 
-    private var eventsRepository: DiscoverEventsRepository {
-        appContainer.discoverEventsRepository
+    private var eventCommandRepository: EventCommandRepository {
+        appContainer.eventCommandRepository
     }
 
-    private var djsRepository: DiscoverDJsRepository {
-        appContainer.discoverDJsRepository
+    private var eventMediaRepository: EventMediaRepository {
+        appContainer.eventMediaRepository
+    }
+
+    private var djListRepository: DJListRepository {
+        appContainer.djListRepository
     }
 
     let mode: Mode
@@ -2737,7 +2745,7 @@ struct EventEditorView: View {
             .map(\.djName)
 
         let resolved = await fetchExactDJMatches(names: unresolvedNames) { keyword in
-            let page = try await djsRepository.fetchDJs(
+            let page = try await djListRepository.fetchDJs(
                 page: 1,
                 limit: 20,
                 search: keyword,
@@ -2842,7 +2850,7 @@ struct EventEditorView: View {
         do {
             switch mode {
             case .create:
-                let created = try await eventsRepository.createEvent(
+                let created = try await eventCommandRepository.createEvent(
                     input: CreateEventInput(
                         name: trimmedName,
                         description: encodedDescription,
@@ -2874,7 +2882,7 @@ struct EventEditorView: View {
                 var uploadedLineupURL: String?
 
                 if let selectedCoverData {
-                    let upload = try await eventsRepository.uploadEventImage(
+                    let upload = try await eventMediaRepository.uploadEventImage(
                         imageData: jpegData(from: selectedCoverData),
                         fileName: "event-cover-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg",
@@ -2885,7 +2893,7 @@ struct EventEditorView: View {
                 }
 
                 if let selectedLineupData {
-                    let upload = try await eventsRepository.uploadEventImage(
+                    let upload = try await eventMediaRepository.uploadEventImage(
                         imageData: jpegData(from: selectedLineupData),
                         fileName: "event-lineup-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg",
@@ -2896,7 +2904,7 @@ struct EventEditorView: View {
                 }
 
                 if uploadedCoverURL != nil || uploadedLineupURL != nil {
-                    _ = try await eventsRepository.updateEvent(
+                    _ = try await eventCommandRepository.updateEvent(
                         id: created.id,
                         input: UpdateEventInput(
                             coverImageUrl: uploadedCoverURL,
@@ -2909,7 +2917,7 @@ struct EventEditorView: View {
                 var finalLineup = lineupImageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
 
                 if let selectedCoverData {
-                    let upload = try await eventsRepository.uploadEventImage(
+                    let upload = try await eventMediaRepository.uploadEventImage(
                         imageData: jpegData(from: selectedCoverData),
                         fileName: "event-cover-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg",
@@ -2920,7 +2928,7 @@ struct EventEditorView: View {
                 }
 
                 if let selectedLineupData {
-                    let upload = try await eventsRepository.uploadEventImage(
+                    let upload = try await eventMediaRepository.uploadEventImage(
                         imageData: jpegData(from: selectedLineupData),
                         fileName: "event-lineup-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg",
@@ -2930,7 +2938,7 @@ struct EventEditorView: View {
                     finalLineup = upload.url
                 }
 
-                _ = try await eventsRepository.updateEvent(
+                _ = try await eventCommandRepository.updateEvent(
                     id: event.id,
                         input: UpdateEventInput(
                             name: trimmedName,
@@ -3093,7 +3101,7 @@ struct EventEditorView: View {
                 return
             }
 
-            let preview = try await eventsRepository.importEventLineupFromImage(
+            let preview = try await eventMediaRepository.importEventLineupFromImage(
                 imageData: jpegData(from: loaded),
                 fileName: "lineup-import-\(UUID().uuidString).jpg",
                 mimeType: "image/jpeg",
@@ -3372,7 +3380,7 @@ struct EventEditorView: View {
                 .map(\.djName)
         }
         let resolved = await fetchExactDJMatches(names: unresolvedNames) { keyword in
-            let page = try await djsRepository.fetchDJs(
+            let page = try await djListRepository.fetchDJs(
                 page: 1,
                 limit: 20,
                 search: keyword,
@@ -3486,7 +3494,7 @@ struct EventEditorView: View {
         guard !unresolvedNames.isEmpty else { return matchedSlots }
 
         let resolved = await fetchExactDJMatches(names: unresolvedNames) { keyword in
-            let page = try await djsRepository.fetchDJs(
+            let page = try await djListRepository.fetchDJs(
                 page: 1,
                 limit: 20,
                 search: keyword,
@@ -3914,7 +3922,7 @@ struct EventEditorView: View {
             do {
                 try await Task.sleep(nanoseconds: 250_000_000)
                 if Task.isCancelled { return }
-                let page = try await djsRepository.fetchDJs(
+                let page = try await djListRepository.fetchDJs(
                     page: 1,
                     limit: 20,
                     search: trimmed,
@@ -4124,6 +4132,70 @@ private struct EventLocationPickerResult {
     let placeName: String?
 }
 
+private enum EventCoordinateTransform {
+    private static let a = 6378245.0
+    private static let ee = 0.00669342162296594323
+
+    static func wgs84ToGcj02IfNeeded(_ coordinate: CLLocationCoordinate2D) -> CLLocationCoordinate2D {
+        guard isInsideChina(coordinate) else {
+            return coordinate
+        }
+
+        var dLat = transformLat(
+            x: coordinate.longitude - 105.0,
+            y: coordinate.latitude - 35.0
+        )
+        var dLng = transformLng(
+            x: coordinate.longitude - 105.0,
+            y: coordinate.latitude - 35.0
+        )
+        let radLat = coordinate.latitude / 180.0 * .pi
+        var magic = sin(radLat)
+        magic = 1 - ee * magic * magic
+        let sqrtMagic = sqrt(magic)
+        dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * .pi)
+        dLng = (dLng * 180.0) / (a / sqrtMagic * cos(radLat) * .pi)
+
+        return CLLocationCoordinate2D(
+            latitude: coordinate.latitude + dLat,
+            longitude: coordinate.longitude + dLng
+        )
+    }
+
+    private static func isInsideChina(_ coordinate: CLLocationCoordinate2D) -> Bool {
+        coordinate.longitude >= 72.004
+            && coordinate.longitude <= 137.8347
+            && coordinate.latitude >= 0.8293
+            && coordinate.latitude <= 55.8271
+    }
+
+    private static func transformLat(x: Double, y: Double) -> Double {
+        var result = -100.0
+            + 2.0 * x
+            + 3.0 * y
+            + 0.2 * y * y
+            + 0.1 * x * y
+            + 0.2 * sqrt(abs(x))
+        result += (20.0 * sin(6.0 * x * .pi) + 20.0 * sin(2.0 * x * .pi)) * 2.0 / 3.0
+        result += (20.0 * sin(y * .pi) + 40.0 * sin(y / 3.0 * .pi)) * 2.0 / 3.0
+        result += (160.0 * sin(y / 12.0 * .pi) + 320.0 * sin(y * .pi / 30.0)) * 2.0 / 3.0
+        return result
+    }
+
+    private static func transformLng(x: Double, y: Double) -> Double {
+        var result = 300.0
+            + x
+            + 2.0 * y
+            + 0.1 * x * x
+            + 0.1 * x * y
+            + 0.1 * sqrt(abs(x))
+        result += (20.0 * sin(6.0 * x * .pi) + 20.0 * sin(2.0 * x * .pi)) * 2.0 / 3.0
+        result += (20.0 * sin(x * .pi) + 40.0 * sin(x / 3.0 * .pi)) * 2.0 / 3.0
+        result += (150.0 * sin(x / 12.0 * .pi) + 300.0 * sin(x / 30.0 * .pi)) * 2.0 / 3.0
+        return result
+    }
+}
+
 private final class EventPickerCurrentLocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var coordinate: CLLocationCoordinate2D?
     @Published private(set) var authorizationStatus: CLAuthorizationStatus
@@ -4159,7 +4231,9 @@ private final class EventPickerCurrentLocationProvider: NSObject, ObservableObje
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        coordinate = locations.last?.coordinate
+        coordinate = locations.last
+            .map(\.coordinate)
+            .map(EventCoordinateTransform.wgs84ToGcj02IfNeeded)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {

@@ -3,6 +3,7 @@ import Foundation
 protocol ShareMessageRepository {
     func fetchConversations(type: ConversationType) async throws -> [Conversation]
     func sendMessage(conversationID: String, content: String) async throws -> ChatMessage
+    func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage
     func sendCircleIDCardMessage(conversationID: String, payload: CircleIDShareCardPayload) async throws -> ChatMessage
     func sendEventCardMessage(conversationID: String, payload: EventShareCardPayload) async throws -> ChatMessage
     func sendDJCardMessage(conversationID: String, payload: DJShareCardPayload) async throws -> ChatMessage
@@ -30,6 +31,10 @@ struct ShareMessageRepositoryAdapter: ShareMessageRepository {
 
     func sendMessage(conversationID: String, content: String) async throws -> ChatMessage {
         try await service.sendMessage(conversationID: conversationID, content: content)
+    }
+
+    func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage {
+        try await service.sendPostCardMessage(conversationID: conversationID, payload: payload)
     }
 
     func sendCircleIDCardMessage(

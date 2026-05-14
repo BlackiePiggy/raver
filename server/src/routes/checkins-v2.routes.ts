@@ -17,6 +17,7 @@ import {
   normalizeNullableText,
   normalizeSelections,
 } from '../modules/checkins';
+import { isAdminOrOperator } from '../modules/admin/admin-auth.policy';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -62,8 +63,7 @@ const requireAuth = (req: BFFAuthRequest, res: Response): string | null => {
 const requireAdminOrOperator = (req: BFFAuthRequest, res: Response): boolean => {
   const userId = requireAuth(req, res);
   if (!userId) return false;
-  const role = req.user?.role;
-  if (role !== 'admin' && role !== 'operator') {
+  if (!isAdminOrOperator(req.user)) {
     res.status(403).json({ error: 'Forbidden' });
     return false;
   }

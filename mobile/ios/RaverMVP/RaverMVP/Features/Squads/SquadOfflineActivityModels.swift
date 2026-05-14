@@ -116,6 +116,104 @@ struct SquadOfflineActivityCardPayload: Codable, Hashable {
     var participantCount: Int
 }
 
+protocol SquadActivityRepository {
+    func fetchSquadProfile(squadID: String) async throws -> SquadProfile
+    func fetchCurrentSquadOfflineActivity(squadID: String) async throws -> SquadOfflineActivity?
+    func fetchSquadOfflineActivityHistory(squadID: String) async throws -> [SquadOfflineActivity]
+    func startSquadOfflineActivity(squadID: String, input: StartSquadOfflineActivityInput) async throws -> SquadOfflineActivity
+    func endSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity?
+    func joinSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity
+    func leaveSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity?
+    func removeSquadOfflineActivityParticipant(squadID: String, activityID: String, participantUserID: String) async throws -> SquadOfflineActivity?
+    func updateSquadOfflineActivityStatus(squadID: String, activityID: String, input: SquadOfflineActivityStatusInput) async throws -> SquadOfflineActivity?
+    func fetchFriends(userID: String, cursor: String?) async throws -> FollowListPage
+    func inviteUserToSquad(squadID: String, inviteeUserID: String) async throws
+}
+
+protocol LocationSyncRepository {
+    func uploadSquadOfflineActivityLocation(
+        squadID: String,
+        activityID: String,
+        input: SquadOfflineLocationUploadInput
+    ) async throws
+}
+
+struct SquadActivityRepositoryAdapter: SquadActivityRepository {
+    private let service: SocialService
+
+    init(service: SocialService) {
+        self.service = service
+    }
+
+    func fetchCurrentSquadOfflineActivity(squadID: String) async throws -> SquadOfflineActivity? {
+        try await service.fetchCurrentSquadOfflineActivity(squadID: squadID)
+    }
+
+    func fetchSquadProfile(squadID: String) async throws -> SquadProfile {
+        try await service.fetchSquadProfile(squadID: squadID)
+    }
+
+    func fetchSquadOfflineActivityHistory(squadID: String) async throws -> [SquadOfflineActivity] {
+        try await service.fetchSquadOfflineActivityHistory(squadID: squadID)
+    }
+
+    func startSquadOfflineActivity(squadID: String, input: StartSquadOfflineActivityInput) async throws -> SquadOfflineActivity {
+        try await service.startSquadOfflineActivity(squadID: squadID, input: input)
+    }
+
+    func endSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity? {
+        try await service.endSquadOfflineActivity(squadID: squadID, activityID: activityID)
+    }
+
+    func joinSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity {
+        try await service.joinSquadOfflineActivity(squadID: squadID, activityID: activityID)
+    }
+
+    func leaveSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity? {
+        try await service.leaveSquadOfflineActivity(squadID: squadID, activityID: activityID)
+    }
+
+    func removeSquadOfflineActivityParticipant(squadID: String, activityID: String, participantUserID: String) async throws -> SquadOfflineActivity? {
+        try await service.removeSquadOfflineActivityParticipant(
+            squadID: squadID,
+            activityID: activityID,
+            participantUserID: participantUserID
+        )
+    }
+
+    func updateSquadOfflineActivityStatus(squadID: String, activityID: String, input: SquadOfflineActivityStatusInput) async throws -> SquadOfflineActivity? {
+        try await service.updateSquadOfflineActivityStatus(squadID: squadID, activityID: activityID, input: input)
+    }
+
+    func fetchFriends(userID: String, cursor: String?) async throws -> FollowListPage {
+        try await service.fetchFriends(userID: userID, cursor: cursor)
+    }
+
+    func inviteUserToSquad(squadID: String, inviteeUserID: String) async throws {
+        try await service.inviteUserToSquad(squadID: squadID, inviteeUserID: inviteeUserID)
+    }
+}
+
+struct LocationSyncRepositoryAdapter: LocationSyncRepository {
+    private let service: SocialService
+
+    init(service: SocialService) {
+        self.service = service
+    }
+
+    func uploadSquadOfflineActivityLocation(
+        squadID: String,
+        activityID: String,
+        input: SquadOfflineLocationUploadInput
+    ) async throws {
+        try await service.uploadSquadOfflineActivityLocation(
+            squadID: squadID,
+            activityID: activityID,
+            input: input
+        )
+    }
+}
+
 extension JSONDecoder {
     static func raverISO8601() -> JSONDecoder {
         let decoder = JSONDecoder()

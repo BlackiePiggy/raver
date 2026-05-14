@@ -69,6 +69,21 @@ npx prisma db seed
 
 ### 4. 启动开发服务
 
+推荐一条命令启动 Web、主后端和 Festival Viewer WebTool：
+
+```bash
+./start-all.sh
+```
+
+启动后访问：
+
+- Web: `http://127.0.0.1:3000`
+- 后台工作台: `http://127.0.0.1:3000/admin`
+- Content CMS: `http://127.0.0.1:3000/admin/content-cms`
+- Festival Viewer: `http://127.0.0.1:3000/admin/festival-viewer.html`
+
+如需分别启动：
+
 ```bash
 cd server && pnpm dev
 ```
@@ -81,6 +96,7 @@ cd web && pnpm dev
 
 - Backend: `http://localhost:3901`
 - Web: `http://localhost:3000`
+- Festival Viewer WebTool: `http://127.0.0.1:8000`
 
 ### 5. iOS
 

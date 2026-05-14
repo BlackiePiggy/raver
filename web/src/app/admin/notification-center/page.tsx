@@ -339,13 +339,21 @@ export default function NotificationCenterAdminPage() {
             <h1 className="text-3xl font-semibold">通知中心后台</h1>
             <p className="mt-2 text-text-secondary">APNs 配置诊断与通知投递明细</p>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadData()}
-            className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
-          >
-            刷新
-          </button>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/admin"
+              className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+            >
+              运营总览
+            </Link>
+            <button
+              type="button"
+              onClick={() => void loadData()}
+              className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+            >
+              刷新
+            </button>
+          </div>
         </div>
 
         {error && <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>}

@@ -129,13 +129,8 @@ export const runEventCountdownJob = async (): Promise<EventCountdownJobReport> =
 
   const now = executedAt;
   const until = new Date(now.getTime() + (SCHEDULER_CONFIG.maxDaysBeforeStart + 1) * 24 * 60 * 60 * 1000);
-  const userRows = await prisma.checkin.findMany({
+  const userRows = await prisma.eventFavorite.findMany({
     where: {
-      type: 'event',
-      note: 'marked',
-      eventId: {
-        not: null,
-      },
       event: {
         startDate: {
           gte: now,

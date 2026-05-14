@@ -8,7 +8,7 @@ import {
   ensureDJs,
   updateDJ,
   deleteDJ,
-} from '../controllers/dj.controller';
+} from '../modules/music';
 import { authenticate, authorize } from '../middleware/auth';
 
 const router: Router = Router();

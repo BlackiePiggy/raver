@@ -34,7 +34,7 @@ final class RatingEventEditorViewModel: ObservableObject {
         }
     }
 
-    func save(repository: ProfileSocialRepository) async -> Bool {
+    func save(repository: RatingRepository) async -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
             errorMessage = L("名称不能为空", "Name cannot be empty.")
@@ -114,7 +114,7 @@ final class RatingUnitEditorViewModel: ObservableObject {
         }
     }
 
-    func save(repository: ProfileSocialRepository) async -> Bool {
+    func save(repository: RatingRepository) async -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
             errorMessage = L("名称不能为空", "Name cannot be empty.")
@@ -165,7 +165,7 @@ final class RatingUnitEditorViewModel: ObservableObject {
 struct RatingEventEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var repository: ProfileSocialRepository { appContainer.profileSocialRepository }
+    private var ratingRepository: RatingRepository { appContainer.ratingRepository }
 
     let event: WebRatingEvent
     let onSaved: () -> Void
@@ -222,7 +222,7 @@ struct RatingEventEditorSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(viewModel.isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
                         Task {
-                            if await viewModel.save(repository: repository) {
+                            if await viewModel.save(repository: ratingRepository) {
                                 onSaved()
                                 dismiss()
                             }
@@ -264,7 +264,7 @@ struct RatingEventEditorSheet: View {
 struct RatingUnitEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appContainer: AppContainer
-    private var repository: ProfileSocialRepository { appContainer.profileSocialRepository }
+    private var ratingRepository: RatingRepository { appContainer.ratingRepository }
 
     let unit: WebRatingUnit
     let onSaved: () -> Void
@@ -321,7 +321,7 @@ struct RatingUnitEditorSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(viewModel.isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
                         Task {
-                            if await viewModel.save(repository: repository) {
+                            if await viewModel.save(repository: ratingRepository) {
                                 onSaved()
                                 dismiss()
                             }

@@ -7,32 +7,32 @@ final class DemoAlignedChatRouteCoordinator {
     private weak var presenter: UIViewController?
 
     private var conversation: Conversation
-    private var service: SocialService
+    private var repository: ChatSettingsRepository
     private var onNavigate: ((AppRoute) -> Void)?
     private var onLeaveConversation: (() -> Void)?
 
     init(
         presenter: UIViewController,
         conversation: Conversation,
-        service: SocialService,
+        repository: ChatSettingsRepository,
         onNavigate: ((AppRoute) -> Void)?,
         onLeaveConversation: (() -> Void)?
     ) {
         self.presenter = presenter
         self.conversation = conversation
-        self.service = service
+        self.repository = repository
         self.onNavigate = onNavigate
         self.onLeaveConversation = onLeaveConversation
     }
 
     func updateContext(
         conversation: Conversation,
-        service: SocialService,
+        repository: ChatSettingsRepository,
         onNavigate: ((AppRoute) -> Void)?,
         onLeaveConversation: (() -> Void)?
     ) {
         self.conversation = conversation
-        self.service = service
+        self.repository = repository
         self.onNavigate = onNavigate
         self.onLeaveConversation = onLeaveConversation
     }
@@ -43,7 +43,7 @@ final class DemoAlignedChatRouteCoordinator {
 
         let settingsView = ChatSettingsView(
             conversation: conversation,
-            service: service,
+            repository: repository,
             chatStore: IMChatStore.shared,
             onLeaveConversation: { [weak self] in
                 self?.handleLeaveConversation()

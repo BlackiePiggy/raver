@@ -1,27 +1,37 @@
 import Foundation
 import Combine
 
-protocol ProfileSocialRepository {
+protocol ProfileUserRepository {
     func fetchMyProfile() async throws -> UserProfile
     func fetchUserProfile(userID: String) async throws -> UserProfile
-    func fetchPostsByUser(userID: String, cursor: String?) async throws -> FeedPage
-    func fetchMyLikeHistory(cursor: String?) async throws -> ActivityPostPage
-    func fetchMyRepostHistory(cursor: String?) async throws -> ActivityPostPage
-    func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage
-    func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage
-    func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage
-    func fetchEvent(id: String) async throws -> WebEvent
-    func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage
-    func fetchMyPublishes() async throws -> MyPublishes
-    func toggleLike(postID: String, shouldLike: Bool) async throws -> Post
-    func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post
-    func toggleSave(postID: String, shouldSave: Bool) async throws -> Post
     func fetchFollowers(userID: String, cursor: String?) async throws -> FollowListPage
     func fetchFollowing(userID: String, cursor: String?) async throws -> FollowListPage
     func fetchFriends(userID: String, cursor: String?) async throws -> FollowListPage
     func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary
     func uploadMyAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> AvatarUploadResponse
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile
+}
+
+protocol ProfileContentRepository {
+    func fetchPostsByUser(userID: String, cursor: String?) async throws -> FeedPage
+    func fetchMyLikeHistory(cursor: String?) async throws -> ActivityPostPage
+    func fetchMyRepostHistory(cursor: String?) async throws -> ActivityPostPage
+    func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage
+    func fetchEvent(id: String) async throws -> WebEvent
+    func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage
+    func fetchMyPublishes() async throws -> MyPublishes
+    func toggleLike(postID: String, shouldLike: Bool) async throws -> Post
+    func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post
+    func toggleSave(postID: String, shouldSave: Bool) async throws -> Post
+    func deleteDJSet(id: String) async throws
+    func deleteEvent(id: String) async throws
+    func deleteRatingEvent(id: String) async throws
+    func deleteRatingUnit(id: String) async throws
+}
+
+protocol ProfileCheckinRepository {
+    func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage
+    func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage
     func fetchMyCheckinsOverview() async throws -> MyCheckinsOverviewResponse
     func fetchUserCheckinsOverview(userID: String) async throws -> MyCheckinsOverviewResponse
     func fetchMyCheckinsTimeline(page: Int, limit: Int) async throws -> MyCheckinsTimelinePage
@@ -31,23 +41,49 @@ protocol ProfileSocialRepository {
     func fetchMyCheckinsGalleryArtists(page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage
     func fetchUserCheckinsGalleryArtists(userID: String, page: Int, limit: Int) async throws -> MyCheckinsGalleryArtistPage
     func deleteCheckin(id: String) async throws
-    func uploadRatingImage(
-        imageData: Data,
-        fileName: String,
-        mimeType: String,
-        ratingEventID: String?,
-        ratingUnitID: String?,
-        usage: String?
-    ) async throws -> UploadMediaResponse
-    func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent
-    func updateRatingUnit(id: String, input: UpdateRatingUnitInput) async throws -> WebRatingUnit
-    func deleteDJSet(id: String) async throws
-    func deleteEvent(id: String) async throws
-    func deleteRatingEvent(id: String) async throws
-    func deleteRatingUnit(id: String) async throws
 }
 
-struct ProfileSocialRepositoryAdapter: ProfileSocialRepository {
+struct ProfileUserRepositoryAdapter: ProfileUserRepository {
+    private let socialService: SocialService
+
+    init(socialService: SocialService) {
+        self.socialService = socialService
+    }
+
+    func fetchMyProfile() async throws -> UserProfile {
+        try await socialService.fetchMyProfile()
+    }
+
+    func fetchUserProfile(userID: String) async throws -> UserProfile {
+        try await socialService.fetchUserProfile(userID: userID)
+    }
+
+    func fetchFollowers(userID: String, cursor: String?) async throws -> FollowListPage {
+        try await socialService.fetchFollowers(userID: userID, cursor: cursor)
+    }
+
+    func fetchFollowing(userID: String, cursor: String?) async throws -> FollowListPage {
+        try await socialService.fetchFollowing(userID: userID, cursor: cursor)
+    }
+
+    func fetchFriends(userID: String, cursor: String?) async throws -> FollowListPage {
+        try await socialService.fetchFriends(userID: userID, cursor: cursor)
+    }
+
+    func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary {
+        try await socialService.toggleFollow(userID: userID, shouldFollow: shouldFollow)
+    }
+
+    func uploadMyAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> AvatarUploadResponse {
+        try await socialService.uploadMyAvatar(imageData: imageData, fileName: fileName, mimeType: mimeType)
+    }
+
+    func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile {
+        try await socialService.updateMyProfile(input: input)
+    }
+}
+
+struct ProfileContentRepositoryAdapter: ProfileContentRepository {
     private let socialService: SocialService
     private let webService: WebFeatureService
 
@@ -57,14 +93,6 @@ struct ProfileSocialRepositoryAdapter: ProfileSocialRepository {
     ) {
         self.socialService = socialService
         self.webService = webService
-    }
-
-    func fetchMyProfile() async throws -> UserProfile {
-        try await socialService.fetchMyProfile()
-    }
-
-    func fetchUserProfile(userID: String) async throws -> UserProfile {
-        try await socialService.fetchUserProfile(userID: userID)
     }
 
     func fetchPostsByUser(userID: String, cursor: String?) async throws -> FeedPage {
@@ -81,14 +109,6 @@ struct ProfileSocialRepositoryAdapter: ProfileSocialRepository {
 
     func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage {
         try await socialService.fetchMySaveHistory(cursor: cursor)
-    }
-
-    func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
-        try await webService.fetchUserCheckins(userID: userID, page: page, limit: limit, type: type)
-    }
-
-    func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
-        try await webService.fetchMyCheckins(page: page, limit: limit, type: type)
     }
 
     func fetchEvent(id: String) async throws -> WebEvent {
@@ -115,28 +135,36 @@ struct ProfileSocialRepositoryAdapter: ProfileSocialRepository {
         try await socialService.toggleSave(postID: postID, shouldSave: shouldSave)
     }
 
-    func fetchFollowers(userID: String, cursor: String?) async throws -> FollowListPage {
-        try await socialService.fetchFollowers(userID: userID, cursor: cursor)
+    func deleteDJSet(id: String) async throws {
+        try await webService.deleteDJSet(id: id)
     }
 
-    func fetchFollowing(userID: String, cursor: String?) async throws -> FollowListPage {
-        try await socialService.fetchFollowing(userID: userID, cursor: cursor)
+    func deleteEvent(id: String) async throws {
+        try await webService.deleteEvent(id: id)
     }
 
-    func fetchFriends(userID: String, cursor: String?) async throws -> FollowListPage {
-        try await socialService.fetchFriends(userID: userID, cursor: cursor)
+    func deleteRatingEvent(id: String) async throws {
+        try await webService.deleteRatingEvent(id: id)
     }
 
-    func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary {
-        try await socialService.toggleFollow(userID: userID, shouldFollow: shouldFollow)
+    func deleteRatingUnit(id: String) async throws {
+        try await webService.deleteRatingUnit(id: id)
+    }
+}
+
+struct ProfileCheckinRepositoryAdapter: ProfileCheckinRepository {
+    private let webService: WebFeatureService
+
+    init(webService: WebFeatureService) {
+        self.webService = webService
     }
 
-    func uploadMyAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> AvatarUploadResponse {
-        try await socialService.uploadMyAvatar(imageData: imageData, fileName: fileName, mimeType: mimeType)
+    func fetchUserCheckins(userID: String, page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
+        try await webService.fetchUserCheckins(userID: userID, page: page, limit: limit, type: type)
     }
 
-    func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile {
-        try await socialService.updateMyProfile(input: input)
+    func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
+        try await webService.fetchMyCheckins(page: page, limit: limit, type: type)
     }
 
     func fetchMyCheckinsOverview() async throws -> MyCheckinsOverviewResponse {
@@ -174,48 +202,6 @@ struct ProfileSocialRepositoryAdapter: ProfileSocialRepository {
     func deleteCheckin(id: String) async throws {
         try await webService.deleteCheckin(id: id)
     }
-
-    func uploadRatingImage(
-        imageData: Data,
-        fileName: String,
-        mimeType: String,
-        ratingEventID: String?,
-        ratingUnitID: String?,
-        usage: String?
-    ) async throws -> UploadMediaResponse {
-        try await webService.uploadRatingImage(
-            imageData: imageData,
-            fileName: fileName,
-            mimeType: mimeType,
-            ratingEventID: ratingEventID,
-            ratingUnitID: ratingUnitID,
-            usage: usage
-        )
-    }
-
-    func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent {
-        try await webService.updateRatingEvent(id: id, input: input)
-    }
-
-    func updateRatingUnit(id: String, input: UpdateRatingUnitInput) async throws -> WebRatingUnit {
-        try await webService.updateRatingUnit(id: id, input: input)
-    }
-
-    func deleteDJSet(id: String) async throws {
-        try await webService.deleteDJSet(id: id)
-    }
-
-    func deleteEvent(id: String) async throws {
-        try await webService.deleteEvent(id: id)
-    }
-
-    func deleteRatingEvent(id: String) async throws {
-        try await webService.deleteRatingEvent(id: id)
-    }
-
-    func deleteRatingUnit(id: String) async throws {
-        try await webService.deleteRatingUnit(id: id)
-    }
 }
 
 struct ProfileDashboardSnapshot {
@@ -238,22 +224,30 @@ private struct ProfileOfflineSnapshot: Codable {
 }
 
 struct LoadMyProfileDashboardUseCase {
-    private let repository: ProfileSocialRepository
+    private let userRepository: ProfileUserRepository
+    private let contentRepository: ProfileContentRepository
+    private let checkinRepository: ProfileCheckinRepository
 
-    init(repository: ProfileSocialRepository) {
-        self.repository = repository
+    init(
+        userRepository: ProfileUserRepository,
+        contentRepository: ProfileContentRepository,
+        checkinRepository: ProfileCheckinRepository
+    ) {
+        self.userRepository = userRepository
+        self.contentRepository = contentRepository
+        self.checkinRepository = checkinRepository
     }
 
     func execute() async throws -> ProfileDashboardSnapshot {
-        let profileValue = try await repository.fetchMyProfile()
+        let profileValue = try await userRepository.fetchMyProfile()
 
-        async let postsTask = repository.fetchPostsByUser(userID: profileValue.id, cursor: nil)
-        async let likesTask = repository.fetchMyLikeHistory(cursor: nil)
-        async let repostsTask = repository.fetchMyRepostHistory(cursor: nil)
-        async let savesTask = repository.fetchMySaveHistory(cursor: nil)
+        async let postsTask = contentRepository.fetchPostsByUser(userID: profileValue.id, cursor: nil)
+        async let likesTask = contentRepository.fetchMyLikeHistory(cursor: nil)
+        async let repostsTask = contentRepository.fetchMyRepostHistory(cursor: nil)
+        async let savesTask = contentRepository.fetchMySaveHistory(cursor: nil)
 
         let (postsPage, likesPage, repostsPage, savesPage) = try await (postsTask, likesTask, repostsTask, savesTask)
-        let checkins = (try? await repository.fetchUserCheckins(userID: profileValue.id, page: 1, limit: 6, type: nil))?.items ?? []
+        let checkins = (try? await checkinRepository.fetchUserCheckins(userID: profileValue.id, page: 1, limit: 6, type: nil))?.items ?? []
 
         return ProfileDashboardSnapshot(
             profile: profileValue,
@@ -306,18 +300,28 @@ final class ProfileViewModel: ObservableObject {
     @Published var bannerMessage: String?
     @Published var error: String?
 
-    private let repository: ProfileSocialRepository
+    private let userRepository: ProfileUserRepository
+    private let contentRepository: ProfileContentRepository
+    private let checkinRepository: ProfileCheckinRepository
     private let virtualAssetRepository: VirtualAssetRepository
     private let loadDashboardUseCase: LoadMyProfileDashboardUseCase
     private let offlineSnapshotStorageKey = "raver.profile.offlineSnapshot.v1"
 
     init(
-        repository: ProfileSocialRepository,
+        userRepository: ProfileUserRepository,
+        contentRepository: ProfileContentRepository,
+        checkinRepository: ProfileCheckinRepository,
         virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
     ) {
-        self.repository = repository
+        self.userRepository = userRepository
+        self.contentRepository = contentRepository
+        self.checkinRepository = checkinRepository
         self.virtualAssetRepository = virtualAssetRepository
-        self.loadDashboardUseCase = LoadMyProfileDashboardUseCase(repository: repository)
+        self.loadDashboardUseCase = LoadMyProfileDashboardUseCase(
+            userRepository: userRepository,
+            contentRepository: contentRepository,
+            checkinRepository: checkinRepository
+        )
     }
 
     func load() async {
@@ -372,13 +376,13 @@ final class ProfileViewModel: ObservableObject {
         do {
             switch selectedSection {
             case .published:
-                recentPosts = try await repository.fetchPostsByUser(userID: profile.id, cursor: nil).posts.filter { !$0.isRaverNews }
+                recentPosts = try await contentRepository.fetchPostsByUser(userID: profile.id, cursor: nil).posts.filter { !$0.isRaverNews }
             case .saves:
-                savedItems = try await repository.fetchMySaveHistory(cursor: nil).items
+                savedItems = try await contentRepository.fetchMySaveHistory(cursor: nil).items
             case .likes:
-                likedItems = try await repository.fetchMyLikeHistory(cursor: nil).items
+                likedItems = try await contentRepository.fetchMyLikeHistory(cursor: nil).items
             }
-            if let checkinPage = try? await repository.fetchUserCheckins(userID: profile.id, page: 1, limit: 6, type: nil) {
+            if let checkinPage = try? await checkinRepository.fetchUserCheckins(userID: profile.id, page: 1, limit: 6, type: nil) {
                 recentCheckins = checkinPage.items
             }
             await loadAppearance(for: profile.id)
@@ -405,7 +409,7 @@ final class ProfileViewModel: ObservableObject {
 
     func toggleLike(post: Post) async {
         do {
-            let updated = try await repository.toggleLike(postID: post.id, shouldLike: !post.isLiked)
+            let updated = try await contentRepository.toggleLike(postID: post.id, shouldLike: !post.isLiked)
             replacePost(updated)
             if !updated.isLiked {
                 likedItems.removeAll { $0.post.id == updated.id }
@@ -418,7 +422,7 @@ final class ProfileViewModel: ObservableObject {
 
     func toggleRepost(post: Post) async {
         do {
-            let updated = try await repository.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
+            let updated = try await contentRepository.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
             replacePost(updated)
             if !updated.isReposted {
                 repostedItems.removeAll { $0.post.id == updated.id }
@@ -431,7 +435,7 @@ final class ProfileViewModel: ObservableObject {
 
     func toggleSave(post: Post) async {
         do {
-            let updated = try await repository.toggleSave(postID: post.id, shouldSave: !post.isSaved)
+            let updated = try await contentRepository.toggleSave(postID: post.id, shouldSave: !post.isSaved)
             replacePost(updated)
             if !updated.isSaved {
                 savedItems.removeAll { $0.post.id == updated.id }

@@ -32,7 +32,9 @@ struct EventLiveDiscussionView: View {
 
     let eventID: String
     let eventName: String
-    let repository: DiscoverEventsRepository
+    let eventReadRepository: EventReadRepository
+    let discussionRepository: EventLiveDiscussionRepository
+    let discussionMediaRepository: EventDiscussionMediaRepository
 
     @State private var comments: [EventLiveComment] = []
     @State private var event: WebEvent?
@@ -95,6 +97,20 @@ struct EventLiveDiscussionView: View {
 
     private var liveDiscussionHeaderHeight: CGFloat {
          44
+    }
+
+    init(
+        eventID: String,
+        eventName: String,
+        eventReadRepository: EventReadRepository,
+        discussionRepository: EventLiveDiscussionRepository,
+        discussionMediaRepository: EventDiscussionMediaRepository
+    ) {
+        self.eventID = eventID
+        self.eventName = eventName
+        self.eventReadRepository = eventReadRepository
+        self.discussionRepository = discussionRepository
+        self.discussionMediaRepository = discussionMediaRepository
     }
 
     var body: some View {
@@ -526,7 +542,7 @@ struct EventLiveDiscussionView: View {
     @MainActor
     private func loadEvent() async {
         do {
-            event = try await repository.fetchEvent(id: eventID)
+            event = try await eventReadRepository.fetchEvent(id: eventID)
         } catch {
             // Keep discussion usable even if event detail fails.
         }
@@ -1080,7 +1096,7 @@ struct EventLiveDiscussionView: View {
             phase = .initialLoading
         }
         do {
-            let page = try await repository.fetchEventLiveComments(eventID: eventID, cursor: nil, sort: sortMode)
+            let page = try await discussionRepository.fetchEventLiveComments(eventID: eventID, cursor: nil, sort: sortMode)
             comments = page.comments
             phase = page.comments.isEmpty ? .empty : .success
         } catch {
@@ -1095,7 +1111,7 @@ struct EventLiveDiscussionView: View {
         defer { isSending = false }
 
         do {
-            let created = try await repository.addEventLiveComment(
+            let created = try await discussionRepository.addEventLiveComment(
                 eventID: eventID,
                 content: trimmedDraft,
                 imageURLs: imageURLs,
@@ -1114,7 +1130,7 @@ struct EventLiveDiscussionView: View {
     @MainActor
     private func toggleLike(_ comment: EventLiveComment) async {
         do {
-            let updated = try await repository.toggleEventLiveCommentLike(commentID: comment.id, shouldLike: !comment.isLiked)
+            let updated = try await discussionRepository.toggleEventLiveCommentLike(commentID: comment.id, shouldLike: !comment.isLiked)
             mergeComment(updated)
         } catch {
             errorMessage = error.userFacingMessage
@@ -1133,7 +1149,7 @@ struct EventLiveDiscussionView: View {
         for item in items where imageURLs.count < 3 {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self) else { continue }
-                let upload = try await repository.uploadPostImage(
+                let upload = try await discussionMediaRepository.uploadPostImage(
                     imageData: normalizedImageData(from: data),
                     fileName: "event-live-comment-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg"
@@ -1236,8 +1252,13 @@ struct EventDetailView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
 
-    private var eventsRepository: DiscoverEventsRepository { appContainer.discoverEventsRepository }
-    private var feedRepository: CircleFeedRepository { appContainer.circleFeedRepository }
+    private var eventReadRepository: EventReadRepository { appContainer.eventReadRepository }
+    private var ratingRepository: RatingRepository { appContainer.ratingRepository }
+    private var eventCheckinRepository: EventCheckinRepository { appContainer.eventCheckinRepository }
+    private var eventRelatedContentRepository: EventRelatedContentRepository { appContainer.eventRelatedContentRepository }
+    private var eventCommandRepository: EventCommandRepository { appContainer.eventCommandRepository }
+    private var feedStreamRepository: FeedStreamRepository { appContainer.feedStreamRepository }
+    private var postInteractionRepository: PostInteractionRepository { appContainer.postInteractionRepository }
     private var newsRepository: DiscoverNewsRepository { appContainer.discoverNewsRepository }
     private var shareMessageRepository: ShareMessageRepository { appContainer.shareMessageRepository }
     private var shareLinkCoordinator: ShareLinkCoordinator { ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository()) }
@@ -1317,7 +1338,7 @@ struct EventDetailView: View {
     @State private var manualCachedAt: Date?
     @State private var bannerDismissToken = UUID()
     @State private var isInWidgetCountdownPool = false
-    @State private var markedCheckinID: String?
+    @State private var eventFavoriteID: String?
     @State private var isTogglingMarkedEvent = false
     @State private var shareMorePresentation: EventCardSharePresentation?
     @State private var isShareMorePanelVisible = false
@@ -2497,7 +2518,7 @@ struct EventDetailView: View {
         defer { isLoadingEventDiscussion = false }
 
         do {
-            let page = try await feedRepository.fetchFeed(cursor: nil, mode: .latest, eventID: eventID)
+            let page = try await feedStreamRepository.fetchFeed(cursor: nil, mode: .latest, eventID: eventID)
             eventDiscussionPosts = page.posts
             eventDiscussionNextCursor = page.nextCursor
             eventDiscussionPhase = page.posts.isEmpty ? .empty : .success
@@ -2513,7 +2534,7 @@ struct EventDetailView: View {
         defer { isLoadingEventDiscussion = false }
 
         do {
-            let page = try await feedRepository.fetchFeed(cursor: cursor, mode: .latest, eventID: eventID)
+            let page = try await feedStreamRepository.fetchFeed(cursor: cursor, mode: .latest, eventID: eventID)
             let existing = Set(eventDiscussionPosts.map(\.id))
             eventDiscussionPosts.append(contentsOf: page.posts.filter { !existing.contains($0.id) })
             eventDiscussionNextCursor = page.nextCursor
@@ -2539,7 +2560,7 @@ struct EventDetailView: View {
     @MainActor
     private func toggleEventDiscussionLike(post: Post) async {
         do {
-            let updated = try await feedRepository.toggleLike(postID: post.id, shouldLike: !post.isLiked)
+            let updated = try await postInteractionRepository.toggleLike(postID: post.id, shouldLike: !post.isLiked)
             replaceEventDiscussionPost(updated)
         } catch {
             errorMessage = error.userFacingMessage
@@ -2549,7 +2570,7 @@ struct EventDetailView: View {
     @MainActor
     private func toggleEventDiscussionRepost(post: Post) async {
         do {
-            let updated = try await feedRepository.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
+            let updated = try await postInteractionRepository.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
             replaceEventDiscussionPost(updated)
         } catch {
             errorMessage = error.userFacingMessage
@@ -2559,7 +2580,7 @@ struct EventDetailView: View {
     @MainActor
     private func toggleEventDiscussionSave(post: Post) async {
         do {
-            let updated = try await feedRepository.toggleSave(postID: post.id, shouldSave: !post.isSaved)
+            let updated = try await postInteractionRepository.toggleSave(postID: post.id, shouldSave: !post.isSaved)
             replaceEventDiscussionPost(updated)
         } catch {
             errorMessage = error.userFacingMessage
@@ -2607,6 +2628,9 @@ struct EventDetailView: View {
                     } else {
                         eventInfoRow(icon: "globe", title: L("官网", "Website"), value: website)
                     }
+                }
+                if let festival = event.wikiFestival {
+                    eventBrandInfoRow(festival)
                 }
             }
         }
@@ -3437,7 +3461,7 @@ struct EventDetailView: View {
             )
         }
 
-        let isMarked = markedCheckinID != nil
+        let isMarked = eventFavoriteID != nil
         actions.append(
             SharePanelQuickAction(
                 title: isTogglingMarkedEvent
@@ -4199,6 +4223,53 @@ struct EventDetailView: View {
         }
     }
 
+    private func eventBrandInfoRow(_ brand: WebEventFestivalLite) -> some View {
+        Button {
+            appPush(.festivalDetail(festivalID: brand.id))
+        } label: {
+            HStack(alignment: .center, spacing: 10) {
+                eventBrandAvatar(brand)
+
+                Text(brand.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func eventBrandAvatar(_ brand: WebEventFestivalLite) -> some View {
+        if let resolved = AppConfig.resolvedURLString(brand.avatarUrl),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved, resizingMode: .fill)
+                .background(eventBrandAvatarFallback(brand))
+                .frame(width: 38, height: 38)
+                .clipShape(Circle())
+        } else {
+            eventBrandAvatarFallback(brand)
+        }
+    }
+
+    private func eventBrandAvatarFallback(_ brand: WebEventFestivalLite) -> some View {
+        ZStack {
+            Circle()
+                .fill(RaverTheme.card)
+                .frame(width: 38, height: 38)
+            Image(systemName: "sparkles")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(RaverTheme.accent)
+        }
+    }
+
     private func eventInfoDateText(_ date: Date) -> String {
         switch AppLanguagePreference.current.effectiveLanguage {
         case .zh:
@@ -4269,10 +4340,14 @@ struct EventDetailView: View {
             await MainActor.run {
                 isLoadingRelatedArticles = true
             }
-            async let eventTask = eventsRepository.fetchEvent(id: eventID)
+            async let eventTask = eventReadRepository.fetchEvent(id: eventID)
+            async let favoriteStatusTask: EventFavoriteStatus? = {
+                guard hasSession else { return nil }
+                return try? await eventCheckinRepository.fetchEventFavoriteStatus(eventID: eventID)
+            }()
             async let checkinsTask: [WebCheckin] = {
                 guard hasSession else { return [] }
-                let page = try? await eventsRepository.fetchMyCheckins(
+                let page = try? await eventCheckinRepository.fetchMyCheckins(
                     page: 1,
                     limit: 200,
                     type: nil,
@@ -4281,18 +4356,19 @@ struct EventDetailView: View {
                 )
                 return page?.items ?? []
             }()
-            async let ratingEventsTask = eventsRepository.fetchEventRatingEvents(eventID: eventID)
+            async let ratingEventsTask = ratingRepository.fetchEventRatingEvents(eventID: eventID)
             async let relatedArticlesTask = fetchRelatedNewsArticlesForEvent(eventID: eventID)
 
             let loadedEvent = try await eventTask
+            let loadedFavoriteStatus = await favoriteStatusTask
             let loadedCheckins = await checkinsTask
             let loadedRatingEvents = (try? await ratingEventsTask) ?? []
-            let loadedEventSets = (try? await eventsRepository.fetchEventDJSets(eventName: loadedEvent.name)) ?? []
+            let loadedEventSets = (try? await eventRelatedContentRepository.fetchEventDJSets(eventName: loadedEvent.name)) ?? []
             let loadedArticles = (try? await relatedArticlesTask) ?? []
 
             event = loadedEvent
             relatedEventCheckins = loadedCheckins
-            markedCheckinID = loadedCheckins.first(where: { $0.type.lowercased() == "event" && $0.isMarkedCheckin })?.id
+            eventFavoriteID = loadedFavoriteStatus?.id ?? loadedEvent.favoriteId
             relatedRatingEvents = loadedRatingEvents
             relatedEventSets = loadedEventSets
             relatedArticles = loadedArticles
@@ -4336,7 +4412,7 @@ struct EventDetailView: View {
     }
 
     private func reloadEventRatings() async {
-        relatedRatingEvents = (try? await eventsRepository.fetchEventRatingEvents(eventID: eventID)) ?? []
+        relatedRatingEvents = (try? await ratingRepository.fetchEventRatingEvents(eventID: eventID)) ?? []
         await persistCurrentManualCacheSnapshotIfPossible()
     }
 
@@ -4345,7 +4421,7 @@ struct EventDetailView: View {
             relatedEventSets = []
             return
         }
-        relatedEventSets = (try? await eventsRepository.fetchEventDJSets(eventName: event.name)) ?? []
+        relatedEventSets = (try? await eventRelatedContentRepository.fetchEventDJSets(eventName: event.name)) ?? []
         await persistCurrentManualCacheSnapshotIfPossible()
     }
 
@@ -4364,8 +4440,8 @@ struct EventDetailView: View {
 
         do {
             let eventForCache = try await resolveEventForManualCache()
-            async let ratingsTask = eventsRepository.fetchEventRatingEvents(eventID: eventID)
-            async let setsTask = eventsRepository.fetchEventDJSets(eventName: eventForCache.name)
+            async let ratingsTask = ratingRepository.fetchEventRatingEvents(eventID: eventID)
+            async let setsTask = eventRelatedContentRepository.fetchEventDJSets(eventName: eventForCache.name)
             async let articlesTask = fetchRelatedNewsArticlesForEvent(eventID: eventID)
 
             let snapshot = EventManualCacheSnapshot(
@@ -4397,7 +4473,7 @@ struct EventDetailView: View {
 
     @MainActor
     private func resolveEventForManualCache() async throws -> WebEvent {
-        if let latest = try? await eventsRepository.fetchEvent(id: eventID) {
+        if let latest = try? await eventReadRepository.fetchEvent(id: eventID) {
             return latest
         }
         if let event {
@@ -4513,7 +4589,7 @@ struct EventDetailView: View {
         defer { isPreparingEventCheckinSheet = false }
 
         do {
-            let page = try await eventsRepository.fetchMyCheckins(
+            let page = try await eventCheckinRepository.fetchMyCheckins(
                 page: 1,
                 limit: 200,
                 type: nil,
@@ -4681,7 +4757,7 @@ struct EventDetailView: View {
         let didUpdateExisting: Bool
         if let activeAttendanceCheckin {
             do {
-                primaryCheckin = try await eventsRepository.updateCheckin(
+                primaryCheckin = try await eventCheckinRepository.updateCheckin(
                     id: activeAttendanceCheckin.id,
                     input: UpdateCheckinInput(
                         eventId: eventID,
@@ -4731,7 +4807,7 @@ struct EventDetailView: View {
         attendedAt: Date,
         payloads: [EventAttendanceDaySelectionPayload]
     ) async throws -> WebCheckin {
-        try await eventsRepository.createCheckin(
+        try await eventCheckinRepository.createCheckin(
             input: CreateCheckinInput(
                 type: "event",
                 eventId: eventID,
@@ -4752,7 +4828,7 @@ struct EventDetailView: View {
         }
 
         do {
-            try await eventsRepository.deleteCheckin(id: activeAttendanceCheckin.id)
+            try await eventCheckinRepository.deleteCheckin(id: activeAttendanceCheckin.id)
         } catch {
             guard isInactiveCheckinError(error) else { throw error }
         }
@@ -4768,7 +4844,7 @@ struct EventDetailView: View {
     }
 
     private func refreshRelatedEventCheckins() async throws {
-        let page = try await eventsRepository.fetchMyCheckins(
+        let page = try await eventCheckinRepository.fetchMyCheckins(
             page: 1,
             limit: 200,
             type: nil,
@@ -4776,7 +4852,6 @@ struct EventDetailView: View {
             djID: nil
         )
         relatedEventCheckins = page.items
-        markedCheckinID = page.items.first(where: { $0.type.lowercased() == "event" && $0.isMarkedCheckin })?.id
     }
 
     @MainActor
@@ -4791,19 +4866,14 @@ struct EventDetailView: View {
         defer { isTogglingMarkedEvent = false }
 
         do {
-            if let checkinID = markedCheckinID {
-                try await eventsRepository.deleteCheckin(id: checkinID)
-                markedCheckinID = nil
-                relatedEventCheckins.removeAll { $0.id == checkinID }
-                showBannerMessageAutoDismiss(L("已取消收藏活动", "Event removed from favorites."))
+            if eventFavoriteID != nil {
+                try await eventCheckinRepository.unfavoriteEvent(eventID: event.id)
+                eventFavoriteID = nil
+                showEventFavoriteSuccessBanner(message: L("已取消收藏活动", "Event removed from favorites."))
             } else {
-                let created = try await eventsRepository.createCheckin(
-                    input: CreateCheckinInput(type: "event", eventId: event.id, djId: nil, note: "marked", rating: nil)
-                )
-                markedCheckinID = created.id
-                relatedEventCheckins.removeAll { $0.id == created.id }
-                relatedEventCheckins.append(created)
-                showBannerMessageAutoDismiss(L("已收藏活动", "Event added to favorites."))
+                let favorite = try await eventCheckinRepository.favoriteEvent(eventID: event.id)
+                eventFavoriteID = favorite.id ?? event.id
+                showEventFavoriteSuccessBanner(message: L("已收藏活动", "Event added to favorites."))
             }
 
             NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
@@ -4827,6 +4897,10 @@ struct EventDetailView: View {
                 title: L("查看我的打卡", "View My Check-ins")
             )
         )
+    }
+
+    private func showEventFavoriteSuccessBanner(message: String) {
+        OperationBannerCenter.shared.success(message)
     }
 
     private func preselectedDaySelections(for checkin: WebCheckin, in event: WebEvent) -> [EventAttendanceDaySelectionPayload] {
@@ -4942,7 +5016,7 @@ struct EventDetailView: View {
     private func cleanupLegacyEventCheckins(keeping keptID: String?) async {
         let cleanupTargets = relatedEventCheckins.filter { shouldCleanupEventCheckin($0, keeping: keptID) }
         for item in cleanupTargets {
-            try? await eventsRepository.deleteCheckin(id: item.id)
+            try? await eventCheckinRepository.deleteCheckin(id: item.id)
         }
     }
 
@@ -4970,7 +5044,7 @@ struct EventDetailView: View {
 
     private func deleteEvent() async {
         do {
-            try await eventsRepository.deleteEvent(id: eventID)
+            try await eventCommandRepository.deleteEvent(id: eventID)
             errorMessage = L("活动已删除，请返回列表刷新", "Event deleted. Please return to the list and refresh.")
         } catch {
             errorMessage = error.userFacingMessage
@@ -5794,9 +5868,8 @@ private struct EventRouteSharePreviewCard: View {
 }
 
 struct EventRoutePlannerLoaderView: View {
-    @EnvironmentObject private var appContainer: AppContainer
-
     let eventID: String
+    let eventReadRepository: EventReadRepository
     let ownerUserID: String?
     let ownerDisplayName: String?
     let selectedDayID: String?
@@ -5804,6 +5877,22 @@ struct EventRoutePlannerLoaderView: View {
 
     @State private var event: WebEvent?
     @State private var phase: LoadPhase = .idle
+
+    init(
+        eventID: String,
+        eventReadRepository: EventReadRepository,
+        ownerUserID: String?,
+        ownerDisplayName: String?,
+        selectedDayID: String?,
+        selectedSlotIDs: [String]?
+    ) {
+        self.eventID = eventID
+        self.eventReadRepository = eventReadRepository
+        self.ownerUserID = ownerUserID
+        self.ownerDisplayName = ownerDisplayName
+        self.selectedDayID = selectedDayID
+        self.selectedSlotIDs = selectedSlotIDs
+    }
 
     var body: some View {
         Group {
@@ -5856,7 +5945,7 @@ struct EventRoutePlannerLoaderView: View {
         if !force, phase == .success, event != nil { return }
         phase = .initialLoading
         do {
-            event = try await appContainer.discoverEventsRepository.fetchEvent(id: eventID)
+            event = try await eventReadRepository.fetchEvent(id: eventID)
             phase = event == nil ? .empty : .success
         } catch {
             phase = .failure(

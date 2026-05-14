@@ -2,8 +2,11 @@ import Foundation
 import Combine
 import SwiftUI
 
-protocol MessagesRepository: IMChatConversationDataSource {
+protocol ConversationRepository: IMChatConversationDataSource {
     func startDirectConversation(identifier: String) async throws -> Conversation
+}
+
+protocol MessageNotificationRepository {
     func fetchNotifications(limit: Int) async throws -> NotificationInbox
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
     func markNotificationRead(notificationID: String) async throws
@@ -19,7 +22,7 @@ protocol MessagesRepository: IMChatConversationDataSource {
     func markFollowedBrandNotificationRead(notificationID: String) async throws
 }
 
-struct MessagesRepositoryAdapter: MessagesRepository {
+struct ConversationRepositoryAdapter: ConversationRepository {
     private let service: SocialService
 
     init(service: SocialService) {
@@ -48,6 +51,14 @@ struct MessagesRepositoryAdapter: MessagesRepository {
 
     func startDirectConversation(identifier: String) async throws -> Conversation {
         try await service.startDirectConversation(identifier: identifier)
+    }
+}
+
+struct MessageNotificationRepositoryAdapter: MessageNotificationRepository {
+    private let service: SocialService
+
+    init(service: SocialService) {
+        self.service = service
     }
 
     func fetchNotifications(limit: Int) async throws -> NotificationInbox {
@@ -118,12 +129,17 @@ final class MessagesViewModel: ObservableObject {
     @Published var followedDJsSummary: FollowedDJsSummary = .empty
     @Published var followedBrandsSummary: FollowedBrandsSummary = .empty
 
-    private let repository: MessagesRepository
+    private let conversationRepository: ConversationRepository
+    private let notificationRepository: MessageNotificationRepository
     private let chatStore = IMChatStore.shared
     private var cancellables = Set<AnyCancellable>()
 
-    init(repository: MessagesRepository) {
-        self.repository = repository
+    init(
+        conversationRepository: ConversationRepository,
+        notificationRepository: MessageNotificationRepository
+    ) {
+        self.conversationRepository = conversationRepository
+        self.notificationRepository = notificationRepository
         bindChatStore()
     }
 
@@ -140,10 +156,10 @@ final class MessagesViewModel: ObservableObject {
         defer { isRefreshing = false }
 
         do {
-            try await chatStore.loadConversations(using: repository)
-            async let followedEventsTask = repository.fetchFollowedEventsSummary()
-            async let followedDJsTask = repository.fetchFollowedDJsSummary()
-            async let followedBrandsTask = repository.fetchFollowedBrandsSummary()
+            try await chatStore.loadConversations(using: conversationRepository)
+            async let followedEventsTask = notificationRepository.fetchFollowedEventsSummary()
+            async let followedDJsTask = notificationRepository.fetchFollowedDJsSummary()
+            async let followedBrandsTask = notificationRepository.fetchFollowedBrandsSummary()
             followedEventsSummary = (try? await followedEventsTask) ?? .empty
             followedDJsSummary = (try? await followedDJsTask) ?? .empty
             followedBrandsSummary = (try? await followedBrandsTask) ?? .empty
@@ -162,20 +178,20 @@ final class MessagesViewModel: ObservableObject {
     }
 
     func refreshFollowedEventsSummary() async {
-        followedEventsSummary = (try? await repository.fetchFollowedEventsSummary()) ?? .empty
+        followedEventsSummary = (try? await notificationRepository.fetchFollowedEventsSummary()) ?? .empty
     }
 
     func refreshFollowedDJsSummary() async {
-        followedDJsSummary = (try? await repository.fetchFollowedDJsSummary()) ?? .empty
+        followedDJsSummary = (try? await notificationRepository.fetchFollowedDJsSummary()) ?? .empty
     }
 
     func refreshFollowedBrandsSummary() async {
-        followedBrandsSummary = (try? await repository.fetchFollowedBrandsSummary()) ?? .empty
+        followedBrandsSummary = (try? await notificationRepository.fetchFollowedBrandsSummary()) ?? .empty
     }
 
     func markConversationRead(conversationID: String) async {
         do {
-            try await chatStore.markConversationRead(conversationID: conversationID, using: repository)
+            try await chatStore.markConversationRead(conversationID: conversationID, using: conversationRepository)
             error = nil
         } catch {
             self.error = error.userFacingMessage
@@ -187,7 +203,7 @@ final class MessagesViewModel: ObservableObject {
             try await chatStore.setConversationPinned(
                 conversationID: conversationID,
                 pinned: pinned,
-                using: repository
+                using: conversationRepository
             )
             error = nil
         } catch {
@@ -200,7 +216,7 @@ final class MessagesViewModel: ObservableObject {
             try await chatStore.markConversationUnread(
                 conversationID: conversationID,
                 unread: unread,
-                using: repository
+                using: conversationRepository
             )
             error = nil
         } catch {
@@ -210,7 +226,7 @@ final class MessagesViewModel: ObservableObject {
 
     func hideConversation(conversationID: String) async {
         do {
-            try await chatStore.hideConversation(conversationID: conversationID, using: repository)
+            try await chatStore.hideConversation(conversationID: conversationID, using: conversationRepository)
             selectedConversationIDs.remove(conversationID)
             error = nil
         } catch {

@@ -1,6 +1,13 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3901/api';
 const V1_BASE_URL = API_URL.endsWith('/api') ? `${API_URL.slice(0, -4)}/v1` : `${API_URL}/v1`;
 
+/**
+ * Legacy OpenIM admin client.
+ *
+ * Current IM/Admin mainline is Tencent IM + /api/admin/v1. Keep this client
+ * only for historical compatibility and migration inspection; do not add new
+ * Admin capabilities here.
+ */
 export interface OpenIMAdminOverview {
   pendingReports: number;
   reports24h: number;

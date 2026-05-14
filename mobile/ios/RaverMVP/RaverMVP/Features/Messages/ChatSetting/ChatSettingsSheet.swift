@@ -2,6 +2,142 @@ import SwiftUI
 import PhotosUI
 import UIKit
 
+protocol ChatSettingsRepository: IMChatConversationDataSource {
+    func fetchSquadProfile(squadID: String) async throws -> SquadProfile
+    func fetchSquadMemberDirectory(squadID: String) async throws -> GroupMemberDirectory
+    func fetchSquadInviteOption(squadID: String) async throws -> GroupInviteOption
+    func fetchFriends(userID: String, cursor: String?) async throws -> FollowListPage
+    func isUserBlacklisted(userID: String) async throws -> Bool
+    func setConversationMuted(conversationID: String, muted: Bool) async throws
+    func fetchUserProfile(userID: String) async throws -> UserProfile
+    func updateSquadInfo(squadID: String, input: UpdateSquadInfoInput) async throws
+    func updateSquadMySettings(squadID: String, input: UpdateSquadMySettingsInput) async throws
+    func uploadSquadAvatar(
+        squadID: String,
+        imageData: Data,
+        fileName: String,
+        mimeType: String
+    ) async throws -> AvatarUploadResponse
+    func setUserBlacklisted(userID: String, blacklisted: Bool) async throws
+    func clearConversationHistory(conversationID: String) async throws
+    func leaveSquad(squadID: String) async throws
+    func disbandSquad(squadID: String) async throws
+    func setSquadInviteOption(squadID: String, option: GroupInviteOption) async throws
+    func inviteUserToSquad(squadID: String, inviteeUserID: String) async throws
+    func removeSquadMember(squadID: String, memberUserID: String) async throws
+    func updateSquadMemberRole(squadID: String, memberUserID: String, role: String) async throws
+}
+
+struct ChatSettingsRepositoryAdapter: ChatSettingsRepository {
+    private let service: SocialService
+
+    init(service: SocialService) {
+        self.service = service
+    }
+
+    func fetchConversations(type: ConversationType) async throws -> [Conversation] {
+        try await service.fetchConversations(type: type)
+    }
+
+    func markConversationRead(conversationID: String) async throws {
+        try await service.markConversationRead(conversationID: conversationID)
+    }
+
+    func setConversationPinned(conversationID: String, pinned: Bool) async throws {
+        try await service.setConversationPinned(conversationID: conversationID, pinned: pinned)
+    }
+
+    func markConversationUnread(conversationID: String, unread: Bool) async throws {
+        try await service.markConversationUnread(conversationID: conversationID, unread: unread)
+    }
+
+    func hideConversation(conversationID: String) async throws {
+        try await service.hideConversation(conversationID: conversationID)
+    }
+
+    func fetchSquadProfile(squadID: String) async throws -> SquadProfile {
+        try await service.fetchSquadProfile(squadID: squadID)
+    }
+
+    func fetchSquadMemberDirectory(squadID: String) async throws -> GroupMemberDirectory {
+        try await service.fetchSquadMemberDirectory(squadID: squadID)
+    }
+
+    func fetchSquadInviteOption(squadID: String) async throws -> GroupInviteOption {
+        try await service.fetchSquadInviteOption(squadID: squadID)
+    }
+
+    func fetchFriends(userID: String, cursor: String?) async throws -> FollowListPage {
+        try await service.fetchFriends(userID: userID, cursor: cursor)
+    }
+
+    func isUserBlacklisted(userID: String) async throws -> Bool {
+        try await service.isUserBlacklisted(userID: userID)
+    }
+
+    func setConversationMuted(conversationID: String, muted: Bool) async throws {
+        try await service.setConversationMuted(conversationID: conversationID, muted: muted)
+    }
+
+    func fetchUserProfile(userID: String) async throws -> UserProfile {
+        try await service.fetchUserProfile(userID: userID)
+    }
+
+    func updateSquadInfo(squadID: String, input: UpdateSquadInfoInput) async throws {
+        try await service.updateSquadInfo(squadID: squadID, input: input)
+    }
+
+    func updateSquadMySettings(squadID: String, input: UpdateSquadMySettingsInput) async throws {
+        try await service.updateSquadMySettings(squadID: squadID, input: input)
+    }
+
+    func uploadSquadAvatar(
+        squadID: String,
+        imageData: Data,
+        fileName: String,
+        mimeType: String
+    ) async throws -> AvatarUploadResponse {
+        try await service.uploadSquadAvatar(
+            squadID: squadID,
+            imageData: imageData,
+            fileName: fileName,
+            mimeType: mimeType
+        )
+    }
+
+    func setUserBlacklisted(userID: String, blacklisted: Bool) async throws {
+        try await service.setUserBlacklisted(userID: userID, blacklisted: blacklisted)
+    }
+
+    func clearConversationHistory(conversationID: String) async throws {
+        try await service.clearConversationHistory(conversationID: conversationID)
+    }
+
+    func leaveSquad(squadID: String) async throws {
+        try await service.leaveSquad(squadID: squadID)
+    }
+
+    func disbandSquad(squadID: String) async throws {
+        try await service.disbandSquad(squadID: squadID)
+    }
+
+    func setSquadInviteOption(squadID: String, option: GroupInviteOption) async throws {
+        try await service.setSquadInviteOption(squadID: squadID, option: option)
+    }
+
+    func inviteUserToSquad(squadID: String, inviteeUserID: String) async throws {
+        try await service.inviteUserToSquad(squadID: squadID, inviteeUserID: inviteeUserID)
+    }
+
+    func removeSquadMember(squadID: String, memberUserID: String) async throws {
+        try await service.removeSquadMember(squadID: squadID, memberUserID: memberUserID)
+    }
+
+    func updateSquadMemberRole(squadID: String, memberUserID: String, role: String) async throws {
+        try await service.updateSquadMemberRole(squadID: squadID, memberUserID: memberUserID, role: role)
+    }
+}
+
 struct ChatSettingsView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
@@ -10,7 +146,7 @@ struct ChatSettingsView: View {
     @FocusState private var isGroupNicknameFieldFocused: Bool
 
     let conversation: Conversation
-    let service: SocialService
+    let repository: ChatSettingsRepository
     let chatStore: IMChatStore
     var onLeaveConversation: (() -> Void)? = nil
 
@@ -348,7 +484,7 @@ struct ChatSettingsView: View {
                             destination: InviteSquadMembersView(
                                 squadID: platformSquadID,
                                 existingMemberIDs: Set(effectiveGroupMembers.map(\.id)),
-                                service: service,
+                                repository: repository,
                                 currentUserID: appState.session?.user.id ?? "",
                                 onInvited: { invitedUsers in
                                     handleInvitedMembers(invitedUsers)
@@ -367,7 +503,7 @@ struct ChatSettingsView: View {
                                     members: profile.members,
                                     myRole: effectiveGroupMyRole
                                 ),
-                                service: service,
+                                repository: repository,
                                 onDirectoryChanged: { updatedDirectory in
                                     groupMemberDirectory = updatedDirectory
                                     if var updatedProfile = squadProfile {
@@ -681,7 +817,7 @@ struct ChatSettingsView: View {
         defer { isLoadingSquadProfile = false }
 
         do {
-            squadProfile = try await service.fetchSquadProfile(squadID: platformSquadID)
+            squadProfile = try await repository.fetchSquadProfile(squadID: platformSquadID)
             groupNicknameDraft = squadProfile?.myNickname ?? ""
             committedGroupNickname = groupNicknameDraft
         } catch {
@@ -695,7 +831,7 @@ struct ChatSettingsView: View {
         if groupMemberDirectory != nil && !force { return }
 
         do {
-            let directory = try await service.fetchSquadMemberDirectory(squadID: platformSquadID)
+            let directory = try await repository.fetchSquadMemberDirectory(squadID: platformSquadID)
             groupMemberDirectory = directory
             if var profile = squadProfile {
                 profile.members = directory.members
@@ -716,7 +852,7 @@ struct ChatSettingsView: View {
         if isUpdatingInviteOption && !force { return }
 
         do {
-            groupInviteOption = try await service.fetchSquadInviteOption(squadID: platformSquadID)
+            groupInviteOption = try await repository.fetchSquadInviteOption(squadID: platformSquadID)
         } catch {
             if force {
                 errorMessage = error.userFacingMessage ?? L("加载邀请方式失败", "Failed to load invite option")
@@ -736,8 +872,8 @@ struct ChatSettingsView: View {
 
         do {
             let currentUserID = appState.session?.user.id ?? ""
-            async let loadedFriends = service.fetchFriends(userID: currentUserID, cursor: nil)
-            async let loadedBlacklistState = service.isUserBlacklisted(userID: peerID)
+            async let loadedFriends = repository.fetchFriends(userID: currentUserID, cursor: nil)
+            async let loadedBlacklistState = repository.isUserBlacklisted(userID: peerID)
             let (friendList, blacklisted) = try await (loadedFriends, loadedBlacklistState)
             let baseDisplayName = await resolveDirectBaseDisplayName(peerID: peerID)
             let platformPeerID = TencentIMIdentity.normalizePlatformUserIDForProfile(peerID)
@@ -777,7 +913,7 @@ struct ChatSettingsView: View {
         isMuting = true
         defer { isMuting = false }
         do {
-            try await service.setConversationMuted(conversationID: conversation.id, muted: muted)
+            try await repository.setConversationMuted(conversationID: conversation.id, muted: muted)
             chatStore.updateConversationMuteState(conversationID: conversation.id, muted: muted)
         } catch {
             notificationsMuted = oldValue
@@ -791,7 +927,7 @@ struct ChatSettingsView: View {
             try await chatStore.setConversationPinned(
                 conversationID: conversation.id,
                 pinned: pinned,
-                using: service
+                using: repository
             )
         } catch {
             topPinned = oldValue
@@ -865,12 +1001,12 @@ struct ChatSettingsView: View {
         }
 
         let platformUserID = TencentIMIdentity.normalizePlatformUserIDForProfile(peerID)
-        if let profile = try? await service.fetchUserProfile(userID: platformUserID),
+        if let profile = try? await repository.fetchUserProfile(userID: platformUserID),
            let displayName = profile.displayName.nilIfBlank {
             return displayName
         }
 
-        if let refreshed = try? await service.fetchConversations(type: .direct).first(where: {
+        if let refreshed = try? await repository.fetchConversations(type: .direct).first(where: {
             $0.id == conversation.id
                 || $0.sdkConversationID == conversation.sdkConversationID
                 || $0.id == conversation.sdkConversationID
@@ -937,8 +1073,8 @@ struct ChatSettingsView: View {
         }
 
         do {
-            try await service.updateSquadInfo(squadID: platformSquadID, input: input)
-            squadProfile = try await service.fetchSquadProfile(squadID: platformSquadID)
+            try await repository.updateSquadInfo(squadID: platformSquadID, input: input)
+            squadProfile = try await repository.fetchSquadProfile(squadID: platformSquadID)
             editingGroupInfoField = nil
         } catch {
             errorMessage = error.userFacingMessage ?? L("更新群资料失败", "Failed to update group info")
@@ -967,14 +1103,14 @@ struct ChatSettingsView: View {
         defer { isSavingGroupNickname = false }
 
         do {
-            try await service.updateSquadMySettings(
+            try await repository.updateSquadMySettings(
                 squadID: platformSquadID,
                 input: UpdateSquadMySettingsInput(
                     nickname: groupNicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : groupNicknameDraft,
                     notificationsEnabled: profile.myNotificationsEnabled ?? true
                 )
             )
-            let refreshed = try await service.fetchSquadProfile(squadID: platformSquadID)
+            let refreshed = try await repository.fetchSquadProfile(squadID: platformSquadID)
             squadProfile = refreshed
             groupNicknameDraft = refreshed.myNickname ?? ""
             committedGroupNickname = groupNicknameDraft
@@ -1010,7 +1146,7 @@ struct ChatSettingsView: View {
                 uploadData = rawData
             }
 
-            let uploaded = try await service.uploadSquadAvatar(
+            let uploaded = try await repository.uploadSquadAvatar(
                 squadID: platformSquadID,
                 imageData: uploadData,
                 fileName: "group-avatar-\(Int(Date().timeIntervalSince1970)).jpg",
@@ -1026,7 +1162,7 @@ struct ChatSettingsView: View {
                 bannerURL: nil,
                 notice: currentProfile?.notice ?? ""
             )
-            try await service.updateSquadInfo(squadID: platformSquadID, input: input)
+            try await repository.updateSquadInfo(squadID: platformSquadID, input: input)
             await loadSquadProfile(force: true)
         } catch {
             errorMessage = error.userFacingMessage ?? L("更新群头像失败", "Failed to update group avatar")
@@ -1056,7 +1192,7 @@ struct ChatSettingsView: View {
         defer { isUpdatingBlacklist = false }
 
         do {
-            try await service.setUserBlacklisted(userID: peerID, blacklisted: shouldBlacklist)
+            try await repository.setUserBlacklisted(userID: peerID, blacklisted: shouldBlacklist)
             isBlacklisted = shouldBlacklist
         } catch {
             errorMessage = error.userFacingMessage ?? L("更新黑名单状态失败", "Failed to update blacklist status")
@@ -1069,7 +1205,7 @@ struct ChatSettingsView: View {
         isClearing = true
         defer { isClearing = false }
         do {
-            try await service.clearConversationHistory(conversationID: conversation.id)
+            try await repository.clearConversationHistory(conversationID: conversation.id)
             chatStore.clearMessages(for: conversation)
         } catch {
             errorMessage = error.userFacingMessage ?? L("清空聊天记录失败", "Failed to clear chat history")
@@ -1088,7 +1224,7 @@ struct ChatSettingsView: View {
         defer { isLeaving = false }
 
         do {
-            try await service.leaveSquad(squadID: platformSquadID)
+            try await repository.leaveSquad(squadID: platformSquadID)
             chatStore.removeConversation(conversationID: conversation.id)
             dismiss()
             onLeaveConversation?()
@@ -1111,7 +1247,7 @@ struct ChatSettingsView: View {
         defer { isDisbanding = false }
 
         do {
-            try await service.disbandSquad(squadID: platformSquadID)
+            try await repository.disbandSquad(squadID: platformSquadID)
             chatStore.removeConversation(conversationID: conversation.id)
             dismiss()
             onLeaveConversation?()
@@ -1138,7 +1274,7 @@ struct ChatSettingsView: View {
         defer { isUpdatingInviteOption = false }
 
         do {
-            try await service.setSquadInviteOption(squadID: platformSquadID, option: option)
+            try await repository.setSquadInviteOption(squadID: platformSquadID, option: option)
             groupInviteOption = option
         } catch {
             groupInviteOption = previous
@@ -1408,7 +1544,7 @@ private struct InviteSquadMembersView: View {
 
     let squadID: String
     let existingMemberIDs: Set<String>
-    let service: SocialService
+    let repository: ChatSettingsRepository
     let currentUserID: String
     let onInvited: ([UserSummary]) -> Void
 
@@ -1507,7 +1643,7 @@ private struct InviteSquadMembersView: View {
         defer { isLoading = false }
 
         do {
-            friends = try await service.fetchFriends(userID: currentUserID, cursor: nil).users
+            friends = try await repository.fetchFriends(userID: currentUserID, cursor: nil).users
         } catch {
             errorMessage = error.userFacingMessage ?? L("加载好友失败", "Failed to load friends")
         }
@@ -1523,7 +1659,7 @@ private struct InviteSquadMembersView: View {
         do {
             let invitedUsers = availableFriends.filter { selectedUserIDs.contains($0.id) }
             for userID in selectedUserIDs {
-                try await service.inviteUserToSquad(squadID: squadID, inviteeUserID: userID)
+                try await repository.inviteUserToSquad(squadID: squadID, inviteeUserID: userID)
             }
             onInvited(invitedUsers)
             dismiss()
@@ -1547,7 +1683,7 @@ private struct InviteSquadMembersView: View {
 
 private struct GroupMemberListView: View {
     let squadID: String
-    let service: SocialService
+    let repository: ChatSettingsRepository
     let onDirectoryChanged: (GroupMemberDirectory) -> Void
 
     @State private var memberDirectory: GroupMemberDirectory
@@ -1561,11 +1697,11 @@ private struct GroupMemberListView: View {
     init(
         squadID: String,
         memberDirectory: GroupMemberDirectory,
-        service: SocialService,
+        repository: ChatSettingsRepository,
         onDirectoryChanged: @escaping (GroupMemberDirectory) -> Void
     ) {
         self.squadID = squadID
-        self.service = service
+        self.repository = repository
         self.onDirectoryChanged = onDirectoryChanged
         _memberDirectory = State(initialValue: memberDirectory)
     }
@@ -1840,7 +1976,7 @@ private struct GroupMemberListView: View {
         defer { memberActionInFlightUserID = nil }
 
         do {
-            try await service.removeSquadMember(squadID: squadID, memberUserID: member.id)
+            try await repository.removeSquadMember(squadID: squadID, memberUserID: member.id)
             pendingRemoveMember = nil
             memberDirectory.members.removeAll { $0.id == member.id }
             onDirectoryChanged(memberDirectory)
@@ -1857,7 +1993,7 @@ private struct GroupMemberListView: View {
         defer { memberActionInFlightUserID = nil }
 
         do {
-            try await service.updateSquadMemberRole(squadID: squadID, memberUserID: member.id, role: role)
+            try await repository.updateSquadMemberRole(squadID: squadID, memberUserID: member.id, role: role)
             if let index = memberDirectory.members.firstIndex(where: { $0.id == member.id }) {
                 switch role {
                 case "leader":

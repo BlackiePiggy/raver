@@ -85,6 +85,7 @@ struct TencentUIKitChatView: View {
     let conversation: Conversation
     let service: SocialService
     let webService: WebFeatureService
+    private let squadActivityRepository: SquadActivityRepository
 
     @StateObject private var viewModel: ExyteChatConversationViewModel
     @State private var scrollToID: String?
@@ -96,7 +97,7 @@ struct TencentUIKitChatView: View {
     @State private var composerInjectedText: String?
     @State private var mentionCandidates: [InputMentionCandidate] = []
     @State private var allowMentionAll = false
-    @State private var recentCardNavigation: RecentCardNavigation?
+    @State private var recentCardRoute: RecentChatCardRoute?
     @State private var offlineActivity: SquadOfflineActivity?
     @State private var canManageOfflineActivity = false
     @State private var isShowingOfflineActivityStarter = false
@@ -116,6 +117,7 @@ struct TencentUIKitChatView: View {
         self.conversation = conversation
         self.service = service
         self.webService = webService
+        self.squadActivityRepository = SquadActivityRepositoryAdapter(service: service)
         _viewModel = StateObject(
             wrappedValue: ExyteChatConversationViewModel(
                 conversation: conversation,
@@ -160,8 +162,8 @@ struct TencentUIKitChatView: View {
         .sheet(isPresented: $isShowingOfflineActivityStarter) {
             SquadOfflineActivityStarterSheet(
                 squadID: resolvedHeaderSquadID(),
-                service: service,
-                webService: webService
+                activityRepository: squadActivityRepository,
+                eventListRepository: EventListRepositoryAdapter(service: webService)
             ) { created in
                 offlineActivity = created
                 appNavigate(.squadOfflineActivity(squadID: resolvedHeaderSquadID()))
@@ -448,7 +450,7 @@ struct TencentUIKitChatView: View {
             return
         }
         do {
-            offlineActivity = try await service.fetchCurrentSquadOfflineActivity(squadID: resolvedHeaderSquadID())
+            offlineActivity = try await squadActivityRepository.fetchCurrentSquadOfflineActivity(squadID: resolvedHeaderSquadID())
         } catch {
             offlineActivity = nil
         }
@@ -460,7 +462,7 @@ struct TencentUIKitChatView: View {
             return
         }
         do {
-            let profile = try await service.fetchSquadProfile(squadID: resolvedHeaderSquadID())
+            let profile = try await squadActivityRepository.fetchSquadProfile(squadID: resolvedHeaderSquadID())
             canManageOfflineActivity = profile.canEditGroup || profile.myRole == "leader" || profile.myRole == "admin"
         } catch {
             canManageOfflineActivity = false
@@ -608,7 +610,7 @@ struct TencentUIKitChatView: View {
                     }
 
                     interactiveBubble {
-                        navigateFromChatCard(kind: .event, id: payload.eventID) {
+                        openChatCardRoute(.event(eventID: payload.eventID)) {
                             appNavigate(.eventDetail(eventID: payload.eventID))
                         }
                     } onLongPress: {
@@ -663,18 +665,15 @@ struct TencentUIKitChatView: View {
                         fileMessageTimeView(for: params.message, isMine: true)
                     }
 
-                    Button {
-                        appPush(.postDetail(postID: payload.postID))
-                    } label: {
+                    chatCardButton(
+                        target: .post(postID: payload.postID),
+                        onTap: {
+                            appPush(.postDetail(postID: payload.postID))
+                        },
+                        onLongPress: params.showContextMenuClosure
+                    ) {
                         ChatPostCardBubbleView(payload: payload)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35)
-                            .onEnded { _ in
-                                params.showContextMenuClosure()
-                            }
-                    )
 
                     if !isMine {
                         fileMessageTimeView(for: params.message, isMine: false)
@@ -726,7 +725,7 @@ struct TencentUIKitChatView: View {
 #if DEBUG
                         print("[RatingEventResolve] chat-tap route=.circle(.ratingEventDetail(\(payload.eventID)))")
 #endif
-                        navigateFromChatCard(kind: .ratingEvent, id: payload.eventID) {
+                        openChatCardRoute(.ratingEvent(eventID: payload.eventID)) {
                             appPush(.circle(.ratingEventDetail(payload.eventID)))
                         }
                     } onLongPress: {
@@ -781,18 +780,15 @@ struct TencentUIKitChatView: View {
                         fileMessageTimeView(for: params.message, isMine: true)
                     }
 
-                    Button {
-                        appPush(.ratingUnitDetail(unitID: payload.unitID))
-                    } label: {
+                    chatCardButton(
+                        target: .ratingUnit(unitID: payload.unitID),
+                        onTap: {
+                            appPush(.ratingUnitDetail(unitID: payload.unitID))
+                        },
+                        onLongPress: params.showContextMenuClosure
+                    ) {
                         ChatRatingUnitCardBubbleView(payload: payload)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35)
-                            .onEnded { _ in
-                                params.showContextMenuClosure()
-                            }
-                    )
 
                     if !isMine {
                         fileMessageTimeView(for: params.message, isMine: false)
@@ -840,18 +836,15 @@ struct TencentUIKitChatView: View {
                         fileMessageTimeView(for: params.message, isMine: true)
                     }
 
-                    Button {
-                        appNavigate(.djDetail(djID: payload.djID))
-                    } label: {
+                    chatCardButton(
+                        target: .dj(djID: payload.djID),
+                        onTap: {
+                            appNavigate(.djDetail(djID: payload.djID))
+                        },
+                        onLongPress: params.showContextMenuClosure
+                    ) {
                         ChatDJCardBubbleView(payload: payload)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35)
-                            .onEnded { _ in
-                                params.showContextMenuClosure()
-                            }
-                    )
 
                     if !isMine {
                         fileMessageTimeView(for: params.message, isMine: false)
@@ -899,18 +892,15 @@ struct TencentUIKitChatView: View {
                         fileMessageTimeView(for: params.message, isMine: true)
                     }
 
-                    Button {
-                        appPush(.discover(.setDetail(setID: payload.setID)))
-                    } label: {
+                    chatCardButton(
+                        target: .set(setID: payload.setID),
+                        onTap: {
+                            appPush(.discover(.setDetail(setID: payload.setID)))
+                        },
+                        onLongPress: params.showContextMenuClosure
+                    ) {
                         ChatSetCardBubbleView(payload: payload)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35)
-                            .onEnded { _ in
-                                params.showContextMenuClosure()
-                            }
-                    )
 
                     if !isMine {
                         fileMessageTimeView(for: params.message, isMine: false)
@@ -958,18 +948,15 @@ struct TencentUIKitChatView: View {
                         fileMessageTimeView(for: params.message, isMine: true)
                     }
 
-                    Button {
-                        appPush(.discover(.festivalDetail(festivalID: payload.brandID)))
-                    } label: {
+                    chatCardButton(
+                        target: .festival(festivalID: payload.brandID),
+                        onTap: {
+                            appPush(.discover(.festivalDetail(festivalID: payload.brandID)))
+                        },
+                        onLongPress: params.showContextMenuClosure
+                    ) {
                         ChatBrandCardBubbleView(payload: payload)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35)
-                            .onEnded { _ in
-                                params.showContextMenuClosure()
-                            }
-                    )
 
                     if !isMine {
                         fileMessageTimeView(for: params.message, isMine: false)
@@ -1017,18 +1004,15 @@ struct TencentUIKitChatView: View {
                         fileMessageTimeView(for: params.message, isMine: true)
                     }
 
-                    Button {
-                        appPush(.labelDetail(labelID: payload.labelID))
-                    } label: {
+                    chatCardButton(
+                        target: .label(labelID: payload.labelID),
+                        onTap: {
+                            appPush(.labelDetail(labelID: payload.labelID))
+                        },
+                        onLongPress: params.showContextMenuClosure
+                    ) {
                         ChatLabelCardBubbleView(payload: payload)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35)
-                            .onEnded { _ in
-                                params.showContextMenuClosure()
-                            }
-                    )
 
                     if !isMine {
                         fileMessageTimeView(for: params.message, isMine: false)
@@ -1076,25 +1060,22 @@ struct TencentUIKitChatView: View {
                         fileMessageTimeView(for: params.message, isMine: true)
                     }
 
-                    Button {
-                        let board = RankingBoard(
-                            id: payload.boardID,
-                            title: payload.boardName,
-                            subtitle: payload.boardSubtitle,
-                            coverImageUrl: payload.coverImageURL,
-                            years: [payload.year]
-                        )
-                        appPush(.rankingBoardDetail(board: board, year: payload.year))
-                    } label: {
+                    let board = RankingBoard(
+                        id: payload.boardID,
+                        title: payload.boardName,
+                        subtitle: payload.boardSubtitle,
+                        coverImageUrl: payload.coverImageURL,
+                        years: [payload.year]
+                    )
+                    chatCardButton(
+                        target: .rankingBoard(board: board, year: payload.year),
+                        onTap: {
+                            appPush(.rankingBoardDetail(board: board, year: payload.year))
+                        },
+                        onLongPress: params.showContextMenuClosure
+                    ) {
                         ChatRankingBoardCardBubbleView(payload: payload)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35)
-                            .onEnded { _ in
-                                params.showContextMenuClosure()
-                            }
-                    )
 
                     if !isMine {
                         fileMessageTimeView(for: params.message, isMine: false)
@@ -1142,18 +1123,15 @@ struct TencentUIKitChatView: View {
                         fileMessageTimeView(for: params.message, isMine: true)
                     }
 
-                    Button {
-                        appPush(.circle(.idDetail(entryID: payload.entryID)))
-                    } label: {
+                    chatCardButton(
+                        target: .circleID(entryID: payload.entryID),
+                        onTap: {
+                            appPush(.circle(.idDetail(entryID: payload.entryID)))
+                        },
+                        onLongPress: params.showContextMenuClosure
+                    ) {
                         ChatCircleIDCardBubbleView(payload: payload)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35)
-                            .onEnded { _ in
-                                params.showContextMenuClosure()
-                            }
-                    )
 
                     if !isMine {
                         fileMessageTimeView(for: params.message, isMine: false)
@@ -1201,26 +1179,27 @@ struct TencentUIKitChatView: View {
                         fileMessageTimeView(for: params.message, isMine: true)
                     }
 
-                    Button {
-                        appPush(
-                            .profile(
-                                .myCheckins(
-                                    targetUserID: payload.userID,
-                                    title: payload.title,
-                                    ownerDisplayName: payload.displayName
+                    chatCardButton(
+                        target: .myCheckins(
+                            targetUserID: payload.userID,
+                            title: payload.title,
+                            ownerDisplayName: payload.displayName
+                        ),
+                        onTap: {
+                            appPush(
+                                .profile(
+                                    .myCheckins(
+                                        targetUserID: payload.userID,
+                                        title: payload.title,
+                                        ownerDisplayName: payload.displayName
+                                    )
                                 )
                             )
-                        )
-                    } label: {
+                        },
+                        onLongPress: params.showContextMenuClosure
+                    ) {
                         ChatMyCheckinsCardBubbleView(payload: payload)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35)
-                            .onEnded { _ in
-                                params.showContextMenuClosure()
-                            }
-                    )
 
                     if !isMine {
                         fileMessageTimeView(for: params.message, isMine: false)
@@ -1268,26 +1247,29 @@ struct TencentUIKitChatView: View {
                         fileMessageTimeView(for: params.message, isMine: true)
                     }
 
-                    Button {
-                        appPush(
-                            .eventRoute(
-                                eventID: payload.eventID,
-                                ownerUserID: payload.ownerUserID,
-                                ownerDisplayName: payload.ownerDisplayName,
-                                selectedDayID: payload.selectedDayID,
-                                selectedSlotIDs: payload.selectedSlotIDs
+                    chatCardButton(
+                        target: .eventRoute(
+                            eventID: payload.eventID,
+                            ownerUserID: payload.ownerUserID,
+                            ownerDisplayName: payload.ownerDisplayName,
+                            selectedDayID: payload.selectedDayID,
+                            selectedSlotIDs: payload.selectedSlotIDs
+                        ),
+                        onTap: {
+                            appPush(
+                                .eventRoute(
+                                    eventID: payload.eventID,
+                                    ownerUserID: payload.ownerUserID,
+                                    ownerDisplayName: payload.ownerDisplayName,
+                                    selectedDayID: payload.selectedDayID,
+                                    selectedSlotIDs: payload.selectedSlotIDs
+                                )
                             )
-                        )
-                    } label: {
+                        },
+                        onLongPress: params.showContextMenuClosure
+                    ) {
                         ChatEventRouteCardBubbleView(payload: payload)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35)
-                            .onEnded { _ in
-                                params.showContextMenuClosure()
-                            }
-                    )
 
                     if !isMine {
                         fileMessageTimeView(for: params.message, isMine: false)
@@ -1336,7 +1318,9 @@ struct TencentUIKitChatView: View {
                     }
 
                     interactiveBubble {
-                        appNavigate(.squadOfflineActivityHistory(squadID: payload.squadID))
+                        openChatCardRoute(.squadOfflineActivityHistory(squadID: payload.squadID)) {
+                            appNavigate(.squadOfflineActivityHistory(squadID: payload.squadID))
+                        }
                     } onLongPress: {
                         params.showContextMenuClosure()
                     } content: {
@@ -1389,9 +1373,13 @@ struct TencentUIKitChatView: View {
                         fileMessageTimeView(for: params.message, isMine: true)
                     }
 
-                    Button {
-                        appPush(.newsDetail(articleID: payload.articleID))
-                    } label: {
+                    chatCardButton(
+                        target: .news(articleID: payload.articleID),
+                        onTap: {
+                            appPush(.newsDetail(articleID: payload.articleID))
+                        },
+                        onLongPress: params.showContextMenuClosure
+                    ) {
                         ChatNewsCardBubbleView(
                             payload: payload,
                             maxWidth: newsCardMaxWidth(
@@ -1400,13 +1388,6 @@ struct TencentUIKitChatView: View {
                             )
                         )
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35)
-                            .onEnded { _ in
-                                params.showContextMenuClosure()
-                            }
-                    )
 
                     if !isMine {
                         fileMessageTimeView(for: params.message, isMine: false)
@@ -1500,25 +1481,44 @@ struct TencentUIKitChatView: View {
             .accessibilityAddTraits(.isButton)
     }
 
-    private func navigateFromChatCard(
-        kind: ChatCardNavigationKind,
-        id: String,
+    @ViewBuilder
+    private func chatCardButton<Content: View>(
+        target: ChatCardRouteTarget,
+        onTap: @escaping () -> Void,
+        onLongPress: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Button {
+            openChatCardRoute(target, perform: onTap)
+        } label: {
+            content()
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.35)
+                .onEnded { _ in
+                    onLongPress()
+                }
+        )
+    }
+
+    private func openChatCardRoute(
+        _ target: ChatCardRouteTarget,
         perform: () -> Void
     ) {
         let now = Date()
-        if let recentCardNavigation,
-           recentCardNavigation.id == id,
-           recentCardNavigation.kind != kind,
-           now.timeIntervalSince(recentCardNavigation.timestamp) < 1.0 {
+        if let recentCardRoute,
+           recentCardRoute.target.dedupeKey == target.dedupeKey,
+           recentCardRoute.target != target,
+           now.timeIntervalSince(recentCardRoute.timestamp) < 1.0 {
 #if DEBUG
-            print("[RatingEventResolve] suppress conflicting chat navigation kind=\(kind.rawValue) id=\(id) recent=\(recentCardNavigation.kind.rawValue)")
+            print("[RatingEventResolve] suppress conflicting chat navigation target=\(target.dedupeKey) recent=\(recentCardRoute.target.dedupeKey)")
 #endif
             return
         }
 
-        recentCardNavigation = RecentCardNavigation(
-            kind: kind,
-            id: id,
+        recentCardRoute = RecentChatCardRoute(
+            target: target,
             timestamp: now
         )
         perform()
@@ -2280,17 +2280,6 @@ private struct ChatDJCardPayload {
     let genreText: String?
     let coverImageURL: String?
     let badgeText: String?
-}
-
-private enum ChatCardNavigationKind: String {
-    case event
-    case ratingEvent
-}
-
-private struct RecentCardNavigation {
-    let kind: ChatCardNavigationKind
-    let id: String
-    let timestamp: Date
 }
 
 private struct ChatPostCardPayload {
@@ -3613,225 +3602,109 @@ private struct ConversationMessageSearchSheet: View {
     }
 
     private func parseEventCardPayloadForPreview(from rawText: String) -> EventShareCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: EventShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "event",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(EventShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            EventShareCardPayload.self,
+            cardType: ChatCustomCardWireType.event,
+            from: rawText
+        )
     }
 
     private func parseRatingEventCardPayloadForPreview(from rawText: String) -> RatingEventShareCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: RatingEventShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "rating_event",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return nil
+        ChatCustomCardCodec.decodePayload(
+            RatingEventShareCardPayload.self,
+            cardType: ChatCustomCardWireType.ratingEvent,
+            from: rawText,
+            allowBarePayload: false
+        )
     }
 
     private func parseRatingUnitCardPayloadForPreview(from rawText: String) -> RatingUnitShareCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: RatingUnitShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "rating_unit",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(RatingUnitShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            RatingUnitShareCardPayload.self,
+            cardType: ChatCustomCardWireType.ratingUnit,
+            from: rawText
+        )
     }
 
     private func parseDJCardPayloadForPreview(from rawText: String) -> DJShareCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: DJShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "dj",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(DJShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            DJShareCardPayload.self,
+            cardType: ChatCustomCardWireType.dj,
+            from: rawText
+        )
     }
 
     private func parseSetCardPayloadForPreview(from rawText: String) -> SetShareCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: SetShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "set",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(SetShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            SetShareCardPayload.self,
+            cardType: ChatCustomCardWireType.set,
+            from: rawText
+        )
     }
 
     private func parseBrandCardPayloadForPreview(from rawText: String) -> BrandShareCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: BrandShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "brand",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(BrandShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            BrandShareCardPayload.self,
+            cardType: ChatCustomCardWireType.brand,
+            from: rawText
+        )
     }
 
     private func parseLabelCardPayloadForPreview(from rawText: String) -> LabelShareCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: LabelShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "label",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(LabelShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            LabelShareCardPayload.self,
+            cardType: ChatCustomCardWireType.label,
+            from: rawText
+        )
     }
 
     private func parseNewsCardPayloadForPreview(from rawText: String) -> NewsShareCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: NewsShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "news",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(NewsShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            NewsShareCardPayload.self,
+            cardType: ChatCustomCardWireType.news,
+            from: rawText
+        )
     }
 
     private func parseRankingBoardCardPayloadForPreview(from rawText: String) -> RankingBoardShareCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: RankingBoardShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "ranking",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(RankingBoardShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            RankingBoardShareCardPayload.self,
+            cardType: ChatCustomCardWireType.ranking,
+            from: rawText
+        )
     }
 
     private func parseCircleIDCardPayloadForPreview(from rawText: String) -> CircleIDShareCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: CircleIDShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "circle_id",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(CircleIDShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            CircleIDShareCardPayload.self,
+            cardType: ChatCustomCardWireType.circleID,
+            from: rawText
+        )
     }
 
     private func parseMyCheckinsCardPayloadForPreview(from rawText: String) -> MyCheckinsShareCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: MyCheckinsShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "my_checkins",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(MyCheckinsShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            MyCheckinsShareCardPayload.self,
+            cardType: ChatCustomCardWireType.myCheckins,
+            from: rawText
+        )
     }
 
     private func parseEventRouteCardPayloadForPreview(from rawText: String) -> EventRouteShareCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: EventRouteShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "event_route",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(EventRouteShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            EventRouteShareCardPayload.self,
+            cardType: ChatCustomCardWireType.eventRoute,
+            from: rawText
+        )
     }
 
     private func parseSquadOfflineActivityCardPayloadForPreview(from rawText: String) -> SquadOfflineActivityCardPayload? {
-        guard let data = rawText.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let cardType: String?
-            let payload: SquadOfflineActivityCardPayload?
-        }
-
-        let decoder = JSONDecoder.raverISO8601()
-        if let envelope = try? decoder.decode(Envelope.self, from: data),
-           envelope.cardType == "squad_offline_activity",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? decoder.decode(SquadOfflineActivityCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            SquadOfflineActivityCardPayload.self,
+            cardType: ChatCustomCardWireType.squadOfflineActivity,
+            from: rawText,
+            decoder: JSONDecoder.raverISO8601()
+        )
     }
 }
 
@@ -4176,7 +4049,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
     @Published private(set) var chatHeaderAvatar: ExyteAvatarPresentation
 
     private var conversation: Conversation
-    private let service: SocialService
+    private let messageRepository: ChatMessageRepository
     private let appearanceResolver: VirtualAssetChatAppearanceResolver
     private let chatController: RaverChatController
     private var cancellables = Set<AnyCancellable>()
@@ -4199,7 +4072,8 @@ private final class ExyteChatConversationViewModel: ObservableObject {
         virtualAssetRepository: VirtualAssetRepository
     ) {
         self.conversation = conversation
-        self.service = service
+        let messageRepository = ChatMessageRepositoryAdapter(service: service)
+        self.messageRepository = messageRepository
         self.appearanceResolver = VirtualAssetChatAppearanceResolver(repository: virtualAssetRepository)
         self.chatTitle = conversation.title
         self.chatStatus = ExyteChatConversationViewModel.buildStatus(for: conversation)
@@ -4209,7 +4083,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
         self.chatController = RaverChatController(
             dataProvider: RaverChatDataProvider(
                 conversation: conversation,
-                service: service
+                repository: messageRepository
             )
         )
         self.appearanceResolver.onAppearanceUpdated = { [weak self] in
@@ -4514,11 +4388,11 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             lastRequestedReadMessageID = triggerMessageID
         }
 
-        let service = self.service
+        let messageRepository = self.messageRepository
         let conversationID = conversation.id
         Task {
             do {
-                try await service.markConversationRead(conversationID: conversationID)
+                try await messageRepository.markConversationRead(conversationID: conversationID)
             } catch {
                 #if DEBUG
                 print("[ExyteChatConversationViewModel] markConversationRead failed: \(error.localizedDescription)")
@@ -4824,275 +4698,120 @@ private final class ExyteChatConversationViewModel: ObservableObject {
     }
 
     private func parseEventCardPayload(from rawContent: String) -> EventShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: EventShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "event",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(EventShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            EventShareCardPayload.self,
+            cardType: ChatCustomCardWireType.event,
+            from: rawContent
+        )
     }
 
     private func parsePostCardPayload(from rawContent: String) -> PostShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: PostShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "post",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(PostShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            PostShareCardPayload.self,
+            cardType: ChatCustomCardWireType.post,
+            from: rawContent
+        )
     }
 
     private func parseRatingEventCardPayload(from rawContent: String) -> RatingEventShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: RatingEventShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "rating_event",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return nil
+        ChatCustomCardCodec.decodePayload(
+            RatingEventShareCardPayload.self,
+            cardType: ChatCustomCardWireType.ratingEvent,
+            from: rawContent,
+            allowBarePayload: false
+        )
     }
 
     private func parseRatingUnitCardPayload(from rawContent: String) -> RatingUnitShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: RatingUnitShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "rating_unit",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(RatingUnitShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            RatingUnitShareCardPayload.self,
+            cardType: ChatCustomCardWireType.ratingUnit,
+            from: rawContent
+        )
     }
 
     private func parseMyCheckinsCardPayload(from rawContent: String) -> MyCheckinsShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: MyCheckinsShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "my_checkins",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(MyCheckinsShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            MyCheckinsShareCardPayload.self,
+            cardType: ChatCustomCardWireType.myCheckins,
+            from: rawContent
+        )
     }
 
     private func parseEventRouteCardPayload(from rawContent: String) -> EventRouteShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: EventRouteShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "event_route",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(EventRouteShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            EventRouteShareCardPayload.self,
+            cardType: ChatCustomCardWireType.eventRoute,
+            from: rawContent
+        )
     }
 
     private func parseSquadOfflineActivityCardPayload(from rawContent: String) -> SquadOfflineActivityCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: SquadOfflineActivityCardPayload?
-        }
-
-        let decoder = JSONDecoder.raverISO8601()
-        if let envelope = try? decoder.decode(Envelope.self, from: data),
-           envelope.cardType == "squad_offline_activity",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? decoder.decode(SquadOfflineActivityCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            SquadOfflineActivityCardPayload.self,
+            cardType: ChatCustomCardWireType.squadOfflineActivity,
+            from: rawContent,
+            decoder: JSONDecoder.raverISO8601()
+        )
     }
 
     private func parseDJCardPayload(from rawContent: String) -> DJShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: DJShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "dj",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        if let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           jsonObject["setID"] != nil || jsonObject["setTitle"] != nil {
-            return nil
-        }
-
-        return try? JSONDecoder().decode(DJShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            DJShareCardPayload.self,
+            cardType: ChatCustomCardWireType.dj,
+            from: rawContent,
+            rejectBarePayload: { data in
+                ChatCustomCardCodec.jsonObjectContainsAnyKey(["setID", "setTitle"], in: data)
+            }
+        )
     }
 
     private func parseSetCardPayload(from rawContent: String) -> SetShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: SetShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "set",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(SetShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            SetShareCardPayload.self,
+            cardType: ChatCustomCardWireType.set,
+            from: rawContent
+        )
     }
 
     private func parseBrandCardPayload(from rawContent: String) -> BrandShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: BrandShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "brand",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(BrandShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            BrandShareCardPayload.self,
+            cardType: ChatCustomCardWireType.brand,
+            from: rawContent
+        )
     }
 
     private func parseLabelCardPayload(from rawContent: String) -> LabelShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: LabelShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "label",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(LabelShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            LabelShareCardPayload.self,
+            cardType: ChatCustomCardWireType.label,
+            from: rawContent
+        )
     }
 
     private func parseNewsCardPayload(from rawContent: String) -> NewsShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: NewsShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "news",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(NewsShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            NewsShareCardPayload.self,
+            cardType: ChatCustomCardWireType.news,
+            from: rawContent
+        )
     }
 
     private func parseRankingBoardCardPayload(from rawContent: String) -> RankingBoardShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: RankingBoardShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "ranking",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(RankingBoardShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            RankingBoardShareCardPayload.self,
+            cardType: ChatCustomCardWireType.ranking,
+            from: rawContent
+        )
     }
 
     private func parseCircleIDCardPayload(from rawContent: String) -> CircleIDShareCardPayload? {
-        guard let data = rawContent.data(using: .utf8) else { return nil }
-
-        struct Envelope: Decodable {
-            let businessID: String?
-            let version: Int?
-            let cardType: String?
-            let payload: CircleIDShareCardPayload?
-        }
-
-        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-           envelope.cardType == "circle_id",
-           let payload = envelope.payload {
-            return payload
-        }
-
-        return try? JSONDecoder().decode(CircleIDShareCardPayload.self, from: data)
+        ChatCustomCardCodec.decodePayload(
+            CircleIDShareCardPayload.self,
+            cardType: ChatCustomCardWireType.circleID,
+            from: rawContent
+        )
     }
 
     private func eventCardDateText(_ iso: String?) -> String {
@@ -5149,7 +4868,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
         }
 
         do {
-            try await service.sendTypingStatus(conversationID: conversation.id, isTyping: isTyping)
+            try await messageRepository.sendTypingStatus(conversationID: conversation.id, isTyping: isTyping)
             isSendingTyping = isTyping
             if isTyping {
                 lastSentTypingAt = Date()

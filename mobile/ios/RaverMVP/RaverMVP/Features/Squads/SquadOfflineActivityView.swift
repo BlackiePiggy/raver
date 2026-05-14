@@ -25,7 +25,8 @@ private enum SquadOfflineMapFocusMode: CaseIterable {
 
 struct SquadOfflineActivityView: View {
     let squadID: String
-    let service: SocialService
+    let activityRepository: SquadActivityRepository
+    let locationRepository: LocationSyncRepository
 
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var router: AppRouter
@@ -153,7 +154,7 @@ struct SquadOfflineActivityView: View {
             SquadOfflineActivityInviteSheet(
                 squadID: squadID,
                 existingMemberIDs: Set(activity?.participants.map(\.id) ?? []),
-                service: service,
+                repository: activityRepository,
                 currentUserID: appState.session?.user.id ?? ""
             )
         }
@@ -805,10 +806,10 @@ struct SquadOfflineActivityView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            if let current = try await service.fetchCurrentSquadOfflineActivity(squadID: squadID) {
+            if let current = try await activityRepository.fetchCurrentSquadOfflineActivity(squadID: squadID) {
                 activity = current
             } else {
-                activity = try await service.fetchSquadOfflineActivityHistory(squadID: squadID).first
+                activity = try await activityRepository.fetchSquadOfflineActivityHistory(squadID: squadID).first
             }
             errorMessage = nil
         } catch {
@@ -821,8 +822,8 @@ struct SquadOfflineActivityView: View {
         isJoining = true
         defer { isJoining = false }
         do {
-            self.activity = try await service.joinSquadOfflineActivity(squadID: squadID, activityID: activity.id)
-            _ = await locationUploader.uploadNow(service: service, squadID: squadID, activityID: activity.id)
+            self.activity = try await activityRepository.joinSquadOfflineActivity(squadID: squadID, activityID: activity.id)
+            _ = await locationUploader.uploadNow(repository: locationRepository, squadID: squadID, activityID: activity.id)
             errorMessage = nil
         } catch {
             errorMessage = error.userFacingMessage ?? L("加入失败", "Failed to join")
@@ -831,7 +832,7 @@ struct SquadOfflineActivityView: View {
 
     private func manuallyUploadLocation(_ activity: SquadOfflineActivity) async {
         guard activity.isJoined else { return }
-        let didUpload = await locationUploader.uploadNow(service: service, squadID: squadID, activityID: activity.id)
+        let didUpload = await locationUploader.uploadNow(repository: locationRepository, squadID: squadID, activityID: activity.id)
         if didUpload {
             shouldPreserveCameraOnNextActivityRefresh = true
             await loadActivity()
@@ -851,7 +852,7 @@ struct SquadOfflineActivityView: View {
             return
         }
 
-        let didUpload = await locationUploader.uploadNow(service: service, squadID: squadID, activityID: activity.id)
+        let didUpload = await locationUploader.uploadNow(repository: locationRepository, squadID: squadID, activityID: activity.id)
         if didUpload {
             await loadActivity()
             _ = centerOnJoinedUserLocation(in: self.activity)
@@ -892,7 +893,7 @@ struct SquadOfflineActivityView: View {
 
     private func leaveActivity(_ activity: SquadOfflineActivity) async {
         do {
-            self.activity = try await service.leaveSquadOfflineActivity(squadID: squadID, activityID: activity.id)
+            self.activity = try await activityRepository.leaveSquadOfflineActivity(squadID: squadID, activityID: activity.id)
             locationUploader.stop()
             errorMessage = nil
         } catch {
@@ -905,7 +906,7 @@ struct SquadOfflineActivityView: View {
         isEnding = true
         defer { isEnding = false }
         do {
-            let endedActivity = try await service.endSquadOfflineActivity(squadID: squadID, activityID: activity.id)
+            let endedActivity = try await activityRepository.endSquadOfflineActivity(squadID: squadID, activityID: activity.id)
             locationUploader.stop()
             self.activity = endedActivity
             errorMessage = nil
@@ -922,7 +923,7 @@ struct SquadOfflineActivityView: View {
             participantToRemove = nil
         }
         do {
-            self.activity = try await service.removeSquadOfflineActivityParticipant(
+            self.activity = try await activityRepository.removeSquadOfflineActivityParticipant(
                 squadID: squadID,
                 activityID: activity.id,
                 participantUserID: participant.id
@@ -939,7 +940,7 @@ struct SquadOfflineActivityView: View {
         defer { isUpdatingPresenceStatus = false }
         do {
             shouldPreserveCameraOnNextActivityRefresh = true
-            self.activity = try await service.updateSquadOfflineActivityStatus(
+            self.activity = try await activityRepository.updateSquadOfflineActivityStatus(
                 squadID: squadID,
                 activityID: activity.id,
                 input: SquadOfflineActivityStatusInput(
@@ -963,7 +964,7 @@ struct SquadOfflineActivityView: View {
         guard configuredLocationUploadKey != uploadKey else { return }
         configuredLocationUploadKey = uploadKey
         locationUploader.start(
-            service: service,
+            repository: locationRepository,
             squadID: squadID,
             activityID: activity.id,
             intervalSeconds: activity.uploadIntervalSeconds
@@ -1201,7 +1202,7 @@ private struct SquadOfflineActivityInviteSheet: View {
 
     let squadID: String
     let existingMemberIDs: Set<String>
-    let service: SocialService
+    let repository: SquadActivityRepository
     let currentUserID: String
 
     @State private var friends: [UserSummary] = []
@@ -1303,7 +1304,7 @@ private struct SquadOfflineActivityInviteSheet: View {
         defer { isLoading = false }
 
         do {
-            friends = try await service.fetchFriends(userID: currentUserID, cursor: nil).users
+            friends = try await repository.fetchFriends(userID: currentUserID, cursor: nil).users
         } catch {
             errorMessage = error.userFacingMessage ?? L("加载好友失败", "Failed to load friends")
         }
@@ -1318,7 +1319,7 @@ private struct SquadOfflineActivityInviteSheet: View {
 
         do {
             for userID in selectedUserIDs {
-                try await service.inviteUserToSquad(squadID: squadID, inviteeUserID: userID)
+                try await repository.inviteUserToSquad(squadID: squadID, inviteeUserID: userID)
             }
             dismiss()
         } catch {

@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, AuthRequest } from '../middleware/auth';
+import { adminAuditService } from '../modules/admin/admin-audit.service';
+import { requireAdminOrOperator } from '../modules/admin/admin-auth.policy';
 import { virtualAssetService, VirtualAssetError } from '../services/virtual-asset.service';
 
 const router: Router = Router();
@@ -80,9 +82,15 @@ router.get('/users/:id/appearance', async (req, res): Promise<void> => {
 router.post(
   '/admin/virtual-assets/grants',
   authenticate,
-  authorize('admin', 'operator'),
+  requireAdminOrOperator,
   async (req: AuthRequest, res): Promise<void> => {
     try {
+      const actorUserId = req.user?.userId;
+      if (!actorUserId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
       const body = req.body as {
         userId?: string;
         assetId?: string;
@@ -98,6 +106,19 @@ router.post(
         acquisitionSource: body.acquisitionSource,
         expiresAt: body.expiresAt,
         metadata: body.metadata,
+      });
+      await adminAuditService.createAction({
+        actorId: actorUserId,
+        action: 'virtual_asset.grant',
+        targetType: 'user_virtual_asset',
+        targetId: result.id,
+        detail: {
+          userId: result.userId,
+          assetId: result.assetId,
+          assetCode: result.asset.code,
+          acquisitionSource: result.acquisitionSource,
+          expiresAt: result.expiresAt,
+        },
       });
       res.status(201).json(result);
     } catch (error) {

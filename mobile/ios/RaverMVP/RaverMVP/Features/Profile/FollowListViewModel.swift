@@ -13,11 +13,11 @@ final class FollowListViewModel: ObservableObject {
     let userID: String
     let kind: FollowListKind
 
-    private let repository: ProfileSocialRepository
+    private let repository: ProfileUserRepository
     private var nextCursor: String?
     private var hasMore = true
 
-    init(userID: String, kind: FollowListKind, repository: ProfileSocialRepository) {
+    init(userID: String, kind: FollowListKind, repository: ProfileUserRepository) {
         self.userID = userID
         self.kind = kind
         self.repository = repository

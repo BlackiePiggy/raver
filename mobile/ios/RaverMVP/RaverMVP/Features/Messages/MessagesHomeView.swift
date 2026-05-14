@@ -1437,9 +1437,9 @@ final class FollowedEventsInboxViewModel: ObservableObject {
     @Published var bannerMessage: String?
     @Published var error: String?
 
-    private let repository: MessagesRepository
+    private let repository: MessageNotificationRepository
 
-    init(repository: MessagesRepository) {
+    init(repository: MessageNotificationRepository) {
         self.repository = repository
     }
 
@@ -1493,7 +1493,7 @@ struct FollowedEventsInboxView: View {
     @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: FollowedEventsInboxViewModel
 
-    init(repository: MessagesRepository) {
+    init(repository: MessageNotificationRepository) {
         _viewModel = StateObject(wrappedValue: FollowedEventsInboxViewModel(repository: repository))
     }
 
@@ -1658,9 +1658,9 @@ final class FollowedDJsInboxViewModel: ObservableObject {
     @Published var bannerMessage: String?
     @Published var error: String?
 
-    private let repository: MessagesRepository
+    private let repository: MessageNotificationRepository
 
-    init(repository: MessagesRepository) {
+    init(repository: MessageNotificationRepository) {
         self.repository = repository
     }
 
@@ -1714,7 +1714,7 @@ struct FollowedDJsInboxView: View {
     @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: FollowedDJsInboxViewModel
 
-    init(repository: MessagesRepository) {
+    init(repository: MessageNotificationRepository) {
         _viewModel = StateObject(wrappedValue: FollowedDJsInboxViewModel(repository: repository))
     }
 
@@ -1873,9 +1873,9 @@ final class FollowedBrandsInboxViewModel: ObservableObject {
     @Published var bannerMessage: String?
     @Published var error: String?
 
-    private let repository: MessagesRepository
+    private let repository: MessageNotificationRepository
 
-    init(repository: MessagesRepository) {
+    init(repository: MessageNotificationRepository) {
         self.repository = repository
     }
 
@@ -1929,7 +1929,7 @@ struct FollowedBrandsInboxView: View {
     @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: FollowedBrandsInboxViewModel
 
-    init(repository: MessagesRepository) {
+    init(repository: MessageNotificationRepository) {
         _viewModel = StateObject(wrappedValue: FollowedBrandsInboxViewModel(repository: repository))
     }
 

@@ -9,26 +9,31 @@ struct DiscoverEventsPageRequest: Equatable {
     let status: String?
 }
 
-protocol DiscoverEventsRepository {
+protocol EventListRepository {
     func fetchEvents(request: DiscoverEventsPageRequest) async throws -> EventListPage
+}
+
+protocol EventRecommendationRepository {
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent]
+}
+
+protocol EventReadRepository {
     func fetchEvent(id: String) async throws -> WebEvent
+}
+
+protocol RatingRepository {
+    func fetchRatingEvents() async throws -> [WebRatingEvent]
+    func fetchRatingEvent(id: String) async throws -> WebRatingEvent
+    func fetchRatingUnit(id: String) async throws -> WebRatingUnit
     func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent
     func createRatingEventFromEvent(eventID: String) async throws -> WebRatingEvent
     func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit
-    func fetchEventLiveComments(eventID: String, cursor: String?, sort: EventLiveCommentSortMode) async throws -> EventLiveCommentPage
-    func addEventLiveComment(eventID: String, content: String, imageURLs: [String], parentCommentID: String?) async throws -> EventLiveComment
-    func toggleEventLiveCommentLike(commentID: String, shouldLike: Bool) async throws -> EventLiveComment
-    func createEvent(input: CreateEventInput) async throws -> WebEvent
-    func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent
-    func uploadEventImage(
-        imageData: Data,
-        fileName: String,
-        mimeType: String,
-        eventID: String?,
-        usage: String?
-    ) async throws -> UploadMediaResponse
-    func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
+    func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent
+    func updateRatingUnit(id: String, input: UpdateRatingUnitInput) async throws -> WebRatingUnit
+    func deleteRatingEvent(id: String) async throws
+    func deleteRatingUnit(id: String) async throws
+    func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent]
+    func addRatingComment(unitID: String, input: CreateRatingCommentInput) async throws -> WebRatingComment
     func uploadRatingImage(
         imageData: Data,
         fileName: String,
@@ -37,6 +42,29 @@ protocol DiscoverEventsRepository {
         ratingUnitID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse
+}
+
+protocol EventLiveDiscussionRepository {
+    func fetchEventLiveComments(eventID: String, cursor: String?, sort: EventLiveCommentSortMode) async throws -> EventLiveCommentPage
+    func addEventLiveComment(eventID: String, content: String, imageURLs: [String], parentCommentID: String?) async throws -> EventLiveComment
+    func toggleEventLiveCommentLike(commentID: String, shouldLike: Bool) async throws -> EventLiveComment
+}
+
+protocol EventCommandRepository {
+    func createEvent(input: CreateEventInput) async throws -> WebEvent
+    func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent
+    func deleteEvent(id: String) async throws
+}
+
+protocol EventMediaRepository {
+    func uploadEventImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        eventID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse
+    func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
     func importEventLineupFromImage(
         imageData: Data,
         fileName: String,
@@ -44,23 +72,33 @@ protocol DiscoverEventsRepository {
         startDate: Date?,
         endDate: Date?
     ) async throws -> EventLineupImageImportResponse
+}
+
+protocol EventDiscussionMediaRepository {
+    func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
+}
+
+protocol EventCheckinRepository {
     func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage
     func fetchMyCheckins(page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage
     func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin
     func updateCheckin(id: String, input: UpdateCheckinInput) async throws -> WebCheckin
     func deleteCheckin(id: String) async throws
-    func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent]
-    func fetchEventDJSets(eventName: String) async throws -> [WebDJSet]
-    func deleteEvent(id: String) async throws
+    func fetchFavoriteEvents(page: Int, limit: Int) async throws -> EventListPage
+    func fetchEventFavoriteStatus(eventID: String) async throws -> EventFavoriteStatus
+    func favoriteEvent(eventID: String) async throws -> EventFavoriteStatus
+    func unfavoriteEvent(eventID: String) async throws
 }
 
-struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
-    private let service: WebFeatureService
-    private let socialService: SocialService
+protocol EventRelatedContentRepository {
+    func fetchEventDJSets(eventName: String) async throws -> [WebDJSet]
+}
 
-    init(service: WebFeatureService, socialService: SocialService) {
+struct EventListRepositoryAdapter: EventListRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
         self.service = service
-        self.socialService = socialService
     }
 
     func fetchEvents(request: DiscoverEventsPageRequest) async throws -> EventListPage {
@@ -72,25 +110,37 @@ struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
             status: request.status
         )
     }
+}
+
+struct EventRecommendationRepositoryAdapter: EventRecommendationRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
+    }
 
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent] {
         try await service.fetchRecommendedEvents(limit: limit, statuses: statuses)
+    }
+}
+
+struct EventReadRepositoryAdapter: EventReadRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
     }
 
     func fetchEvent(id: String) async throws -> WebEvent {
         try await service.fetchEvent(id: id)
     }
+}
 
-    func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent {
-        try await service.createRatingEvent(input: input)
-    }
+struct EventLiveDiscussionRepositoryAdapter: EventLiveDiscussionRepository {
+    private let service: SocialService
 
-    func createRatingEventFromEvent(eventID: String) async throws -> WebRatingEvent {
-        try await service.createRatingEventFromEvent(eventID: eventID)
-    }
-
-    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit {
-        try await service.createRatingUnit(eventID: eventID, input: input)
+    init(service: SocialService) {
+        self.service = service
     }
 
     func fetchEventLiveComments(
@@ -98,7 +148,7 @@ struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
         cursor: String?,
         sort: EventLiveCommentSortMode
     ) async throws -> EventLiveCommentPage {
-        try await socialService.fetchEventLiveComments(eventID: eventID, cursor: cursor, sort: sort)
+        try await service.fetchEventLiveComments(eventID: eventID, cursor: cursor, sort: sort)
     }
 
     func addEventLiveComment(
@@ -107,7 +157,7 @@ struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
         imageURLs: [String],
         parentCommentID: String?
     ) async throws -> EventLiveComment {
-        try await socialService.addEventLiveComment(
+        try await service.addEventLiveComment(
             eventID: eventID,
             content: content,
             imageURLs: imageURLs,
@@ -116,7 +166,15 @@ struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
     }
 
     func toggleEventLiveCommentLike(commentID: String, shouldLike: Bool) async throws -> EventLiveComment {
-        try await socialService.toggleEventLiveCommentLike(commentID: commentID, shouldLike: shouldLike)
+        try await service.toggleEventLiveCommentLike(commentID: commentID, shouldLike: shouldLike)
+    }
+}
+
+struct EventCommandRepositoryAdapter: EventCommandRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
     }
 
     func createEvent(input: CreateEventInput) async throws -> WebEvent {
@@ -125,6 +183,18 @@ struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
 
     func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent {
         try await service.updateEvent(id: id, input: input)
+    }
+
+    func deleteEvent(id: String) async throws {
+        try await service.deleteEvent(id: id)
+    }
+}
+
+struct EventMediaRepositoryAdapter: EventMediaRepository, EventDiscussionMediaRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
     }
 
     func uploadEventImage(
@@ -151,24 +221,6 @@ struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
         )
     }
 
-    func uploadRatingImage(
-        imageData: Data,
-        fileName: String,
-        mimeType: String,
-        ratingEventID: String?,
-        ratingUnitID: String?,
-        usage: String?
-    ) async throws -> UploadMediaResponse {
-        try await service.uploadRatingImage(
-            imageData: imageData,
-            fileName: fileName,
-            mimeType: mimeType,
-            ratingEventID: ratingEventID,
-            ratingUnitID: ratingUnitID,
-            usage: usage
-        )
-    }
-
     func importEventLineupFromImage(
         imageData: Data,
         fileName: String,
@@ -183,6 +235,14 @@ struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
             startDate: startDate,
             endDate: endDate
         )
+    }
+}
+
+struct EventCheckinRepositoryAdapter: EventCheckinRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
     }
 
     func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage {
@@ -205,23 +265,113 @@ struct DiscoverEventsRepositoryAdapter: DiscoverEventsRepository {
         try await service.deleteCheckin(id: id)
     }
 
-    func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent] {
-        try await service.fetchEventRatingEvents(eventID: eventID)
+    func fetchFavoriteEvents(page: Int, limit: Int) async throws -> EventListPage {
+        try await service.fetchFavoriteEvents(page: page, limit: limit)
+    }
+
+    func fetchEventFavoriteStatus(eventID: String) async throws -> EventFavoriteStatus {
+        try await service.fetchEventFavoriteStatus(eventID: eventID)
+    }
+
+    func favoriteEvent(eventID: String) async throws -> EventFavoriteStatus {
+        try await service.favoriteEvent(eventID: eventID)
+    }
+
+    func unfavoriteEvent(eventID: String) async throws {
+        try await service.unfavoriteEvent(eventID: eventID)
+    }
+}
+
+struct EventRelatedContentRepositoryAdapter: EventRelatedContentRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
     }
 
     func fetchEventDJSets(eventName: String) async throws -> [WebDJSet] {
         try await service.fetchEventDJSets(eventName: eventName)
     }
+}
 
-    func deleteEvent(id: String) async throws {
-        try await service.deleteEvent(id: id)
+struct RatingRepositoryAdapter: RatingRepository {
+    private let service: WebFeatureService
+
+    init(service: WebFeatureService) {
+        self.service = service
+    }
+
+    func fetchRatingEvents() async throws -> [WebRatingEvent] {
+        try await service.fetchRatingEvents()
+    }
+
+    func fetchRatingEvent(id: String) async throws -> WebRatingEvent {
+        try await service.fetchRatingEvent(id: id)
+    }
+
+    func fetchRatingUnit(id: String) async throws -> WebRatingUnit {
+        try await service.fetchRatingUnit(id: id)
+    }
+
+    func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent {
+        try await service.createRatingEvent(input: input)
+    }
+
+    func createRatingEventFromEvent(eventID: String) async throws -> WebRatingEvent {
+        try await service.createRatingEventFromEvent(eventID: eventID)
+    }
+
+    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit {
+        try await service.createRatingUnit(eventID: eventID, input: input)
+    }
+
+    func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent {
+        try await service.updateRatingEvent(id: id, input: input)
+    }
+
+    func updateRatingUnit(id: String, input: UpdateRatingUnitInput) async throws -> WebRatingUnit {
+        try await service.updateRatingUnit(id: id, input: input)
+    }
+
+    func deleteRatingEvent(id: String) async throws {
+        try await service.deleteRatingEvent(id: id)
+    }
+
+    func deleteRatingUnit(id: String) async throws {
+        try await service.deleteRatingUnit(id: id)
+    }
+
+    func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent] {
+        try await service.fetchEventRatingEvents(eventID: eventID)
+    }
+
+    func addRatingComment(unitID: String, input: CreateRatingCommentInput) async throws -> WebRatingComment {
+        try await service.addRatingComment(unitID: unitID, input: input)
+    }
+
+    func uploadRatingImage(
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        ratingEventID: String?,
+        ratingUnitID: String?,
+        usage: String?
+    ) async throws -> UploadMediaResponse {
+        try await service.uploadRatingImage(
+            imageData: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
+            ratingEventID: ratingEventID,
+            ratingUnitID: ratingUnitID,
+            usage: usage
+        )
     }
 }
 
 struct FetchDiscoverEventsPageUseCase {
-    private let repository: DiscoverEventsRepository
+    private let repository: EventListRepository
 
-    init(repository: DiscoverEventsRepository) {
+    init(repository: EventListRepository) {
         self.repository = repository
     }
 
@@ -231,9 +381,9 @@ struct FetchDiscoverEventsPageUseCase {
 }
 
 struct FetchRecommendedDiscoverEventsUseCase {
-    private let repository: DiscoverEventsRepository
+    private let repository: EventRecommendationRepository
 
-    init(repository: DiscoverEventsRepository) {
+    init(repository: EventRecommendationRepository) {
         self.repository = repository
     }
 
@@ -243,42 +393,38 @@ struct FetchRecommendedDiscoverEventsUseCase {
 }
 
 struct FetchMarkedEventCheckinsUseCase {
-    private let repository: DiscoverEventsRepository
+    private let repository: EventCheckinRepository
 
-    init(repository: DiscoverEventsRepository) {
+    init(repository: EventCheckinRepository) {
         self.repository = repository
     }
 
     func execute(limit: Int = 200) async throws -> [String: String] {
-        let page = try await repository.fetchMyCheckins(page: 1, limit: limit, type: "event")
-        let checkins = page.items.filter { $0.type.lowercased() == "event" && $0.eventId != nil && $0.isMarkedCheckin }
+        let page = try await repository.fetchFavoriteEvents(page: 1, limit: limit)
         var markedMap: [String: String] = [:]
-        for item in checkins {
-            guard let eventID = item.eventId else { continue }
-            markedMap[eventID] = item.id
+        for item in page.items where item.isFavorited == true {
+            markedMap[item.id] = item.favoriteId ?? item.id
         }
         return markedMap
     }
 }
 
 struct ToggleMarkedEventUseCase {
-    private let repository: DiscoverEventsRepository
+    private let repository: EventCheckinRepository
 
-    init(repository: DiscoverEventsRepository) {
+    init(repository: EventCheckinRepository) {
         self.repository = repository
     }
 
     func execute(event: WebEvent, markedCheckinIDsByEventID: [String: String]) async throws -> [String: String] {
         var next = markedCheckinIDsByEventID
 
-        if let checkinID = next[event.id] {
-            try await repository.deleteCheckin(id: checkinID)
+        if next[event.id] != nil {
+            try await repository.unfavoriteEvent(eventID: event.id)
             next[event.id] = nil
         } else {
-            let created = try await repository.createCheckin(
-                input: CreateCheckinInput(type: "event", eventId: event.id, djId: nil, note: "marked", rating: nil)
-            )
-            next[event.id] = created.id
+            let favorite = try await repository.favoriteEvent(eventID: event.id)
+            next[event.id] = favorite.id ?? event.id
         }
         return next
     }
@@ -308,7 +454,7 @@ final class EventsModuleViewModel: ObservableObject {
     @Published private(set) var isLoadingMoreAll = false
     @Published var errorMessage: String?
 
-    private let repository: DiscoverEventsRepository
+    private let eventReadRepository: EventReadRepository
     private let fetchEventsPageUseCase: FetchDiscoverEventsPageUseCase
     private let fetchMarkedEventCheckinsUseCase: FetchMarkedEventCheckinsUseCase
     private let toggleMarkedEventUseCase: ToggleMarkedEventUseCase
@@ -323,11 +469,15 @@ final class EventsModuleViewModel: ObservableObject {
     private var markedReloadToken = UUID()
     private var hasLoadedMarkedState = false
 
-    init(repository: DiscoverEventsRepository) {
-        self.repository = repository
-        self.fetchEventsPageUseCase = FetchDiscoverEventsPageUseCase(repository: repository)
-        self.fetchMarkedEventCheckinsUseCase = FetchMarkedEventCheckinsUseCase(repository: repository)
-        self.toggleMarkedEventUseCase = ToggleMarkedEventUseCase(repository: repository)
+    init(
+        listRepository: EventListRepository,
+        eventReadRepository: EventReadRepository,
+        checkinRepository: EventCheckinRepository
+    ) {
+        self.eventReadRepository = eventReadRepository
+        self.fetchEventsPageUseCase = FetchDiscoverEventsPageUseCase(repository: listRepository)
+        self.fetchMarkedEventCheckinsUseCase = FetchMarkedEventCheckinsUseCase(repository: checkinRepository)
+        self.toggleMarkedEventUseCase = ToggleMarkedEventUseCase(repository: checkinRepository)
     }
 
     var canLoadMoreAll: Bool {
@@ -490,7 +640,7 @@ final class EventsModuleViewModel: ObservableObject {
     private func fetchEventsByIDs(_ ids: [String]) async -> [WebEvent] {
         guard !ids.isEmpty else { return [] }
 
-        let repository = repository
+        let repository = eventReadRepository
         return await withTaskGroup(of: WebEvent?.self, returning: [WebEvent].self) { group in
             for id in ids.sorted() {
                 group.addTask {

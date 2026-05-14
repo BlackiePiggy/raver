@@ -26,115 +26,160 @@ enum PostHideReasonOption: String, CaseIterable, Identifiable {
     }
 }
 
-protocol CircleFeedRepository {
+protocol FeedStreamRepository {
     func fetchFeed(cursor: String?, mode: FeedMode?, eventID: String?) async throws -> FeedPage
+}
+
+protocol PostReadRepository {
     func fetchPost(postID: String) async throws -> Post
+}
+
+protocol PostCommandRepository {
     func createPost(input: CreatePostInput) async throws -> Post
     func updatePost(postID: String, input: UpdatePostInput) async throws -> Post
     func deletePost(postID: String) async throws
+}
+
+protocol PostInteractionRepository {
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post
     func toggleSave(postID: String, shouldSave: Bool) async throws -> Post
     func recordShare(postID: String, channel: String, status: String) async throws -> Post
     func hidePost(postID: String, reason: String?) async throws
-    func recordFeedEvent(input: FeedEventInput) async throws
     func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary
+}
+
+protocol FeedEventTrackingRepository {
+    func recordFeedEvent(input: FeedEventInput) async throws
+}
+
+protocol PostCommentRepository {
     func fetchComments(postID: String) async throws -> [Comment]
     func addComment(postID: String, content: String, parentCommentID: String?) async throws -> Comment
-    func fetchConversations(type: ConversationType) async throws -> [Conversation]
-    func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage
-    func sendMessage(conversationID: String, content: String) async throws -> ChatMessage
+}
+
+protocol PostMediaRepository {
     func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
     func uploadPostVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
 }
 
-struct CircleFeedRepositoryAdapter: CircleFeedRepository {
-    private let socialService: SocialService
-    private let webService: WebFeatureService
-
-    init(socialService: SocialService, webService: WebFeatureService) {
-        self.socialService = socialService
-        self.webService = webService
-    }
+struct FeedStreamRepositoryAdapter: FeedStreamRepository {
+    private let service: SocialService
 
     init(service: SocialService) {
-        self.init(socialService: service, webService: AppEnvironment.makeWebService())
+        self.service = service
     }
 
-    func fetchFeed(cursor: String?, mode: FeedMode?, eventID: String? = nil) async throws -> FeedPage {
-        try await socialService.fetchFeed(cursor: cursor, mode: mode, eventID: eventID)
+    func fetchFeed(cursor: String?, mode: FeedMode?, eventID: String?) async throws -> FeedPage {
+        try await service.fetchFeed(cursor: cursor, mode: mode, eventID: eventID)
+    }
+}
+
+struct PostReadRepositoryAdapter: PostReadRepository {
+    private let service: SocialService
+
+    init(service: SocialService) {
+        self.service = service
     }
 
     func fetchPost(postID: String) async throws -> Post {
-        try await socialService.fetchPost(postID: postID)
+        try await service.fetchPost(postID: postID)
+    }
+}
+
+struct PostCommandRepositoryAdapter: PostCommandRepository {
+    private let service: SocialService
+
+    init(service: SocialService) {
+        self.service = service
     }
 
     func createPost(input: CreatePostInput) async throws -> Post {
-        try await socialService.createPost(input: input)
+        try await service.createPost(input: input)
     }
 
     func updatePost(postID: String, input: UpdatePostInput) async throws -> Post {
-        try await socialService.updatePost(postID: postID, input: input)
+        try await service.updatePost(postID: postID, input: input)
     }
 
     func deletePost(postID: String) async throws {
-        try await socialService.deletePost(postID: postID)
+        try await service.deletePost(postID: postID)
+    }
+}
+
+struct PostInteractionRepositoryAdapter: PostInteractionRepository {
+    private let service: SocialService
+
+    init(service: SocialService) {
+        self.service = service
     }
 
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post {
-        try await socialService.toggleLike(postID: postID, shouldLike: shouldLike)
+        try await service.toggleLike(postID: postID, shouldLike: shouldLike)
     }
 
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post {
-        try await socialService.toggleRepost(postID: postID, shouldRepost: shouldRepost)
+        try await service.toggleRepost(postID: postID, shouldRepost: shouldRepost)
     }
 
     func toggleSave(postID: String, shouldSave: Bool) async throws -> Post {
-        try await socialService.toggleSave(postID: postID, shouldSave: shouldSave)
+        try await service.toggleSave(postID: postID, shouldSave: shouldSave)
     }
 
     func recordShare(postID: String, channel: String, status: String) async throws -> Post {
-        try await socialService.recordShare(postID: postID, channel: channel, status: status)
+        try await service.recordShare(postID: postID, channel: channel, status: status)
     }
 
     func hidePost(postID: String, reason: String?) async throws {
-        try await socialService.hidePost(postID: postID, reason: reason)
-    }
-
-    func recordFeedEvent(input: FeedEventInput) async throws {
-        try await socialService.recordFeedEvent(input: input)
+        try await service.hidePost(postID: postID, reason: reason)
     }
 
     func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary {
-        try await socialService.toggleFollow(userID: userID, shouldFollow: shouldFollow)
+        try await service.toggleFollow(userID: userID, shouldFollow: shouldFollow)
+    }
+}
+
+struct FeedEventTrackingRepositoryAdapter: FeedEventTrackingRepository {
+    private let service: SocialService
+
+    init(service: SocialService) {
+        self.service = service
+    }
+
+    func recordFeedEvent(input: FeedEventInput) async throws {
+        try await service.recordFeedEvent(input: input)
+    }
+}
+
+struct PostCommentRepositoryAdapter: PostCommentRepository {
+    private let service: SocialService
+
+    init(service: SocialService) {
+        self.service = service
     }
 
     func fetchComments(postID: String) async throws -> [Comment] {
-        try await socialService.fetchComments(postID: postID)
+        try await service.fetchComments(postID: postID)
     }
 
     func addComment(postID: String, content: String, parentCommentID: String?) async throws -> Comment {
-        try await socialService.addComment(postID: postID, content: content, parentCommentID: parentCommentID)
+        try await service.addComment(postID: postID, content: content, parentCommentID: parentCommentID)
     }
+}
 
-    func fetchConversations(type: ConversationType) async throws -> [Conversation] {
-        try await socialService.fetchConversations(type: type)
-    }
+struct PostMediaRepositoryAdapter: PostMediaRepository {
+    private let service: WebFeatureService
 
-    func sendPostCardMessage(conversationID: String, payload: PostShareCardPayload) async throws -> ChatMessage {
-        try await socialService.sendPostCardMessage(conversationID: conversationID, payload: payload)
-    }
-
-    func sendMessage(conversationID: String, content: String) async throws -> ChatMessage {
-        try await socialService.sendMessage(conversationID: conversationID, content: content)
+    init(service: WebFeatureService) {
+        self.service = service
     }
 
     func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
-        try await webService.uploadPostImage(imageData: imageData, fileName: fileName, mimeType: mimeType)
+        try await service.uploadPostImage(imageData: imageData, fileName: fileName, mimeType: mimeType)
     }
 
     func uploadPostVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
-        try await webService.uploadPostVideo(videoData: videoData, fileName: fileName, mimeType: mimeType)
+        try await service.uploadPostVideo(videoData: videoData, fileName: fileName, mimeType: mimeType)
     }
 }
 
@@ -149,7 +194,9 @@ final class FeedViewModel: ObservableObject {
     @Published var bannerMessage: String?
     @Published var error: String?
 
-    private let repository: CircleFeedRepository
+    private let streamRepository: FeedStreamRepository
+    private let interactionRepository: PostInteractionRepository
+    private let eventTrackingRepository: FeedEventTrackingRepository
     private let eventID: String?
     private var nextCursor: String?
     private var hasMore = true
@@ -158,8 +205,15 @@ final class FeedViewModel: ObservableObject {
     private var reportedImpressionPostIDs: Set<String> = []
     private let feedSessionID = UUID().uuidString
 
-    init(repository: CircleFeedRepository, eventID: String? = nil) {
-        self.repository = repository
+    init(
+        streamRepository: FeedStreamRepository,
+        interactionRepository: PostInteractionRepository,
+        eventTrackingRepository: FeedEventTrackingRepository,
+        eventID: String? = nil
+    ) {
+        self.streamRepository = streamRepository
+        self.interactionRepository = interactionRepository
+        self.eventTrackingRepository = eventTrackingRepository
         self.eventID = eventID
         if let ids = UserDefaults.standard.array(forKey: localHiddenStorageKey) as? [String] {
             self.localHiddenPostIDs = Set(ids)
@@ -181,7 +235,7 @@ final class FeedViewModel: ObservableObject {
         defer { isRefreshing = false }
 
         do {
-            let page = try await repository.fetchFeed(cursor: nil, mode: selectedMode, eventID: eventID)
+            let page = try await streamRepository.fetchFeed(cursor: nil, mode: selectedMode, eventID: eventID)
             posts = page.posts.filter { !$0.isRaverNews && !localHiddenPostIDs.contains($0.id) }
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil
@@ -189,6 +243,9 @@ final class FeedViewModel: ObservableObject {
             bannerMessage = nil
             self.error = nil
         } catch {
+            if error.isUserInitiatedCancellation {
+                return
+            }
             let message = error.userFacingMessage ?? L("动态加载失败，请稍后重试", "Failed to load posts. Please try again later.")
             if hadContent {
                 bannerMessage = message
@@ -212,7 +269,7 @@ final class FeedViewModel: ObservableObject {
         defer { isLoadingMore = false }
 
         do {
-            let page = try await repository.fetchFeed(cursor: cursor, mode: selectedMode, eventID: eventID)
+            let page = try await streamRepository.fetchFeed(cursor: cursor, mode: selectedMode, eventID: eventID)
             let existingIds = Set(posts.map(\.id))
             posts.append(contentsOf: page.posts.filter {
                 !existingIds.contains($0.id) &&
@@ -225,13 +282,16 @@ final class FeedViewModel: ObservableObject {
             bannerMessage = nil
             self.error = nil
         } catch {
+            if error.isUserInitiatedCancellation {
+                return
+            }
             bannerMessage = error.userFacingMessage
         }
     }
 
     func toggleLike(post: Post, position: Int? = nil) async {
         do {
-            let updated = try await repository.toggleLike(postID: post.id, shouldLike: !post.isLiked)
+            let updated = try await interactionRepository.toggleLike(postID: post.id, shouldLike: !post.isLiked)
             replace(updated)
             await safeRecordFeedEvent(
                 eventType: "feed_like",
@@ -245,7 +305,7 @@ final class FeedViewModel: ObservableObject {
 
     func toggleRepost(post: Post) async {
         do {
-            let updated = try await repository.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
+            let updated = try await interactionRepository.toggleRepost(postID: post.id, shouldRepost: !post.isReposted)
             replace(updated)
         } catch {
             self.error = error.userFacingMessage
@@ -254,7 +314,7 @@ final class FeedViewModel: ObservableObject {
 
     func toggleSave(post: Post, position: Int? = nil) async {
         do {
-            let updated = try await repository.toggleSave(postID: post.id, shouldSave: !post.isSaved)
+            let updated = try await interactionRepository.toggleSave(postID: post.id, shouldSave: !post.isSaved)
             replace(updated)
             await safeRecordFeedEvent(
                 eventType: "feed_save",
@@ -268,7 +328,7 @@ final class FeedViewModel: ObservableObject {
 
     func recordShare(post: Post, channel: String = "system", position: Int? = nil) async {
         do {
-            let updated = try await repository.recordShare(postID: post.id, channel: channel, status: "completed")
+            let updated = try await interactionRepository.recordShare(postID: post.id, channel: channel, status: "completed")
             replace(updated)
             await safeRecordFeedEvent(
                 eventType: "feed_share",
@@ -285,7 +345,7 @@ final class FeedViewModel: ObservableObject {
         guard let index = posts.firstIndex(where: { $0.id == post.id }) else { return }
         let removed = posts.remove(at: index)
         do {
-            try await repository.hidePost(postID: post.id, reason: reason)
+            try await interactionRepository.hidePost(postID: post.id, reason: reason)
             localHiddenPostIDs.insert(post.id)
             persistLocalHiddenPostIDs()
             NotificationCenter.default.post(name: .circlePostDidHide, object: post.id)
@@ -342,7 +402,7 @@ final class FeedViewModel: ObservableObject {
 
     func toggleFollow(author: UserSummary) async {
         do {
-            let updatedAuthor = try await repository.toggleFollow(userID: author.id, shouldFollow: !author.isFollowing)
+            let updatedAuthor = try await interactionRepository.toggleFollow(userID: author.id, shouldFollow: !author.isFollowing)
             for index in posts.indices where posts[index].author.id == updatedAuthor.id {
                 posts[index].author = updatedAuthor
             }
@@ -352,6 +412,7 @@ final class FeedViewModel: ObservableObject {
     }
 
     func mergeNewPost(_ post: Post) {
+        posts.removeAll { $0.id == post.id }
         posts.insert(post, at: 0)
         phase = .success
     }
@@ -392,7 +453,7 @@ final class FeedViewModel: ObservableObject {
         metadata: [String: String]? = nil
     ) async {
         do {
-            try await repository.recordFeedEvent(
+            try await eventTrackingRepository.recordFeedEvent(
                 input: FeedEventInput(
                     sessionID: feedSessionID,
                     eventType: eventType,

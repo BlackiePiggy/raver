@@ -43,9 +43,17 @@ struct MessagesCoordinatorView: View {
     @StateObject private var chatViewModel: MessagesViewModel
     @StateObject private var alertViewModel: MessageNotificationsViewModel
 
-    init(repository: MessagesRepository) {
-        _chatViewModel = StateObject(wrappedValue: MessagesViewModel(repository: repository))
-        _alertViewModel = StateObject(wrappedValue: MessageNotificationsViewModel(repository: repository))
+    init(
+        conversationRepository: ConversationRepository,
+        notificationRepository: MessageNotificationRepository
+    ) {
+        _chatViewModel = StateObject(
+            wrappedValue: MessagesViewModel(
+                conversationRepository: conversationRepository,
+                notificationRepository: notificationRepository
+            )
+        )
+        _alertViewModel = StateObject(wrappedValue: MessageNotificationsViewModel(repository: notificationRepository))
     }
 
     var body: some View {

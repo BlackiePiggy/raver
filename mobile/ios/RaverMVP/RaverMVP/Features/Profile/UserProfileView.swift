@@ -8,7 +8,9 @@ struct UserProfileView: View {
         UserProfileScreen(
             viewModel: UserProfileViewModel(
                 userID: userID,
-                repository: appContainer.profileSocialRepository,
+                userRepository: appContainer.profileUserRepository,
+                contentRepository: appContainer.profileContentRepository,
+                checkinRepository: appContainer.profileCheckinRepository,
                 virtualAssetRepository: appContainer.virtualAssetRepository
             )
         )
@@ -103,7 +105,7 @@ private struct UserProfileScreen: View {
                                                         let identifier = profile.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                                             ? profile.username
                                                             : profile.id
-                                                        let conversation = try await appContainer.messagesRepository.startDirectConversation(identifier: identifier)
+                                                        let conversation = try await appContainer.conversationRepository.startDirectConversation(identifier: identifier)
                                                         IMChatStore.shared.stageConversation(conversation)
                                                         appPush(.conversation(target: .fromConversation(conversation)))
                                                     } catch {

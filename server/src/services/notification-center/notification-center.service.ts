@@ -2093,15 +2093,10 @@ export const notificationCenterService = {
     const maxDaysBeforeStart = normalizeDaysBeforeStart(input.maxDaysBeforeStart, 3);
     const now = new Date();
     const until = new Date(now.getTime() + (maxDaysBeforeStart + 1) * 24 * 60 * 60 * 1000);
-    const rows = await prisma.checkin.findMany({
+    const rows = await prisma.eventFavorite.findMany({
       where: {
         userId: {
           in: normalizedUserIds,
-        },
-        type: 'event',
-        note: 'marked',
-        eventId: {
-          not: null,
         },
         event: {
           startDate: {
@@ -2314,15 +2309,10 @@ export const notificationCenterService = {
     const now = new Date();
     const until = new Date(now.getTime() + (maxDaysBeforeStart + 1) * 24 * 60 * 60 * 1000);
     const since = new Date(now.getTime() - maxDaysAfterEnd * 24 * 60 * 60 * 1000);
-    const rows = await prisma.checkin.findMany({
+    const rows = await prisma.eventFavorite.findMany({
       where: {
         userId: {
           in: normalizedUserIds,
-        },
-        type: 'event',
-        note: 'marked',
-        eventId: {
-          not: null,
         },
         event: {
           startDate: {

@@ -104,6 +104,26 @@ pnpm dev
 
 `festival-viewer.html` 不是直接 `file://` 打开就能完整工作的页面；地图配置、BFF 代理接口来自 `web_tool/server.py`。
 
+推荐本地联调时直接使用根目录脚本，一条命令启动主后端、Festival Viewer WebTool 和 Web 前端：
+
+```bash
+cd /Users/blackie/Projects/raver
+./start-all.sh
+```
+
+脚本会自动为 WebTool 注入：
+
+```bash
+RAVER_BFF_BASE=http://127.0.0.1:3901
+```
+
+并为 Web 前端注入：
+
+```bash
+NEXT_PUBLIC_API_URL=http://127.0.0.1:3901/api
+FESTIVAL_VIEWER_ORIGIN=http://127.0.0.1:8000
+```
+
 ### 6.1 不挂代理
 
 ```bash
@@ -131,9 +151,17 @@ python3 web_tool/server.py
 
 ## 7. 推荐启动顺序（避免联调问题）
 
+优先使用：
+
+```bash
+./start-all.sh
+```
+
+如需手动拆开启动：
+
 1. 启动数据库：`docker-compose up -d`
 2. 启动 app 后端：`server/pnpm dev`
-3. 启动 web_tool：`python3 scrapRave/web_tool/server.py`
+3. 启动 web_tool：`RAVER_BFF_BASE=http://127.0.0.1:3901 python3 scrapRave/web_tool/server.py`
 4. 启动 web 前端：`web/pnpm dev`
 
 ## 8. Prisma：数据库变更后的标准操作

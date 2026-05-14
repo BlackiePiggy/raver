@@ -16,11 +16,15 @@ final class RecommendEventsViewModel: ObservableObject {
     private let fetchMarkedEventCheckinsUseCase: FetchMarkedEventCheckinsUseCase
     private let toggleMarkedEventUseCase: ToggleMarkedEventUseCase
 
-    init(repository: DiscoverEventsRepository) {
-        self.fetchRecommendedEventsUseCase = FetchRecommendedDiscoverEventsUseCase(repository: repository)
-        self.fetchEventsPageUseCase = FetchDiscoverEventsPageUseCase(repository: repository)
-        self.fetchMarkedEventCheckinsUseCase = FetchMarkedEventCheckinsUseCase(repository: repository)
-        self.toggleMarkedEventUseCase = ToggleMarkedEventUseCase(repository: repository)
+    init(
+        recommendationRepository: EventRecommendationRepository,
+        listRepository: EventListRepository,
+        checkinRepository: EventCheckinRepository
+    ) {
+        self.fetchRecommendedEventsUseCase = FetchRecommendedDiscoverEventsUseCase(repository: recommendationRepository)
+        self.fetchEventsPageUseCase = FetchDiscoverEventsPageUseCase(repository: listRepository)
+        self.fetchMarkedEventCheckinsUseCase = FetchMarkedEventCheckinsUseCase(repository: checkinRepository)
+        self.toggleMarkedEventUseCase = ToggleMarkedEventUseCase(repository: checkinRepository)
     }
 
     func reload(isLoggedIn: Bool) async {
