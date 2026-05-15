@@ -834,7 +834,7 @@ final class TencentIMSession: NSObject {
         groupInfo.groupID = groupID
         groupInfo.groupType = input.isPublic ? "Public" : "Work"
         let groupName = input.name?.trimmingCharacters(in: .whitespacesAndNewlines)
-        groupInfo.groupName = (groupName?.isEmpty == false ? groupName : L("新建群聊", "New Group"))!
+        groupInfo.groupName = (groupName?.isEmpty == false ? groupName : LT("新建群聊", "New Group", "新しいグループチャット"))!
         groupInfo.introduction = input.description?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let memberList: [V2TIMCreateGroupMemberInfo] = Array(Set(input.memberIds)).map { rawUserID in
@@ -860,10 +860,10 @@ final class TencentIMSession: NSObject {
         return Conversation(
             id: TencentIMIdentity.normalizePlatformSquadID(createdGroupID),
             type: .group,
-            title: groupInfo.groupName ?? L("新建群聊", "New Group"),
+            title: groupInfo.groupName ?? LT("新建群聊", "New Group", "新しいグループチャット"),
             avatarURL: normalizedText(groupInfo.faceURL),
             sdkConversationID: "group_\(createdGroupID)",
-            lastMessage: L("暂无消息", "No messages yet"),
+            lastMessage: LT("暂无消息", "No messages yet", "メッセージはまだありません"),
             lastMessageSenderID: nil,
             unreadCount: 0,
             updatedAt: Date(),
@@ -1260,7 +1260,7 @@ final class TencentIMSession: NSObject {
         let atUserList = buildTencentIMAtUserList(from: mentionedUserIDs)
         guard atUserList.count > 0 else { return message }
         guard let signedMessage = manager.createAtSignedGroupMessage(message: message, atUserList: atUserList) else {
-            throw ServiceError.message(L("腾讯 IM 群 @ 消息创建失败", "Tencent IM failed to create group @ message"))
+            throw ServiceError.message(LT("腾讯 IM 群 @ 消息创建失败", "Tencent IM failed to create group @ message", "Tencent IMのグループ@メッセージ作成に失敗しました"))
         }
         return signedMessage
     }
@@ -1303,7 +1303,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[活动卡片]", "[Event Card]")) \(payload.eventName)"
+            previewText: "\(LT("[活动卡片]", "[Event Card]", "[イベントカード]")) \(payload.eventName)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -1344,7 +1344,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[DJ卡片]", "[DJ Card]")) \(payload.djName)"
+            previewText: "\(LT("[DJ卡片]", "[DJ Card]", "[DJカード]")) \(payload.djName)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -1385,7 +1385,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[Set卡片]", "[Set Card]")) \(payload.setTitle)"
+            previewText: "\(LT("[Set卡片]", "[Set Card]", "[Setカード]")) \(payload.setTitle)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -1426,7 +1426,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[音乐节卡片]", "[Festival Card]")) \(payload.brandName)"
+            previewText: "\(LT("[音乐节卡片]", "[Festival Card]", "[フェスカード]")) \(payload.brandName)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -1467,7 +1467,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[厂牌卡片]", "[Label Card]")) \(payload.labelName)"
+            previewText: "\(LT("[厂牌卡片]", "[Label Card]", "[レーベルカード]")) \(payload.labelName)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -1508,7 +1508,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[资讯卡片]", "[News Card]")) \(payload.headline)"
+            previewText: "\(LT("[资讯卡片]", "[News Card]", "[ニュースカード]")) \(payload.headline)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -1549,7 +1549,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[榜单卡片]", "[Ranking Card]")) \(payload.boardName) · \(payload.year)"
+            previewText: "\(LT("[榜单卡片]", "[Ranking Card]", "[ランキングカード]")) \(payload.boardName) · \(payload.year)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -1590,7 +1590,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[打分事件卡片]", "[Rating Event Card]")) \(payload.eventName)"
+            previewText: "\(LT("[打分事件卡片]", "[Rating Event Card]", "[評価イベントカード]")) \(payload.eventName)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -1631,7 +1631,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[打分单位卡片]", "[Rating Unit Card]")) \(payload.unitName)"
+            previewText: "\(LT("[打分单位卡片]", "[Rating Unit Card]", "[評価ユニットカード]")) \(payload.unitName)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -1672,7 +1672,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[帖子卡片]", "[Post Card]")) \(payload.authorDisplayName)"
+            previewText: "\(LT("[帖子卡片]", "[Post Card]", "[投稿カード]")) \(payload.authorDisplayName)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -1713,7 +1713,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[ID卡片]", "[ID Card]")) \(payload.songName)"
+            previewText: "\(LT("[ID卡片]", "[ID Card]", "[IDカード]")) \(payload.songName)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -1752,7 +1752,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[打卡卡片]", "[Check-ins Card]")) \(payload.title)"
+            previewText: "\(LT("[打卡卡片]", "[Check-ins Card]", "[チェックインカード]")) \(payload.title)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -1791,7 +1791,7 @@ final class TencentIMSession: NSObject {
         let offlinePushInfo = await buildCardOfflinePushInfo(
             manager: manager,
             target: target,
-            previewText: "\(L("[路线卡片]", "[Route Card]")) \(payload.title)"
+            previewText: "\(LT("[路线卡片]", "[Route Card]", "[ルートカード]")) \(payload.title)"
         )
         var sent = try await sendMessage(
             manager: manager,
@@ -2585,7 +2585,7 @@ final class TencentIMSession: NSObject {
         case .group:
             let senderName = await resolveCurrentUserPushDisplayName(manager: manager)
                 ?? currentUserID
-                ?? L("成员", "Member")
+                ?? LT("成员", "Member", "メンバー")
             info.title = conversationTitle ?? target.businessConversationID
             info.desc = "\(senderName): \(trimmedContent)"
         }
@@ -2626,7 +2626,7 @@ final class TencentIMSession: NSObject {
         case .group:
             let senderName = await resolveCurrentUserPushDisplayName(manager: manager)
                 ?? currentUserID
-                ?? L("成员", "Member")
+                ?? LT("成员", "Member", "メンバー")
             info.title = conversationTitle ?? target.businessConversationID
             info.desc = "\(senderName): \(normalizedPreview)"
         }
@@ -2858,7 +2858,7 @@ final class TencentIMSession: NSObject {
         let senderID = normalizedText(message.sender)
         let resolvedIsMine = senderID == currentUserID || message.isSelf
         if resolvedIsMine {
-            return L("我", "Me")
+            return LT("我", "Me", "自分")
         }
 
         let displayName = normalizedText(message.friendRemark)
@@ -2879,81 +2879,81 @@ final class TencentIMSession: NSObject {
 
     private func previewText(for message: V2TIMMessage?) -> String {
         guard let message else {
-            return L("暂无消息", "No messages yet")
+            return LT("暂无消息", "No messages yet", "メッセージはまだありません")
         }
 
         switch message.elemType.rawValue {
         case Self.elemTypeTextRawValue:
             return normalizedText(message.textElem?.text) ?? ""
         case Self.elemTypeImageRawValue:
-            return L("[图片]", "[Image]")
+            return LT("[图片]", "[Image]", "[画像]")
         case Self.elemTypeSoundRawValue:
-            return L("[语音]", "[Voice]")
+            return LT("[语音]", "[Voice]", "[音声]")
         case Self.elemTypeVideoRawValue:
-            return L("[视频]", "[Video]")
+            return LT("[视频]", "[Video]", "[動画]")
         case Self.elemTypeFileRawValue:
-            return normalizedText(message.fileElem?.filename) ?? L("[文件]", "[File]")
+            return normalizedText(message.fileElem?.filename) ?? LT("[文件]", "[File]", "[ファイル]")
         case Self.elemTypeLocationRawValue:
-            return normalizedText(message.locationElem?.desc) ?? L("[位置]", "[Location]")
+            return normalizedText(message.locationElem?.desc) ?? LT("[位置]", "[Location]", "[位置情報]")
         case Self.elemTypeFaceRawValue:
-            return L("[表情]", "[Sticker]")
+            return LT("[表情]", "[Sticker]", "[スタンプ]")
         case Self.elemTypeCustomRawValue:
             if let typingStatus = typingStatusPayload(from: message.customElem?.data) {
                 return typingStatus == 1
-                    ? L("正在输入...", "Typing...")
-                    : L("停止输入", "Typing ended")
+                    ? LT("正在输入...", "Typing...", "入力中...")
+                    : LT("停止输入", "Typing ended", "入力を停止しました")
             }
             if let friendTip = friendCreatedTipPayload(from: message.customElem?.data) {
                 return friendTip
             }
             if let eventCard = customEventCardPayload(from: message.customElem?.data) {
-                return "\(L("[活动卡片]", "[Event Card]")) \(eventCard.eventName)"
+                return "\(LT("[活动卡片]", "[Event Card]", "[イベントカード]")) \(eventCard.eventName)"
             }
             if let djCard = customDJCardPayload(from: message.customElem?.data) {
-                return "\(L("[DJ卡片]", "[DJ Card]")) \(djCard.djName)"
+                return "\(LT("[DJ卡片]", "[DJ Card]", "[DJカード]")) \(djCard.djName)"
             }
             if let setCard = customSetCardPayload(from: message.customElem?.data) {
-                return "\(L("[Set卡片]", "[Set Card]")) \(setCard.setTitle)"
+                return "\(LT("[Set卡片]", "[Set Card]", "[Setカード]")) \(setCard.setTitle)"
             }
             if let brandCard = customBrandCardPayload(from: message.customElem?.data) {
-                return "\(L("[音乐节卡片]", "[Festival Card]")) \(brandCard.brandName)"
+                return "\(LT("[音乐节卡片]", "[Festival Card]", "[フェスカード]")) \(brandCard.brandName)"
             }
             if let labelCard = customLabelCardPayload(from: message.customElem?.data) {
-                return "\(L("[厂牌卡片]", "[Label Card]")) \(labelCard.labelName)"
+                return "\(LT("[厂牌卡片]", "[Label Card]", "[レーベルカード]")) \(labelCard.labelName)"
             }
             if let newsCard = customNewsCardPayload(from: message.customElem?.data) {
-                return "\(L("[资讯卡片]", "[News Card]")) \(newsCard.headline)"
+                return "\(LT("[资讯卡片]", "[News Card]", "[ニュースカード]")) \(newsCard.headline)"
             }
             if let rankingCard = customRankingBoardCardPayload(from: message.customElem?.data) {
-                return "\(L("[榜单卡片]", "[Ranking Card]")) \(rankingCard.boardName) · \(rankingCard.year)"
+                return "\(LT("[榜单卡片]", "[Ranking Card]", "[ランキングカード]")) \(rankingCard.boardName) · \(rankingCard.year)"
             }
             if let ratingEventCard = customRatingEventCardPayload(from: message.customElem?.data) {
-                return "\(L("[打分事件卡片]", "[Rating Event Card]")) \(ratingEventCard.eventName)"
+                return "\(LT("[打分事件卡片]", "[Rating Event Card]", "[評価イベントカード]")) \(ratingEventCard.eventName)"
             }
             if let ratingUnitCard = customRatingUnitCardPayload(from: message.customElem?.data) {
-                return "\(L("[打分单位卡片]", "[Rating Unit Card]")) \(ratingUnitCard.unitName)"
+                return "\(LT("[打分单位卡片]", "[Rating Unit Card]", "[評価ユニットカード]")) \(ratingUnitCard.unitName)"
             }
             if let postCard = customPostCardPayload(from: message.customElem?.data) {
-                return "\(L("[帖子卡片]", "[Post Card]")) \(postCard.authorDisplayName)"
+                return "\(LT("[帖子卡片]", "[Post Card]", "[投稿カード]")) \(postCard.authorDisplayName)"
             }
             if let idCard = customCircleIDCardPayload(from: message.customElem?.data) {
-                return "\(L("[ID卡片]", "[ID Card]")) \(idCard.songName)"
+                return "\(LT("[ID卡片]", "[ID Card]", "[IDカード]")) \(idCard.songName)"
             }
             if let myCheckinsCard = customMyCheckinsCardPayload(from: message.customElem?.data) {
-                return "\(L("[打卡卡片]", "[Check-ins Card]")) \(myCheckinsCard.title)"
+                return "\(LT("[打卡卡片]", "[Check-ins Card]", "[チェックインカード]")) \(myCheckinsCard.title)"
             }
             if let eventRouteCard = customEventRouteCardPayload(from: message.customElem?.data) {
-                return "\(L("[路线卡片]", "[Route Card]")) \(eventRouteCard.title)"
+                return "\(LT("[路线卡片]", "[Route Card]", "[ルートカード]")) \(eventRouteCard.title)"
             }
-            return normalizedText(message.customElem?.desc) ?? L("[自定义消息]", "[Custom Message]")
+            return normalizedText(message.customElem?.desc) ?? LT("[自定义消息]", "[Custom Message]", "[カスタムメッセージ]")
         case Self.elemTypeGroupTipsRawValue:
-            return L("[群提示]", "[Group Notice]")
+            return LT("[群提示]", "[Group Notice]", "[グループ通知]")
         case Self.elemTypeMergerRawValue:
-            return L("[聊天记录]", "[Merged Messages]")
+            return LT("[聊天记录]", "[Merged Messages]", "[チャット履歴]")
         case Self.elemTypeStreamRawValue:
-            return L("[流式消息]", "[Stream Message]")
+            return LT("[流式消息]", "[Stream Message]", "[ストリームメッセージ]")
         default:
-            return L("[消息]", "[Message]")
+            return LT("[消息]", "[Message]", "[メッセージ]")
         }
     }
 
@@ -3000,32 +3000,32 @@ final class TencentIMSession: NSObject {
             content = normalizedText(message.textElem?.text) ?? ""
         case Self.elemTypeImageRawValue:
             kind = .image
-            content = L("[图片]", "[Image]")
+            content = LT("[图片]", "[Image]", "[画像]")
             media = mapImagePayload(from: message.imageElem)
         case Self.elemTypeSoundRawValue:
             kind = .voice
-            content = L("[语音]", "[Voice]")
+            content = LT("[语音]", "[Voice]", "[音声]")
             media = await mapSoundPayload(from: message.soundElem)
         case Self.elemTypeVideoRawValue:
             kind = .video
-            content = L("[视频]", "[Video]")
+            content = LT("[视频]", "[Video]", "[動画]")
             media = await mapVideoPayload(from: message.videoElem)
         case Self.elemTypeFileRawValue:
             kind = .file
-            content = normalizedText(message.fileElem?.filename) ?? L("[文件]", "[File]")
+            content = normalizedText(message.fileElem?.filename) ?? LT("[文件]", "[File]", "[ファイル]")
             media = await mapFilePayload(from: message.fileElem)
         case Self.elemTypeLocationRawValue:
             kind = .location
-            content = normalizedText(message.locationElem?.desc) ?? L("[位置]", "[Location]")
+            content = normalizedText(message.locationElem?.desc) ?? LT("[位置]", "[Location]", "[位置情報]")
         case Self.elemTypeFaceRawValue:
             kind = .emoji
-            content = L("[表情]", "[Sticker]")
+            content = LT("[表情]", "[Sticker]", "[スタンプ]")
         case Self.elemTypeCustomRawValue:
             if let typingStatus = typingStatusPayload(from: message.customElem?.data) {
                 kind = .typing
                 content = typingStatus == 1
-                    ? L("正在输入...", "Typing...")
-                    : L("停止输入", "Typing ended")
+                    ? LT("正在输入...", "Typing...", "入力中...")
+                    : LT("停止输入", "Typing ended", "入力を停止しました")
             } else if let friendTip = friendCreatedTipPayload(from: message.customElem?.data) {
                 kind = .system
                 content = friendTip
@@ -3134,17 +3134,17 @@ final class TencentIMSession: NSObject {
                 )
             } else {
                 kind = .custom
-                content = normalizedText(message.customElem?.desc) ?? L("[自定义消息]", "[Custom Message]")
+                content = normalizedText(message.customElem?.desc) ?? LT("[自定义消息]", "[Custom Message]", "[カスタムメッセージ]")
             }
         case Self.elemTypeGroupTipsRawValue:
             kind = .system
-            content = L("[群提示]", "[Group Notice]")
+            content = LT("[群提示]", "[Group Notice]", "[グループ通知]")
         case Self.elemTypeMergerRawValue:
             kind = .card
-            content = L("[聊天记录]", "[Merged Messages]")
+            content = LT("[聊天记录]", "[Merged Messages]", "[チャット履歴]")
         case Self.elemTypeStreamRawValue:
             kind = .custom
-            content = L("[流式消息]", "[Stream Message]")
+            content = LT("[流式消息]", "[Stream Message]", "[ストリームメッセージ]")
         default:
             break
         }
@@ -3187,7 +3187,7 @@ final class TencentIMSession: NSObject {
             kind: kind,
             media: media,
             deliveryStatus: deliveryStatus,
-            deliveryError: deliveryStatus == .failed ? L("发送失败", "Send failed") : nil,
+            deliveryError: deliveryStatus == .failed ? LT("发送失败", "Send failed", "送信に失敗しました") : nil,
             mentionedUserIDs: mappedMentionedUserIDs(from: message),
             peerRead: dynamicBoolValue("isPeerRead", from: message),
             readReceiptReadCount: dynamicIntValue("groupReadCount", from: message)
@@ -3607,22 +3607,22 @@ final class TencentIMSession: NSObject {
             ?? normalizedText(message.nameCard)
             ?? normalizedText(message.nickName)
             ?? messageSenderID
-            ?? L("用户", "User")
+            ?? LT("用户", "User", "ユーザー")
         let revokerDisplayName = normalizedText(operateUser?.nickName)
             ?? normalizedText(message.revokerInfo?.nickName)
             ?? senderDisplayName
 
         if revokerID == messageSenderID {
             if message.isSelf {
-                return L("你撤回了一条消息", "You recalled a message")
+                return LT("你撤回了一条消息", "You recalled a message", "メッセージを取り消しました")
             }
             if normalizedText(message.userID) != nil {
-                return L("对方撤回了一条消息", "The other user recalled a message")
+                return LT("对方撤回了一条消息", "The other user recalled a message", "相手がメッセージを取り消しました")
             }
-            return String(format: L("%@ 撤回了一条消息", "%@ recalled a message"), senderDisplayName)
+            return String(format: LT("%@ 撤回了一条消息", "%@ recalled a message", "%@ がメッセージを取り消しました"), senderDisplayName)
         }
 
-        return String(format: L("%@ 撤回了一条消息", "%@ recalled a message"), revokerDisplayName)
+        return String(format: LT("%@ 撤回了一条消息", "%@ recalled a message", "%@ がメッセージを取り消しました"), revokerDisplayName)
     }
 #endif
 }

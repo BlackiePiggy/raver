@@ -9,7 +9,7 @@ protocol WebFeatureService {
     func fetchEventFavoriteStatus(eventID: String) async throws -> EventFavoriteStatus
     func favoriteEvent(eventID: String) async throws -> EventFavoriteStatus
     func unfavoriteEvent(eventID: String) async throws
-    func createEvent(input: CreateEventInput) async throws -> WebEvent
+    func createEvent(input: CreateEventInput) async throws -> CreateEventResult
     func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent
     func deleteEvent(id: String) async throws
     func uploadEventImage(
@@ -49,9 +49,9 @@ protocol WebFeatureService {
     func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate]
     func searchDiscogsDJs(query: String, limit: Int) async throws -> [DiscogsDJCandidate]
     func fetchDiscogsDJArtist(id: Int) async throws -> DiscogsDJArtistDetail
-    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportSpotifyDJResponse
-    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDiscogsDJResponse
-    func importManualDJ(input: ImportManualDJInput) async throws -> ImportManualDJResponse
+    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportDJResult<ImportSpotifyDJResponse>
+    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDJResult<ImportDiscogsDJResponse>
+    func importManualDJ(input: ImportManualDJInput) async throws -> ImportDJResult<ImportManualDJResponse>
     func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ
     func uploadDJImage(
         imageData: Data,
@@ -70,7 +70,7 @@ protocol WebFeatureService {
     func fetchEventDJSets(eventName: String) async throws -> [WebDJSet]
     func fetchDJSet(id: String) async throws -> WebDJSet
     func fetchMyDJSets() async throws -> [WebDJSet]
-    func createDJSet(input: CreateDJSetInput) async throws -> WebDJSet
+    func createDJSet(input: CreateDJSetInput) async throws -> CreateContentResult<WebDJSet>
     func updateDJSet(id: String, input: UpdateDJSetInput) async throws -> WebDJSet
     func deleteDJSet(id: String) async throws
     func replaceTracks(setID: String, tracks: [CreateTrackInput]) async throws -> WebDJSet
@@ -110,11 +110,11 @@ protocol WebFeatureService {
     func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent]
     func fetchRatingEvent(id: String) async throws -> WebRatingEvent
     func fetchDJRatingUnits(djID: String) async throws -> [WebRatingUnit]
-    func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent
+    func createRatingEvent(input: CreateRatingEventInput) async throws -> CreateContentResult<WebRatingEvent>
     func createRatingEventFromEvent(eventID: String) async throws -> WebRatingEvent
     func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent
     func deleteRatingEvent(id: String) async throws
-    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit
+    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> CreateContentResult<WebRatingUnit>
     func updateRatingUnit(id: String, input: UpdateRatingUnitInput) async throws -> WebRatingUnit
     func deleteRatingUnit(id: String) async throws
     func fetchRatingUnit(id: String) async throws -> WebRatingUnit
@@ -130,14 +130,19 @@ protocol WebFeatureService {
         nation: String?,
         genre: String?
     ) async throws -> LearnLabelListPage
+    func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel>
     func fetchLearnFestivals(search: String?) async throws -> [WebLearnFestival]
-    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> WebLearnFestival
+    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> CreateContentResult<WebLearnFestival>
     func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival
     func fetchRankingBoards() async throws -> [RankingBoard]
     func fetchRankingBoardDetail(boardID: String, year: Int?) async throws -> RankingBoardDetail
     func searchGlobal(query: String, tab: GlobalSearchTab, limit: Int) async throws -> GlobalSearchResponse
 
     func fetchMyPublishes() async throws -> MyPublishes
+    func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary]
+    func fetchMyContentSubmission(id: String) async throws -> ContentSubmissionDetail
+    func createContentSubmission(entityType: String, payload: [String: ContentSubmissionJSONValue]) async throws -> ContentSubmissionDetail
+    func resubmitMyContentSubmission(id: String, payload: [String: ContentSubmissionJSONValue], changeNote: String?) async throws -> ContentSubmissionDetail
 }
 
 extension WebFeatureService {

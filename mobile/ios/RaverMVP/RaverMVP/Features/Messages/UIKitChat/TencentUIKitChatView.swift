@@ -22,15 +22,15 @@ private enum RaverMessageMenuAction: MessageMenuAction, Sendable {
     func title() -> String {
         switch self {
         case .copy:
-            return L("复制", "Copy")
+            return LT("复制", "Copy", "コピー")
         case .mention:
-            return L("@TA", "@Mention")
+            return LT("@TA", "@Mention", "@メンション")
         case .reply:
-            return L("回复", "Reply")
+            return LT("回复", "Reply", "返信")
         case .revoke:
-            return L("撤回", "Recall")
+            return LT("撤回", "Recall", "取り消し")
         case .delete:
-            return L("删除", "Delete")
+            return LT("删除", "Delete", "削除")
         }
     }
 
@@ -85,6 +85,7 @@ struct TencentUIKitChatView: View {
     let conversation: Conversation
     let service: SocialService
     let webService: WebFeatureService
+    private let accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)?
     private let squadActivityRepository: SquadActivityRepository
 
     @StateObject private var viewModel: ExyteChatConversationViewModel
@@ -112,17 +113,23 @@ struct TencentUIKitChatView: View {
         conversation: Conversation,
         service: SocialService,
         webService: WebFeatureService,
-        virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
+        virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository(),
+        accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)? = nil
     ) {
         self.conversation = conversation
         self.service = service
         self.webService = webService
-        self.squadActivityRepository = SquadActivityRepositoryAdapter(service: service)
+        self.accountEnforcementStatusProvider = accountEnforcementStatusProvider
+        self.squadActivityRepository = SquadActivityRepositoryAdapter(
+            service: service,
+            accountEnforcementStatusProvider: accountEnforcementStatusProvider
+        )
         _viewModel = StateObject(
             wrappedValue: ExyteChatConversationViewModel(
                 conversation: conversation,
                 service: service,
-                virtualAssetRepository: virtualAssetRepository
+                virtualAssetRepository: virtualAssetRepository,
+                accountEnforcementStatusProvider: accountEnforcementStatusProvider
             )
         )
     }
@@ -172,7 +179,7 @@ struct TencentUIKitChatView: View {
             .presentationDragIndicator(.visible)
         }
         .alert(
-            L("未定位到消息", "Message Not Located"),
+            LT("未定位到消息", "Message Not Located", "メッセージを特定できません"),
             isPresented: Binding(
                 get: { conversationSearchLocateFailureMessage != nil },
                 set: { isPresented in
@@ -182,14 +189,11 @@ struct TencentUIKitChatView: View {
                 }
             )
         ) {
-            Button(L("好的", "OK"), role: .cancel) {}
+            Button(LT("好的", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(
                 conversationSearchLocateFailureMessage
-                ?? L(
-                    "该结果暂不在当前加载窗口，请上滑加载更多历史后再试。",
-                    "This result is outside the current loaded window. Load more history and try again."
-                )
+                ?? LT("该结果暂不在当前加载窗口，请上滑加载更多历史后再试。", "This result is outside the current loaded window. Load more history and try again.", "この結果は現在読み込まれている範囲外です。履歴をさらに読み込んでからもう一度お試しください。")
             )
         }
         .onChange(of: conversation) { oldConversation, updatedConversation in
@@ -299,8 +303,8 @@ struct TencentUIKitChatView: View {
                 .accessibilityLabel(
                     Text(
                         conversation.type == .group
-                            ? L("查看小队主页", "View Squad Profile")
-                            : L("查看用户主页", "View User Profile")
+                            ? LT("查看小队主页", "View Squad Profile", "Squad ホームを見る")
+                            : LT("查看用户主页", "View User Profile", "ユーザープロフィールを見る")
                     )
                 )
 
@@ -327,7 +331,7 @@ struct TencentUIKitChatView: View {
                             .frame(width: 28, height: 28)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(Text(L("开启线下活动", "Start Offline Activity")))
+                    .accessibilityLabel(Text(LT("开启线下活动", "Start Offline Activity", "オフライン活動を開始")))
                 }
 
                 Button {
@@ -342,8 +346,8 @@ struct TencentUIKitChatView: View {
                 .accessibilityLabel(
                     Text(
                         conversation.type == .group
-                            ? L("群聊设置", "Group Chat Settings")
-                            : L("更多操作", "More Actions")
+                            ? LT("群聊设置", "Group Chat Settings", "グループチャット設定")
+                            : LT("更多操作", "More Actions", "その他の操作")
                     )
                 )
             }
@@ -423,7 +427,7 @@ struct TencentUIKitChatView: View {
                             .imageScale(.large)
                             .foregroundStyle(.white)
                             .frame(height: 30)
-                        Text("Reply")
+                        Text(LT("回复", "Reply", "返信"))
                             .foregroundStyle(.white)
                             .font(.footnote)
                     }
@@ -1739,10 +1743,7 @@ struct TencentUIKitChatView: View {
                 if located {
                     focusMessageInViewport(result.message.id)
                 } else {
-                    conversationSearchLocateFailureMessage = L(
-                        "该结果暂不在当前加载窗口，请上滑加载更多历史后再试。",
-                        "This result is outside the current loaded window. Load more history and try again."
-                    )
+                    conversationSearchLocateFailureMessage = LT("该结果暂不在当前加载窗口，请上滑加载更多历史后再试。", "This result is outside the current loaded window. Load more history and try again.", "この結果は現在読み込まれている範囲外です。履歴をさらに読み込んでからもう一度お試しください。")
                 }
             }
         }
@@ -2233,14 +2234,14 @@ struct TencentUIKitChatView: View {
         if let fileSizeBytes = payload.fileSizeBytes, fileSizeBytes > 0 {
             sizeText = ByteCountFormatter.string(fromByteCount: Int64(fileSizeBytes), countStyle: .file)
         } else {
-            sizeText = L("未知大小", "Unknown size")
+            sizeText = LT("未知大小", "Unknown size", "サイズ不明")
         }
         return "\(fileType) · \(sizeText)"
     }
 
     private func fileExtensionLabel(from fileName: String) -> String {
         let ext = URL(fileURLWithPath: fileName).pathExtension.uppercased()
-        return ext.isEmpty ? L("音频", "Audio") : ext
+        return ext.isEmpty ? LT("音频", "Audio", "音声") : ext
     }
 
     private func audioDurationText(_ seconds: Int?) -> String? {
@@ -2417,7 +2418,7 @@ private actor ChatAudioFileMetadataStore {
         }
 
         guard let resolved = RaverChatMediaResolver.resolvedURL(from: rawURL) else {
-            throw ServiceError.message(L("音频地址无效", "Invalid audio URL"))
+            throw ServiceError.message(LT("音频地址无效", "Invalid audio URL", "音声 URL が無効です"))
         }
 
         let playableURL: URL
@@ -2515,7 +2516,7 @@ private struct ChatAudioFileBubbleView: View {
                     .font(.caption)
                     .foregroundStyle(isMine ? Color.white.opacity(0.74) : RaverTheme.secondaryText)
             } else {
-                Label(L("点击播放", "Tap to play"), systemImage: "music.note")
+                Label(LT("点击播放", "Tap to play", "タップして再生"), systemImage: "music.note")
                     .font(.caption)
                     .foregroundStyle(isMine ? Color.white.opacity(0.74) : RaverTheme.secondaryText)
             }
@@ -2547,14 +2548,14 @@ private struct ChatAudioFileBubbleView: View {
         if let fileSizeBytes = payload.fileSizeBytes, fileSizeBytes > 0 {
             sizeText = ByteCountFormatter.string(fromByteCount: Int64(fileSizeBytes), countStyle: .file)
         } else {
-            sizeText = L("未知大小", "Unknown size")
+            sizeText = LT("未知大小", "Unknown size", "サイズ不明")
         }
         return "\(fileType) · \(sizeText)"
     }
 
     private func fileExtensionLabel(from fileName: String) -> String {
         let ext = URL(fileURLWithPath: fileName).pathExtension.uppercased()
-        return ext.isEmpty ? L("音频", "Audio") : ext
+        return ext.isEmpty ? LT("音频", "Audio", "音声") : ext
     }
 
     private func audioDurationText(_ seconds: Int?) -> String? {
@@ -2638,7 +2639,7 @@ private struct ChatPostCardBubbleView: View {
     private var titleText: String {
         let trimmed = payload.contentText.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            return L("来自 \(payload.authorDisplayName) 的动态", "A post from \(payload.authorDisplayName)")
+            return LT("来自 \(payload.authorDisplayName) 的动态", "A post from \(payload.authorDisplayName)", "\(payload.authorDisplayName) さんの投稿")
         }
         return String(trimmed.prefix(100))
     }
@@ -2646,7 +2647,7 @@ private struct ChatPostCardBubbleView: View {
     private var subtitleText: String? {
         let parts = [
             "@\(payload.authorUsername)".nilIfBlank,
-            payload.commentCount > 0 ? "\(payload.commentCount) \(L("评论", "comments"))" : nil
+            payload.commentCount > 0 ? "\(payload.commentCount) \(LT("评论", "comments", "コメント"))" : nil
         ].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -2735,9 +2736,9 @@ private struct ChatRatingUnitCardBubbleView: View {
         }
         if let rating = payload.rating, rating > 0 {
             if let count = payload.ratingCount, count > 0 {
-                parts.append(String(format: L("%.1f 分 · %d 人评分", "%.1f · %d ratings"), rating, count))
+                parts.append(String(format: LT("%.1f 分 · %d 人评分", "%.1f · %d ratings", "%.1f点 · %d件の評価"), rating, count))
             } else {
-                parts.append(String(format: L("%.1f 分", "%.1f"), rating))
+                parts.append(String(format: LT("%.1f 分", "%.1f", "%.1f点"), rating))
             }
         } else if let description = payload.description?.nilIfBlank {
             parts.append(description)
@@ -3091,7 +3092,7 @@ private struct ChatSquadOfflineActivityCardBubbleView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(L("线下活动", "Offline Activity"))
+                    Text(LT("线下活动", "Offline Activity", "オフライン活動"))
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(RaverTheme.accent)
                         .padding(.horizontal, 7)
@@ -3128,7 +3129,7 @@ private struct ChatSquadOfflineActivityCardBubbleView: View {
 
             HStack(spacing: 12) {
                 Label(durationLabel, systemImage: "clock")
-                Label(L("\(payload.participantCount) 人次", "\(payload.participantCount) participants"), systemImage: "person.2")
+                Label(LT("\(payload.participantCount) 人次", "\(payload.participantCount) participants", "\(payload.participantCount)人"), systemImage: "person.2")
             }
             .font(.caption.weight(.medium))
             .foregroundStyle(RaverTheme.secondaryText)
@@ -3182,12 +3183,12 @@ private struct ChatSquadOfflineActivityCardBubbleView: View {
         let hours = payload.durationSeconds / 3600
         let minutes = (payload.durationSeconds % 3600) / 60
         if hours > 0 {
-            return L("\(hours) 小时 \(minutes) 分钟", "\(hours)h \(minutes)m")
+            return LT("\(hours) 小时 \(minutes) 分钟", "\(hours)h \(minutes)m", "\(hours)時間 \(minutes)分")
         }
         if minutes > 0 {
-            return L("\(minutes) 分钟", "\(minutes)m")
+            return LT("\(minutes) 分钟", "\(minutes)m", "\(minutes)分")
         }
-        return L("<1 分钟", "<1m")
+        return LT("<1 分钟", "<1m", "1分未満")
     }
 }
 
@@ -3393,13 +3394,13 @@ private struct ConversationMessageSearchSheet: View {
                                     .lineLimit(2)
 
                                 HStack(spacing: 6) {
-                                    Text(result.message.isMine ? L("我", "Me") : result.message.sender.displayName)
+                                    Text(result.message.isMine ? LT("我", "Me", "自分") : result.message.sender.displayName)
                                         .lineLimit(1)
                                     Text("·")
                                     Text(result.message.createdAt.chatTimeText)
                                         .lineLimit(1)
                                     Text("·")
-                                    Text(result.source == .localIndex ? L("本地", "Local") : L("远端", "Remote"))
+                                    Text(result.source == .localIndex ? LT("本地", "Local", "ローカル") : LT("远端", "Remote", "リモート"))
                                         .lineLimit(1)
                                 }
                                 .font(.caption)
@@ -3413,16 +3414,16 @@ private struct ConversationMessageSearchSheet: View {
                           !isSearching,
                           errorMessage == nil {
                     ContentUnavailableView(
-                        L("无搜索结果", "No Results"),
+                        LT("无搜索结果", "No Results", "検索結果なし"),
                         systemImage: "magnifyingglass",
-                        description: Text(L("请尝试更换关键词。", "Try a different keyword."))
+                        description: Text(LT("请尝试更换关键词。", "Try a different keyword.", "別のキーワードをお試しください。"))
                     )
                 }
             }
             .listStyle(.insetGrouped)
             .overlay(alignment: .center) {
                 if isSearching {
-                    ProgressView(L("搜索中...", "Searching..."))
+                    ProgressView(LT("搜索中...", "Searching...", "検索中..."))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .background(.ultraThinMaterial)
@@ -3432,7 +3433,7 @@ private struct ConversationMessageSearchSheet: View {
             .searchable(
                 text: $query,
                 placement: .navigationBarDrawer(displayMode: .always),
-                prompt: L("搜索当前聊天记录", "Search this conversation")
+                prompt: LT("搜索当前聊天记录", "Search this conversation", "この会話を検索")
             )
             .onSubmit(of: .search) {
                 triggerSearch(immediate: true)
@@ -3440,11 +3441,11 @@ private struct ConversationMessageSearchSheet: View {
             .onChange(of: query) { _, _ in
                 triggerSearch(immediate: false)
             }
-            .navigationTitle(L("搜索聊天记录", "Search in Conversation"))
+            .navigationTitle(LT("搜索聊天记录", "Search in Conversation", "チャット履歴を検索"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(L("关闭", "Close")) {
+                    Button(LT("关闭", "Close", "閉じる")) {
                         dismiss()
                     }
                 }
@@ -3457,7 +3458,7 @@ private struct ConversationMessageSearchSheet: View {
             }
         }
         .alert(
-            L("搜索失败", "Search Failed"),
+            LT("搜索失败", "Search Failed", "検索に失敗しました"),
             isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { isPresented in
@@ -3467,7 +3468,7 @@ private struct ConversationMessageSearchSheet: View {
                 }
             )
         ) {
-            Button(L("好的", "OK"), role: .cancel) {}
+            Button(LT("好的", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -3532,71 +3533,71 @@ private struct ConversationMessageSearchSheet: View {
 
         switch message.kind {
         case .image:
-            return L("[图片]", "[Image]")
+            return LT("[图片]", "[Image]", "[画像]")
         case .video:
-            return L("[视频]", "[Video]")
+            return LT("[视频]", "[Video]", "[動画]")
         case .voice:
-            return L("[语音]", "[Voice]")
+            return LT("[语音]", "[Voice]", "[音声]")
         case .file:
-            return message.media?.fileName ?? L("[文件]", "[File]")
+            return message.media?.fileName ?? LT("[文件]", "[File]", "[ファイル]")
         case .emoji:
-            return L("[表情]", "[Emoji]")
+            return LT("[表情]", "[Emoji]", "[絵文字]")
         case .location:
-            return L("[位置]", "[Location]")
+            return LT("[位置]", "[Location]", "[位置情報]")
         case .card:
-            return L("[名片]", "[Card]")
+            return LT("[名片]", "[Card]", "[カード]")
         case .custom:
-            return L("[自定义消息]", "[Custom Message]")
+            return LT("[自定义消息]", "[Custom Message]", "[カスタムメッセージ]")
         case .system:
-            return L("[系统消息]", "[System Message]")
+            return LT("[系统消息]", "[System Message]", "[システムメッセージ]")
         case .typing:
-            return L("[输入中]", "[Typing]")
+            return LT("[输入中]", "[Typing]", "[入力中]")
         case .unknown:
-            return L("[消息]", "[Message]")
+            return LT("[消息]", "[Message]", "[メッセージ]")
         case .text:
-            return L("[文本消息]", "[Text Message]")
+            return LT("[文本消息]", "[Text Message]", "[テキストメッセージ]")
         }
     }
 
     private func cardPreviewText(from rawText: String) -> String? {
         if let payload = parseRatingEventCardPayloadForPreview(from: rawText) {
-            return "\(L("[打分事件卡片]", "[Rating Event Card]")) \(payload.eventName)"
+            return "\(LT("[打分事件卡片]", "[Rating Event Card]", "[評価イベントカード]")) \(payload.eventName)"
         }
         if let payload = parseRatingUnitCardPayloadForPreview(from: rawText) {
-            return "\(L("[打分单位卡片]", "[Rating Unit Card]")) \(payload.unitName)"
+            return "\(LT("[打分单位卡片]", "[Rating Unit Card]", "[評価ユニットカード]")) \(payload.unitName)"
         }
         if let payload = parseEventCardPayloadForPreview(from: rawText) {
-            return "\(L("[活动卡片]", "[Event Card]")) \(payload.eventName)"
+            return "\(LT("[活动卡片]", "[Event Card]", "[イベントカード]")) \(payload.eventName)"
         }
         if let payload = parseDJCardPayloadForPreview(from: rawText) {
-            return "\(L("[DJ卡片]", "[DJ Card]")) \(payload.djName)"
+            return "\(LT("[DJ卡片]", "[DJ Card]", "[DJカード]")) \(payload.djName)"
         }
         if let payload = parseSetCardPayloadForPreview(from: rawText) {
-            return "\(L("[Set卡片]", "[Set Card]")) \(payload.setTitle)"
+            return "\(LT("[Set卡片]", "[Set Card]", "[Setカード]")) \(payload.setTitle)"
         }
         if let payload = parseBrandCardPayloadForPreview(from: rawText) {
-            return "\(L("[音乐节卡片]", "[Festival Card]")) \(payload.brandName)"
+            return "\(LT("[音乐节卡片]", "[Festival Card]", "[フェスカード]")) \(payload.brandName)"
         }
         if let payload = parseLabelCardPayloadForPreview(from: rawText) {
-            return "\(L("[厂牌卡片]", "[Label Card]")) \(payload.labelName)"
+            return "\(LT("[厂牌卡片]", "[Label Card]", "[レーベルカード]")) \(payload.labelName)"
         }
         if let payload = parseNewsCardPayloadForPreview(from: rawText) {
-            return "\(L("[资讯卡片]", "[News Card]")) \(payload.headline)"
+            return "\(LT("[资讯卡片]", "[News Card]", "[ニュースカード]")) \(payload.headline)"
         }
         if let payload = parseRankingBoardCardPayloadForPreview(from: rawText) {
-            return "\(L("[榜单卡片]", "[Ranking Card]")) \(payload.boardName) · \(payload.year)"
+            return "\(LT("[榜单卡片]", "[Ranking Card]", "[ランキングカード]")) \(payload.boardName) · \(payload.year)"
         }
         if let payload = parseCircleIDCardPayloadForPreview(from: rawText) {
-            return "\(L("[ID卡片]", "[ID Card]")) \(payload.songName)"
+            return "\(LT("[ID卡片]", "[ID Card]", "[IDカード]")) \(payload.songName)"
         }
         if let payload = parseMyCheckinsCardPayloadForPreview(from: rawText) {
-            return "\(L("[打卡卡片]", "[Check-ins Card]")) \(payload.title)"
+            return "\(LT("[打卡卡片]", "[Check-ins Card]", "[チェックインカード]")) \(payload.title)"
         }
         if let payload = parseEventRouteCardPayloadForPreview(from: rawText) {
-            return "\(L("[路线卡片]", "[Route Card]")) \(payload.title)"
+            return "\(LT("[路线卡片]", "[Route Card]", "[ルートカード]")) \(payload.title)"
         }
         if let payload = parseSquadOfflineActivityCardPayloadForPreview(from: rawText) {
-            return "\(L("[线下活动]", "[Offline Activity]")) \(payload.title)"
+            return "\(LT("[线下活动]", "[Offline Activity]", "[オフライン活動]")) \(payload.title)"
         }
         return nil
     }
@@ -3823,11 +3824,11 @@ private struct ChatAudioFilePlayerSheet: View {
                 Spacer()
             }
             .background(RaverTheme.background.ignoresSafeArea())
-            .navigationTitle(L("音频播放", "Audio Player"))
+            .navigationTitle(LT("音频播放", "Audio Player", "音声プレーヤー"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(L("关闭", "Close")) {
+                    Button(LT("关闭", "Close", "閉じる")) {
                         dismiss()
                     }
                 }
@@ -3844,12 +3845,12 @@ private struct ChatAudioFilePlayerSheet: View {
 
     private var metadataText: String {
         let fileType = URL(fileURLWithPath: item.fileName).pathExtension.uppercased()
-        let typeText = fileType.isEmpty ? L("音频文件", "Audio File") : fileType
+        let typeText = fileType.isEmpty ? LT("音频文件", "Audio File", "音声ファイル") : fileType
         let sizeText: String
         if let bytes = item.fileSizeBytes, bytes > 0 {
             sizeText = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
         } else {
-            sizeText = L("未知大小", "Unknown size")
+            sizeText = LT("未知大小", "Unknown size", "サイズ不明")
         }
         let durationText: String
         if viewModel.totalDuration > 0 {
@@ -3857,7 +3858,7 @@ private struct ChatAudioFilePlayerSheet: View {
         } else if let seconds = item.durationSeconds, seconds > 0 {
             durationText = ChatAudioFilePlayerViewModel.durationLabel(TimeInterval(seconds))
         } else {
-            durationText = L("时长未知", "Unknown duration")
+            durationText = LT("时长未知", "Unknown duration", "長さ不明")
         }
         return "\(typeText) · \(sizeText) · \(durationText)"
     }
@@ -4069,10 +4070,14 @@ private final class ExyteChatConversationViewModel: ObservableObject {
     init(
         conversation: Conversation,
         service: SocialService,
-        virtualAssetRepository: VirtualAssetRepository
+        virtualAssetRepository: VirtualAssetRepository,
+        accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)? = nil
     ) {
         self.conversation = conversation
-        let messageRepository = ChatMessageRepositoryAdapter(service: service)
+        let messageRepository = ChatMessageRepositoryAdapter(
+            service: service,
+            accountEnforcementStatusProvider: accountEnforcementStatusProvider
+        )
         self.messageRepository = messageRepository
         self.appearanceResolver = VirtualAssetChatAppearanceResolver(repository: virtualAssetRepository)
         self.chatTitle = conversation.title
@@ -4301,7 +4306,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
                     city: "Shanghai",
                     startAtISO8601: ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600 * 24 * 3)),
                     coverImageURL: "https://images.unsplash.com/photo-1571266028243-d220c9f1db71?auto=format&fit=crop&w=1200&q=80",
-                    badgeText: L("活动", "Event")
+                    badgeText: LT("活动", "Event", "イベント")
                 )
                 try attachReplyIfNeeded(replyMessageID, shouldAttachReply: &shouldAttachReply)
                 _ = try await chatController.sendEventCardMessage(payload)
@@ -4363,7 +4368,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
         let hasTarget = chatController.currentMessagesSnapshot().contains { $0.id == replyMessageID }
         guard hasTarget else {
             throw ServiceError.message(
-                L("引用的消息已不可用", "The replied message is no longer available.")
+                LT("引用的消息已不可用", "The replied message is no longer available.", "引用元のメッセージは利用できません。")
             )
         }
         chatController.toggleReplyDraft(for: replyMessageID)
@@ -4838,7 +4843,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             return
         }
 
-        chatStatus = L("正在输入...", "Typing...")
+        chatStatus = LT("正在输入...", "Typing...", "入力中...")
         typingResetTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             guard !Task.isCancelled else { return }
@@ -4994,9 +4999,9 @@ private final class ExyteChatConversationViewModel: ObservableObject {
     private static func buildStatus(for conversation: Conversation) -> String {
         switch conversation.type {
         case .direct:
-            return L("在线", "online")
+            return LT("在线", "online", "オンライン")
         case .group:
-            return L("群聊", "Group chat")
+            return LT("群聊", "Group chat", "グループチャット")
         }
     }
 
@@ -5024,7 +5029,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             return UserSummary(
                 id: conversation.id,
                 username: title.isEmpty ? conversation.id : title,
-                displayName: title.isEmpty ? L("群聊", "Group chat") : title,
+                displayName: title.isEmpty ? LT("群聊", "Group chat", "グループチャット") : title,
                 avatarURL: resolvedConversationAvatarURL(),
                 isFollowing: false
             )
@@ -5125,7 +5130,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             let username = normalizedText(conversation.peer?.username)
             return peerDisplayName ?? title ?? username ?? conversation.id
         case .group:
-            return normalizedText(conversation.title) ?? L("群聊", "Group chat")
+            return normalizedText(conversation.title) ?? LT("群聊", "Group chat", "グループチャット")
         }
     }
 

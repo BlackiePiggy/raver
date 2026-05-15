@@ -49,9 +49,9 @@ final class DemoAlignedViewportCoordinator {
         let title: String
         if pendingNewMessageCount > 0 {
             let badgeText = pendingNewMessageCount > 99 ? "99+" : "\(pendingNewMessageCount)"
-            title = L("\(badgeText) 条新消息", "\(badgeText) new messages")
+            title = LT("\(badgeText) 条新消息", "\(badgeText) new messages", "新着メッセージ \(badgeText) 件")
         } else {
-            title = L("回到底部", "Back to bottom")
+            title = LT("回到底部", "Back to bottom", "下部へ戻る")
         }
 
         var config = jumpToBottomButton.configuration ?? UIButton.Configuration.filled()

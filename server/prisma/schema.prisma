@@ -37,6 +37,11 @@ model User {
   role                  String    @default("user")
   profileShareCode      String?   @unique @map("profile_share_code")
   profileShareQrCodeUrl String?   @map("profile_share_qr_code_url")
+  regionCode            String    @default("JP") @map("region_code")
+  birthYear             Int?      @map("birth_year")
+  ageBand               String    @default("unknown") @map("age_band")
+  guardianContactEmail  String?   @map("guardian_contact_email")
+  ageDeclaredAt         DateTime? @map("age_declared_at")
 
   checkins            Checkin[]
   eventFavorites      EventFavorite[]
@@ -82,6 +87,9 @@ model User {
   notificationInboxItems       NotificationInboxItem[]
   devicePushTokens             DevicePushToken[]
   notificationDeliveries       NotificationDelivery[]
+  contentSubmissions           ContentSubmission[]        @relation("UserContentSubmissions")
+  djEnrichmentJobsRequested    DJEnrichmentJob[]          @relation("UserDJEnrichmentJobsRequested")
+  djEnrichmentResultsReviewed  DJEnrichmentResult[]       @relation("UserDJEnrichmentResultsReviewed")
   createdActivities            SquadActivity[]
   createdAlbums                SquadAlbum[]
   uploadedPhotos               SquadAlbumPhoto[]
@@ -94,8 +102,165 @@ model User {
   profileModerationJobs        UserProfileModerationJob[]
   virtualAssets                UserVirtualAsset[]
   virtualAssetEquips           UserVirtualAssetEquip[]
+  accountEnforcements          AccountEnforcement[]
+  enforcementAppeals           EnforcementAppeal[]
+  accountDeletionRequests      AccountDeletionRequest[]
 
+  @@index([regionCode])
+  @@index([ageBand])
   @@map("users")
+}
+
+model AccountDeletionRequest {
+  id                    String    @id @default(uuid())
+  userId                String    @map("user_id")
+  status                String    @default("queued")
+  requestedBy           String    @default("user") @map("requested_by")
+  requestSource         String    @default("ios") @map("request_source")
+  originalEmailHash     String?   @map("original_email_hash")
+  originalPhoneHash     String?   @map("original_phone_hash")
+  previousAvatarUrl     String?   @map("previous_avatar_url") @db.Text
+  previousProfileQrUrl  String?   @map("previous_profile_qr_url") @db.Text
+  imUserId              String?   @map("im_user_id")
+  imStatus              String    @default("pending") @map("im_status")
+  imAttempts            Int       @default(0) @map("im_attempts")
+  imNextRunAt           DateTime  @default(now()) @map("im_next_run_at")
+  imLastError           String?   @map("im_last_error") @db.Text
+  mediaStatus           String    @default("pending") @map("media_status")
+  mediaAttempts         Int       @default(0) @map("media_attempts")
+  mediaNextRunAt        DateTime  @default(now()) @map("media_next_run_at")
+  mediaLastError        String?   @map("media_last_error") @db.Text
+  mediaTargets          Json?     @map("media_targets")
+  completedAt           DateTime? @map("completed_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([imStatus, imNextRunAt])
+  @@index([mediaStatus, mediaNextRunAt])
+  @@map("account_deletion_requests")
+}
+
+model ContentReport {
+  id             String    @id @default(uuid())
+  reporterUserId String    @map("reporter_user_id")
+  targetType     String    @map("target_type")
+  targetId       String    @map("target_id")
+  targetUserId   String?   @map("target_user_id")
+  reason         String
+  detail         String?   @db.Text
+  attachments    Json?
+  source         String    @default("in_app")
+  status         String    @default("pending")
+  metadata       Json?
+  resolvedAt     DateTime? @map("resolved_at")
+  resolvedBy     String?   @map("resolved_by")
+  resolutionNote String?   @map("resolution_note") @db.Text
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@unique([reporterUserId, targetType, targetId])
+  @@index([reporterUserId, createdAt])
+  @@index([targetType, targetId])
+  @@index([status, createdAt])
+  @@index([targetUserId, createdAt])
+  @@map("content_reports")
+}
+
+model ModerationDecisionTemplate {
+  id          String    @id @default(uuid())
+  templateKey String    @map("template_key")
+  locale      String
+  title       String
+  body        String    @db.Text
+  status      String    @default("draft")
+  version     Int       @default(1)
+  publishedAt DateTime? @map("published_at")
+  publishedBy String?   @map("published_by")
+  createdBy   String?   @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@unique([templateKey, locale, version])
+  @@index([templateKey, locale, status])
+  @@index([status, updatedAt])
+  @@map("moderation_decision_templates")
+}
+
+model UserBlock {
+  id            String   @id @default(uuid())
+  blockerUserId String   @map("blocker_user_id")
+  blockedUserId String   @map("blocked_user_id")
+  reason        String?
+  note          String?  @db.Text
+  source        String   @default("in_app")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([blockerUserId, blockedUserId])
+  @@index([blockerUserId, createdAt])
+  @@index([blockedUserId, createdAt])
+  @@map("user_blocks")
+}
+
+model AccountEnforcement {
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  status              String    @default("active")
+  type                String
+  scopes              String[]  @default([])
+  reasonCode          String    @map("reason_code")
+  userMessageI18n     Json?     @map("user_message_i18n")
+  internalNote        String?   @map("internal_note") @db.Text
+  evidence            Json?
+  startsAt            DateTime  @default(now()) @map("starts_at")
+  endsAt              DateTime? @map("ends_at")
+  createdBy           String?   @map("created_by")
+  createdFromReportId String?   @map("created_from_report_id")
+  createdFromCaseId   String?   @map("created_from_case_id")
+  revokedAt           DateTime? @map("revoked_at")
+  revokedBy           String?   @map("revoked_by")
+  revocationReason    String?   @map("revocation_reason") @db.Text
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  user    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appeals EnforcementAppeal[]
+
+  @@index([userId, status, startsAt])
+  @@index([type, status, startsAt])
+  @@index([reasonCode, status, startsAt])
+  @@index([createdBy, createdAt])
+  @@index([createdFromReportId])
+  @@map("account_enforcements")
+}
+
+model EnforcementAppeal {
+  id             String    @id @default(uuid())
+  enforcementId  String    @map("enforcement_id")
+  userId         String    @map("user_id")
+  status         String    @default("submitted")
+  appealReason   String    @map("appeal_reason") @db.Text
+  attachments    Json?
+  contactEmail   String?   @map("contact_email")
+  reviewerId     String?   @map("reviewer_id")
+  decision       String?
+  decisionNote   String?   @map("decision_note") @db.Text
+  reviewedAt     DateTime? @map("reviewed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  enforcement AccountEnforcement @relation(fields: [enforcementId], references: [id], onDelete: Cascade)
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([enforcementId, createdAt])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([reviewerId, reviewedAt])
+  @@map("enforcement_appeals")
 }
 
 model UserProfileModerationJob {
@@ -118,6 +283,109 @@ model UserProfileModerationJob {
   @@index([userId, targetType, createdAt])
   @@index([status, createdAt])
   @@map("user_profile_moderation_jobs")
+}
+
+model ContentSubmission {
+  id              String    @id @default(uuid())
+  submitterId     String    @map("submitter_id")
+  entityType      String    @map("entity_type")
+  status          String    @default("pending")
+  title           String
+  payload         Json
+  reviewReason    String?   @map("review_reason") @db.Text
+  reviewNotes     Json?     @map("review_notes")
+  reviewedAt      DateTime? @map("reviewed_at")
+  reviewedBy      String?   @map("reviewed_by")
+  createdEntityId String?   @map("created_entity_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  submitter User                       @relation("UserContentSubmissions", fields: [submitterId], references: [id], onDelete: Cascade)
+  versions  ContentSubmissionVersion[]
+
+  @@index([submitterId, createdAt])
+  @@index([entityType, status, createdAt])
+  @@index([status, createdAt])
+  @@map("content_submissions")
+}
+
+model ContentSubmissionVersion {
+  id           String   @id @default(uuid())
+  submissionId String   @map("submission_id")
+  version      Int
+  title        String
+  payload      Json
+  submittedAt  DateTime @default(now()) @map("submitted_at")
+  submittedBy  String?  @map("submitted_by")
+  changeNote   String?  @map("change_note") @db.Text
+
+  submission ContentSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, version])
+  @@index([submissionId, submittedAt])
+  @@map("content_submission_versions")
+}
+
+model DJEnrichmentJob {
+  id             String   @id @default(uuid())
+  requestedById  String   @map("requested_by_id")
+  status         String   @default("pending")
+  applyMode      String   @default("review_required") @map("apply_mode")
+  totalCount     Int      @default(0) @map("total_count")
+  queuedCount    Int      @default(0) @map("queued_count")
+  runningCount   Int      @default(0) @map("running_count")
+  successCount   Int      @default(0) @map("success_count")
+  failedCount    Int      @default(0) @map("failed_count")
+  reviewedCount  Int      @default(0) @map("reviewed_count")
+  startedAt      DateTime? @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  lastError      String?  @map("last_error") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  requestedBy User                 @relation("UserDJEnrichmentJobsRequested", fields: [requestedById], references: [id], onDelete: Cascade)
+  results     DJEnrichmentResult[]
+
+  @@index([requestedById, createdAt])
+  @@index([status, createdAt])
+  @@map("dj_enrichment_jobs")
+}
+
+model DJEnrichmentResult {
+  id                           String    @id @default(uuid())
+  jobId                        String    @map("job_id")
+  djId                         String?   @map("dj_id")
+  inputName                    String    @map("input_name")
+  status                       String    @default("queued")
+  applyStatus                  String    @default("pending_review") @map("apply_status")
+  inputPayload                 Json      @map("input_payload")
+  normalizedResult             Json?     @map("normalized_result")
+  cozeRawResponse              Json?     @map("coze_raw_response")
+  matchConfidence              Float?    @map("match_confidence")
+  isMatchConfident             Boolean   @default(false) @map("is_match_confident")
+  electronicConfidence         Float?    @map("electronic_confidence")
+  isElectronicDjConfident      Boolean   @default(false) @map("is_electronic_dj_confident")
+  genreConfidence              Float?    @map("genre_confidence")
+  shouldApplyGenres            Boolean   @default(false) @map("should_apply_genres")
+  reviewReason                 String?   @map("review_reason") @db.Text
+  reviewNotes                  Json?     @map("review_notes")
+  reviewedAt                   DateTime? @map("reviewed_at")
+  reviewedById                 String?   @map("reviewed_by_id")
+  appliedAt                    DateTime? @map("applied_at")
+  applySummary                 Json?     @map("apply_summary")
+  errorMessage                 String?   @map("error_message") @db.Text
+  createdAt                    DateTime  @default(now()) @map("created_at")
+  updatedAt                    DateTime  @updatedAt @map("updated_at")
+
+  job        DJEnrichmentJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  dj         DJ?             @relation(fields: [djId], references: [id], onDelete: SetNull)
+  reviewedBy User?           @relation("UserDJEnrichmentResultsReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([jobId, createdAt])
+  @@index([djId, createdAt])
+  @@index([status, applyStatus, createdAt])
+  @@index([reviewedById, reviewedAt])
+  @@map("dj_enrichment_results")
 }
 
 model Event {
@@ -152,6 +420,7 @@ model Event {
   longitude         Decimal? @db.Decimal(11, 8)
   startDate         DateTime @map("start_date")
   endDate           DateTime @map("end_date")
+  timeZone          String   @default("UTC") @map("time_zone")
   startTime         String   @default("00:00:00") @map("start_time")
   endTime           String   @default("23:59:59") @map("end_time")
   dayRolloverHour   Int      @default(6) @map("day_rollover_hour")
@@ -300,11 +569,14 @@ model DJ {
   bannerUrl           String?  @map("banner_url")
   country             String?
   countryI18n         Json?    @map("country_i18n")
+  spotifyUrl          String?  @map("spotify_url")
   spotifyId           String?  @map("spotify_id")
   spotifyFollowers    Int?     @map("spotify_followers")
   appleMusicId        String?  @map("apple_music_id")
   soundcloudUrl       String?  @map("soundcloud_url")
   soundcloudId        String?  @map("soundcloud_id")
+  neteaseUrl          String?  @map("netease_url")
+  qqMusicUrl          String?  @map("qq_music_url")
   website             String?  @map("website")
   trackCount          Int?     @map("track_count")
   playlistCount       Int?     @map("playlist_count")
@@ -367,6 +639,7 @@ model DJ {
   lineupArtists EventLineupArtist[]
   timetableSlots EventTimetableSlot[]
   contributors  DJContributor[]
+  enrichmentResults DJEnrichmentResult[]
   foundedLabels Label[]           @relation("LabelFounderDJ")
 
   @@map("djs")
@@ -404,6 +677,7 @@ model Genre {
 model Label {
   id               String  @id @default(uuid())
   name             String
+  nameI18n         Json?   @map("name_i18n")
   slug             String  @unique
   profileUrl       String  @unique @map("profile_url")
   profileSlug      String? @map("profile_slug")
@@ -425,6 +699,7 @@ model Label {
   introductionPreview   String?  @map("introduction_preview") @db.Text
   locationPeriod        String?  @map("location_period")
   introduction          String?  @db.Text
+  descriptionI18n       Json?    @map("description_i18n")
   genres                String[] @default([])
   contacts              Json?
   linksInWeb            Json?    @map("links_in_web")
@@ -758,8 +1033,10 @@ model DJSet {
   customDjNames String[]  @default([]) @map("custom_dj_names")
   uploadedById  String?   @map("uploaded_by_id")
   title         String
+  titleI18n     Json?     @map("title_i18n")
   slug          String    @unique
   description   String?
+  descriptionI18n Json?   @map("description_i18n")
   thumbnailUrl  String?   @map("thumbnail_url")
   videoUrl      String    @map("video_url")
   platform      String // "youtube" or "bilibili"
@@ -954,6 +1231,9 @@ model Post {
   id                 String    @id @default(uuid())
   userId             String    @map("user_id")
   content            String    @db.Text
+  titleI18n          Json?     @map("title_i18n")
+  summaryI18n        Json?     @map("summary_i18n")
+  bodyI18n           Json?     @map("body_i18n")
   images             String[]  @default([])
   location           String?
   type               String    @default("general") // general, event, set, squad

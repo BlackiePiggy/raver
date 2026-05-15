@@ -1,4 +1,4 @@
-export type NotificationChannel = 'in_app' | 'apns';
+export type NotificationChannel = 'in_app' | 'apns' | 'email' | 'sms';
 
 export type NotificationCategory =
   | 'chat_message'
@@ -8,6 +8,9 @@ export type NotificationCategory =
   | 'route_dj_reminder'
   | 'followed_dj_update'
   | 'followed_brand_update'
+  | 'account_enforcement'
+  | 'content_review'
+  | 'report_decision'
   | 'major_news';
 
 export interface NotificationTarget {
@@ -20,6 +23,7 @@ export interface NotificationPayload {
   deeplink?: string | null;
   badgeDelta?: number;
   metadata?: Record<string, unknown>;
+  locale?: string;
 }
 
 export interface NotificationEvent {

@@ -13,15 +13,15 @@ enum PostHideReasonOption: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .notRelevant:
-            return L("不感兴趣", "Not interested")
+            return LT("不感兴趣", "Not interested", "興味がない")
         case .seenTooOften:
-            return L("总是刷到", "Seeing this too often")
+            return LT("总是刷到", "Seeing this too often", "表示されすぎる")
         case .lowQuality:
-            return L("内容质量低", "Low quality")
+            return LT("内容质量低", "Low quality", "コンテンツの品質が低い")
         case .author:
-            return L("不想看这个作者", "Don't want posts from this author")
+            return LT("不想看这个作者", "Don't want posts from this author", "この投稿者の投稿を見たくない")
         case .other:
-            return LL("其他")
+            return LT("其他", "其他", "その他")
         }
     }
 }
@@ -35,7 +35,7 @@ protocol PostReadRepository {
 }
 
 protocol PostCommandRepository {
-    func createPost(input: CreatePostInput) async throws -> Post
+    func createPost(input: CreatePostInput) async throws -> CreatePostResult
     func updatePost(postID: String, input: UpdatePostInput) async throws -> Post
     func deletePost(postID: String) async throws
 }
@@ -94,7 +94,7 @@ struct PostCommandRepositoryAdapter: PostCommandRepository {
         self.service = service
     }
 
-    func createPost(input: CreatePostInput) async throws -> Post {
+    func createPost(input: CreatePostInput) async throws -> CreatePostResult {
         try await service.createPost(input: input)
     }
 
@@ -246,7 +246,7 @@ final class FeedViewModel: ObservableObject {
             if error.isUserInitiatedCancellation {
                 return
             }
-            let message = error.userFacingMessage ?? L("动态加载失败，请稍后重试", "Failed to load posts. Please try again later.")
+            let message = error.userFacingMessage ?? LT("动态加载失败，请稍后重试", "Failed to load posts. Please try again later.", "投稿の読み込みに失敗しました。後でもう一度お試しください。")
             if hadContent {
                 bannerMessage = message
                 phase = posts.isEmpty ? .empty : .success

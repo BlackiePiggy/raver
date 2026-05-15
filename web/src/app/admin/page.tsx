@@ -157,6 +157,13 @@ export default function AdminOverviewPage() {
             <div className="mt-2 text-lg font-semibold">内容管理中心</div>
             <div className="mt-2 text-sm leading-6 text-text-secondary">活动、DJ、Set、资讯、百科、榜单统一入口</div>
           </Link>
+          {rolePolicy.canAccessOperations && (
+            <Link href="/admin/festival-viewer.html#review" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
+              <div className="text-sm text-text-secondary">Contribution Review</div>
+              <div className="mt-2 text-lg font-semibold">内容贡献审核</div>
+              <div className="mt-2 text-sm leading-6 text-text-secondary">在 Festival Viewer 中按真实内容结构审核共建提交</div>
+            </Link>
+          )}
           {rolePolicy.canAccessPreRegistrationOps && (
             <Link href="/admin/pre-registrations" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
               <div className="text-sm text-text-secondary">Pre-registration Ops</div>
@@ -169,6 +176,27 @@ export default function AdminOverviewPage() {
               <div className="text-sm text-text-secondary">Notification Ops</div>
               <div className="mt-2 text-lg font-semibold">通知中心后台</div>
               <div className="mt-2 text-sm leading-6 text-text-secondary">通知模板、投递状态与配置</div>
+            </Link>
+          )}
+          {rolePolicy.canAccessOperations && (
+            <Link href="/admin/account-enforcements" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
+              <div className="text-sm text-text-secondary">Trust & Safety</div>
+              <div className="mt-2 text-lg font-semibold">账号处罚与申诉</div>
+              <div className="mt-2 text-sm leading-6 text-text-secondary">手动封禁、撤销处罚、处理申诉</div>
+            </Link>
+          )}
+          {rolePolicy.canAccessOperations && (
+            <Link href="/admin/account-deletions" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
+              <div className="text-sm text-text-secondary">Privacy Ops</div>
+              <div className="mt-2 text-lg font-semibold">账号删除请求</div>
+              <div className="mt-2 text-sm leading-6 text-text-secondary">查看 IM 删除、OSS 媒体清理与失败重试状态</div>
+            </Link>
+          )}
+          {rolePolicy.canAccessOperations && (
+            <Link href="/admin/content-reports" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
+              <div className="text-sm text-text-secondary">Moderation Queue</div>
+              <div className="mt-2 text-lg font-semibold">举报审核队列</div>
+              <div className="mt-2 text-sm leading-6 text-text-secondary">按优先级、原因、对象类型处理 UGC 举报</div>
             </Link>
           )}
           {rolePolicy.canAccessOperations ? (

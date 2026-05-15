@@ -23,13 +23,13 @@ struct SquadProfileView: View {
             if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if viewModel.isRefreshing {
-                        InlineLoadingBadge(title: L("正在更新小队", "Updating squad"))
+                        InlineLoadingBadge(title: LT("正在更新小队", "Updating squad", "Squadを更新中"))
                     }
                     if let bannerMessage = viewModel.bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task {
                                 await viewModel.load()
@@ -55,7 +55,7 @@ struct SquadProfileView: View {
                 .padding(.horizontal, 16)
                 Spacer()
             case .empty:
-                ContentUnavailableView(LL("小队不存在"), systemImage: "person.3.sequence")
+                ContentUnavailableView(LT("小队不存在", "Squad not found", "Squadが存在しません"), systemImage: "person.3.sequence")
                     .padding(.top, 80)
             case .success:
                 ScrollView {
@@ -74,7 +74,7 @@ struct SquadProfileView: View {
                                 Button {
                                     appPush(.squadManage(squadID: profile.id))
                                 } label: {
-                                    Label(L("编辑小队信息", "Edit Squad"), systemImage: "square.and.pencil")
+                                    Label(LT("编辑小队信息", "Edit Squad", "Squad情報を編集"), systemImage: "square.and.pencil")
                                         .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.bordered)
@@ -90,12 +90,12 @@ struct SquadProfileView: View {
                                 if viewModel.isProcessingJoin {
                                     ProgressView().tint(.white)
                                 } else {
-                                    Text(profile.isMember ? L("进入小队", "Enter Squad") : L("加入并进入小队", "Join & Enter Squad"))
+                                    Text(profile.isMember ? LT("进入小队", "Enter Squad", "Squadへ入る") : LT("加入并进入小队", "Join & Enter Squad", "参加してSquadへ"))
                                 }
                             }
                             .buttonStyle(PrimaryButtonStyle())
                         } else {
-                            ContentUnavailableView(LL("小队不存在"), systemImage: "person.3.sequence")
+                            ContentUnavailableView(LT("小队不存在", "Squad not found", "Squadが存在しません"), systemImage: "person.3.sequence")
                                 .padding(.top, 80)
                         }
                     }
@@ -112,13 +112,13 @@ struct SquadProfileView: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button(L("收起", "Dismiss")) {
+                Button(LT("收起", "Dismiss", "閉じる")) {
                     dismissKeyboard()
                 }
             }
         }
         .raverGradientNavigationChrome(
-            title: LL("小队"),
+            title: LT("小队", "Squad", "Squad"),
             trailing: AnyView(headerTrailingActions)
         ) {
             dismiss()
@@ -139,16 +139,16 @@ struct SquadProfileView: View {
                 syncMySettingsFromProfile()
             }
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { viewModel.error != nil },
             set: { if !$0 { viewModel.error = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
         }
         .confirmationDialog(
-            L("移出小队成员", "Remove Squad Member"),
+            LT("移出小队成员", "Remove Squad Member", "Squadメンバーを削除"),
             isPresented: Binding(
                 get: { pendingRemoveMember != nil },
                 set: { if !$0 { pendingRemoveMember = nil } }
@@ -156,18 +156,18 @@ struct SquadProfileView: View {
             titleVisibility: .visible
         ) {
             if let member = pendingRemoveMember {
-                Button(L("移出 \(member.shownName)", "Remove \(member.shownName)"), role: .destructive) {
+                Button(LT("移出 \(member.shownName)", "Remove \(member.shownName)", "\(member.shownName) を削除"), role: .destructive) {
                     let memberID = member.id
                     pendingRemoveMember = nil
                     Task { _ = await viewModel.removeMember(memberUserID: memberID) }
                 }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {
                 pendingRemoveMember = nil
             }
         } message: {
             if let member = pendingRemoveMember {
-                Text(L("将从小队中移出 \(member.shownName)。", "Remove \(member.shownName) from squad."))
+                Text(LT("将从小队中移出 \(member.shownName)。", "Remove \(member.shownName) from squad.", "\(member.shownName) をSquadから削除します。"))
             }
         }
     }
@@ -195,7 +195,7 @@ struct SquadProfileView: View {
                     frameSize: 34,
                     font: .system(size: 14, weight: .semibold)
                 )
-                .accessibilityLabel(Text(L("小队二维码", "Squad QR Code")))
+                .accessibilityLabel(Text(LT("小队二维码", "Squad QR Code", "Squad QRコード")))
 
                 RaverNavigationCircleIconButton(
                     systemName: "photo.on.rectangle",
@@ -206,7 +206,7 @@ struct SquadProfileView: View {
                     frameSize: 34,
                     font: .system(size: 14, weight: .semibold)
                 )
-                .accessibilityLabel(Text(L("分享海报", "Share Poster")))
+                .accessibilityLabel(Text(LT("分享海报", "Share Poster", "海報を共有")))
 
                 RaverNavigationCircleIconButton(
                     systemName: "link",
@@ -217,7 +217,7 @@ struct SquadProfileView: View {
                     frameSize: 34,
                     font: .system(size: 14, weight: .semibold)
                 )
-                .accessibilityLabel(Text(L("复制链接", "Copy Link")))
+                .accessibilityLabel(Text(LT("复制链接", "Copy Link", "リンクをコピー")))
             }
         } else {
             Color.clear
@@ -232,18 +232,18 @@ struct SquadProfileView: View {
         let isInviteLink = !profile.isPublic
         let targetType: ShareTargetType = isInviteLink ? .squadInvite : .squadCard
         let successMessage = isInviteLink
-            ? L("已复制小队邀请链接", "Squad invite link copied")
-            : L("已复制小队链接", "Squad link copied")
+            ? LT("已复制小队邀请链接", "Squad invite link copied", "Squad招待リンクをコピーしました")
+            : LT("已复制小队链接", "Squad link copied", "Squadリンクをコピーしました")
         let failureMessage = isInviteLink
-            ? L("复制小队邀请链接失败，请稍后重试。", "Failed to copy squad invite link. Please try again.")
-            : L("复制小队链接失败，请稍后重试。", "Failed to copy squad link. Please try again.")
+            ? LT("复制小队邀请链接失败，请稍后重试。", "Failed to copy squad invite link. Please try again.", "Squad招待リンクをコピーできませんでした。もう一度お試しください。")
+            : LT("复制小队链接失败，请稍后重试。", "Failed to copy squad link. Please try again.", "Squadリンクをコピーできませんでした。もう一度お試しください。")
 
         do {
             let result = try await shareLinkCoordinator.copyLink(
                 target: ShareTarget(
                     type: targetType,
                     id: profile.id,
-                    title: isInviteLink ? L("加入「\(profile.name)」", "Join \(profile.name)") : profile.name,
+                    title: isInviteLink ? LT("加入「\(profile.name)」", "Join \(profile.name)", "「\(profile.name)」に参加") : profile.name,
                     subtitle: profile.description,
                     imageURL: profile.avatarURL
                 ),
@@ -254,7 +254,7 @@ struct SquadProfileView: View {
             )
 
             if result.usedDeepLinkFallback {
-                viewModel.error = L("已复制 App 内链接", "Copied app-only link.")
+                viewModel.error = LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました")
             } else {
                 OperationBannerCenter.shared.success(successMessage)
             }
@@ -273,7 +273,7 @@ struct SquadProfileView: View {
                 target: ShareTarget(
                     type: targetType,
                     id: profile.id,
-                    title: isInviteLink ? L("加入「\(profile.name)」", "Join \(profile.name)") : profile.name,
+                    title: isInviteLink ? LT("加入「\(profile.name)」", "Join \(profile.name)", "「\(profile.name)」に参加") : profile.name,
                     subtitle: profile.description,
                     imageURL: profile.avatarURL
                 ),
@@ -285,22 +285,22 @@ struct SquadProfileView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: profile.name,
                         subtitle: profile.description,
                         imageURL: profile.avatarURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
                         hintText: isInviteLink
-                            ? L("私密小队海报仍受邀请规则控制，过期或撤销后将无法继续加入。", "Private squad posters still follow invite-link rules and stop working after expiry or revocation.")
-                            : L("群名片海报由系统统一生成，后续更新群头像或简介后可继续复用。", "The squad poster is generated by the system and can continue to be reused after future avatar or bio updates."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                            ? LT("私密小队海报仍受邀请规则控制，过期或撤销后将无法继续加入。", "Private squad posters still follow invite-link rules and stop working after expiry or revocation.", "非公開Squadの海報は招待ルールに従います。有効期限切れまたは取消後は参加できません。")
+                            : LT("群名片海报由系统统一生成，后续更新群头像或简介后可继续复用。", "The squad poster is generated by the system and can continue to be reused after future avatar or bio updates.", "Squad海報はシステムで生成され、今後アバターや紹介を更新しても継続利用できます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            viewModel.error = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            viewModel.error = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -313,7 +313,7 @@ struct SquadProfileView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(profile.name)
                             .font(.title3.bold())
-                        Text("\(profile.isPublic ? L("公开小队", "Public Squad") : L("私密小队", "Private Squad")) (\(profile.memberCount)/\(profile.maxMembers))")
+                        Text("\(profile.isPublic ? LT("公开小队", "Public Squad", "公開Squad") : LT("私密小队", "Private Squad", "非公開Squad")) (\(profile.memberCount)/\(profile.maxMembers))")
                             .font(.caption)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
@@ -336,7 +336,7 @@ struct SquadProfileView: View {
     private func membersCard(_ profile: SquadProfile) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text(LL("小队成员"))
+                Text(LT("小队成员", "Squad Members", "Squadメンバー"))
                     .font(.headline)
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -368,14 +368,14 @@ struct SquadProfileView: View {
     private func groupDetailsCard(_ profile: SquadProfile) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
-                Text(LL("小队详情"))
+                Text(LT("小队详情", "Squad Details", "Squad詳細"))
                     .font(.headline)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(LL("小队通知"))
+                    Text(LT("小队通知", "Squad Notice", "Squad通知"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
-                    Text(profile.notice.isEmpty ? L("暂无小队通知", "No Squad Notice Yet") : profile.notice)
+                    Text(profile.notice.isEmpty ? LT("暂无小队通知", "No Squad Notice Yet", "Squad通知はまだありません") : profile.notice)
                         .font(.subheadline)
                 }
             }
@@ -385,11 +385,11 @@ struct SquadProfileView: View {
     private func activitiesCard(_ profile: SquadProfile) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text(LL("小队活动"))
+                Text(LT("小队活动", "Squad Activities", "Squad活動"))
                     .font(.headline)
 
                 if profile.activities.isEmpty {
-                    Text(LL("近期暂无活动"))
+                    Text(LT("近期暂无活动", "No recent activities", "最近の活動はありません"))
                         .font(.subheadline)
                         .foregroundStyle(RaverTheme.secondaryText)
                 } else {
@@ -416,10 +416,10 @@ struct SquadProfileView: View {
     private func mySettingsCard(_ profile: SquadProfile) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text(LL("我的小队设置"))
+                Text(LT("我的小队设置", "My Squad Settings", "自分のSquad設定"))
                     .font(.headline)
 
-                TextField(LL("本小队昵称"), text: $myNicknameDraft)
+                TextField(LT("本小队昵称", "Nickname in this squad", "このSquadでのニックネーム"), text: $myNicknameDraft)
                     .submitLabel(.done)
                     .onSubmit {
                         dismissKeyboard()
@@ -429,14 +429,14 @@ struct SquadProfileView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                 Toggle(isOn: $myNotificationsEnabled) {
-                    Text(LL("通知权限"))
+                    Text(LT("通知权限", "Notification Permission", "通知権限"))
                         .font(.subheadline)
                 }
                 .tint(RaverTheme.accent)
 
                 HStack {
                     if let role = profile.myRole, !role.isEmpty {
-                        Text(L("当前身份：\(roleLabel(role))", "Role: \(roleLabel(role))"))
+                        Text(LT("当前身份：\(roleLabel(role))", "Role: \(roleLabel(role))", "現在の役割: \(roleLabel(role))"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -452,7 +452,7 @@ struct SquadProfileView: View {
                         if viewModel.isSavingMySettings {
                             ProgressView()
                         } else {
-                            Text(L("保存", "Save"))
+                            Text(LT("保存", "Save", "保存"))
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -469,9 +469,9 @@ struct SquadProfileView: View {
 
     private func roleLabel(_ role: String) -> String {
         switch role {
-        case "leader": return L("队长", "Leader")
-        case "admin": return L("管理员", "Admin")
-        default: return L("成员", "Member")
+        case "leader": return LT("队长", "Leader", "リーダー")
+        case "admin": return LT("管理员", "Admin", "管理者")
+        default: return LT("成员", "Member", "メンバー")
         }
     }
 
@@ -491,7 +491,7 @@ struct SquadProfileView: View {
                     Button {
                         Task { _ = await viewModel.updateMemberRole(memberUserID: member.id, role: "admin") }
                     } label: {
-                        Label(L("设为管理员", "Promote to Admin"), systemImage: "person.badge.plus")
+                        Label(LT("设为管理员", "Promote to Admin", "管理者に昇格"), systemImage: "person.badge.plus")
                     }
                 }
 
@@ -499,7 +499,7 @@ struct SquadProfileView: View {
                     Button {
                         Task { _ = await viewModel.updateMemberRole(memberUserID: member.id, role: "member") }
                     } label: {
-                        Label(L("降为成员", "Demote to Member"), systemImage: "person.badge.minus")
+                        Label(LT("降为成员", "Demote to Member", "メンバーに降格"), systemImage: "person.badge.minus")
                     }
                 }
 
@@ -507,20 +507,20 @@ struct SquadProfileView: View {
                     Button {
                         Task { _ = await viewModel.updateMemberRole(memberUserID: member.id, role: "leader") }
                     } label: {
-                        Label(L("转让队长", "Transfer Leader"), systemImage: "crown")
+                        Label(LT("转让队长", "Transfer Leader", "リーダーを譲渡"), systemImage: "crown")
                     }
 
                     Button(role: .destructive) {
                         pendingRemoveMember = member
                     } label: {
-                        Label(L("移出小队", "Remove from Squad"), systemImage: "person.crop.circle.badge.xmark")
+                        Label(LT("移出小队", "Remove from Squad", "Squadから削除"), systemImage: "person.crop.circle.badge.xmark")
                     }
                 }
             } else if myRole == "admin", member.role == "member" {
                 Button(role: .destructive) {
                     pendingRemoveMember = member
                 } label: {
-                    Label(L("移出小队", "Remove from Squad"), systemImage: "person.crop.circle.badge.xmark")
+                    Label(LT("移出小队", "Remove from Squad", "Squadから削除"), systemImage: "person.crop.circle.badge.xmark")
                 }
             }
         }
@@ -581,10 +581,10 @@ struct SquadProfileView: View {
 
     private func memberRoleBadge(_ member: SquadMemberProfile) -> (title: String, color: Color)? {
         if member.isCaptain {
-            return (L("队长", "Leader"), .orange)
+            return (LT("队长", "Leader", "リーダー"), .orange)
         }
         if member.isAdmin {
-            return (L("管理员", "Admin"), .blue)
+            return (LT("管理员", "Admin", "管理者"), .blue)
         }
         return nil
     }
@@ -627,7 +627,7 @@ struct SquadManageRouteView: View {
     var body: some View {
         Group {
             if isLoading && profile == nil {
-                ProgressView(L("加载小队中...", "Loading squads..."))
+                ProgressView(LT("加载小队中...", "Loading squads...", "Squadを読み込み中..."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let profile {
                 SquadManageFormView(
@@ -641,8 +641,8 @@ struct SquadManageRouteView: View {
                 }
             } else {
                 VStack(spacing: 10) {
-                    ContentUnavailableView(LL("小队不存在"), systemImage: "person.3.sequence")
-                    Button(L("重试", "Retry")) {
+                    ContentUnavailableView(LT("小队不存在", "Squad not found", "Squadが存在しません"), systemImage: "person.3.sequence")
+                    Button(LT("重试", "Retry", "再試行")) {
                         Task {
                             await load(force: true)
                         }
@@ -653,15 +653,15 @@ struct SquadManageRouteView: View {
             }
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: LL("编辑小队信息"))
+        .raverSystemNavigation(title: LT("编辑小队信息", "Edit Squad Info", "Squad情報を編集"))
         .task {
             await load(force: false)
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -708,8 +708,8 @@ private struct SquadManageFormView: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .public: return L("公开小队", "Public Squad")
-            case .private: return L("私密小队", "Private Squad")
+            case .public: return LT("公开小队", "Public Squad", "公開Squad")
+            case .private: return LT("私密小队", "Private Squad", "非公開Squad")
             }
         }
 
@@ -753,15 +753,15 @@ private struct SquadManageFormView: View {
 
     var body: some View {
         Form {
-            Section(LL("基础")) {
-                TextField(LL("小队名称"), text: $name)
+            Section(LT("基础", "Basics", "基本")) {
+                TextField(LT("小队名称", "Squad name", "Squad名"), text: $name)
                     .submitLabel(.done)
                     .onSubmit {
                         dismissKeyboard()
                     }
-                TextField(LL("简介"), text: $descriptionText, axis: .vertical)
+                TextField(LT("简介", "Description", "紹介"), text: $descriptionText, axis: .vertical)
                     .lineLimit(2...4)
-                Picker(LL("小队性质"), selection: $privacyOption) {
+                Picker(LT("小队性质", "Squad Type", "Squad種別"), selection: $privacyOption) {
                     ForEach(PrivacyOption.allCases) { item in
                         Text(item.title).tag(item)
                     }
@@ -769,8 +769,8 @@ private struct SquadManageFormView: View {
                 .pickerStyle(.segmented)
             }
 
-            Section(LL("展示")) {
-                TextField(LL("头像 URL（可选）"), text: $avatarURL)
+            Section(LT("展示", "Display", "表示")) {
+                TextField(LT("头像 URL（可选）", "Avatar URL (optional)", "アバターURL（任意）"), text: $avatarURL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.done)
@@ -779,13 +779,13 @@ private struct SquadManageFormView: View {
                     }
                 PhotosPicker(selection: $selectedAvatarPhotoItem, matching: .images) {
                     if isUploadingAvatar {
-                        Label(LL("头像上传中..."), systemImage: "arrow.trianglehead.2.clockwise")
+                        Label(LT("头像上传中...", "Uploading avatar...", "アバターをアップロード中..."), systemImage: "arrow.trianglehead.2.clockwise")
                     } else {
-                        Label(LL("从相册选择小队头像"), systemImage: "person.crop.circle.badge.plus")
+                        Label(LT("从相册选择小队头像", "Choose squad avatar from Photos", "写真からSquadアバターを選択"), systemImage: "person.crop.circle.badge.plus")
                     }
                 }
                 .disabled(isUploadingAvatar || isUploadingFlag)
-                TextField(LL("旗帜图 URL（可选）"), text: $bannerURL)
+                TextField(LT("旗帜图 URL（可选）", "Banner URL (optional)", "バナー画像URL（任意）"), text: $bannerURL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.done)
@@ -794,16 +794,16 @@ private struct SquadManageFormView: View {
                     }
                 PhotosPicker(selection: $selectedFlagPhotoItem, matching: .images) {
                     if isUploadingFlag {
-                        Label(LL("旗帜图上传中..."), systemImage: "arrow.trianglehead.2.clockwise")
+                        Label(LT("旗帜图上传中...", "Uploading banner...", "バナー画像をアップロード中..."), systemImage: "arrow.trianglehead.2.clockwise")
                     } else {
-                        Label(LL("从相册选择旗帜图"), systemImage: "flag.pattern.checkered")
+                        Label(LT("从相册选择旗帜图", "Choose banner from Photos", "写真からバナー画像を選択"), systemImage: "flag.pattern.checkered")
                     }
                 }
                 .disabled(isUploadingFlag)
             }
 
-            Section(LL("小队通知")) {
-                TextField(LL("小队通知内容"), text: $notice, axis: .vertical)
+            Section(LT("小队通知", "Squad Notice", "Squad通知")) {
+                TextField(LT("小队通知内容", "Squad notice content", "Squad通知内容"), text: $notice, axis: .vertical)
                     .lineLimit(2...4)
             }
         }
@@ -826,14 +826,14 @@ private struct SquadManageFormView: View {
                     if isSaving {
                         ProgressView()
                     } else {
-                        Text(L("保存", "Save"))
+                        Text(LT("保存", "Save", "保存"))
                     }
                 }
                 .disabled(isSaving || isUploadingAvatar || isUploadingFlag || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button(L("收起", "Dismiss")) {
+                Button(LT("收起", "Dismiss", "閉じる")) {
                     dismissKeyboard()
                 }
             }
@@ -852,11 +852,11 @@ private struct SquadManageFormView: View {
                 await uploadFlagImage(data: data)
             }
         }
-        .alert(LL("上传失败"), isPresented: Binding(
+        .alert(LT("上传失败", "Upload Failed", "アップロードに失敗しました"), isPresented: Binding(
             get: { uploadError != nil },
             set: { if !$0 { uploadError = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(uploadError ?? "")
         }

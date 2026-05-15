@@ -13,12 +13,12 @@ struct DiscoverHomeView: View {
 
         var title: String {
             switch self {
-            case .recommend: return L("推荐", "Picks")
-            case .events: return L("活动", "Events")
-            case .news: return L("资讯", "News")
-            case .djs: return L("DJ", "DJ")
-            case .sets: return L("Sets", "Sets")
-            case .learn: return L("Wiki", "Wiki")
+            case .recommend: return LT("推荐", "Picks", "おすすめ")
+            case .events: return LT("活动", "Events", "イベント")
+            case .news: return LT("资讯", "News", "ニュース")
+            case .djs: return LT("DJ", "DJ", "DJ")
+            case .sets: return LT("Sets", "Sets", "Sets")
+            case .learn: return LT("Wiki", "Wiki", "Wiki")
             }
         }
 

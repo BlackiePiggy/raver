@@ -44,7 +44,7 @@ final class FollowListViewModel: ObservableObject {
             bannerMessage = nil
             error = nil
         } catch {
-            let message = error.userFacingMessage ?? L("列表加载失败，请稍后重试", "Failed to load the list. Please try again later.")
+            let message = error.userFacingMessage ?? LT("列表加载失败，请稍后重试", "Failed to load the list. Please try again later.", "一覧を読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success

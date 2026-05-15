@@ -1,6 +1,14 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth';
+import {
+  diffEventDays,
+  getEventHour,
+  normalizeEventTimeZone,
+  parseEventDateInput,
+  setEventDayAndKeepTime,
+  startOfEventDay,
+} from '../utils/event-timezone';
 
 const prisma = new PrismaClient();
 
@@ -48,29 +56,6 @@ const toNumberOrNull = (value: unknown): number | null => {
   return Number.isFinite(num) ? num : null;
 };
 
-const parseOptionalDate = (value: unknown): Date | null => {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value;
-  }
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dateOnlyMatch) {
-    const year = Number(dateOnlyMatch[1]);
-    const month = Number(dateOnlyMatch[2]);
-    const day = Number(dateOnlyMatch[3]);
-    const parsedLocalDate = new Date(year, month - 1, day);
-    return Number.isNaN(parsedLocalDate.getTime()) ? null : parsedLocalDate;
-  }
-  const parsed = new Date(trimmed);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
 const EVENT_DEFAULT_START_TIME = '00:00:00';
 const EVENT_DEFAULT_END_TIME = '23:59:59';
 
@@ -88,17 +73,10 @@ const normalizeEventClockTime = (value: unknown, fallback: string): string => {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
 };
 
-const normalizeEventStartDate = (date: Date): Date => {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
-};
+const normalizeEventStartDate = (date: Date, timeZone = 'UTC'): Date => startOfEventDay(date, timeZone);
 
-const normalizeEventEndDate = (date: Date): Date => {
-  const next = new Date(date);
-  next.setHours(23, 59, 59, 0);
-  return next;
-};
+const normalizeEventEndDate = (date: Date, timeZone = 'UTC'): Date =>
+  new Date(startOfEventDay(date, timeZone).getTime() + 86_400_000 - 1000);
 
 const resolveEventStatus = (
   startDate: Date,
@@ -141,27 +119,17 @@ const normalizeDayRolloverHour = (value: unknown, fallback = 6): number => {
   return hour;
 };
 
-const startOfDay = (date: Date): Date => {
-  const out = new Date(date);
-  out.setHours(0, 0, 0, 0);
-  return out;
-};
-
-const diffDays = (from: Date, to: Date): number => {
-  const millis = startOfDay(to).getTime() - startOfDay(from).getTime();
-  return Math.floor(millis / 86_400_000);
-};
-
 const inferFestivalDayIndex = (
   startTime: Date,
   eventStartDate: Date,
-  dayRolloverHour: number
+  dayRolloverHour: number,
+  timeZone = 'UTC'
 ): number | null => {
   if (Number.isNaN(startTime.getTime()) || Number.isNaN(eventStartDate.getTime())) {
     return null;
   }
-  let dayOffset = diffDays(eventStartDate, startTime);
-  if (dayOffset > 0 && startTime.getHours() < dayRolloverHour) {
+  let dayOffset = diffEventDays(eventStartDate, startTime, timeZone);
+  if (dayOffset > 0 && getEventHour(startTime, timeZone) < dayRolloverHour) {
     dayOffset -= 1;
   }
   return Math.max(1, dayOffset + 1);
@@ -170,18 +138,9 @@ const inferFestivalDayIndex = (
 const applyFestivalDayIndexToDate = (
   timeSource: Date,
   eventStartDate: Date,
-  festivalDayIndex: number
-): Date => {
-  const targetDay = new Date(startOfDay(eventStartDate));
-  targetDay.setDate(targetDay.getDate() + Math.max(0, festivalDayIndex - 1));
-  targetDay.setHours(
-    timeSource.getHours(),
-    timeSource.getMinutes(),
-    timeSource.getSeconds(),
-    timeSource.getMilliseconds()
-  );
-  return targetDay;
-};
+  festivalDayIndex: number,
+  timeZone = 'UTC'
+): Date => setEventDayAndKeepTime(timeSource, eventStartDate, festivalDayIndex, timeZone);
 
 type ExistingLineupSlotForRebase = {
   id: string;
@@ -194,16 +153,17 @@ const rebaseExistingLineupSlotsToEventStart = (
   slots: ExistingLineupSlotForRebase[],
   previousEventStartDate: Date,
   nextEventStartDate: Date,
-  dayRolloverHour: number
+  dayRolloverHour: number,
+  timeZone = 'UTC'
 ): Array<{ id: string; festivalDayIndex: number; startTime: Date; endTime: Date }> =>
   slots.map((slot) => {
     const festivalDayIndex =
       slot.festivalDayIndex
-      ?? inferFestivalDayIndex(slot.startTime, previousEventStartDate, dayRolloverHour)
+      ?? inferFestivalDayIndex(slot.startTime, previousEventStartDate, dayRolloverHour, timeZone)
       ?? 1;
-    const endDayOffset = Math.max(0, diffDays(slot.startTime, slot.endTime));
-    const startTime = applyFestivalDayIndexToDate(slot.startTime, nextEventStartDate, festivalDayIndex);
-    let endTime = applyFestivalDayIndexToDate(slot.endTime, nextEventStartDate, festivalDayIndex + endDayOffset);
+    const endDayOffset = Math.max(0, diffEventDays(slot.startTime, slot.endTime, timeZone));
+    const startTime = applyFestivalDayIndexToDate(slot.startTime, nextEventStartDate, festivalDayIndex, timeZone);
+    let endTime = applyFestivalDayIndexToDate(slot.endTime, nextEventStartDate, festivalDayIndex + endDayOffset, timeZone);
 
     while (endTime < startTime) {
       endTime = new Date(endTime.getTime() + 86_400_000);
@@ -220,20 +180,22 @@ const rebaseExistingLineupSlotsToEventStart = (
 const normalizeLineupSlots = (
   slots: unknown,
   eventStartDate: Date,
-  dayRolloverHourRaw: unknown = 6
+  dayRolloverHourRaw: unknown = 6,
+  timeZoneRaw: unknown = 'UTC'
 ): LineupSlotInput[] => {
   if (!Array.isArray(slots)) {
     return [];
   }
 
   const dayRolloverHour = normalizeDayRolloverHour(dayRolloverHourRaw, 6);
+  const timeZone = normalizeEventTimeZone(timeZoneRaw);
   const safeEventStart = Number.isNaN(eventStartDate.getTime()) ? new Date() : eventStartDate;
   return slots
     .filter((slot) => slot && typeof slot === 'object')
     .map((slot) => slot as RawLineupSlotInput)
     .map((slot, index) => {
-      const parsedStart = parseOptionalDate(slot.startTime);
-      const parsedEnd = parseOptionalDate(slot.endTime);
+      const parsedStart = parseEventDateInput(slot.startTime, timeZone, 'start');
+      const parsedEnd = parseEventDateInput(slot.endTime, timeZone, 'end');
       const fallbackBase = new Date(safeEventStart.getTime() + index * 60_000);
       const explicitFestivalDayIndex =
         typeof slot.festivalDayIndex === 'number' && Number.isFinite(slot.festivalDayIndex)
@@ -254,8 +216,8 @@ const normalizeLineupSlots = (
       }
 
       if (explicitFestivalDayIndex) {
-        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex);
-        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex);
+        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex, timeZone);
+        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex, timeZone);
         if (endTime < startTime) {
           endTime = new Date(endTime.getTime() + 86_400_000);
         }
@@ -275,7 +237,7 @@ const normalizeLineupSlots = (
       const effectiveDjId = djId || firstBoundDjId;
       const festivalDayIndex =
         explicitFestivalDayIndex
-        ?? inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour);
+        ?? inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour, timeZone);
 
       return {
         djId: effectiveDjId,
@@ -489,6 +451,7 @@ export const getEvent = async (req: Request, res: Response): Promise<void> => {
 export const createEvent = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
+    const role = req.user?.role;
     if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
@@ -512,6 +475,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       longitude,
       startDate,
       endDate,
+      timeZone,
       startTime,
       endTime,
       dayRolloverHour,
@@ -531,6 +495,23 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
+    if (role !== 'admin' && role !== 'operator') {
+      const submission = await prisma.contentSubmission.create({
+        data: {
+          submitterId: userId,
+          entityType: 'event',
+          title: String(name).trim(),
+          payload: req.body,
+          status: 'pending',
+        },
+      });
+      res.status(202).json({
+        message: '活动信息已提交审核，管理员审核通过后才会入库',
+        submission,
+      });
+      return;
+    }
+
     const desiredSlug = slug || slugify(name);
     const existingEvent = await prisma.event.findUnique({
       where: { slug: desiredSlug },
@@ -542,18 +523,19 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const normalizedTicketTiers = normalizeTicketTiers(ticketTiers);
-    const parsedStartDateInput = new Date(startDate);
-    const parsedEndDateInput = new Date(endDate);
-    if (Number.isNaN(parsedStartDateInput.getTime()) || Number.isNaN(parsedEndDateInput.getTime())) {
+    const normalizedTimeZone = normalizeEventTimeZone(timeZone);
+    const normalizedStartTime = normalizeEventClockTime(startTime, EVENT_DEFAULT_START_TIME);
+    const normalizedEndTime = normalizeEventClockTime(endTime, EVENT_DEFAULT_END_TIME);
+    const parsedStartDateInput = parseEventDateInput(startDate, normalizedTimeZone, 'start', normalizedStartTime);
+    const parsedEndDateInput = parseEventDateInput(endDate, normalizedTimeZone, 'end', normalizedEndTime);
+    if (!parsedStartDateInput || !parsedEndDateInput) {
       res.status(400).json({ error: 'Invalid event date range' });
       return;
     }
-    const parsedStartDate = normalizeEventStartDate(parsedStartDateInput);
-    const parsedEndDate = normalizeEventEndDate(parsedEndDateInput);
-    const normalizedStartTime = normalizeEventClockTime(startTime, EVENT_DEFAULT_START_TIME);
-    const normalizedEndTime = normalizeEventClockTime(endTime, EVENT_DEFAULT_END_TIME);
+    const parsedStartDate = normalizeEventStartDate(parsedStartDateInput, normalizedTimeZone);
+    const parsedEndDate = normalizeEventEndDate(parsedEndDateInput, normalizedTimeZone);
     const normalizedDayRolloverHour = normalizeDayRolloverHour(dayRolloverHour, 6);
-    const normalizedSlots = normalizeLineupSlots(lineupSlots, parsedStartDate, normalizedDayRolloverHour);
+    const normalizedSlots = normalizeLineupSlots(lineupSlots, parsedStartDate, normalizedDayRolloverHour, normalizedTimeZone);
 
     const event = await prisma.event.create({
       data: {
@@ -575,6 +557,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
         longitude: toNumberOrNull(longitude),
         startDate: parsedStartDate,
         endDate: parsedEndDate,
+        timeZone: normalizedTimeZone,
         startTime: normalizedStartTime,
         endTime: normalizedEndTime,
         dayRolloverHour: normalizedDayRolloverHour,
@@ -668,6 +651,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       longitude,
       startDate,
       endDate,
+      timeZone,
       startTime,
       endTime,
       dayRolloverHour,
@@ -689,6 +673,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         organizerId: true,
         startDate: true,
         endDate: true,
+        timeZone: true,
         startTime: true,
         endTime: true,
         dayRolloverHour: true,
@@ -712,34 +697,37 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const nextStartDateInput = startDate ? new Date(startDate) : null;
-    if (nextStartDateInput && Number.isNaN(nextStartDateInput.getTime())) {
-      res.status(400).json({ error: 'Invalid startDate' });
-      return;
-    }
-    const nextEndDateInput = endDate ? new Date(endDate) : null;
-    if (nextEndDateInput && Number.isNaN(nextEndDateInput.getTime())) {
-      res.status(400).json({ error: 'Invalid endDate' });
-      return;
-    }
-    const nextStartDate = nextStartDateInput ? normalizeEventStartDate(nextStartDateInput) : null;
-    const nextEndDate = nextEndDateInput ? normalizeEventEndDate(nextEndDateInput) : null;
+    const nextTimeZone = timeZone !== undefined
+      ? normalizeEventTimeZone(timeZone, existing.timeZone ?? 'UTC')
+      : normalizeEventTimeZone(existing.timeZone ?? 'UTC');
     const nextStartTime = startTime !== undefined
       ? normalizeEventClockTime(startTime, EVENT_DEFAULT_START_TIME)
       : normalizeEventClockTime(existing.startTime, EVENT_DEFAULT_START_TIME);
     const nextEndTime = endTime !== undefined
       ? normalizeEventClockTime(endTime, EVENT_DEFAULT_END_TIME)
       : normalizeEventClockTime(existing.endTime, EVENT_DEFAULT_END_TIME);
+    const nextStartDateInput = startDate ? parseEventDateInput(startDate, nextTimeZone, 'start', nextStartTime) : null;
+    if (startDate && !nextStartDateInput) {
+      res.status(400).json({ error: 'Invalid startDate' });
+      return;
+    }
+    const nextEndDateInput = endDate ? parseEventDateInput(endDate, nextTimeZone, 'end', nextEndTime) : null;
+    if (endDate && !nextEndDateInput) {
+      res.status(400).json({ error: 'Invalid endDate' });
+      return;
+    }
+    const nextStartDate = nextStartDateInput ? normalizeEventStartDate(nextStartDateInput, nextTimeZone) : null;
+    const nextEndDate = nextEndDateInput ? normalizeEventEndDate(nextEndDateInput, nextTimeZone) : null;
     const effectiveStartDate = nextStartDate ?? existing.startDate;
     const effectiveEndDate = nextEndDate ?? existing.endDate;
     const nextDayRolloverHour = dayRolloverHour !== undefined
       ? normalizeDayRolloverHour(dayRolloverHour, existing.dayRolloverHour ?? 6)
       : (existing.dayRolloverHour ?? 6);
-    const normalizedSlots = normalizeLineupSlots(lineupSlots, nextStartDate ?? existing.startDate, nextDayRolloverHour);
+    const normalizedSlots = normalizeLineupSlots(lineupSlots, nextStartDate ?? existing.startDate, nextDayRolloverHour, nextTimeZone);
     const normalizedTicketTiers = normalizeTicketTiers(ticketTiers);
     const shouldRebaseExistingLineupSlots =
       !Array.isArray(lineupSlots)
-      && (startDate !== undefined || dayRolloverHour !== undefined)
+      && (startDate !== undefined || dayRolloverHour !== undefined || timeZone !== undefined)
       && existing.lineupSlots.length > 0;
 
     await prisma.event.update({
@@ -762,6 +750,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         longitude: longitude !== undefined ? toNumberOrNull(longitude) : undefined,
         startDate: startDate ? nextStartDate ?? undefined : undefined,
         endDate: endDate ? nextEndDate ?? undefined : undefined,
+        timeZone: timeZone !== undefined ? nextTimeZone : undefined,
         startTime: startTime !== undefined ? nextStartTime : undefined,
         endTime: endTime !== undefined ? nextEndTime : undefined,
         dayRolloverHour: dayRolloverHour !== undefined ? nextDayRolloverHour : undefined,
@@ -810,7 +799,8 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         existing.lineupSlots,
         existing.startDate,
         effectiveStartDate,
-        nextDayRolloverHour
+        nextDayRolloverHour,
+        nextTimeZone
       );
 
       await prisma.$transaction(

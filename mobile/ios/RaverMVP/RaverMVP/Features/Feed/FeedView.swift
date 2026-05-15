@@ -53,13 +53,13 @@ private struct FeedScreen: View {
             if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if viewModel.isRefreshing {
-                        InlineLoadingBadge(title: L("正在更新动态", "Updating feed"))
+                        InlineLoadingBadge(title: LT("正在更新动态", "Updating feed", "フィードを更新中"))
                     }
                     if let bannerMessage = viewModel.bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task { await viewModel.load() }
                         }
@@ -84,9 +84,9 @@ private struct FeedScreen: View {
                     }
                 case .empty:
                     ContentUnavailableView(
-                        L("还没有动态", "No Posts Yet"),
+                        LT("还没有动态", "No Posts Yet", "投稿はまだありません"),
                         systemImage: "square.and.pencil",
-                        description: Text(LL("成为第一个发帖的人，开始你的社群互动。"))
+                        description: Text(LT("成为第一个发帖的人，开始你的社群互动。", "Be the first to post and start your community interaction.", "最初の投稿者になって、コミュニティで交流を始めましょう。"))
                     )
                     .padding(.top, 12)
                 case .success:
@@ -146,7 +146,7 @@ private struct FeedScreen: View {
                             if viewModel.isLoadingMore {
                                 HStack {
                                     Spacer()
-                                    ProgressView(L("加载更多...", "Loading more..."))
+                                    ProgressView(LT("加载更多...", "Loading more...", "さらに読み込み中..."))
                                     Spacer()
                                 }
                                 .padding(.vertical, 10)
@@ -178,7 +178,7 @@ private struct FeedScreen: View {
                             .shadow(color: Color.black.opacity(0.28), radius: 10, x: 0, y: 6)
                     )
             }
-            .accessibilityLabel(L("发布动态", "Publish Post"))
+            .accessibilityLabel(LT("发布动态", "Publish Post", "投稿を公開"))
             .padding(.trailing, 8)
             .padding(.bottom, max(tabBarReservedHeight + 50, 100))
         }
@@ -212,7 +212,7 @@ private struct FeedScreen: View {
             appearanceResolver.warmAppearances(for: posts.map(\.author.id))
         }
         .confirmationDialog(
-            L("告诉我们原因", "Tell us why"),
+            LT("告诉我们原因", "Tell us why", "理由を教えてください"),
             isPresented: Binding(
                 get: { hideReasonTargetPost != nil },
                 set: { if !$0 { hideReasonTargetPost = nil } }
@@ -232,20 +232,20 @@ private struct FeedScreen: View {
                     }
                 }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {
                 hideReasonTargetPost = nil
             }
         } message: {
-            Text(L("我们会据此减少类似内容。", "We'll show fewer similar posts."))
+            Text(LT("我们会据此减少类似内容。", "We'll show fewer similar posts.", "これをもとに類似コンテンツの表示を減らします。"))
         }
-        .alert(L("加载失败", "Load Failed"), isPresented: Binding(
+        .alert(LT("加载失败", "Load Failed", "読み込みに失敗しました"), isPresented: Binding(
             get: { viewModel.error != nil },
             set: { if !$0 { viewModel.error = nil } }
         )) {
-            Button(L("重试", "Retry")) {
+            Button(LT("重试", "Retry", "再試行")) {
                 Task { await viewModel.load() }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
         }

@@ -905,6 +905,20 @@ export const redeemShareLinkInvite = async (input: RedeemInviteInput): Promise<R
   if (shareLink.createdBy && shareLink.createdBy === userId) {
     throw new ShareLinkError('self_invite_not_allowed', 400, 'You cannot redeem your own squad invite');
   }
+  if (shareLink.createdBy) {
+    const block = await input.prisma.userBlock.findFirst({
+      where: {
+        OR: [
+          { blockerUserId: shareLink.createdBy, blockedUserId: userId },
+          { blockerUserId: userId, blockedUserId: shareLink.createdBy },
+        ],
+      },
+      select: { id: true },
+    });
+    if (block) {
+      throw new ShareLinkError('blocked_relationship', 403, 'This invite cannot be used because of a blocking relationship');
+    }
+  }
   if (shareLink.expiresAt && shareLink.expiresAt.getTime() <= Date.now()) {
     throw new ShareLinkError('expired', 410, 'This invite link has expired');
   }

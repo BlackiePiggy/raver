@@ -38,8 +38,8 @@ struct EventsModuleView: View {
 
         var title: String {
             switch self {
-            case .all: return L("全部活动", "All Events")
-            case .mine: return L("收藏活动", "Favorites")
+            case .all: return LT("全部活动", "All Events", "すべてのイベント")
+            case .mine: return LT("收藏活动", "Favorites", "お気に入り")
             }
         }
     }
@@ -52,8 +52,8 @@ struct EventsModuleView: View {
 
         var title: String {
             switch self {
-            case .domestic: return L("国内", "Domestic")
-            case .foreign: return L("国外", "International")
+            case .domestic: return LT("国内", "Domestic", "国内")
+            case .foreign: return LT("国外", "International", "海外")
             }
         }
     }
@@ -69,11 +69,11 @@ struct EventsModuleView: View {
 
         var title: String {
             switch self {
-            case .asia: return L("亚洲", "Asia")
-            case .europe: return L("欧洲", "Europe")
-            case .americas: return L("美洲", "Americas")
-            case .oceania: return L("大洋洲", "Oceania")
-            case .africa: return L("非洲", "Africa")
+            case .asia: return LT("亚洲", "Asia", "アジア")
+            case .europe: return LT("欧洲", "Europe", "ヨーロッパ")
+            case .americas: return LT("美洲", "Americas", "南北アメリカ")
+            case .oceania: return LT("大洋洲", "Oceania", "オセアニア")
+            case .africa: return LT("非洲", "Africa", "アフリカ")
             }
         }
     }
@@ -155,11 +155,11 @@ struct EventsModuleView: View {
         .onDisappear {
             notifySelectorDragging(false)
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { viewModel.errorMessage != nil },
             set: { if !$0 { viewModel.errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
@@ -243,9 +243,9 @@ struct EventsModuleView: View {
 
     private var filterButtonTitle: String {
         if activeFilterLabels.isEmpty {
-            return L("筛选", "Filter")
+            return LT("筛选", "Filter", "絞り込み")
         }
-        return L("筛选 (\(activeFilterLabels.count))", "Filter (\(activeFilterLabels.count))")
+        return LT("筛选 (\(activeFilterLabels.count))", "Filter (\(activeFilterLabels.count))", "絞り込み (\(activeFilterLabels.count))")
     }
 
     private var headerView: some View {
@@ -262,7 +262,7 @@ struct EventsModuleView: View {
                         Button {
                             clearCountryFilters()
                         } label: {
-                            Text(L("清空筛选", "Clear Filters"))
+                            Text(LT("清空筛选", "Clear Filters", "絞り込みをクリア"))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(RaverTheme.accent)
                                 .padding(.horizontal, 10)
@@ -306,7 +306,7 @@ struct EventsModuleView: View {
             HStack(spacing: 8) {
                 utilityIconButton(
                     systemName: selectedScope == .mine ? "star.fill" : "star",
-                    accessibilityLabel: selectedScope == .mine ? L("仅收藏", "Favorites") : L("全部活动", "All Events"),
+                    accessibilityLabel: selectedScope == .mine ? LT("仅收藏", "Favorites", "お気に入りのみ") : LT("全部活动", "All Events", "すべてのイベント"),
                     isActive: selectedScope == .mine
                 ) {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -326,7 +326,7 @@ struct EventsModuleView: View {
 
                 utilityIconButton(
                     systemName: "calendar",
-                    accessibilityLabel: L("日历", "Calendar")
+                    accessibilityLabel: LT("日历", "Calendar", "カレンダー")
                 ) {
                     showCalendar = true
                 }
@@ -382,8 +382,8 @@ struct EventsModuleView: View {
             ProgressView()
             Text(
                 selectedScope == .all
-                    ? L("正在加载活动", "Loading events")
-                    : L("正在加载收藏活动", "Loading favorite events")
+                    ? LT("正在加载活动", "Loading events", "イベントを読み込み中")
+                    : LT("正在加载收藏活动", "Loading favorite events", "お気に入りイベントを読み込み中")
             )
             .font(.subheadline)
             .foregroundStyle(RaverTheme.secondaryText)
@@ -412,25 +412,25 @@ struct EventsModuleView: View {
 
     private var emptyStateTitle: String {
         if selectedScope == .mine && appState.session == nil {
-            return L("登录后查看收藏活动", "Sign in to view favorite events")
+            return LT("登录后查看收藏活动", "Sign in to view favorite events", "ログインしてお気に入りイベントを見る")
         }
         if selectedScope == .mine {
-            return L("暂无收藏活动", "No favorite events yet")
+            return LT("暂无收藏活动", "No favorite events yet", "お気に入りイベントはまだありません")
         }
-        return L("没有匹配的活动", "No matching events")
+        return LT("没有匹配的活动", "No matching events", "一致するイベントがありません")
     }
 
     private var emptyStateMessage: String {
         if selectedScope == .mine && appState.session == nil {
-            return L("你标记过的活动会集中显示在这里。", "Events you mark will appear here.")
+            return LT("你标记过的活动会集中显示在这里。", "Events you mark will appear here.", "マークしたイベントはここにまとめて表示されます。")
         }
         if isCountryFilterActive || !selectedEventType.isEmpty {
-            return L("试试清空筛选条件。", "Try clearing filters.")
+            return LT("试试清空筛选条件。", "Try clearing filters.", "絞り込み条件をクリアしてみてください。")
         }
         if selectedScope == .mine {
-            return L("在活动列表里点亮星标后，这里就会出现内容。", "Mark events with the star button and they will show up here.")
+            return LT("在活动列表里点亮星标后，这里就会出现内容。", "Mark events with the star button and they will show up here.", "イベント一覧で星を付けると、ここに表示されます。")
         }
-        return L("当前没有可展示的活动。", "There are no events to show right now.")
+        return LT("当前没有可展示的活动。", "There are no events to show right now.", "現在表示できるイベントはありません。")
     }
 
     private var emptyStateIcon: String {
@@ -543,7 +543,7 @@ struct EventsModuleView: View {
                 .shadow(color: Color.black.opacity(0.16), radius: 10, x: 0, y: 5)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(L("上传活动", "Upload Event"))
+        .accessibilityLabel(LT("上传活动", "Upload Event", "イベントをアップロード"))
     }
 
     private func activeFilterChip(_ title: String) -> some View {
@@ -771,7 +771,7 @@ private struct EventCountryFilterSheet: View {
             VStack(spacing: 12) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
-                        chipSection(title: L("国家范围", "Area")) {
+                        chipSection(title: LT("国家范围", "Area", "範囲")) {
                             LazyVGrid(columns: chipColumns, alignment: .leading, spacing: 8) {
                                 ForEach(EventsModuleView.CountryAreaBucket.allCases) { bucket in
                                     filterChip(
@@ -784,9 +784,9 @@ private struct EventCountryFilterSheet: View {
                             }
                         }
 
-                        chipSection(title: L("大洲", "Continent")) {
+                        chipSection(title: LT("大洲", "Continent", "大陸")) {
                             if availableContinents.isEmpty {
-                                Text(L("暂无可筛选大洲", "No continent options"))
+                                Text(LT("暂无可筛选大洲", "No continent options", "絞り込める大陸はありません"))
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             } else {
@@ -803,9 +803,9 @@ private struct EventCountryFilterSheet: View {
                             }
                         }
 
-                        chipSection(title: L("国家", "Country")) {
+                        chipSection(title: LT("国家", "Country", "国")) {
                             if availableCountries.isEmpty {
-                                Text(L("暂无可筛选国家", "No country options"))
+                                Text(LT("暂无可筛选国家", "No country options", "絞り込める国はありません"))
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             } else {
@@ -834,7 +834,7 @@ private struct EventCountryFilterSheet: View {
                             selectedContinentBuckets.removeAll()
                             selectedCountries.removeAll()
                         } label: {
-                            Text(L("重置", "Reset"))
+                            Text(LT("重置", "Reset", "リセット"))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(RaverTheme.secondaryText)
                                 .frame(maxWidth: .infinity)
@@ -848,7 +848,7 @@ private struct EventCountryFilterSheet: View {
                     Button {
                         dismiss()
                     } label: {
-                        Text(L("完成", "Done"))
+                        Text(LT("完成", "Done", "完了"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity)
@@ -862,7 +862,7 @@ private struct EventCountryFilterSheet: View {
                 .padding(.bottom, 10)
             }
             .background(RaverTheme.background)
-            .navigationTitle(L("筛选活动", "Filter Events"))
+            .navigationTitle(LT("筛选活动", "Filter Events", "イベントを絞り込み"))
             .navigationBarTitleDisplayMode(.inline)
         }
         .raverEnableCustomSwipeBack(edgeRatio: 0.2)

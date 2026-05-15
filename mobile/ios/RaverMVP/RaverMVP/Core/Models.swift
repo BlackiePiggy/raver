@@ -7,8 +7,8 @@ enum ConversationType: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .direct: return L("私信", "Direct")
-        case .group: return L("小队", "Squad")
+        case .direct: return LT("私信", "Direct", "DM")
+        case .group: return LT("小队", "Squad", "Squad")
         }
     }
 }
@@ -17,11 +17,13 @@ struct Session: Codable {
     let token: String
     let refreshToken: String?
     let user: UserSummary
+    let accountStatus: AccountEnforcementStatus?
 
-    init(token: String, refreshToken: String? = nil, user: UserSummary) {
+    init(token: String, refreshToken: String? = nil, user: UserSummary, accountStatus: AccountEnforcementStatus? = nil) {
         self.token = token
         self.refreshToken = refreshToken
         self.user = user
+        self.accountStatus = accountStatus
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -29,6 +31,7 @@ struct Session: Codable {
         case accessToken
         case refreshToken
         case user
+        case accountStatus
     }
 
     init(from decoder: Decoder) throws {
@@ -37,10 +40,12 @@ struct Session: Codable {
             ?? container.decode(String.self, forKey: .accessToken)
         let refreshTokenValue = try container.decodeIfPresent(String.self, forKey: .refreshToken)
         let userValue = try container.decode(UserSummary.self, forKey: .user)
+        let accountStatusValue = try container.decodeIfPresent(AccountEnforcementStatus.self, forKey: .accountStatus)
 
         token = tokenValue
         refreshToken = refreshTokenValue
         user = userValue
+        accountStatus = accountStatusValue
     }
 
     func encode(to encoder: Encoder) throws {
@@ -48,6 +53,7 @@ struct Session: Codable {
         try container.encode(token, forKey: .token)
         try container.encodeIfPresent(refreshToken, forKey: .refreshToken)
         try container.encode(user, forKey: .user)
+        try container.encodeIfPresent(accountStatus, forKey: .accountStatus)
     }
 }
 
@@ -80,6 +86,501 @@ struct UserSummary: Codable, Identifiable, Hashable {
     var isFriend: Bool? = nil
     var conversationID: String? = nil
     var friendMessage: String? = nil
+    var regionCode: String? = nil
+    var birthYear: Int? = nil
+    var ageBand: UserAgeBand? = nil
+    var guardianContactEmail: String? = nil
+}
+
+enum AccountBaseStatus: String, Codable, Hashable {
+    case active
+    case pendingDeletion = "pending_deletion"
+    case deleted
+    case disabled
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = AccountBaseStatus(rawValue: raw) ?? .unknown
+    }
+
+    var title: String {
+        switch self {
+        case .active: return LT("正常", "Active", "正常")
+        case .pendingDeletion: return LT("删除处理中", "Deletion Pending", "削除処理中")
+        case .deleted: return LT("已删除", "Deleted", "削除済み")
+        case .disabled: return LT("已停用", "Disabled", "停止済み")
+        case .unknown: return LT("未知", "Unknown", "不明")
+        }
+    }
+}
+
+enum AccountEnforcementStatusKind: String, Codable, Hashable {
+    case none
+    case restricted
+    case suspended
+    case banned
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = AccountEnforcementStatusKind(rawValue: raw) ?? .unknown
+    }
+
+    var title: String {
+        switch self {
+        case .none: return LT("无处罚", "No Enforcement", "処分なし")
+        case .restricted: return LT("功能受限", "Restricted", "機能制限中")
+        case .suspended: return LT("临时封禁", "Suspended", "一時停止")
+        case .banned: return LT("封禁", "Banned", "禁止")
+        case .unknown: return LT("未知状态", "Unknown", "不明な状態")
+        }
+    }
+
+    var isLimited: Bool {
+        self == .restricted || self == .suspended || self == .banned
+    }
+}
+
+enum AccountEnforcementScope: String, Codable, Hashable, CaseIterable {
+    case login
+    case postCreate = "post_create"
+    case commentCreate = "comment_create"
+    case messageSend = "message_send"
+    case mediaUpload = "media_upload"
+    case eventCreate = "event_create"
+    case locationShare = "location_share"
+    case profileUpdate = "profile_update"
+    case squadCreate = "squad_create"
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = AccountEnforcementScope(rawValue: raw) ?? .unknown
+    }
+
+    var title: String {
+        switch self {
+        case .login: return LT("登录", "Login", "ログイン")
+        case .postCreate: return LT("发帖", "Create Posts", "投稿作成")
+        case .commentCreate: return LT("评论", "Comment", "コメント")
+        case .messageSend: return LT("私信", "Message", "メッセージ")
+        case .mediaUpload: return LT("上传媒体", "Upload Media", "メディアアップロード")
+        case .eventCreate: return LT("创建活动", "Create Event", "イベント作成")
+        case .locationShare: return LT("位置共享", "Share Location", "位置情報共有")
+        case .profileUpdate: return LT("修改资料", "Edit Profile", "プロフィール編集")
+        case .squadCreate: return LT("创建小队", "Create Squad", "Squad作成")
+        case .unknown: return LT("未知范围", "Unknown Scope", "不明な範囲")
+        }
+    }
+}
+
+enum AccountEnforcementType: String, Codable, Hashable {
+    case warning
+    case contentAction = "content_action"
+    case restriction
+    case suspension
+    case ban
+    case riskFreeze = "risk_freeze"
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = AccountEnforcementType(rawValue: raw) ?? .unknown
+    }
+
+    var title: String {
+        switch self {
+        case .warning: return LT("警告", "Warning", "警告")
+        case .contentAction: return LT("内容处理", "Content Action", "コンテンツ対応")
+        case .restriction: return LT("功能限制", "Restriction", "機能制限")
+        case .suspension: return LT("临时封禁", "Suspension", "一時停止")
+        case .ban: return LT("封禁", "Ban", "禁止")
+        case .riskFreeze: return LT("风险冻结", "Risk Freeze", "リスク凍結")
+        case .unknown: return LT("处罚", "Enforcement", "処分")
+        }
+    }
+}
+
+enum AccountEnforcementRecordStatus: String, Codable, Hashable {
+    case active
+    case scheduled
+    case expired
+    case revoked
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = AccountEnforcementRecordStatus(rawValue: raw) ?? .unknown
+    }
+
+    var title: String {
+        switch self {
+        case .active: return LT("生效中", "Active", "有効")
+        case .scheduled: return LT("待生效", "Scheduled", "予定")
+        case .expired: return LT("已到期", "Expired", "期限切れ")
+        case .revoked: return LT("已撤销", "Revoked", "取消済み")
+        case .unknown: return LT("未知", "Unknown", "不明")
+        }
+    }
+}
+
+enum AccountEnforcementAppealStatus: String, Codable, Hashable {
+    case submitted
+    case underReview = "under_review"
+    case needMoreInfo = "need_more_info"
+    case accepted
+    case rejected
+    case closed
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = AccountEnforcementAppealStatus(rawValue: raw) ?? .unknown
+    }
+
+    var title: String {
+        switch self {
+        case .submitted: return LT("已提交", "Submitted", "送信済み")
+        case .underReview: return LT("审核中", "Under Review", "審査中")
+        case .needMoreInfo: return LT("需补充", "Need More Info", "追加情報が必要")
+        case .accepted: return LT("已通过", "Accepted", "承認済み")
+        case .rejected: return LT("已驳回", "Rejected", "却下済み")
+        case .closed: return LT("已关闭", "Closed", "終了")
+        case .unknown: return LT("未知", "Unknown", "不明")
+        }
+    }
+}
+
+struct AccountEnforcementStatus: Codable, Hashable {
+    let userId: String
+    var accountStatus: AccountBaseStatus
+    var enforcementStatus: AccountEnforcementStatusKind
+    var scopes: [String]
+    var nextReviewAt: Date?
+    var appealable: Bool
+    var activeEnforcements: [AccountEnforcement]
+
+    static let clear = AccountEnforcementStatus(
+        userId: "",
+        accountStatus: .active,
+        enforcementStatus: .none,
+        scopes: [],
+        nextReviewAt: nil,
+        appealable: false,
+        activeEnforcements: []
+    )
+
+    func blocks(_ scope: AccountEnforcementScope) -> Bool {
+        guard enforcementStatus.isLimited else { return false }
+        if scopes.contains(scope.rawValue) {
+            return true
+        }
+        return scope != .login && scopes.contains(AccountEnforcementScope.login.rawValue)
+    }
+
+    func restriction(for scope: AccountEnforcementScope) -> AccountEnforcementRestriction? {
+        restriction(for: [scope])
+    }
+
+    func restriction(for scopes: [AccountEnforcementScope]) -> AccountEnforcementRestriction? {
+        guard enforcementStatus.isLimited else { return nil }
+        for scope in scopes where blocks(scope) {
+            let blockingEnforcements = activeEnforcements.filter { enforcement in
+                enforcement.scopes.contains(scope.rawValue)
+                    || (scope != .login && enforcement.scopes.contains(AccountEnforcementScope.login.rawValue))
+            }
+            return AccountEnforcementRestriction(
+                scope: scope.rawValue,
+                accountStatus: self,
+                blockingEnforcements: blockingEnforcements
+            )
+        }
+        return nil
+    }
+
+    var limitedScopeTitles: [String] {
+        scopes.compactMap { AccountEnforcementScope(rawValue: $0)?.title }
+    }
+
+    var restrictionSummary: String {
+        guard enforcementStatus.isLimited else { return LT("账号正常。", "Account is active.", "アカウントは正常です。") }
+        let scopeText = limitedScopeTitles.isEmpty ? LT("当前操作受限。", "Current actions are restricted.", "現在の操作は制限されています。") : limitedScopeTitles.joined(separator: "、")
+        if let nextReviewAt {
+            return "\(scopeText) \(LT("下次复核：", "Next review: ", "次回審査: "))\(Self.formatDate(nextReviewAt))"
+        }
+        return scopeText
+    }
+
+    private static func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+}
+
+struct AccountEnforcement: Codable, Hashable, Identifiable {
+    let id: String
+    var userId: String?
+    var status: AccountEnforcementRecordStatus?
+    var type: AccountEnforcementType
+    var scopes: [String]
+    var reasonCode: String
+    var userMessageI18n: [String: String]?
+    var startsAt: Date
+    var endsAt: Date?
+    var revokedAt: Date?
+    var createdAt: Date?
+    var updatedAt: Date?
+    var appeals: [AccountEnforcementAppeal]?
+
+    var userMessage: String? {
+        let language = AppLanguagePreference.current.effectiveLanguage
+        let preferredKeys: [String]
+        switch language {
+        case .ja:
+            preferredKeys = ["ja-JP", "ja", "en", "en-US", "zh", "zh-CN"]
+        case .en:
+            preferredKeys = ["en", "en-US", "ja-JP", "ja", "zh", "zh-CN"]
+        case .zh, .system:
+            preferredKeys = ["zh", "zh-CN", "ja-JP", "ja", "en", "en-US"]
+        }
+        for key in preferredKeys {
+            if let value = userMessageI18n?[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
+                return value
+            }
+        }
+        return nil
+    }
+
+    var displayReason: String {
+        userMessage ?? Self.localizedReasonTitle(for: reasonCode)
+    }
+
+    var isAppealable: Bool {
+        status == nil || status == .active || status == .scheduled
+    }
+
+    private static func localizedReasonTitle(for reasonCode: String) -> String {
+        switch reasonCode {
+        case "spam":
+            return LT("垃圾信息或刷屏", "Spam or flooding", "スパムまたは連投")
+        case "harassment":
+            return LT("骚扰、辱骂或霸凌", "Harassment or bullying", "嫌がらせ、侮辱、いじめ")
+        case "hate_or_discrimination":
+            return LT("仇恨或歧视", "Hate or discrimination", "ヘイトまたは差別")
+        case "sexual_content":
+            return LT("色情或露骨内容", "Sexual content", "性的または露骨な内容")
+        case "violence_or_threat":
+            return LT("暴力威胁", "Violence or threats", "暴力や脅迫")
+        case "illegal_activity":
+            return LT("违法活动", "Illegal activity", "違法行為")
+        case "impersonation":
+            return LT("冒充他人", "Impersonation", "なりすまし")
+        case "privacy_violation":
+            return LT("泄露隐私", "Privacy violation", "プライバシー侵害")
+        case "copyright":
+            return LT("版权侵权", "Copyright infringement", "著作権侵害")
+        case "scam_or_fraud":
+            return LT("诈骗或钓鱼", "Scam or fraud", "詐欺またはフィッシング")
+        case "minor_safety":
+            return LT("未成年人安全", "Minor safety", "未成年者の安全")
+        case "platform_abuse":
+            return LT("平台滥用", "Platform abuse", "プラットフォーム悪用")
+        default:
+            return LT("违反社区规范", "Community guideline violation", "コミュニティガイドライン違反")
+        }
+    }
+}
+
+struct AccountEnforcementAppeal: Codable, Hashable, Identifiable {
+    let id: String
+    var enforcementId: String
+    var userId: String?
+    var status: AccountEnforcementAppealStatus
+    var appealReason: String
+    var contactEmail: String?
+    var reviewerId: String?
+    var decision: String?
+    var decisionNote: String?
+    var reviewedAt: Date?
+    var createdAt: Date
+    var updatedAt: Date?
+}
+
+struct AccountEnforcementAppealInput: Encodable, Hashable {
+    var appealReason: String
+    var contactEmail: String?
+    var attachments: [String]
+}
+
+struct AccountEnforcementRestriction: Codable, Hashable {
+    let scope: String
+    let accountStatus: AccountEnforcementStatus?
+    let blockingEnforcements: [AccountEnforcement]
+}
+
+enum ContentReportTargetType: String, Codable, Hashable {
+    case user
+    case post
+    case postComment = "post_comment"
+    case eventLiveComment = "event_live_comment"
+    case djSet = "dj_set"
+    case event
+    case dj
+    case label
+    case directChat = "direct_chat"
+    case groupChat = "group_chat"
+    case checkins = "checkins"
+    case learnArticle = "learn_article"
+    case festival
+    case circleID = "circle_id"
+    case ratingEvent = "rating_event"
+    case ratingUnit = "rating_unit"
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ContentReportTargetType(rawValue: raw) ?? .unknown
+    }
+
+    var title: String {
+        switch self {
+        case .user: return LT("用户", "User", "ユーザー")
+        case .post: return LT("动态", "Post", "投稿")
+        case .postComment: return LT("评论", "Comment", "コメント")
+        case .eventLiveComment: return LT("活动讨论", "Event Discussion", "イベントディスカッション")
+        case .djSet: return "DJ Set"
+        case .event: return LT("活动", "Event", "イベント")
+        case .dj: return "DJ"
+        case .label: return LT("厂牌", "Label", "レーベル")
+        case .directChat: return LT("私信会话", "Direct Chat", "DM会話")
+        case .groupChat: return LT("群聊", "Group Chat", "グループチャット")
+        case .checkins: return LT("打卡页", "Check-ins", "チェックインページ")
+        case .learnArticle: return LT("学习内容", "Learn Article", "学習コンテンツ")
+        case .festival: return LT("音乐节", "Festival", "フェス")
+        case .circleID: return "Circle ID"
+        case .ratingEvent: return LT("评分活动", "Rating Event", "評価イベント")
+        case .ratingUnit: return LT("评分单元", "Rating Unit", "評価ユニット")
+        case .unknown: return LT("内容", "Content", "コンテンツ")
+        }
+    }
+}
+
+enum ContentReportReason: String, Codable, Hashable, CaseIterable, Identifiable {
+    case spam
+    case harassment
+    case hateOrDiscrimination = "hate_or_discrimination"
+    case sexualContent = "sexual_content"
+    case violenceOrThreat = "violence_or_threat"
+    case illegalActivity = "illegal_activity"
+    case impersonation
+    case privacyViolation = "privacy_violation"
+    case copyright
+    case scamOrFraud = "scam_or_fraud"
+    case minorSafety = "minor_safety"
+    case platformAbuse = "platform_abuse"
+    case other
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .spam: return LT("垃圾信息/刷屏", "Spam or flooding", "スパム/連投")
+        case .harassment: return LT("骚扰、辱骂或霸凌", "Harassment or bullying", "嫌がらせ、侮辱、いじめ")
+        case .hateOrDiscrimination: return LT("仇恨或歧视", "Hate or discrimination", "ヘイトまたは差別")
+        case .sexualContent: return LT("色情或露骨内容", "Sexual content", "性的または露骨な内容")
+        case .violenceOrThreat: return LT("暴力威胁", "Violence or threats", "暴力や脅迫")
+        case .illegalActivity: return LT("违法活动", "Illegal activity", "違法行為")
+        case .impersonation: return LT("冒充他人", "Impersonation", "なりすまし")
+        case .privacyViolation: return LT("泄露隐私", "Privacy violation", "プライバシー侵害")
+        case .copyright: return LT("版权侵权", "Copyright infringement", "著作権侵害")
+        case .scamOrFraud: return LT("诈骗或钓鱼", "Scam or fraud", "詐欺またはフィッシング")
+        case .minorSafety: return LT("未成年人安全", "Minor safety", "未成年者の安全")
+        case .platformAbuse: return LT("平台滥用", "Platform abuse", "プラットフォーム悪用")
+        case .other: return LT("其他", "Other", "その他")
+        }
+    }
+}
+
+struct ContentReportInput: Encodable, Hashable {
+    var targetType: String
+    var targetId: String
+    var reason: String
+    var detail: String?
+    var attachments: [ContentReportAttachmentInput]?
+    var source: String
+}
+
+struct ContentReportAttachmentInput: Encodable, Hashable {
+    var type: String
+    var url: String
+    var label: String?
+}
+
+struct ContentReport: Codable, Identifiable, Hashable {
+    let id: String
+    var targetType: String
+    var targetId: String
+    var targetUserId: String?
+    var targetUser: UserSummary?
+    var reason: String
+    var detail: String?
+    var attachments: [ContentReportAttachment]?
+    var source: String?
+    var status: String
+    var resolutionNote: String?
+    var resolvedAt: Date?
+    var createdAt: Date
+    var updatedAt: Date?
+
+    var targetTypeTitle: String {
+        ContentReportTargetType(rawValue: targetType)?.title ?? targetType.replacingOccurrences(of: "_", with: " ")
+    }
+
+    var reasonTitle: String {
+        ContentReportReason(rawValue: reason)?.title ?? reason.replacingOccurrences(of: "_", with: " ")
+    }
+
+    var statusTitle: String {
+        switch status {
+        case "pending": return LT("待处理", "Pending", "対応待ち")
+        case "reviewing", "in_review": return LT("审核中", "In Review", "審査中")
+        case "resolved", "accepted": return LT("已处理", "Resolved", "対応済み")
+        case "rejected": return LT("未发现违规", "No Violation Found", "違反は確認されませんでした")
+        case "closed": return LT("已关闭", "Closed", "終了")
+        default: return status.replacingOccurrences(of: "_", with: " ")
+        }
+    }
+}
+
+struct ContentReportAttachment: Codable, Hashable {
+    var type: String?
+    var url: String?
+    var label: String?
+}
+
+struct UserBlockStatus: Codable, Hashable {
+    var isBlocked: Bool
+    var blockedAt: Date?
+}
+
+struct UserBlockInput: Encodable, Hashable {
+    var reason: String?
+    var note: String?
+    var source: String
+}
+
+struct UserBlockListItem: Codable, Identifiable, Hashable {
+    let id: String
+    var user: UserSummary
+    var reason: String?
+    var note: String?
+    var source: String?
+    var createdAt: Date
+    var updatedAt: Date?
 }
 
 struct UserProfile: Codable, Identifiable {
@@ -418,11 +919,11 @@ enum GroupMentionAlertType: Int, Codable, Hashable {
         case .none:
             return ""
         case .atMe:
-            return L("[@你]", "[@You]")
+            return LT("[@你]", "[@You]", "[@あなた]")
         case .atAll:
-            return L("[@所有人]", "[@All]")
+            return LT("[@所有人]", "[@All]", "[@全員]")
         case .atAllAndMe:
-            return L("[@你][@所有人]", "[@You][@All]")
+            return LT("[@你][@所有人]", "[@You][@All]", "[@あなた][@全員]")
         }
     }
 }
@@ -690,9 +1191,9 @@ enum EventLiveCommentSortMode: String, Codable, CaseIterable, Identifiable, Hash
 
     var title: String {
         switch self {
-        case .hot: return L("热度", "Hot")
-        case .newest: return L("最新", "Newest")
-        case .oldest: return L("最早", "Oldest")
+        case .hot: return LT("热度", "Hot", "人気")
+        case .newest: return LT("最新", "Newest", "最新")
+        case .oldest: return LT("最早", "Oldest", "古い順")
         }
     }
 }
@@ -897,10 +1398,10 @@ enum AppNotificationType: String, Codable, Hashable {
 
     var title: String {
         switch self {
-        case .follow: return L("关注", "Follow")
-        case .like: return L("点赞", "Like")
-        case .comment: return L("评论", "Comment")
-        case .squadInvite: return L("小队邀请", "Squad Invite")
+        case .follow: return LT("关注", "Follow", "フォロー")
+        case .like: return LT("点赞", "Like", "いいね")
+        case .comment: return LT("评论", "Comment", "コメント")
+        case .squadInvite: return LT("小队邀请", "Squad Invite", "Squad招待")
         }
     }
 
@@ -924,6 +1425,35 @@ struct FollowedEventsSummary: Codable, Hashable {
         latestItemPreview: nil,
         latestOccurredAt: nil
     )
+}
+
+struct ContentReviewSummary: Codable, Hashable {
+    var unreadCount: Int
+    var latestItemPreview: String?
+    var latestOccurredAt: Date?
+
+    static let empty = ContentReviewSummary(
+        unreadCount: 0,
+        latestItemPreview: nil,
+        latestOccurredAt: nil
+    )
+}
+
+struct ContentReviewNotificationItem: Codable, Identifiable, Hashable {
+    let id: String
+    var submissionId: String
+    var entityType: String
+    var status: String
+    var title: String
+    var body: String
+    var reason: String?
+    var createdEntityId: String?
+    var isRead: Bool
+    var occurredAt: Date
+
+    var isApproved: Bool {
+        status == "approved"
+    }
 }
 
 struct FollowedEventNotificationItem: Codable, Identifiable, Hashable {
@@ -1010,6 +1540,17 @@ struct FollowedBrandUpdatePreferenceInput: Codable, Hashable {
     var includeEvents: Bool?
 }
 
+struct NotificationCategoryPreference: Codable, Identifiable, Hashable {
+    var category: String
+    var enabled: Bool
+
+    var id: String { category }
+}
+
+struct NotificationCategoryPreferencesInput: Codable, Hashable {
+    var preferences: [NotificationCategoryPreference]
+}
+
 struct FollowedBrandsSummary: Codable, Hashable {
     var unreadCount: Int
     var latestItemPreview: String?
@@ -1083,15 +1624,15 @@ extension Post {
     }
 
     var raverNewsTitle: String {
-        raverNewsValue(for: ["标题", "title"]) ?? L("未命名资讯", "Untitled News")
+        raverNewsValue(for: ["标题", "title"]) ?? LT("未命名资讯", "Untitled News", "無題のニュース")
     }
 
     var raverNewsSource: String {
-        raverNewsValue(for: ["来源", "source"]) ?? L("社区投稿", "Community Submission")
+        raverNewsValue(for: ["来源", "source"]) ?? LT("社区投稿", "Community Submission", "コミュニティ投稿")
     }
 
     var raverNewsSummary: String {
-        raverNewsValue(for: ["摘要", "summary"]) ?? L("暂无摘要", "No Summary")
+        raverNewsValue(for: ["摘要", "summary"]) ?? LT("暂无摘要", "No Summary", "概要なし")
     }
 
     private func raverNewsValue(for keys: [String]) -> String? {

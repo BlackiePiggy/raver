@@ -42,31 +42,31 @@ struct DiscoverNewsPublishSheet: View {
 
     var body: some View {
         Form {
-            Section(LL("基础信息")) {
-                Picker(LL("分类"), selection: $category) {
+            Section(LT("基础信息", "基础信息", "基本情報")) {
+                Picker(LT("分类", "分类", "カテゴリ"), selection: $category) {
                     ForEach(DiscoverNewsCategory.allCases.filter { $0 != .all }) { item in
                         Text(item.title).tag(item)
                     }
                 }
 
-                TextField(LL("来源名称"), text: $sourceName)
-                TextField(LL("资讯标题"), text: $title)
-                TextField(LL("资讯摘要（选填）"), text: $summary, axis: .vertical)
+                TextField(LT("来源名称", "来源名称", "ソース名"), text: $sourceName)
+                TextField(LT("资讯标题", "资讯标题", "ニュースタイトル"), text: $title)
+                TextField(LT("资讯摘要（选填）", "资讯摘要（选填）", "ニュース概要（任意）"), text: $summary, axis: .vertical)
                     .lineLimit(2...4)
-                TextField(LL("正文（选填）"), text: $bodyText, axis: .vertical)
+                TextField(LT("正文（选填）", "正文（选填）", "本文（任意）"), text: $bodyText, axis: .vertical)
                     .lineLimit(3...8)
             }
 
-            Section(LL("封面图")) {
-                TextField(LL("封面图 URL（选填）"), text: $coverURL)
+            Section(LT("封面图", "封面图", "カバー画像")) {
+                TextField(LT("封面图 URL（选填）", "封面图 URL（选填）", "カバー画像URL（任意）"), text: $coverURL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
                 PhotosPicker(selection: $selectedCoverPhoto, matching: .images) {
                     Label(
                         selectedCoverData == nil
-                            ? L("从相册上传封面图", "Upload cover from Photos")
-                            : L("更换封面图", "Replace cover"),
+                            ? LT("从相册上传封面图", "Upload cover from Photos", "写真からカバー画像をアップロード")
+                            : LT("更换封面图", "Replace cover", "カバー画像を変更"),
                         systemImage: "photo"
                     )
                 }
@@ -82,19 +82,19 @@ struct DiscoverNewsPublishSheet: View {
                 }
             }
 
-            Section(LL("外链（选填）")) {
-                TextField(LL("原文链接"), text: $linkText)
+            Section(LT("外链（选填）", "外链（选填）", "外部リンク（任意）")) {
+                TextField(LT("原文链接", "原文链接", "原文リンク"), text: $linkText)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
 
-            Section(LL("关联实体（选填）")) {
+            Section(LT("关联实体（选填）", "关联实体（选填）", "関連エンティティ（任意）")) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
-                        TextField(LL("搜索 DJ"), text: $djSearchText)
+                        TextField(LT("搜索 DJ", "搜索 DJ", "DJを検索"), text: $djSearchText)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                        Button(LL("搜索")) {
+                        Button(LT("搜索", "搜索", "検索")) {
                             Task { await searchBindingDJs() }
                         }
                         .buttonStyle(.bordered)
@@ -126,7 +126,7 @@ struct DiscoverNewsPublishSheet: View {
                     }
 
                     if isSearchingDJs {
-                        ProgressView(LL("搜索 DJ 中..."))
+                        ProgressView(LT("搜索 DJ 中...", "搜索 DJ 中...", "DJを検索中..."))
                             .font(.caption)
                     } else if !djSearchResults.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
@@ -153,10 +153,10 @@ struct DiscoverNewsPublishSheet: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
-                        TextField(LL("搜索电音节 Brand"), text: $brandSearchText)
+                        TextField(LT("搜索电音节 Brand", "搜索电音节 Brand", "フェスBrandを検索"), text: $brandSearchText)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                        Button(LL("搜索")) {
+                        Button(LT("搜索", "搜索", "検索")) {
                             Task { await searchBindingBrands() }
                         }
                         .buttonStyle(.bordered)
@@ -188,7 +188,7 @@ struct DiscoverNewsPublishSheet: View {
                     }
 
                     if isSearchingBrands {
-                        ProgressView(LL("搜索 Brand 中..."))
+                        ProgressView(LT("搜索 Brand 中...", "搜索 Brand 中...", "Brandを検索中..."))
                             .font(.caption)
                     } else if !brandSearchResults.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
@@ -215,10 +215,10 @@ struct DiscoverNewsPublishSheet: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
-                        TextField(LL("搜索活动 Event"), text: $eventSearchText)
+                        TextField(LT("搜索活动 Event", "搜索活动 Event", "イベントを検索"), text: $eventSearchText)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                        Button(LL("搜索")) {
+                        Button(LT("搜索", "搜索", "検索")) {
                             Task { await searchBindingEvents() }
                         }
                         .buttonStyle(.bordered)
@@ -250,7 +250,7 @@ struct DiscoverNewsPublishSheet: View {
                     }
 
                     if isSearchingEvents {
-                        ProgressView(LL("搜索活动中..."))
+                        ProgressView(LT("搜索活动中...", "搜索活动中...", "イベントを検索中..."))
                             .font(.caption)
                     } else if !eventSearchResults.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
@@ -284,10 +284,10 @@ struct DiscoverNewsPublishSheet: View {
                 }
             }
         }
-        .raverSystemNavigation(title: LL("发布资讯"))
+        .raverSystemNavigation(title: LT("发布资讯", "发布资讯", "ニュースを公開"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(isSubmitting ? L("发布中...", "Publishing...") : L("发布", "Publish")) {
+                Button(isSubmitting ? LT("发布中...", "Publishing...", "公開中...") : LT("发布", "Publish", "公開")) {
                     Task { await submit() }
                 }
                 .disabled(!canSubmit)
@@ -358,7 +358,7 @@ struct DiscoverNewsPublishSheet: View {
             selectedCoverData = try await item.loadTransferable(type: Data.self)
         } catch {
             selectedCoverData = nil
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
+            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
         }
     }
 

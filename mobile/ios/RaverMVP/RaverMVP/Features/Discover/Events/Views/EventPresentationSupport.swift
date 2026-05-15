@@ -15,6 +15,13 @@ enum EventVisualStatus: String {
             case .ended: return "已结束"
             case .cancelled: return "已取消"
             }
+        case .ja:
+            switch self {
+            case .upcoming: return "まもなく開始"
+            case .ongoing: return "開催中"
+            case .ended: return "終了"
+            case .cancelled: return "キャンセル済み"
+            }
         case .en, .system:
             switch self {
             case .upcoming: return "Upcoming"
@@ -318,7 +325,7 @@ struct EventRow: View {
         let start = event.startDate
         let end = event.endDate
 
-        if AppLanguagePreference.current.effectiveLanguage == .zh {
+        if AppLanguagePreference.current.effectiveLanguage != .en {
             return start.appLocalizedDateRangeText(to: end)
         }
 

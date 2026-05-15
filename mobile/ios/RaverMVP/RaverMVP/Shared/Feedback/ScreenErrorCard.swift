@@ -1,9 +1,9 @@
 import SwiftUI
 
 struct ScreenErrorCard: View {
-    var title: String = L("加载失败", "Load Failed")
+    var title: String = LT("加载失败", "Load Failed", "読み込みに失敗しました")
     var message: String
-    var retryTitle: String = L("重试", "Retry")
+    var retryTitle: String = LT("重试", "Retry", "再試行")
     var retryAction: (() -> Void)? = nil
     var secondaryTitle: String? = nil
     var secondaryAction: (() -> Void)? = nil

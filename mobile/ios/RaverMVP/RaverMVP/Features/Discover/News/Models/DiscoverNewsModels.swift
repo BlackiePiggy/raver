@@ -12,12 +12,12 @@ enum DiscoverNewsCategory: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: return L("全部", "All")
-        case .festival: return L("电音节", "Festival")
-        case .scene: return L("现场观察", "Live Scene")
-        case .gear: return L("设备玩法", "Gear")
-        case .industry: return L("行业动态", "Industry")
-        case .community: return L("社区话题", "Community")
+        case .all: return LT("全部", "All", "すべて")
+        case .festival: return LT("电音节", "Festival", "フェス")
+        case .scene: return LT("现场观察", "Live Scene", "現場観察")
+        case .gear: return LT("设备玩法", "Gear", "機材")
+        case .industry: return LT("行业动态", "Industry", "業界動向")
+        case .community: return LT("社区话题", "Community", "コミュニティ")
         }
     }
 
@@ -151,7 +151,7 @@ struct DiscoverNewsRepositoryAdapter: DiscoverNewsRepository {
     func publish(draft: DiscoverNewsDraft) async throws -> DiscoverNewsArticle? {
         let content = DiscoverNewsCodec.encode(draft)
         let imageURLs = draft.coverImageURL.flatMap { $0.isEmpty ? nil : [$0] } ?? []
-        let created = try await socialService.createPost(
+        let result = try await socialService.createPost(
             input: CreatePostInput(
                 content: content,
                 images: imageURLs,
@@ -160,7 +160,12 @@ struct DiscoverNewsRepositoryAdapter: DiscoverNewsRepository {
                 boundEventIDs: draft.boundEventIDs
             )
         )
-        return DiscoverNewsCodec.decode(post: created)
+        switch result {
+        case .created(let created):
+            return DiscoverNewsCodec.decode(post: created)
+        case .submittedForReview:
+            return nil
+        }
     }
 
     func fetchComments(postID: String) async throws -> [Comment] {

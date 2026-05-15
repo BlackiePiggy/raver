@@ -19,6 +19,7 @@ struct ComposePostEventTag: Hashable {
 
 struct ComposePostView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
     private let commandRepository: PostCommandRepository
     private let mediaRepository: PostMediaRepository
     private let maxContentLength = 500
@@ -97,6 +98,11 @@ struct ComposePostView: View {
             && !isSending
             && !isDeleting
             && !isUploadingMedia
+            && !appState.accountEnforcementStatus.blocks(.postCreate)
+    }
+
+    private var canUploadMedia: Bool {
+        !appState.accountEnforcementStatus.blocks(.mediaUpload)
     }
 
     private var isEditMode: Bool {
@@ -114,17 +120,29 @@ struct ComposePostView: View {
     }
 
     private var submitButtonTitle: String {
-        isEditMode ? L("重新发布", "Republish") : L("发布动态", "Publish Post")
+        isEditMode ? LT("重新发布", "Republish", "再公開") : LT("发布动态", "Publish Post", "投稿を公開")
     }
 
     private var pageTitle: String {
-        isEditMode ? L("编辑动态", "Edit Post") : L("发布动态", "Publish Post")
+        isEditMode ? LT("编辑动态", "Edit Post", "投稿を編集") : LT("发布动态", "Publish Post", "投稿を公開")
     }
 
     var body: some View {
         VStack(spacing: 14) {
+            if appState.accountEnforcementStatus.enforcementStatus.isLimited {
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(LT("账号当前受限", "Account restricted", "アカウントは現在制限されています"))
+                            .font(.subheadline.weight(.semibold))
+                        Text(appState.accountEnforcementStatus.restrictionSummary)
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+            }
+
             HStack {
-                Text(LL("正文"))
+                Text(LT("正文", "text", "本文"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
@@ -145,7 +163,7 @@ struct ComposePostView: View {
                 .padding(.vertical, 4)
 
                 if text.isEmpty {
-                    Text(LL("分享这一刻..."))
+                    Text(LT("分享这一刻...", "Share this moment...", "この瞬間をシェア..."))
                         .font(.body)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .padding(.horizontal, 12)
@@ -161,7 +179,7 @@ struct ComposePostView: View {
             }
 
             HStack(spacing: 10) {
-                Text(LL("媒体"))
+                Text(LT("媒体", "media", "メディア"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
@@ -215,7 +233,7 @@ struct ComposePostView: View {
                                     Image(systemName: "plus")
                                         .font(.system(size: 20, weight: .semibold))
                                         .foregroundStyle(RaverTheme.secondaryText)
-                                    Text(LL("添加"))
+                                    Text(LT("添加", "Add to", "追加"))
                                         .font(.caption)
                                         .foregroundStyle(RaverTheme.secondaryText)
                                 }
@@ -224,7 +242,7 @@ struct ComposePostView: View {
                         .aspectRatio(1, contentMode: .fit)
                     }
                     .buttonStyle(.plain)
-                    .disabled(isUploadingMedia)
+                    .disabled(isUploadingMedia || !canUploadMedia)
                 }
             }
             .animation(.spring(response: 0.26, dampingFraction: 0.84), value: mediaEntries)
@@ -259,7 +277,7 @@ struct ComposePostView: View {
                         ProgressView()
                             .tint(.red)
                     } else {
-                        Text(LL("删除动态"))
+                        Text(LT("删除动态", "Delete updates", "投稿を削除"))
                             .font(.subheadline.weight(.semibold))
                     }
                 }
@@ -281,23 +299,23 @@ struct ComposePostView: View {
                 await uploadSelectedMedia(from: newValue)
             }
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { toast != nil },
             set: { if !$0 { toast = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(toast ?? "")
         }
         .confirmationDialog(
-            L("确认删除这条动态吗？", "Are you sure you want to delete this post?"),
+            LT("确认删除这条动态吗？", "Are you sure you want to delete this post?", "この投稿を削除しますか？"),
             isPresented: $isDeleteConfirmationPresented,
             titleVisibility: .visible
         ) {
-            Button(LL("删除动态"), role: .destructive) {
+            Button(LT("删除动态", "Delete updates", "投稿を削除"), role: .destructive) {
                 Task { await deletePost() }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         }
         .fullScreenCover(item: $selectedPreview) { preview in
             ComposeMediaBrowserView(
@@ -321,7 +339,11 @@ struct ComposePostView: View {
         defer { isSending = false }
 
         guard !trimmedText.isEmpty || !normalizedMediaURLs.isEmpty else {
-            toast = L("请填写正文或添加媒体", "Please enter text or add media.")
+            toast = LT("请填写正文或添加媒体", "Please enter text or add media.", "本文を入力するかメディアを追加してください。")
+            return
+        }
+        guard !appState.accountEnforcementStatus.blocks(.postCreate) else {
+            toast = appState.accountEnforcementStatus.restrictionSummary
             return
         }
 
@@ -337,7 +359,7 @@ struct ComposePostView: View {
                 )
                 onPostUpdated?(updated)
             } else {
-                let created = try await commandRepository.createPost(
+                let result = try await commandRepository.createPost(
                     input: CreatePostInput(
                         content: trimmedText,
                         images: normalizedMediaURLs,
@@ -345,7 +367,12 @@ struct ComposePostView: View {
                         boundEventIDs: initialEventTag.map { [$0.id] } ?? []
                     )
                 )
-                onPostCreated?(created)
+                switch result {
+                case .created(let created):
+                    onPostCreated?(created)
+                case .submittedForReview:
+                    OperationBannerCenter.shared.success(LT("内容已提交审核", "Submitted for review", "コンテンツを審査に送信しました"))
+                }
             }
             dismiss()
         } catch {
@@ -373,6 +400,10 @@ struct ComposePostView: View {
     @MainActor
     private func uploadSelectedMedia(from items: [PhotosPickerItem]) async {
         guard !isUploadingMedia else { return }
+        guard canUploadMedia else {
+            toast = appState.accountEnforcementStatus.restrictionSummary
+            return
+        }
         isUploadingMedia = true
         defer {
             isUploadingMedia = false
@@ -381,7 +412,7 @@ struct ComposePostView: View {
 
         for item in items {
             if mediaEntries.count >= maxMediaCount {
-                toast = L("最多添加 \(maxMediaCount) 个媒体", "You can add up to \(maxMediaCount) media items.")
+                toast = LT("最多添加 \\(maxMediaCount) 个媒体", "You can add up to \\(maxMediaCount) media items.", "メディアは最大 \\(maxMediaCount) 件まで追加できます。")
                 break
             }
 
@@ -406,7 +437,7 @@ struct ComposePostView: View {
                     mediaEntries.append(ComposeMediaEntry(url: upload.url))
                 }
             } catch {
-                toast = L("媒体上传失败：\(error.userFacingMessage ?? "")", "Media upload failed: \(error.userFacingMessage ?? "")")
+                toast = LT("媒体上传失败：\(error.userFacingMessage ?? "")", "Media upload failed: \(error.userFacingMessage ?? "")", "メディアのアップロードに失敗しました：\(error.userFacingMessage ?? "")")
             }
         }
     }
@@ -483,12 +514,12 @@ struct ComposePostView: View {
     private var locationSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text(LL("定位标签"))
+                Text(LT("定位标签", "Positioning tags", "位置タグ"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
                 if normalizedLocationTag != nil {
-                    Button(L("清除", "Clear")) {
+                    Button(LT("清除", "Clear", "クリア")) {
                         locationTag = ""
                     }
                     .font(.caption.weight(.semibold))
@@ -503,7 +534,7 @@ struct ComposePostView: View {
                     Image(systemName: "mappin.and.ellipse")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
-                    Text(normalizedLocationTag ?? L("添加定位标签", "Add Location Tag"))
+                    Text(normalizedLocationTag ?? LT("添加定位标签", "Add Location Tag", "位置タグを追加"))
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(normalizedLocationTag == nil ? RaverTheme.secondaryText : RaverTheme.primaryText)
                         .lineLimit(1)
@@ -524,7 +555,7 @@ struct ComposePostView: View {
 
     private func eventTagSection(_ tag: ComposePostEventTag) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(LL("活动标签"))
+            Text(LT("活动标签", "活动标签", "イベントタグ"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(RaverTheme.primaryText)
 
@@ -1082,7 +1113,7 @@ private final class PostLocationSearchModel: NSObject, ObservableObject, MKLocal
                 result.append(
                     PostLocationCandidate(
                         id: key,
-                        title: resolvedTitle.isEmpty ? L("附近地点", "Nearby Place") : resolvedTitle,
+                        title: resolvedTitle.isEmpty ? LT("附近地点", "Nearby Place", "周辺スポット") : resolvedTitle,
                         subtitle: subtitle,
                         coordinate: coordinate
                     )
@@ -1119,6 +1150,7 @@ private struct PostLocationPickerSheet: View {
     @State private var nearbySearchTask: Task<Void, Never>?
     @FocusState private var isSearchFieldFocused: Bool
     @State private var hasAppliedInitialDeviceLocation = false
+    @State private var showLocationPermissionRationale = false
 
     init(initialQuery: String, onSelect: @escaping (String) -> Void) {
         self.initialQuery = initialQuery
@@ -1144,7 +1176,7 @@ private struct PostLocationPickerSheet: View {
                 locationListArea
             }
             .background(RaverTheme.background)
-            .raverSystemNavigation(title: LL("选择定位"))
+            .raverSystemNavigation(title: LT("选择定位", "Select targeting", "位置を選択"))
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -1155,7 +1187,7 @@ private struct PostLocationPickerSheet: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L("确认", "Confirm")) {
+                    Button(LT("确认", "Confirm", "確認")) {
                         Task { await confirmSelection() }
                     }
                     .font(.subheadline.weight(.semibold))
@@ -1166,7 +1198,7 @@ private struct PostLocationPickerSheet: View {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(RaverTheme.secondaryText)
-                        TextField(LL("搜索地点"), text: $query)
+                        TextField(LT("搜索地点", "Search places", "場所を検索"), text: $query)
                             .textInputAutocapitalization(.never)
                             .disableAutocorrection(true)
                             .focused($isSearchFieldFocused)
@@ -1184,7 +1216,7 @@ private struct PostLocationPickerSheet: View {
             .onAppear {
                 searchModel.updateQuery(query)
                 scheduleNearbySearch(for: pinCoordinate)
-                locationProvider.requestCurrentLocation()
+                requestCurrentLocationWithRationaleIfNeeded()
             }
             .onReceive(locationProvider.$coordinate) { coordinate in
                 guard let coordinate else { return }
@@ -1218,13 +1250,23 @@ private struct PostLocationPickerSheet: View {
             .onDisappear {
                 nearbySearchTask?.cancel()
             }
-            .alert(L("提示", "Notice"), isPresented: Binding(
+            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
             )) {
-                Button(L("确定", "OK"), role: .cancel) {}
+                Button(LT("确定", "OK", "OK"), role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
+            }
+            .alert(LT("允许定位用于附近地点？", "Allow location for nearby places?", "周辺スポットのために位置情報を許可しますか？"), isPresented: $showLocationPermissionRationale) {
+                Button(LT("继续", "Continue", "続行")) {
+                    locationProvider.requestCurrentLocation()
+                }
+                Button(LT("先手动输入", "Enter Manually", "手動で入力"), role: .cancel) {
+                    isSearchFieldFocused = true
+                }
+            } message: {
+                Text(LT("Raver 只会用当前位置帮你推荐附近地点标签。你也可以不授权，直接搜索或输入地点。", "Raver uses your current location only to recommend nearby location tags. You can skip this and search or enter a place manually.", "Raver は現在地を周辺の場所タグ推薦にのみ使用します。許可せずに検索または場所を入力することもできます。"))
             }
         }
         .raverEnableCustomSwipeBack(edgeRatio: 0.2)
@@ -1292,7 +1334,7 @@ private struct PostLocationPickerSheet: View {
                     Image(systemName: listMode == .query ? "magnifyingglass" : "scope")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
-                    Text(listMode == .query ? L("搜索候选地点", "Search Candidates") : L("附近推荐地点", "Nearby Recommendations"))
+                    Text(listMode == .query ? LT("搜索候选地点", "Search Candidates", "候補地点を検索") : LT("附近推荐地点", "Nearby Recommendations", "周辺おすすめ地点"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
                     Spacer(minLength: 0)
@@ -1389,7 +1431,7 @@ private struct PostLocationPickerSheet: View {
                 )
             }
         } catch {
-            errorMessage = L("地点解析失败，请重试", "Failed to resolve place. Please try again.")
+            errorMessage = LT("地点解析失败，请重试", "Failed to resolve place. Please try again.", "場所の解析に失敗しました。もう一度お試しください。")
         }
     }
 
@@ -1416,7 +1458,7 @@ private struct PostLocationPickerSheet: View {
             return
         }
 
-        errorMessage = L("请先搜索地点，或拖动地图后确认", "Please search for a place, or drag the map pin and confirm.")
+        errorMessage = LT("请先搜索地点，或拖动地图后确认", "Please search for a place, or drag the map pin and confirm.", "まず場所を検索するか、地図をドラッグしてから確認してください。")
     }
 
     private var displayedCandidates: [PostLocationCandidate] {
@@ -1432,10 +1474,10 @@ private struct PostLocationPickerSheet: View {
         switch listMode {
         case .query:
             return query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? L("输入关键词搜索地点", "Enter keywords to search places")
-                : L("未找到匹配地点", "No matching places found")
+                ? LT("输入关键词搜索地点", "Enter keywords to search places", "キーワードを入力して場所を検索")
+                : LT("未找到匹配地点", "No matching places found", "一致する場所が見つかりません")
         case .nearby:
-            return L("拖动地图后，将在这里展示 pin 附近地点", "After dragging the map, nearby places around the pin will appear here.")
+            return LT("拖动地图后，将在这里展示 pin 附近地点", "After dragging the map, nearby places around the pin will appear here.", "地図をドラッグすると、ピン周辺の場所がここに表示されます。")
         }
     }
 
@@ -1463,15 +1505,23 @@ private struct PostLocationPickerSheet: View {
         }
 
         if forceRequest {
-            locationProvider.requestCurrentLocation()
+            requestCurrentLocationWithRationaleIfNeeded()
         }
 
         switch locationProvider.authorizationStatus {
         case .denied, .restricted:
-            errorMessage = L("定位权限未开启，请在系统设置中允许定位后重试", "Location permission is disabled. Please enable it in Settings and try again.")
+            errorMessage = LT("定位权限未开启，请在系统设置中允许定位后重试", "Location permission is disabled. Please enable it in Settings and try again.", "位置情報の権限が無効です。システム設定で許可してからもう一度お試しください。")
         default:
-            errorMessage = L("正在获取当前位置，请稍后再试", "Getting current location. Please try again shortly.")
+            errorMessage = LT("正在获取当前位置，请稍后再试", "Getting current location. Please try again shortly.", "現在地を取得中です。少し待ってからもう一度お試しください。")
         }
+    }
+
+    private func requestCurrentLocationWithRationaleIfNeeded() {
+        if locationProvider.authorizationStatus == .notDetermined {
+            showLocationPermissionRationale = true
+            return
+        }
+        locationProvider.requestCurrentLocation()
     }
 
     private func reverseGeocodeLabel(for coordinate: CLLocationCoordinate2D) async -> String? {
@@ -1501,7 +1551,7 @@ private struct PostLocationPickerSheet: View {
         try await withCheckedThrowingContinuation { continuation in
             CLGeocoder().reverseGeocodeLocation(
                 CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude),
-                preferredLocale: Locale(identifier: "zh_CN")
+                preferredLocale: Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
             ) { placemarks, error in
                 if let error {
                     continuation.resume(throwing: error)

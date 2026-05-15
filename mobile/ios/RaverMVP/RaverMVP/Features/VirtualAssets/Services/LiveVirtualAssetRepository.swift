@@ -131,7 +131,7 @@ final class LiveVirtualAssetRepository: VirtualAssetRepository {
         guard (200...299).contains(http.statusCode) else {
             let message = (try? JSONDecoder.raver.decode(VirtualAssetErrorEnvelope.self, from: data).error)
                 ?? String(data: data, encoding: .utf8)
-                ?? L("请求失败", "Request failed")
+                ?? LT("请求失败", "Request failed", "リクエストに失敗しました")
             throw ServiceError.message(message)
         }
 
@@ -139,10 +139,10 @@ final class LiveVirtualAssetRepository: VirtualAssetRepository {
             return try JSONDecoder.raver.decode(T.self, from: data)
         } catch let decodingError as DecodingError {
             print("Virtual asset BFF decode error:", decodingError)
-            throw ServiceError.message(L("虚拟资产接口返回格式不匹配", "Virtual asset response format mismatch"))
+            throw ServiceError.message(LT("虚拟资产接口返回格式不匹配", "Virtual asset response format mismatch", "仮想アセットAPIのレスポンス形式が一致しません"))
         } catch {
             print("Virtual asset BFF decode error:", error)
-            throw ServiceError.message(L("虚拟资产接口返回格式不匹配", "Virtual asset response format mismatch"))
+            throw ServiceError.message(LT("虚拟资产接口返回格式不匹配", "Virtual asset response format mismatch", "仮想アセットAPIのレスポンス形式が一致しません"))
         }
     }
 

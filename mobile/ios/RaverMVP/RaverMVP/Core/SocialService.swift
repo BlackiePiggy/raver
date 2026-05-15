@@ -9,11 +9,11 @@ enum GroupInviteOption: String, Codable, CaseIterable {
     var title: String {
         switch self {
         case .forbid:
-            return L("禁止邀请", "Invite Disabled")
+            return LT("禁止邀请", "Invite Disabled", "招待禁止")
         case .auth:
-            return L("管理员审批", "Admin Approval")
+            return LT("管理员审批", "Admin Approval", "管理者承認")
         case .any:
-            return L("自动通过", "Auto Approval")
+            return LT("自动通过", "Auto Approval", "自動承認")
         }
     }
 }
@@ -201,9 +201,9 @@ enum FeedMode: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .recommended: return L("推荐", "Recommended")
-        case .following: return L("关注", "Following")
-        case .latest: return L("最新", "Latest")
+        case .recommended: return LT("推荐", "Recommended", "おすすめ")
+        case .following: return LT("关注", "Following", "フォロー中")
+        case .latest: return LT("最新", "Latest", "最新")
         }
     }
 }
@@ -213,14 +213,31 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func login(username: String, password: String) async throws -> Session
     func loginWithSms(phoneNumber: String, code: String) async throws -> Session
     func sendLoginSmsCode(phoneNumber: String) async throws -> Int
-    func register(email: String, password: String, displayName: String) async throws -> Session
+    func register(
+        email: String,
+        password: String,
+        displayName: String,
+        birthYear: Int?,
+        regionCode: String?
+    ) async throws -> Session
     func logout() async
+    func deleteAccount() async throws
+    func fetchAccountEnforcementStatus() async throws -> AccountEnforcementStatus
+    func fetchAccountEnforcements() async throws -> [AccountEnforcement]
+    func fetchAccountEnforcementAppeals() async throws -> [AccountEnforcementAppeal]
+    func submitAccountEnforcementAppeal(enforcementID: String, input: AccountEnforcementAppealInput) async throws -> AccountEnforcementAppeal
     func fetchTencentIMBootstrap() async throws -> TencentIMBootstrap
+    func submitContentReport(input: ContentReportInput) async throws -> ContentReport
+    func fetchMyContentReports(limit: Int) async throws -> [ContentReport]
+    func fetchBlockedUsers(limit: Int) async throws -> [UserBlockListItem]
+    func fetchUserBlockStatus(userID: String) async throws -> UserBlockStatus
+    func blockUser(userID: String, input: UserBlockInput) async throws -> UserBlockStatus
+    func unblockUser(userID: String) async throws -> UserBlockStatus
 
     func fetchFeed(cursor: String?, mode: FeedMode?, eventID: String?) async throws -> FeedPage
     func searchFeed(query: String) async throws -> FeedPage
     func fetchPost(postID: String) async throws -> Post
-    func createPost(input: CreatePostInput) async throws -> Post
+    func createPost(input: CreatePostInput) async throws -> CreatePostResult
     func updatePost(postID: String, input: UpdatePostInput) async throws -> Post
     func deletePost(postID: String) async throws
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post
@@ -288,6 +305,9 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
     func markNotificationRead(notificationID: String) async throws
     func markNotificationsRead(type: AppNotificationType) async throws
+    func fetchContentReviewSummary() async throws -> ContentReviewSummary
+    func fetchContentReviewNotifications(limit: Int) async throws -> [ContentReviewNotificationItem]
+    func markContentReviewNotificationRead(notificationID: String) async throws
     func fetchFollowedEventsSummary() async throws -> FollowedEventsSummary
     func fetchFollowedEventNotifications(limit: Int) async throws -> [FollowedEventNotificationItem]
     func markFollowedEventNotificationRead(notificationID: String) async throws
@@ -297,6 +317,8 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func fetchFollowedBrandsSummary() async throws -> FollowedBrandsSummary
     func fetchFollowedBrandNotifications(limit: Int) async throws -> [FollowedBrandNotificationItem]
     func markFollowedBrandNotificationRead(notificationID: String) async throws
+    func fetchNotificationCategoryPreferences() async throws -> [NotificationCategoryPreference]
+    func updateNotificationCategoryPreferences(_ input: NotificationCategoryPreferencesInput) async throws -> [NotificationCategoryPreference]
     func fetchFollowedBrandUpdatePreference() async throws -> FollowedBrandUpdatePreference
     func updateFollowedBrandUpdatePreference(_ input: FollowedBrandUpdatePreferenceInput) async throws -> FollowedBrandUpdatePreference
     func registerDevicePushToken(
@@ -608,16 +630,35 @@ extension SocialService {
 enum ServiceError: LocalizedError {
     case invalidResponse
     case unauthorized
+    case accountInactive
+    case accountEnforcementRestricted(AccountEnforcementRestriction)
     case message(String)
 
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return L("服务响应无效", "Invalid service response")
+            return LT("服务响应无效", "Invalid service response", "サービスレスポンスが無効です")
         case .unauthorized:
-            return L("登录状态已失效，请重新登录", "Session expired. Please log in again.")
+            return LT("登录状态已失效，请重新登录", "Session expired. Please log in again.", "ログイン状態が無効です。再度ログインしてください。")
+        case .accountInactive:
+            return LT("账号已删除或停用，请重新登录其他账号。", "This account has been deleted or disabled. Please log in with another account.", "このアカウントは削除または停止されています。別のアカウントでログインしてください。")
+        case .accountEnforcementRestricted(let restriction):
+            let scopeTitle = AccountEnforcementScope(rawValue: restriction.scope)?.title ?? restriction.scope.replacingOccurrences(of: "_", with: " ")
+            let reason = restriction.blockingEnforcements.first?.displayReason
+            if let reason, !reason.isEmpty {
+                return LT(
+                    "账号当前受限，无法\(scopeTitle)。原因：\(reason)。你可以在账号安全页查看详情并提交申诉。",
+                    "Your account is currently restricted and cannot \(scopeTitle.lowercased()). Reason: \(reason). You can review details and appeal in Account Security.",
+                    "アカウントが制限中のため、\(scopeTitle) は利用できません。理由: \(reason)。アカウント安全ページで詳細を確認し、申立を送信できます。"
+                )
+            }
+            return LT(
+                "账号当前受限，无法\(scopeTitle)。你可以在账号安全页查看详情并提交申诉。",
+                "Your account is currently restricted and cannot \(scopeTitle.lowercased()). You can review details and appeal in Account Security.",
+                "アカウントが制限中のため、\(scopeTitle) は利用できません。アカウント安全ページで詳細を確認し、申立を送信できます。"
+            )
         case .message(let text):
-            return LL(text)
+            return text
         }
     }
 }

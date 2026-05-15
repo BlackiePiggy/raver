@@ -49,7 +49,7 @@ final class DemoAlignedMediaSendProgressPresenter {
         }
 
         progressView.setProgress(0, animated: false)
-        progressLabel.text = L("发送媒体 0%", "Sending media 0%")
+        progressLabel.text = LT("发送媒体 0%", "Sending media 0%", "メディア送信中 0%")
         progressView.isHidden = true
         progressLabel.isHidden = true
         heightConstraint.constant = 0
@@ -79,7 +79,7 @@ final class DemoAlignedMediaSendProgressPresenter {
 
         progressView.setProgress(Float(clamped), animated: true)
         let percent = Int(round(clamped * 100))
-        progressLabel.text = L("发送媒体 \(percent)%", "Sending media \(percent)%")
+        progressLabel.text = LT("发送媒体 \(percent)%", "Sending media \(percent)%", "メディア送信中 \(percent)%")
     }
 
     func updateProgress(_ progress: Double) {

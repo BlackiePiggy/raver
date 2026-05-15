@@ -25,6 +25,7 @@ struct PostDetailView: View {
     @State private var isSharePanelMounted = false
     @State private var isShowingMoreChatsSheet = false
     @State private var isShowingRealNameSheet = false
+    @State private var reportTarget: ReportSheetTarget?
     @State private var replyTargetComment: Comment?
     @State private var commentSortMode: CommentSortMode = .hot
     @State private var visibleRootCount = 0
@@ -70,13 +71,13 @@ struct PostDetailView: View {
                     if isRefreshing || bannerMessage != nil {
                         VStack(alignment: .leading, spacing: 10) {
                             if isRefreshing {
-                                InlineLoadingBadge(title: L("正在更新动态详情", "Updating post details"))
+                                InlineLoadingBadge(title: LT("正在更新动态详情", "Updating post details", "投稿詳細を更新中"))
                             }
                             if let bannerMessage {
                                 ScreenStatusBanner(
                                     message: bannerMessage,
                                     style: .error,
-                                    actionTitle: L("重试", "Retry")
+                                    actionTitle: LT("重试", "Retry", "再試行")
                                 ) {
                                     Task { await loadComments() }
                                 }
@@ -89,7 +90,7 @@ struct PostDetailView: View {
                     GlassCard {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 10) {
-                                Text(LL("评论"))
+                                Text(LT("评论", "Comment", "コメント"))
                                     .font(.headline)
                                 Spacer()
                                 if !comments.isEmpty {
@@ -108,13 +109,13 @@ struct PostDetailView: View {
                                 CommentSectionSkeletonView()
                             case .failure(let message), .offline(let message):
                                 ScreenErrorCard(
-                                    title: L("评论加载失败", "Comments Failed to Load"),
+                                    title: LT("评论加载失败", "Comments Failed to Load", "コメントの読み込みに失敗しました"),
                                     message: message
                                 ) {
                                     Task { await loadComments() }
                                 }
                             case .empty:
-                                Text(LL("还没有评论，来抢沙发吧。"))
+                                Text(LT("还没有评论，来抢沙发吧。", "There are no comments yet, be the first to be the first.", "まだコメントはありません。最初にコメントしましょう。"))
                                     .font(.subheadline)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             case .success:
@@ -143,9 +144,10 @@ struct PostDetailView: View {
                 if let replyTargetComment {
                     HStack(spacing: 8) {
                         Text(
-                            L(
+                            LT(
                                 "回复 \(replyTargetComment.author.displayName)",
-                                "Replying to \(replyTargetComment.author.displayName)"
+                                "Replying to \(replyTargetComment.author.displayName)",
+                                "\(replyTargetComment.author.displayName) に返信中"
                             )
                         )
                         .font(.caption)
@@ -172,7 +174,7 @@ struct PostDetailView: View {
                         .background(RaverTheme.card)
                         .clipShape(RoundedRectangle(cornerRadius: 1, style: .continuous))
 
-                    Button(L("发送", "Send")) {
+                    Button(LT("发送", "Send", "送信")) {
                         submitComment()
                     }
                     .buttonStyle(.borderedProminent)
@@ -188,12 +190,12 @@ struct PostDetailView: View {
             }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button(L("收起", "Collapse")) {
+                Button(LT("收起", "Collapse", "閉じる")) {
                     dismissKeyboard()
                 }
             }
         }
-        .raverSystemNavigation(title: LL("动态详情"))
+        .raverSystemNavigation(title: LT("动态详情", "动态详情", "投稿詳細"))
         .task {
             await loadComments()
         }
@@ -232,8 +234,19 @@ struct PostDetailView: View {
             RealNameVerificationSheet()
                 .presentationDetents([.medium])
         }
+        .sheet(item: $reportTarget) { target in
+            ReportSheet(target: target) { _, blocked in
+                OperationBannerCenter.shared.success(
+                    blocked
+                        ? LT("举报已提交，并已拉黑该用户", "Report submitted and user blocked", "通報を送信し、このユーザーをブロックしました")
+                        : LT("举报已提交", "Report submitted", "通報を送信しました")
+                )
+            }
+            .environmentObject(appState)
+            .presentationDetents([.large])
+        }
         .confirmationDialog(
-            L("告诉我们原因", "Tell us why"),
+            LT("告诉我们原因", "Tell us why", "理由を教えてください"),
             isPresented: $isShowingHideReasonDialog,
             titleVisibility: .visible
         ) {
@@ -242,15 +255,15 @@ struct PostDetailView: View {
                     Task { await hidePost(reason: reason.rawValue) }
                 }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
-            Text(L("我们会据此减少类似内容。", "We'll show fewer similar posts."))
+            Text(LT("我们会据此减少类似内容。", "We'll show fewer similar posts.", "これをもとに類似コンテンツの表示を減らします。"))
         }
-        .alert(LL("失败"), isPresented: Binding(
+        .alert(LT("失败", "fail", "失敗"), isPresented: Binding(
             get: { error != nil },
             set: { if !$0 { error = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(error ?? "")
         }
@@ -268,7 +281,7 @@ struct PostDetailView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(L("更多", "More"))
+        .accessibilityLabel(LT("更多", "More", "その他"))
     }
 
     @ViewBuilder
@@ -459,14 +472,14 @@ struct PostDetailView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                error = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                error = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat 共有機能はまだ接続されていません。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "paperplane.circle.fill",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
-                error = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                error = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ 共有機能はまだ接続されていません。")
             }
         ]
     }
@@ -475,46 +488,53 @@ struct PostDetailView: View {
         let payload = PostSharePayload(post: post)
         return [
             SharePanelQuickAction(
-                title: L("复制链接", "Copy Link"),
+                title: LT("复制链接", "Copy Link", "リンクをコピー"),
                 systemImage: "link",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
             ) {
                 Task { await copyPostShareLink() }
             },
             SharePanelQuickAction(
-                title: L("查看二维码", "View QR"),
+                title: LT("查看二维码", "View QR", "QRコードを見る"),
                 systemImage: "qrcode",
                 accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
             ) {
                 Task { await openPostQRCode(payload: payload) }
             },
             SharePanelQuickAction(
-                title: L("查看海报", "View Poster"),
+                title: LT("查看海报", "View Poster", "ポスターを見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
             ) {
                 Task { await openPostPoster(payload: payload) }
             },
             SharePanelQuickAction(
-                title: L("保存海报", "Save Poster"),
+                title: LT("保存海报", "Save Poster", "ポスターを保存"),
                 systemImage: "photo.badge.arrow.down",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
                 Task { await savePostPoster(payload: payload) }
             },
             SharePanelQuickAction(
-                title: L("不感兴趣", "Not Interested"),
+                title: LT("不感兴趣", "Not Interested", "興味がない"),
                 systemImage: "eye.slash",
                 accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
             ) {
                 isShowingHideReasonDialog = true
             },
             SharePanelQuickAction(
-                title: L("举报", "Report"),
+                title: LT("举报", "Report", "通報"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.93, green: 0.39, blue: 0.24)
             ) {
-                error = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+                reportTarget = ReportSheetTarget(
+                    id: post.id,
+                    type: .post,
+                    title: post.author.displayName,
+                    preview: post.content,
+                    targetUserID: post.author.id,
+                    targetUserDisplayName: post.author.displayName
+                )
             }
         ]
     }
@@ -534,12 +554,12 @@ struct PostDetailView: View {
             )
 
             if result.usedDeepLinkFallback {
-                error = L("已复制 App 内链接", "Copied app-only link.")
+                error = LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました")
             } else {
-                OperationBannerCenter.shared.success(L("已复制链接", "Link copied"))
+                OperationBannerCenter.shared.success(LT("已复制链接", "Link copied", "リンクをコピーしました"))
             }
         } catch {
-            self.error = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            self.error = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクのコピーに失敗しました。後でもう一度お試しください。")
         }
     }
 
@@ -568,7 +588,7 @@ struct PostDetailView: View {
                 )
             )
         } catch {
-            self.error = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            self.error = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。後でもう一度お試しください。")
         }
     }
 
@@ -588,20 +608,20 @@ struct PostDetailView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "共有ポスター"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("动态海报由分享系统统一生成，内容封面、摘要和二维码都会跟随短链一起更新。", "Post posters are generated by the share system, so the cover, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "ポスターはまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有ポスターはまだ準備できていません。後でもう一度お試しください。"),
+                        hintText: LT("动态海报由分享系统统一生成，内容封面、摘要和二维码都会跟随短链一起更新。", "Post posters are generated by the share system, so the cover, summary, and QR code stay aligned with the short link.", "投稿ポスターは共有システムで生成され、カバー、概要、QRコードは短縮リンクと同期して更新されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "ポスターを保存")
                     )
                 )
             )
         } catch {
-            self.error = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            self.error = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有ポスターを開けませんでした。後でもう一度お試しください。")
         }
     }
 
@@ -619,9 +639,9 @@ struct PostDetailView: View {
                 channel: "poster_save"
             )
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            OperationBannerCenter.shared.success(L("海报已保存到相册", "Poster saved to Photos"))
+            OperationBannerCenter.shared.success(LT("海报已保存到相册", "Poster saved to Photos", "ポスターを写真に保存しました"))
         } catch {
-            self.error = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            self.error = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "ポスターの保存に失敗しました。後でもう一度お試しください。")
         }
     }
 
@@ -651,7 +671,7 @@ struct PostDetailView: View {
             if error.isUserInitiatedCancellation {
                 return
             }
-            let message = error.userFacingMessage ?? L("评论加载失败，请稍后重试", "Failed to load comments. Please try again later.")
+            let message = error.userFacingMessage ?? LT("评论加载失败，请稍后重试", "Failed to load comments. Please try again later.", "コメントの読み込みに失敗しました。後でもう一度お試しください。")
             if hadComments {
                 bannerMessage = message
                 commentsPhase = .success
@@ -717,9 +737,9 @@ struct PostDetailView: View {
 
     private var commentInputPlaceholder: String {
         if let replyTargetComment {
-            return L("回复 \(replyTargetComment.author.displayName)...", "Reply to \(replyTargetComment.author.displayName)...")
+            return LT("回复 \\(replyTargetComment.author.displayName)...", "Reply to \\(replyTargetComment.author.displayName)...", "\\(replyTargetComment.author.displayName) に返信...")
         }
-        return LL("说点什么...")
+        return LT("说点什么...", "Say something...", "何か書いて...")
     }
 
     private var sortedCommentThreads: [CommentThread] {
@@ -832,9 +852,10 @@ struct PostDetailView: View {
             HStack(spacing: 14) {
                 if isExpanded, remaining > 0 {
                     Button(
-                        L(
+                        LT(
                             "查看更多回复（剩余 \(remaining) 条）",
-                            "Show more replies (\(remaining) left)"
+                            "Show more replies (\(remaining) left)",
+                            "返信をさらに表示（残り \(remaining) 件）"
                         )
                     ) {
                         loadMoreReplies(for: thread)
@@ -846,9 +867,10 @@ struct PostDetailView: View {
 
                 if !isExpanded, thread.replies.count > replyPreviewCount {
                     Button(
-                        L(
+                        LT(
                             "展开 \(thread.replies.count) 条回复",
-                            "Expand \(thread.replies.count) replies"
+                            "Expand \(thread.replies.count) replies",
+                            "\(thread.replies.count) 件の返信を展開"
                         )
                     ) {
                         expandReplies(for: thread)
@@ -857,7 +879,7 @@ struct PostDetailView: View {
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
                 } else if isExpanded, thread.replies.count > replyPreviewCount {
-                    Button(LL("收起回复")) {
+                    Button(LT("收起回复", "收起回复", "返信を閉じる")) {
                         collapseReplies(for: thread)
                     }
                     .buttonStyle(.plain)
@@ -896,9 +918,10 @@ struct PostDetailView: View {
 
                 if showReplyTarget, let replyTo = comment.replyToAuthor {
                     Text(
-                        L(
+                        LT(
                             "回复 \(replyTo.displayName)：\(comment.content)",
-                            "Reply to \(replyTo.displayName): \(comment.content)"
+                            "Reply to \(replyTo.displayName): \(comment.content)",
+                            "\(replyTo.displayName) への返信：\(comment.content)"
                         )
                     )
                     .font(contentFont)
@@ -1051,9 +1074,9 @@ private enum CommentSortMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .hot:
-            return L("热度", "Hot")
+            return LT("热度", "Hot", "人気")
         case .timeline:
-            return L("时间轴", "Timeline")
+            return LT("时间轴", "Timeline", "タイムライン")
         }
     }
 }

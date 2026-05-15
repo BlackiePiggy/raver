@@ -14,6 +14,7 @@ extension Notification.Name {
     static let raverFollowedEventsDidMutate = Notification.Name("raverFollowedEventsDidMutate")
     static let raverFollowedDJsDidMutate = Notification.Name("raverFollowedDJsDidMutate")
     static let raverFollowedBrandsDidMutate = Notification.Name("raverFollowedBrandsDidMutate")
+    static let raverContentReviewsDidMutate = Notification.Name("raverContentReviewsDidMutate")
 }
 
 private struct MessagesPushKey: EnvironmentKey {

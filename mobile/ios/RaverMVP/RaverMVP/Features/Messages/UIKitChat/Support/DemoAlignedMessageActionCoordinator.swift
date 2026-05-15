@@ -63,7 +63,7 @@ final class DemoAlignedMessageActionCoordinator: NSObject, @preconcurrency AVAud
     private func resendMessage(messageID: String) async {
         if pendingResendMessageIDs.contains(messageID) {
             failureFeedbackActions.show(
-                message: L("正在重发，请稍候", "Resending... Please wait."),
+                message: LT("正在重发，请稍候", "Resending... Please wait.", "再送信中です。しばらくお待ちください。"),
                 reason: "resend_in_progress"
             )
             return
@@ -75,7 +75,7 @@ final class DemoAlignedMessageActionCoordinator: NSObject, @preconcurrency AVAud
         }
 
         failureFeedbackActions.show(
-            message: L("正在重发消息...", "Resending message..."),
+            message: LT("正在重发消息...", "Resending message...", "メッセージを再送信中..."),
             reason: "resend_started"
         )
         do {
@@ -125,7 +125,7 @@ final class DemoAlignedMessageActionCoordinator: NSObject, @preconcurrency AVAud
     private func resolveVoicePlaybackURL(for message: ChatMessage) async throws -> URL {
         guard let rawURL = RaverChatMediaResolver.playbackRawURL(for: message),
               let resolved = RaverChatMediaResolver.resolvedURL(from: rawURL) else {
-            throw ServiceError.message(L("语音地址无效", "Invalid voice URL"))
+            throw ServiceError.message(LT("语音地址无效", "Invalid voice URL", "音声 URL が無効です"))
         }
         if resolved.isFileURL {
             ChatMediaTempFileStore.noteAccess(for: resolved)

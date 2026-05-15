@@ -9,7 +9,7 @@ struct DirectChatSettingsSection: View {
             Button {
                 onOpenProfile(peer)
             } label: {
-                Label(L("查看用户主页", "View User Profile"), systemImage: "person.crop.circle")
+                Label(LT("查看用户主页", "View User Profile", "ユーザープロフィールを見る"), systemImage: "person.crop.circle")
             }
         }
     }

@@ -334,7 +334,7 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
         VirtualAssetUIKitChatAvatarRenderer.removeFrameOverlay(from: senderAvatarView)
         VirtualAssetUIKitChatMetaRenderer.removeDecorations(from: senderMetaRow)
         if isMine {
-            senderNameLabel.text = L("我", "Me")
+            senderNameLabel.text = LT("我", "Me", "自分")
         } else {
             senderNameLabel.text = sender.displayName.isEmpty ? sender.username : sender.displayName
         }
@@ -377,14 +377,14 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
             stopSendingIconAnimation()
             if let readCount = message.readReceiptReadCount, readCount > 0 {
                 if let unreadCount = message.readReceiptUnreadCount {
-                    statusPillLabel.text = "\(L("已读", "Read")) \(readCount)\(L("人", "")) · \(L("未读", "Unread")) \(max(unreadCount, 0))"
+                    statusPillLabel.text = "\(LT("已读", "Read", "既読")) \(readCount)\(LT("人", "", "人")) · \(LT("未读", "Unread", "未読")) \(max(unreadCount, 0))"
                 } else {
-                    statusPillLabel.text = "\(L("已读", "Read")) \(readCount)\(L("人", ""))"
+                    statusPillLabel.text = "\(LT("已读", "Read", "既読")) \(readCount)\(LT("人", "", "人"))"
                 }
             } else if let peerRead = message.peerRead {
-                statusPillLabel.text = peerRead ? L("已读", "Read") : L("未读", "Unread")
+                statusPillLabel.text = peerRead ? LT("已读", "Read", "既読") : LT("未读", "Unread", "未読")
             } else {
-                statusPillLabel.text = L("已发送", "Sent")
+                statusPillLabel.text = LT("已发送", "Sent", "送信済み")
             }
             statusPillView.backgroundColor = isMine
                 ? UIColor.white.withAlphaComponent(0.2)
@@ -395,7 +395,7 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
             statusPillIconView.isHidden = false
             statusPillView.isHidden = false
         case .sending:
-            statusPillLabel.text = L("发送中", "Sending")
+            statusPillLabel.text = LT("发送中", "Sending", "送信中")
             statusPillView.backgroundColor = isMine
                 ? UIColor.white.withAlphaComponent(0.22)
                 : UIColor(RaverTheme.cardBorder).withAlphaComponent(0.6)
@@ -407,7 +407,7 @@ final class DemoAlignedMessageCell: UICollectionViewCell {
             statusPillView.isHidden = false
         case .failed:
             stopSendingIconAnimation()
-            statusPillLabel.text = L("失败·点重试", "Failed · Tap retry")
+            statusPillLabel.text = LT("失败·点重试", "Failed · Tap retry", "失敗・タップして再試行")
             statusPillView.backgroundColor = isMine
                 ? UIColor.systemRed.withAlphaComponent(0.28)
                 : UIColor.systemRed.withAlphaComponent(0.12)

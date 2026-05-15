@@ -30,6 +30,7 @@ struct PostCardView: View {
     @State private var isShowingMoreChatsSheet = false
     @State private var isShowingRealNameSheet = false
     @State private var shareErrorMessage: String?
+    @State private var reportTarget: ReportSheetTarget?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
         ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
@@ -104,9 +105,9 @@ struct PostCardView: View {
                                 )
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(L("编辑动态", "Edit Post"))
+                        .accessibilityLabel(LT("编辑动态", "Edit Post", "投稿を編集"))
                     } else if showsFollowButton, let onFollowTap {
-                        Button(post.author.isFollowing ? L("已关注", "Following") : L("关注", "Follow"), action: onFollowTap)
+                        Button(post.author.isFollowing ? LT("已关注", "Following", "フォロー中") : LT("关注", "Follow", "フォロー"), action: onFollowTap)
                             .font(.caption.bold())
                             .foregroundStyle(post.author.isFollowing ? RaverTheme.secondaryText : Color.white)
                             .padding(.horizontal, 10)
@@ -190,14 +191,14 @@ struct PostCardView: View {
 
                     if post.author.id != currentUserId, let onMessageTap {
                         Button(action: onMessageTap) {
-                            Label(LL("私信"), systemImage: "paperplane")
+                            Label(LT("私信", "私信", "DM"), systemImage: "paperplane")
                         }
                         .foregroundStyle(RaverTheme.secondaryText)
                     }
 
                     if post.squad != nil, let onSquadTap {
                         Button(action: onSquadTap) {
-                            Label(LL("进小队"), systemImage: "person.3")
+                            Label(LT("进小队", "进小队", "Squadへ"), systemImage: "person.3")
                         }
                         .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -288,11 +289,22 @@ struct PostCardView: View {
             RealNameVerificationSheet()
                 .presentationDetents([.medium])
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .sheet(item: $reportTarget) { target in
+            ReportSheet(target: target) { _, blocked in
+                OperationBannerCenter.shared.success(
+                    blocked
+                        ? LT("举报已提交，并已拉黑该用户", "Report submitted and user blocked", "報告を送信し、このユーザーをブロックしました")
+                        : LT("举报已提交", "Report submitted", "報告を送信しました")
+                )
+            }
+            .environmentObject(appState)
+            .presentationDetents([.large])
+        }
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { shareErrorMessage != nil },
             set: { if !$0 { shareErrorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(shareErrorMessage ?? "")
         }
@@ -436,14 +448,14 @@ struct PostCardView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                shareErrorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                shareErrorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "paperplane.circle.fill",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
-                shareErrorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                shareErrorMessage = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ共有連携は未接続です。")
             }
         ]
     }
@@ -451,28 +463,28 @@ struct PostCardView: View {
     private func shareQuickActions() -> [SharePanelQuickAction] {
         var actions: [SharePanelQuickAction] = [
             SharePanelQuickAction(
-                title: L("复制链接", "Copy Link"),
+                title: LT("复制链接", "Copy Link", "リンクをコピー"),
                 systemImage: "link",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
             ) {
                 Task { await copyPostShareLink() }
             },
             SharePanelQuickAction(
-                title: L("查看二维码", "View QR"),
+                title: LT("查看二维码", "View QR", "QRを見る"),
                 systemImage: "qrcode",
                 accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
             ) {
                 Task { await openPostQRCode() }
             },
             SharePanelQuickAction(
-                title: L("查看海报", "View Poster"),
+                title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
             ) {
                 Task { await openPostPoster() }
             },
             SharePanelQuickAction(
-                title: L("保存海报", "Save Poster"),
+                title: LT("保存海报", "Save Poster", "海報を保存"),
                 systemImage: "photo.badge.arrow.down",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
@@ -483,7 +495,7 @@ struct PostCardView: View {
         if let onHideTap {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("不感兴趣", "Not Interested"),
+                    title: LT("不感兴趣", "Not Interested", "興味なし"),
                     systemImage: "eye.slash",
                     accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
                 ) {
@@ -493,11 +505,18 @@ struct PostCardView: View {
         }
         actions.append(
             SharePanelQuickAction(
-                title: L("举报", "Report"),
+                title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.93, green: 0.39, blue: 0.24)
             ) {
-                shareErrorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+                reportTarget = ReportSheetTarget(
+                    id: post.id,
+                    type: .post,
+                    title: post.author.displayName,
+                    preview: post.content,
+                    targetUserID: post.author.id,
+                    targetUserDisplayName: post.author.displayName
+                )
             }
         )
         return actions
@@ -517,12 +536,12 @@ struct PostCardView: View {
             )
 
             if result.usedDeepLinkFallback {
-                shareErrorMessage = L("已复制 App 内链接", "Copied app-only link.")
+                shareErrorMessage = LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました")
             } else {
-                OperationBannerCenter.shared.success(L("已复制链接", "Link copied"))
+                OperationBannerCenter.shared.success(LT("已复制链接", "Link copied", "リンクをコピーしました"))
             }
         } catch {
-            shareErrorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            shareErrorMessage = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクをコピーできませんでした。もう一度お試しください。")
         }
     }
 
@@ -552,7 +571,7 @@ struct PostCardView: View {
                 )
             )
         } catch {
-            shareErrorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            shareErrorMessage = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -573,20 +592,20 @@ struct PostCardView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("动态海报由分享系统统一生成，内容封面、摘要和二维码都会跟随短链一起更新。", "Post posters are generated by the share system, so the cover, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
+                        hintText: LT("动态海报由分享系统统一生成，内容封面、摘要和二维码都会跟随短链一起更新。", "Post posters are generated by the share system, so the cover, summary, and QR code stay aligned with the short link.", "投稿海報は共有システムで生成され、カバー、概要、QRコードは短縮リンクと同期されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            shareErrorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            shareErrorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -605,9 +624,9 @@ struct PostCardView: View {
                 channel: "poster_save"
             )
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            OperationBannerCenter.shared.success(L("海报已保存到相册", "Poster saved to Photos"))
+            OperationBannerCenter.shared.success(LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
         } catch {
-            shareErrorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            shareErrorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 }
@@ -634,10 +653,10 @@ private struct PostLocationMapView: View {
 
         var title: String {
             switch self {
-            case .apple: return L("Apple 地图", "Apple Maps")
-            case .amap: return L("高德地图", "Amap")
-            case .baidu: return L("百度地图", "Baidu Maps")
-            case .tencent: return L("腾讯地图", "Tencent Maps")
+            case .apple: return LT("Apple 地图", "Apple Maps", "Appleマップ")
+            case .amap: return LT("高德地图", "Amap", "高徳地図")
+            case .baidu: return LT("百度地图", "Baidu Maps", "Baiduマップ")
+            case .tencent: return LT("腾讯地图", "Tencent Maps", "Tencentマップ")
             }
         }
     }
@@ -667,7 +686,7 @@ private struct PostLocationMapView: View {
                 .ignoresSafeArea(edges: .bottom)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(LL("定位信息"))
+                    Text(LT("定位信息", "定位信息", "位置情報"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
                     Text(locationText)
@@ -676,11 +695,11 @@ private struct PostLocationMapView: View {
                         .lineLimit(2)
 
                     if isResolving {
-                        ProgressView(LL("正在解析位置…"))
+                        ProgressView(LT("正在解析位置…", "正在解析位置…", "位置を解析中…"))
                             .font(.caption)
                             .tint(RaverTheme.secondaryText)
                     } else if resolveFailed {
-                        Text(LL("未能精确定位，仍可在地图中拖动查看区域。"))
+                        Text(LT("未能精确定位，仍可在地图中拖动查看区域。", "未能精确定位，仍可在地图中拖动查看区域。", "正確な位置を特定できませんでした。地図をドラッグしてエリアを確認できます。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -691,7 +710,7 @@ private struct PostLocationMapView: View {
                             showMapAppPicker = true
                         }
                     } label: {
-                        Label(LL("打开地图App"), systemImage: "arrow.up.right.square")
+                        Label(LT("打开地图App", "打开地图App", "地図アプリを開く"), systemImage: "arrow.up.right.square")
                             .font(.subheadline.weight(.semibold))
                     }
                     .buttonStyle(.borderedProminent)
@@ -706,7 +725,7 @@ private struct PostLocationMapView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 12)
             }
-            .raverSystemNavigation(title: LL("位置地图"))
+            .raverSystemNavigation(title: LT("位置地图", "位置地图", "位置地図"))
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -717,13 +736,13 @@ private struct PostLocationMapView: View {
                     }
                 }
             }
-            .confirmationDialog(L("选择地图应用", "Choose Map App"), isPresented: $showMapAppPicker, titleVisibility: .visible) {
+            .confirmationDialog(LT("选择地图应用", "Choose Map App", "地図アプリを選択"), isPresented: $showMapAppPicker, titleVisibility: .visible) {
                 ForEach(availableMapApps) { app in
                     Button(app.title) {
                         openExternalMap(app)
                     }
                 }
-                Button(L("取消", "Cancel"), role: .cancel) {}
+                Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
             }
             .task {
                 refreshAvailableMapApps()
@@ -1233,13 +1252,13 @@ struct PostSharePayload: Identifiable {
     var shareSummary: String {
         let trimmed = post.content.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            return L("来自 Raver 的动态", "A post from Raver")
+            return LT("来自 Raver 的动态", "A post from Raver", "Raverからの投稿")
         }
         return String(trimmed.prefix(90))
     }
 
     var shareTitle: String {
-        "\(post.author.displayName) · \(L("Raver 动态", "Raver Post"))"
+        "\(post.author.displayName) · \(LT("Raver 动态", "Raver Post", "Raver投稿"))"
     }
 
     var shareURLString: String {
@@ -1271,7 +1290,7 @@ struct PostSharePayload: Identifiable {
             likeCount: post.likeCount,
             commentCount: post.commentCount,
             shareCount: post.shareCount,
-            badgeText: L("Post", "Post")
+            badgeText: LT("Post", "Post", "投稿")
         )
     }
 }
@@ -1294,7 +1313,7 @@ struct PostInAppShareSheet: View {
                 .padding(.top, 6)
 
             HStack(spacing: 10) {
-                Text(L("分享动态", "Share Post"))
+                Text(LT("分享动态", "Share Post", "投稿を共有"))
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
@@ -1315,18 +1334,18 @@ struct PostInAppShareSheet: View {
 
             HStack(spacing: 18) {
                 PostShareActionButton(
-                    title: L("系统分享", "System Share"),
+                    title: LT("系统分享", "System Share", "システム共有"),
                     icon: "square.and.arrow.up"
                 ) {
                     isShowingSystemShare = true
                 }
 
                 PostShareActionButton(
-                    title: L("复制链接", "Copy Link"),
+                    title: LT("复制链接", "Copy Link", "リンクをコピー"),
                     icon: "link"
                 ) {
                     UIPasteboard.general.string = payload.shareURLString
-                    feedbackText = L("链接已复制", "Link copied")
+                    feedbackText = LT("链接已复制", "Link copied", "リンクをコピーしました")
                     onRecordShare("copy_link")
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                         dismiss()

@@ -16,6 +16,14 @@ private actor AuthRefreshGate {
     }
 }
 
+private struct RegisterRequest: Encodable {
+    let email: String
+    let password: String
+    let displayName: String
+    let birthYear: Int?
+    let regionCode: String?
+}
+
 final class LiveSocialService: SocialService {
     private let friendChatGreeting = "你们已成功添加好友，现在可以开始聊天了"
     private let baseURL: URL
@@ -97,12 +105,20 @@ final class LiveSocialService: SocialService {
         return max(0, response.expiresInSeconds)
     }
 
-    func register(email: String, password: String, displayName: String) async throws -> Session {
-        let body = [
-            "email": email,
-            "password": password,
-            "displayName": displayName
-        ]
+    func register(
+        email: String,
+        password: String,
+        displayName: String,
+        birthYear: Int?,
+        regionCode: String?
+    ) async throws -> Session {
+        let body = RegisterRequest(
+            email: email,
+            password: password,
+            displayName: displayName,
+            birthYear: birthYear,
+            regionCode: regionCode
+        )
         let sessionResponse: Session = try await request(
             path: "/v1/auth/register",
             method: "POST",
@@ -136,6 +152,78 @@ final class LiveSocialService: SocialService {
         refreshToken = nil
     }
 
+    func deleteAccount() async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/auth/account",
+            method: "DELETE"
+        )
+        token = nil
+        refreshToken = nil
+    }
+
+    func fetchAccountEnforcementStatus() async throws -> AccountEnforcementStatus {
+        let response: AccountStatusResponse = try await request(path: "/v1/account/status", method: "GET")
+        return response.status ?? .clear
+    }
+
+    func fetchAccountEnforcements() async throws -> [AccountEnforcement] {
+        let response: AccountEnforcementListResponse = try await request(path: "/v1/account/enforcements", method: "GET")
+        return response.items
+    }
+
+    func fetchAccountEnforcementAppeals() async throws -> [AccountEnforcementAppeal] {
+        let response: AccountEnforcementAppealListResponse = try await request(path: "/v1/account/appeals", method: "GET")
+        return response.items
+    }
+
+    func submitAccountEnforcementAppeal(enforcementID: String, input: AccountEnforcementAppealInput) async throws -> AccountEnforcementAppeal {
+        let response: AccountEnforcementAppealSubmitResponse = try await request(
+            path: "/v1/account/enforcements/\(enforcementID)/appeal",
+            method: "POST",
+            body: input
+        )
+        return response.appeal
+    }
+
+    func submitContentReport(input: ContentReportInput) async throws -> ContentReport {
+        try await request(path: "/v1/reports", method: "POST", body: input)
+    }
+
+    func fetchMyContentReports(limit: Int) async throws -> [ContentReport] {
+        let normalized = max(1, min(limit, 100))
+        let response: ContentReportListResponse = try await request(
+            path: "/v1/reports?limit=\(normalized)",
+            method: "GET"
+        )
+        return response.items
+    }
+
+    func fetchBlockedUsers(limit: Int) async throws -> [UserBlockListItem] {
+        let normalized = max(1, min(limit, 100))
+        let response: UserBlockListResponse = try await request(
+            path: "/v1/social/blocks?limit=\(normalized)",
+            method: "GET"
+        )
+        return response.items
+    }
+
+    func fetchUserBlockStatus(userID: String) async throws -> UserBlockStatus {
+        try await request(path: "/v1/social/users/\(userID)/block", method: "GET")
+    }
+
+    func blockUser(userID: String, input: UserBlockInput) async throws -> UserBlockStatus {
+        let response: UserBlockMutationResponse = try await request(
+            path: "/v1/social/users/\(userID)/block",
+            method: "POST",
+            body: input
+        )
+        return UserBlockStatus(isBlocked: response.isBlocked, blockedAt: response.block?.createdAt)
+    }
+
+    func unblockUser(userID: String) async throws -> UserBlockStatus {
+        try await request(path: "/v1/social/users/\(userID)/block", method: "DELETE")
+    }
+
     func fetchTencentIMBootstrap() async throws -> TencentIMBootstrap {
         try await request(path: "/v1/im/tencent/bootstrap", method: "GET")
     }
@@ -166,7 +254,7 @@ final class LiveSocialService: SocialService {
         try await request(path: "/v1/feed/posts/\(postID)", method: "GET")
     }
 
-    func createPost(input: CreatePostInput) async throws -> Post {
+    func createPost(input: CreatePostInput) async throws -> CreatePostResult {
         try await request(path: "/v1/feed/posts", method: "POST", body: input)
     }
 
@@ -891,6 +979,48 @@ final class LiveSocialService: SocialService {
         )
     }
 
+    func fetchContentReviewSummary() async throws -> ContentReviewSummary {
+        let response: ContentReviewSummaryResponse = try await request(
+            path: "/v1/notification-center/content-reviews/summary",
+            method: "GET"
+        )
+        return ContentReviewSummary(
+            unreadCount: max(0, response.unreadCount),
+            latestItemPreview: response.latestItemPreview?.nilIfBlank,
+            latestOccurredAt: response.latestOccurredAt
+        )
+    }
+
+    func fetchContentReviewNotifications(limit: Int) async throws -> [ContentReviewNotificationItem] {
+        let normalized = max(1, min(limit, 50))
+        let response: ContentReviewInboxResponse = try await request(
+            path: "/v1/notification-center/content-reviews/items?limit=\(normalized)",
+            method: "GET"
+        )
+        return response.items.map { item in
+            ContentReviewNotificationItem(
+                id: item.id,
+                submissionId: item.submissionId,
+                entityType: item.entityType,
+                status: item.status,
+                title: item.title,
+                body: item.body,
+                reason: item.reason?.nilIfBlank,
+                createdEntityId: item.createdEntityId?.nilIfBlank,
+                isRead: item.isRead,
+                occurredAt: item.occurredAt
+            )
+        }
+    }
+
+    func markContentReviewNotificationRead(notificationID: String) async throws {
+        let _: GenericSuccessResponse = try await request(
+            path: "/v1/notification-center/content-reviews/read",
+            method: "POST",
+            body: ["itemId": notificationID]
+        )
+    }
+
     func fetchFollowedEventsSummary() async throws -> FollowedEventsSummary {
         let response: FollowedEventsSummaryResponse = try await request(
             path: "/v1/notification-center/followed-events/summary",
@@ -1015,6 +1145,23 @@ final class LiveSocialService: SocialService {
             method: "POST",
             body: ["itemId": notificationID]
         )
+    }
+
+    func fetchNotificationCategoryPreferences() async throws -> [NotificationCategoryPreference] {
+        let response: NotificationCategoryPreferencesEnvelope = try await request(
+            path: "/v1/notification-center/preferences/categories",
+            method: "GET"
+        )
+        return response.preferences
+    }
+
+    func updateNotificationCategoryPreferences(_ input: NotificationCategoryPreferencesInput) async throws -> [NotificationCategoryPreference] {
+        let response: NotificationCategoryPreferencesEnvelope = try await request(
+            path: "/v1/notification-center/preferences/categories",
+            method: "PUT",
+            body: input
+        )
+        return response.preferences
     }
 
     func fetchFollowedBrandUpdatePreference() async throws -> FollowedBrandUpdatePreference {
@@ -1188,6 +1335,16 @@ final class LiveSocialService: SocialService {
 
         var (data, http) = try await performRequest(urlRequest)
 
+        if http.statusCode == 401,
+           (try? JSONDecoder.raver.decode(BFFErrorEnvelope.self, from: data).code) == "ACCOUNT_INACTIVE" {
+            if postSessionExpiredOnUnauthorized {
+                NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+            }
+            token = nil
+            refreshToken = nil
+            throw ServiceError.accountInactive
+        }
+
         if http.statusCode == 401 {
             let canRetryWithRefresh = allowAuthRetry && includeAccessToken && path != "/v1/auth/refresh"
             if canRetryWithRefresh {
@@ -1200,7 +1357,19 @@ final class LiveSocialService: SocialService {
                     var retryRequest = urlRequest
                     retryRequest.setValue("Bearer \(refreshed.token)", forHTTPHeaderField: "Authorization")
                     (data, http) = try await performRequest(retryRequest)
+                    if http.statusCode == 401,
+                       (try? JSONDecoder.raver.decode(BFFErrorEnvelope.self, from: data).code) == "ACCOUNT_INACTIVE" {
+                        if postSessionExpiredOnUnauthorized {
+                            NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+                        }
+                        token = nil
+                        refreshToken = nil
+                        throw ServiceError.accountInactive
+                    }
                 } catch {
+                    if case ServiceError.accountInactive = error {
+                        throw error
+                    }
                     if postSessionExpiredOnUnauthorized {
                         NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
                     }
@@ -1222,6 +1391,10 @@ final class LiveSocialService: SocialService {
         }
 
         guard (200...299).contains(http.statusCode) else {
+            if let enforcementRestriction = try? JSONDecoder.raver.decode(AccountEnforcementRestrictionEnvelope.self, from: data),
+               enforcementRestriction.error == "account_enforcement_restricted" {
+                throw ServiceError.accountEnforcementRestricted(enforcementRestriction.toRestriction())
+            }
             let message = (try? JSONDecoder.raver.decode(BFFErrorEnvelope.self, from: data).error)
                 ?? String(data: data, encoding: .utf8)
                 ?? "请求失败"
@@ -1515,6 +1688,22 @@ final class LiveSocialService: SocialService {
 
     private struct BFFErrorEnvelope: Decodable {
         let error: String?
+        let code: String?
+    }
+
+    private struct AccountEnforcementRestrictionEnvelope: Decodable {
+        let error: String
+        let scope: String
+        let accountStatus: AccountEnforcementStatus?
+        let blockingEnforcements: [AccountEnforcement]
+
+        func toRestriction() -> AccountEnforcementRestriction {
+            AccountEnforcementRestriction(
+                scope: scope,
+                accountStatus: accountStatus,
+                blockingEnforcements: blockingEnforcements
+            )
+        }
     }
 
     private func toTencentIMUserID(_ raw: String) -> String {
@@ -1528,6 +1717,43 @@ private struct JoinSquadResponse: Decodable {
 
 private struct GenericSuccessResponse: Decodable {
     let success: Bool
+}
+
+private struct AccountStatusResponse: Decodable {
+    let success: Bool
+    let status: AccountEnforcementStatus?
+}
+
+private struct AccountEnforcementListResponse: Decodable {
+    let success: Bool
+    let items: [AccountEnforcement]
+}
+
+private struct AccountEnforcementAppealListResponse: Decodable {
+    let success: Bool
+    let items: [AccountEnforcementAppeal]
+}
+
+private struct AccountEnforcementAppealSubmitResponse: Decodable {
+    let success: Bool
+    let appeal: AccountEnforcementAppeal
+}
+
+private struct UserBlockMutationResponse: Decodable {
+    struct Block: Decodable {
+        let createdAt: Date?
+    }
+
+    let isBlocked: Bool
+    let block: Block?
+}
+
+private struct ContentReportListResponse: Decodable {
+    let items: [ContentReport]
+}
+
+private struct UserBlockListResponse: Decodable {
+    let items: [UserBlockListItem]
 }
 
 private struct UpdateSquadMemberRoleRequest: Encodable {
@@ -1577,6 +1803,29 @@ private struct NotificationCenterUnreadCountResponse: Decodable {
     let likes: Int?
     let comments: Int?
     let squadInvites: Int?
+}
+
+private struct ContentReviewSummaryResponse: Decodable {
+    let unreadCount: Int
+    let latestItemPreview: String?
+    let latestOccurredAt: Date?
+}
+
+private struct ContentReviewInboxResponse: Decodable {
+    let items: [ContentReviewInboxItem]
+}
+
+private struct ContentReviewInboxItem: Decodable {
+    let id: String
+    let submissionId: String
+    let entityType: String
+    let status: String
+    let title: String
+    let body: String
+    let reason: String?
+    let createdEntityId: String?
+    let isRead: Bool
+    let occurredAt: Date
 }
 
 private struct FollowedEventsSummaryResponse: Decodable {
@@ -1651,6 +1900,11 @@ private struct FollowedBrandsInboxItem: Decodable {
 private struct FollowedBrandUpdatePreferenceEnvelope: Decodable {
     let success: Bool
     let preference: FollowedBrandUpdatePreference
+}
+
+private struct NotificationCategoryPreferencesEnvelope: Decodable {
+    let success: Bool
+    let preferences: [NotificationCategoryPreference]
 }
 
 private struct AnyEncodable: Encodable {

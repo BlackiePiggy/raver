@@ -32,9 +32,23 @@ protocol ChatMessageRepository: AnyObject {
 
 final class ChatMessageRepositoryAdapter: ChatMessageRepository {
     private let service: SocialService
+    private let accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)?
 
-    init(service: SocialService) {
+    init(
+        service: SocialService,
+        accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)? = nil
+    ) {
         self.service = service
+        self.accountEnforcementStatusProvider = accountEnforcementStatusProvider
+    }
+
+    private func ensureAllowed(_ scopes: [AccountEnforcementScope]) async throws {
+        guard let accountEnforcementStatusProvider else { return }
+        guard let status = await accountEnforcementStatusProvider(),
+              let restriction = status.restriction(for: scopes) else {
+            return
+        }
+        throw ServiceError.accountEnforcementRestricted(restriction)
     }
 
     func fetchMessages(conversationID: String) async throws -> [ChatMessage] {
@@ -58,7 +72,8 @@ final class ChatMessageRepositoryAdapter: ChatMessageRepository {
         content: String,
         mentionedUserIDs: [String]
     ) async throws -> ChatMessage {
-        try await service.sendMessage(
+        try await ensureAllowed([.messageSend])
+        return try await service.sendMessage(
             conversationID: conversationID,
             content: content,
             mentionedUserIDs: mentionedUserIDs
@@ -66,54 +81,66 @@ final class ChatMessageRepositoryAdapter: ChatMessageRepository {
     }
 
     func sendImageMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
-        try await service.sendImageMessage(conversationID: conversationID, fileURL: fileURL)
+        try await ensureAllowed([.messageSend, .mediaUpload])
+        return try await service.sendImageMessage(conversationID: conversationID, fileURL: fileURL)
     }
 
     func sendVideoMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
-        try await service.sendVideoMessage(conversationID: conversationID, fileURL: fileURL)
+        try await ensureAllowed([.messageSend, .mediaUpload])
+        return try await service.sendVideoMessage(conversationID: conversationID, fileURL: fileURL)
     }
 
     func sendVoiceMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
-        try await service.sendVoiceMessage(conversationID: conversationID, fileURL: fileURL)
+        try await ensureAllowed([.messageSend, .mediaUpload])
+        return try await service.sendVoiceMessage(conversationID: conversationID, fileURL: fileURL)
     }
 
     func sendFileMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
-        try await service.sendFileMessage(conversationID: conversationID, fileURL: fileURL)
+        try await ensureAllowed([.messageSend, .mediaUpload])
+        return try await service.sendFileMessage(conversationID: conversationID, fileURL: fileURL)
     }
 
     func sendEventCardMessage(conversationID: String, payload: EventShareCardPayload) async throws -> ChatMessage {
-        try await service.sendEventCardMessage(conversationID: conversationID, payload: payload)
+        try await ensureAllowed([.messageSend])
+        return try await service.sendEventCardMessage(conversationID: conversationID, payload: payload)
     }
 
     func sendSetCardMessage(conversationID: String, payload: SetShareCardPayload) async throws -> ChatMessage {
-        try await service.sendSetCardMessage(conversationID: conversationID, payload: payload)
+        try await ensureAllowed([.messageSend])
+        return try await service.sendSetCardMessage(conversationID: conversationID, payload: payload)
     }
 
     func sendBrandCardMessage(conversationID: String, payload: BrandShareCardPayload) async throws -> ChatMessage {
-        try await service.sendBrandCardMessage(conversationID: conversationID, payload: payload)
+        try await ensureAllowed([.messageSend])
+        return try await service.sendBrandCardMessage(conversationID: conversationID, payload: payload)
     }
 
     func sendLabelCardMessage(conversationID: String, payload: LabelShareCardPayload) async throws -> ChatMessage {
-        try await service.sendLabelCardMessage(conversationID: conversationID, payload: payload)
+        try await ensureAllowed([.messageSend])
+        return try await service.sendLabelCardMessage(conversationID: conversationID, payload: payload)
     }
 
     func sendNewsCardMessage(conversationID: String, payload: NewsShareCardPayload) async throws -> ChatMessage {
-        try await service.sendNewsCardMessage(conversationID: conversationID, payload: payload)
+        try await ensureAllowed([.messageSend])
+        return try await service.sendNewsCardMessage(conversationID: conversationID, payload: payload)
     }
 
     func sendRankingBoardCardMessage(
         conversationID: String,
         payload: RankingBoardShareCardPayload
     ) async throws -> ChatMessage {
-        try await service.sendRankingBoardCardMessage(conversationID: conversationID, payload: payload)
+        try await ensureAllowed([.messageSend])
+        return try await service.sendRankingBoardCardMessage(conversationID: conversationID, payload: payload)
     }
 
     func sendMyCheckinsCardMessage(conversationID: String, payload: MyCheckinsShareCardPayload) async throws -> ChatMessage {
-        try await service.sendMyCheckinsCardMessage(conversationID: conversationID, payload: payload)
+        try await ensureAllowed([.messageSend])
+        return try await service.sendMyCheckinsCardMessage(conversationID: conversationID, payload: payload)
     }
 
     func sendEventRouteCardMessage(conversationID: String, payload: EventRouteShareCardPayload) async throws -> ChatMessage {
-        try await service.sendEventRouteCardMessage(conversationID: conversationID, payload: payload)
+        try await ensureAllowed([.messageSend])
+        return try await service.sendEventRouteCardMessage(conversationID: conversationID, payload: payload)
     }
 
     func sendTypingStatus(conversationID: String, isTyping: Bool) async throws {

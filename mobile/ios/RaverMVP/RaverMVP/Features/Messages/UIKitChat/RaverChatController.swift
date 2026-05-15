@@ -231,17 +231,17 @@ final class RaverChatController: ObservableObject {
     @discardableResult
     func resendFailedMessage(messageID: String) async throws -> ChatMessage {
         guard let message = messages.first(where: { $0.id == messageID }) else {
-            throw ServiceError.message(L("未找到待重发消息", "Failed message not found"))
+            throw ServiceError.message(LT("未找到待重发消息", "Failed message not found", "再送信するメッセージが見つかりません"))
         }
         guard message.deliveryStatus == .failed else {
-            throw ServiceError.message(L("该消息当前不可重发", "This message cannot be resent now"))
+            throw ServiceError.message(LT("该消息当前不可重发", "This message cannot be resent now", "このメッセージは現在再送信できません"))
         }
 
         switch message.kind {
         case .text:
             let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else {
-                throw ServiceError.message(L("文本内容为空，无法重发", "Empty text message cannot be resent"))
+                throw ServiceError.message(LT("文本内容为空，无法重发", "Empty text message cannot be resent", "テキストが空のため再送信できません"))
             }
             let resent = try await dataProvider.currentRepository.sendMessage(
                 conversationID: dataProvider.currentConversation.id,
@@ -286,7 +286,7 @@ final class RaverChatController: ObservableObject {
             return resent
         default:
             throw ServiceError.message(
-                L("当前消息类型暂不支持重发", "Resend is not supported for this message type")
+                LT("当前消息类型暂不支持重发", "Resend is not supported for this message type", "このメッセージタイプは再送信に対応していません")
             )
         }
     }
@@ -323,15 +323,15 @@ final class RaverChatController: ObservableObject {
 
     func revokeMessage(_ messageID: String) async throws {
         guard let index = messages.firstIndex(where: { $0.id == messageID }) else {
-            throw ServiceError.message(L("未找到待撤回消息", "Message to revoke was not found"))
+            throw ServiceError.message(LT("未找到待撤回消息", "Message to revoke was not found", "取り消すメッセージが見つかりません"))
         }
 
         let message = messages[index]
         guard message.isMine else {
-            throw ServiceError.message(L("只能撤回自己发送的消息", "Only your own messages can be revoked"))
+            throw ServiceError.message(LT("只能撤回自己发送的消息", "Only your own messages can be revoked", "自分が送信したメッセージのみ取り消せます"))
         }
         guard message.deliveryStatus == .sent else {
-            throw ServiceError.message(L("消息尚未发送完成，暂不可撤回", "This message cannot be revoked yet"))
+            throw ServiceError.message(LT("消息尚未发送完成，暂不可撤回", "This message cannot be revoked yet", "メッセージ送信が完了していないため、まだ取り消せません"))
         }
 
         let displayText = try await dataProvider.currentRepository.revokeMessage(
@@ -343,7 +343,7 @@ final class RaverChatController: ObservableObject {
 
     func deleteMessage(_ messageID: String) async throws {
         guard let index = messages.firstIndex(where: { $0.id == messageID }) else {
-            throw ServiceError.message(L("未找到待删除消息", "Message to delete was not found"))
+            throw ServiceError.message(LT("未找到待删除消息", "Message to delete was not found", "削除するメッセージが見つかりません"))
         }
 
         let message = messages[index]
@@ -685,20 +685,20 @@ final class RaverChatController: ObservableObject {
         } else {
             switch message.kind {
             case .image:
-                body = L("[图片]", "[Image]")
+                body = LT("[图片]", "[Image]", "[画像]")
             case .video:
-                body = L("[视频]", "[Video]")
+                body = LT("[视频]", "[Video]", "[動画]")
             case .voice:
-                body = L("[语音]", "[Voice]")
+                body = LT("[语音]", "[Voice]", "[音声]")
             case .file:
                 if let fileName = message.media?.fileName?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !fileName.isEmpty {
                     body = "[\(fileName)]"
                 } else {
-                    body = L("[文件]", "[File]")
+                    body = LT("[文件]", "[File]", "[ファイル]")
                 }
             default:
-                body = L("[消息]", "[Message]")
+                body = LT("[消息]", "[Message]", "[メッセージ]")
             }
         }
 
@@ -709,12 +709,12 @@ final class RaverChatController: ObservableObject {
 
     private func displayName(for sender: UserSummary, isMine: Bool) -> String {
         if isMine {
-            return L("我", "Me")
+            return LT("我", "Me", "自分")
         }
         let shown = sender.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !shown.isEmpty { return shown }
         let username = sender.username.trimmingCharacters(in: .whitespacesAndNewlines)
-        return username.isEmpty ? L("用户", "User") : username
+        return username.isEmpty ? LT("用户", "User", "ユーザー") : username
     }
 
     private func sanitizeReplyEnvelopeField(_ raw: String) -> String {
@@ -727,7 +727,7 @@ final class RaverChatController: ObservableObject {
     private func localMediaFileURL(from message: ChatMessage) throws -> URL {
         guard let raw = message.media?.mediaURL?.trimmingCharacters(in: .whitespacesAndNewlines),
               !raw.isEmpty else {
-            throw ServiceError.message(L("本地媒体文件不存在，无法重发", "Local media file is missing"))
+            throw ServiceError.message(LT("本地媒体文件不存在，无法重发", "Local media file is missing", "ローカルメディアファイルがないため再送信できません"))
         }
 
         let url: URL
@@ -739,12 +739,12 @@ final class RaverChatController: ObservableObject {
             url = parsed
         } else {
             throw ServiceError.message(
-                L("该媒体消息缺少本地文件，仅云端地址不可直接重发", "Remote-only media cannot be resent directly")
+                LT("该媒体消息缺少本地文件，仅云端地址不可直接重发", "Remote-only media cannot be resent directly", "クラウド上のメディアのみのため直接再送信できません")
             )
         }
 
         guard FileManager.default.fileExists(atPath: url.path) else {
-            throw ServiceError.message(L("本地媒体文件已失效，请重新发送", "Local media file no longer exists"))
+            throw ServiceError.message(LT("本地媒体文件已失效，请重新发送", "Local media file no longer exists", "ローカルメディアファイルが無効です。再度送信してください"))
         }
         return url
     }

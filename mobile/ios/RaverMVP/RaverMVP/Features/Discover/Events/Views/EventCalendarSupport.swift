@@ -8,8 +8,8 @@ enum EventCalendarViewFilter: String, CaseIterable, Hashable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: return L("全部活动", "All Events")
-        case .marked: return L("已标记", "Marked")
+        case .all: return LT("全部活动", "All Events", "すべてのイベント")
+        case .marked: return LT("已标记", "Marked", "マーク済み")
         }
     }
 
@@ -104,15 +104,15 @@ enum EventTypeOption: String, CaseIterable {
     }
 
     static var allEventsTitle: String {
-        L("全部活动", "All Events")
+        LT("全部活动", "All Events", "すべてのイベント")
     }
 
     static var pickerPrompt: String {
-        L("请选择活动性质", "Select Event Type")
+        LT("请选择活动性质", "Select Event Type", "イベント種別を選択")
     }
 
     static var uncategorizedTitle: String {
-        L("未分类", "Uncategorized")
+        LT("未分类", "Uncategorized", "未分類")
     }
 
     private var localizedTitle: String {
@@ -126,6 +126,16 @@ enum EventTypeOption: String, CaseIterable {
             case .warehouseParty: return "仓库派对"
             case .tourSpecial: return "巡演专场"
             case .other: return "其他"
+            }
+        case .ja:
+            switch self {
+            case .festival: return "フェス"
+            case .barEvent: return "バーイベント"
+            case .outdoorEvent: return "野外イベント"
+            case .clubParty: return "クラブパーティー"
+            case .warehouseParty: return "ウェアハウスパーティー"
+            case .tourSpecial: return "ツアー特別公演"
+            case .other: return "その他"
             }
         case .en, .system:
             switch self {
@@ -171,7 +181,7 @@ struct EventCalendarSheet: View {
     var body: some View {
         VStack(spacing: 14) {
             HStack {
-                Text(LL("活动日历"))
+                Text(LT("活动日历", "活动日历", "イベントカレンダー"))
                     .font(.title3.weight(.bold))
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
@@ -292,13 +302,13 @@ struct EventCalendarSheet: View {
                             .font(.headline)
                             .foregroundStyle(RaverTheme.primaryText)
                         Spacer()
-                        Text(L("共 \(eventsOnSelectedDay.count) 场", "\(eventsOnSelectedDay.count) events"))
+                        Text(LT("共 \(eventsOnSelectedDay.count) 场", "\(eventsOnSelectedDay.count) events", "\(eventsOnSelectedDay.count)件"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
 
                     if eventsOnSelectedDay.isEmpty {
-                        ContentUnavailableView(LL("当日暂无活动"), systemImage: "calendar")
+                        ContentUnavailableView(LT("当日暂无活动", "当日暂无活动", "当日のイベントはありません"), systemImage: "calendar")
                     } else {
                         ScrollView {
                             LazyVStack(spacing: 10) {
@@ -329,7 +339,7 @@ struct EventCalendarSheet: View {
 
                                             VStack(spacing: 4) {
                                                 if markedEventIDs.contains(event.id) {
-                                                    tag(L("标记", "Marked"), color: RaverTheme.accent)
+                                                    tag(LT("标记", "Marked", "マーク"), color: RaverTheme.accent)
                                                 }
                                             }
                                         }

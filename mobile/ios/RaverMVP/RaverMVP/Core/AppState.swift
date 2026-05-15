@@ -8,6 +8,7 @@ enum AppLanguage: String, CaseIterable, Codable, Hashable, Identifiable {
     case system
     case zh
     case en
+    case ja
 
     var id: String { rawValue }
 
@@ -18,12 +19,21 @@ enum AppLanguage: String, CaseIterable, Codable, Hashable, Identifiable {
             case .system: return "跟随系统"
             case .zh: return "中文"
             case .en: return "English"
+            case .ja: return "日本語"
             }
         case .en, .system:
             switch self {
             case .system: return "System"
             case .zh: return "Chinese"
             case .en: return "English"
+            case .ja: return "Japanese"
+            }
+        case .ja:
+            switch self {
+            case .system: return "システムに合わせる"
+            case .zh: return "中文"
+            case .en: return "English"
+            case .ja: return "日本語"
             }
         }
     }
@@ -36,6 +46,8 @@ enum AppLanguage: String, CaseIterable, Codable, Hashable, Identifiable {
             return "zh-Hans"
         case .en:
             return "en"
+        case .ja:
+            return "ja-JP"
         }
     }
 
@@ -43,8 +55,10 @@ enum AppLanguage: String, CaseIterable, Codable, Hashable, Identifiable {
         switch self {
         case .system:
             let preferred = Locale.preferredLanguages.first?.lowercased() ?? ""
-            return preferred.hasPrefix("zh") ? .zh : .en
-        case .zh, .en:
+            if preferred.hasPrefix("ja") { return .ja }
+            if preferred.hasPrefix("zh") { return .zh }
+            return .en
+        case .zh, .en, .ja:
             return self
         }
     }
@@ -60,18 +74,52 @@ enum AppAppearance: String, CaseIterable, Codable, Hashable, Identifiable {
     var title: String {
         switch self {
         case .system:
-            return L("跟随系统", "System")
+            return LT("跟随系统", "System", "システムに従う")
         case .light:
-            return L("浅色", "Light")
+            return LT("浅色", "Light", "ライト")
         case .dark:
-            return L("深色", "Dark")
+            return LT("深色", "Dark", "ダーク")
+        }
+    }
+}
+
+struct AppLocalizedTextValue: Hashable {
+    let zh: String
+    let en: String
+    let ja: String
+
+    func text(for language: AppLanguage = AppLanguagePreference.current.effectiveLanguage) -> String {
+        switch language {
+        case .zh, .system:
+            return zh
+        case .en:
+            return en
+        case .ja:
+            return ja
         }
     }
 }
 
 @inline(__always)
+func LT(_ zh: String, _ en: String, _ ja: String) -> String {
+    AppLocalizedTextValue(zh: zh, en: en, ja: ja).text()
+}
+
+@inline(__always)
 func L(_ zh: String, _ en: String) -> String {
-    AppLanguagePreference.current.effectiveLanguage == .en ? en : zh
+    switch AppLanguagePreference.current.effectiveLanguage {
+    case .zh, .system:
+        return zh
+    case .en:
+        return en
+    case .ja:
+        return AppLocalizedText.jaMap[zh] ?? en
+    }
+}
+
+@inline(__always)
+func L(_ zh: String, _ en: String, _ ja: String) -> String {
+    LT(zh, en, ja)
 }
 
 private enum AppLocalizedText {
@@ -492,11 +540,175 @@ private enum AppLocalizedText {
         return mapping
     }()
 
+    static let jaMap: [String: String] = [
+        "跟随系统": "システムに合わせる",
+        "浅色": "ライト",
+        "深色": "ダーク",
+        "提示": "お知らせ",
+        "知道了": "OK",
+        "确定": "OK",
+        "取消": "キャンセル",
+        "提交": "送信",
+        "保存": "保存",
+        "编辑": "編集",
+        "删除": "削除",
+        "重试": "再試行",
+        "关闭": "閉じる",
+        "加载失败": "読み込みに失敗しました",
+        "正在更新": "更新中",
+        "账号": "アカウント",
+        "编辑资料": "プロフィールを編集",
+        "账号安全": "アカウントの安全",
+        "隐私设置": "プライバシー設定",
+        "通知": "通知",
+        "推送通知": "プッシュ通知",
+        "消息提醒": "メッセージ通知",
+        "内容偏好": "コンテンツ設定",
+        "主题设置": "テーマ設定",
+        "兴趣标签": "興味タグ",
+        "语言设置": "言語設定",
+        "内容过滤": "コンテンツフィルター",
+        "数据与存储": "データとストレージ",
+        "缓存管理": "キャッシュ管理",
+        "数据使用": "データ使用量",
+        "下载设置": "ダウンロード設定",
+        "关于": "情報",
+        "帮助中心": "ヘルプセンター",
+        "服务条款": "利用規約",
+        "隐私政策": "プライバシーポリシー",
+        "关于我们": "Raver について",
+        "版本": "バージョン",
+        "退出登录": "ログアウト",
+        "设置": "設定",
+        "显示语言": "表示言語",
+        "显示主题": "表示テーマ",
+        "删除账号": "アカウント削除",
+        "确认删除账号": "アカウントを削除",
+        "删除后你将退出登录，账号会被停用并清除个人资料。此操作不可撤销。": "削除後はログアウトされ、アカウントは無効化され個人情報が消去されます。この操作は元に戻せません。",
+        "我的举报记录": "自分の通報履歴",
+        "暂无举报记录。": "通報履歴はありません。",
+        "重复举报同一对象会更新补充说明，不会无限创建重复记录。": "同じ対象を再度通報すると補足内容が更新され、重複記録は作成されません。",
+        "拉黑列表": "ブロックリスト",
+        "暂无拉黑用户。": "ブロック中のユーザーはいません。",
+        "解除拉黑后，对方可能重新通过私信或互动与你接触。": "ブロックを解除すると、相手が再びメッセージや交流で接触できる場合があります。",
+        "举报": "通報",
+        "举报已提交": "通報を送信しました",
+        "举报已提交，并已拉黑该用户": "通報を送信し、このユーザーをブロックしました",
+        "拉黑": "ブロック",
+        "解除拉黑": "ブロック解除",
+        "申诉": "異議申し立て",
+        "封禁": "停止",
+        "账号正常。": "アカウントは正常です。",
+        "当前操作受限。": "現在、一部操作が制限されています。",
+        "下次复核：": "次回確認：",
+        "禁止邀请": "招待禁止",
+        "管理员审批": "管理者承認",
+        "自动通过": "自動承認",
+        "推荐": "おすすめ",
+        "最新": "最新",
+        "服务响应无效": "サービス応答が無効です",
+        "登录状态已失效，请重新登录": "ログインの有効期限が切れました。もう一度ログインしてください。",
+        "请先登录": "ログインしてください。",
+        "请填写申诉理由": "異議申し立ての理由を入力してください。",
+        "账号当前受限，无法发帖。你可以在账号安全页查看详情并提交申诉。": "現在アカウントが制限されているため投稿できません。アカウントの安全ページで詳細を確認し、異議申し立てできます。",
+        "账号当前受限，无法评论。你可以在账号安全页查看详情并提交申诉。": "現在アカウントが制限されているためコメントできません。アカウントの安全ページで詳細を確認し、異議申し立てできます。",
+        "账号当前受限，无法私信。你可以在账号安全页查看详情并提交申诉。": "現在アカウントが制限されているためメッセージを送信できません。アカウントの安全ページで詳細を確認し、異議申し立てできます。",
+        "账号当前受限，无法上传媒体。你可以在账号安全页查看详情并提交申诉。": "現在アカウントが制限されているためメディアをアップロードできません。アカウントの安全ページで詳細を確認し、異議申し立てできます。",
+        "账号当前受限，无法修改资料。你可以在账号安全页查看详情并提交申诉。": "現在アカウントが制限されているためプロフィールを変更できません。アカウントの安全ページで詳細を確認し、異議申し立てできます。",
+        "账号当前受限，无法位置共享。你可以在账号安全页查看详情并提交申诉。": "現在アカウントが制限されているため位置情報を共有できません。アカウントの安全ページで詳細を確認し、異議申し立てできます。",
+        "先看看": "あとで見る",
+        "我同意《用户服务条款》《用户协议》《隐私政策》": "利用規約、ユーザー契約、プライバシーポリシーに同意します",
+        "一键登录": "ワンタップでログイン",
+        "其他手机号登录": "別の電話番号でログイン",
+        "注册新账号": "新規登録",
+        "— 其他登录方式 —": "— その他のログイン方法 —",
+        "收起": "閉じる",
+        "登录方式": "ログイン方法",
+        "手机号（含区号）": "電話番号（国番号を含む）",
+        "验证码": "認証コード",
+        "发送验证码": "コードを送信",
+        "账号登录": "アカウントでログイン",
+        "验证码登录": "SMSでログイン",
+        "用户名": "ユーザー名",
+        "密码": "パスワード",
+        "还没有账号？注册": "アカウントをお持ちでない方は登録",
+        "第三方登录即将开放，先使用账号登录": "外部ログインは準備中です。先にアカウントログインをご利用ください。",
+        "请先勾选并同意用户协议": "先に利用規約への同意にチェックしてください。",
+        "请先输入手机号": "電話番号を入力してください。",
+        "创建账号": "アカウントを作成",
+        "补充头像、昵称和登录信息，完成后即可进入 Raver。": "アイコン、ニックネーム、ログイン情報を入力すると Raver を始められます。",
+        "上传头像": "アイコンをアップロード",
+        "更换头像": "アイコンを変更",
+        "邮箱": "メールアドレス",
+        "昵称": "ニックネーム",
+        "昵称全平台唯一，不区分大小写，提交后进入审核。": "ニックネームは全体で一意です。大文字小文字は区別されず、送信後に審査されます。",
+        "确认密码": "パスワード確認",
+        "完成注册": "登録を完了",
+        "头像读取失败，请重新选择": "アイコンの読み込みに失敗しました。もう一度選択してください。",
+        "请输入邮箱": "メールアドレスを入力してください。",
+        "请输入昵称": "ニックネームを入力してください。",
+        "密码至少需要 6 位": "パスワードは6文字以上で入力してください。",
+        "两次输入的密码不一致": "入力したパスワードが一致しません。",
+        "注册成功，但头像上传失败，请稍后在个人主页重试": "登録は完了しましたが、アイコンのアップロードに失敗しました。後ほどプロフィールから再試行してください。",
+        "短信": "SMS",
+        "私信": "メッセージ",
+        "小队": "Squad",
+        "暂无消息": "メッセージはありません",
+        "[图片]": "[画像]",
+        "[视频]": "[動画]",
+        "[语音]": "[音声]",
+        "[文件]": "[ファイル]",
+        "[名片]": "[カード]",
+        "[位置]": "[位置]",
+        "[引用消息]": "[引用]",
+        "[表情]": "[絵文字]",
+        "[自定义消息]": "[カスタムメッセージ]",
+        "[消息]": "[メッセージ]",
+        "系统": "システム",
+        "[系统消息]": "[システムメッセージ]",
+        "关注": "フォロー",
+        "已关注": "フォロー中",
+        "动态": "投稿",
+        "粉丝": "フォロワー",
+        "好友": "友達",
+        "快捷入口": "クイック操作",
+        "我的发布": "自分の投稿",
+        "我的收藏": "保存済み",
+        "我的路线": "自分のルート",
+        "小工具": "ツール",
+        "二维码": "QRコード",
+        "暂无内容": "コンテンツはありません",
+        "暂无动态": "投稿はありません",
+        "还没有动态": "投稿はまだありません",
+        "活动": "イベント",
+        "活动加载中...": "イベントを読み込み中...",
+        "近期暂无活动": "近日中のイベントはありません",
+        "活动详情": "イベント詳細",
+        "活动日历": "イベントカレンダー",
+        "购票链接（可选）": "チケットリンク（任意）",
+        "城市": "都市",
+        "国家": "国",
+        "搜索": "検索",
+        "搜索结果": "検索結果",
+        "没有找到匹配活动": "一致するイベントが見つかりません",
+        "试试不同关键词": "別のキーワードをお試しください",
+        "即将开始": "まもなく開始",
+        "进行中": "開催中",
+        "已结束": "終了",
+        "已取消": "キャンセル済み",
+        "加载活动中...": "イベントを読み込み中...",
+        "加载 Set 中...": "Set を読み込み中...",
+        "加载打分事件中...": "評価イベントを読み込み中...",
+        "加载打分单位中...": "評価対象を読み込み中..."
+    ]
+
     @inline(__always)
     static func resolveForCurrentLanguage(_ text: String) -> String {
         switch AppLanguagePreference.current.effectiveLanguage {
         case .en:
             return enMap[text] ?? text
+        case .ja:
+            return jaMap[text] ?? enMap[text] ?? text
         case .zh, .system:
             return zhMap[text] ?? text
         }
@@ -648,6 +860,11 @@ final class AppState: ObservableObject {
     @Published var session: Session? {
         didSet {
             syncSharedPushContext()
+            accountEnforcementStatus = session?.accountStatus ?? .clear
+            if session == nil {
+                accountEnforcements = []
+                accountEnforcementAppeals = []
+            }
         }
     }
     @Published var errorMessage: String?
@@ -659,6 +876,10 @@ final class AppState: ObservableObject {
     @Published var preferredLanguage: AppLanguage = AppLanguagePreference.current
     @Published var preferredAppearance: AppAppearance = AppAppearancePreference.current
     @Published var realNameVerificationStatus: RealNameVerificationStatus = .unverified
+    @Published var accountEnforcementStatus: AccountEnforcementStatus = .clear
+    @Published var accountEnforcements: [AccountEnforcement] = []
+    @Published var accountEnforcementAppeals: [AccountEnforcementAppeal] = []
+    @Published var isLoadingAccountEnforcements = false
 
     let service: SocialService
     private var cancellables: Set<AnyCancellable> = []
@@ -694,7 +915,7 @@ final class AppState: ObservableObject {
                 self.session = nil
                 self.resetUnreadCounts()
                 SessionTokenStore.shared.clear()
-                self.errorMessage = L("登录状态已失效，请重新登录", "Session expired. Please log in again.")
+                self.errorMessage = LT("登录状态已失效，请重新登录", "Session expired. Please log in again.", "ログイン状態が無効です。再度ログインしてください。")
                 self.tencentIMBootstrap = nil
                 self.tencentIMSession.reset()
                 self.tencentIMBootstrapRefreshTask?.cancel()
@@ -710,6 +931,7 @@ final class AppState: ObservableObject {
                     if shouldRefreshTencentBootstrap {
                         await self.refreshTencentIMBootstrap(source: "didBecomeActive")
                     }
+                    await self.refreshAccountEnforcements()
                     await self.refreshUnreadMessages()
                 }
             }
@@ -789,6 +1011,7 @@ final class AppState: ObservableObject {
 
         session = restored
         await refreshTencentIMBootstrap(source: "bootstrap-restore-session")
+        await refreshAccountEnforcements()
         await refreshUnreadMessages()
         await uploadPushTokenIfPossible()
         flushPendingSystemNotificationPayloadIfPossible(trigger: "bootstrap-restore-session")
@@ -816,6 +1039,7 @@ final class AppState: ObservableObject {
         do {
             session = try await service.login(username: username, password: password)
             await refreshTencentIMBootstrap(source: "login-password")
+            await refreshAccountEnforcements()
             await refreshUnreadMessages()
             await uploadPushTokenIfPossible()
             flushPendingSystemNotificationPayloadIfPossible(trigger: "login-password")
@@ -829,6 +1053,7 @@ final class AppState: ObservableObject {
         do {
             session = try await service.loginWithSms(phoneNumber: phoneNumber, code: code)
             await refreshTencentIMBootstrap(source: "login-sms")
+            await refreshAccountEnforcements()
             await refreshUnreadMessages()
             await uploadPushTokenIfPossible()
             flushPendingSystemNotificationPayloadIfPossible(trigger: "login-sms")
@@ -849,14 +1074,23 @@ final class AppState: ObservableObject {
         }
     }
 
-    func register(email: String, password: String, displayName: String) async {
+    func register(
+        email: String,
+        password: String,
+        displayName: String,
+        birthYear: Int?,
+        regionCode: String?
+    ) async {
         do {
             session = try await service.register(
                 email: email,
                 password: password,
-                displayName: displayName
+                displayName: displayName,
+                birthYear: birthYear,
+                regionCode: regionCode
             )
             await refreshTencentIMBootstrap(source: "register")
+            await refreshAccountEnforcements()
             await refreshUnreadMessages()
             await uploadPushTokenIfPossible()
             flushPendingSystemNotificationPayloadIfPossible(trigger: "register")
@@ -888,6 +1122,87 @@ final class AppState: ObservableObject {
         tencentIMSession.reset()
         tencentIMBootstrapRefreshTask?.cancel()
         tencentIMBootstrapRefreshTask = nil
+        accountEnforcementStatus = .clear
+        accountEnforcements = []
+        accountEnforcementAppeals = []
+    }
+
+    func deleteAccount() async -> Bool {
+        guard session != nil else {
+            errorMessage = LT("请先登录", "Please log in first.", "先にログインしてください。")
+            return false
+        }
+
+        do {
+            try await service.deleteAccount()
+            SessionTokenStore.shared.clear()
+            session = nil
+            realNameVerificationStatus = .unverified
+            resetUnreadCounts()
+            tencentIMBootstrap = nil
+            tencentIMSession.reset()
+            tencentIMBootstrapRefreshTask?.cancel()
+            tencentIMBootstrapRefreshTask = nil
+            accountEnforcementStatus = .clear
+            accountEnforcements = []
+            accountEnforcementAppeals = []
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.userFacingMessage
+            return false
+        }
+    }
+
+    func refreshAccountEnforcements() async {
+        guard session != nil else { return }
+        isLoadingAccountEnforcements = true
+        defer { isLoadingAccountEnforcements = false }
+        do {
+            async let statusRequest = service.fetchAccountEnforcementStatus()
+            async let enforcementsRequest = service.fetchAccountEnforcements()
+            async let appealsRequest = service.fetchAccountEnforcementAppeals()
+            let (status, enforcements, appeals) = try await (statusRequest, enforcementsRequest, appealsRequest)
+            accountEnforcementStatus = status
+            accountEnforcements = enforcements
+            accountEnforcementAppeals = appeals
+            errorMessage = nil
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    func submitAccountEnforcementAppeal(enforcementID: String, input: AccountEnforcementAppealInput) async -> Bool {
+        guard session != nil else {
+            errorMessage = LT("请先登录", "Please log in first.", "先にログインしてください。")
+            return false
+        }
+        let reason = input.appealReason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !reason.isEmpty else {
+            errorMessage = LT("请填写申诉理由", "Please enter an appeal reason.", "申立理由を入力してください。")
+            return false
+        }
+
+        do {
+            let appeal = try await service.submitAccountEnforcementAppeal(
+                enforcementID: enforcementID,
+                input: AccountEnforcementAppealInput(
+                    appealReason: reason,
+                    contactEmail: input.contactEmail?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+                    attachments: input.attachments
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                )
+            )
+            accountEnforcementAppeals.removeAll { $0.id == appeal.id }
+            accountEnforcementAppeals.insert(appeal, at: 0)
+            await refreshAccountEnforcements()
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.userFacingMessage
+            return false
+        }
     }
 
     private func syncSharedPushContext() {
@@ -1088,10 +1403,7 @@ final class AppState: ObservableObject {
                 await self?.refreshUnreadMessages()
             }
         case .kickedOffline:
-            errorMessage = L(
-                "腾讯云 IM 已在其他设备登录，请重新进入或重新登录",
-                "Tencent Cloud IM was logged in on another device. Please re-enter or sign in again."
-            )
+            errorMessage = LT("腾讯云 IM 已在其他设备登录，请重新进入或重新登录", "Tencent Cloud IM was logged in on another device. Please re-enter or sign in again.", "Tencent Cloud IM が別の端末でログインされました。再度入るかログインし直してください。")
         case .idle, .disabled, .unavailable, .initializing, .connecting, .connected, .failed:
             break
         }

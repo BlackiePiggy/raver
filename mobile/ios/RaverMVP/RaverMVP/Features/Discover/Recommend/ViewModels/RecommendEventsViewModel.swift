@@ -47,7 +47,7 @@ final class RecommendEventsViewModel: ObservableObject {
 
     func toggleMarked(event: WebEvent, isLoggedIn: Bool) async {
         guard isLoggedIn else {
-            bannerMessage = L("请先登录再收藏活动", "Please log in before saving events.")
+            bannerMessage = LT("请先登录再收藏活动", "Please log in before saving events.", "イベントを保存するにはログインしてください。")
             return
         }
 
@@ -95,7 +95,7 @@ final class RecommendEventsViewModel: ObservableObject {
                 phase = events.isEmpty ? .empty : .success
                 bannerMessage = nil
             } catch {
-                let message = error.userFacingMessage ?? L("推荐活动加载失败，请稍后重试", "Failed to load recommended events. Please try again later.")
+                let message = error.userFacingMessage ?? LT("推荐活动加载失败，请稍后重试", "Failed to load recommended events. Please try again later.", "おすすめイベントを読み込めませんでした。時間をおいて再試行してください。")
                 if hadContent {
                     bannerMessage = message
                     phase = .success

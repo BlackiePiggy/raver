@@ -35,7 +35,7 @@ final class MessageNotificationsViewModel: ObservableObject {
             bannerMessage = nil
             self.error = nil
         } catch {
-            let message = error.userFacingMessage ?? L("消息提醒加载失败，请稍后重试", "Failed to load alerts. Please try again later.")
+            let message = error.userFacingMessage ?? LT("消息提醒加载失败，请稍后重试", "Failed to load alerts. Please try again later.", "メッセージ通知の読み込みに失敗しました。後でもう一度お試しください。")
             if !notifications.isEmpty {
                 bannerMessage = message
                 self.error = nil

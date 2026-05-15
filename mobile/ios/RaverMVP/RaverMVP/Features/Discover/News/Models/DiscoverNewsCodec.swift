@@ -28,9 +28,9 @@ enum DiscoverNewsCodec {
 
         guard lines.contains(marker) else { return nil }
 
-        let title = value(for: ["标题", "title"], in: lines) ?? L("未命名资讯", "Untitled News")
+        let title = value(for: ["标题", "title"], in: lines) ?? LT("未命名资讯", "Untitled News", "無題のニュース")
         let summary = value(for: ["摘要", "summary"], in: lines) ?? ""
-        let source = value(for: ["来源", "source"], in: lines) ?? L("社区投稿", "Community")
+        let source = value(for: ["来源", "source"], in: lines) ?? LT("社区投稿", "Community", "コミュニティ投稿")
         let rawCategory = value(for: ["分类", "category"], in: lines) ?? DiscoverNewsCategory.community.title
         let body = decodedBody(in: lines) ?? value(for: ["正文", "content", "body"], in: lines) ?? ""
         let link = value(for: ["链接", "url", "link"], in: lines)

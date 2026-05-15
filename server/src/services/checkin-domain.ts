@@ -1,10 +1,7 @@
 import { Prisma } from '@prisma/client';
+import { normalizeTriTextPayload, type TriTextPayload } from '../utils/i18n';
 
-export type EventBiTextPayload = {
-  en: string;
-  zh: string;
-  enFull?: string;
-};
+export type EventBiTextPayload = TriTextPayload;
 
 export type NormalizedSelectionDJ = {
   djId: string | null;
@@ -90,31 +87,7 @@ export const normalizeInt = (value: unknown, fallback = 0): number => {
 };
 
 export const normalizeBiText = (value: unknown, fallback = ''): EventBiTextPayload | null => {
-  const fallbackText = normalizeText(fallback);
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const row = value as Record<string, unknown>;
-    const en = normalizeText(row.en ?? row.EN ?? row.english) || fallbackText;
-    const zh = normalizeText(row.zh ?? row.ZH ?? row.cn ?? row.chinese) || en || fallbackText;
-    const enFull = normalizeText(
-      row.enFull ?? row.en_full ?? row.englishFull ?? row.country_en_full
-    );
-    const normalizedEn = en || zh || fallbackText;
-    const normalizedZh = zh || en || fallbackText;
-    if (!normalizedEn && !normalizedZh) return null;
-    const out: EventBiTextPayload = {
-      en: normalizedEn,
-      zh: normalizedZh,
-    };
-    if (enFull) out.enFull = enFull;
-    return out;
-  }
-
-  const plain = normalizeText(value) || fallbackText;
-  if (!plain) return null;
-  return {
-    en: plain,
-    zh: plain,
-  };
+  return normalizeTriTextPayload(value, fallback);
 };
 
 export const resolveEventAddress = (event: {

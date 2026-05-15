@@ -20,6 +20,9 @@ protocol ProfileContentRepository {
     func fetchEvent(id: String) async throws -> WebEvent
     func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage
     func fetchMyPublishes() async throws -> MyPublishes
+    func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary]
+    func fetchMyContentSubmission(id: String) async throws -> ContentSubmissionDetail
+    func resubmitMyContentSubmission(id: String, payload: [String: ContentSubmissionJSONValue], changeNote: String?) async throws -> ContentSubmissionDetail
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post
     func toggleRepost(postID: String, shouldRepost: Bool) async throws -> Post
     func toggleSave(postID: String, shouldSave: Bool) async throws -> Post
@@ -121,6 +124,22 @@ struct ProfileContentRepositoryAdapter: ProfileContentRepository {
 
     func fetchMyPublishes() async throws -> MyPublishes {
         try await webService.fetchMyPublishes()
+    }
+
+    func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary] {
+        try await webService.fetchMyContentSubmissions()
+    }
+
+    func fetchMyContentSubmission(id: String) async throws -> ContentSubmissionDetail {
+        try await webService.fetchMyContentSubmission(id: id)
+    }
+
+    func resubmitMyContentSubmission(
+        id: String,
+        payload: [String: ContentSubmissionJSONValue],
+        changeNote: String?
+    ) async throws -> ContentSubmissionDetail {
+        try await webService.resubmitMyContentSubmission(id: id, payload: payload, changeNote: changeNote)
     }
 
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post {
@@ -271,9 +290,9 @@ final class ProfileViewModel: ObservableObject {
 
         var title: String {
             switch self {
-            case .published: return L("我发的帖子", "My Posts")
-            case .saves: return L("我收藏的帖子", "Saved")
-            case .likes: return L("我 Like 的帖子", "Liked")
+            case .published: return LT("我发的帖子", "My Posts", "自分の投稿")
+            case .saves: return LT("我收藏的帖子", "Saved", "保存済み投稿")
+            case .likes: return LT("我 Like 的帖子", "Liked", "いいねした投稿")
             }
         }
 
@@ -352,13 +371,13 @@ final class ProfileViewModel: ObservableObject {
         } catch {
             if restoreOfflineSnapshot() {
                 phase = .success
-                bannerMessage = L("当前离线，已显示上次同步的个人主页数据。", "You're offline. Showing your latest synced profile snapshot.")
+                bannerMessage = LT("当前离线，已显示上次同步的个人主页数据。", "You're offline. Showing your latest synced profile snapshot.", "現在オフラインです。最後に同期したプロフィールデータを表示しています。")
                 self.error = nil
             } else if hadContent {
-                bannerMessage = error.userFacingMessage ?? L("个人主页更新失败，请稍后重试", "Failed to refresh profile. Please try again later.")
+                bannerMessage = error.userFacingMessage ?? LT("个人主页更新失败，请稍后重试", "Failed to refresh profile. Please try again later.", "プロフィールを更新できませんでした。時間をおいて再試行してください。")
                 phase = .success
             } else {
-                let message = error.userFacingMessage ?? L("个人主页加载失败，请稍后重试", "Failed to load profile. Please try again later.")
+                let message = error.userFacingMessage ?? LT("个人主页加载失败，请稍后重试", "Failed to load profile. Please try again later.", "プロフィールを読み込めませんでした。時間をおいて再試行してください。")
                 phase = .failure(message: message)
             }
         }
@@ -392,7 +411,7 @@ final class ProfileViewModel: ObservableObject {
             self.error = nil
         } catch {
             guard !error.isUserInitiatedCancellation else { return }
-            bannerMessage = error.userFacingMessage ?? L("当前内容刷新失败，请稍后重试", "Failed to refresh this section. Please try again later.")
+            bannerMessage = error.userFacingMessage ?? LT("当前内容刷新失败，请稍后重试", "Failed to refresh this section. Please try again later.", "この内容を更新できませんでした。時間をおいて再試行してください。")
         }
     }
 

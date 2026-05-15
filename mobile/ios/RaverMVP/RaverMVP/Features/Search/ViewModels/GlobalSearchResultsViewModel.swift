@@ -136,7 +136,7 @@ final class GlobalSearchResultsViewModel: ObservableObject {
         GlobalSearchTab.allCases.forEach { tab in
             if requestedTab == .all || tab == requestedTab || partialFailureTabs.contains(tab) {
                 if partialFailureTabs.contains(tab) {
-                    phaseByTab[tab] = .failed(L("\(tab.title)结果加载失败", "\(tab.title) results failed"))
+                    phaseByTab[tab] = .failed(LT("\(tab.title)结果加载失败", "\(tab.title) results failed", "\(tab.title)結果の読み込みに失敗しました"))
                 } else {
                     phaseByTab[tab] = count(for: tab) > 0 ? .loaded : .empty
                 }

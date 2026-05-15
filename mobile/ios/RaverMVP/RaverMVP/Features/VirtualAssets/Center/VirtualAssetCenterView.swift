@@ -68,9 +68,9 @@ final class VirtualAssetCenterViewModel: ObservableObject {
             if catalog.isEmpty, inventory.isEmpty, let cached = repository.cachedMyAssets() {
                 apply(cached)
                 phase = .success
-                self.error = L("当前离线，已显示上次同步的装扮库存。", "You're offline. Showing your latest synced style inventory.")
+                self.error = LT("当前离线，已显示上次同步的装扮库存。", "You're offline. Showing your latest synced style inventory.", "現在オフラインです。最後に同期した装飾インベントリを表示しています。")
             } else if catalog.isEmpty, inventory.isEmpty {
-                phase = .failure(message: error.userFacingMessage ?? L("装扮中心加载失败", "Failed to load Style Center"))
+                phase = .failure(message: error.userFacingMessage ?? LT("装扮中心加载失败", "Failed to load Style Center", "スタイルセンターの読み込みに失敗しました"))
             } else {
                 phase = .success
                 self.error = error.userFacingMessage
@@ -92,15 +92,15 @@ final class VirtualAssetCenterViewModel: ObservableObject {
 
     func statusText(for asset: VirtualAssetDefinition) -> String {
         guard let item = inventory.first(where: { $0.assetID == asset.id }) else {
-            return L("未拥有", "Not owned")
+            return LT("未拥有", "Not owned", "未所有")
         }
         if !item.isUsable {
-            return L("不可用", "Unavailable")
+            return LT("不可用", "Unavailable", "利用不可")
         }
         if let expiresAt = item.expiresAt {
-            return L("限时 \(expiresAt.appLocalizedYMDText())", "Until \(expiresAt.appLocalizedYMDText())")
+            return LT("限时 \(expiresAt.appLocalizedYMDText())", "Until \(expiresAt.appLocalizedYMDText())", "\(expiresAt.appLocalizedYMDText()) まで")
         }
-        return L("已拥有", "Owned")
+        return LT("已拥有", "Owned", "所有済み")
     }
 
     func toggleEquip(_ asset: VirtualAssetDefinition) async {
@@ -132,7 +132,7 @@ final class VirtualAssetCenterViewModel: ObservableObject {
                 assetType: asset.type
             )
             onAppearanceChanged()
-            OperationBannerCenter.shared.success(nextIDs.isEmpty ? L("已卸下装扮", "Style removed") : L("已装备装扮", "Style equipped"))
+            OperationBannerCenter.shared.success(nextIDs.isEmpty ? LT("已卸下装扮", "Style removed", "装飾を外しました") : LT("已装备装扮", "Style equipped", "装飾を装着しました"))
         } catch {
             VirtualAssetTelemetry.record(
                 event: "load_failed",
@@ -209,7 +209,7 @@ struct VirtualAssetCenterView: View {
             }
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: L("装扮中心", "Style Center"))
+        .raverSystemNavigation(title: LT("装扮中心", "Style Center", "スタイルセンター"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -223,11 +223,11 @@ struct VirtualAssetCenterView: View {
         .task {
             await viewModel.load()
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { viewModel.error != nil },
             set: { if !$0 { viewModel.error = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
         }
@@ -237,7 +237,7 @@ struct VirtualAssetCenterView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
                 if viewModel.isRefreshing {
-                    InlineLoadingBadge(title: L("正在同步装扮", "Syncing styles"))
+                    InlineLoadingBadge(title: LT("正在同步装扮", "Syncing styles", "装飾を同期中"))
                 }
 
                 if let appearance = viewModel.appearance {
@@ -248,9 +248,9 @@ struct VirtualAssetCenterView: View {
 
                 if viewModel.selectedAssets.isEmpty {
                     ContentUnavailableView(
-                        L("暂无装扮", "No Styles"),
+                        LT("暂无装扮", "No Styles", "装飾はまだありません"),
                         systemImage: "sparkles",
-                        description: Text(L("这一类装扮还没有开放。", "This style category is not available yet."))
+                        description: Text(LT("这一类装扮还没有开放。", "This style category is not available yet.", "この装飾カテゴリはまだ利用できません。"))
                     )
                     .padding(.top, 20)
                 } else {
@@ -280,11 +280,11 @@ struct VirtualAssetCenterView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text(L("分类", "Categories"))
+                    Text(LT("分类", "Categories", "カテゴリ"))
                         .font(.headline)
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer()
-                    Text(L("已拥有 \(viewModel.selectedOwnedCount)", "\(viewModel.selectedOwnedCount) owned"))
+                    Text(LT("已拥有 \(viewModel.selectedOwnedCount)", "\(viewModel.selectedOwnedCount) owned", "所有済み \(viewModel.selectedOwnedCount)"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
@@ -389,8 +389,8 @@ private struct VirtualAssetInventoryRow: View {
     }
 
     private var buttonTitle: String {
-        if !isOwned { return L("预览", "Preview") }
-        return isEquipped ? L("卸下", "Remove") : L("装备", "Equip")
+        if !isOwned { return LT("预览", "Preview", "プレビュー") }
+        return isEquipped ? LT("卸下", "Remove", "外す") : LT("装备", "Equip", "装着")
     }
 
     @ViewBuilder
@@ -426,13 +426,13 @@ private extension VirtualAssetType {
     var centerTitle: String {
         switch self {
         case .avatarFrame:
-            return L("头像框", "Frames")
+            return LT("头像框", "Frames", "フレーム")
         case .profileBadge:
-            return L("徽章", "Badges")
+            return LT("徽章", "Badges", "バッジ")
         case .chatBubbleSkin:
-            return L("气泡", "Bubbles")
+            return LT("气泡", "Bubbles", "吹き出し")
         case .titleMedal:
-            return L("称号", "Titles")
+            return LT("称号", "Titles", "称号")
         case .unknown(let value):
             return value
         }

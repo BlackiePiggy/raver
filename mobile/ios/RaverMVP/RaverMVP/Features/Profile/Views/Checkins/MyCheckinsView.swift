@@ -151,7 +151,7 @@ final class MyCheckinsViewModel: ObservableObject {
             if !reset {
                 lastRequestedTimelinePage = nil
             }
-            let message = error.userFacingMessage ?? L("打卡记录加载失败，请稍后重试", "Failed to load check-ins. Please try again later.")
+            let message = error.userFacingMessage ?? LT("打卡记录加载失败，请稍后重试", "Failed to load check-ins. Please try again later.", "チェックイン記録を読み込めませんでした。時間をおいて再試行してください。")
             if reset {
                 phase = .failure(message: message)
             } else if !timelineItems.isEmpty {
@@ -198,7 +198,7 @@ final class MyCheckinsViewModel: ObservableObject {
             galleryEventsPhase = galleryEvents.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("活动画廊加载失败，请稍后重试", "Failed to load event gallery. Please try again later.")
+            let message = error.userFacingMessage ?? LT("活动画廊加载失败，请稍后重试", "Failed to load event gallery. Please try again later.", "イベントギャラリーを読み込めませんでした。時間をおいて再試行してください。")
             if galleryEvents.isEmpty {
                 galleryEventsPhase = .failure(message: message)
             } else {
@@ -230,7 +230,7 @@ final class MyCheckinsViewModel: ObservableObject {
             galleryArtistsPhase = galleryArtists.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("DJ 画廊加载失败，请稍后重试", "Failed to load DJ gallery. Please try again later.")
+            let message = error.userFacingMessage ?? LT("DJ 画廊加载失败，请稍后重试", "Failed to load DJ gallery. Please try again later.", "DJギャラリーを読み込めませんでした。時間をおいて再試行してください。")
             if galleryArtists.isEmpty {
                 galleryArtistsPhase = .failure(message: message)
             } else {
@@ -395,6 +395,7 @@ final class MyCheckinsViewModel: ObservableObject {
             longitude: nil,
             startDate: event.startDate ?? timelineItem.attendedAt,
             endDate: event.endDate ?? timelineItem.attendedAt,
+            timeZone: TimeZone.current.identifier,
             ticketUrl: nil,
             ticketPriceMin: nil,
             ticketPriceMax: nil,
@@ -796,8 +797,8 @@ struct MyCheckinsView: View {
 
         var title: String {
             switch self {
-            case .timeline: return L("时间轴", "Timeline")
-            case .gallery: return L("画廊", "Gallery")
+            case .timeline: return LT("时间轴", "Timeline", "タイムライン")
+            case .gallery: return LT("画廊", "Gallery", "ギャラリー")
             }
         }
 
@@ -815,7 +816,7 @@ struct MyCheckinsView: View {
 
         var title: String {
             switch self {
-            case .event: return L("活动", "Events")
+            case .event: return LT("活动", "Events", "イベント")
             case .dj: return "DJ"
             }
         }
@@ -836,6 +837,7 @@ struct MyCheckinsView: View {
     @State private var galleryMode: GalleryMode = .event
     @State private var shareMorePresentation: MyCheckinsSharePresentation?
     @State private var fullChatSharePresentation: MyCheckinsSharePresentation?
+    @State private var reportTarget: ReportSheetTarget?
     @State private var isShareMorePanelVisible = false
     @State private var timelineAutoLoadTask: Task<Void, Never>?
     @State private var galleryAutoLoadTask: Task<Void, Never>?
@@ -850,7 +852,7 @@ struct MyCheckinsView: View {
         ownerDisplayName: String? = nil
     ) {
         self.targetUserID = targetUserID
-        self.navigationTitleText = title.isEmpty ? L("我的打卡", "My Check-ins") : title
+        self.navigationTitleText = title.isEmpty ? LT("我的打卡", "My Check-ins", "自分のチェックイン") : title
         self.ownerDisplayName = ownerDisplayName
         _viewModel = StateObject(
             wrappedValue: MyCheckinsViewModel(
@@ -866,13 +868,13 @@ struct MyCheckinsView: View {
                 if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if viewModel.isRefreshing {
-                            InlineLoadingBadge(title: L("正在更新打卡记录", "Updating check-ins"))
+                            InlineLoadingBadge(title: LT("正在更新打卡记录", "Updating check-ins", "チェックイン記録を更新中"))
                         }
                         if let bannerMessage = viewModel.bannerMessage {
                             ScreenStatusBanner(
                                 message: bannerMessage,
                                 style: .error,
-                                actionTitle: L("重试", "Retry")
+                                actionTitle: LT("重试", "Retry", "再試行")
                             ) {
                                 Task { await viewModel.reload(force: true) }
                             }
@@ -903,7 +905,7 @@ struct MyCheckinsView: View {
                         .frame(maxWidth: .infinity)
                 } else if case .failure(let message) = viewModel.phase {
                     ScreenErrorCard(
-                        title: L("打卡记录加载失败", "Check-ins Failed to Load"),
+                        title: LT("打卡记录加载失败", "Check-ins Failed to Load", "チェックイン記録の読み込みに失敗しました"),
                         message: message
                     ) {
                         Task { await viewModel.reload(force: true) }
@@ -911,7 +913,7 @@ struct MyCheckinsView: View {
                     .frame(maxWidth: .infinity, minHeight: 260)
                 } else if case .offline(let message) = viewModel.phase {
                     ScreenErrorCard(
-                        title: L("网络不可用", "Network Unavailable"),
+                        title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                         message: message
                     ) {
                         Task { await viewModel.reload(force: true) }
@@ -919,8 +921,8 @@ struct MyCheckinsView: View {
                     .frame(maxWidth: .infinity, minHeight: 260)
                 } else if isCurrentViewEmpty {
                     VStack(spacing: 12) {
-                        ContentUnavailableView(LL("还没有观演记录"), systemImage: "sparkles.tv")
-                        Text(LL("去发现页完成活动或 DJ 打卡，记录会按你选择的观演时间展示。"))
+                        ContentUnavailableView(LT("还没有观演记录", "No show history yet", "観覧記録はまだありません"), systemImage: "sparkles.tv")
+                        Text(LT("去发现页完成活动或 DJ 打卡，记录会按你选择的观演时间展示。", "Complete an event or DJ check-in from Discover, and records will appear in your selected show-time order.", "発見ページでイベントまたはDJチェックインを完了すると、選択した参加時間順に記録が表示されます。"))
                             .font(.caption)
                             .multilineTextAlignment(.center)
                             .foregroundStyle(RaverTheme.secondaryText)
@@ -993,7 +995,7 @@ struct MyCheckinsView: View {
                 }
             ) { conversation in
                 showWidgetStatusBanner(
-                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                     conversation: conversation
                 )
             } preview: {
@@ -1001,28 +1003,39 @@ struct MyCheckinsView: View {
             }
             .presentationDetents([.fraction(0.76), .large])
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .sheet(item: $reportTarget) { target in
+            ReportSheet(target: target) { _, blocked in
+                showWidgetStatusBanner(
+                    message: blocked
+                        ? LT("举报已提交，并已拉黑该用户", "Report submitted and user blocked", "報告を送信し、このユーザーをブロックしました")
+                        : LT("举报已提交", "Report submitted", "報告を送信しました")
+                )
+            }
+            .environmentObject(appState)
+            .presentationDetents([.large])
+        }
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { viewModel.errorMessage != nil },
             set: { if !$0 { viewModel.errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
-        .alert(L("DJ 信息待补充", "DJ Info Needed"), isPresented: Binding(
+        .alert(LT("DJ 信息待补充", "DJ Info Needed", "DJ情報が不足しています"), isPresented: Binding(
             get: { pendingUnboundDJName != nil },
             set: { if !$0 { pendingUnboundDJName = nil } }
         )) {
-            Button(L("关闭", "Close"), role: .cancel) {
+            Button(LT("关闭", "Close", "閉じる"), role: .cancel) {
                 pendingUnboundDJName = nil
             }
-            Button(L("去补充", "Add Info")) {
+            Button(LT("去补充", "Add Info", "情報を追加")) {
                 let name = pendingUnboundDJName
                 pendingUnboundDJName = nil
                 appPush(.discover(.djImport(initialName: name)))
             }
         } message: {
-            Text(L("这个 DJ 暂未建立唯一档案，补充资料后就可以跳转到详情页。", "This DJ does not have a unique profile yet. Add the info to enable detail navigation."))
+            Text(LT("这个 DJ 暂未建立唯一档案，补充资料后就可以跳转到详情页。", "This DJ does not have a unique profile yet. Add the info to enable detail navigation.", "このDJにはまだ固有プロフィールがありません。情報を追加すると詳細ページへ移動できます。"))
         }
         .overlay {
             if let presentation = shareMorePresentation {
@@ -1048,7 +1061,7 @@ struct MyCheckinsView: View {
                         }
                     ) { conversation in
                         showWidgetStatusBanner(
-                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                             conversation: conversation
                         )
                     } onMoreChats: {
@@ -1095,7 +1108,7 @@ struct MyCheckinsView: View {
            !sessionName.isEmpty {
             return sessionName
         }
-        return L("Ta", "They")
+        return LT("Ta", "They", "相手")
     }
     private var effectiveShareUserID: String? {
         if let trimmedTargetUserID = targetUserID?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1169,17 +1182,11 @@ struct MyCheckinsView: View {
     }
 
     private var shareStatsSummaryText: String {
-        L(
-            "打卡\(checkinActivityCount)次活动、\(checkinArtistCount)个艺人",
-            "Checked in at \(checkinActivityCount) events, \(checkinArtistCount) artists"
-        )
+        LT("打卡\(checkinActivityCount)次活动、\(checkinArtistCount)个艺人", "Checked in at \(checkinActivityCount) events, \(checkinArtistCount) artists", "\(checkinActivityCount)件のイベント、\(checkinArtistCount)人のアーティストにチェックイン")
     }
 
     private var timelineStatsText: String {
-        L(
-            "\(checkinActivityCount)次活动、\(checkinArtistCount)个艺人",
-            "\(checkinActivityCount) events, \(checkinArtistCount) artists"
-        )
+        LT("\(checkinActivityCount)次活动、\(checkinArtistCount)个艺人", "\(checkinActivityCount) events, \(checkinArtistCount) artists", "\(checkinActivityCount)件のイベント、\(checkinArtistCount)人のアーティスト")
     }
 
     private var isCurrentViewEmpty: Bool {
@@ -1289,7 +1296,7 @@ struct MyCheckinsView: View {
     private var navigationShareButton: some View {
         Button {
             guard let payload = makeSharePayload() else {
-                errorMessage = L("当前打卡页暂时无法分享。", "This check-ins page cannot be shared right now.")
+                errorMessage = LT("当前打卡页暂时无法分享。", "This check-ins page cannot be shared right now.", "このチェックインページは現在共有できません。")
                 return
             }
             shareMorePresentation = MyCheckinsSharePresentation(payload: payload)
@@ -1362,14 +1369,14 @@ struct MyCheckinsView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                errorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "paperplane.circle.fill",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
-                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                errorMessage = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ共有連携は未接続です。")
             }
         ]
     }
@@ -1377,7 +1384,7 @@ struct MyCheckinsView: View {
     private func shareMoreQuickActions() -> [SharePanelQuickAction] {
         [
             SharePanelQuickAction(
-                title: L("举报", "Report"),
+                title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
             ) {
@@ -1387,7 +1394,22 @@ struct MyCheckinsView: View {
     }
 
     private func openCheckinsReportEntry() {
-        errorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+        guard let userID = effectiveShareUserID else {
+            errorMessage = LT("暂时无法定位要举报的打卡页。", "Could not identify the check-ins page to report.", "報告対象のチェックインページを特定できませんでした。")
+            return
+        }
+        if userID == appState.session?.user.id {
+            errorMessage = LT("不能举报自己的打卡页。", "You cannot report your own check-ins page.", "自分のチェックインページは報告できません。")
+            return
+        }
+        reportTarget = ReportSheetTarget(
+            id: userID,
+            type: .user,
+            title: navigationTitleText,
+            preview: shareStatsSummaryText,
+            targetUserID: userID,
+            targetUserDisplayName: effectiveOwnerDisplayName
+        )
     }
 
     private func makeSharePayload() -> MyCheckinsShareCardPayload? {
@@ -1403,7 +1425,7 @@ struct MyCheckinsView: View {
         if let targetUserID, !targetUserID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             shareTitle = navigationTitleText
         } else {
-            shareTitle = L("\(effectiveOwnerDisplayName)的打卡", "\(effectiveOwnerDisplayName)'s Check-ins")
+            shareTitle = LT("\(effectiveOwnerDisplayName)的打卡", "\(effectiveOwnerDisplayName)'s Check-ins", "\(effectiveOwnerDisplayName) のチェックイン")
         }
 
         return MyCheckinsShareCardPayload(
@@ -1412,7 +1434,7 @@ struct MyCheckinsView: View {
             title: shareTitle,
             summary: shareStatsSummaryText,
             coverImageURL: coverImageURL,
-            badgeText: L("打卡", "Check-ins")
+            badgeText: LT("打卡", "Check-ins", "チェックイン")
         )
     }
 
@@ -1460,7 +1482,7 @@ struct MyCheckinsView: View {
                     .frame(maxWidth: .infinity)
             } else if case .failure(let message) = activeGalleryPhase {
                 ScreenErrorCard(
-                    title: L("画廊加载失败", "Gallery Failed to Load"),
+                    title: LT("画廊加载失败", "Gallery Failed to Load", "ギャラリーの読み込みに失敗しました"),
                     message: message
                 ) {
                     Task { await reloadActiveGallery() }
@@ -1484,7 +1506,7 @@ struct MyCheckinsView: View {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
-                Text(L("正在加载更多", "Loading more"))
+                Text(LT("正在加载更多", "Loading more", "さらに読み込み中"))
                     .font(.footnote)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -1505,7 +1527,7 @@ struct MyCheckinsView: View {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
-                Text(L("正在加载更多", "Loading more"))
+                Text(LT("正在加载更多", "Loading more", "さらに読み込み中"))
                     .font(.footnote)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -1560,7 +1582,7 @@ struct MyCheckinsView: View {
         return VStack(alignment: .leading, spacing: 16) {
             ForEach(galleryDJSections) { section in
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(L("观看\(section.count)次", "Watched \(section.count)x"))
+                    Text(LT("观看\(section.count)次", "Watched \(section.count)x", "\(section.count)回視聴"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color(red: 0.84, green: 0.42, blue: 0.28))
 
@@ -1665,7 +1687,7 @@ struct MyCheckinsView: View {
                             }
 
                             if section.djs.isEmpty {
-                                Text(LL("未选择 DJ"))
+                                Text(LT("未选择 DJ", "No DJ selected", "DJ未選択"))
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             } else {
@@ -1729,7 +1751,7 @@ struct MyCheckinsView: View {
 
     private func galleryEventTitle(for event: MyCheckinsOverviewGalleryEvent) -> String {
         let trimmed = event.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? L("未命名活动", "Untitled Event") : trimmed
+        return trimmed.isEmpty ? LT("未命名活动", "Untitled Event", "無題のイベント") : trimmed
     }
 
     private var eventTimelineFallback: some View {
@@ -1745,7 +1767,7 @@ struct MyCheckinsView: View {
             VStack(spacing: 10) {
                 Image(systemName: "music.note.house.fill")
                     .font(.title)
-                Text(L("音乐节回忆", "Festival Memory"))
+                Text(LT("音乐节回忆", "Festival Memory", "フェスの思い出"))
                     .font(.headline.weight(.semibold))
             }
             .foregroundStyle(Color.white.opacity(0.92))
@@ -1754,14 +1776,14 @@ struct MyCheckinsView: View {
 
     private func standaloneDJHeader(manualEventName: String?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(manualEventName ?? L("单独 DJ 打卡", "Standalone DJ Check-in"))
+            Text(manualEventName ?? LT("单独 DJ 打卡", "Standalone DJ Check-in", "単独DJチェックイン"))
                 .font(.title3.weight(.bold))
                 .foregroundStyle(RaverTheme.primaryText)
 
             Text(
                 manualEventName == nil
-                    ? L("这次是单独的 DJ 打卡，暂无匹配活动。", "This is a standalone DJ check-in, with no matched event.")
-                    : L("这次是单独的 DJ 打卡，暂无匹配活动，已按你填写的活动信息记录。", "This is a standalone DJ check-in. No matched event was found, so it was recorded with your custom event info.")
+                    ? LT("这次是单独的 DJ 打卡，暂无匹配活动。", "This is a standalone DJ check-in, with no matched event.", "これは単独DJチェックインで、一致するイベントはありません。")
+                    : LT("这次是单独的 DJ 打卡，暂无匹配活动，已按你填写的活动信息记录。", "This is a standalone DJ check-in. No matched event was found, so it was recorded with your custom event info.", "これは単独DJチェックインです。一致するイベントがないため、入力したイベント情報で記録しました。")
             )
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
@@ -2022,7 +2044,7 @@ struct MyCheckinsView: View {
             return localized
         }
         let trimmed = event.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? L("未命名活动", "Untitled Event") : trimmed
+        return trimmed.isEmpty ? LT("未命名活动", "Untitled Event", "無題のイベント") : trimmed
     }
 
     private func eventNodeSubtitle(for node: TimelineNodeV2, fallbackEvent: TimelineEventLite) -> String? {
@@ -2061,7 +2083,7 @@ struct MyCheckinsView: View {
     }
 
     private func checkinCountBadge(_ count: Int) -> some View {
-        Text(L("\(count) 位", "\(count) DJs"))
+        Text(LT("\(count) 位", "\(count) DJs", "DJ \(count)人"))
             .font(.caption.weight(.semibold))
             .foregroundStyle(Color(red: 0.82, green: 0.39, blue: 0.20))
             .padding(.horizontal, 10)
@@ -2789,7 +2811,7 @@ struct MyCheckinsView: View {
 
     private func presentUnboundDJPrompt(name: String) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        pendingUnboundDJName = trimmedName.isEmpty ? LL("待补充 DJ") : trimmedName
+        pendingUnboundDJName = trimmedName.isEmpty ? LT("待补充 DJ", "DJ info needed", "DJ情報未入力") : trimmedName
     }
 
     private func galleryDJGroupingKey(for dj: CheckinDJLite) -> String {

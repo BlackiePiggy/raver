@@ -4,6 +4,7 @@ import type {
   NotificationChannelHandler,
   NotificationDeliveryResult,
   NotificationEvent,
+  NotificationPayload,
   NotificationPublishInput,
   RegisterDevicePushTokenInput,
 } from './notification-center.types';
@@ -21,6 +22,14 @@ const readBoolEnv = (key: string, fallback: boolean): boolean => {
 };
 
 const NOTIFICATION_OUTBOX_ASYNC_ENABLED = readBoolEnv('NOTIFICATION_OUTBOX_ASYNC_ENABLED', false);
+const NOTIFICATION_CHANNELS = ['in_app', 'apns', 'email', 'sms'] as const satisfies readonly NotificationChannel[];
+const DELIVERABLE_NOTIFICATION_CHANNELS = ['in_app', 'apns'] as const satisfies readonly NotificationChannel[];
+
+const isNotificationChannel = (value: string): value is NotificationChannel =>
+  (NOTIFICATION_CHANNELS as readonly string[]).includes(value);
+
+const isDeliverableNotificationChannel = (value: string): value is NotificationChannel =>
+  (DELIVERABLE_NOTIFICATION_CHANNELS as readonly string[]).includes(value);
 
 const toInputJsonValue = (value: unknown): Prisma.InputJsonValue => {
   return (value ?? {}) as Prisma.InputJsonValue;
@@ -115,6 +124,9 @@ const NOTIFICATION_CATEGORIES = [
   'route_dj_reminder',
   'followed_dj_update',
   'followed_brand_update',
+  'account_enforcement',
+  'content_review',
+  'report_decision',
   'major_news',
 ] as const;
 
@@ -157,6 +169,11 @@ type NotificationTemplateSeed = {
   bodyTemplate: string;
   deeplinkTemplate?: string | null;
   variables?: string[];
+};
+
+export type NotificationCategoryPreference = {
+  category: NotificationCategory;
+  enabled: boolean;
 };
 
 export type EventCountdownPreference = {
@@ -222,11 +239,16 @@ const DEFAULT_GLOBAL_CONFIG: NotificationAdminGlobalConfig = {
     route_dj_reminder: true,
     followed_dj_update: true,
     followed_brand_update: true,
+    account_enforcement: true,
+    content_review: true,
+    report_decision: true,
     major_news: true,
   },
   channelSwitches: {
     in_app: true,
     apns: true,
+    email: false,
+    sms: false,
   },
   grayRelease: {
     enabled: false,
@@ -238,7 +260,7 @@ const DEFAULT_GLOBAL_CONFIG: NotificationAdminGlobalConfig = {
       enabled: false,
       windowSeconds: 60 * 60,
       maxPerUser: 60,
-      exemptCategories: ['chat_message'],
+    exemptCategories: ['chat_message'],
     },
     quietHours: {
       enabled: false,
@@ -308,10 +330,46 @@ const DEFAULT_TEMPLATE_SEEDS: NotificationTemplateSeed[] = [
     variables: ['senderName', 'messagePreview', 'conversationId'],
   },
   {
+    category: 'chat_message',
+    locale: 'en',
+    channel: 'apns',
+    titleTemplate: 'New message',
+    bodyTemplate: '{{senderName}}: {{messagePreview}}',
+    deeplinkTemplate: 'raver://messages/conversation/{{conversationId}}',
+    variables: ['senderName', 'messagePreview', 'conversationId'],
+  },
+  {
+    category: 'chat_message',
+    locale: 'ja-JP',
+    channel: 'apns',
+    titleTemplate: '新しいメッセージ',
+    bodyTemplate: '{{senderName}}: {{messagePreview}}',
+    deeplinkTemplate: 'raver://messages/conversation/{{conversationId}}',
+    variables: ['senderName', 'messagePreview', 'conversationId'],
+  },
+  {
     category: 'community_interaction',
     locale: 'zh-CN',
     channel: 'apns',
     titleTemplate: '你有新的互动',
+    bodyTemplate: '{{actorName}} {{actionText}}',
+    deeplinkTemplate: 'raver://community/post/{{postId}}',
+    variables: ['actorName', 'actionText', 'postId'],
+  },
+  {
+    category: 'community_interaction',
+    locale: 'en',
+    channel: 'apns',
+    titleTemplate: 'New activity',
+    bodyTemplate: '{{actorName}} {{actionText}}',
+    deeplinkTemplate: 'raver://community/post/{{postId}}',
+    variables: ['actorName', 'actionText', 'postId'],
+  },
+  {
+    category: 'community_interaction',
+    locale: 'ja-JP',
+    channel: 'apns',
+    titleTemplate: '新しいリアクション',
     bodyTemplate: '{{actorName}} {{actionText}}',
     deeplinkTemplate: 'raver://community/post/{{postId}}',
     variables: ['actorName', 'actionText', 'postId'],
@@ -326,11 +384,47 @@ const DEFAULT_TEMPLATE_SEEDS: NotificationTemplateSeed[] = [
     variables: ['eventName', 'daysLeft', 'eventId'],
   },
   {
+    category: 'event_countdown',
+    locale: 'en',
+    channel: 'in_app',
+    titleTemplate: '{{eventName}} countdown',
+    bodyTemplate: '{{daysLeft}} days until it starts',
+    deeplinkTemplate: 'raver://event/{{eventId}}',
+    variables: ['eventName', 'daysLeft', 'eventId'],
+  },
+  {
+    category: 'event_countdown',
+    locale: 'ja-JP',
+    channel: 'in_app',
+    titleTemplate: '{{eventName}} のカウントダウン',
+    bodyTemplate: '開始まであと {{daysLeft}} 日',
+    deeplinkTemplate: 'raver://event/{{eventId}}',
+    variables: ['eventName', 'daysLeft', 'eventId'],
+  },
+  {
     category: 'event_daily_digest',
     locale: 'zh-CN',
     channel: 'in_app',
     titleTemplate: '{{eventName}} 今日动态',
     bodyTemplate: '资讯 {{newsCount}} 条，打分 {{ratingCount}} 条',
+    deeplinkTemplate: 'raver://event/{{eventId}}',
+    variables: ['eventName', 'newsCount', 'ratingCount', 'eventId'],
+  },
+  {
+    category: 'event_daily_digest',
+    locale: 'en',
+    channel: 'in_app',
+    titleTemplate: '{{eventName}} today',
+    bodyTemplate: '{{newsCount}} updates, {{ratingCount}} ratings',
+    deeplinkTemplate: 'raver://event/{{eventId}}',
+    variables: ['eventName', 'newsCount', 'ratingCount', 'eventId'],
+  },
+  {
+    category: 'event_daily_digest',
+    locale: 'ja-JP',
+    channel: 'in_app',
+    titleTemplate: '{{eventName}} の今日の動き',
+    bodyTemplate: 'ニュース {{newsCount}} 件、評価 {{ratingCount}} 件',
     deeplinkTemplate: 'raver://event/{{eventId}}',
     variables: ['eventName', 'newsCount', 'ratingCount', 'eventId'],
   },
@@ -344,11 +438,47 @@ const DEFAULT_TEMPLATE_SEEDS: NotificationTemplateSeed[] = [
     variables: ['djName', 'eventName', 'stageName', 'minutesLeft', 'eventId'],
   },
   {
+    category: 'route_dj_reminder',
+    locale: 'en',
+    channel: 'in_app',
+    titleTemplate: '{{djName}} is on soon',
+    bodyTemplate: '{{eventName}} · {{stageName}} · starts in {{minutesLeft}} min',
+    deeplinkTemplate: 'raver://event/{{eventId}}',
+    variables: ['djName', 'eventName', 'stageName', 'minutesLeft', 'eventId'],
+  },
+  {
+    category: 'route_dj_reminder',
+    locale: 'ja-JP',
+    channel: 'in_app',
+    titleTemplate: '{{djName}} がまもなく出演',
+    bodyTemplate: '{{eventName}} · {{stageName}} · あと {{minutesLeft}} 分で開始',
+    deeplinkTemplate: 'raver://event/{{eventId}}',
+    variables: ['djName', 'eventName', 'stageName', 'minutesLeft', 'eventId'],
+  },
+  {
     category: 'followed_dj_update',
     locale: 'zh-CN',
     channel: 'in_app',
     titleTemplate: '你关注的 DJ 有新动态',
     bodyTemplate: '资讯 {{infoCount}} 条，Sets {{setCount}} 条，打分 {{ratingCount}} 条',
+    deeplinkTemplate: 'raver://dj/{{djId}}',
+    variables: ['infoCount', 'setCount', 'ratingCount', 'djId'],
+  },
+  {
+    category: 'followed_dj_update',
+    locale: 'en',
+    channel: 'in_app',
+    titleTemplate: 'New updates from a DJ you follow',
+    bodyTemplate: '{{infoCount}} updates, {{setCount}} sets, {{ratingCount}} ratings',
+    deeplinkTemplate: 'raver://dj/{{djId}}',
+    variables: ['infoCount', 'setCount', 'ratingCount', 'djId'],
+  },
+  {
+    category: 'followed_dj_update',
+    locale: 'ja-JP',
+    channel: 'in_app',
+    titleTemplate: 'フォロー中の DJ に新着情報があります',
+    bodyTemplate: 'ニュース {{infoCount}} 件、Sets {{setCount}} 件、評価 {{ratingCount}} 件',
     deeplinkTemplate: 'raver://dj/{{djId}}',
     variables: ['infoCount', 'setCount', 'ratingCount', 'djId'],
   },
@@ -362,8 +492,359 @@ const DEFAULT_TEMPLATE_SEEDS: NotificationTemplateSeed[] = [
     variables: ['infoCount', 'eventCount', 'brandId'],
   },
   {
+    category: 'followed_brand_update',
+    locale: 'en',
+    channel: 'in_app',
+    titleTemplate: 'New updates from a Brand you follow',
+    bodyTemplate: '{{infoCount}} updates, {{eventCount}} events',
+    deeplinkTemplate: 'raver://brand/{{brandId}}',
+    variables: ['infoCount', 'eventCount', 'brandId'],
+  },
+  {
+    category: 'followed_brand_update',
+    locale: 'ja-JP',
+    channel: 'in_app',
+    titleTemplate: 'フォロー中の Brand に新着情報があります',
+    bodyTemplate: 'ニュース {{infoCount}} 件、イベント {{eventCount}} 件',
+    deeplinkTemplate: 'raver://brand/{{brandId}}',
+    variables: ['infoCount', 'eventCount', 'brandId'],
+  },
+  {
+    category: 'account_enforcement',
+    locale: 'zh-CN',
+    channel: 'in_app',
+    titleTemplate: '账号处罚状态已更新',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://account/enforcements/{{enforcementId}}',
+    variables: ['message', 'enforcementId', 'reasonCode', 'decisionCode'],
+  },
+  {
+    category: 'account_enforcement',
+    locale: 'ja-JP',
+    channel: 'in_app',
+    titleTemplate: 'アカウント制限のステータスが更新されました',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://account/enforcements/{{enforcementId}}',
+    variables: ['message', 'enforcementId', 'reasonCode', 'decisionCode'],
+  },
+  {
+    category: 'account_enforcement',
+    locale: 'en',
+    channel: 'in_app',
+    titleTemplate: 'Account enforcement status updated',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://account/enforcements/{{enforcementId}}',
+    variables: ['message', 'enforcementId', 'reasonCode', 'decisionCode'],
+  },
+  {
+    category: 'account_enforcement',
+    locale: 'zh-CN',
+    channel: 'apns',
+    titleTemplate: '账号处罚状态已更新',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://account/enforcements/{{enforcementId}}',
+    variables: ['message', 'enforcementId', 'reasonCode', 'decisionCode'],
+  },
+  {
+    category: 'account_enforcement',
+    locale: 'en',
+    channel: 'apns',
+    titleTemplate: 'Account enforcement status updated',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://account/enforcements/{{enforcementId}}',
+    variables: ['message', 'enforcementId', 'reasonCode', 'decisionCode'],
+  },
+  {
+    category: 'account_enforcement',
+    locale: 'ja-JP',
+    channel: 'apns',
+    titleTemplate: 'アカウント制限のステータスが更新されました',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://account/enforcements/{{enforcementId}}',
+    variables: ['message', 'enforcementId', 'reasonCode', 'decisionCode'],
+  },
+  {
+    category: 'account_enforcement',
+    locale: 'zh-CN',
+    channel: 'email',
+    titleTemplate: '账号处罚状态已更新',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://account/enforcements/{{enforcementId}}',
+    variables: ['message', 'enforcementId', 'reasonCode', 'decisionCode'],
+  },
+  {
+    category: 'account_enforcement',
+    locale: 'en',
+    channel: 'email',
+    titleTemplate: 'Account enforcement status updated',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://account/enforcements/{{enforcementId}}',
+    variables: ['message', 'enforcementId', 'reasonCode', 'decisionCode'],
+  },
+  {
+    category: 'account_enforcement',
+    locale: 'ja-JP',
+    channel: 'email',
+    titleTemplate: 'アカウント制限のステータスが更新されました',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://account/enforcements/{{enforcementId}}',
+    variables: ['message', 'enforcementId', 'reasonCode', 'decisionCode'],
+  },
+  {
+    category: 'account_enforcement',
+    locale: 'zh-CN',
+    channel: 'sms',
+    titleTemplate: 'Raver账号状态',
+    bodyTemplate: '{{message}}',
+    variables: ['message', 'enforcementId', 'reasonCode', 'decisionCode'],
+  },
+  {
+    category: 'account_enforcement',
+    locale: 'en',
+    channel: 'sms',
+    titleTemplate: 'Raver account status',
+    bodyTemplate: '{{message}}',
+    variables: ['message', 'enforcementId', 'reasonCode', 'decisionCode'],
+  },
+  {
+    category: 'account_enforcement',
+    locale: 'ja-JP',
+    channel: 'sms',
+    titleTemplate: 'Raverアカウント状態',
+    bodyTemplate: '{{message}}',
+    variables: ['message', 'enforcementId', 'reasonCode', 'decisionCode'],
+  },
+  {
+    category: 'content_review',
+    locale: 'zh-CN',
+    channel: 'in_app',
+    titleTemplate: '{{typeLabel}}提交{{statusLabel}}',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://profile/submissions/{{submissionId}}',
+    variables: ['typeLabel', 'statusLabel', 'message', 'submissionId', 'entityType', 'reasonCode'],
+  },
+  {
+    category: 'content_review',
+    locale: 'en',
+    channel: 'in_app',
+    titleTemplate: '{{typeLabel}} submission {{statusLabel}}',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://profile/submissions/{{submissionId}}',
+    variables: ['typeLabel', 'statusLabel', 'message', 'submissionId', 'entityType', 'reasonCode'],
+  },
+  {
+    category: 'content_review',
+    locale: 'ja-JP',
+    channel: 'in_app',
+    titleTemplate: '{{typeLabel}}の投稿{{statusLabel}}',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://profile/submissions/{{submissionId}}',
+    variables: ['typeLabel', 'statusLabel', 'message', 'submissionId', 'entityType', 'reasonCode'],
+  },
+  {
+    category: 'content_review',
+    locale: 'zh-CN',
+    channel: 'apns',
+    titleTemplate: '{{typeLabel}}提交{{statusLabel}}',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://profile/submissions/{{submissionId}}',
+    variables: ['typeLabel', 'statusLabel', 'message', 'submissionId', 'entityType', 'reasonCode'],
+  },
+  {
+    category: 'content_review',
+    locale: 'en',
+    channel: 'apns',
+    titleTemplate: '{{typeLabel}} submission {{statusLabel}}',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://profile/submissions/{{submissionId}}',
+    variables: ['typeLabel', 'statusLabel', 'message', 'submissionId', 'entityType', 'reasonCode'],
+  },
+  {
+    category: 'content_review',
+    locale: 'ja-JP',
+    channel: 'apns',
+    titleTemplate: '{{typeLabel}}の投稿{{statusLabel}}',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://profile/submissions/{{submissionId}}',
+    variables: ['typeLabel', 'statusLabel', 'message', 'submissionId', 'entityType', 'reasonCode'],
+  },
+  {
+    category: 'content_review',
+    locale: 'zh-CN',
+    channel: 'email',
+    titleTemplate: '{{typeLabel}}提交{{statusLabel}}',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://profile/submissions/{{submissionId}}',
+    variables: ['typeLabel', 'statusLabel', 'message', 'submissionId', 'entityType', 'reasonCode'],
+  },
+  {
+    category: 'content_review',
+    locale: 'en',
+    channel: 'email',
+    titleTemplate: '{{typeLabel}} submission {{statusLabel}}',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://profile/submissions/{{submissionId}}',
+    variables: ['typeLabel', 'statusLabel', 'message', 'submissionId', 'entityType', 'reasonCode'],
+  },
+  {
+    category: 'content_review',
+    locale: 'ja-JP',
+    channel: 'email',
+    titleTemplate: '{{typeLabel}}の投稿{{statusLabel}}',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://profile/submissions/{{submissionId}}',
+    variables: ['typeLabel', 'statusLabel', 'message', 'submissionId', 'entityType', 'reasonCode'],
+  },
+  {
+    category: 'content_review',
+    locale: 'zh-CN',
+    channel: 'sms',
+    titleTemplate: 'Raver内容审核',
+    bodyTemplate: '{{message}}',
+    variables: ['typeLabel', 'statusLabel', 'message', 'submissionId', 'entityType', 'reasonCode'],
+  },
+  {
+    category: 'content_review',
+    locale: 'en',
+    channel: 'sms',
+    titleTemplate: 'Raver content review',
+    bodyTemplate: '{{message}}',
+    variables: ['typeLabel', 'statusLabel', 'message', 'submissionId', 'entityType', 'reasonCode'],
+  },
+  {
+    category: 'content_review',
+    locale: 'ja-JP',
+    channel: 'sms',
+    titleTemplate: 'Raverコンテンツ審査',
+    bodyTemplate: '{{message}}',
+    variables: ['typeLabel', 'statusLabel', 'message', 'submissionId', 'entityType', 'reasonCode'],
+  },
+  {
+    category: 'report_decision',
+    locale: 'zh-CN',
+    channel: 'in_app',
+    titleTemplate: '举报处理结果',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://reports/{{reportId}}',
+    variables: ['message', 'reportId', 'decisionCode'],
+  },
+  {
+    category: 'report_decision',
+    locale: 'en',
+    channel: 'in_app',
+    titleTemplate: 'Report decision',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://reports/{{reportId}}',
+    variables: ['message', 'reportId', 'decisionCode'],
+  },
+  {
+    category: 'report_decision',
+    locale: 'ja-JP',
+    channel: 'in_app',
+    titleTemplate: '通報の対応結果',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://reports/{{reportId}}',
+    variables: ['message', 'reportId', 'decisionCode'],
+  },
+  {
+    category: 'report_decision',
+    locale: 'zh-CN',
+    channel: 'apns',
+    titleTemplate: '举报处理结果',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://reports/{{reportId}}',
+    variables: ['message', 'reportId', 'decisionCode'],
+  },
+  {
+    category: 'report_decision',
+    locale: 'en',
+    channel: 'apns',
+    titleTemplate: 'Report decision',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://reports/{{reportId}}',
+    variables: ['message', 'reportId', 'decisionCode'],
+  },
+  {
+    category: 'report_decision',
+    locale: 'ja-JP',
+    channel: 'apns',
+    titleTemplate: '通報の対応結果',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://reports/{{reportId}}',
+    variables: ['message', 'reportId', 'decisionCode'],
+  },
+  {
+    category: 'report_decision',
+    locale: 'zh-CN',
+    channel: 'email',
+    titleTemplate: '举报处理结果',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://reports/{{reportId}}',
+    variables: ['message', 'reportId', 'decisionCode'],
+  },
+  {
+    category: 'report_decision',
+    locale: 'en',
+    channel: 'email',
+    titleTemplate: 'Report decision',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://reports/{{reportId}}',
+    variables: ['message', 'reportId', 'decisionCode'],
+  },
+  {
+    category: 'report_decision',
+    locale: 'ja-JP',
+    channel: 'email',
+    titleTemplate: '通報の対応結果',
+    bodyTemplate: '{{message}}',
+    deeplinkTemplate: 'raver://reports/{{reportId}}',
+    variables: ['message', 'reportId', 'decisionCode'],
+  },
+  {
+    category: 'report_decision',
+    locale: 'zh-CN',
+    channel: 'sms',
+    titleTemplate: 'Raver举报处理',
+    bodyTemplate: '{{message}}',
+    variables: ['message', 'reportId', 'decisionCode'],
+  },
+  {
+    category: 'report_decision',
+    locale: 'en',
+    channel: 'sms',
+    titleTemplate: 'Raver report decision',
+    bodyTemplate: '{{message}}',
+    variables: ['message', 'reportId', 'decisionCode'],
+  },
+  {
+    category: 'report_decision',
+    locale: 'ja-JP',
+    channel: 'sms',
+    titleTemplate: 'Raver通報対応',
+    bodyTemplate: '{{message}}',
+    variables: ['message', 'reportId', 'decisionCode'],
+  },
+  {
     category: 'major_news',
     locale: 'zh-CN',
+    channel: 'apns',
+    titleTemplate: '{{headline}}',
+    bodyTemplate: '{{summary}}',
+    deeplinkTemplate: 'raver://news/{{newsId}}',
+    variables: ['headline', 'summary', 'newsId'],
+  },
+  {
+    category: 'major_news',
+    locale: 'en',
+    channel: 'apns',
+    titleTemplate: '{{headline}}',
+    bodyTemplate: '{{summary}}',
+    deeplinkTemplate: 'raver://news/{{newsId}}',
+    variables: ['headline', 'summary', 'newsId'],
+  },
+  {
+    category: 'major_news',
+    locale: 'ja-JP',
     channel: 'apns',
     titleTemplate: '{{headline}}',
     bodyTemplate: '{{summary}}',
@@ -387,6 +868,140 @@ const readNumberFromRecord = (record: Record<string, unknown>, key: string, fall
   const value = record[key];
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return value;
+};
+
+const normalizeNotificationLocale = (value: unknown): string => {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  const lower = normalized.toLowerCase();
+  if (lower === 'ja' || lower === 'ja-jp' || lower.startsWith('ja-')) return 'ja-JP';
+  if (lower === 'zh' || lower === 'zh-cn' || lower === 'zh-hans' || lower.startsWith('zh-')) return 'zh-CN';
+  if (lower === 'en' || lower === 'en-us' || lower === 'en-gb' || lower.startsWith('en-')) return 'en';
+  return 'ja-JP';
+};
+
+const notificationLocaleFallbacks = (locale: string): string[] => {
+  const normalized = normalizeNotificationLocale(locale);
+  const fallbacks = normalized === 'ja-JP'
+    ? ['ja-JP', 'en', 'zh-CN']
+    : normalized === 'en'
+      ? ['en', 'zh-CN']
+      : ['zh-CN', 'en'];
+  return fallbacks.filter((item, index) => fallbacks.indexOf(item) === index);
+};
+
+const renderNotificationTemplateText = (template: string, variables: Record<string, unknown>): string => {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_match, key: string) => {
+    const value = variables[key];
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value);
+    return '';
+  });
+};
+
+const resolveNotificationTemplate = async (
+  category: NotificationCategory,
+  channel: NotificationChannel,
+  locale: string
+): Promise<NotificationTemplateSeed | null> => {
+  await seedDefaultTemplatesIfNeeded();
+  const fallbackLocales = notificationLocaleFallbacks(locale);
+  const rows = await prisma.notificationTemplate.findMany({
+    where: {
+      category,
+      channel,
+      locale: { in: fallbackLocales },
+      isActive: true,
+    },
+    select: {
+      category: true,
+      locale: true,
+      channel: true,
+      titleTemplate: true,
+      bodyTemplate: true,
+      deeplinkTemplate: true,
+      variables: true,
+    },
+  });
+
+  for (const targetLocale of fallbackLocales) {
+    const row = rows.find((item) => item.locale === targetLocale);
+    if (row) {
+      return {
+        category,
+        locale: row.locale,
+        channel,
+        titleTemplate: row.titleTemplate,
+        bodyTemplate: row.bodyTemplate,
+        deeplinkTemplate: row.deeplinkTemplate,
+        variables: Array.isArray(row.variables)
+          ? row.variables.filter((item): item is string => typeof item === 'string')
+          : [],
+      };
+    }
+  }
+
+  const seed = DEFAULT_TEMPLATE_SEEDS.find((item) => (
+    item.category === category
+    && item.channel === channel
+    && fallbackLocales.includes(item.locale)
+  ));
+  return seed ?? null;
+};
+
+const renderNotificationPayloadForChannel = async (
+  category: NotificationCategory,
+  channel: NotificationChannel,
+  payload: NotificationPayload
+): Promise<NotificationPayload> => {
+  const metadata = isRecord(payload.metadata) ? payload.metadata : {};
+  const locale = normalizeNotificationLocale(payload.locale ?? metadata.locale);
+  const template = await resolveNotificationTemplate(category, channel, locale);
+  if (!template) {
+    return { ...payload, locale };
+  }
+
+  const variables = {
+    ...metadata,
+    title: payload.title,
+    body: payload.body,
+    deeplink: payload.deeplink ?? '',
+  };
+  const title = renderNotificationTemplateText(template.titleTemplate, variables).trim() || payload.title;
+  const body = renderNotificationTemplateText(template.bodyTemplate, variables).trim() || payload.body;
+  const deeplinkTemplate = template.deeplinkTemplate?.trim();
+  const deeplink = deeplinkTemplate
+    ? (renderNotificationTemplateText(deeplinkTemplate, variables).trim() || payload.deeplink || null)
+    : (payload.deeplink || null);
+
+  return {
+    ...payload,
+    title,
+    body,
+    deeplink,
+    locale,
+    metadata,
+  };
+};
+
+const readRenderedPayloadForChannel = (
+  payloadRecord: Record<string, unknown>,
+  channel: NotificationChannel
+): Partial<NotificationPayload> | null => {
+  const renderedByChannel = isRecord(payloadRecord.renderedByChannel)
+    ? payloadRecord.renderedByChannel
+    : (isRecord(payloadRecord.metadata) && isRecord(payloadRecord.metadata.renderedByChannel)
+        ? payloadRecord.metadata.renderedByChannel
+        : null);
+  if (!renderedByChannel) return null;
+  const channelPayload = renderedByChannel[channel];
+  if (!isRecord(channelPayload)) return null;
+  return {
+    title: readStringFromRecord(channelPayload, 'title') || undefined,
+    body: readStringFromRecord(channelPayload, 'body') || undefined,
+    deeplink: readStringFromRecord(channelPayload, 'deeplink'),
+    locale: readStringFromRecord(channelPayload, 'locale') || undefined,
+  };
 };
 
 const clampPercentage = (value: number): number => {
@@ -433,7 +1048,7 @@ const normalizeNotificationChannelList = (raw: unknown, fallback: NotificationCh
       raw
         .filter((item): item is string => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
+        .filter(isNotificationChannel)
     )
   );
   return normalized.length > 0 ? normalized : [...fallback];
@@ -528,7 +1143,7 @@ const normalizeGlobalConfig = (raw: unknown): NotificationAdminGlobalConfig => {
   }
 
   const channelSwitches = { ...DEFAULT_GLOBAL_CONFIG.channelSwitches };
-  for (const channel of ['in_app', 'apns'] as const) {
+  for (const channel of NOTIFICATION_CHANNELS) {
     if (typeof channelSwitchesRaw[channel] === 'boolean') {
       channelSwitches[channel] = Boolean(channelSwitchesRaw[channel]);
     }
@@ -679,7 +1294,7 @@ const normalizeEventCountdownPreference = (raw: unknown): EventCountdownPreferen
       channelsRaw
         .filter((item): item is string => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
+        .filter(isDeliverableNotificationChannel)
     )
   );
 
@@ -727,7 +1342,7 @@ const normalizeEventDailyDigestPreference = (raw: unknown): EventDailyDigestPref
       channelsRaw
         .filter((item): item is string => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
+        .filter(isDeliverableNotificationChannel)
     )
   );
 
@@ -776,7 +1391,7 @@ const normalizeRouteDJReminderPreference = (raw: unknown): RouteDJReminderPrefer
       channelsRaw
         .filter((item): item is string => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
+        .filter(isDeliverableNotificationChannel)
     )
   );
   const timezoneRaw = typeof payload.timezone === 'string' ? payload.timezone : undefined;
@@ -847,7 +1462,7 @@ const normalizeFollowedDJUpdatePreference = (raw: unknown): FollowedDJUpdatePref
       channelsRaw
         .filter((item): item is string => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
+        .filter(isDeliverableNotificationChannel)
     )
   );
   const timezoneRaw = typeof payload.timezone === 'string' ? payload.timezone : undefined;
@@ -905,7 +1520,7 @@ const normalizeFollowedBrandUpdatePreference = (raw: unknown): FollowedBrandUpda
       channelsRaw
         .filter((item): item is string => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
+        .filter(isDeliverableNotificationChannel)
     )
   );
   const timezoneRaw = typeof payload.timezone === 'string' ? payload.timezone : undefined;
@@ -955,12 +1570,21 @@ const isNotificationCategory = (value: string): value is NotificationCategory =>
   return NOTIFICATION_CATEGORIES.includes(value as NotificationCategory);
 };
 
-const seedDefaultTemplatesIfNeeded = async (): Promise<void> => {
-  const existingCount = await prisma.notificationTemplate.count();
-  if (existingCount > 0) {
-    return;
+const normalizeNotificationCategoryPreferences = (
+  input: Array<{ category?: unknown; enabled?: unknown }>
+): NotificationCategoryPreference[] => {
+  const preferenceMap = new Map<NotificationCategory, boolean>();
+  for (const item of input) {
+    const category = typeof item.category === 'string' ? item.category.trim() : '';
+    if (!isNotificationCategory(category) || typeof item.enabled !== 'boolean') {
+      continue;
+    }
+    preferenceMap.set(category, item.enabled);
   }
+  return Array.from(preferenceMap.entries()).map(([category, enabled]) => ({ category, enabled }));
+};
 
+const seedDefaultTemplatesIfNeeded = async (): Promise<void> => {
   await prisma.notificationTemplate.createMany({
     data: DEFAULT_TEMPLATE_SEEDS.map((item) => ({
       category: item.category,
@@ -1097,7 +1721,9 @@ export const notificationCenterService = {
       }));
     }
 
-    let configuredChannels = Array.from(new Set(input.channels)).filter((channel) => globalConfig.channelSwitches[channel]);
+    let configuredChannels = Array.from(new Set(input.channels))
+      .filter(isDeliverableNotificationChannel)
+      .filter((channel) => globalConfig.channelSwitches[channel]);
     if (configuredChannels.length === 0) {
       return input.channels.map((channel) => ({
         channel,
@@ -1161,16 +1787,62 @@ export const notificationCenterService = {
       }
     }
 
+    const disabledSubscriptions = await prisma.notificationSubscription.findMany({
+      where: {
+        userId: {
+          in: Array.from(new Set(targets.map((target) => target.userId))),
+        },
+        category: input.category,
+        enabled: false,
+      },
+      select: {
+        userId: true,
+      },
+    });
+    if (disabledSubscriptions.length > 0) {
+      const disabledUserIds = new Set(disabledSubscriptions.map((item) => item.userId));
+      targets = targets.filter((target) => !disabledUserIds.has(target.userId));
+      if (targets.length === 0) {
+        return configuredChannels.map((channel) => ({
+          channel,
+          success: false,
+          detail: 'user-disabled-category',
+        }));
+      }
+    }
+
+    const renderedPayloadByChannel = new Map<NotificationChannel, NotificationPayload>();
+    for (const channel of configuredChannels) {
+      renderedPayloadByChannel.set(channel, await renderNotificationPayloadForChannel(input.category, channel, input.payload));
+    }
+    const primaryPayload =
+      renderedPayloadByChannel.get(configuredChannels[0])
+      ?? { ...input.payload, locale: normalizeNotificationLocale(input.payload.locale ?? input.payload.metadata?.locale) };
+
     const eventRow = await prisma.notificationEvent.create({
       data: {
         category: input.category,
         dedupeKey,
         payload: toInputJsonValue({
-          title: input.payload.title,
-          body: input.payload.body,
-          deeplink: input.payload.deeplink || null,
-          badgeDelta: input.payload.badgeDelta ?? 0,
-          metadata: input.payload.metadata ?? {},
+          title: primaryPayload.title,
+          body: primaryPayload.body,
+          deeplink: primaryPayload.deeplink || null,
+          badgeDelta: primaryPayload.badgeDelta ?? 0,
+          locale: primaryPayload.locale,
+          metadata: {
+            ...(primaryPayload.metadata ?? {}),
+            renderedByChannel: Object.fromEntries(
+              Array.from(renderedPayloadByChannel.entries()).map(([channel, payload]) => [
+                channel,
+                {
+                  title: payload.title,
+                  body: payload.body,
+                  deeplink: payload.deeplink || null,
+                  locale: payload.locale,
+                },
+              ])
+            ),
+          },
         }),
         status: 'queued',
       },
@@ -1178,14 +1850,18 @@ export const notificationCenterService = {
     });
 
     if (configuredChannels.includes('in_app')) {
+      const inboxPayload = renderedPayloadByChannel.get('in_app') ?? primaryPayload;
       await prisma.notificationInboxItem.createMany({
         data: targets.map((target) => ({
           userId: target.userId,
           type: input.category,
-          title: input.payload.title,
-          body: input.payload.body,
-          deeplink: input.payload.deeplink || null,
-          metadata: toInputJsonValue(input.payload.metadata ?? {}),
+          title: inboxPayload.title,
+          body: inboxPayload.body,
+          deeplink: inboxPayload.deeplink || null,
+          metadata: toInputJsonValue({
+            ...(inboxPayload.metadata ?? {}),
+            locale: inboxPayload.locale,
+          }),
           sourceEventId: eventRow.id,
         })),
       });
@@ -1238,6 +1914,7 @@ export const notificationCenterService = {
       ...input,
       channels: configuredChannels,
       targets,
+      payload: renderedPayloadByChannel.get('apns') ?? primaryPayload,
     });
     const results = await deliverWithHandlers(runtimeEvent);
     const resultMap = new Map(results.map((item) => [item.channel, item]));
@@ -1342,6 +2019,7 @@ export const notificationCenterService = {
         const payloadBody = readStringFromRecord(payloadRecord, 'body') || '';
         const payloadDeeplink = readStringFromRecord(payloadRecord, 'deeplink');
         const payloadBadgeDelta = readNumberFromRecord(payloadRecord, 'badgeDelta', 0);
+        const payloadLocale = readStringFromRecord(payloadRecord, 'locale');
         const payloadMetadataRaw = payloadRecord.metadata;
         const payloadMetadata = isRecord(payloadMetadataRaw) ? payloadMetadataRaw : {};
 
@@ -1349,7 +2027,7 @@ export const notificationCenterService = {
           new Set(
             queuedDeliveries
               .map((item) => item.channel.trim().toLowerCase())
-              .filter((item): item is NotificationChannel => item === 'in_app' || item === 'apns')
+              .filter(isDeliverableNotificationChannel)
           )
         );
         if (channels.length === 0) {
@@ -1378,16 +2056,19 @@ export const notificationCenterService = {
         }
 
         const targets = Array.from(new Set(queuedDeliveries.map((item) => item.userId))).map((userId) => ({ userId }));
+        const primaryChannel = channels[0];
+        const renderedPayload = primaryChannel ? readRenderedPayloadForChannel(payloadRecord, primaryChannel) : null;
         const runtimeEvent = createRuntimeEvent(eventRow.id, {
           category: eventRow.category as NotificationPublishInput['category'],
           targets,
           channels,
           dedupeKey: eventRow.dedupeKey || undefined,
           payload: {
-            title: payloadTitle,
-            body: payloadBody,
-            deeplink: payloadDeeplink,
+            title: renderedPayload?.title || payloadTitle,
+            body: renderedPayload?.body || payloadBody,
+            deeplink: renderedPayload?.deeplink ?? payloadDeeplink,
             badgeDelta: payloadBadgeDelta,
+            locale: renderedPayload?.locale || payloadLocale || undefined,
             metadata: payloadMetadata,
           },
         });
@@ -1535,7 +2216,7 @@ export const notificationCenterService = {
     const limit = normalizePositiveLimit(Number(input?.limit ?? 50), 50, 200);
     const where: Prisma.NotificationDeliveryWhereInput = {};
     const channel = input?.channel?.trim();
-    if (channel === 'in_app' || channel === 'apns') {
+    if (channel && isNotificationChannel(channel)) {
       where.channel = channel;
     }
     const status = input?.status?.trim();
@@ -1831,7 +2512,7 @@ export const notificationCenterService = {
       where.locale = locale;
     }
     const channel = input?.channel?.trim();
-    if (channel === 'in_app' || channel === 'apns') {
+    if (channel && isNotificationChannel(channel)) {
       where.channel = channel;
     }
     if (typeof input?.isActive === 'boolean') {
@@ -1881,7 +2562,7 @@ export const notificationCenterService = {
     if (!isNotificationCategory(category)) {
       throw new Error(`unsupported notification category: ${category}`);
     }
-    if (channel !== 'in_app' && channel !== 'apns') {
+    if (!isNotificationChannel(channel)) {
       throw new Error(`unsupported notification channel: ${channel}`);
     }
 
@@ -1935,6 +2616,74 @@ export const notificationCenterService = {
         updatedAt: true,
       },
     });
+  },
+
+  async fetchCategoryPreferences(userId: string): Promise<NotificationCategoryPreference[]> {
+    const normalizedUserId = userId.trim();
+    if (!normalizedUserId) {
+      return NOTIFICATION_CATEGORIES.map((category) => ({ category, enabled: true }));
+    }
+
+    const rows = await prisma.notificationSubscription.findMany({
+      where: {
+        userId: normalizedUserId,
+        category: {
+          in: [...NOTIFICATION_CATEGORIES],
+        },
+      },
+      select: {
+        category: true,
+        enabled: true,
+      },
+    });
+    const enabledMap = new Map(
+      rows
+        .filter((item): item is { category: NotificationCategory; enabled: boolean } =>
+          isNotificationCategory(item.category)
+        )
+        .map((item) => [item.category, item.enabled])
+    );
+
+    return NOTIFICATION_CATEGORIES.map((category) => ({
+      category,
+      enabled: enabledMap.get(category) ?? true,
+    }));
+  },
+
+  async updateCategoryPreferences(
+    userId: string,
+    input: Array<{ category?: unknown; enabled?: unknown }>
+  ): Promise<NotificationCategoryPreference[]> {
+    const normalizedUserId = userId.trim();
+    if (!normalizedUserId) {
+      throw new Error('userId is required');
+    }
+
+    const preferences = normalizeNotificationCategoryPreferences(input);
+    for (const preference of preferences) {
+      await prisma.notificationSubscription.upsert({
+        where: {
+          userId_category: {
+            userId: normalizedUserId,
+            category: preference.category,
+          },
+        },
+        create: {
+          userId: normalizedUserId,
+          category: preference.category,
+          enabled: preference.enabled,
+          frequencyConfig: toInputJsonValue({ enabled: preference.enabled }),
+        },
+        update: {
+          enabled: preference.enabled,
+        },
+        select: {
+          id: true,
+        },
+      });
+    }
+
+    return this.fetchCategoryPreferences(normalizedUserId);
   },
 
   async fetchEventCountdownPreference(userId: string): Promise<EventCountdownPreference> {

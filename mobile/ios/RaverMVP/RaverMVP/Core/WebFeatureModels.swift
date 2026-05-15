@@ -169,6 +169,7 @@ struct LearnLabelListPage: Codable {
 struct WebBiText: Codable, Hashable {
     var en: String
     var zh: String
+    var ja: String? = nil
     var enFull: String? = nil
 
     func text(for language: AppLanguage) -> String {
@@ -180,6 +181,14 @@ struct WebBiText: Codable, Hashable {
             if !enFullText.isEmpty { return enFullText }
             return en
         case .en, .system:
+            let enFullText = (enFull ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !enFullText.isEmpty { return enFullText }
+            let enText = en.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !enText.isEmpty { return enText }
+            return zh
+        case .ja:
+            let jaText = (ja ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !jaText.isEmpty { return jaText }
             let enFullText = (enFull ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if !enFullText.isEmpty { return enFullText }
             let enText = en.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -279,6 +288,23 @@ struct CreateLearnFestivalInput: Codable {
     var avatarUrl: String?
     var backgroundUrl: String?
     var links: [LearnFestivalLinkPayload]?
+}
+
+struct CreateLearnLabelInput: Codable {
+    var name: String
+    var slug: String? = nil
+    var profileUrl: String? = nil
+    var profileSlug: String? = nil
+    var logoUrl: String? = nil
+    var avatarUrl: String? = nil
+    var backgroundUrl: String? = nil
+    var nation: String? = nil
+    var country: String? = nil
+    var genresPreview: String? = nil
+    var introductionPreview: String? = nil
+    var introduction: String? = nil
+    var description: String? = nil
+    var genres: [String]? = nil
 }
 
 struct WebUserLite: Codable, Identifiable, Hashable {
@@ -483,6 +509,7 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var longitude: Double?
     var startDate: Date
     var endDate: Date
+    var timeZone: String? = nil
     var startTime: String? = nil
     var endTime: String? = nil
     var dayRolloverHour: Int? = nil
@@ -540,6 +567,7 @@ struct CreateEventInput: Codable {
     var officialWebsite: String? = nil
     var startDate: Date
     var endDate: Date
+    var timeZone: String? = nil
     var startTime: String? = nil
     var endTime: String? = nil
     var dayRolloverHour: Int? = nil
@@ -549,6 +577,160 @@ struct CreateEventInput: Codable {
     var ticketTiers: [EventTicketTierInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
     var status: String?
+}
+
+struct ContentSubmissionSummary: Codable, Identifiable, Hashable {
+    var id: String
+    var entityType: String
+    var status: String
+    var title: String
+    var payload: [String: ContentSubmissionJSONValue]? = nil
+    var reviewReason: String? = nil
+    var createdEntityId: String? = nil
+    var createdAt: Date? = nil
+    var updatedAt: Date? = nil
+}
+
+enum ContentSubmissionJSONValue: Codable, Hashable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case object([String: ContentSubmissionJSONValue])
+    case array([ContentSubmissionJSONValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([String: ContentSubmissionJSONValue].self) {
+            self = .object(value)
+        } else {
+            self = .array(try container.decode([ContentSubmissionJSONValue].self))
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value):
+            try container.encode(value)
+        case .number(let value):
+            try container.encode(value)
+        case .bool(let value):
+            try container.encode(value)
+        case .object(let value):
+            try container.encode(value)
+        case .array(let value):
+            try container.encode(value)
+        case .null:
+            try container.encodeNil()
+        }
+    }
+}
+
+struct ContentSubmissionVersionSummary: Codable, Identifiable, Hashable {
+    var id: String
+    var submissionId: String? = nil
+    var version: Int
+    var title: String
+    var payload: [String: ContentSubmissionJSONValue]
+    var submittedAt: Date? = nil
+    var submittedBy: String? = nil
+    var changeNote: String? = nil
+}
+
+struct ContentSubmissionDetail: Codable, Identifiable, Hashable {
+    var id: String
+    var entityType: String
+    var status: String
+    var title: String
+    var payload: [String: ContentSubmissionJSONValue]
+    var reviewReason: String? = nil
+    var createdEntityId: String? = nil
+    var createdAt: Date? = nil
+    var updatedAt: Date? = nil
+    var versions: [ContentSubmissionVersionSummary] = []
+}
+
+struct ContentSubmissionDetailResponse: Codable, Hashable {
+    var submission: ContentSubmissionDetail
+}
+
+struct ContentSubmissionResubmitInput: Encodable {
+    var payload: [String: ContentSubmissionJSONValue]
+    var changeNote: String?
+}
+
+struct ContentSubmissionCreateInput: Encodable {
+    var entityType: String
+    var payload: [String: ContentSubmissionJSONValue]
+}
+
+struct ContentSubmissionCreateResponse: Codable, Hashable {
+    var message: String
+    var submission: ContentSubmissionDetail
+}
+
+struct ContentSubmissionResubmitResponse: Codable, Hashable {
+    var message: String
+    var submission: ContentSubmissionDetail
+}
+
+struct ContentSubmissionAcceptedPayload: Codable, Hashable {
+    var status: String? = nil
+    var message: String
+    var submission: ContentSubmissionSummary
+}
+
+enum CreateEventResult: Hashable {
+    case created(WebEvent)
+    case submittedForReview(ContentSubmissionAcceptedPayload)
+}
+
+enum CreateEventResponsePayload: Decodable {
+    case event(WebEvent)
+    case submission(ContentSubmissionAcceptedPayload)
+
+    init(from decoder: Decoder) throws {
+        if let event = try? WebEvent(from: decoder) {
+            self = .event(event)
+            return
+        }
+        self = .submission(try ContentSubmissionAcceptedPayload(from: decoder))
+    }
+}
+
+enum CreateContentResult<Created: Decodable & Hashable>: Decodable, Hashable {
+    case created(Created)
+    case submittedForReview(ContentSubmissionAcceptedPayload)
+
+    init(from decoder: Decoder) throws {
+        if let created = try? Created(from: decoder) {
+            self = .created(created)
+            return
+        }
+        self = .submittedForReview(try ContentSubmissionAcceptedPayload(from: decoder))
+    }
+}
+
+enum CreatePostResult: Decodable, Hashable {
+    case created(Post)
+    case submittedForReview(ContentSubmissionAcceptedPayload)
+
+    init(from decoder: Decoder) throws {
+        if let post = try? Post(from: decoder) {
+            self = .created(post)
+            return
+        }
+        self = .submittedForReview(try ContentSubmissionAcceptedPayload(from: decoder))
+    }
 }
 
 struct UpdateEventInput: Encodable {
@@ -570,6 +752,7 @@ struct UpdateEventInput: Encodable {
     var officialWebsite: String? = nil
     var startDate: Date?
     var endDate: Date?
+    var timeZone: String? = nil
     var startTime: String? = nil
     var endTime: String? = nil
     var dayRolloverHour: Int? = nil
@@ -602,6 +785,7 @@ struct UpdateEventInput: Encodable {
         case officialWebsite
         case startDate
         case endDate
+        case timeZone
         case startTime
         case endTime
         case dayRolloverHour
@@ -645,6 +829,7 @@ struct UpdateEventInput: Encodable {
         try container.encodeIfPresent(officialWebsite, forKey: .officialWebsite)
         try container.encodeIfPresent(startDate, forKey: .startDate)
         try container.encodeIfPresent(endDate, forKey: .endDate)
+        try container.encodeIfPresent(timeZone, forKey: .timeZone)
         try container.encodeIfPresent(startTime, forKey: .startTime)
         try container.encodeIfPresent(endTime, forKey: .endTime)
         try container.encodeIfPresent(dayRolloverHour, forKey: .dayRolloverHour)
@@ -794,6 +979,7 @@ struct CreateDJSetInput: Codable {
     var venue: String?
     var eventName: String?
     var recordedAt: Date?
+    var rightsConfirmed: Bool = false
 }
 
 struct UpdateDJSetInput: Codable {
@@ -805,6 +991,7 @@ struct UpdateDJSetInput: Codable {
     var venue: String?
     var eventName: String?
     var recordedAt: Date?
+    var rightsConfirmed: Bool? = nil
 }
 
 struct ReplaceTracksInput: Codable {
@@ -1178,6 +1365,10 @@ struct MyPublishes: Codable, Hashable {
     var ratingUnits: [MyPublishRatingUnit]
 }
 
+struct MyContentSubmissionsResponse: Codable, Hashable {
+    var items: [ContentSubmissionSummary]
+}
+
 struct MyPublishSet: Codable, Identifiable, Hashable {
     let id: String
     var title: String
@@ -1317,6 +1508,19 @@ struct ImportSpotifyDJResponse: Codable, Hashable {
     var avatarUploadedToOss: Bool
     var replacedExistingAvatar: Bool
     var dj: WebDJ
+}
+
+enum ImportDJResult<Imported: Decodable & Hashable>: Decodable, Hashable {
+    case imported(Imported)
+    case submittedForReview(ContentSubmissionAcceptedPayload)
+
+    init(from decoder: Decoder) throws {
+        if let imported = try? Imported(from: decoder) {
+            self = .imported(imported)
+            return
+        }
+        self = .submittedForReview(try ContentSubmissionAcceptedPayload(from: decoder))
+    }
 }
 
 struct ImportDiscogsDJInput: Codable, Hashable {

@@ -60,7 +60,7 @@ struct GlobalSearchResultCard: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
-        .accessibilityHint(L("打开搜索结果详情", "Opens the search result detail"))
+        .accessibilityHint(LT("打开搜索结果详情", "Opens the search result detail", "検索結果詳細を開きます"))
         .accessibilityIdentifier("globalSearch.result.\(item.type.rawValue).\(item.entityID)")
     }
 
@@ -129,7 +129,7 @@ struct GlobalSearchSummaryStrip: View {
                 Image(systemName: "magnifyingglass")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(RaverTheme.accent)
-                Text(L("找到与 “\(query)” 相关的内容", "Results related to \"\(query)\""))
+                Text(LT("找到与 “\(query)” 相关的内容", "Results related to \"\(query)\"", "「\(query)」に関連する内容"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
                     .lineLimit(1)
@@ -146,7 +146,7 @@ struct GlobalSearchSummaryStrip: View {
                 HStack(spacing: 7) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.caption2.weight(.bold))
-                    Text(L("部分结果暂时不可用", "Some results are temporarily unavailable"))
+                    Text(LT("部分结果暂时不可用", "Some results are temporarily unavailable", "一部の結果は一時的に利用できません"))
                         .font(.caption.weight(.semibold))
                 }
                 .foregroundStyle(Color.orange)
@@ -159,7 +159,7 @@ struct GlobalSearchSummaryStrip: View {
                 .strokeBorder(RaverTheme.cardBorder, lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(L("找到与 \(query) 相关的 \(totalCount) 条内容", "\(totalCount) results related to \(query)"))
+        .accessibilityLabel(LT("找到与 \(query) 相关的 \(totalCount) 条内容", "\(totalCount) results related to \(query)", "\(query) に関連する結果 \(totalCount)件"))
     }
 }
 
@@ -174,11 +174,11 @@ struct GlobalSearchEmptyState: View {
                 .frame(width: 70, height: 70)
                 .background(RaverTheme.accent.opacity(0.12), in: Circle())
 
-            Text(L("没有找到相关内容", "No Results Found"))
+            Text(LT("没有找到相关内容", "No Results Found", "関連内容が見つかりません"))
                 .font(.title3.weight(.bold))
                 .foregroundStyle(RaverTheme.primaryText)
 
-            Text(L("换个关键词试试，也可以从这些内容开始探索。", "Try another keyword, or start exploring from these content areas."))
+            Text(LT("换个关键词试试，也可以从这些内容开始探索。", "Try another keyword, or start exploring from these content areas.", "別のキーワードを試すか、これらの内容から探索を始めてください。"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .multilineTextAlignment(.center)
@@ -206,7 +206,7 @@ struct GlobalSearchEmptyState: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 44)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(L("没有找到与 \(query) 相关的内容", "No results found for \(query)"))
+        .accessibilityLabel(LT("没有找到与 \(query) 相关的内容", "No results found for \(query)", "\(query) に関連する内容は見つかりません"))
     }
 }
 
@@ -279,7 +279,7 @@ struct GlobalSearchErrorState: View {
             Button {
                 onRetry()
             } label: {
-                Label(L("重试", "Retry"), systemImage: "arrow.clockwise")
+                Label(LT("重试", "Retry", "再試行"), systemImage: "arrow.clockwise")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 16)
@@ -288,7 +288,7 @@ struct GlobalSearchErrorState: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("globalSearch.error.retry")
-            .accessibilityLabel(L("重试搜索", "Retry search"))
+            .accessibilityLabel(LT("重试搜索", "Retry search", "検索を再試行"))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 24)
@@ -311,7 +311,7 @@ struct GlobalSearchLoadingState: View {
         }
         .padding(16)
         .redacted(reason: .placeholder)
-        .accessibilityLabel(L("搜索结果加载中", "Search results loading"))
+        .accessibilityLabel(LT("搜索结果加载中", "Search results loading", "検索結果を読み込み中"))
     }
 }
 
@@ -324,11 +324,11 @@ struct GlobalSearchLoginRequiredView: View {
                 .frame(width: 58, height: 58)
                 .background(RaverTheme.accent.opacity(0.12), in: Circle())
 
-            Text(L("请先登录", "Login Required"))
+            Text(LT("请先登录", "Login Required", "ログインが必要です"))
                 .font(.headline.weight(.bold))
                 .foregroundStyle(RaverTheme.primaryText)
 
-            Text(L("登录后才能使用全局聚合搜索。", "Log in to use global search."))
+            Text(LT("登录后才能使用全局聚合搜索。", "Log in to use global search.", "グローバル検索を使うにはログインしてください。"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .multilineTextAlignment(.center)
@@ -336,7 +336,7 @@ struct GlobalSearchLoginRequiredView: View {
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: L("搜索", "Search"))
+        .raverSystemNavigation(title: LT("搜索", "Search", "検索"))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("globalSearch.loginRequired")
     }

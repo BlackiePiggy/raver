@@ -42,13 +42,17 @@ const CATEGORY_OPTIONS = [
   { value: 'route_dj_reminder', label: '路线 DJ 提醒' },
   { value: 'followed_dj_update', label: '关注 DJ 动态' },
   { value: 'followed_brand_update', label: '关注品牌动态' },
+  { value: 'account_enforcement', label: '账号处罚/申诉' },
+  { value: 'content_review', label: '内容审核结果' },
+  { value: 'report_decision', label: '举报处理结果' },
   { value: 'major_news', label: '重大资讯' },
 ] as const;
 
 const CHANNEL_OPTIONS = [
   { value: 'in_app', label: '站内' },
   { value: 'apns', label: 'APNs' },
-  { value: 'openim', label: 'OpenIM' },
+  { value: 'email', label: 'Email' },
+  { value: 'sms', label: 'SMS' },
 ] as const;
 
 const CATEGORY_VALUES = new Set(CATEGORY_OPTIONS.map((item) => item.value));
@@ -154,7 +158,7 @@ export default function NotificationCenterAdminPage() {
         notificationCenterAdminApi.getStatus(windowHoursNumeric),
         notificationCenterAdminApi.getDeliveries({
           limit: deliveriesLimit,
-          channel: filterChannel ? (filterChannel as 'in_app' | 'apns' | 'openim') : undefined,
+          channel: filterChannel ? (filterChannel as (typeof CHANNEL_OPTIONS)[number]['value']) : undefined,
           status: trimValue(filterStatus) || undefined,
           userId: trimValue(filterUserId) || undefined,
           eventId: trimValue(filterEventId) || undefined,
@@ -379,7 +383,8 @@ export default function NotificationCenterAdminPage() {
               <option value="">全部</option>
               <option value="apns">apns</option>
               <option value="in_app">in_app</option>
-              <option value="openim">openim</option>
+              <option value="email">email</option>
+              <option value="sms">sms</option>
             </select>
           </label>
 

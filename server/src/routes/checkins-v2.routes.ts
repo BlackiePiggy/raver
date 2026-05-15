@@ -24,6 +24,8 @@ const prisma = new PrismaClient();
 
 interface BFFAuthRequest extends Request {
   user?: JWTPayload;
+  authUserId?: string;
+  authAccountStatus?: 'active' | 'inactive' | 'missing';
 }
 
 type BFFPagination = {
@@ -33,7 +35,7 @@ type BFFPagination = {
   totalPages: number;
 };
 
-const optionalAuth = (req: Request, _res: Response, next: NextFunction): void => {
+const optionalAuth = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     next();
@@ -43,7 +45,20 @@ const optionalAuth = (req: Request, _res: Response, next: NextFunction): void =>
   const token = authHeader.substring(7);
   try {
     const decoded = verifyToken(token);
-    (req as BFFAuthRequest).user = decoded;
+    const authReq = req as BFFAuthRequest;
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, email: true, role: true, isActive: true },
+    });
+    authReq.authUserId = decoded.userId;
+    authReq.authAccountStatus = !user ? 'missing' : user.isActive ? 'active' : 'inactive';
+    if (user?.isActive) {
+      authReq.user = {
+          ...decoded,
+          email: user.email,
+          role: user.role,
+        };
+    }
   } catch (_error) {
     // Ignore invalid token for public endpoints.
   }
@@ -55,6 +70,14 @@ const requireAuth = (req: BFFAuthRequest, res: Response): string | null => {
   const userId = req.user?.userId;
   if (!userId) {
     res.status(401).json({ error: 'Unauthorized' });
+    return null;
+  }
+  if (req.authAccountStatus && req.authAccountStatus !== 'active') {
+    res.status(401).json({
+      error: 'Account is no longer active',
+      code: 'ACCOUNT_INACTIVE',
+      accountStatus: req.authAccountStatus === 'inactive' ? 'deleted' : 'missing',
+    });
     return null;
   }
   return userId;

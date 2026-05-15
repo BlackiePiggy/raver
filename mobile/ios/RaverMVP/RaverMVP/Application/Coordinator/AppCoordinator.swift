@@ -33,13 +33,13 @@ struct AppCoordinatorView: View {
         .onOpenURL { url in
             handleIncomingURL(url)
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { appState.errorMessage != nil },
             set: { newValue in
                 if !newValue { appState.errorMessage = nil }
             }
         )) {
-            Button(LL("知道了"), role: .cancel) {}
+            Button(LT("知道了", "Got it", "OK"), role: .cancel) {}
         } message: {
             Text(appState.errorMessage ?? "")
         }

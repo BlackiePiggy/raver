@@ -50,6 +50,14 @@ import {
   resetShareLinkInvite,
   ShareLinkError,
 } from '../services/share-link.service';
+import {
+  accountEnforcementService,
+  type EnforcementScope,
+} from '../services/account-enforcement.service';
+import { accountDeletionService } from '../services/account-deletion.service';
+import { analyzeI18nCompleteness } from '../utils/i18n';
+import { contentCompliance } from '../utils/content-compliance';
+import { regionalCompliance } from '../config/regional-compliance';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -281,9 +289,11 @@ const deletePostMediaFromOss = async (imageUrls: string[]): Promise<{ deletedKey
 
 interface BFFAuthRequest extends Request {
   user?: JWTPayload;
+  authUserId?: string;
+  authAccountStatus?: 'active' | 'inactive' | 'missing';
 }
 
-const optionalAuth = (req: Request, _res: Response, next: NextFunction): void => {
+const optionalAuth = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     next();
@@ -293,7 +303,20 @@ const optionalAuth = (req: Request, _res: Response, next: NextFunction): void =>
   const token = authHeader.substring(7);
   try {
     const decoded = verifyToken(token);
-    (req as BFFAuthRequest).user = decoded;
+    const authReq = req as BFFAuthRequest;
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, email: true, role: true, isActive: true },
+    });
+    authReq.authUserId = decoded.userId;
+    authReq.authAccountStatus = !user ? 'missing' : user.isActive ? 'active' : 'inactive';
+    if (user?.isActive) {
+      authReq.user = {
+          ...decoded,
+          email: user.email,
+          role: user.role,
+        };
+    }
   } catch (_error) {
     // Ignore invalid token for public endpoints.
   }
@@ -301,13 +324,287 @@ const optionalAuth = (req: Request, _res: Response, next: NextFunction): void =>
   next();
 };
 
-const requireAuth = (req: BFFAuthRequest, res: Response): string | null => {
-  const userId = req.user?.userId;
+const requireAuth = (
+  req: BFFAuthRequest,
+  res: Response,
+  options: { allowInactiveAccount?: boolean } = {}
+): string | null => {
+  const userId = req.user?.userId ?? (options.allowInactiveAccount ? req.authUserId : undefined);
   if (!userId) {
     res.status(401).json({ error: 'Unauthorized' });
     return null;
   }
+  if (!options.allowInactiveAccount && req.authAccountStatus && req.authAccountStatus !== 'active') {
+    res.status(401).json({
+      error: 'Account is no longer active',
+      code: 'ACCOUNT_INACTIVE',
+      accountStatus: req.authAccountStatus === 'inactive' ? 'deleted' : 'missing',
+    });
+    return null;
+  }
   return userId;
+};
+
+const denyForEnforcement = async (
+  userId: string,
+  scope: EnforcementScope,
+  res: Response
+): Promise<boolean> => {
+  const result = await accountEnforcementService.assertAllowed(userId, scope);
+  if (result.allowed) return false;
+
+  res.status(403).json({
+    error: 'account_enforcement_restricted',
+    scope,
+    accountStatus: result.status,
+    blockingEnforcements: result.blockingEnforcements.map((item) => ({
+      id: item.id,
+      type: item.type,
+      scopes: item.scopes,
+      reasonCode: item.reasonCode,
+      userMessageI18n: item.userMessageI18n,
+      startsAt: item.startsAt.toISOString(),
+      endsAt: item.endsAt ? item.endsAt.toISOString() : null,
+    })),
+  });
+  return true;
+};
+
+type MinorRestrictionKey = keyof ReturnType<typeof regionalCompliance.policyFor>['minorRestrictions'];
+
+const denyForMinorRegionalRestriction = async (
+  userId: string,
+  restriction: MinorRestrictionKey,
+  res: Response
+): Promise<boolean> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { regionCode: true, ageBand: true },
+  });
+  const policy = regionalCompliance.policyFor(user?.regionCode);
+  if (regionalCompliance.isRestrictedMinor(user, restriction)) {
+    res.status(403).json({
+      error: 'This action is restricted by regional minor safety policy',
+      code: 'REGIONAL_MINOR_SAFETY_RESTRICTED',
+      region: policy.region,
+    });
+    return true;
+  }
+  return false;
+};
+
+const normalizeComplianceText = (value: unknown, maxLength: number): string | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  if (!normalized) return null;
+  return normalized.slice(0, maxLength);
+};
+
+const normalizeReportAttachments = (value: unknown): Prisma.InputJsonValue | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const attachments = value
+    .slice(0, 8)
+    .map((item) => {
+      if (typeof item === 'string') {
+        const url = item.trim();
+        return url ? { type: 'link', url } : null;
+      }
+      if (!item || typeof item !== 'object') return null;
+      const record = item as Record<string, unknown>;
+      const url = typeof record.url === 'string' ? record.url.trim() : '';
+      if (!url) return null;
+      const type = typeof record.type === 'string' ? record.type.trim().slice(0, 32) : 'link';
+      const label = typeof record.label === 'string' ? record.label.trim().slice(0, 120) : null;
+      return { type, url, label };
+    })
+    .filter((item): item is { type: string; url: string; label: string | null } => Boolean(item));
+  return attachments.length > 0 ? (attachments as Prisma.InputJsonValue) : undefined;
+};
+
+const resolveReportTargetUserId = async (
+  targetType: string,
+  targetId: string
+): Promise<string | null> => {
+  const [normalizedType, ownerHint] = targetType.includes(':')
+    ? targetType.split(':', 2)
+    : [targetType, null];
+  const ownerIdFromHint = ownerHint?.startsWith('owner=') ? ownerHint.slice('owner='.length) : null;
+  if (ownerIdFromHint) return ownerIdFromHint;
+
+  if (['image', 'video', 'audio', 'media_image', 'media_video', 'media_audio'].includes(normalizedType)) {
+    return null;
+  }
+
+  switch (normalizedType) {
+    case 'user': {
+      const user = await prisma.user.findUnique({
+        where: { id: targetId },
+        select: { id: true },
+      });
+      return user?.id ?? null;
+    }
+    case 'post': {
+      const post = await prisma.post.findUnique({
+        where: { id: targetId },
+        select: { userId: true },
+      });
+      return post?.userId ?? null;
+    }
+    case 'post_comment': {
+      const comment = await prisma.postComment.findUnique({
+        where: { id: targetId },
+        select: { userId: true },
+      });
+      return comment?.userId ?? null;
+    }
+    case 'event_live_comment': {
+      const comment = await prisma.eventLiveComment.findUnique({
+        where: { id: targetId },
+        select: { userId: true },
+      });
+      return comment?.userId ?? null;
+    }
+    case 'dj_set': {
+      const set = await prisma.dJSet.findUnique({
+        where: { id: targetId },
+        select: { uploadedById: true },
+      });
+      return set?.uploadedById ?? null;
+    }
+    case 'event': {
+      const event = await prisma.event.findUnique({
+        where: { id: targetId },
+        select: { organizerId: true },
+      });
+      return event?.organizerId ?? null;
+    }
+    case 'label':
+    case 'festival':
+    case 'circle_id':
+      return null;
+    case 'rating_event': {
+      const ratingEvent = await prisma.ratingEvent.findUnique({
+        where: { id: targetId },
+        select: { createdById: true },
+      });
+      return ratingEvent?.createdById ?? null;
+    }
+    case 'rating_unit': {
+      const ratingUnit = await prisma.ratingUnit.findUnique({
+        where: { id: targetId },
+        select: { createdById: true },
+      });
+      return ratingUnit?.createdById ?? null;
+    }
+    case 'direct_message': {
+      const message = await prisma.directMessage.findUnique({
+        where: { id: targetId },
+        select: { senderId: true },
+      });
+      return message?.senderId ?? null;
+    }
+    case 'group_message':
+    case 'squad_message': {
+      const message = await prisma.squadMessage.findUnique({
+        where: { id: targetId },
+        select: { userId: true },
+      });
+      return message?.userId ?? null;
+    }
+    default:
+      return null;
+  }
+};
+
+const toPublicUserSummary = (user: {
+  id: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+} | null | undefined) => {
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName || user.username,
+    avatarURL: user.avatarUrl,
+    avatarUrl: user.avatarUrl,
+    isFollowing: false,
+  };
+};
+
+const canBypassContentReview = (role?: string | null): boolean =>
+  role === 'admin' || role === 'operator';
+
+const CONTENT_I18N_FIELDS_BY_ENTITY: Record<string, string[]> = {
+  news: ['titleI18n', 'summaryI18n', 'bodyI18n'],
+  id: ['titleI18n', 'descriptionI18n'],
+};
+
+const buildI18nReviewNotes = (entityType: string, payload: Record<string, unknown>): Prisma.InputJsonObject => ({
+  i18n: analyzeI18nCompleteness(payload, CONTENT_I18N_FIELDS_BY_ENTITY[entityType] || ['titleI18n']) as unknown as Prisma.InputJsonValue,
+  compliance: contentCompliance.reviewNotes(entityType, payload),
+});
+
+const createPendingContentSubmission = async (input: {
+  submitterId: string;
+  entityType: 'news' | 'id';
+  title: string;
+  payload: Record<string, unknown>;
+}) => {
+  return prisma.$transaction(async (tx) => {
+    const submission = await tx.contentSubmission.create({
+      data: {
+        submitterId: input.submitterId,
+        entityType: input.entityType,
+        title: input.title,
+        payload: input.payload as Prisma.InputJsonObject,
+        reviewNotes: buildI18nReviewNotes(input.entityType, input.payload),
+        status: 'pending',
+      },
+    });
+
+    await (tx as any).contentSubmissionVersion.create({
+      data: {
+        submissionId: submission.id,
+        version: 1,
+        title: input.title,
+        payload: input.payload as Prisma.InputJsonObject,
+        submittedBy: input.submitterId,
+        changeNote: 'Initial submission',
+      },
+    });
+
+    return submission;
+  });
+};
+
+const acceptedSubmission = (
+  res: Response,
+  submission: Awaited<ReturnType<typeof createPendingContentSubmission>>,
+  message: string
+): void => {
+  res.status(202).json({
+    status: 'submitted_for_review',
+    message,
+    submission,
+  });
+};
+
+const newsTitleFromContent = (content: string): string => {
+  const line = content
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .find((item) => item.startsWith('标题：') || item.toLowerCase().startsWith('title:'));
+  return line?.replace(/^标题：/u, '').replace(/^title:/i, '').trim() || '未命名资讯';
+};
+
+const idTitleFromContent = (content: string): string => {
+  const line = content
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .find((item) => item.startsWith('标题：') || item.toLowerCase().startsWith('title:'));
+  return line?.replace(/^标题：/u, '').replace(/^title:/i, '').trim() || '未命名 ID';
 };
 
 const syncTencentIMUserBestEffort = async (userId: string, reason: string): Promise<void> => {
@@ -611,6 +908,10 @@ type AuthUserRecord = {
   avatarUrl: string | null;
   email: string;
   role: string;
+  regionCode?: string | null;
+  birthYear?: number | null;
+  ageBand?: string | null;
+  guardianContactEmail?: string | null;
 };
 
 const createAccessTokenForUser = (user: Pick<AuthUserRecord, 'id' | 'email' | 'role'>): string => {
@@ -650,6 +951,7 @@ const issueAuthSuccessResponse = async (
   res: Response,
   user: AuthUserRecord
 ): Promise<void> => {
+  const accountStatus = await accountEnforcementService.getAccountStatus(user.id);
   const accessToken = createAccessTokenForUser(user);
   const refreshSession = await createRefreshSessionForUser(user.id, req);
   setRefreshCookie(res, refreshSession.refreshToken);
@@ -666,9 +968,14 @@ const issueAuthSuccessResponse = async (
         username: user.username,
         displayName: user.displayName,
         avatarUrl: user.avatarUrl,
+        regionCode: user.regionCode,
+        birthYear: user.birthYear,
+        ageBand: user.ageBand,
+        guardianContactEmail: user.guardianContactEmail,
       },
       false
     ),
+    accountStatus,
   });
 };
 
@@ -812,6 +1119,10 @@ type BasicUser = {
   username: string;
   displayName: string | null;
   avatarUrl: string | null;
+  regionCode?: string | null;
+  birthYear?: number | null;
+  ageBand?: string | null;
+  guardianContactEmail?: string | null;
 };
 
 const toUserSummary = (user: BasicUser, isFollowing: boolean) => {
@@ -821,6 +1132,10 @@ const toUserSummary = (user: BasicUser, isFollowing: boolean) => {
     displayName: user.displayName || user.username,
     avatarURL: user.avatarUrl,
     isFollowing,
+    regionCode: user.regionCode ?? undefined,
+    birthYear: user.birthYear ?? undefined,
+    ageBand: user.ageBand ?? undefined,
+    guardianContactEmail: user.guardianContactEmail ?? undefined,
   };
 };
 
@@ -1355,6 +1670,49 @@ const buildFollowingMap = async (viewerId: string | undefined, targetUserIds: st
   });
 
   return new Set(follows.map((f) => f.followingId).filter((id): id is string => Boolean(id)));
+};
+
+const buildBlockedRelationUserIds = async (viewerId: string | undefined | null): Promise<Set<string>> => {
+  if (!viewerId) {
+    return new Set<string>();
+  }
+
+  const rows = await prisma.userBlock.findMany({
+    where: {
+      OR: [
+        { blockerUserId: viewerId },
+        { blockedUserId: viewerId },
+      ],
+    },
+    select: {
+      blockerUserId: true,
+      blockedUserId: true,
+    },
+  });
+
+  return new Set(
+    rows
+      .map((row) => (row.blockerUserId === viewerId ? row.blockedUserId : row.blockerUserId))
+      .filter((id): id is string => Boolean(id && id !== viewerId))
+  );
+};
+
+const hasBlockingRelationship = async (userAId: string, userBId: string): Promise<boolean> => {
+  if (!userAId || !userBId || userAId === userBId) {
+    return false;
+  }
+
+  const block = await prisma.userBlock.findFirst({
+    where: {
+      OR: [
+        { blockerUserId: userAId, blockedUserId: userBId },
+        { blockerUserId: userBId, blockedUserId: userAId },
+      ],
+    },
+    select: { id: true },
+  });
+
+  return Boolean(block);
 };
 
 const buildFriendUserIds = async (userId: string, candidateUserIds?: string[]) => {
@@ -2416,6 +2774,12 @@ router.get('/', (_req: Request, res: Response) => {
       authRefresh: 'POST /v1/auth/refresh',
       authLogout: 'POST /v1/auth/logout',
       authLogoutAll: 'POST /v1/auth/logout-all',
+      authAccountDelete: 'DELETE /v1/auth/account',
+      accountStatus: 'GET /v1/account/status',
+      accountEnforcements: 'GET /v1/account/enforcements',
+      accountEnforcementAppeal: 'POST /v1/account/enforcements/:id/appeal',
+      accountAppeals: 'GET /v1/account/appeals',
+      reportContent: 'POST /v1/reports',
       feed: 'GET /v1/feed',
       feedSearch: 'GET /v1/feed/search',
       feedPostDetail: 'GET /v1/feed/posts/:id',
@@ -2457,6 +2821,8 @@ router.get('/', (_req: Request, res: Response) => {
       hidePost: 'POST /v1/feed/posts/:id/hide',
       feedEvent: 'POST /v1/feed/events',
       feedExperimentSummary: 'GET /v1/feed/experiments/summary',
+      blockUser: 'POST /v1/social/users/:id/block',
+      unblockUser: 'DELETE /v1/social/users/:id/block',
     },
   });
 });
@@ -2681,6 +3047,17 @@ router.post('/auth/login', async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
+    if (await denyForEnforcement(user.id, 'login', res)) {
+      writeAuthAuditLog(req, {
+        action: 'auth.login',
+        outcome: 'blocked',
+        userId: user.id,
+        identifier: loginIdentifier,
+        errorCode: 'AUTH_ACCOUNT_ENFORCEMENT_BLOCKED',
+      });
+      return;
+    }
+
     clearRateBucket(authLoginRateBuckets, loginRateKey);
 
     await prisma.user.update({
@@ -2702,6 +3079,10 @@ router.post('/auth/login', async (req: Request, res: Response): Promise<void> =>
       avatarUrl: user.avatarUrl,
       email: user.email,
       role: user.role,
+      regionCode: user.regionCode,
+      birthYear: user.birthYear,
+      ageBand: user.ageBand,
+      guardianContactEmail: user.guardianContactEmail,
     });
   } catch (error) {
     console.error('BFF login error:', error);
@@ -2716,17 +3097,27 @@ router.post('/auth/login', async (req: Request, res: Response): Promise<void> =>
 
 router.post('/auth/register', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { username, email, password, displayName } = req.body as {
+    const { username, email, password, displayName, birthYear, regionCode, guardianContactEmail } = req.body as {
       username?: string;
       email?: string;
       password?: string;
       displayName?: string;
+      birthYear?: number | string;
+      regionCode?: string;
+      guardianContactEmail?: string;
     };
 
     const requestedUsername = String(username || '').trim().toLowerCase();
     const normalizedEmail = String(email || '').trim().toLowerCase();
     const normalizedDisplayName = normalizeDisplayName(displayName);
     const normalizedDisplayNameKey = normalizeDisplayNameForUniqueness(normalizedDisplayName);
+    const complianceRegion = regionalCompliance.resolveRegion(regionCode);
+    const compliancePolicy = regionalCompliance.policyFor(complianceRegion);
+    const normalizedBirthYear =
+      typeof birthYear === 'number'
+        ? birthYear
+        : Number.parseInt(String(birthYear || ''), 10);
+    const hasBirthYear = Number.isInteger(normalizedBirthYear);
     const nowMs = Date.now();
     const registerIdentifier = normalizedEmail || normalizedDisplayNameKey || requestedUsername || 'unknown';
     const registerRateKey = buildRateKey(getClientIp(req), registerIdentifier);
@@ -2788,6 +3179,45 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
       return;
     }
 
+    if (compliancePolicy.ageDeclarationRequired && !hasBirthYear) {
+      writeAuthAuditLog(req, {
+        action: 'auth.register',
+        outcome: 'failed',
+        identifier: registerIdentifier,
+        errorCode: 'AUTH_BIRTH_YEAR_REQUIRED',
+        detail: { region: complianceRegion },
+      });
+      res.status(400).json({ error: 'Birth year is required for this region' });
+      return;
+    }
+
+    if (hasBirthYear) {
+      const currentYear = new Date().getUTCFullYear();
+      if (normalizedBirthYear < 1900 || normalizedBirthYear > currentYear) {
+        writeAuthAuditLog(req, {
+          action: 'auth.register',
+          outcome: 'failed',
+          identifier: registerIdentifier,
+          errorCode: 'AUTH_BIRTH_YEAR_INVALID',
+          detail: { region: complianceRegion },
+        });
+        res.status(400).json({ error: 'Birth year is invalid' });
+        return;
+      }
+      const ageBand = regionalCompliance.ageBandForBirthYear(normalizedBirthYear);
+      if (ageBand === 'under_13') {
+        writeAuthAuditLog(req, {
+          action: 'auth.register',
+          outcome: 'blocked',
+          identifier: registerIdentifier,
+          errorCode: 'AUTH_MINIMUM_AGE_NOT_MET',
+          detail: { region: complianceRegion },
+        });
+        res.status(403).json({ error: 'You must meet the minimum age requirement to create an account' });
+        return;
+      }
+    }
+
     const exists = await prisma.user.findFirst({
       where: {
         OR: [
@@ -2821,6 +3251,11 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
         displayName: normalizedDisplayName,
         displayNameNormalized: normalizedDisplayNameKey,
         displayNameStatus: 'pending',
+        regionCode: complianceRegion,
+        birthYear: hasBirthYear ? normalizedBirthYear : null,
+        ageBand: hasBirthYear ? regionalCompliance.ageBandForBirthYear(normalizedBirthYear) : 'unknown',
+        guardianContactEmail: String(guardianContactEmail || '').trim() || null,
+        ageDeclaredAt: hasBirthYear ? new Date() : null,
       },
       select: {
         id: true,
@@ -2829,6 +3264,10 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
         displayName: true,
         avatarUrl: true,
         role: true,
+        regionCode: true,
+        birthYear: true,
+        ageBand: true,
+        guardianContactEmail: true,
       },
     });
 
@@ -2854,6 +3293,10 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
       avatarUrl: user.avatarUrl,
       email: user.email,
       role: user.role,
+      regionCode: user.regionCode,
+      birthYear: user.birthYear,
+      ageBand: user.ageBand,
+      guardianContactEmail: user.guardianContactEmail,
     });
   } catch (error) {
     console.error('BFF register error:', error);
@@ -2969,7 +3412,13 @@ router.post('/auth/sms/send', async (req: Request, res: Response): Promise<void>
 
 router.post('/auth/sms/login', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { phone, code } = req.body as { phone?: string; code?: string };
+    const { phone, code, birthYear, regionCode, guardianContactEmail } = req.body as {
+      phone?: string;
+      code?: string;
+      birthYear?: number | string;
+      regionCode?: string;
+      guardianContactEmail?: string;
+    };
     const phoneNumber = normalizePhoneNumber(phone);
     const smsCode = normalizeSmsCode(code);
     const now = new Date();
@@ -3042,10 +3491,45 @@ router.post('/auth/sms/login', async (req: Request, res: Response): Promise<void
         avatarUrl: true,
         email: true,
         role: true,
+        regionCode: true,
+        birthYear: true,
+        ageBand: true,
+        guardianContactEmail: true,
       },
     });
 
     if (!user) {
+      const complianceRegion = regionalCompliance.resolveRegion(regionCode);
+      const compliancePolicy = regionalCompliance.policyFor(complianceRegion);
+      const normalizedBirthYear =
+        typeof birthYear === 'number'
+          ? birthYear
+          : Number.parseInt(String(birthYear || ''), 10);
+      const hasBirthYear = Number.isInteger(normalizedBirthYear);
+
+      if (compliancePolicy.ageDeclarationRequired && !hasBirthYear) {
+        res.status(400).json({
+          error: 'Birth year is required before creating a new account in this region',
+          code: 'AUTH_BIRTH_YEAR_REQUIRED',
+        });
+        return;
+      }
+
+      if (hasBirthYear) {
+        const currentYear = new Date().getUTCFullYear();
+        if (normalizedBirthYear < 1900 || normalizedBirthYear > currentYear) {
+          res.status(400).json({ error: 'Birth year is invalid', code: 'AUTH_BIRTH_YEAR_INVALID' });
+          return;
+        }
+        if (regionalCompliance.ageBandForBirthYear(normalizedBirthYear) === 'under_13') {
+          res.status(403).json({
+            error: 'You must meet the minimum age requirement to create an account',
+            code: 'AUTH_MINIMUM_AGE_NOT_MET',
+          });
+          return;
+        }
+      }
+
       const bootstrapIdentity = await generatePhoneBootstrapIdentity(phoneNumber);
       user = await prisma.user.create({
         data: {
@@ -3055,6 +3539,11 @@ router.post('/auth/sms/login', async (req: Request, res: Response): Promise<void
           passwordHash: await hashPassword(generateRefreshToken()),
           displayName: bootstrapIdentity.displayName,
           isActive: true,
+          regionCode: complianceRegion,
+          birthYear: hasBirthYear ? normalizedBirthYear : null,
+          ageBand: hasBirthYear ? regionalCompliance.ageBandForBirthYear(normalizedBirthYear) : 'unknown',
+          guardianContactEmail: String(guardianContactEmail || '').trim() || null,
+          ageDeclaredAt: hasBirthYear ? new Date() : null,
         },
         select: {
           id: true,
@@ -3063,8 +3552,23 @@ router.post('/auth/sms/login', async (req: Request, res: Response): Promise<void
           avatarUrl: true,
           email: true,
           role: true,
+          regionCode: true,
+          birthYear: true,
+          ageBand: true,
+          guardianContactEmail: true,
         },
       });
+    }
+
+    if (await denyForEnforcement(user.id, 'login', res)) {
+      writeAuthAuditLog(req, {
+        action: 'auth.sms_login',
+        outcome: 'blocked',
+        userId: user.id,
+        identifier: phoneNumber,
+        errorCode: 'AUTH_ACCOUNT_ENFORCEMENT_BLOCKED',
+      });
+      return;
     }
 
     await prisma.user.update({
@@ -3135,6 +3639,25 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
       return;
     }
 
+    if (await denyForEnforcement(current.userId, 'login', res)) {
+      clearRefreshCookie(res);
+      await prisma.authRefreshToken.update({
+        where: { id: current.id },
+        data: {
+          revokedAt: now,
+          lastUsedAt: now,
+        },
+        select: { id: true },
+      });
+      writeAuthAuditLog(req, {
+        action: 'auth.refresh',
+        outcome: 'blocked',
+        userId: current.userId,
+        errorCode: 'AUTH_ACCOUNT_ENFORCEMENT_BLOCKED',
+      });
+      return;
+    }
+
     const nextRefreshToken = generateRefreshToken();
     const nextRefreshHash = hashToken(nextRefreshToken);
     const nextExpiresAt = new Date(now.getTime() + REFRESH_TOKEN_TTL_MS);
@@ -3168,6 +3691,7 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
 
     setRefreshCookie(res, nextRefreshToken);
     const accessToken = createAccessTokenForUser(current.user);
+    const accountStatus = await accountEnforcementService.getAccountStatus(current.userId);
     writeAuthAuditLog(req, {
       action: 'auth.refresh',
       outcome: 'success',
@@ -3179,6 +3703,7 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
       accessTokenExpiresIn: ACCESS_TOKEN_TTL_SECONDS,
       refreshToken: nextRefreshToken,
       refreshTokenId: createdNextToken.id,
+      accountStatus,
       user: toUserSummary(
         {
           id: current.user.id,
@@ -3270,6 +3795,461 @@ router.post('/auth/logout-all', optionalAuth, async (req: Request, res: Response
   }
 });
 
+router.get('/account/status', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const status = await accountEnforcementService.getAccountStatus(userId);
+    res.json({ success: true, status });
+  } catch (error) {
+    console.error('BFF account status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/account/enforcements', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const items = await accountEnforcementService.listEnforcements({
+      userId,
+      limit: 100,
+    });
+    res.json({ success: true, items });
+  } catch (error) {
+    console.error('BFF account enforcements error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/account/enforcements/:id/appeal', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const body = req.body as {
+      appealReason?: string;
+      reason?: string;
+      attachments?: unknown;
+      contactEmail?: string;
+    };
+
+    const appeal = await accountEnforcementService.createAppeal({
+      enforcementId: String(req.params.id || ''),
+      userId,
+      appealReason: String(body.appealReason || body.reason || ''),
+      attachments: body.attachments as never,
+      contactEmail: body.contactEmail || null,
+    });
+
+    res.status(201).json({ success: true, appeal });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const status = message === 'enforcement_not_found' ? 404 : 400;
+    res.status(status).json({ error: message || 'Failed to create appeal' });
+  }
+});
+
+router.get('/account/appeals', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const items = await accountEnforcementService.listAppeals({
+      userId,
+      limit: 100,
+    });
+    res.json({ success: true, items });
+  } catch (error) {
+    console.error('BFF account appeals error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/auth/account', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  const authReq = req as BFFAuthRequest;
+  try {
+    const userId = requireAuth(authReq, res, { allowInactiveAccount: true });
+    if (!userId) {
+      writeAuthAuditLog(req, {
+        action: 'auth.account-delete',
+        outcome: 'failed',
+        errorCode: 'AUTH_UNAUTHORIZED',
+      });
+      return;
+    }
+
+    const now = new Date();
+    const anonymizedSuffix = userId.replace(/-/g, '').slice(0, 12);
+    let deletionRequestId: string | null = null;
+    await prisma.$transaction(async (tx) => {
+      const userSnapshot = await tx.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          phoneNumber: true,
+          avatarUrl: true,
+          profileShareQrCodeUrl: true,
+          posts: { select: { images: true } },
+          eventLiveComments: { select: { imageUrls: true } },
+          squadMessages: { select: { imageUrl: true } },
+          uploadedPhotos: { select: { url: true } },
+        },
+      });
+
+      if (!userSnapshot) {
+        throw new Error('account_delete_user_not_found');
+      }
+
+      const deletionRequest = await accountDeletionService.createOrGetRequest(tx, {
+        user: userSnapshot,
+        requestedBy: 'user',
+        requestSource: 'ios',
+      });
+      deletionRequestId = deletionRequest.id;
+
+      await tx.authRefreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now, lastUsedAt: now },
+      });
+
+      await tx.devicePushToken.updateMany({
+        where: { userId, isActive: true },
+        data: { isActive: false, lastSeenAt: now },
+      });
+
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          username: `deleted-${anonymizedSuffix}`,
+          isActive: false,
+          email: `deleted-${anonymizedSuffix}@deleted.raver.local`,
+          phoneNumber: null,
+          passwordHash: `deleted:${crypto.randomBytes(32).toString('hex')}`,
+          displayName: 'Deleted User',
+          displayNameNormalized: `deleted-${anonymizedSuffix}`,
+          displayNameStatus: 'approved',
+          displayNameReviewNote: null,
+          avatarUrl: null,
+          avatarStatus: 'none',
+          avatarReviewNote: null,
+          bio: null,
+          location: null,
+          favoriteDjIds: [],
+          favoriteGenres: [],
+          isVerified: false,
+          profileShareCode: null,
+          profileShareQrCodeUrl: null,
+        },
+        select: { id: true },
+      });
+    });
+
+    clearRefreshCookie(res);
+    writeAuthAuditLog(req, {
+      action: 'auth.account-delete',
+      outcome: 'success',
+      userId,
+      detail: { strategy: 'soft_delete_and_anonymize', deletionRequestId },
+    });
+    res.json({ success: true, status: 'deleted', deletionRequestId });
+  } catch (error) {
+    console.error('BFF account delete error:', error);
+    clearRefreshCookie(res);
+    writeAuthAuditLog(req, {
+      action: 'auth.account-delete',
+      outcome: 'failed',
+      userId: authReq.user?.userId ?? null,
+      errorCode: 'AUTH_INTERNAL_ERROR',
+    });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/reports', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const targetType = normalizeComplianceText(body.targetType, 64);
+    const targetId = normalizeComplianceText(body.targetId, 128);
+    const reason = normalizeComplianceText(body.reason, 64);
+    const detail = normalizeComplianceText(body.detail, 2000);
+    const source = normalizeComplianceText(body.source, 64) || 'in_app';
+    const attachments = normalizeReportAttachments(body.attachments);
+
+    if (!targetType || !targetId || !reason) {
+      res.status(400).json({ error: 'targetType, targetId and reason are required' });
+      return;
+    }
+
+    const targetUserId = await resolveReportTargetUserId(targetType, targetId);
+    if (targetType === 'user' && targetId === userId) {
+      res.status(400).json({ error: 'Cannot report yourself' });
+      return;
+    }
+
+    const report = await prisma.contentReport.upsert({
+      where: {
+        reporterUserId_targetType_targetId: {
+          reporterUserId: userId,
+          targetType,
+          targetId,
+        },
+      },
+      create: {
+        reporterUserId: userId,
+        targetType,
+        targetId,
+        targetUserId,
+        reason,
+        detail,
+        attachments,
+        source,
+        metadata: {
+          ip: getClientIp(req),
+          userAgent: req.headers['user-agent'] || null,
+        } as Prisma.InputJsonValue,
+      },
+      update: {
+        reason,
+        detail,
+        attachments,
+        source,
+        targetUserId,
+        status: 'pending',
+        metadata: {
+          ip: getClientIp(req),
+          userAgent: req.headers['user-agent'] || null,
+          resubmittedAt: new Date().toISOString(),
+        } as Prisma.InputJsonValue,
+      },
+      select: {
+        id: true,
+        targetType: true,
+        targetId: true,
+        reason: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    res.status(201).json(report);
+  } catch (error) {
+    console.error('BFF create report error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/reports', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const limit = Math.max(1, Math.min(Number(req.query.limit) || 50, 100));
+    const reports = await prisma.contentReport.findMany({
+      where: { reporterUserId: userId },
+      orderBy: { updatedAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        targetType: true,
+        targetId: true,
+        targetUserId: true,
+        reason: true,
+        detail: true,
+        source: true,
+        status: true,
+        resolutionNote: true,
+        resolvedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const targetUserIds = Array.from(new Set(reports.map((item) => item.targetUserId).filter(Boolean))) as string[];
+    const targetUsers = targetUserIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: targetUserIds } },
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        })
+      : [];
+    const targetUserById = new Map(targetUsers.map((user) => [user.id, user]));
+
+    res.json({
+      items: reports.map((report) => ({
+        ...report,
+        targetUser: report.targetUserId ? toPublicUserSummary(targetUserById.get(report.targetUserId)) : null,
+      })),
+    });
+  } catch (error) {
+    console.error('BFF list reports error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/social/blocks', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const limit = Math.max(1, Math.min(Number(req.query.limit) || 100, 100));
+    const blocks = await prisma.userBlock.findMany({
+      where: { blockerUserId: userId },
+      orderBy: { updatedAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        blockedUserId: true,
+        reason: true,
+        note: true,
+        source: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const blockedUserIds = blocks.map((item) => item.blockedUserId);
+    const blockedUsers = blockedUserIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: blockedUserIds } },
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        })
+      : [];
+    const userById = new Map(blockedUsers.map((user) => [user.id, user]));
+
+    res.json({
+      items: blocks.map((block) => ({
+        id: block.id,
+        reason: block.reason,
+        note: block.note,
+        source: block.source,
+        createdAt: block.createdAt,
+        updatedAt: block.updatedAt,
+        user: toPublicUserSummary(userById.get(block.blockedUserId)) || {
+          id: block.blockedUserId,
+          username: 'unknown',
+          displayName: 'Unknown User',
+          avatarURL: null,
+          avatarUrl: null,
+          isFollowing: false,
+        },
+      })),
+    });
+  } catch (error) {
+    console.error('BFF list blocked users error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/social/users/:id/block', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+    const targetUserId = String(req.params.id || '').trim();
+    if (!targetUserId || targetUserId === userId) {
+      res.status(400).json({ error: 'Invalid target user' });
+      return;
+    }
+
+    const block = await prisma.userBlock.findUnique({
+      where: {
+        blockerUserId_blockedUserId: {
+          blockerUserId: userId,
+          blockedUserId: targetUserId,
+        },
+      },
+      select: { id: true, createdAt: true },
+    });
+
+    res.json({ isBlocked: Boolean(block), blockedAt: block?.createdAt ?? null });
+  } catch (error) {
+    console.error('BFF get user block error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/social/users/:id/block', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+    const targetUserId = String(req.params.id || '').trim();
+    if (!targetUserId || targetUserId === userId) {
+      res.status(400).json({ error: 'Invalid target user' });
+      return;
+    }
+
+    const target = await prisma.user.findFirst({
+      where: { id: targetUserId, isActive: true },
+      select: { id: true },
+    });
+    if (!target) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const reason = normalizeComplianceText(body.reason, 64);
+    const note = normalizeComplianceText(body.note, 1000);
+    const source = normalizeComplianceText(body.source, 64) || 'in_app';
+    const block = await prisma.userBlock.upsert({
+      where: {
+        blockerUserId_blockedUserId: {
+          blockerUserId: userId,
+          blockedUserId: targetUserId,
+        },
+      },
+      create: {
+        blockerUserId: userId,
+        blockedUserId: targetUserId,
+        reason,
+        note,
+        source,
+      },
+      update: {
+        reason,
+        note,
+        source,
+      },
+      select: { id: true, createdAt: true, updatedAt: true },
+    });
+
+    res.status(201).json({ isBlocked: true, block });
+  } catch (error) {
+    console.error('BFF block user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/social/users/:id/block', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+    const targetUserId = String(req.params.id || '').trim();
+    if (!targetUserId || targetUserId === userId) {
+      res.status(400).json({ error: 'Invalid target user' });
+      return;
+    }
+
+    await prisma.userBlock.deleteMany({
+      where: {
+        blockerUserId: userId,
+        blockedUserId: targetUserId,
+      },
+    });
+
+    res.json({ success: true, isBlocked: false });
+  } catch (error) {
+    console.error('BFF unblock user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const authReq = req as BFFAuthRequest;
@@ -3287,9 +4267,15 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
 
     const limit = normalizeLimit(req.query.limit, 20, 50);
     const cursorDate = parseCursorDate(req.query.cursor);
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
     const baseWhere = {
       visibility: 'public' as const,
       squadId: null,
+      ...(blockedRelationUserIds.size > 0
+        ? {
+            userId: { notIn: Array.from(blockedRelationUserIds) },
+          }
+        : {}),
       ...(eventID
         ? {
             OR: [
@@ -3434,7 +4420,7 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
 
         const followingIds = followingRows
           .map((row) => row.followingId)
-          .filter((id): id is string => Boolean(id));
+          .filter((id): id is string => Boolean(id && !blockedRelationUserIds.has(id)));
         const followedDjIds = new Set(
           followedDjRows.map((row) => row.djId).filter((id): id is string => Boolean(id))
         );
@@ -3467,7 +4453,7 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
           new Set(
             interactionSeeds
               .map((row) => row.userId)
-              .filter((id): id is string => Boolean(id && id !== viewerId))
+              .filter((id): id is string => Boolean(id && id !== viewerId && !blockedRelationUserIds.has(id)))
           )
         );
         const relatedDjIds = Array.from(new Set(interactionSeeds.flatMap((row) => row.boundDjIds || [])));
@@ -3551,7 +4537,7 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
       });
       const followingIds = followingRows
         .map((row) => row.followingId)
-        .filter((id): id is string => Boolean(id));
+        .filter((id): id is string => Boolean(id && !blockedRelationUserIds.has(id)));
 
       if (followingIds.length === 0) {
         res.json({
@@ -3857,6 +4843,7 @@ router.get('/events/:id/live-comments', optionalAuth, async (req: Request, res: 
     const limit = normalizeLimit(req.query.limit, 50, 100);
     const cursorDate = parseCursorDate(req.query.cursor);
     const sort = String(req.query.sort || 'oldest').trim().toLowerCase();
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
 
     if (!eventID) {
       res.status(400).json({ error: 'Event id is required' });
@@ -3904,8 +4891,13 @@ router.get('/events/:id/live-comments', optionalAuth, async (req: Request, res: 
       take: limit + 1,
     });
 
-    const hasMore = comments.length > limit;
-    const pageComments = hasMore ? comments.slice(0, limit) : comments;
+    const visibleComments = comments.filter(
+      (comment) =>
+        !blockedRelationUserIds.has(comment.user.id) &&
+        (!comment.replyToUser || !blockedRelationUserIds.has(comment.replyToUser.id))
+    );
+    const hasMore = visibleComments.length > limit;
+    const pageComments = hasMore ? visibleComments.slice(0, limit) : visibleComments;
     const authorIds = Array.from(
       new Set(
         pageComments
@@ -3933,6 +4925,7 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
   try {
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
+    if (await denyForEnforcement(userId, 'comment_create', res)) return;
 
     const eventID = String(req.params.id || '').trim();
     const body = (req.body ?? {}) as {
@@ -3957,6 +4950,7 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
       body.replyToCommentId;
     const parentCommentID = typeof rawParentID === 'string' ? rawParentID.trim() : '';
     const normalizedParentCommentID = parentCommentID.length > 0 ? parentCommentID : null;
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(userId);
 
     if (!eventID) {
       res.status(400).json({ error: 'Event id is required' });
@@ -4002,6 +4996,9 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
         if (!parentComment || parentComment.eventId !== eventID) {
           throw new Error('Parent comment not found');
         }
+        if (blockedRelationUserIds.has(parentComment.userId)) {
+          throw new Error('Blocked relation');
+        }
       }
 
       const depth = parentComment ? Math.min((parentComment.depth ?? 0) + 1, 1) : 0;
@@ -4042,6 +5039,10 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
     const followingSet = await buildFollowingMap(userId, [created.user.id, created.replyToUser?.id].filter((id): id is string => Boolean(id)));
     res.status(201).json(mapEventLiveComment(created, followingSet));
   } catch (error) {
+    if (error instanceof Error && error.message === 'Blocked relation') {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
     if (error instanceof Error && error.message === 'Parent comment not found') {
       res.status(404).json({ error: 'Parent comment not found' });
       return;
@@ -4271,6 +5272,7 @@ router.get('/feed/search', optionalAuth, async (req: Request, res: Response): Pr
     const viewerId = authReq.user?.userId;
     const query = String(req.query.q || '').trim();
     const limit = normalizeLimit(req.query.limit, 20, 50);
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
 
     if (!query) {
       res.json({ posts: [], nextCursor: null });
@@ -4281,6 +5283,11 @@ router.get('/feed/search', optionalAuth, async (req: Request, res: Response): Pr
       where: {
         visibility: 'public',
         squadId: null,
+        ...(blockedRelationUserIds.size > 0
+          ? {
+              userId: { notIn: Array.from(blockedRelationUserIds) },
+            }
+          : {}),
         ...(viewerId
           ? {
               hides: {
@@ -4348,6 +5355,7 @@ router.get('/feed/posts/:id', optionalAuth, async (req: Request, res: Response):
     const authReq = req as BFFAuthRequest;
     const viewerId = authReq.user?.userId;
     const postID = String(req.params.id || '').trim();
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
 
     if (!postID) {
       res.status(400).json({ error: 'Post id is required' });
@@ -4359,6 +5367,11 @@ router.get('/feed/posts/:id', optionalAuth, async (req: Request, res: Response):
         id: postID,
         visibility: 'public',
         squadId: null,
+        ...(blockedRelationUserIds.size > 0
+          ? {
+              userId: { notIn: Array.from(blockedRelationUserIds) },
+            }
+          : {}),
       },
       include: {
         user: {
@@ -4406,6 +5419,7 @@ router.get('/users/search', optionalAuth, async (req: Request, res: Response): P
 
     const query = String(req.query.q || '').trim();
     const limit = normalizeLimit(req.query.limit, 20, 50);
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(userId);
     if (!query) {
       res.json([]);
       return;
@@ -4414,7 +5428,9 @@ router.get('/users/search', optionalAuth, async (req: Request, res: Response): P
     const users = await prisma.user.findMany({
       where: {
         isActive: true,
-        id: { not: userId },
+        id: blockedRelationUserIds.size > 0
+          ? { not: userId, notIn: Array.from(blockedRelationUserIds) }
+          : { not: userId },
         OR: [
           { username: { contains: query, mode: 'insensitive' } },
           { displayName: { contains: query, mode: 'insensitive' } },
@@ -4732,6 +5748,7 @@ router.get('/users/:id/posts', optionalAuth, async (req: Request, res: Response)
     const targetUserId = req.params.id as string;
     const limit = normalizeLimit(req.query.limit, 20, 50);
     const cursorDate = parseCursorDate(req.query.cursor);
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
 
     const targetUser = await prisma.user.findUnique({
       where: { id: targetUserId },
@@ -4740,6 +5757,10 @@ router.get('/users/:id/posts', optionalAuth, async (req: Request, res: Response)
 
     if (!targetUser || !targetUser.isActive) {
       res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    if (blockedRelationUserIds.has(targetUserId)) {
+      res.json({ posts: [], nextCursor: null });
       return;
     }
 
@@ -5846,6 +6867,8 @@ router.post('/squads/:id/offline-activities/:activityId/location', optionalAuth,
   try {
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
+    if (await denyForEnforcement(userId, 'location_share', res)) return;
+    if (await denyForMinorRegionalRestriction(userId, 'locationSharing', res)) return;
 
     const squadId = req.params.id as string;
     const activityId = req.params.activityId as string;
@@ -6157,9 +7180,16 @@ router.post('/squads', optionalAuth, async (req: Request, res: Response): Promis
     }
 
     if (normalizedMemberIds.length > 0) {
-      const friendIds = await buildFriendUserIds(userId, normalizedMemberIds);
+      const [friendIds, blockedRelationUserIds] = await Promise.all([
+        buildFriendUserIds(userId, normalizedMemberIds),
+        buildBlockedRelationUserIds(userId),
+      ]);
       if (friendIds.size !== normalizedMemberIds.length) {
         res.status(403).json({ error: '只能从好友列表中选择小队成员' });
+        return;
+      }
+      if (normalizedMemberIds.some((memberId) => blockedRelationUserIds.has(memberId))) {
+        res.status(403).json({ error: '不能邀请已拉黑用户创建小队' });
         return;
       }
     }
@@ -6809,8 +7839,11 @@ router.post('/squads/:id/members/:memberUserId/remove', optionalAuth, async (req
 
 router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = requireAuth(req as BFFAuthRequest, res);
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
     if (!userId) return;
+    if (await denyForEnforcement(userId, 'post_create', res)) return;
+    const viewerRole = authReq.user?.role ?? null;
 
     const body = (req.body ?? {}) as Record<string, unknown>;
     const { content, images, squadId, location } = body as {
@@ -6848,6 +7881,47 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
     const trimmed = String(content || '').trim();
     if (!trimmed && normalizedImages.length === 0) {
       res.status(400).json({ error: 'content or images is required' });
+      return;
+    }
+
+    const isNewsSubmission = trimmed
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .includes('#RAVER_NEWS');
+    const isIDSubmission = trimmed
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .includes('#RAVER_ID');
+
+    if (!canBypassContentReview(viewerRole) && (isNewsSubmission || isIDSubmission)) {
+      const entityType = isNewsSubmission ? 'news' : 'id';
+      const title = isNewsSubmission ? newsTitleFromContent(trimmed) : idTitleFromContent(trimmed);
+      const submissionPayload = {
+        ...body,
+        content: trimmed,
+        images: normalizedImages,
+        location: normalizedLocation || null,
+        boundDjIDs: normalizedBoundDjIDs,
+        boundBrandIDs: normalizedBoundBrandIDs,
+        boundEventIDs: normalizedBoundEventIDs,
+        displayPublishedAt: parsedDisplayPublishedAt || new Date().toISOString(),
+      };
+      const complianceError = contentCompliance.validationError(entityType, submissionPayload);
+      if (complianceError) {
+        res.status(400).json({ error: complianceError });
+        return;
+      }
+      const submission = await createPendingContentSubmission({
+        submitterId: userId,
+        entityType,
+        title,
+        payload: submissionPayload,
+      });
+      acceptedSubmission(
+        res,
+        submission,
+        isNewsSubmission ? '资讯已提交审核，管理员审核通过后才会发布' : 'ID 已提交审核，管理员审核通过后才会发布'
+      );
       return;
     }
 
@@ -7499,12 +8573,18 @@ router.get('/feed/posts/:id/comments', optionalAuth, async (req: Request, res: R
   try {
     const viewerId = (req as BFFAuthRequest).user?.userId;
     const postId = req.params.id as string;
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
 
     const comments = await fetchPostComments(postId);
+    const visibleComments = comments.filter(
+      (comment) =>
+        !blockedRelationUserIds.has(comment.user.id) &&
+        (!comment.replyToUser || !blockedRelationUserIds.has(comment.replyToUser.id))
+    );
 
     const authorIds = Array.from(
       new Set(
-        comments
+        visibleComments
           .flatMap((comment) => [comment.user.id, comment.replyToUser?.id ?? null])
           .filter((id): id is string => Boolean(id))
       )
@@ -7512,7 +8592,7 @@ router.get('/feed/posts/:id/comments', optionalAuth, async (req: Request, res: R
     const followingSet = await buildFollowingMap(viewerId, authorIds);
 
     res.json(
-      comments.map((comment) => ({
+      visibleComments.map((comment) => ({
         id: comment.id,
         postID: comment.postId,
         parentCommentID: comment.parentCommentId ?? null,
@@ -7536,6 +8616,7 @@ router.post('/feed/posts/:id/comments', optionalAuth, async (req: Request, res: 
   try {
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
+    if (await denyForEnforcement(userId, 'comment_create', res)) return;
 
     const postId = req.params.id as string;
     const body = (req.body ?? {}) as {
@@ -7614,6 +8695,7 @@ router.get('/chat/conversations', optionalAuth, async (req: Request, res: Respon
 
     const type = String(req.query.type || 'group');
     const limit = normalizeLimit(req.query.limit, 50, 200);
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(userId);
 
     if (type === 'direct') {
       const directConversations = await prisma.directConversation.findMany({
@@ -7654,7 +8736,11 @@ router.get('/chat/conversations', optionalAuth, async (req: Request, res: Respon
         take: limit,
       });
 
-      const conversationIds = directConversations.map((conversation) => conversation.id);
+      const visibleDirectConversations = directConversations.filter((conversation) => {
+        const peerId = conversation.userAId === userId ? conversation.userBId : conversation.userAId;
+        return !blockedRelationUserIds.has(peerId);
+      });
+      const conversationIds = visibleDirectConversations.map((conversation) => conversation.id);
       const readRows =
         conversationIds.length === 0
           ? []
@@ -7671,7 +8757,7 @@ router.get('/chat/conversations', optionalAuth, async (req: Request, res: Respon
 
       const readMap = new Map(readRows.map((row) => [row.conversationId, row.lastReadAt]));
       const unreadPairs = await Promise.all(
-        directConversations.map(async (conversation) => {
+        visibleDirectConversations.map(async (conversation) => {
           const lastReadAt = readMap.get(conversation.id);
           const unreadCount = await prisma.directMessage.count({
             where: {
@@ -7686,7 +8772,7 @@ router.get('/chat/conversations', optionalAuth, async (req: Request, res: Respon
       const unreadMap = new Map(unreadPairs);
 
       const mapped = await Promise.all(
-        directConversations.map((conversation) =>
+        visibleDirectConversations.map((conversation) =>
           mapDirectConversation(conversation, userId, unreadMap.get(conversation.id) ?? 0)
         )
       );
@@ -7858,7 +8944,17 @@ router.post('/chat/direct/start', optionalAuth, async (req: Request, res: Respon
       return;
     }
 
-    if (!(await isMutualFriend(userId, target.id))) {
+    if (await hasBlockingRelationship(userId, target.id)) {
+      res.status(403).json({ error: '无法与该用户发起私信' });
+      return;
+    }
+
+    const isFriend = await isMutualFriend(userId, target.id);
+    if (!isFriend && await denyForMinorRegionalRestriction(userId, 'strangerDirectMessages', res)) {
+      return;
+    }
+
+    if (!isFriend) {
       res.status(403).json({ error: '需要双方互相关注成为好友后才能聊天' });
       return;
     }
@@ -7947,6 +9043,14 @@ router.get('/chat/conversations/:id/messages', optionalAuth, async (req: Request
     });
 
     if (directConversation) {
+      const directTargetUserId = directConversation.userAId === userId
+        ? directConversation.userBId
+        : directConversation.userAId;
+      if (await hasBlockingRelationship(userId, directTargetUserId)) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
+
       const messages = await prisma.directMessage.findMany({
         where: { conversationId },
         include: {
@@ -8009,6 +9113,7 @@ router.get('/chat/conversations/:id/messages', optionalAuth, async (req: Request
       return;
     }
 
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(userId);
     const messages = await prisma.squadMessage.findMany({
       where: { squadId: conversationId },
       include: {
@@ -8024,8 +9129,13 @@ router.get('/chat/conversations/:id/messages', optionalAuth, async (req: Request
       orderBy: { createdAt: 'asc' },
       take: limit,
     });
+    const visibleMessages = messages.filter((message) => {
+      if (message.type === 'system') return true;
+      if (message.userId === userId) return true;
+      return !blockedRelationUserIds.has(message.userId);
+    });
 
-    const senderIds = Array.from(new Set(messages.map((msg) => msg.user.id)));
+    const senderIds = Array.from(new Set(visibleMessages.map((msg) => msg.user.id)));
     const [followingSet, squadMembers] = await Promise.all([
       buildFollowingMap(userId, senderIds),
       prisma.squadMember.findMany({
@@ -8054,7 +9164,7 @@ router.get('/chat/conversations/:id/messages', optionalAuth, async (req: Request
     });
 
     res.json(
-      messages.map((message) => ({
+      visibleMessages.map((message) => ({
         id: message.id,
         conversationID: conversationId,
         sender: toUserSummaryWithNickname(
@@ -8077,6 +9187,7 @@ router.post('/chat/conversations/:id/messages', optionalAuth, async (req: Reques
   try {
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
+    if (await denyForEnforcement(userId, 'message_send', res)) return;
 
     const conversationId = req.params.id as string;
     const content = String((req.body as { content?: string }).content || '').trim();
@@ -8098,6 +9209,11 @@ router.post('/chat/conversations/:id/messages', optionalAuth, async (req: Reques
       const directTargetUserId = directConversation.userAId === userId
         ? directConversation.userBId
         : directConversation.userAId;
+
+      if (await hasBlockingRelationship(userId, directTargetUserId)) {
+        res.status(403).json({ error: '无法向该用户发送私信' });
+        return;
+      }
 
       if (!(await isMutualFriend(userId, directTargetUserId))) {
         res.status(403).json({ error: '需要双方互相关注成为好友后才能聊天' });
@@ -8231,10 +9347,11 @@ router.post('/chat/conversations/:id/messages', optionalAuth, async (req: Reques
         select: { userId: true },
       }),
     ]);
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(userId);
 
     const senderDisplayName = created.user.displayName || created.user.username || '新消息';
     publishChatMessageSafely({
-      targetUserIds: targetMembers.map((item) => item.userId),
+      targetUserIds: targetMembers.map((item) => item.userId).filter((targetUserId) => !blockedRelationUserIds.has(targetUserId)),
       title: squad?.name || '小队消息',
       body: `${senderDisplayName}: ${truncateText(created.content, 100) || '发来一条新消息'}`,
       deeplink: `raver://messages/conversation/${conversationId}`,
@@ -8342,6 +9459,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
   try {
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
+    if (await denyForEnforcement(userId, 'profile_update', res)) return;
 
     const body = req.body as {
       displayName?: string;
@@ -8494,6 +9612,7 @@ router.post(
     try {
       const userId = requireAuth(req as BFFAuthRequest, res);
       if (!userId) return;
+      if (await denyForEnforcement(userId, 'media_upload', res)) return;
 
       const file = (req as Request & { file?: Express.Multer.File }).file;
       if (!file) {

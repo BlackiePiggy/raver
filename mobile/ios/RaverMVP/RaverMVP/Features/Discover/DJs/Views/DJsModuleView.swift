@@ -150,9 +150,9 @@ struct DJsModuleView: View {
         var title: String {
             switch self {
             case .hot:
-                return L("热度 DJ", "Hot DJs")
+                return LT("热度 DJ", "Hot DJs", "人気DJ")
             case .spotlight:
-                return L("精选", "Spotlight")
+                return LT("精选", "Spotlight", "注目")
             }
         }
     }
@@ -160,11 +160,13 @@ struct DJsModuleView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     private let hotDJBatchSize = 25
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
     private let initialImportName: String?
     private let openImportOnAppear: Bool
+    private let dismissAfterSuccessfulImport: Bool
     @StateObject private var viewModel: DJsModuleViewModel
 
     private var djImportRepository: DJImportRepository {
@@ -177,6 +179,7 @@ struct DJsModuleView: View {
 
     @State private var selectedSection: DJsModuleSection = .spotlight
     @State private var errorMessage: String?
+    @State private var djImportSuccessMessage: String?
     @State private var showDJImportSheet = false
     @State private var importMode: DJsImportMode = .spotify
     @State private var spotifySearchKeyword = ""
@@ -222,12 +225,14 @@ struct DJsModuleView: View {
         viewModel: DJsModuleViewModel,
         initialImportName: String? = nil,
         openImportOnAppear: Bool = false,
+        dismissAfterSuccessfulImport: Bool = false,
         onHorizontalDragStateChanged: ((Bool) -> Void)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: viewModel)
         let normalizedInitialName = initialImportName?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.initialImportName = normalizedInitialName?.isEmpty == false ? normalizedInitialName : nil
         self.openImportOnAppear = openImportOnAppear
+        self.dismissAfterSuccessfulImport = dismissAfterSuccessfulImport
         self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
         _importMode = State(initialValue: normalizedInitialName?.isEmpty == false ? .manual : .spotify)
         _manualName = State(initialValue: normalizedInitialName?.isEmpty == false ? (normalizedInitialName ?? "") : "")
@@ -242,7 +247,7 @@ struct DJsModuleView: View {
             case .failure(let message), .offline(let message):
                 ScrollView {
                     ScreenErrorCard(
-                        title: L("DJ 列表加载失败", "DJs Failed to Load"),
+                        title: LT("DJ 列表加载失败", "DJs Failed to Load", "DJ一覧の読み込みに失敗しました"),
                         message: message
                     ) {
                         Task { await viewModel.reload() }
@@ -251,7 +256,7 @@ struct DJsModuleView: View {
                     .padding(.top, 96)
                 }
             case .empty:
-                ContentUnavailableView(LL("暂无 DJ"), systemImage: "music.mic")
+                ContentUnavailableView(LT("暂无 DJ", "暂无 DJ", "DJはまだありません"), systemImage: "music.mic")
                     .frame(maxWidth: .infinity, minHeight: 220)
             case .success:
                 sectionContent
@@ -261,13 +266,13 @@ struct DJsModuleView: View {
                 if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if viewModel.isRefreshing {
-                            InlineLoadingBadge(title: L("正在更新 DJ 列表", "Updating DJs"))
+                            InlineLoadingBadge(title: LT("正在更新 DJ 列表", "Updating DJs", "DJ一覧を更新中"))
                         }
                         if let bannerMessage = viewModel.bannerMessage {
                             ScreenStatusBanner(
                                 message: bannerMessage,
                                 style: .error,
-                                actionTitle: L("重试", "Retry")
+                                actionTitle: LT("重试", "Retry", "再試行")
                             ) {
                                 Task { await viewModel.reload() }
                             }
@@ -309,7 +314,7 @@ struct DJsModuleView: View {
         .onChange(of: manualBannerItem) { _, item in
             Task { await loadManualPhoto(item, target: .banner) }
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { activeErrorMessage != nil },
             set: {
                 if !$0 {
@@ -318,7 +323,7 @@ struct DJsModuleView: View {
                 }
             }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(activeErrorMessage ?? "")
         }
@@ -350,7 +355,7 @@ struct DJsModuleView: View {
     @ViewBuilder
     private var sectionContent: some View {
         if spotlightCarouselDJs.isEmpty {
-            ContentUnavailableView(LL("暂无 DJ"), systemImage: "music.mic")
+            ContentUnavailableView(LT("暂无 DJ", "暂无 DJ", "DJはまだありません"), systemImage: "music.mic")
                 .frame(maxWidth: .infinity, minHeight: 220)
         } else {
             DJSpotlightCarouselSection(
@@ -420,8 +425,8 @@ struct DJsModuleView: View {
 
     private var djImportSheet: some View {
         Form {
-                Section(LL("导入方式")) {
-                    Picker(LL("导入方式"), selection: $importMode) {
+                Section(LT("导入方式", "导入方式", "取り込み方法")) {
+                    Picker(LT("导入方式", "导入方式", "取り込み方法"), selection: $importMode) {
                         ForEach(DJsImportMode.allCases) { mode in
                             Text(mode.title).tag(mode)
                         }
@@ -430,16 +435,16 @@ struct DJsModuleView: View {
                 }
 
                 if importMode == .spotify {
-                    Section(LL("搜索 Spotify DJ")) {
+                    Section(LT("搜索 Spotify DJ", "搜索 Spotify DJ", "Spotify DJを検索")) {
                         HStack(spacing: 8) {
-                            TextField(LL("输入 DJ 名称"), text: $spotifySearchKeyword)
+                            TextField(LT("输入 DJ 名称", "输入 DJ 名称", "DJ名を入力"), text: $spotifySearchKeyword)
                                 .textInputAutocapitalization(.words)
                                 .autocorrectionDisabled(true)
                                 .onSubmit {
                                     Task { await searchSpotifyCandidates() }
                                 }
 
-                            Button(isSearchingSpotify ? L("搜索中...", "Searching...") : L("搜索", "Search")) {
+                            Button(isSearchingSpotify ? LT("搜索中...", "Searching...", "検索中...") : LT("搜索", "Search", "検索")) {
                                 Task { await searchSpotifyCandidates() }
                             }
                             .disabled(isSearchingSpotify || spotifySearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -449,16 +454,16 @@ struct DJsModuleView: View {
                             HStack(spacing: 8) {
                                 ProgressView()
                                     .controlSize(.small)
-                                Text(LL("正在拉取 Spotify 候选列表..."))
+                                Text(LT("正在拉取 Spotify 候选列表...", "正在拉取 Spotify 候选列表...", "Spotify候補を取得中..."))
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             }
                         }
                     }
 
-                    Section(LL("候选结果")) {
+                    Section(LT("候选结果", "候选结果", "候補結果")) {
                         if spotifyCandidates.isEmpty {
-                            Text(LL("暂无候选，可切换到手动导入。"))
+                            Text(LT("暂无候选，可切换到手动导入。", "暂无候选，可切换到手动导入。", "候補がありません。手動取り込みに切り替えられます。"))
                                 .font(.subheadline)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         } else {
@@ -474,34 +479,34 @@ struct DJsModuleView: View {
                     }
 
                     if let selected = selectedSpotifyCandidate {
-                        Section(LL("确认导入信息")) {
-                            Text(L("Spotify ID: \(selected.spotifyId)", "Spotify ID: \(selected.spotifyId)"))
+                        Section(LT("确认导入信息", "确认导入信息", "取り込み情報を確認")) {
+                            Text(LT("Spotify ID: \(selected.spotifyId)", "Spotify ID: \(selected.spotifyId)", "Spotify ID: \(selected.spotifyId)"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
 
-                            TextField(LL("DJ 名称"), text: $spotifyDraftName)
-                            TextField(LL("别名（英文逗号分隔）"), text: $spotifyDraftAliases)
-                            TextField(LL("简介"), text: $spotifyDraftBio, axis: .vertical)
-                            TextField(LL("国家（可选）"), text: $spotifyDraftCountry)
+                            TextField(LT("DJ 名称", "DJ 名称", "DJ名"), text: $spotifyDraftName)
+                            TextField(LT("别名（英文逗号分隔）", "别名（英文逗号分隔）", "別名（半角カンマ区切り）"), text: $spotifyDraftAliases)
+                            TextField(LT("简介", "简介", "紹介"), text: $spotifyDraftBio, axis: .vertical)
+                            TextField(LT("国家（可选）", "国家（可选）", "国（任意）"), text: $spotifyDraftCountry)
 
                             if let existingName = selected.existingDJName, !existingName.isEmpty {
-                                Text(L("检测到同名/同Spotify DJ：\(existingName)，导入时将合并更新，不会重复创建。", "Matched existing same-name/Spotify DJ: \(existingName). Import will merge update instead of creating duplicate."))
+                                Text(LT("检测到同名/同Spotify DJ：\(existingName)，导入时将合并更新，不会重复创建。", "Matched existing same-name/Spotify DJ: \(existingName). Import will merge update instead of creating duplicate.", "同名/同一SpotifyのDJ「\(existingName)」を検出しました。取り込み時に統合更新され、重複作成されません。"))
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             }
                         }
                     }
                 } else if importMode == .discogs {
-                    Section(LL("搜索 Discogs Artist")) {
+                    Section(LT("搜索 Discogs Artist", "搜索 Discogs Artist", "Discogs Artistを検索")) {
                         HStack(spacing: 8) {
-                            TextField(LL("输入 DJ 名称"), text: $discogsSearchKeyword)
+                            TextField(LT("输入 DJ 名称", "输入 DJ 名称", "DJ名を入力"), text: $discogsSearchKeyword)
                                 .textInputAutocapitalization(.words)
                                 .autocorrectionDisabled(true)
                                 .onSubmit {
                                     Task { await searchDiscogsCandidates() }
                                 }
 
-                            Button(isSearchingDiscogs ? L("搜索中...", "Searching...") : L("搜索", "Search")) {
+                            Button(isSearchingDiscogs ? LT("搜索中...", "Searching...", "検索中...") : LT("搜索", "Search", "検索")) {
                                 Task { await searchDiscogsCandidates() }
                             }
                             .disabled(isSearchingDiscogs || discogsSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -511,16 +516,16 @@ struct DJsModuleView: View {
                             HStack(spacing: 8) {
                                 ProgressView()
                                     .controlSize(.small)
-                                Text(LL("正在拉取 Discogs 候选列表..."))
+                                Text(LT("正在拉取 Discogs 候选列表...", "正在拉取 Discogs 候选列表...", "Discogs候補を取得中..."))
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             }
                         }
                     }
 
-                    Section(LL("Discogs 候选结果")) {
+                    Section(LT("Discogs 候选结果", "Discogs 候选结果", "Discogs候補結果")) {
                         if discogsCandidates.isEmpty {
-                            Text(LL("暂无候选，可继续搜索或切换到手动导入。"))
+                            Text(LT("暂无候选，可继续搜索或切换到手动导入。", "暂无候选，可继续搜索或切换到手动导入。", "候補がありません。検索を続けるか手動取り込みに切り替えられます。"))
                                 .font(.subheadline)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         } else {
@@ -536,53 +541,53 @@ struct DJsModuleView: View {
                     }
 
                     if selectedDiscogsCandidate != nil {
-                        Section(LL("确认导入信息（支持二次修改）")) {
+                        Section(LT("确认导入信息（支持二次修改）", "确认导入信息（支持二次修改）", "取り込み情報を確認（二次編集可）")) {
                             if isLoadingDiscogsDetail {
                                 HStack(spacing: 8) {
                                     ProgressView()
                                         .controlSize(.small)
-                                    Text(LL("正在读取 Discogs 详情并自动填充..."))
+                                    Text(LT("正在读取 Discogs 详情并自动填充...", "正在读取 Discogs 详情并自动填充...", "Discogs詳細を読み込んで自動入力中..."))
                                         .font(.caption)
                                         .foregroundStyle(RaverTheme.secondaryText)
                                 }
                             }
 
-                            TextField(LL("DJ 名称"), text: $discogsDraftName)
-                            TextField(LL("别名（英文逗号分隔）"), text: $discogsDraftAliases)
-                            TextField(LL("简介"), text: $discogsDraftBio, axis: .vertical)
-                            TextField(LL("国家（可选）"), text: $discogsDraftCountry)
-                            TextField(LL("Instagram（可选）"), text: $discogsDraftInstagram)
+                            TextField(LT("DJ 名称", "DJ 名称", "DJ名"), text: $discogsDraftName)
+                            TextField(LT("别名（英文逗号分隔）", "别名（英文逗号分隔）", "別名（半角カンマ区切り）"), text: $discogsDraftAliases)
+                            TextField(LT("简介", "简介", "紹介"), text: $discogsDraftBio, axis: .vertical)
+                            TextField(LT("国家（可选）", "国家（可选）", "国（任意）"), text: $discogsDraftCountry)
+                            TextField(LT("Instagram（可选）", "Instagram（可选）", "Instagram（任意）"), text: $discogsDraftInstagram)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled(true)
-                            TextField(LL("SoundCloud（可选）"), text: $discogsDraftSoundcloud)
+                            TextField(LT("SoundCloud（可选）", "SoundCloud（可选）", "SoundCloud（任意）"), text: $discogsDraftSoundcloud)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled(true)
-                            TextField(LL("X/Twitter（可选）"), text: $discogsDraftTwitter)
+                            TextField(LT("X/Twitter（可选）", "X/Twitter（可选）", "X/Twitter（任意）"), text: $discogsDraftTwitter)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled(true)
-                            TextField(LL("Spotify ID（可选）"), text: $discogsDraftSpotifyID)
+                            TextField(LT("Spotify ID（可选）", "Spotify ID（可选）", "Spotify ID（任意）"), text: $discogsDraftSpotifyID)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled(true)
 
                             if let selectedDiscogsCandidate,
                                let existingName = selectedDiscogsCandidate.existingDJName,
                                !existingName.isEmpty {
-                                Text(L("检测到同名 DJ：\(existingName)，导入时将合并更新，不会重复创建。", "Matched existing same-name DJ: \(existingName). Import will merge update instead of creating duplicate."))
+                                Text(LT("检测到同名 DJ：\(existingName)，导入时将合并更新，不会重复创建。", "Matched existing same-name DJ: \(existingName). Import will merge update instead of creating duplicate.", "同名DJ「\(existingName)」を検出しました。取り込み時に統合更新され、重複作成されません。"))
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             }
                         }
 
-                        Section(LL("关联 Spotify（可选）")) {
+                        Section(LT("关联 Spotify（可选）", "关联 Spotify（可选）", "Spotify連携（任意）")) {
                             HStack(spacing: 8) {
-                                TextField(LL("搜索 Spotify 用于补全链接"), text: $discogsLinkedSpotifyKeyword)
+                                TextField(LT("搜索 Spotify 用于补全链接", "搜索 Spotify 用于补全链接", "リンク補完用にSpotifyを検索"), text: $discogsLinkedSpotifyKeyword)
                                     .textInputAutocapitalization(.words)
                                     .autocorrectionDisabled(true)
                                     .onSubmit {
                                         Task { await searchDiscogsLinkedSpotifyCandidates() }
                                     }
 
-                                Button(isSearchingDiscogsLinkedSpotify ? L("搜索中...", "Searching...") : "搜索") {
+                                Button(isSearchingDiscogsLinkedSpotify ? LT("搜索中...", "Searching...", "検索中...") : "搜索") {
                                     Task { await searchDiscogsLinkedSpotifyCandidates() }
                                 }
                                 .disabled(isSearchingDiscogsLinkedSpotify || discogsLinkedSpotifyKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -592,7 +597,7 @@ struct DJsModuleView: View {
                                 HStack(spacing: 8) {
                                     ProgressView()
                                         .controlSize(.small)
-                                    Text(LL("正在搜索 Spotify..."))
+                                    Text(LT("正在搜索 Spotify...", "正在搜索 Spotify...", "Spotifyを検索中..."))
                                         .font(.caption)
                                         .foregroundStyle(RaverTheme.secondaryText)
                                 }
@@ -613,33 +618,33 @@ struct DJsModuleView: View {
                             }
 
                             if let selectedDiscogsLinkedSpotifyCandidate {
-                                Text(L("已关联 Spotify：\(selectedDiscogsLinkedSpotifyCandidate.name)", "Linked Spotify: \(selectedDiscogsLinkedSpotifyCandidate.name)"))
+                                Text(LT("已关联 Spotify：\(selectedDiscogsLinkedSpotifyCandidate.name)", "Linked Spotify: \(selectedDiscogsLinkedSpotifyCandidate.name)", "関連Spotify: \(selectedDiscogsLinkedSpotifyCandidate.name)"))
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             }
                         }
                     }
                 } else {
-                    Section(LL("手动填写 DJ 信息")) {
-                        TextField(LL("DJ 名称（必填）"), text: $manualName)
-                        TextField(LL("别名（英文逗号分隔）"), text: $manualAliases)
-                        TextField(LL("国家（可选）"), text: $manualCountry)
-                        TextField(LL("Instagram（可选）"), text: $manualInstagram)
+                    Section(LT("手动填写 DJ 信息", "手动填写 DJ 信息", "DJ情報を手動入力")) {
+                        TextField(LT("DJ 名称（必填）", "DJ 名称（必填）", "DJ名（必須）"), text: $manualName)
+                        TextField(LT("别名（英文逗号分隔）", "别名（英文逗号分隔）", "別名（半角カンマ区切り）"), text: $manualAliases)
+                        TextField(LT("国家（可选）", "国家（可选）", "国（任意）"), text: $manualCountry)
+                        TextField(LT("Instagram（可选）", "Instagram（可选）", "Instagram（任意）"), text: $manualInstagram)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
-                        TextField(LL("SoundCloud（可选）"), text: $manualSoundcloud)
+                        TextField(LT("SoundCloud（可选）", "SoundCloud（可选）", "SoundCloud（任意）"), text: $manualSoundcloud)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
-                        TextField(LL("X/Twitter（可选）"), text: $manualTwitter)
+                        TextField(LT("X/Twitter（可选）", "X/Twitter（可选）", "X/Twitter（任意）"), text: $manualTwitter)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
-                        TextField(LL("简介（可选）"), text: $manualBio, axis: .vertical)
+                        TextField(LT("简介（可选）", "简介（可选）", "紹介（任意）"), text: $manualBio, axis: .vertical)
                     }
 
-                    Section(LL("图片（上传到 OSS 的 DJ 文件夹）")) {
+                    Section(LT("图片（上传到 OSS 的 DJ 文件夹）", "图片（上传到 OSS 的 DJ 文件夹）", "画像（OSSのDJフォルダにアップロード）")) {
                         HStack(spacing: 12) {
                             PhotosPicker(selection: $manualAvatarItem, matching: .images) {
-                                Label(LL("选择头像"), systemImage: "person.crop.circle")
+                                Label(LT("选择头像", "选择头像", "アバターを選択"), systemImage: "person.crop.circle")
                             }
                             .buttonStyle(.bordered)
 
@@ -654,7 +659,7 @@ struct DJsModuleView: View {
 
                         HStack(spacing: 12) {
                             PhotosPicker(selection: $manualBannerItem, matching: .images) {
-                                Label(LL("选择横幅"), systemImage: "photo.rectangle")
+                                Label(LT("选择横幅", "选择横幅", "バナーを選択"), systemImage: "photo.rectangle")
                             }
                             .buttonStyle(.bordered)
 
@@ -670,14 +675,24 @@ struct DJsModuleView: View {
                 }
 
                 Section {
-                    Button(isImportingDJ ? L("导入中...", "Importing...") : L("确认导入到 DJ 数据库", "Confirm import to DJ database")) {
+                    Button(isImportingDJ ? LT("导入中...", "Importing...", "取り込み中...") : LT("确认导入到 DJ 数据库", "Confirm import to DJ database", "DJデータベースへの取り込みを確認")) {
                         Task { await confirmDJImport() }
                     }
                     .disabled(isImportingDJ || isImportConfirmDisabled)
                 }
             }
-            .raverSystemNavigation(title: LL("导入 DJ"))
+            .raverSystemNavigation(title: LT("导入 DJ", "导入 DJ", "DJを取り込み"))
             .scrollDismissesKeyboard(.interactively)
+            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
+                get: { djImportSuccessMessage != nil },
+                set: { if !$0 { djImportSuccessMessage = nil } }
+            )) {
+                Button(LT("确定", "OK", "OK"), role: .cancel) {
+                    finishDJImportSuccessDismissal()
+                }
+            } message: {
+                Text(djImportSuccessMessage ?? "")
+            }
     }
 
     private var isImportConfirmDisabled: Bool {
@@ -714,7 +729,7 @@ struct DJsModuleView: View {
                 selectedSpotifyCandidate = nil
             }
         } catch {
-            errorMessage = L("Spotify 搜索失败：\(error.userFacingMessage ?? "")", "Spotify search failed: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("Spotify 搜索失败：\(error.userFacingMessage ?? "")", "Spotify search failed: \(error.userFacingMessage ?? "")", "Spotify検索に失敗しました: \(error.userFacingMessage ?? "")")
         }
     }
 
@@ -739,7 +754,7 @@ struct DJsModuleView: View {
                 selectedDiscogsCandidate = nil
             }
         } catch {
-            errorMessage = L("Discogs 搜索失败：\(error.userFacingMessage ?? "")", "Discogs search failed: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("Discogs 搜索失败：\(error.userFacingMessage ?? "")", "Discogs search failed: \(error.userFacingMessage ?? "")", "Discogs検索に失敗しました: \(error.userFacingMessage ?? "")")
         }
     }
 
@@ -758,7 +773,7 @@ struct DJsModuleView: View {
             let items = try await djImportRepository.searchSpotifyDJs(query: keyword, limit: 8)
             discogsLinkedSpotifyCandidates = items
         } catch {
-            errorMessage = L("Spotify 搜索失败：\(error.userFacingMessage ?? "")", "Spotify search failed: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("Spotify 搜索失败：\(error.userFacingMessage ?? "")", "Spotify search failed: \(error.userFacingMessage ?? "")", "Spotify検索に失敗しました: \(error.userFacingMessage ?? "")")
         }
     }
 
@@ -814,7 +829,7 @@ struct DJsModuleView: View {
                 discogsDraftSpotifyID = linkedSpotify.spotifyId
             }
         } catch {
-            errorMessage = L("读取 Discogs 详情失败：\(error.userFacingMessage ?? "")", "Failed to load Discogs detail: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("读取 Discogs 详情失败：\(error.userFacingMessage ?? "")", "Failed to load Discogs detail: \(error.userFacingMessage ?? "")", "Discogs詳細の読み込みに失敗しました: \(error.userFacingMessage ?? "")")
         }
     }
 
@@ -839,14 +854,14 @@ struct DJsModuleView: View {
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
-                    Text(L("粉丝 \(candidate.followers)", "Followers \(candidate.followers)"))
-                    Text(L("热度 \(candidate.popularity)", "Popularity \(candidate.popularity)"))
+                    Text(LT("粉丝 \(candidate.followers)", "Followers \(candidate.followers)", "フォロワー \(candidate.followers)"))
+                    Text(LT("热度 \(candidate.popularity)", "Popularity \(candidate.popularity)", "人気度 \(candidate.popularity)"))
                 }
                 .font(.caption2)
                 .foregroundStyle(RaverTheme.secondaryText)
 
                 if let existingName = candidate.existingDJName, !existingName.isEmpty {
-                    Text(L("将合并到：\(existingName)", "Will merge into: \(existingName)"))
+                    Text(LT("将合并到：\(existingName)", "Will merge into: \(existingName)", "\(existingName) に統合されます"))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Color.orange)
                         .lineLimit(1)
@@ -886,12 +901,12 @@ struct DJsModuleView: View {
                     .foregroundStyle(RaverTheme.primaryText)
                     .lineLimit(1)
 
-                Text(L("Discogs ID \(candidate.artistId)", "Discogs ID \(candidate.artistId)"))
+                Text(LT("Discogs ID \(candidate.artistId)", "Discogs ID \(candidate.artistId)", "Discogs ID \(candidate.artistId)"))
                     .font(.caption2)
                     .foregroundStyle(RaverTheme.secondaryText)
 
                 if let existingName = candidate.existingDJName, !existingName.isEmpty {
-                    Text(L("将合并到：\(existingName)", "Will merge into: \(existingName)"))
+                    Text(LT("将合并到：\(existingName)", "Will merge into: \(existingName)", "\(existingName) に統合されます"))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Color.orange)
                         .lineLimit(1)
@@ -923,12 +938,12 @@ struct DJsModuleView: View {
     @MainActor
     private func confirmSpotifyImport() async {
         guard let selected = selectedSpotifyCandidate else {
-            errorMessage = L("请先选择一个 Spotify DJ", "Please select a Spotify DJ first.")
+            errorMessage = LT("请先选择一个 Spotify DJ", "Please select a Spotify DJ first.", "先にSpotify DJを選択してください。")
             return
         }
         let finalName = spotifyDraftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalName.isEmpty else {
-            errorMessage = L("DJ 名称不能为空", "DJ name cannot be empty.")
+            errorMessage = LT("DJ 名称不能为空", "DJ name cannot be empty.", "DJ名を入力してください。")
             return
         }
 
@@ -956,25 +971,27 @@ struct DJsModuleView: View {
                     isVerified: true
                 )
             )
-            showDJImportSheet = false
-            await viewModel.reload()
-            errorMessage = result.action == "created"
-                ? L("已导入 DJ：\(result.dj.name)", "DJ imported: \(result.dj.name)")
-                : L("已更新 DJ：\(result.dj.name)", "DJ updated: \(result.dj.name)")
+            switch result {
+            case .submittedForReview:
+                completeDJImportSuccess()
+            case .imported:
+                await viewModel.reload()
+                completeDJImportSuccess(message: LT("DJ 信息已保存", "DJ saved", "DJ情報を保存しました"))
+            }
         } catch {
-            errorMessage = L("导入失败：\(error.userFacingMessage ?? "")", "Import failed: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("导入失败：\(error.userFacingMessage ?? "")", "Import failed: \(error.userFacingMessage ?? "")", "取り込みに失敗しました: \(error.userFacingMessage ?? "")")
         }
     }
 
     @MainActor
     private func confirmDiscogsImport() async {
         guard let selected = selectedDiscogsCandidate else {
-            errorMessage = L("请先选择一个 Discogs DJ", "Please select a Discogs DJ first.")
+            errorMessage = LT("请先选择一个 Discogs DJ", "Please select a Discogs DJ first.", "先にDiscogs DJを選択してください。")
             return
         }
         let finalName = discogsDraftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalName.isEmpty else {
-            errorMessage = L("DJ 名称不能为空", "DJ name cannot be empty.")
+            errorMessage = LT("DJ 名称不能为空", "DJ name cannot be empty.", "DJ名を入力してください。")
             return
         }
 
@@ -1007,13 +1024,15 @@ struct DJsModuleView: View {
                     isVerified: true
                 )
             )
-            showDJImportSheet = false
-            await viewModel.reload()
-            errorMessage = result.action == "created"
-                ? L("已导入 DJ：\(result.dj.name)", "DJ imported: \(result.dj.name)")
-                : L("已更新 DJ：\(result.dj.name)", "DJ updated: \(result.dj.name)")
+            switch result {
+            case .submittedForReview:
+                completeDJImportSuccess()
+            case .imported:
+                await viewModel.reload()
+                completeDJImportSuccess(message: LT("DJ 信息已保存", "DJ saved", "DJ情報を保存しました"))
+            }
         } catch {
-            errorMessage = L("Discogs 导入失败：\(error.userFacingMessage ?? "")", "Discogs import failed: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("Discogs 导入失败：\(error.userFacingMessage ?? "")", "Discogs import failed: \(error.userFacingMessage ?? "")", "Discogs取り込みに失敗しました: \(error.userFacingMessage ?? "")")
         }
     }
 
@@ -1021,7 +1040,7 @@ struct DJsModuleView: View {
     private func confirmManualImport() async {
         let finalName = manualName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalName.isEmpty else {
-            errorMessage = L("DJ 名称不能为空", "DJ name cannot be empty.")
+            errorMessage = LT("DJ 名称不能为空", "DJ name cannot be empty.", "DJ名を入力してください。")
             return
         }
 
@@ -1039,7 +1058,7 @@ struct DJsModuleView: View {
         defer { isImportingDJ = false }
 
         do {
-            let imported = try await djImportRepository.importManualDJ(
+            let result = try await djImportRepository.importManualDJ(
                 input: ImportManualDJInput(
                     name: finalName,
                     spotifyId: nil,
@@ -1052,6 +1071,11 @@ struct DJsModuleView: View {
                     isVerified: true
                 )
             )
+
+            guard case .imported(let imported) = result else {
+                completeDJImportSuccess()
+                return
+            }
 
             if let manualAvatarData {
                 _ = try await djMediaRepository.uploadDJImage(
@@ -1073,14 +1097,26 @@ struct DJsModuleView: View {
                 )
             }
 
-            showDJImportSheet = false
             await viewModel.reload()
-            errorMessage = imported.action == "created"
-                ? L("已手动导入 DJ：\(imported.dj.name)", "DJ imported manually: \(imported.dj.name)")
-                : L("已更新 DJ：\(imported.dj.name)", "DJ updated: \(imported.dj.name)")
+            completeDJImportSuccess(message: LT("DJ 信息已保存", "DJ saved", "DJ情報を保存しました"))
         } catch {
-            errorMessage = L("手动导入失败：\(error.userFacingMessage ?? "")", "Manual import failed: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("手动导入失败：\(error.userFacingMessage ?? "")", "Manual import failed: \(error.userFacingMessage ?? "")", "手動取り込みに失敗しました: \(error.userFacingMessage ?? "")")
         }
+    }
+
+    @MainActor
+    private func completeDJImportSuccess(message: String = LT("DJ 信息已提交审核", "DJ submitted for review", "DJ情報を審査に送信しました")) {
+        errorMessage = nil
+        viewModel.errorMessage = nil
+        djImportSuccessMessage = message
+    }
+
+    @MainActor
+    private func finishDJImportSuccessDismissal() {
+        djImportSuccessMessage = nil
+        showDJImportSheet = false
+        guard dismissAfterSuccessfulImport else { return }
+        dismiss()
     }
 
     private func buildDiscogsAliasesText(from detail: DiscogsDJArtistDetail) -> String {
@@ -1145,7 +1181,7 @@ struct DJsModuleView: View {
                 manualBannerData = loaded
             }
         } catch {
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
+            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
         }
     }
 
@@ -1172,9 +1208,9 @@ private enum DJsImportMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .spotify: return L("Spotify 导入", "Import from Spotify")
-        case .discogs: return L("Discogs 导入", "Import from Discogs")
-        case .manual: return L("手动导入", "Manual Import")
+        case .spotify: return LT("Spotify 导入", "Import from Spotify", "Spotifyから取り込み")
+        case .discogs: return LT("Discogs 导入", "Import from Discogs", "Discogsから取り込み")
+        case .manual: return LT("手动导入", "Manual Import", "手動取り込み")
         }
     }
 }
@@ -1605,12 +1641,12 @@ private struct DJSpotlightCarouselSection: View {
 
     private func spotlightEventCountText(for dj: WebDJ) -> String {
         let eventCount = max(dj.eventCount ?? 0, dj.eventsCount ?? 0, dj.upcomingShows ?? 0)
-        return L("\(eventCount) 场活动", "\(eventCount) events")
+        return LT("\(eventCount) 场活动", "\(eventCount) events", "\(eventCount)件のイベント")
     }
 
     private func spotlightSetCountText(for dj: WebDJ) -> String {
         let setCount = max(dj.setCount ?? 0, dj.setsCount ?? 0, dj.djSetCount ?? 0)
-        return L("\(setCount) 个 Sets", "\(setCount) sets")
+        return LT("\(setCount) 个 Sets", "\(setCount) sets", "\(setCount)件のSet")
     }
 
     private func spotlightSummary(for dj: WebDJ) -> String {
@@ -1618,9 +1654,9 @@ private struct DJSpotlightCarouselSection: View {
             return bio
         }
         if let country = dj.country, !country.isEmpty {
-            return L("\(country) DJ，持续活跃在当下电子音乐现场。", "\(country)-based electronic artist with a strong current presence.")
+            return LT("\(country) DJ，持续活跃在当下电子音乐现场。", "\(country)-based electronic artist with a strong current presence.", "\(country)のDJ。現在の電子音楽シーンで精力的に活動しています。")
         }
-        return L("持续活跃在当下电子音乐现场，值得继续深入探索。", "A standout electronic artist worth diving into.")
+        return LT("持续活跃在当下电子音乐现场，值得继续深入探索。", "A standout electronic artist worth diving into.", "現在の電子音楽シーンで活躍している、さらに深く知りたいアーティストです。")
     }
 }
 
@@ -1736,11 +1772,11 @@ private func compactDJCount(_ value: Int) -> String {
 
     switch absolute {
     case 1_000_000...:
-        return "\(sign)\(trimTrailingZero((absolute / 1_000_000).formatted(.number.precision(.fractionLength(0...1)))))M"
+        return "\(sign)\(trimTrailingZero((absolute / 1_000_000).appLocalizedNumberText(maximumFractionDigits: 1)))M"
     case 1_000...:
-        return "\(sign)\(trimTrailingZero((absolute / 1_000).formatted(.number.precision(.fractionLength(0...1)))))K"
+        return "\(sign)\(trimTrailingZero((absolute / 1_000).appLocalizedNumberText(maximumFractionDigits: 1)))K"
     default:
-        return "\(value)"
+        return value.appLocalizedNumberText()
     }
 }
 
@@ -1985,7 +2021,7 @@ private struct DJWebCard: View {
                             .lineLimit(1)
                     }
 
-                    Label(L("\(dj.followerCount ?? 0) 粉丝", "\(dj.followerCount ?? 0) followers"), systemImage: "person.2")
+                    Label(LT("\(dj.followerCount ?? 0) 粉丝", "\(dj.followerCount ?? 0) followers", "\(dj.followerCount ?? 0) フォロワー"), systemImage: "person.2")
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(1)
@@ -2492,6 +2528,7 @@ struct DJDetailView: View {
     @State private var spotifyDraftName = ""
     @State private var spotifyDraftAliases = ""
     @State private var spotifyDraftBio = ""
+    @State private var reportTarget: ReportSheetTarget?
     @State private var spotifyDraftCountry = ""
     @State private var isImportingSpotifyDJ = false
     @State private var showDJEditSheet = false
@@ -2537,11 +2574,11 @@ struct DJDetailView: View {
 
         var title: String {
             switch self {
-            case .intro: return L("简介", "Intro")
-            case .posts: return L("动态", "Posts")
+            case .intro: return LT("简介", "Intro", "紹介")
+            case .posts: return LT("动态", "Posts", "投稿")
             case .sets: return "Sets"
-            case .events: return L("活动", "Events")
-            case .ratings: return L("打分", "Ratings")
+            case .events: return LT("活动", "Events", "イベント")
+            case .ratings: return LT("打分", "Ratings", "評価")
             }
         }
 
@@ -2566,11 +2603,11 @@ struct DJDetailView: View {
         var title: String {
             switch self {
             case .all:
-                return L("全部地区", "All")
+                return LT("全部地区", "All", "すべての地域")
             case .domestic:
-                return L("国内", "Domestic")
+                return LT("国内", "Domestic", "国内")
             case .international:
-                return L("海外", "International")
+                return LT("海外", "International", "海外")
             }
         }
     }
@@ -2607,15 +2644,22 @@ struct DJDetailView: View {
         }
         .operationBannerHost()
         .sheet(item: $fullChatSharePresentation, content: fullChatShareSheet)
+        .sheet(item: $reportTarget) { target in
+            ReportSheet(target: target) { _, _ in
+                showWidgetStatusBanner(message: LT("举报已提交", "Report submitted", "報告を送信しました"))
+            }
+            .environmentObject(appState)
+            .presentationDetents([.large])
+        }
         .task {
             await refreshManualCacheState()
             await load()
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -2653,7 +2697,7 @@ struct DJDetailView: View {
                 .padding(16)
                 .padding(.top, 96)
             case .empty:
-                ContentUnavailableView(LL("DJ 不存在"), systemImage: "person.crop.circle.badge.exclamationmark")
+                ContentUnavailableView(LT("DJ 不存在", "DJ 不存在", "DJが存在しません"), systemImage: "person.crop.circle.badge.exclamationmark")
             case .success:
                 successDetailBody
             }
@@ -2669,7 +2713,7 @@ struct DJDetailView: View {
             }
             .ignoresSafeArea(edges: .top)
         } else {
-            ContentUnavailableView(LL("DJ 不存在"), systemImage: "person.crop.circle.badge.exclamationmark")
+            ContentUnavailableView(LT("DJ 不存在", "DJ 不存在", "DJが存在しません"), systemImage: "person.crop.circle.badge.exclamationmark")
         }
     }
 
@@ -2707,10 +2751,7 @@ struct DJDetailView: View {
             }
         ) { conversation in
             showWidgetStatusBanner(
-                message: L(
-                    "已分享到 \(conversation.title)",
-                    "Shared to \(conversation.title)"
-                ),
+                message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                 conversation: conversation
             )
         } preview: {
@@ -2744,10 +2785,7 @@ struct DJDetailView: View {
                     }
                 ) { conversation in
                     showWidgetStatusBanner(
-                        message: L(
-                            "已分享到 \(conversation.title)",
-                            "Shared to \(conversation.title)"
-                        ),
+                        message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                         conversation: conversation
                     )
                 } onMoreChats: {
@@ -2769,7 +2807,7 @@ struct DJDetailView: View {
         if isRefreshing || bannerMessage != nil {
             VStack(alignment: .leading, spacing: 10) {
                 if isRefreshing {
-                    InlineLoadingBadge(title: L("正在更新 DJ 详情", "Updating DJ details"))
+                    InlineLoadingBadge(title: LT("正在更新 DJ 详情", "Updating DJ details", "DJ詳細を更新中"))
                 }
                 detailErrorStatusBanner
             }
@@ -2785,7 +2823,7 @@ struct DJDetailView: View {
                 ScreenStatusBanner(
                     message: bannerMessage,
                     style: bannerStyle,
-                    actionTitle: L("重试", "Retry")
+                    actionTitle: LT("重试", "Retry", "再試行")
                 ) {
                     Task { await load() }
                 }
@@ -2852,26 +2890,26 @@ struct DJDetailView: View {
                 phase = .success
                 if isRequestTimeoutError(error) {
                     showBannerMessageAutoDismiss(
-                        L("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version."),
+                        LT("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version.", "リクエストがタイムアウトしました。最新のオフラインキャッシュを表示しています。"),
                         style: .warning
                     )
                 } else {
                     showBannerMessageAutoDismiss(
-                        L("网络较弱，已展示 DJ 缓存数据。", "Network is weak. Showing cached DJ data."),
+                        LT("网络较弱，已展示 DJ 缓存数据。", "Network is weak. Showing cached DJ data.", "ネットワークが弱いため、DJのキャッシュデータを表示しています。"),
                         style: .warning
                     )
                 }
             } else if hadContent {
                 isLoadingRelatedArticles = false
                 showBannerMessage(
-                    error.userFacingMessage ?? L("DJ 详情更新失败，请稍后重试", "Failed to refresh DJ details. Please try again later."),
+                    error.userFacingMessage ?? LT("DJ 详情更新失败，请稍后重试", "Failed to refresh DJ details. Please try again later.", "DJ詳細を更新できませんでした。時間をおいて再試行してください。"),
                     style: .error,
                     allowsRetry: true
                 )
                 phase = .success
             } else {
                 isLoadingRelatedArticles = false
-                let message = error.userFacingMessage ?? L("DJ 详情加载失败，请稍后重试", "Failed to load DJ details. Please try again later.")
+                let message = error.userFacingMessage ?? LT("DJ 详情加载失败，请稍后重试", "Failed to load DJ details. Please try again later.", "DJ詳細を読み込めませんでした。時間をおいて再試行してください。")
                 phase = .failure(message: message)
             }
         }
@@ -2941,9 +2979,9 @@ struct DJDetailView: View {
 
             await persistDJManualCacheSnapshot(snapshot, prefetchImages: true)
             applyDJManualCacheSnapshot(snapshot)
-            errorMessage = L("DJ 页面已缓存，弱网环境也可查看。", "DJ page cached. You can view it in weak-network conditions.")
+            errorMessage = LT("DJ 页面已缓存，弱网环境也可查看。", "DJ page cached. You can view it in weak-network conditions.", "DJページをキャッシュしました。弱いネットワークでも確認できます。")
         } catch {
-            errorMessage = L("缓存失败，请稍后重试。", "Caching failed. Please try again later.")
+            errorMessage = LT("缓存失败，请稍后重试。", "Caching failed. Please try again later.", "キャッシュに失敗しました。時間をおいて再試行してください。")
         }
     }
 
@@ -2967,7 +3005,7 @@ struct DJDetailView: View {
         if let dj {
             return dj
         }
-        throw ServiceError.message(L("DJ 详情加载失败，请稍后重试。", "Failed to load DJ details. Please try again later."))
+        throw ServiceError.message(LT("DJ 详情加载失败，请稍后重试。", "Failed to load DJ details. Please try again later.", "DJ詳細を読み込めませんでした。時間をおいて再試行してください。"))
     }
 
     private func makeDJManualCacheSnapshot(
@@ -3105,7 +3143,7 @@ struct DJDetailView: View {
                 selectedSpotifyCandidate = nil
             }
         } catch {
-            errorMessage = L("Spotify 搜索失败：\(error.userFacingMessage ?? "")", "Spotify search failed: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("Spotify 搜索失败：\(error.userFacingMessage ?? "")", "Spotify search failed: \(error.userFacingMessage ?? "")", "Spotify検索に失敗しました: \(error.userFacingMessage ?? "")")
         }
     }
 
@@ -3142,14 +3180,14 @@ struct DJDetailView: View {
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
-                    Text(L("粉丝 \(candidate.followers)", "Followers \(candidate.followers)"))
-                    Text(L("热度 \(candidate.popularity)", "Popularity \(candidate.popularity)"))
+                    Text(LT("粉丝 \(candidate.followers)", "Followers \(candidate.followers)", "フォロワー \(candidate.followers)"))
+                    Text(LT("热度 \(candidate.popularity)", "Popularity \(candidate.popularity)", "人気度 \(candidate.popularity)"))
                 }
                 .font(.caption2)
                 .foregroundStyle(RaverTheme.secondaryText)
 
                 if let existingName = candidate.existingDJName, !existingName.isEmpty {
-                    Text(L("将合并到：\(existingName)", "Will merge into: \(existingName)"))
+                    Text(LT("将合并到：\(existingName)", "Will merge into: \(existingName)", "\(existingName) に統合されます"))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Color.orange)
                         .lineLimit(1)
@@ -3169,12 +3207,12 @@ struct DJDetailView: View {
     @MainActor
     private func confirmSpotifyImport() async {
         guard let selected = selectedSpotifyCandidate else {
-            errorMessage = L("请先选择一个 Spotify DJ", "Please select a Spotify DJ first.")
+            errorMessage = LT("请先选择一个 Spotify DJ", "Please select a Spotify DJ first.", "先にSpotify DJを選択してください。")
             return
         }
         let finalName = spotifyDraftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalName.isEmpty else {
-            errorMessage = L("DJ 名称不能为空", "DJ name cannot be empty.")
+            errorMessage = LT("DJ 名称不能为空", "DJ name cannot be empty.", "DJ名を入力してください。")
             return
         }
 
@@ -3203,14 +3241,19 @@ struct DJDetailView: View {
                 )
             )
             showSpotifyImportSheet = false
-            errorMessage = result.action == "created"
-                ? L("已导入 DJ：\(result.dj.name)", "DJ imported: \(result.dj.name)")
-                : L("已更新 DJ：\(result.dj.name)", "DJ updated: \(result.dj.name)")
-            if result.dj.id == djID {
-                await load()
+            switch result {
+            case .submittedForReview:
+                OperationBannerCenter.shared.success(LT("DJ 信息已提交审核", "DJ submitted for review", "DJ情報を審査に送信しました"))
+            case .imported(let result):
+                errorMessage = result.action == "created"
+                    ? LT("已导入 DJ：\(result.dj.name)", "DJ imported: \(result.dj.name)", "DJを取り込みました: \(result.dj.name)")
+                    : LT("已更新 DJ：\(result.dj.name)", "DJ updated: \(result.dj.name)", "DJを更新しました: \(result.dj.name)")
+                if result.dj.id == djID {
+                    await load()
+                }
             }
         } catch {
-            errorMessage = L("导入失败：\(error.userFacingMessage ?? "")", "Import failed: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("导入失败：\(error.userFacingMessage ?? "")", "Import failed: \(error.userFacingMessage ?? "")", "取り込みに失敗しました: \(error.userFacingMessage ?? "")")
         }
     }
 
@@ -3237,7 +3280,7 @@ struct DJDetailView: View {
 
         let finalName = editDJName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalName.isEmpty else {
-            errorMessage = L("DJ 名称不能为空", "DJ name cannot be empty.")
+            errorMessage = LT("DJ 名称不能为空", "DJ name cannot be empty.", "DJ名を入力してください。")
             return
         }
 
@@ -3288,9 +3331,9 @@ struct DJDetailView: View {
 
             showDJEditSheet = false
             await load()
-            errorMessage = L("DJ 信息已更新", "DJ profile updated.")
+            errorMessage = LT("DJ 信息已更新", "DJ profile updated.", "DJプロフィールを更新しました。")
         } catch {
-            errorMessage = L("保存失败：\(error.userFacingMessage ?? "")", "Save failed: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("保存失败：\(error.userFacingMessage ?? "")", "Save failed: \(error.userFacingMessage ?? "")", "保存に失敗しました: \(error.userFacingMessage ?? "")")
         }
     }
 
@@ -3320,7 +3363,7 @@ struct DJDetailView: View {
                 editBannerData = loaded
             }
         } catch {
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
+            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
         }
     }
 
@@ -3387,7 +3430,7 @@ struct DJDetailView: View {
                         Spacer(minLength: 0)
 
                         HStack(spacing: 8) {
-                            Button((dj.isFollowing ?? false) ? L("已关注", "Following") : L("关注", "Follow")) {
+                            Button((dj.isFollowing ?? false) ? LT("已关注", "Following", "フォロー中") : LT("关注", "Follow", "フォロー")) {
                                 Task { await toggleFollow(dj) }
                             }
                             .font(.subheadline.weight(.semibold))
@@ -3488,7 +3531,7 @@ struct DJDetailView: View {
                 .fixedSize(horizontal: true, vertical: false)
 
                 HStack(spacing: 6) {
-                    Text(L("活动进行中", "Live now"))
+                    Text(LT("活动进行中", "Live now", "開催中"))
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(Color(red: 0.30, green: 1.0, blue: 0.54))
                         .lineLimit(1)
@@ -3687,14 +3730,14 @@ struct DJDetailView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                errorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "paperplane.circle.fill",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
-                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                errorMessage = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ共有連携は未接続です。")
             }
         ]
     }
@@ -3705,7 +3748,7 @@ struct DJDetailView: View {
         if dj?.canEdit == true {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("编辑", "Edit"),
+                    title: LT("编辑", "Edit", "編集"),
                     systemImage: "square.and.pencil",
                     accentColor: Color(red: 0.99, green: 0.65, blue: 0.20)
                 ) {
@@ -3719,7 +3762,7 @@ struct DJDetailView: View {
         if let dj {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("复制链接", "Copy Link"),
+                    title: LT("复制链接", "Copy Link", "リンクをコピー"),
                     systemImage: "link",
                     accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
                 ) {
@@ -3728,7 +3771,7 @@ struct DJDetailView: View {
             )
             actions.append(
                 SharePanelQuickAction(
-                    title: L("查看二维码", "View QR"),
+                    title: LT("查看二维码", "View QR", "QRを見る"),
                     systemImage: "qrcode",
                     accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
                 ) {
@@ -3737,7 +3780,7 @@ struct DJDetailView: View {
             )
             actions.append(
                 SharePanelQuickAction(
-                    title: L("查看海报", "View Poster"),
+                    title: LT("查看海报", "View Poster", "海報を見る"),
                     systemImage: "photo.on.rectangle",
                     accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
                 ) {
@@ -3746,7 +3789,7 @@ struct DJDetailView: View {
             )
             actions.append(
                 SharePanelQuickAction(
-                    title: L("保存海报", "Save Poster"),
+                    title: LT("保存海报", "Save Poster", "海報を保存"),
                     systemImage: "photo.badge.arrow.down",
                     accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
                 ) {
@@ -3757,7 +3800,7 @@ struct DJDetailView: View {
 
         actions.append(
             SharePanelQuickAction(
-                title: isCachingManualSnapshot ? L("缓存中", "Caching") : L("缓存", "Cache"),
+                title: isCachingManualSnapshot ? LT("缓存中", "Caching", "キャッシュ中") : LT("缓存", "Cache", "キャッシュ"),
                 systemImage: "arrow.down.circle",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
             ) {
@@ -3767,7 +3810,7 @@ struct DJDetailView: View {
 
         actions.append(
             SharePanelQuickAction(
-                title: L("贡献信息", "Incorrect Info"),
+                title: LT("贡献信息", "Incorrect Info", "情報を修正"),
                 systemImage: "info.circle",
                 accentColor: Color(red: 0.96, green: 0.47, blue: 0.26)
             ) {
@@ -3776,7 +3819,7 @@ struct DJDetailView: View {
         )
         actions.append(
             SharePanelQuickAction(
-                title: L("举报", "Report"),
+                title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
             ) {
@@ -3813,11 +3856,11 @@ struct DJDetailView: View {
             let result = try await shareLinkCoordinator.copyLink(target: shareTarget(for: dj))
             showWidgetStatusBanner(
                 message: result.usedDeepLinkFallback
-                    ? L("已复制 App 内链接", "Copied app-only link.")
-                    : L("已复制链接", "Link copied")
+                    ? LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました")
+                    : LT("已复制链接", "Link copied", "リンクをコピーしました")
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            errorMessage = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクをコピーできませんでした。もう一度お試しください。")
         }
     }
 
@@ -3837,7 +3880,7 @@ struct DJDetailView: View {
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -3848,20 +3891,20 @@ struct DJDetailView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("DJ 海报由分享系统统一生成，艺人名称、摘要和二维码都会跟随短链保持一致。", "DJ posters are generated by the share system, so the artist name, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
+                        hintText: LT("DJ 海报由分享系统统一生成，艺人名称、摘要和二维码都会跟随短链保持一致。", "DJ posters are generated by the share system, so the artist name, summary, and QR code stay aligned with the short link.", "DJ海報は共有システムで生成され、アーティスト名、概要、QRコードは短縮リンクと同期されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -3870,54 +3913,64 @@ struct DJDetailView: View {
         do {
             let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(for: dj), channel: "poster_save")
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
         } catch {
-            errorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 
     private func openDJFeedbackEntry() {
         // TODO: Wire to dedicated feedback route/page when available.
-        errorMessage = L("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.")
+        errorMessage = LT("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.", "情報修正の入口は近日公開予定です。この要望は記録しました。")
     }
 
     private func openDJReportEntry() {
-        // TODO: Wire to dedicated report route/page when available.
-        errorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+        guard let dj else {
+            errorMessage = LT("DJ 信息尚未加载完成。", "DJ details are still loading.", "DJ情報はまだ読み込み中です。")
+            return
+        }
+        reportTarget = ReportSheetTarget(
+            id: dj.id,
+            type: .dj,
+            title: dj.name,
+            preview: dj.bio?.nilIfBlank ?? normalizedDJGenres(dj).joined(separator: " · "),
+            targetUserID: dj.contributors?.first?.id,
+            targetUserDisplayName: dj.contributors?.first?.displayName
+        )
     }
 
     private var djEditSheet: some View {
         Form {
-                Section(LL("基础信息")) {
-                    TextField(LL("DJ 名称"), text: $editDJName)
-                    TextField(LL("别名（英文逗号分隔）"), text: $editDJAliases)
-                    TextField(LL("简介"), text: $editDJBio, axis: .vertical)
-                    TextField(LL("国家"), text: $editDJCountry)
-                    Toggle(LL("认证 DJ"), isOn: $editDJVerified)
+                Section(LT("基础信息", "基础信息", "基本情報")) {
+                    TextField(LT("DJ 名称", "DJ 名称", "DJ名"), text: $editDJName)
+                    TextField(LT("别名（英文逗号分隔）", "别名（英文逗号分隔）", "別名（半角カンマ区切り）"), text: $editDJAliases)
+                    TextField(LT("简介", "简介", "紹介"), text: $editDJBio, axis: .vertical)
+                    TextField(LT("国家", "国家", "国"), text: $editDJCountry)
+                    Toggle(LT("认证 DJ", "认证 DJ", "認証DJ"), isOn: $editDJVerified)
                 }
 
-                Section(LL("平台信息")) {
-                    TextField(L("Spotify ID", "Spotify ID"), text: $editDJSpotifyID)
+                Section(LT("平台信息", "平台信息", "プラットフォーム情報")) {
+                    TextField(LT("Spotify ID", "Spotify ID", "Spotify ID"), text: $editDJSpotifyID)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
-                    TextField(L("Apple Music ID", "Apple Music ID"), text: $editDJAppleMusicID)
+                    TextField(LT("Apple Music ID", "Apple Music ID", "Apple Music ID"), text: $editDJAppleMusicID)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
-                    TextField(L("Instagram URL", "Instagram URL"), text: $editDJInstagram)
+                    TextField(LT("Instagram URL", "Instagram URL", "Instagram URL"), text: $editDJInstagram)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
-                    TextField(L("SoundCloud URL", "SoundCloud URL"), text: $editDJSoundcloud)
+                    TextField(LT("SoundCloud URL", "SoundCloud URL", "SoundCloud URL"), text: $editDJSoundcloud)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
-                    TextField(L("X/Twitter URL", "X/Twitter URL"), text: $editDJTwitter)
+                    TextField(LT("X/Twitter URL", "X/Twitter URL", "X/Twitter URL"), text: $editDJTwitter)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
                 }
 
-                Section(LL("图片")) {
+                Section(LT("图片", "图片", "画像")) {
                     HStack(spacing: 12) {
                         PhotosPicker(selection: $editAvatarItem, matching: .images) {
-                            Label(LL("更换头像"), systemImage: "person.crop.circle")
+                            Label(LT("更换头像", "更换头像", "アバターを変更"), systemImage: "person.crop.circle")
                         }
                         .buttonStyle(.bordered)
 
@@ -3938,7 +3991,7 @@ struct DJDetailView: View {
 
                     HStack(spacing: 12) {
                         PhotosPicker(selection: $editBannerItem, matching: .images) {
-                            Label(LL("更换横幅"), systemImage: "photo.rectangle")
+                            Label(LT("更换横幅", "更换横幅", "バナーを変更"), systemImage: "photo.rectangle")
                         }
                         .buttonStyle(.bordered)
 
@@ -3959,20 +4012,20 @@ struct DJDetailView: View {
                 }
 
                 Section {
-                    Button(isSavingDJProfile ? L("保存中...", "Saving...") : "保存 DJ 信息") {
+                    Button(isSavingDJProfile ? LT("保存中...", "Saving...", "保存中...") : "保存 DJ 信息") {
                         Task { await saveDJProfileEdits() }
                     }
                     .disabled(isSavingDJProfile || editDJName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .raverSystemNavigation(title: LL("编辑 DJ"))
+            .raverSystemNavigation(title: LT("编辑 DJ", "编辑 DJ", "DJを編集"))
             .scrollDismissesKeyboard(.interactively)
     }
 
     private var spotifyImportFloatingButton: some View {
         Button {
             guard appState.session != nil else {
-                errorMessage = L("请先登录后再导入 Spotify DJ", "Please log in before importing Spotify DJ.")
+                errorMessage = LT("请先登录后再导入 Spotify DJ", "Please log in before importing Spotify DJ.", "Spotify DJを取り込むにはログインしてください。")
                 return
             }
             showSpotifyImportSheet = true
@@ -3998,16 +4051,16 @@ struct DJDetailView: View {
 
     private var spotifyImportSheet: some View {
         Form {
-                Section(LL("搜索 Spotify DJ")) {
+                Section(LT("搜索 Spotify DJ", "搜索 Spotify DJ", "Spotify DJを検索")) {
                     HStack(spacing: 8) {
-                        TextField(LL("输入 DJ 名称"), text: $spotifySearchKeyword)
+                        TextField(LT("输入 DJ 名称", "输入 DJ 名称", "DJ名を入力"), text: $spotifySearchKeyword)
                             .textInputAutocapitalization(.words)
                             .autocorrectionDisabled(true)
                             .onSubmit {
                                 Task { await searchSpotifyCandidates() }
                             }
 
-                        Button(isSearchingSpotify ? L("搜索中...", "Searching...") : "搜索") {
+                        Button(isSearchingSpotify ? LT("搜索中...", "Searching...", "検索中...") : "搜索") {
                             Task { await searchSpotifyCandidates() }
                         }
                         .disabled(isSearchingSpotify || spotifySearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -4017,16 +4070,16 @@ struct DJDetailView: View {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .controlSize(.small)
-                            Text(LL("正在拉取 Spotify 候选列表..."))
+                            Text(LT("正在拉取 Spotify 候选列表...", "正在拉取 Spotify 候选列表...", "Spotify候補を取得中..."))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
                     }
                 }
 
-                Section(LL("候选结果")) {
+                Section(LT("候选结果", "候选结果", "候補結果")) {
                     if spotifyCandidates.isEmpty {
-                        Text(LL("暂无候选，输入名称后点击搜索。"))
+                        Text(LT("暂无候选，输入名称后点击搜索。", "暂无候选，输入名称后点击搜索。", "候補がありません。名称を入力して検索してください。"))
                             .font(.subheadline)
                             .foregroundStyle(RaverTheme.secondaryText)
                     } else {
@@ -4042,30 +4095,30 @@ struct DJDetailView: View {
                 }
 
                 if let selected = selectedSpotifyCandidate {
-                    Section(LL("确认导入信息")) {
-                        Text(L("Spotify ID: \(selected.spotifyId)", "Spotify ID: \(selected.spotifyId)"))
+                    Section(LT("确认导入信息", "确认导入信息", "取り込み情報を確認")) {
+                        Text(LT("Spotify ID: \(selected.spotifyId)", "Spotify ID: \(selected.spotifyId)", "Spotify ID: \(selected.spotifyId)"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
 
-                        TextField(LL("DJ 名称"), text: $spotifyDraftName)
-                        TextField(LL("别名（英文逗号分隔）"), text: $spotifyDraftAliases)
-                        TextField(LL("简介"), text: $spotifyDraftBio, axis: .vertical)
-                        TextField(LL("国家（可选）"), text: $spotifyDraftCountry)
+                        TextField(LT("DJ 名称", "DJ 名称", "DJ名"), text: $spotifyDraftName)
+                        TextField(LT("别名（英文逗号分隔）", "别名（英文逗号分隔）", "別名（半角カンマ区切り）"), text: $spotifyDraftAliases)
+                        TextField(LT("简介", "简介", "紹介"), text: $spotifyDraftBio, axis: .vertical)
+                        TextField(LT("国家（可选）", "国家（可选）", "国（任意）"), text: $spotifyDraftCountry)
 
                         if let existingName = selected.existingDJName, !existingName.isEmpty {
-                            Text(L("检测到同名/同Spotify DJ：\(existingName)，导入时将合并更新，不会重复创建。", "Matched existing same-name/Spotify DJ: \(existingName). Import will merge update instead of creating duplicate."))
+                            Text(LT("检测到同名/同Spotify DJ：\(existingName)，导入时将合并更新，不会重复创建。", "Matched existing same-name/Spotify DJ: \(existingName). Import will merge update instead of creating duplicate.", "同名/同一SpotifyのDJ「\(existingName)」を検出しました。取り込み時に統合更新され、重複作成されません。"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
 
-                        Button(isImportingSpotifyDJ ? L("导入中...", "Importing...") : L("确认导入到 DJ 数据库", "Confirm import to DJ database")) {
+                        Button(isImportingSpotifyDJ ? LT("导入中...", "Importing...", "取り込み中...") : LT("确认导入到 DJ 数据库", "Confirm import to DJ database", "DJデータベースへの取り込みを確認")) {
                             Task { await confirmSpotifyImport() }
                         }
                         .disabled(isImportingSpotifyDJ || spotifyDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
             }
-            .raverSystemNavigation(title: LL("Spotify 导入"))
+            .raverSystemNavigation(title: LT("Spotify 导入", "Spotify 导入", "Spotify取り込み"))
             .scrollDismissesKeyboard(.interactively)
     }
 
@@ -4097,7 +4150,7 @@ struct DJDetailView: View {
             country: countryText,
             genreText: genreText,
             coverImageURL: heroImageURL(for: dj),
-            badgeText: L("艺人", "Artist")
+            badgeText: LT("艺人", "Artist", "アーティスト")
         )
     }
 
@@ -4294,10 +4347,10 @@ struct DJDetailView: View {
     @ViewBuilder
     private var relatedNewsTabContent: some View {
         if isLoadingRelatedArticles && relatedArticles.isEmpty {
-            ProgressView(LL("正在加载相关资讯..."))
+            ProgressView(LT("正在加载相关资讯...", "正在加载相关资讯...", "関連ニュースを読み込み中..."))
                 .padding(.vertical, 8)
         } else if relatedArticles.isEmpty {
-            Text(LL("暂无相关资讯"))
+            Text(LT("暂无相关资讯", "暂无相关资讯", "関連ニュースはありません"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
@@ -4322,12 +4375,12 @@ struct DJDetailView: View {
     @ViewBuilder
     private func introTabContent(_ dj: WebDJ) -> some View {
         HStack(spacing: 14) {
-            infoPill(icon: "headphones", text: L("已看 \(watchedSetCount) 场", "Watched \(watchedSetCount) sets"))
+            infoPill(icon: "headphones", text: LT("已看 \(watchedSetCount) 场", "Watched \(watchedSetCount) sets", "視聴済み \(watchedSetCount)件"))
             if let country = dj.country, !country.isEmpty {
                 infoPill(icon: "globe", text: country)
             }
             if dj.isVerified == true {
-                infoPill(icon: "checkmark.seal.fill", text: L("认证", "Verified"))
+                infoPill(icon: "checkmark.seal.fill", text: LT("认证", "Verified", "認証済み"))
             }
         }
 
@@ -4358,7 +4411,7 @@ struct DJDetailView: View {
         let contributorUsers = (dj.contributors ?? []).filter { !$0.username.isEmpty }
         if !contributorUsers.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Text(LL("贡献者"))
+                Text(LT("贡献者", "贡献者", "コントリビューター"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
                 VStack(alignment: .leading, spacing: 8) {
@@ -4382,7 +4435,7 @@ struct DJDetailView: View {
             let contributorNames = (dj.contributorUsernames ?? []).filter { !$0.isEmpty }
             if !contributorNames.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(LL("贡献者"))
+                    Text(LT("贡献者", "贡献者", "コントリビューター"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
                     Text(contributorNames.joined(separator: "、"))
@@ -4415,7 +4468,7 @@ struct DJDetailView: View {
     @ViewBuilder
     private var setsTabContent: some View {
         if sets.isEmpty {
-            Text(LL("暂无内容"))
+            Text(LT("暂无内容", "暂无内容", "コンテンツはまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 6)
         } else {
@@ -4433,7 +4486,7 @@ struct DJDetailView: View {
     @ViewBuilder
     private var eventsTabContent: some View {
         if djEvents.isEmpty {
-            Text(LL("暂无历史活动"))
+            Text(LT("暂无历史活动", "暂无历史活动", "過去イベントはまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 6)
         } else {
@@ -4441,7 +4494,7 @@ struct DJDetailView: View {
 
             let filteredEvents = filteredDJEvents
             if filteredEvents.isEmpty {
-                Text(L("没有匹配的活动", "No matching events"))
+                Text(LT("没有匹配的活动", "No matching events", "一致するイベントがありません"))
                     .font(.subheadline)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .padding(.top, 8)
@@ -4473,7 +4526,7 @@ struct DJDetailView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
 
-                TextField(L("搜索活动名/地点/年份", "Search event/location/year"), text: $historyEventSearchText)
+                TextField(LT("搜索活动名/地点/年份", "Search event/location/year", "イベント名/場所/年を検索"), text: $historyEventSearchText)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
 
@@ -4495,7 +4548,7 @@ struct DJDetailView: View {
                     .fill(Color.black.opacity(0.04))
             )
 
-            Picker(L("地区筛选", "Region"), selection: $historyEventRegionFilter) {
+            Picker(LT("地区筛选", "Region", "地域"), selection: $historyEventRegionFilter) {
                 ForEach(DJEventRegionFilter.allCases) { filter in
                     Text(filter.title).tag(filter)
                 }
@@ -4503,11 +4556,11 @@ struct DJDetailView: View {
             .pickerStyle(.segmented)
 
             VStack(alignment: .leading, spacing: 8) {
-                Toggle(L("按开始时间筛选", "Filter by start date"), isOn: historyEventStartDateToggleBinding)
+                Toggle(LT("按开始时间筛选", "Filter by start date", "開始日で絞り込み"), isOn: historyEventStartDateToggleBinding)
                     .font(.subheadline)
                 if historyEventStartDate != nil {
                     HStack(spacing: 8) {
-                        Text(L("开始于", "From"))
+                        Text(LT("开始于", "From", "開始"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                         Spacer(minLength: 0)
@@ -4517,11 +4570,11 @@ struct DJDetailView: View {
                     }
                 }
 
-                Toggle(L("按结束时间筛选", "Filter by end date"), isOn: historyEventEndDateToggleBinding)
+                Toggle(LT("按结束时间筛选", "Filter by end date", "終了日で絞り込み"), isOn: historyEventEndDateToggleBinding)
                     .font(.subheadline)
                 if historyEventEndDate != nil {
                     HStack(spacing: 8) {
-                        Text(L("结束于", "To"))
+                        Text(LT("结束于", "To", "終了"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                         Spacer(minLength: 0)
@@ -4538,7 +4591,7 @@ struct DJDetailView: View {
                     .foregroundStyle(RaverTheme.secondaryText)
                 Spacer(minLength: 0)
                 if hasActiveHistoryEventFilters {
-                    Button(L("清空筛选", "Clear")) {
+                    Button(LT("清空筛选", "Clear", "絞り込みをクリア")) {
                         clearHistoryEventFilters()
                     }
                     .font(.caption.weight(.semibold))
@@ -4555,7 +4608,7 @@ struct DJDetailView: View {
     }
 
     private var historyEventFilterResultText: String {
-        L("显示 \(filteredDJEvents.count) / \(djEvents.count) 场", "\(filteredDJEvents.count) of \(djEvents.count) shown")
+        LT("显示 \(filteredDJEvents.count) / \(djEvents.count) 场", "\(filteredDJEvents.count) of \(djEvents.count) shown", "\(djEvents.count)件中 \(filteredDJEvents.count)件を表示")
     }
 
     private var historyEventSearchQuery: String {
@@ -4746,7 +4799,7 @@ struct DJDetailView: View {
     @ViewBuilder
     private var ratingsTabContent: some View {
         if ratingUnits.isEmpty {
-            Text(LL("暂无关联打分"))
+            Text(LT("暂无关联打分", "暂无关联打分", "関連評価はまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 6)
         } else {
@@ -4934,7 +4987,7 @@ struct DJDetailView: View {
                 .foregroundStyle(RaverTheme.secondaryText)
                 .lineLimit(1)
 
-            Text(locationText.isEmpty ? L("地点待补充", "Location pending") : locationText)
+            Text(locationText.isEmpty ? LT("地点待补充", "Location pending", "場所は未設定") : locationText)
                 .font(.caption)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .lineLimit(1)
@@ -4956,16 +5009,17 @@ struct DJDetailView: View {
                     .lineLimit(2)
 
                 if !eventName.isEmpty {
-                    Text(L("事件：\(eventName)", "Event: \(eventName)"))
+                    Text(LT("事件：\(eventName)", "Event: \(eventName)", "イベント: \(eventName)"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(1)
                 }
 
                 Text(
-                    L(
+                    LT(
                         "评分 \(String(format: "%.1f", unit.rating)) · \(unit.ratingCount) 人",
-                        "Rating \(String(format: "%.1f", unit.rating)) · \(unit.ratingCount) ratings"
+                        "Rating \(String(format: "%.1f", unit.rating)) · \(unit.ratingCount) ratings",
+                        "評価 \(String(format: "%.1f", unit.rating)) · \(unit.ratingCount)件"
                     )
                 )
                     .font(.caption2)

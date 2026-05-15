@@ -101,13 +101,13 @@ struct NewsModuleView: View {
                 if isRefreshing || bannerMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if isRefreshing {
-                            InlineLoadingBadge(title: L("正在更新资讯", "Updating news"))
+                            InlineLoadingBadge(title: LT("正在更新资讯", "Updating news", "ニュースを更新中"))
                         }
                         if let bannerMessage {
                             ScreenStatusBanner(
                                 message: bannerMessage,
                                 style: .error,
-                                actionTitle: L("重试", "Retry")
+                                actionTitle: LT("重试", "Retry", "再試行")
                             ) {
                                 Task { await reload() }
                             }
@@ -122,7 +122,7 @@ struct NewsModuleView: View {
                         .padding(.top, 16)
                 } else if case .failure(let message) = phase {
                     ScreenErrorCard(
-                        title: L("资讯加载失败", "News Failed to Load"),
+                        title: LT("资讯加载失败", "News Failed to Load", "ニュースの読み込みに失敗しました"),
                         message: message
                     ) {
                         Task { await reload() }
@@ -131,7 +131,7 @@ struct NewsModuleView: View {
                     .padding(.top, 24)
                 } else if case .offline(let message) = phase {
                     ScreenErrorCard(
-                        title: L("网络不可用", "Network Unavailable"),
+                        title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                         message: message
                     ) {
                         Task { await reload() }
@@ -140,8 +140,8 @@ struct NewsModuleView: View {
                     .padding(.top, 24)
                 } else if displayedArticles.isEmpty {
                     VStack(spacing: 12) {
-                        ContentUnavailableView(LL("暂无资讯"), systemImage: "newspaper")
-                        Text(LL("点击右上角“发布资讯”发布图文内容后会显示在这里。"))
+                        ContentUnavailableView(LT("暂无资讯", "暂无资讯", "ニュースはまだありません"), systemImage: "newspaper")
+                        Text(LT("点击右上角“发布资讯”发布图文内容后会显示在这里。", "点击右上角“发布资讯”发布图文内容后会显示在这里。", "右上の「ニュースを公開」から画像付きコンテンツを投稿すると、ここに表示されます。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                             .multilineTextAlignment(.center)
@@ -235,7 +235,7 @@ struct NewsModuleView: View {
             phase = articles.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("资讯加载失败，请稍后重试", "Failed to load news. Please try again later.")
+            let message = error.userFacingMessage ?? LT("资讯加载失败，请稍后重试", "Failed to load news. Please try again later.", "ニュースを読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success
@@ -271,7 +271,7 @@ struct NewsModuleView: View {
             articles = sortedArticles(deduplicatedArticles(articles))
             nextCursor = fetchedPageCursor
         } catch {
-            bannerMessage = error.userFacingMessage ?? L("更多资讯加载失败，请稍后重试", "Failed to load more news. Please try again later.")
+            bannerMessage = error.userFacingMessage ?? LT("更多资讯加载失败，请稍后重试", "Failed to load more news. Please try again later.", "さらにニュースを読み込めませんでした。時間をおいて再試行してください。")
         }
     }
 

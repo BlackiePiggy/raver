@@ -125,13 +125,13 @@ struct SetsModuleView: View {
             if isRefreshing || bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if isRefreshing {
-                        InlineLoadingBadge(title: L("正在更新 Sets", "Updating sets"))
+                        InlineLoadingBadge(title: LT("正在更新 Sets", "Updating sets", "Setを更新中"))
                     }
                     if let bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task { await reload() }
                         }
@@ -147,7 +147,7 @@ struct SetsModuleView: View {
                 case .failure(let message), .offline(let message):
                     ScrollView {
                         ScreenErrorCard(
-                            title: L("Sets 加载失败", "Sets Failed to Load"),
+                            title: LT("Sets 加载失败", "Sets Failed to Load", "Setの読み込みに失敗しました"),
                             message: message
                         ) {
                             Task { await reload() }
@@ -157,7 +157,7 @@ struct SetsModuleView: View {
                     }
                 case .empty:
                     ContentUnavailableView(
-                        L("暂无 Sets", "No sets yet"),
+                        LT("暂无 Sets", "No sets yet", "Setはまだありません"),
                         systemImage: "waveform.path.ecg"
                     )
                 case .success:
@@ -173,7 +173,7 @@ struct SetsModuleView: View {
                             }
 
                             if page < totalPages {
-                                Button(L("加载更多", "Load More")) {
+                                Button(LT("加载更多", "Load More", "さらに読み込む")) {
                                     Task { await loadMore() }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .center)
@@ -200,15 +200,15 @@ struct SetsModuleView: View {
                     Spacer(minLength: 0)
 
                     Menu {
-                        Button(LL("最新")) {
+                        Button(LT("最新", "最新", "最新")) {
                             sortBy = "latest"
                             Task { await reload() }
                         }
-                        Button(LL("热门")) {
+                        Button(LT("热门", "热门", "人気")) {
                             sortBy = "popular"
                             Task { await reload() }
                         }
-                        Button(L("Tracks", "Tracks")) {
+                        Button(LT("Tracks", "Tracks", "曲目")) {
                             sortBy = "tracks"
                             Task { await reload() }
                         }
@@ -222,7 +222,7 @@ struct SetsModuleView: View {
                     Button {
                         discoverPush(.setCreate)
                     } label: {
-                        Label(LL("发布"), systemImage: "plus")
+                        Label(LT("发布", "发布", "公開"), systemImage: "plus")
                     }
                     .font(.subheadline)
                     .buttonStyle(.borderedProminent)
@@ -238,11 +238,11 @@ struct SetsModuleView: View {
         .onReceive(NotificationCenter.default.publisher(for: .discoverSetDidSave)) { _ in
             Task { await reload() }
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -280,7 +280,7 @@ struct SetsModuleView: View {
             phase = sets.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("Sets 加载失败，请稍后重试", "Failed to load sets. Please try again later.")
+            let message = error.userFacingMessage ?? LT("Sets 加载失败，请稍后重试", "Failed to load sets. Please try again later.", "Setを読み込めませんでした。時間をおいて再試行してください。")
             if reset {
                 phase = .failure(message: message)
             } else if !sets.isEmpty {
@@ -297,9 +297,9 @@ struct SetsModuleView: View {
 
     private var sortTitle: String {
         switch sortBy {
-        case "popular": return L("热门", "Popular")
+        case "popular": return LT("热门", "Popular", "人気")
         case "tracks": return "Tracks"
-        default: return L("最新", "Latest")
+        default: return LT("最新", "Latest", "最新")
         }
     }
 }
@@ -495,7 +495,7 @@ struct DJSetDetailView: View {
                     .padding(16)
                     .padding(.top, 96)
                 case .empty:
-                    ContentUnavailableView(LL("Set 不存在"), systemImage: "waveform.badge.exclamationmark")
+                    ContentUnavailableView(LT("Set 不存在", "Set 不存在", "Setが存在しません"), systemImage: "waveform.badge.exclamationmark")
                 case .success:
                     if let set {
                         GeometryReader { proxy in
@@ -524,7 +524,7 @@ struct DJSetDetailView: View {
                             }
                         }
                     } else {
-                        ContentUnavailableView(LL("Set 不存在"), systemImage: "waveform.badge.exclamationmark")
+                        ContentUnavailableView(LT("Set 不存在", "Set 不存在", "Setが存在しません"), systemImage: "waveform.badge.exclamationmark")
                     }
                 }
             }
@@ -541,13 +541,13 @@ struct DJSetDetailView: View {
             if isRefreshing || bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if isRefreshing {
-                        InlineLoadingBadge(title: L("正在更新 Set 详情", "Updating set details"))
+                        InlineLoadingBadge(title: LT("正在更新 Set 详情", "Updating set details", "Set詳細を更新中"))
                     }
                     if let bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task { await load() }
                         }
@@ -653,11 +653,11 @@ struct DJSetDetailView: View {
         .task {
             await load()
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -675,7 +675,7 @@ struct DJSetDetailView: View {
                 }
             ) { conversation in
                 showWidgetStatusBanner(
-                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                     conversation: conversation
                 )
             } preview: {
@@ -707,7 +707,7 @@ struct DJSetDetailView: View {
                         }
                     ) { conversation in
                         showWidgetStatusBanner(
-                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                             conversation: conversation
                         )
                     } onMoreChats: {
@@ -832,7 +832,7 @@ struct DJSetDetailView: View {
                     Image(systemName: "calendar.badge.clock")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.accent)
-                    Text(L("Sets on：\(relatedEvent.name)", "Sets on: \(relatedEvent.name)"))
+                    Text(LT("Sets on：\(relatedEvent.name)", "Sets on: \(relatedEvent.name)", "\(relatedEvent.name) のSet"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.accent)
                         .lineLimit(1)
@@ -847,7 +847,7 @@ struct DJSetDetailView: View {
                 Image(systemName: "calendar.badge.clock")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.accent)
-                Text(L("Sets on：\(linkedEventName)", "Sets on: \(linkedEventName)"))
+                Text(LT("Sets on：\(linkedEventName)", "Sets on: \(linkedEventName)", "\(linkedEventName) のSet"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.accent)
                     .lineLimit(1)
@@ -863,10 +863,7 @@ struct DJSetDetailView: View {
         }
 
         Text(
-            L(
-                "\(sortedTracks(for: set).count) 首曲目 · \(set.viewCount) 次播放",
-                "\(sortedTracks(for: set).count) tracks · \(set.viewCount) views"
-            )
+            LT("\(sortedTracks(for: set).count) 首曲目 · \(set.viewCount) 次播放", "\(sortedTracks(for: set).count) tracks · \(set.viewCount) views", "\(sortedTracks(for: set).count)曲 · \(set.viewCount)回再生")
         )
         .font(.caption)
         .foregroundStyle(RaverTheme.secondaryText)
@@ -911,7 +908,7 @@ struct DJSetDetailView: View {
                                 .foregroundStyle(Color.white.opacity(0.78))
                                 .lineLimit(1)
                         } else {
-                            Text(L("音频收听模式", "Audio Listen Mode"))
+                            Text(LT("音频收听模式", "Audio Listen Mode", "音声視聴モード"))
                                 .font(.caption)
                                 .foregroundStyle(Color.white.opacity(0.78))
                                 .lineLimit(1)
@@ -1601,7 +1598,7 @@ struct DJSetDetailView: View {
             )
 
             if tracks.isEmpty {
-                Text(LL("暂无 Tracklist"))
+                Text(LT("暂无 Tracklist", "暂无 Tracklist", "Tracklistはまだありません"))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.72))
             } else {
@@ -1963,7 +1960,7 @@ struct DJSetDetailView: View {
         let currentSet = set
         return SetShareCardPayload(
             setID: setID,
-            setTitle: currentSet?.title ?? L("未命名 Set", "Untitled Set"),
+            setTitle: currentSet?.title ?? LT("未命名 Set", "Untitled Set", "無題のSet"),
             djID: currentSet?.dj?.id ?? currentSet?.djId,
             djName: currentSet?.dj?.name,
             eventName: currentSet?.eventName?.nilIfBlank,
@@ -1972,7 +1969,7 @@ struct DJSetDetailView: View {
             recordedAtISO8601: currentSet?.recordedAt.map {
                 ISO8601DateFormatter().string(from: $0)
             },
-            badgeText: L("Set", "Set")
+            badgeText: LT("Set", "Set", "Set")
         )
     }
 
@@ -2010,14 +2007,14 @@ struct DJSetDetailView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                errorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "paperplane.circle.fill",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
-                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                errorMessage = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ共有連携は未接続です。")
             }
         ]
     }
@@ -2028,7 +2025,7 @@ struct DJSetDetailView: View {
         if let currentSet = set {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("复制链接", "Copy Link"),
+                    title: LT("复制链接", "Copy Link", "リンクをコピー"),
                     systemImage: "link",
                     accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
                 ) {
@@ -2037,7 +2034,7 @@ struct DJSetDetailView: View {
             )
             actions.append(
                 SharePanelQuickAction(
-                    title: L("查看二维码", "View QR"),
+                    title: LT("查看二维码", "View QR", "QRを見る"),
                     systemImage: "qrcode",
                     accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
                 ) {
@@ -2046,7 +2043,7 @@ struct DJSetDetailView: View {
             )
             actions.append(
                 SharePanelQuickAction(
-                    title: L("查看海报", "View Poster"),
+                    title: LT("查看海报", "View Poster", "海報を見る"),
                     systemImage: "photo.on.rectangle",
                     accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
                 ) {
@@ -2055,7 +2052,7 @@ struct DJSetDetailView: View {
             )
             actions.append(
                 SharePanelQuickAction(
-                    title: L("保存海报", "Save Poster"),
+                    title: LT("保存海报", "Save Poster", "海報を保存"),
                     systemImage: "photo.badge.arrow.down",
                     accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
                 ) {
@@ -2067,7 +2064,7 @@ struct DJSetDetailView: View {
         if !isAudioOnlyMode {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("听音频", "Listen Audio"),
+                    title: LT("听音频", "Listen Audio", "音声を聴く"),
                     systemImage: "headphones",
                     accentColor: RaverTheme.accent
                 ) {
@@ -2082,7 +2079,7 @@ struct DJSetDetailView: View {
         if appState.session != nil {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("上传 Tracklist", "Upload Tracklist"),
+                    title: LT("上传 Tracklist", "Upload Tracklist", "Tracklistをアップロード"),
                     systemImage: "square.and.arrow.up",
                     accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
                 ) {
@@ -2095,7 +2092,7 @@ struct DJSetDetailView: View {
         if let currentSet = set, isMine(currentSet) {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("编辑 Set", "Edit Set"),
+                    title: LT("编辑 Set", "Edit Set", "Setを編集"),
                     systemImage: "square.and.pencil",
                     accentColor: Color(red: 0.99, green: 0.65, blue: 0.20)
                 ) {
@@ -2106,7 +2103,7 @@ struct DJSetDetailView: View {
             )
             actions.append(
                 SharePanelQuickAction(
-                    title: L("编辑 Tracklist", "Edit Tracklist"),
+                    title: LT("编辑 Tracklist", "Edit Tracklist", "Tracklistを編集"),
                     systemImage: "text.badge.plus",
                     accentColor: Color(red: 0.91, green: 0.44, blue: 0.85)
                 ) {
@@ -2116,7 +2113,7 @@ struct DJSetDetailView: View {
             )
             actions.append(
                 SharePanelQuickAction(
-                    title: L("删除 Set", "Delete Set"),
+                    title: LT("删除 Set", "Delete Set", "Setを削除"),
                     systemImage: "trash",
                     accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
                 ) {
@@ -2157,12 +2154,12 @@ struct DJSetDetailView: View {
             let result = try await shareLinkCoordinator.copyLink(target: shareTarget(for: set))
             showWidgetStatusBanner(
                 message: result.usedDeepLinkFallback
-                    ? L("已复制 App 内链接", "Copied app-only link.")
-                    : L("已复制链接", "Link copied"),
+                    ? LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました")
+                    : LT("已复制链接", "Link copied", "リンクをコピーしました"),
                 conversation: nil
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            errorMessage = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクをコピーできませんでした。もう一度お試しください。")
         }
     }
 
@@ -2182,7 +2179,7 @@ struct DJSetDetailView: View {
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -2193,20 +2190,20 @@ struct DJSetDetailView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("Set 海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "Set posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
+                        hintText: LT("Set 海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "Set posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link.", "Set海報は共有システムで生成され、タイトル、概要、QRコードは短縮リンクと同期されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -2215,9 +2212,9 @@ struct DJSetDetailView: View {
         do {
             let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(for: set), channel: "poster_save")
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"), conversation: nil)
+            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"), conversation: nil)
         } catch {
-            errorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -2284,7 +2281,7 @@ struct DJSetDetailView: View {
             syncActiveTrack(for: loadedSet, at: 0)
             nativePlayerSession.reset()
         } catch {
-            let message = error.userFacingMessage ?? L("Set 详情加载失败，请稍后重试", "Failed to load set details. Please try again later.")
+            let message = error.userFacingMessage ?? LT("Set 详情加载失败，请稍后重试", "Failed to load set details. Please try again later.", "Set詳細を読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success
@@ -2314,15 +2311,15 @@ struct DJSetDetailView: View {
 
     private var tracklistDisplayName: String {
         if selectedTracklistID == nil {
-            return L("默认 Tracklist", "Default Tracklist")
+            return LT("默认 Tracklist", "Default Tracklist", "デフォルトTracklist")
         }
         if let title = currentTracklistInfo?.title, !title.isEmpty {
             return title
         }
         if let contributor = currentTracklistInfo?.contributor {
-            return L("\(contributor.shownName) 的版本", "\(contributor.shownName)'s version")
+            return LT("\(contributor.shownName) 的版本", "\(contributor.shownName)'s version", "\(contributor.shownName) のバージョン")
         }
-        return L("用户版本 Tracklist", "User Tracklist Version")
+        return LT("用户版本 Tracklist", "User Tracklist Version", "ユーザー版Tracklist")
     }
 
     private func refreshTracklists() async {
@@ -2395,9 +2392,9 @@ struct DJSetDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                Label(LL("无法直接播放该视频地址"), systemImage: "exclamationmark.triangle")
+                Label(LT("无法直接播放该视频地址", "无法直接播放该视频地址", "この動画URLは直接再生できません"), systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.yellow)
-                Text(LL("当前仅支持原生直连媒体地址（mp4/mov/webm/m3u8）。"))
+                Text(LT("当前仅支持原生直连媒体地址（mp4/mov/webm/m3u8）。", "当前仅支持原生直连媒体地址（mp4/mov/webm/m3u8）。", "現在は直接再生可能なメディアURL（mp4/mov/webm/m3u8）のみ対応しています。"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -2425,10 +2422,10 @@ struct DJSetDetailView: View {
                     Image(systemName: "headphones.circle.fill")
                         .font(.system(size: 48, weight: .semibold))
                         .foregroundStyle(RaverTheme.accent)
-                    Text(L("音频收听模式", "Audio Listen Mode"))
+                    Text(LT("音频收听模式", "Audio Listen Mode", "音声視聴モード"))
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(Color.white)
-                    Text(L("已切换为节省流量的音频播放", "Switched to data-saving audio playback"))
+                    Text(LT("已切换为节省流量的音频播放", "Switched to data-saving audio playback", "データ節約の音声再生に切り替えました"))
                         .font(.caption)
                         .foregroundStyle(Color.white.opacity(0.75))
                 }
@@ -2457,9 +2454,9 @@ struct DJSetDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                Label(LL("无法直接播放该视频地址"), systemImage: "exclamationmark.triangle")
+                Label(LT("无法直接播放该视频地址", "无法直接播放该视频地址", "この動画URLは直接再生できません"), systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.yellow)
-                Text(LL("当前仅支持原生直连媒体地址（mp4/mov/webm/m3u8）。"))
+                Text(LT("当前仅支持原生直连媒体地址（mp4/mov/webm/m3u8）。", "当前仅支持原生直连媒体地址（mp4/mov/webm/m3u8）。", "現在は直接再生可能なメディアURL（mp4/mov/webm/m3u8）のみ対応しています。"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -2487,19 +2484,19 @@ struct DJSetDetailView: View {
 
                     Spacer(minLength: 4)
 
-                    Button(LL("选择版本")) {
+                    Button(LT("选择版本", "选择版本", "バージョンを選択")) {
                         showTracklistSelector = true
                     }
                     .font(.caption)
                     .buttonStyle(.bordered)
                     if appState.session != nil {
-                        Button(LL("上传")) {
+                        Button(LT("上传", "上传", "アップロード")) {
                             showTracklistUpload = true
                         }
                         .font(.caption)
                         .buttonStyle(.bordered)
                     }
-                    Button(isTracklistExpanded ? L("收起", "Collapse") : L("展开", "Expand")) {
+                    Button(isTracklistExpanded ? LT("收起", "Collapse", "閉じる") : LT("展开", "Expand", "展開")) {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             isTracklistExpanded.toggle()
                         }
@@ -2699,17 +2696,17 @@ struct DJSetDetailView: View {
         let effectiveTracklistContributor = currentTracklistInfo?.contributor ?? set.tracklistContributor
         if set.videoContributor != nil || effectiveTracklistContributor != nil {
             VStack(alignment: .leading, spacing: 8) {
-                Text(LL("贡献者"))
+                Text(LT("贡献者", "贡献者", "コントリビューター"))
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
 
                 if let video = set.videoContributor {
-                    contributorRow(title: L("视频贡献", "Video Contributor"), contributor: video)
+                    contributorRow(title: LT("视频贡献", "Video Contributor", "動画投稿者"), contributor: video)
                 }
                 if let tracklist = effectiveTracklistContributor {
                     let title = selectedTracklistID == nil
-                        ? L("Tracklist 贡献", "Tracklist Contributor")
-                        : L("当前版本 Tracklist 贡献", "Current Version Contributor")
+                        ? LT("Tracklist 贡献", "Tracklist Contributor", "Tracklist投稿者")
+                        : LT("当前版本 Tracklist 贡献", "Current Version Contributor", "現在バージョンのTracklist投稿者")
                     contributorRow(title: title, contributor: tracklist)
                 }
             }
@@ -2718,12 +2715,12 @@ struct DJSetDetailView: View {
 
     private var commentsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(LL("评论"))
+            Text(LT("评论", "评论", "コメント"))
                 .font(.headline)
                 .foregroundStyle(RaverTheme.primaryText)
 
             if comments.isEmpty {
-                Text(LL("暂无评论"))
+                Text(LT("暂无评论", "暂无评论", "コメントはまだありません"))
                     .foregroundStyle(RaverTheme.secondaryText)
             } else {
                 ForEach(comments) { comment in
@@ -2750,9 +2747,9 @@ struct DJSetDetailView: View {
                 }
             }
 
-            TextField(LL("写评论..."), text: $inputComment, axis: .vertical)
+            TextField(LT("写评论...", "写评论...", "コメントを書く..."), text: $inputComment, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
-            Button(LL("发送评论")) {
+            Button(LT("发送评论", "发送评论", "コメントを送信")) {
                 Task { await sendComment() }
             }
             .buttonStyle(.borderedProminent)
@@ -2802,7 +2799,7 @@ struct DJSetDetailView: View {
     private func deleteSet() async {
         do {
             try await setCommandRepository.deleteDJSet(id: setID)
-            errorMessage = L("Set 已删除，请返回列表刷新", "Set deleted. Please return to the list and refresh.")
+            errorMessage = LT("Set 已删除，请返回列表刷新", "Set deleted. Please return to the list and refresh.", "Setは削除されました。リストに戻って更新してください。")
         } catch {
             errorMessage = error.userFacingMessage
         }
@@ -3225,7 +3222,7 @@ private struct EmbeddedNativeVideoPlayer: UIViewControllerRepresentable {
                         }
                         self.ensurePlaybackState()
                     case .failed:
-                        let message = observedItem.error?.localizedDescription ?? L("视频加载失败，请检查链接或上传文件", "Video loading failed. Please check the link or upload file.")
+                        let message = observedItem.error?.localizedDescription ?? LT("视频加载失败，请检查链接或上传文件", "Video loading failed. Please check the link or upload file.", "動画を読み込めません。リンクまたはアップロードファイルを確認してください。")
                         self.parent.onError(message)
                     default:
                         break
@@ -3361,7 +3358,7 @@ private struct EmbeddedNativeAudioPlayer: UIViewRepresentable {
                         self.ensurePlaybackState()
                     case .failed:
                         let message = observedItem.error?.localizedDescription
-                            ?? L("音频加载失败，请检查链接或上传文件", "Audio loading failed. Please check the link or upload file.")
+                            ?? LT("音频加载失败，请检查链接或上传文件", "Audio loading failed. Please check the link or upload file.", "音声を読み込めません。リンクまたはアップロードファイルを確認してください。")
                         self.parent.onError(message)
                     default:
                         break
@@ -3430,7 +3427,11 @@ private struct TracklistSelectorSheet: View {
         if !trimmed.isEmpty {
             return trimmed
         }
-        return L("\(item.contributor?.shownName ?? L("匿名", "Anonymous")) 的版本", "\(item.contributor?.shownName ?? L("匿名", "Anonymous"))'s version")
+        return LT(
+            "\(item.contributor?.shownName ?? "匿名") 的版本",
+            "\(item.contributor?.shownName ?? "Anonymous")'s version",
+            "\(item.contributor?.shownName ?? "匿名") のバージョン"
+        )
     }
 
     private func copyTracklistID(_ id: String) {
@@ -3449,16 +3450,16 @@ private struct TracklistSelectorSheet: View {
                 HStack(spacing: 10) {
                     ContributorAvatar(
                         avatarURL: (set.tracklistContributor ?? set.videoContributor)?.avatarUrl,
-                        fallback: (set.tracklistContributor ?? set.videoContributor)?.shownName ?? L("官方", "Official")
+                        fallback: (set.tracklistContributor ?? set.videoContributor)?.shownName ?? LT("官方", "Official", "公式")
                     )
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(LL("默认 Tracklist"))
+                        Text(LT("默认 Tracklist", "默认 Tracklist", "デフォルトTracklist"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
-                        Text(set.tracklistContributor?.shownName ?? set.videoContributor?.shownName ?? L("官方版本", "Official Version"))
+                        Text(set.tracklistContributor?.shownName ?? set.videoContributor?.shownName ?? LT("官方版本", "Official Version", "公式バージョン"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
-                        Text(L("ID：默认", "ID: default"))
+                        Text(LT("ID：默认", "ID: default", "ID: デフォルト"))
                             .font(.caption2)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -3481,9 +3482,9 @@ private struct TracklistSelectorSheet: View {
                 }
             }
 
-            Section(LL("用户上传版本")) {
+            Section(LT("用户上传版本", "用户上传版本", "ユーザー投稿版")) {
                 if filteredTracklists.isEmpty {
-                    Text(query.isEmpty ? L("暂无用户上传版本", "No user-uploaded versions yet") : L("未找到匹配版本", "No matching versions found"))
+                    Text(query.isEmpty ? LT("暂无用户上传版本", "No user-uploaded versions yet", "ユーザー投稿版はまだありません") : LT("未找到匹配版本", "No matching versions found", "一致するバージョンが見つかりません"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                 } else {
@@ -3499,14 +3500,11 @@ private struct TracklistSelectorSheet: View {
                                     .foregroundStyle(RaverTheme.primaryText)
                                     .lineLimit(1)
                                 Text(
-                                    L(
-                                        "\(item.trackCount) 首曲目 · \(item.createdAt.feedTimeText)",
-                                        "\(item.trackCount) tracks · \(item.createdAt.feedTimeText)"
-                                    )
+                                    LT("\(item.trackCount) 首曲目 · \(item.createdAt.feedTimeText)", "\(item.trackCount) tracks · \(item.createdAt.feedTimeText)", "\(item.trackCount)曲 · \(item.createdAt.feedTimeText)")
                                 )
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
-                                Text(L("ID：\(item.id)", "ID: \(item.id)"))
+                                Text(LT("ID：\(item.id)", "ID: \(item.id)", "ID: \(item.id)"))
                                     .font(.caption2)
                                     .foregroundStyle(RaverTheme.secondaryText)
                                     .lineLimit(1)
@@ -3534,11 +3532,11 @@ private struct TracklistSelectorSheet: View {
             }
         }
         .listStyle(.insetGrouped)
-        .searchable(text: $query, prompt: L("搜索 Tracklist / 用户 / ID", "Search Tracklist / User / ID"))
-        .raverSystemNavigation(title: LL("选择 Tracklist"))
+        .searchable(text: $query, prompt: LT("搜索 Tracklist / 用户 / ID", "Search Tracklist / User / ID", "Tracklist / ユーザー / IDを検索"))
+        .raverSystemNavigation(title: LT("选择 Tracklist", "选择 Tracklist", "Tracklistを選択"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(L("关闭", "Close")) {
+                Button(LT("关闭", "Close", "閉じる")) {
                     dismiss()
                 }
             }
@@ -3571,48 +3569,48 @@ private struct UploadTracklistSheet: View {
 
     var body: some View {
         Form {
-            Section(LL("当前 Set 信息")) {
-                LabeledContent(L("Set 标题", "Set Title"), value: set.title)
-                LabeledContent(L("Set ID", "Set ID"), value: set.id)
-                LabeledContent(L("当前默认歌曲数", "Default Track Count"), value: "\(set.trackCount)")
+            Section(LT("当前 Set 信息", "当前 Set 信息", "現在のSet情報")) {
+                LabeledContent(LT("Set 标题", "Set Title", "Setタイトル"), value: set.title)
+                LabeledContent(LT("Set ID", "Set ID", "Set ID"), value: set.id)
+                LabeledContent(LT("当前默认歌曲数", "Default Track Count", "現在のデフォルト曲数"), value: "\(set.trackCount)")
             }
 
-            Section(LL("Tracklist 标题")) {
-                TextField(LL("例如：我的版本"), text: $title)
+            Section(LT("Tracklist 标题", "Tracklist 标题", "Tracklistタイトル")) {
+                TextField(LT("例如：我的版本", "例如：我的版本", "例: 自分のバージョン"), text: $title)
             }
 
-            Section(LL("批量粘贴")) {
-                Text(LL("每行格式：`0:00~3:30 - 艺术家 - 歌曲名 | Spotify链接(可选) | 网易云链接(可选)`"))
+            Section(LT("批量粘贴", "批量粘贴", "一括貼り付け")) {
+                Text(LT("每行格式：`0:00~3:30 - 艺术家 - 歌曲名 | Spotify链接(可选) | 网易云链接(可选)`", "每行格式：`0:00~3:30 - 艺术家 - 歌曲名 | Spotify链接(可选) | 网易云链接(可选)`", "1行形式: `0:00~3:30 - アーティスト - 曲名 | Spotifyリンク(任意) | NetEaseリンク(任意)`"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
                 TextEditor(text: $bulkText)
                     .frame(minHeight: 200)
                     .font(.system(.footnote, design: .monospaced))
                 HStack {
-                    Button(LL("解析并替换")) {
+                    Button(LT("解析并替换", "解析并替换", "解析して置き換え")) {
                         parseBulkTracklist(.replace)
                     }
                     .buttonStyle(.bordered)
 
-                    Button(LL("解析并追加")) {
+                    Button(LT("解析并追加", "解析并追加", "解析して追加")) {
                         parseBulkTracklist(.append)
                     }
                     .buttonStyle(.bordered)
 
                     Spacer()
 
-                    Button(LL("从可视化生成文本")) {
+                    Button(LT("从可视化生成文本", "从可视化生成文本", "ビジュアルからテキストを生成")) {
                         bulkText = TracklistDraftCodec.makeBulkText(from: rows)
-                        infoText = L("已用当前可视化内容刷新文本", "Refreshed text from current visual editor")
+                        infoText = LT("已用当前可视化内容刷新文本", "Refreshed text from current visual editor", "現在のビジュアル内容でテキストを更新しました")
                     }
                     .buttonStyle(.plain)
                     .font(.caption)
                 }
             }
 
-            Section(L("可视化编辑（\(rows.count)）", "Visual Editor (\(rows.count))")) {
+            Section(LT("可视化编辑（\(rows.count)）", "Visual Editor (\(rows.count))", "ビジュアル編集（\(rows.count)）")) {
                 if rows.isEmpty {
-                    Text(LL("先粘贴文本并解析，或手动新增 Track。"))
+                    Text(LT("先粘贴文本并解析，或手动新增 Track。", "先粘贴文本并解析，或手动新增 Track。", "先にテキストを貼り付けて解析するか、手動でTrackを追加してください。"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                 } else {
@@ -3628,16 +3626,16 @@ private struct UploadTracklistSheet: View {
                                     .foregroundStyle(RaverTheme.secondaryText)
                             }
 
-                            TextField(LL("歌曲名"), text: $row.title)
-                            TextField(LL("歌手"), text: $row.artist)
+                            TextField(LT("歌曲名", "歌曲名", "曲名"), text: $row.title)
+                            TextField(LT("歌手", "歌手", "アーティスト"), text: $row.artist)
                             HStack {
-                                TextField(LL("开始时间（如 0:00）"), text: $row.startText)
-                                TextField(LL("结束时间（可选）"), text: $row.endText)
+                                TextField(LT("开始时间（如 0:00）", "开始时间（如 0:00）", "開始時間（例 0:00）"), text: $row.startText)
+                                TextField(LT("结束时间（可选）", "结束时间（可选）", "終了時間（任意）"), text: $row.endText)
                             }
-                            TextField(LL("Spotify 链接（可选）"), text: $row.spotifyUrl)
+                            TextField(LT("Spotify 链接（可选）", "Spotify 链接（可选）", "Spotifyリンク（任意）"), text: $row.spotifyUrl)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
-                            TextField(LL("网易云链接（可选）"), text: $row.neteaseUrl)
+                            TextField(LT("网易云链接（可选）", "网易云链接（可选）", "NetEaseリンク（任意）"), text: $row.neteaseUrl)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
                         }
@@ -3664,7 +3662,7 @@ private struct UploadTracklistSheet: View {
                         )
                     )
                 } label: {
-                    Label(LL("新增 Track"), systemImage: "plus")
+                    Label(LT("新增 Track", "新增 Track", "Trackを追加"), systemImage: "plus")
                 }
             }
 
@@ -3676,20 +3674,20 @@ private struct UploadTracklistSheet: View {
                 }
             }
         }
-        .raverSystemNavigation(title: LL("上传我的 Tracklist"))
+        .raverSystemNavigation(title: LT("上传我的 Tracklist", "上传我的 Tracklist", "自分のTracklistをアップロード"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(isSaving ? L("上传中...", "Uploading...") : L("上传", "Upload")) {
+                Button(isSaving ? LT("上传中...", "Uploading...", "アップロード中...") : LT("上传", "Upload", "アップロード")) {
                     Task { await upload() }
                 }
                 .disabled(isSaving || rows.isEmpty)
             }
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -3698,25 +3696,25 @@ private struct UploadTracklistSheet: View {
     private func parseBulkTracklist(_ mode: ParseMode) {
         let parsedRows = TracklistDraftCodec.parseBulkRows(from: bulkText)
         guard !parsedRows.isEmpty else {
-            infoText = L("请先粘贴歌单文本", "Please paste tracklist text first")
+            infoText = LT("请先粘贴歌单文本", "Please paste tracklist text first", "先にTracklistテキストを貼り付けてください")
             return
         }
 
         switch mode {
         case .replace:
             rows = TracklistDraftCodec.reindex(parsedRows)
-            infoText = L("解析成功并替换：\(rows.count) 首", "Parsed and replaced: \(rows.count) tracks")
+            infoText = LT("解析成功并替换：\(rows.count) 首", "Parsed and replaced: \(rows.count) tracks", "解析して置き換えました: \(rows.count)曲")
         case .append:
             let merged = rows + parsedRows
             rows = TracklistDraftCodec.reindex(merged)
-            infoText = L("解析成功并追加：共 \(rows.count) 首", "Parsed and appended: total \(rows.count) tracks")
+            infoText = LT("解析成功并追加：共 \(rows.count) 首", "Parsed and appended: total \(rows.count) tracks", "解析して追加しました: 合計\(rows.count)曲")
         }
     }
 
     private func upload() async {
         let tracks = TracklistDraftCodec.buildCreateTracks(from: rows)
         guard !tracks.isEmpty else {
-            errorMessage = L("至少保留 1 首有效歌曲（需有歌曲名、歌手、开始时间）", "Keep at least one valid track (title, artist, start time required).")
+            errorMessage = LT("至少保留 1 首有效歌曲（需有歌曲名、歌手、开始时间）", "Keep at least one valid track (title, artist, start time required).", "有効な曲を少なくとも1件残してください（曲名、アーティスト、開始時間が必要）。")
             return
         }
         isSaving = true
@@ -3775,8 +3773,8 @@ struct DJSetEditorView: View {
 
         var title: String {
             switch self {
-            case .create: return L("上传 Set", "Upload Set")
-            case .edit: return L("编辑 Set", "Edit Set")
+            case .create: return LT("上传 Set", "Upload Set", "Setをアップロード")
+            case .edit: return LT("编辑 Set", "Edit Set", "Setを編集")
             }
         }
     }
@@ -3809,24 +3807,25 @@ struct DJSetEditorView: View {
     @State private var previewText = ""
     @State private var errorMessage: String?
     @State private var showEventBindingSheet = false
+    @State private var rightsConfirmed = false
 
     private let demoVideoURL = "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
 
     var body: some View {
         Form {
-                Section(LL("基础")) {
-                    TextField(L("DJ ID", "DJ ID"), text: $djId)
-                    TextField(LL("标题"), text: $title)
-                    TextField(LL("简介"), text: $description, axis: .vertical)
-                    TextField(LL("场地"), text: $venue)
+                Section(LT("基础", "基础", "基本")) {
+                    TextField(LT("DJ ID", "DJ ID", "DJ ID"), text: $djId)
+                    TextField(LT("标题", "标题", "タイトル"), text: $title)
+                    TextField(LT("简介", "简介", "概要"), text: $description, axis: .vertical)
+                    TextField(LT("场地", "场地", "会場"), text: $venue)
 
                     VStack(alignment: .leading, spacing: 8) {
                         if eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text(LL("未绑定活动"))
+                            Text(LT("未绑定活动", "未绑定活动", "イベント未紐付け"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         } else {
-                            Text(L("已绑定活动：\(eventName)", "Bound Event: \(eventName)"))
+                            Text(LT("已绑定活动：\(eventName)", "Bound Event: \(eventName)", "イベントに紐付け済み: \(eventName)"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.primaryText)
                                 .lineLimit(2)
@@ -3836,7 +3835,7 @@ struct DJSetEditorView: View {
                             Button {
                                 showEventBindingSheet = true
                             } label: {
-                                Label(LL("绑定活动"), systemImage: "magnifyingglass")
+                                Label(LT("绑定活动", "绑定活动", "イベントを紐付け"), systemImage: "magnifyingglass")
                             }
                             .buttonStyle(.bordered)
 
@@ -3844,7 +3843,7 @@ struct DJSetEditorView: View {
                                 Button(role: .destructive) {
                                     eventName = ""
                                 } label: {
-                                    Text(LL("清除"))
+                                    Text(LT("清除", "清除", "クリア"))
                                 }
                                 .buttonStyle(.bordered)
                             }
@@ -3852,33 +3851,38 @@ struct DJSetEditorView: View {
                     }
                 }
 
-                Section(LL("视频资源")) {
-                    TextField(LL("视频链接（可选）"), text: $videoUrl)
+                Section(LT("视频资源", "视频资源", "動画リソース")) {
+                    TextField(LT("视频链接（可选）", "视频链接（可选）", "動画リンク（任意）"), text: $videoUrl)
                     PhotosPicker(selection: $selectedVideo, matching: .videos) {
-                        Label(LL("上传视频到资源库"), systemImage: "video.badge.plus")
+                        Label(LT("上传视频到资源库", "上传视频到资源库", "動画をライブラリにアップロード"), systemImage: "video.badge.plus")
                     }
                     if isUploadingVideo {
                         HStack(spacing: 8) {
                             ProgressView()
-                            Text(LL("视频上传中..."))
+                            Text(LT("视频上传中...", "视频上传中...", "動画をアップロード中..."))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
                     }
-                    Button(LL("填入 Demo 视频")) {
+                    Button(LT("填入 Demo 视频", "填入 Demo 视频", "Demo動画を入力")) {
                         videoUrl = demoVideoURL
+                    }
+
+                    Toggle(isOn: $rightsConfirmed) {
+                        Text(LT("我确认拥有发布该视频的权利，或确认链接来源合法且可公开引用。", "I confirm I have the right to post this video, or that the link source is lawful and publicly referenceable.", "この動画を投稿する権利がある、またはリンク元が合法で公開参照可能であることを確認します。"))
+                            .font(.caption)
                     }
                 }
 
-                Section(LL("封面")) {
-                    TextField(LL("封面 URL"), text: $thumbnailUrl)
+                Section(LT("封面", "封面", "カバー")) {
+                    TextField(LT("封面 URL", "封面 URL", "カバーURL"), text: $thumbnailUrl)
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                        Label(LL("上传封面"), systemImage: "photo")
+                        Label(LT("上传封面", "上传封面", "カバーをアップロード"), systemImage: "photo")
                     }
                 }
 
                 Section {
-                    Button(LL("预解析视频")) {
+                    Button(LT("预解析视频", "预解析视频", "動画を事前解析")) {
                         Task { await preview() }
                     }
                     if !previewText.isEmpty {
@@ -3891,7 +3895,7 @@ struct DJSetEditorView: View {
             .raverSystemNavigation(title: mode.title)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
+                    Button(isSaving ? LT("保存中...", "Saving...", "保存中...") : LT("保存", "Save", "保存")) {
                         Task { await save() }
                     }
                     .disabled(isSaving)
@@ -3900,11 +3904,11 @@ struct DJSetEditorView: View {
             .task {
                 prefillIfNeeded()
             }
-            .alert(L("提示", "Notice"), isPresented: Binding(
+            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
             )) {
-                Button(L("确定", "OK"), role: .cancel) {}
+                Button(LT("确定", "OK", "OK"), role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
             }
@@ -3929,12 +3933,13 @@ struct DJSetEditorView: View {
         venue = set.venue ?? ""
         eventName = set.eventName ?? ""
         thumbnailUrl = set.thumbnailUrl ?? ""
+        rightsConfirmed = true
     }
 
     private func preview() async {
         let url = videoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !url.isEmpty else {
-            errorMessage = L("请先输入视频链接，或直接上传视频后再保存", "Please enter a video URL, or upload a video first.")
+            errorMessage = LT("请先输入视频链接，或直接上传视频后再保存", "Please enter a video URL, or upload a video first.", "動画URLを入力するか、動画を直接アップロードしてから保存してください。")
             return
         }
         do {
@@ -3953,11 +3958,15 @@ struct DJSetEditorView: View {
         var finalVideo = videoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmedTitle.isEmpty, !trimmedDJID.isEmpty else {
-            errorMessage = L("请补全 DJ ID 和标题", "Please complete DJ ID and title.")
+            errorMessage = LT("请补全 DJ ID 和标题", "Please complete DJ ID and title.", "DJ IDとタイトルを入力してください。")
             return
         }
         if finalVideo.isEmpty, selectedVideo == nil {
-            errorMessage = L("请填写视频链接或上传视频文件", "Please provide a video URL or upload a video file.")
+            errorMessage = LT("请填写视频链接或上传视频文件", "Please provide a video URL or upload a video file.", "動画URLを入力するか動画ファイルをアップロードしてください。")
+            return
+        }
+        guard rightsConfirmed else {
+            errorMessage = LT("请先确认你拥有发布权利，或链接来源合法且可公开引用。", "Please confirm you have posting rights, or that the link source is lawful and publicly referenceable.", "投稿権利がある、またはリンク元が合法で公開参照可能であることを確認してください。")
             return
         }
 
@@ -3981,7 +3990,7 @@ struct DJSetEditorView: View {
                 isUploadingVideo = true
                 defer { isUploadingVideo = false }
                 guard let videoData = try await selectedVideo.loadTransferable(type: Data.self) else {
-                    throw ServiceError.message(L("读取视频文件失败，请重新选择", "Failed to read video file. Please reselect."))
+                    throw ServiceError.message(LT("读取视频文件失败，请重新选择", "Failed to read video file. Please reselect.", "動画ファイルを読み込めませんでした。再選択してください。"))
                 }
                 let upload = try await setMediaRepository.uploadSetVideo(
                     videoData: videoData,
@@ -3992,12 +4001,12 @@ struct DJSetEditorView: View {
             }
 
             guard !finalVideo.isEmpty else {
-                throw ServiceError.message(L("视频上传失败，请重试", "Video upload failed. Please try again."))
+                throw ServiceError.message(LT("视频上传失败，请重试", "Video upload failed. Please try again.", "動画のアップロードに失敗しました。もう一度お試しください。"))
             }
 
             switch mode {
             case .create:
-                _ = try await setCommandRepository.createDJSet(
+                let result = try await setCommandRepository.createDJSet(
                     input: CreateDJSetInput(
                         djId: trimmedDJID,
                         title: trimmedTitle,
@@ -4006,9 +4015,13 @@ struct DJSetEditorView: View {
                         description: description.nilIfEmpty,
                         venue: venue.nilIfEmpty,
                         eventName: eventName.nilIfEmpty,
-                        recordedAt: nil
+                        recordedAt: nil,
+                        rightsConfirmed: rightsConfirmed
                     )
                 )
+                if case .submittedForReview = result {
+                    OperationBannerCenter.shared.success(LT("Set 信息已提交审核", "Set submitted for review", "Set情報を審査に送信しました"))
+                }
             case .edit(let set):
                 _ = try await setCommandRepository.updateDJSet(
                     id: set.id,
@@ -4020,7 +4033,8 @@ struct DJSetEditorView: View {
                         description: description.nilIfEmpty,
                         venue: venue.nilIfEmpty,
                         eventName: eventName.nilIfEmpty,
-                        recordedAt: set.recordedAt
+                        recordedAt: set.recordedAt,
+                        rightsConfirmed: rightsConfirmed
                     )
                 )
             }
@@ -4054,7 +4068,7 @@ private struct SetEventBindingSheet: View {
         NavigationStack {
             Form {
                 if !initialEventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Section(LL("当前绑定")) {
+                    Section(LT("当前绑定", "当前绑定", "現在の紐付け")) {
                         Text(initialEventName)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
@@ -4062,20 +4076,20 @@ private struct SetEventBindingSheet: View {
                     }
                 }
 
-                Section(LL("从活动库搜索并绑定")) {
-                    TextField(L("搜索活动名称", "Search event name"), text: $searchText)
+                Section(LT("从活动库搜索并绑定", "从活动库搜索并绑定", "イベントライブラリから検索して紐付け")) {
+                    TextField(LT("搜索活动名称", "Search event name", "イベント名を検索"), text: $searchText)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
 
                     if isLoading {
                         HStack(spacing: 8) {
                             ProgressView()
-                            Text(L("搜索中...", "Searching..."))
+                            Text(LT("搜索中...", "Searching...", "検索中..."))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
                     } else if events.isEmpty {
-                        Text(LL("没有找到匹配活动"))
+                        Text(LT("没有找到匹配活动", "没有找到匹配活动", "一致するイベントが見つかりません"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     } else {
@@ -4089,7 +4103,7 @@ private struct SetEventBindingSheet: View {
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(RaverTheme.primaryText)
                                         .lineLimit(2)
-                                    Text("\(event.startDate.appLocalizedYMDText()) · \(event.summaryLocation.isEmpty ? L("地点待补充", "Location pending") : event.summaryLocation)")
+                                    Text("\(event.startDate.appLocalizedYMDText()) · \(event.summaryLocation.isEmpty ? LT("地点待补充", "Location pending", "場所は未設定") : event.summaryLocation)")
                                         .font(.caption2)
                                         .foregroundStyle(RaverTheme.secondaryText)
                                         .lineLimit(2)
@@ -4101,9 +4115,9 @@ private struct SetEventBindingSheet: View {
                     }
                 }
 
-                Section(LL("库里没有时可手动输入")) {
-                    TextField(LL("手动填写活动名称"), text: $manualEventName)
-                    Button(LL("使用手动名称")) {
+                Section(LT("库里没有时可手动输入", "库里没有时可手动输入", "ライブラリにない場合は手動入力できます")) {
+                    TextField(LT("手动填写活动名称", "手动填写活动名称", "イベント名を手動入力"), text: $manualEventName)
+                    Button(LT("使用手动名称", "使用手动名称", "手動名を使用")) {
                         let trimmed = manualEventName.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !trimmed.isEmpty else { return }
                         onSelected(trimmed)
@@ -4112,7 +4126,7 @@ private struct SetEventBindingSheet: View {
                     .disabled(manualEventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .raverSystemNavigation(title: LL("绑定活动"))
+            .raverSystemNavigation(title: LT("绑定活动", "绑定活动", "イベントを紐付け"))
             .toolbar {
             }
             .task {
@@ -4132,11 +4146,11 @@ private struct SetEventBindingSheet: View {
                 searchTask?.cancel()
                 searchTask = nil
             }
-            .alert(L("提示", "Notice"), isPresented: Binding(
+            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
             )) {
-                Button(L("确定", "OK"), role: .cancel) {}
+                Button(LT("确定", "OK", "OK"), role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
             }
@@ -4192,15 +4206,15 @@ private struct TracklistEditorView: View {
 
     var body: some View {
         Form {
-            Section(LL("当前 Tracklist 信息")) {
-                LabeledContent(L("名称", "Name"), value: resolvedTracklistTitle)
-                LabeledContent(L("Tracklist ID", "Tracklist ID"), value: selectedTracklistID ?? "default")
-                LabeledContent(L("歌曲数量", "Track Count"), value: "\(rows.count)")
-                LabeledContent(L("贡献者", "Contributor"), value: resolvedTracklistContributor)
+            Section(LT("当前 Tracklist 信息", "当前 Tracklist 信息", "現在のTracklist情報")) {
+                LabeledContent(LT("名称", "Name", "名称"), value: resolvedTracklistTitle)
+                LabeledContent(LT("Tracklist ID", "Tracklist ID", "Tracklist ID"), value: selectedTracklistID ?? "default")
+                LabeledContent(LT("歌曲数量", "Track Count", "曲数"), value: "\(rows.count)")
+                LabeledContent(LT("贡献者", "Contributor", "コントリビューター"), value: resolvedTracklistContributor)
             }
 
-            Section(LL("当前歌单文本（已填充）")) {
-                Text(LL("每行格式：`0:00~3:30 - 艺术家 - 歌曲名 | Spotify链接(可选) | 网易云链接(可选)`"))
+            Section(LT("当前歌单文本（已填充）", "当前歌单文本（已填充）", "現在のTracklistテキスト（入力済み）")) {
+                Text(LT("每行格式：`0:00~3:30 - 艺术家 - 歌曲名 | Spotify链接(可选) | 网易云链接(可选)`", "每行格式：`0:00~3:30 - 艺术家 - 歌曲名 | Spotify链接(可选) | 网易云链接(可选)`", "1行形式: `0:00~3:30 - アーティスト - 曲名 | Spotifyリンク(任意) | NetEaseリンク(任意)`"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
                 TextEditor(text: $bulkText)
@@ -4208,21 +4222,21 @@ private struct TracklistEditorView: View {
                     .font(.system(.footnote, design: .monospaced))
 
                 HStack {
-                    Button(LL("解析并替换")) {
+                    Button(LT("解析并替换", "解析并替换", "解析して置き換え")) {
                         parseBulkTracklist(.replace)
                     }
                     .buttonStyle(.bordered)
 
-                    Button(LL("解析并追加")) {
+                    Button(LT("解析并追加", "解析并追加", "解析して追加")) {
                         parseBulkTracklist(.append)
                     }
                     .buttonStyle(.bordered)
 
                     Spacer()
 
-                    Button(LL("从可视化生成文本")) {
+                    Button(LT("从可视化生成文本", "从可视化生成文本", "ビジュアルからテキストを生成")) {
                         bulkText = TracklistDraftCodec.makeBulkText(from: rows)
-                        bulkParseMessage = L("已用当前可视化内容刷新文本", "Refreshed text from current visual editor")
+                        bulkParseMessage = LT("已用当前可视化内容刷新文本", "Refreshed text from current visual editor", "現在のビジュアル内容でテキストを更新しました")
                     }
                     .buttonStyle(.plain)
                     .font(.caption)
@@ -4237,7 +4251,7 @@ private struct TracklistEditorView: View {
                 }
             }
 
-            Section(L("可视化编辑（\(rows.count)）", "Visual Editor (\(rows.count))")) {
+            Section(LT("可视化编辑（\(rows.count)）", "Visual Editor (\(rows.count))", "ビジュアル編集（\(rows.count)）")) {
                 ForEach($rows) { $row in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
@@ -4249,16 +4263,16 @@ private struct TracklistEditorView: View {
                                 .font(.caption2)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
-                        TextField(LL("歌曲名"), text: $row.title)
-                        TextField(LL("歌手"), text: $row.artist)
+                        TextField(LT("歌曲名", "歌曲名", "曲名"), text: $row.title)
+                        TextField(LT("歌手", "歌手", "アーティスト"), text: $row.artist)
                         HStack {
-                            TextField(LL("开始时间（如 0:00）"), text: $row.startText)
-                            TextField(LL("结束时间（可选）"), text: $row.endText)
+                            TextField(LT("开始时间（如 0:00）", "开始时间（如 0:00）", "開始時間（例 0:00）"), text: $row.startText)
+                            TextField(LT("结束时间（可选）", "结束时间（可选）", "終了時間（任意）"), text: $row.endText)
                         }
-                        TextField(LL("Spotify 链接（可选）"), text: $row.spotifyUrl)
+                        TextField(LT("Spotify 链接（可选）", "Spotify 链接（可选）", "Spotifyリンク（任意）"), text: $row.spotifyUrl)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                        TextField(LL("网易云链接（可选）"), text: $row.neteaseUrl)
+                        TextField(LT("网易云链接（可选）", "网易云链接（可选）", "NetEaseリンク（任意）"), text: $row.neteaseUrl)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     }
@@ -4283,20 +4297,20 @@ private struct TracklistEditorView: View {
                         )
                     )
                 } label: {
-                    Label(LL("新增 Track"), systemImage: "plus")
+                    Label(LT("新增 Track", "新增 Track", "Trackを追加"), systemImage: "plus")
                 }
             }
         }
-        .raverSystemNavigation(title: LL("编辑 Tracklist"))
+        .raverSystemNavigation(title: LT("编辑 Tracklist", "编辑 Tracklist", "Tracklistを編集"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
+                Button(isSaving ? LT("保存中...", "Saving...", "保存中...") : LT("保存", "Save", "保存")) {
                     Task { await save() }
                 }
                 .disabled(isSaving || rows.isEmpty)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button(LL("自动链接")) {
+                Button(LT("自动链接", "自动链接", "自動リンク")) {
                     Task { await autoLink() }
                 }
             }
@@ -4304,11 +4318,11 @@ private struct TracklistEditorView: View {
         .onAppear {
             initializeRowsIfNeeded()
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -4319,9 +4333,9 @@ private struct TracklistEditorView: View {
             return title
         }
         if selectedTracklistID == nil {
-            return L("默认 Tracklist", "Default Tracklist")
+            return LT("默认 Tracklist", "Default Tracklist", "デフォルトTracklist")
         }
-        return L("用户版本 Tracklist", "User Tracklist Version")
+        return LT("用户版本 Tracklist", "User Tracklist Version", "ユーザー版Tracklist")
     }
 
     private var resolvedTracklistContributor: String {
@@ -4331,7 +4345,7 @@ private struct TracklistEditorView: View {
         if let contributor = set.tracklistContributor?.shownName, !contributor.isEmpty {
             return contributor
         }
-        return L("官方", "Official")
+        return LT("官方", "Official", "公式")
     }
 
     private func initializeRowsIfNeeded() {
@@ -4370,16 +4384,16 @@ private struct TracklistEditorView: View {
     private func parseBulkTracklist(_ mode: ParseMode) {
         let parsedRows = TracklistDraftCodec.parseBulkRows(from: bulkText)
         guard !parsedRows.isEmpty else {
-            bulkParseMessage = L("未识别可用行，请检查格式后重试", "No valid lines recognized. Please check format and try again.")
+            bulkParseMessage = LT("未识别可用行，请检查格式后重试", "No valid lines recognized. Please check format and try again.", "有効な行を認識できません。形式を確認してもう一度お試しください。")
             return
         }
         switch mode {
         case .replace:
             rows = TracklistDraftCodec.reindex(parsedRows)
-            bulkParseMessage = L("解析成功并替换：\(rows.count) 首", "Parsed and replaced: \(rows.count) tracks")
+            bulkParseMessage = LT("解析成功并替换：\(rows.count) 首", "Parsed and replaced: \(rows.count) tracks", "解析して置き換えました: \(rows.count)曲")
         case .append:
             rows = TracklistDraftCodec.reindex(rows + parsedRows)
-            bulkParseMessage = L("解析成功并追加：共 \(rows.count) 首", "Parsed and appended: total \(rows.count) tracks")
+            bulkParseMessage = LT("解析成功并追加：共 \(rows.count) 首", "Parsed and appended: total \(rows.count) tracks", "解析して追加しました: 合計\(rows.count)曲")
         }
     }
 
@@ -4387,7 +4401,7 @@ private struct TracklistEditorView: View {
         let tracks = TracklistDraftCodec.buildCreateTracks(from: rows)
 
         guard !tracks.isEmpty else {
-            errorMessage = L("至少保留 1 条有效 Track（需有歌曲名、歌手、开始时间）", "Keep at least one valid track (title, artist, start time required).")
+            errorMessage = LT("至少保留 1 条有效 Track（需有歌曲名、歌手、开始时间）", "Keep at least one valid track (title, artist, start time required).", "有効なTrackを少なくとも1件残してください（曲名、アーティスト、開始時間が必要）。")
             return
         }
 
@@ -4406,7 +4420,7 @@ private struct TracklistEditorView: View {
     private func autoLink() async {
         do {
             try await repository.autoLinkTracks(setID: set.id)
-            errorMessage = L("已触发自动链接", "Auto-link triggered.")
+            errorMessage = LT("已触发自动链接", "Auto-link triggered.", "自動リンクを開始しました。")
         } catch {
             errorMessage = error.userFacingMessage
         }

@@ -21,19 +21,19 @@ final class DemoAlignedConversationSearchCoordinator {
         guard let presenter else { return }
 
         let alert = UIAlertController(
-            title: L("会话内搜索", "Search in Conversation"),
+            title: LT("会话内搜索", "Search in Conversation", "会話内検索"),
             message: nil,
             preferredStyle: .alert
         )
         alert.addTextField { textField in
-            textField.placeholder = L("输入关键词", "Enter keyword")
+            textField.placeholder = LT("输入关键词", "Enter keyword", "キーワードを入力")
             textField.returnKeyType = .search
             textField.clearButtonMode = .whileEditing
         }
-        alert.addAction(UIAlertAction(title: L("取消", "Cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: LT("取消", "Cancel", "キャンセル"), style: .cancel))
         alert.addAction(
             UIAlertAction(
-                title: L("搜索", "Search"),
+                title: LT("搜索", "Search", "検索"),
                 style: .default,
                 handler: { [weak self, weak alert] _ in
                     guard let self else { return }
@@ -59,11 +59,11 @@ final class DemoAlignedConversationSearchCoordinator {
             guard !results.isEmpty else {
                 IMProbeLogger.log("[DemoAlignedSearch] result-empty query=\(normalizedQuery)")
                 let emptyAlert = UIAlertController(
-                    title: L("无搜索结果", "No Results"),
-                    message: L("请尝试更换关键词。", "Try a different keyword."),
+                    title: LT("无搜索结果", "No Results", "検索結果なし"),
+                    message: LT("请尝试更换关键词。", "Try a different keyword.", "別のキーワードをお試しください。"),
                     preferredStyle: .alert
                 )
-                emptyAlert.addAction(UIAlertAction(title: L("好的", "OK"), style: .default))
+                emptyAlert.addAction(UIAlertAction(title: LT("好的", "OK", "OK"), style: .default))
                 presenter.present(emptyAlert, animated: true)
                 return
             }
@@ -78,11 +78,11 @@ final class DemoAlignedConversationSearchCoordinator {
             )
             let message = error.userFacingMessage
             let failureAlert = UIAlertController(
-                title: L("搜索失败", "Search Failed"),
+                title: LT("搜索失败", "Search Failed", "検索に失敗しました"),
                 message: message,
                 preferredStyle: .alert
             )
-            failureAlert.addAction(UIAlertAction(title: L("好的", "OK"), style: .default))
+            failureAlert.addAction(UIAlertAction(title: LT("好的", "OK", "OK"), style: .default))
             presenter.present(failureAlert, animated: true)
         }
     }

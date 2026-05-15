@@ -49,7 +49,7 @@ struct RecommendEventsModuleView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 } else if case .failure(let message) = viewModel.phase {
                     ScreenErrorCard(
-                        title: L("推荐活动加载失败", "Recommended Events Failed to Load"),
+                        title: LT("推荐活动加载失败", "Recommended Events Failed to Load", "おすすめイベントの読み込みに失敗しました"),
                         message: message
                     ) {
                         Task { await viewModel.reload(isLoggedIn: appState.session != nil) }
@@ -57,7 +57,7 @@ struct RecommendEventsModuleView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if case .offline(let message) = viewModel.phase {
                     ScreenErrorCard(
-                        title: L("网络不可用", "Network Unavailable"),
+                        title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                         message: message
                     ) {
                         Task { await viewModel.reload(isLoggedIn: appState.session != nil) }
@@ -65,7 +65,7 @@ struct RecommendEventsModuleView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.events.isEmpty {
                     ContentUnavailableView(
-                        L("暂无可推荐活动", "No Recommended Events"),
+                        LT("暂无可推荐活动", "No Recommended Events", "おすすめイベントはまだありません"),
                         systemImage: "sparkles.tv"
                     )
                 } else {
@@ -76,13 +76,13 @@ struct RecommendEventsModuleView: View {
             if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if viewModel.isRefreshing {
-                        InlineLoadingBadge(title: L("正在更新推荐", "Updating recommendations"))
+                        InlineLoadingBadge(title: LT("正在更新推荐", "Updating recommendations", "おすすめを更新中"))
                     }
                     if let bannerMessage = viewModel.bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task { await viewModel.reload(isLoggedIn: appState.session != nil) }
                         }
@@ -344,7 +344,7 @@ struct RecommendEventsModuleView: View {
         switch AppLanguagePreference.current.effectiveLanguage {
         case .zh:
             return true
-        case .en:
+        case .en, .ja:
             return false
         case .system:
             let first = Locale.preferredLanguages.first?.lowercased() ?? ""
@@ -393,7 +393,7 @@ struct RecommendEventsModuleView: View {
         if !event.summaryLocation.isEmpty {
             return event.summaryLocation
         }
-        return L("地点待定", "Location TBA")
+        return LT("地点待定", "Location TBA", "場所未定")
     }
 
     private func recommendationDateText(for event: WebEvent) -> String {

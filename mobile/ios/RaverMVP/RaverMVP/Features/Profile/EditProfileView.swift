@@ -82,6 +82,7 @@ final class EditProfileViewModel: ObservableObject {
 
 struct EditProfileView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
 
     @StateObject private var viewModel: EditProfileViewModel
     private let onSaved: (UserProfile) -> Void
@@ -114,21 +115,34 @@ struct EditProfileView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if appState.accountEnforcementStatus.blocks(.profileUpdate) {
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(LT("账号当前受限，无法修改资料", "Account restricted. Cannot edit profile.", "アカウントが制限中のため、プロフィールを編集できません。"))
+                                .font(.subheadline.weight(.semibold))
+                            Text(appState.accountEnforcementStatus.restrictionSummary)
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                    }
+                }
+
                 VStack(spacing: 12) {
                     avatarPreview
 
                     PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                        Label(LL("更换头像"), systemImage: "photo")
+                        Label(LT("更换头像", "Change Avatar", "アバターを変更"), systemImage: "photo")
                     }
                     .buttonStyle(.bordered)
+                    .disabled(appState.accountEnforcementStatus.blocks(.mediaUpload))
                 }
                 .frame(maxWidth: .infinity)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(LL("昵称"))
+                    Text(LT("昵称", "Nickname", "ニックネーム"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
-                    TextField(LL("请输入昵称"), text: $displayName)
+                    TextField(LT("请输入昵称", "Enter a nickname", "ニックネームを入力"), text: $displayName)
                         .submitLabel(.done)
                         .onSubmit {
                             dismissKeyboard()
@@ -139,7 +153,7 @@ struct EditProfileView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(LL("签名"))
+                    Text(LT("签名", "Bio", "自己紹介"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                     TextEditor(text: $bio)
@@ -150,10 +164,10 @@ struct EditProfileView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(LL("Tag（逗号分隔）"))
+                    Text(LT("Tag（逗号分隔）", "Tags (comma separated)", "タグ（カンマ区切り）"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
-                    TextField(LL("如: Techno, House"), text: $tagsText)
+                    TextField(LT("如: Techno, House", "e.g. Techno, House", "例: Techno, House"), text: $tagsText)
                         .submitLabel(.done)
                         .onSubmit {
                             dismissKeyboard()
@@ -165,8 +179,8 @@ struct EditProfileView: View {
 
                 GlassCard {
                     VStack(alignment: .leading, spacing: 12) {
-                        Toggle(LL("允许他人查看我的粉丝列表"), isOn: $isFollowersListPublic)
-                        Toggle(LL("允许他人查看我的关注列表"), isOn: $isFollowingListPublic)
+                        Toggle(LT("允许他人查看我的粉丝列表", "Allow others to see my followers", "他の人にフォロワー一覧を表示する"), isOn: $isFollowersListPublic)
+                        Toggle(LT("允许他人查看我的关注列表", "Allow others to see who I follow", "他の人にフォロー一覧を表示する"), isOn: $isFollowingListPublic)
                     }
                 }
 
@@ -176,38 +190,39 @@ struct EditProfileView: View {
                     if viewModel.isSaving {
                         ProgressView().tint(.white)
                     } else {
-                        Text(L("保存", "Save"))
+                        Text(LT("保存", "Save", "保存"))
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isSaving)
+                .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isSaving || appState.accountEnforcementStatus.blocks(.profileUpdate))
             }
             .padding(16)
         }
         .background(RaverTheme.background)
         .scrollDismissesKeyboard(.interactively)
-        .raverSystemNavigation(title: L("编辑资料", "Edit Profile"))
+        .raverSystemNavigation(title: LT("编辑资料", "Edit Profile", "プロフィール編集"))
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button(L("收起", "Dismiss")) {
+                Button(LT("收起", "Dismiss", "閉じる")) {
                     dismissKeyboard()
                 }
             }
         }
         .onChange(of: selectedPhotoItem) { _, newItem in
             guard let newItem else { return }
+            guard !appState.accountEnforcementStatus.blocks(.mediaUpload) else { return }
             Task {
                 if let data = try? await newItem.loadTransferable(type: Data.self) {
                     pendingAvatarData = data
                 }
             }
         }
-        .alert(L("保存失败", "Save Failed"), isPresented: Binding(
+        .alert(LT("保存失败", "Save Failed", "保存に失敗しました"), isPresented: Binding(
             get: { viewModel.error != nil },
             set: { if !$0 { viewModel.error = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
         }
@@ -245,6 +260,10 @@ struct EditProfileView: View {
 
     @MainActor
     private func save() async {
+        guard !appState.accountEnforcementStatus.blocks(.profileUpdate) else {
+            viewModel.error = appState.accountEnforcementStatus.restrictionSummary
+            return
+        }
         if let updated = await viewModel.saveProfile(
             displayName: displayName,
             bio: bio,

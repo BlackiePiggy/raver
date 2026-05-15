@@ -40,9 +40,9 @@ struct RaverChatComposerView: View {
 
     private var placeholderText: String {
         if isMessageStyle {
-            return L("发消息...", "Message...")
+            return LT("发消息...", "Message...", "メッセージ...")
         }
-        return L("添加说明...", "Add a caption...")
+        return LT("添加说明...", "Add a caption...", "説明を追加...")
     }
 
     private var sendEnabled: Bool {
@@ -285,7 +285,7 @@ struct RaverChatComposerView: View {
                     .foregroundColor(theme.colors.messageMyBG)
                     .frame(width: 2)
                 VStack(alignment: .leading) {
-                    Text("回复 \(replyMessage.user.name)")
+                    Text(LT("回复 \(replyMessage.user.name)", "Reply to \(replyMessage.user.name)", "\(replyMessage.user.name) に返信"))
                         .font(.caption2)
                         .foregroundColor(theme.colors.mainCaptionText)
                     Text(replyPreviewText(for: replyMessage))
@@ -321,19 +321,19 @@ struct RaverChatComposerView: View {
             return text
         }
         if replyMessage.recording != nil {
-            return L("[语音]", "[Voice]")
+            return LT("[语音]", "[Voice]", "[音声]")
         }
         if !replyMessage.attachments.isEmpty {
-            return L("[附件]", "[Attachment]")
+            return LT("[附件]", "[Attachment]", "[添付]")
         }
-        return L("[消息]", "[Message]")
+        return LT("[消息]", "[Message]", "[メッセージ]")
     }
 
     private var emojiPacks: [EmojiPackDescriptor] {
         [
             EmojiPackDescriptor(
                 id: "tencent-default",
-                title: L("默认", "Default"),
+                title: LT("默认", "Default", "デフォルト"),
                 iconSystemName: "face.smiling",
                 items: TencentEmojiCatalog.items
             )

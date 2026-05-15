@@ -1,0 +1,4 @@
+ALTER TABLE "djs"
+ADD COLUMN IF NOT EXISTS "spotify_url" TEXT,
+ADD COLUMN IF NOT EXISTS "netease_url" TEXT,
+ADD COLUMN IF NOT EXISTS "qq_music_url" TEXT;

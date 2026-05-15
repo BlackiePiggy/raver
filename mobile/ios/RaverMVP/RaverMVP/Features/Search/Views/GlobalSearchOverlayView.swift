@@ -30,7 +30,7 @@ struct GlobalSearchOverlayView: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button(L("收起", "Dismiss")) {
+                Button(LT("收起", "Dismiss", "閉じる")) {
                     hideKeyboard()
                 }
             }
@@ -68,12 +68,12 @@ struct GlobalSearchOverlayView: View {
                     Image(systemName: "sparkles")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(RaverTheme.accent)
-                    Text(L("全局聚合搜索", "Global Search"))
+                    Text(LT("全局聚合搜索", "Global Search", "グローバル検索"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
 
-                Text(L("搜索 Raver 里的内容", "Search across Raver"))
+                Text(LT("搜索 Raver 里的内容", "Search across Raver", "Raver内を検索"))
                     .font(.title3.weight(.bold))
                     .foregroundStyle(RaverTheme.primaryText)
                     .lineLimit(1)
@@ -92,7 +92,7 @@ struct GlobalSearchOverlayView: View {
                     .background(RaverTheme.cardBorder.opacity(0.5), in: Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(L("关闭搜索", "Close search"))
+            .accessibilityLabel(LT("关闭搜索", "Close search", "検索を閉じる"))
             .accessibilityIdentifier("globalSearch.overlay.close")
         }
     }
@@ -104,7 +104,7 @@ struct GlobalSearchOverlayView: View {
                 .foregroundStyle(RaverTheme.secondaryText)
 
             TextField(
-                L("搜索活动、资讯、DJ、Sets、榜单、打分、圈子内容", "Search events, news, DJs, sets, rankings, ratings, posts"),
+                LT("搜索活动、资讯、DJ、Sets、榜单、打分、圈子内容", "Search events, news, DJs, sets, rankings, ratings, posts", "イベント、ニュース、DJ、Sets、ランキング、評価、投稿を検索"),
                 text: $query
             )
             .font(.headline)
@@ -117,7 +117,7 @@ struct GlobalSearchOverlayView: View {
                 submit()
             }
             .accessibilityIdentifier("globalSearch.overlay.input")
-            .accessibilityLabel(L("搜索关键词", "Search query"))
+            .accessibilityLabel(LT("搜索关键词", "Search query", "検索キーワード"))
 
             if !trimmedQuery.isEmpty {
                 Button {
@@ -128,7 +128,7 @@ struct GlobalSearchOverlayView: View {
                         .foregroundStyle(RaverTheme.secondaryText.opacity(0.8))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(L("清空关键词", "Clear query"))
+                .accessibilityLabel(LT("清空关键词", "Clear query", "キーワードをクリア"))
                 .accessibilityIdentifier("globalSearch.overlay.clear")
             }
 
@@ -146,7 +146,7 @@ struct GlobalSearchOverlayView: View {
             }
             .buttonStyle(.plain)
             .disabled(trimmedQuery.isEmpty)
-            .accessibilityLabel(L("搜索", "Search"))
+            .accessibilityLabel(LT("搜索", "Search", "検索"))
             .accessibilityIdentifier("globalSearch.overlay.submit")
         }
         .padding(.horizontal, 13)
@@ -163,11 +163,11 @@ struct GlobalSearchOverlayView: View {
         if !recentStore.queries.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text(L("最近搜索", "Recent Searches"))
+                    Text(LT("最近搜索", "Recent Searches", "最近の検索"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer()
-                    Button(L("清空", "Clear")) {
+                    Button(LT("清空", "Clear", "クリア")) {
                         recentStore.clear()
                     }
                     .font(.caption.weight(.semibold))
@@ -198,7 +198,7 @@ struct GlobalSearchOverlayView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(L("搜索 \(item)", "Search \(item)"))
+                        .accessibilityLabel(LT("搜索 \(item)", "Search \(item)", "\(item)を検索"))
                     }
                 }
             }
@@ -207,7 +207,7 @@ struct GlobalSearchOverlayView: View {
 
     private var scopeHints: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L("在 Raver 探索", "Explore on Raver"))
+            Text(LT("在 Raver 探索", "Explore on Raver", "Raverで探索"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(RaverTheme.primaryText)
 

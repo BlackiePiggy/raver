@@ -4,9 +4,15 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { adminAuditService } from '../modules/admin/admin-audit.service';
 import { requireAdmin } from '../modules/admin/admin-auth.policy';
 import { getNotificationCenterAPNSStatus, notificationCenterService } from '../modules/notifications';
+import type { NotificationChannel } from '../services/notification-center/notification-center.types';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
+const TEMPLATE_CHANNELS = new Set(['in_app', 'apns', 'email', 'sms']);
+const DELIVERABLE_CHANNELS = new Set(['in_app', 'apns']);
+
+const isTemplateChannel = (value: string): value is NotificationChannel => TEMPLATE_CHANNELS.has(value);
+const isDeliverableChannel = (value: string): value is NotificationChannel => DELIVERABLE_CHANNELS.has(value);
 
 type LegacyNotificationType = 'follow' | 'like' | 'comment' | 'squad_invite';
 type CommunityNotificationSource = 'user_follow' | 'post_like' | 'post_comment' | 'post_comment_reply' | 'squad_invite';
@@ -143,6 +149,59 @@ type FollowedBrandInboxProjection = {
   newsCoverImageURL: string | null;
   isRead: boolean;
   occurredAt: Date;
+};
+
+type ContentReviewInboxProjection = {
+  id: string;
+  submissionId: string;
+  entityType: string;
+  status: string;
+  title: string;
+  body: string;
+  reason: string | null;
+  createdEntityId: string | null;
+  isRead: boolean;
+  occurredAt: Date;
+};
+
+const CONTENT_REVIEW_SOURCE = 'content_submission_review';
+
+const mapContentReviewInboxItem = (
+  row: {
+    id: string;
+    type: string;
+    title: string;
+    body: string;
+    deeplink: string | null;
+    metadata: Prisma.JsonValue | null;
+    isRead: boolean;
+    createdAt: Date;
+  }
+): ContentReviewInboxProjection | null => {
+  const metadata = isRecord(row.metadata) ? row.metadata : {};
+  if (readString(metadata.source) !== CONTENT_REVIEW_SOURCE) {
+    return null;
+  }
+
+  const submissionId = readString(metadata.submissionId);
+  const entityType = readString(metadata.entityType) ?? 'content';
+  const status = readString(metadata.status);
+  if (!submissionId || (status !== 'approved' && status !== 'rejected')) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    submissionId,
+    entityType,
+    status,
+    title: row.title,
+    body: row.body,
+    reason: readString(metadata.reason),
+    createdEntityId: readString(metadata.createdEntityId),
+    isRead: row.isRead,
+    occurredAt: row.createdAt,
+  };
 };
 
 const mapFollowedEventInboxItem = (
@@ -712,6 +771,130 @@ router.post('/followed-events/read', authenticate, async (req: AuthRequest, res:
   }
 });
 
+router.get('/content-reviews/summary', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const rows = await prisma.notificationInboxItem.findMany({
+      where: {
+        userId,
+        type: 'community_interaction',
+      },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        body: true,
+        deeplink: true,
+        metadata: true,
+        isRead: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 100,
+    });
+
+    const items = rows
+      .map(mapContentReviewInboxItem)
+      .filter((item): item is ContentReviewInboxProjection => Boolean(item));
+    const latest = items[0] ?? null;
+
+    res.json({
+      unreadCount: items.reduce((sum, item) => sum + (item.isRead ? 0 : 1), 0),
+      latestItemPreview: latest?.body ?? latest?.title ?? null,
+      latestOccurredAt: latest?.occurredAt ?? null,
+    });
+  } catch (error) {
+    console.error('Fetch content review summary error:', error);
+    res.status(500).json({ error: 'Failed to fetch content review summary' });
+  }
+});
+
+router.get('/content-reviews/items', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const limit = parseLimit((req.query as Request['query']).limit, 20, 100);
+    const rows = await prisma.notificationInboxItem.findMany({
+      where: {
+        userId,
+        type: 'community_interaction',
+      },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        body: true,
+        deeplink: true,
+        metadata: true,
+        isRead: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: Math.max(limit * 3, 100),
+    });
+
+    const items = rows
+      .map(mapContentReviewInboxItem)
+      .filter((item): item is ContentReviewInboxProjection => Boolean(item))
+      .slice(0, limit);
+
+    res.json({ items });
+  } catch (error) {
+    console.error('Fetch content review inbox items error:', error);
+    res.status(500).json({ error: 'Failed to fetch content review notifications' });
+  }
+});
+
+router.post('/content-reviews/read', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as {
+      itemID?: unknown;
+      itemId?: unknown;
+    };
+    const itemID = readString(body.itemID) ?? readString(body.itemId);
+    if (!itemID) {
+      res.status(400).json({ error: 'itemID/itemId is required' });
+      return;
+    }
+
+    const updated = await prisma.notificationInboxItem.updateMany({
+      where: {
+        id: itemID,
+        userId,
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+        readAt: new Date(),
+      },
+    });
+
+    res.json({ success: true, updated: updated.count });
+  } catch (error) {
+    console.error('Mark content review notification read error:', error);
+    res.status(500).json({ error: 'Failed to mark content review notification read' });
+  }
+});
+
 router.get('/followed-djs/summary', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
@@ -957,6 +1140,48 @@ router.post('/followed-brands/read', authenticate, async (req: AuthRequest, res:
   } catch (error) {
     console.error('Mark followed brand notification read error:', error);
     res.status(500).json({ error: 'Failed to mark followed brand notification read' });
+  }
+});
+
+router.get('/preferences/categories', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const preferences = await notificationCenterService.fetchCategoryPreferences(userId);
+    res.json({ success: true, preferences });
+  } catch (error) {
+    console.error('Fetch notification category preferences error:', error);
+    res.status(500).json({ error: 'Failed to fetch notification category preferences' });
+  }
+});
+
+router.put('/preferences/categories', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as {
+      preferences?: unknown;
+    };
+    if (!Array.isArray(body.preferences)) {
+      res.status(400).json({ error: 'preferences is required' });
+      return;
+    }
+
+    const preferences = await notificationCenterService.updateCategoryPreferences(userId, body.preferences);
+    res.json({ success: true, preferences });
+  } catch (error) {
+    console.error('Update notification category preferences error:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to update notification category preferences',
+    });
   }
 });
 
@@ -1233,7 +1458,7 @@ router.post('/admin/major-news/publish', authenticate, requireAdmin, async (req:
       ? body.channels.filter((item): item is string => typeof item === 'string').map((item) => item.trim().toLowerCase())
       : [];
     const channels = (channelsRaw.length > 0 ? channelsRaw : ['in_app', 'apns']).filter(
-      (channel): channel is 'in_app' | 'apns' => channel === 'in_app' || channel === 'apns'
+      isDeliverableChannel
     );
     if (channels.length === 0) {
       res.status(400).json({ error: 'channels are invalid' });
@@ -1387,7 +1612,7 @@ router.get('/admin/deliveries', authenticate, requireAdmin, async (req: AuthRequ
   try {
     const query = req.query as Request['query'];
     const channelRaw = typeof query.channel === 'string' ? query.channel.trim().toLowerCase() : '';
-    const channel = channelRaw === 'in_app' || channelRaw === 'apns' ? channelRaw : undefined;
+    const channel = isTemplateChannel(channelRaw) ? channelRaw : undefined;
     const status = typeof query.status === 'string' ? query.status.trim() : undefined;
     const userId = typeof query.userId === 'string' ? query.userId.trim() : undefined;
     const eventId = typeof query.eventId === 'string' ? query.eventId.trim() : undefined;
@@ -1450,7 +1675,7 @@ router.get('/admin/templates', authenticate, requireAdmin, async (req: AuthReque
   try {
     const query = req.query as Request['query'];
     const channelRaw = typeof query.channel === 'string' ? query.channel.trim().toLowerCase() : '';
-    const channel = channelRaw === 'in_app' || channelRaw === 'apns' ? channelRaw : undefined;
+    const channel = isTemplateChannel(channelRaw) ? channelRaw : undefined;
     const items = await notificationCenterService.fetchAdminTemplates({
       limit: parseLimit(query.limit, 50, 200),
       category: typeof query.category === 'string' ? query.category.trim() : undefined,
@@ -1493,15 +1718,15 @@ router.put('/admin/templates', authenticate, requireAdmin, async (req: AuthReque
       res.status(400).json({ error: 'category/titleTemplate/bodyTemplate are required' });
       return;
     }
-    if (channelRaw !== 'in_app' && channelRaw !== 'apns') {
-      res.status(400).json({ error: 'channel must be one of in_app/apns' });
+    if (!isTemplateChannel(channelRaw)) {
+      res.status(400).json({ error: 'channel must be one of in_app/apns/email/sms' });
       return;
     }
 
     const item = await notificationCenterService.upsertAdminTemplate({
       category,
       locale,
-      channel: channelRaw as 'in_app' | 'apns',
+      channel: channelRaw,
       titleTemplate,
       bodyTemplate,
       deeplinkTemplate: typeof body.deeplinkTemplate === 'string' ? body.deeplinkTemplate.trim() : null,

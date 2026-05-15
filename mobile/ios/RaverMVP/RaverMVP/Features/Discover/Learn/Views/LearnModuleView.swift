@@ -101,13 +101,13 @@ struct LearnModuleView: View {
                 if selectedSectionIsRefreshing || bannerMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if selectedSectionIsRefreshing {
-                            InlineLoadingBadge(title: L("正在更新内容", "Updating content"))
+                            InlineLoadingBadge(title: LT("正在更新内容", "Updating content", "コンテンツを更新中"))
                         }
                         if let bannerMessage {
                             ScreenStatusBanner(
                                 message: bannerMessage,
                                 style: .error,
-                                actionTitle: L("重试", "Retry")
+                                actionTitle: LT("重试", "Retry", "再試行")
                             ) {
                                 Task { await refreshSelectedSection() }
                             }
@@ -153,11 +153,11 @@ struct LearnModuleView: View {
             .onReceive(NotificationCenter.default.publisher(for: .discoverFestivalDidSave)) { _ in
                 Task { await loadFestivals() }
             }
-            .alert(L("提示", "Notice"), isPresented: Binding(
+            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
             )) {
-                Button(L("确定", "OK"), role: .cancel) {}
+                Button(LT("确定", "OK", "OK"), role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
             }
@@ -227,7 +227,7 @@ struct LearnModuleView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: sortOrder == .desc ? "arrow.down" : "arrow.up")
-                            Text(sortOrder == .desc ? L("降序", "Desc") : L("升序", "Asc"))
+                            Text(sortOrder == .desc ? LT("降序", "Desc", "降順") : LT("升序", "Asc", "昇順"))
                         }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
@@ -245,7 +245,7 @@ struct LearnModuleView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: activeFilterPanel == .genres ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                            Text(selectedGenreFilters.isEmpty ? L("风格", "Genres") : L("风格 \(selectedGenreFilters.count)", "Genres \(selectedGenreFilters.count)"))
+                            Text(selectedGenreFilters.isEmpty ? LT("风格", "Genres", "ジャンル") : LT("风格 \(selectedGenreFilters.count)", "Genres \(selectedGenreFilters.count)", "ジャンル \(selectedGenreFilters.count)"))
                                 .lineLimit(1)
                         }
                         .font(.caption.weight(.semibold))
@@ -264,7 +264,7 @@ struct LearnModuleView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: activeFilterPanel == .nations ? "flag.fill" : "flag")
-                            Text(selectedNationFilters.isEmpty ? L("国家", "Countries") : L("国家 \(selectedNationFilters.count)", "Countries \(selectedNationFilters.count)"))
+                            Text(selectedNationFilters.isEmpty ? LT("国家", "Countries", "国") : LT("国家 \(selectedNationFilters.count)", "Countries \(selectedNationFilters.count)", "国 \(selectedNationFilters.count)"))
                                 .lineLimit(1)
                         }
                         .font(.caption.weight(.semibold))
@@ -277,7 +277,7 @@ struct LearnModuleView: View {
                     .buttonStyle(.plain)
 
                     if !selectedGenreFilters.isEmpty || !selectedNationFilters.isEmpty {
-                        Button(LL("清空全部")) {
+                        Button(LT("清空全部", "清空全部", "すべてクリア")) {
                             selectedGenreFilters.removeAll()
                             selectedNationFilters.removeAll()
                         }
@@ -290,10 +290,10 @@ struct LearnModuleView: View {
 
             if activeFilterPanel == .genres {
                 LearnLabelMultiSelectPanel(
-                    title: L("筛选风格", "Filter Genres"),
+                    title: LT("筛选风格", "Filter Genres", "ジャンルで絞り込み"),
                     options: availableGenreFilters,
                     selectedValues: selectedGenreFilters,
-                    emptyText: L("暂无可筛选风格", "No genres available for filtering"),
+                    emptyText: LT("暂无可筛选风格", "No genres available for filtering", "絞り込めるジャンルはありません"),
                     onToggle: toggleGenreFilter,
                     onClear: {
                         selectedGenreFilters.removeAll()
@@ -306,10 +306,10 @@ struct LearnModuleView: View {
                 )
             } else if activeFilterPanel == .nations {
                 LearnLabelMultiSelectPanel(
-                    title: L("筛选国家", "Filter Countries"),
+                    title: LT("筛选国家", "Filter Countries", "国で絞り込み"),
                     options: availableNationFilters,
                     selectedValues: selectedNationFilters,
-                    emptyText: L("暂无可筛选国家", "No countries available for filtering"),
+                    emptyText: LT("暂无可筛选国家", "No countries available for filtering", "絞り込める国はありません"),
                     onToggle: toggleNationFilter,
                     onClear: {
                         selectedNationFilters.removeAll()
@@ -323,7 +323,7 @@ struct LearnModuleView: View {
             }
 
             if let total = labelsPagination?.total {
-                Text(L("筛选后 \(labels.count) / 共 \(total) 个厂牌", "Filtered \(labels.count) / Total \(total) labels"))
+                Text(LT("筛选后 \(labels.count) / 共 \(total) 个厂牌", "Filtered \(labels.count) / Total \(total) labels", "絞り込み後 \(labels.count) / 全 \(total) 件のレーベル"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -335,7 +335,7 @@ struct LearnModuleView: View {
     private var festivalsToolbar: some View {
         VStack(spacing: 8) {
             HStack(spacing: 10) {
-                Text(L("筛选后 \(festivals.count) / 共 \(allFestivals.count) 个电音节 IP", "Filtered \(festivals.count) / Total \(allFestivals.count) festival IPs"))
+                Text(LT("筛选后 \(festivals.count) / 共 \(allFestivals.count) 个电音节 IP", "Filtered \(festivals.count) / Total \(allFestivals.count) festival IPs", "絞り込み後 \(festivals.count) / 全 \(allFestivals.count) 件のフェスIP"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
 
@@ -348,7 +348,7 @@ struct LearnModuleView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.circle.fill")
                             .font(.caption.weight(.bold))
-                        Text(LL("新增电音节"))
+                        Text(LT("新增电音节", "新增电音节", "フェスを追加"))
                             .font(.caption.weight(.semibold))
                     }
                     .foregroundStyle(Color.white)
@@ -369,7 +369,7 @@ struct LearnModuleView: View {
                 .frame(maxWidth: .infinity, minHeight: 220)
         } else if case .failure(let message) = rankingsPhase {
             ScreenErrorCard(
-                title: L("榜单加载失败", "Rankings Failed to Load"),
+                title: LT("榜单加载失败", "Rankings Failed to Load", "ランキングの読み込みに失敗しました"),
                 message: message
             ) {
                 Task { await loadRankingBoards() }
@@ -378,7 +378,7 @@ struct LearnModuleView: View {
             .padding(.top, 24)
         } else if case .offline(let message) = rankingsPhase {
             ScreenErrorCard(
-                title: L("网络不可用", "Network Unavailable"),
+                title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                 message: message
             ) {
                 Task { await loadRankingBoards() }
@@ -386,7 +386,7 @@ struct LearnModuleView: View {
             .padding(.horizontal, 16)
             .padding(.top, 24)
         } else if rankingBoards.isEmpty {
-            ContentUnavailableView(LL("暂无榜单"), systemImage: "list.number")
+            ContentUnavailableView(LT("暂无榜单", "暂无榜单", "ランキングはまだありません"), systemImage: "list.number")
                 .frame(maxWidth: .infinity, minHeight: 220)
         } else {
             ScrollView {
@@ -422,7 +422,7 @@ struct LearnModuleView: View {
                 .padding(.top, 12)
         } else if case .failure(let message) = genresPhase {
             ScreenErrorCard(
-                title: L("学习内容加载失败", "Learn Content Failed to Load"),
+                title: LT("学习内容加载失败", "Learn Content Failed to Load", "学習コンテンツの読み込みに失敗しました"),
                 message: message
             ) {
                 Task { await loadGenres() }
@@ -431,7 +431,7 @@ struct LearnModuleView: View {
             .padding(.top, 24)
         } else if case .offline(let message) = genresPhase {
             ScreenErrorCard(
-                title: L("网络不可用", "Network Unavailable"),
+                title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                 message: message
             ) {
                 Task { await loadGenres() }
@@ -439,13 +439,13 @@ struct LearnModuleView: View {
             .padding(.horizontal, 16)
             .padding(.top, 24)
         } else if genres.isEmpty {
-            ContentUnavailableView(LL("暂无学习内容"), systemImage: "book")
+            ContentUnavailableView(LT("暂无学习内容", "暂无学习内容", "学習コンテンツはまだありません"), systemImage: "book")
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if !genres.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text(LL("流派树"))
+                            Text(LT("流派树", "流派树", "ジャンルツリー"))
                                 .font(.title3.weight(.bold))
                                 .foregroundStyle(RaverTheme.primaryText)
                             ForEach(genres) { node in
@@ -476,7 +476,7 @@ struct LearnModuleView: View {
                 .padding(.top, 12)
         } else if case .failure(let message) = labelsPhase {
             ScreenErrorCard(
-                title: L("厂牌加载失败", "Labels Failed to Load"),
+                title: LT("厂牌加载失败", "Labels Failed to Load", "レーベルの読み込みに失敗しました"),
                 message: message
             ) {
                 Task { await loadLabels() }
@@ -485,7 +485,7 @@ struct LearnModuleView: View {
             .padding(.top, 24)
         } else if case .offline(let message) = labelsPhase {
             ScreenErrorCard(
-                title: L("网络不可用", "Network Unavailable"),
+                title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                 message: message
             ) {
                 Task { await loadLabels() }
@@ -493,7 +493,7 @@ struct LearnModuleView: View {
             .padding(.horizontal, 16)
             .padding(.top, 24)
         } else if labels.isEmpty {
-            ContentUnavailableView(LL("暂无厂牌"), systemImage: "building.2")
+            ContentUnavailableView(LT("暂无厂牌", "暂无厂牌", "レーベルはまだありません"), systemImage: "building.2")
         } else {
             ScrollView {
                 LazyVStack(spacing: 14) {
@@ -532,7 +532,7 @@ struct LearnModuleView: View {
                 .padding(.top, 12)
         } else if case .failure(let message) = festivalsPhase {
             ScreenErrorCard(
-                title: L("电音节加载失败", "Festivals Failed to Load"),
+                title: LT("电音节加载失败", "Festivals Failed to Load", "フェスの読み込みに失敗しました"),
                 message: message
             ) {
                 Task { await loadFestivals() }
@@ -541,7 +541,7 @@ struct LearnModuleView: View {
             .padding(.top, 24)
         } else if case .offline(let message) = festivalsPhase {
             ScreenErrorCard(
-                title: L("网络不可用", "Network Unavailable"),
+                title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                 message: message
             ) {
                 Task { await loadFestivals() }
@@ -552,7 +552,7 @@ struct LearnModuleView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if festivals.isEmpty {
-                        ContentUnavailableView(LL("暂无匹配电音节"), systemImage: "music.quarternote.3")
+                        ContentUnavailableView(LT("暂无匹配电音节", "暂无匹配电音节", "一致するフェスはありません"), systemImage: "music.quarternote.3")
                             .frame(maxWidth: .infinity, minHeight: 220)
                     } else {
                         LazyVStack(spacing: 14) {
@@ -621,7 +621,7 @@ struct LearnModuleView: View {
             rankingsPhase = rankingBoards.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("榜单加载失败，请稍后重试", "Failed to load rankings. Please try again later.")
+            let message = error.userFacingMessage ?? LT("榜单加载失败，请稍后重试", "Failed to load rankings. Please try again later.", "ランキングを読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 rankingsPhase = .success
@@ -646,7 +646,7 @@ struct LearnModuleView: View {
             genresPhase = genres.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("学习内容加载失败，请稍后重试", "Failed to load learn content. Please try again later.")
+            let message = error.userFacingMessage ?? LT("学习内容加载失败，请稍后重试", "Failed to load learn content. Please try again later.", "学習コンテンツを読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 genresPhase = .success
@@ -683,7 +683,7 @@ struct LearnModuleView: View {
             labelsPhase = labels.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("厂牌加载失败，请稍后重试", "Failed to load labels. Please try again later.")
+            let message = error.userFacingMessage ?? LT("厂牌加载失败，请稍后重试", "Failed to load labels. Please try again later.", "レーベルを読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 labelsPhase = .success
@@ -711,7 +711,7 @@ struct LearnModuleView: View {
             festivalsPhase = festivals.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("电音节加载失败，请稍后重试", "Failed to load festivals. Please try again later.")
+            let message = error.userFacingMessage ?? LT("电音节加载失败，请稍后重试", "Failed to load festivals. Please try again later.", "フェスを読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 festivalsPhase = .success
@@ -818,7 +818,7 @@ struct LearnModuleView: View {
     @ViewBuilder
     private var festivalRankingSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(LL("榜单分区"))
+            Text(LT("榜单分区", "榜单分区", "ランキング区分"))
                 .font(.headline.weight(.bold))
                 .foregroundStyle(RaverTheme.primaryText)
 
@@ -873,24 +873,24 @@ struct LearnModuleView: View {
     private var festivalCreateSheet: some View {
         NavigationStack {
             Form {
-                Section(LL("基础信息")) {
-                    TextField(LL("电音节名称"), text: $createFestivalName)
-                    TextField(LL("别名（英文逗号分隔）"), text: $createFestivalAliases)
-                    TextField(LL("国家"), text: $createFestivalCountry)
-                    TextField(LL("城市"), text: $createFestivalCity)
-                    TextField(LL("首办时间"), text: $createFestivalFoundedYear)
-                    TextField(LL("举办频次"), text: $createFestivalFrequency)
-                    TextField(LL("定位"), text: $createFestivalTagline)
-                    TextField(LL("简介"), text: $createFestivalIntroduction, axis: .vertical)
-                    TextField(LL("官网链接"), text: $createFestivalWebsite)
+                Section(LT("基础信息", "基础信息", "基本情報")) {
+                    TextField(LT("电音节名称", "电音节名称", "フェス名"), text: $createFestivalName)
+                    TextField(LT("别名（英文逗号分隔）", "别名（英文逗号分隔）", "別名（半角カンマ区切り）"), text: $createFestivalAliases)
+                    TextField(LT("国家", "国家", "国"), text: $createFestivalCountry)
+                    TextField(LT("城市", "城市", "都市"), text: $createFestivalCity)
+                    TextField(LT("首办时间", "首办时间", "初開催年"), text: $createFestivalFoundedYear)
+                    TextField(LT("举办频次", "举办频次", "開催頻度"), text: $createFestivalFrequency)
+                    TextField(LT("定位", "定位", "タグライン"), text: $createFestivalTagline)
+                    TextField(LT("简介", "简介", "概要"), text: $createFestivalIntroduction, axis: .vertical)
+                    TextField(LT("官网链接", "官网链接", "公式サイトリンク"), text: $createFestivalWebsite)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
                 }
 
-                Section(LL("媒体")) {
+                Section(LT("媒体", "媒体", "メディア")) {
                     HStack(spacing: 12) {
                         PhotosPicker(selection: $createFestivalAvatarItem, matching: .images) {
-                            Label(LL("选择头像"), systemImage: "person.crop.square")
+                            Label(LT("选择头像", "选择头像", "アバターを選択"), systemImage: "person.crop.square")
                         }
                         .buttonStyle(.bordered)
 
@@ -905,7 +905,7 @@ struct LearnModuleView: View {
 
                     HStack(spacing: 12) {
                         PhotosPicker(selection: $createFestivalBackgroundItem, matching: .images) {
-                            Label(LL("选择背景"), systemImage: "photo.rectangle")
+                            Label(LT("选择背景", "选择背景", "背景を選択"), systemImage: "photo.rectangle")
                         }
                         .buttonStyle(.bordered)
 
@@ -920,13 +920,13 @@ struct LearnModuleView: View {
                 }
 
                 Section {
-                    Button(isCreatingFestival ? L("创建中...", "Creating...") : "创建电音节") {
+                    Button(isCreatingFestival ? LT("创建中...", "Creating...", "作成中...") : "创建电音节") {
                         Task { await createFestival() }
                     }
                     .disabled(isCreatingFestival || createFestivalName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .raverSystemNavigation(title: LL("新增电音节"))
+            .raverSystemNavigation(title: LT("新增电音节", "新增电音节", "フェスを追加"))
             .scrollDismissesKeyboard(.interactively)
         }
         .raverEnableCustomSwipeBack(edgeRatio: 0.2)
@@ -969,7 +969,7 @@ struct LearnModuleView: View {
                 createFestivalBackgroundData = loaded
             }
         } catch {
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
+            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
         }
     }
 
@@ -977,7 +977,7 @@ struct LearnModuleView: View {
     private func createFestival() async {
         let finalName = createFestivalName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalName.isEmpty else {
-            errorMessage = L("电音节名称不能为空", "Festival name cannot be empty.")
+            errorMessage = LT("电音节名称不能为空", "Festival name cannot be empty.", "フェス名を入力してください。")
             return
         }
 
@@ -988,10 +988,10 @@ struct LearnModuleView: View {
             let website = normalizeFestivalURL(createFestivalWebsite)
             let links: [LearnFestivalLinkPayload] = {
                 guard let website else { return [] }
-                return [LearnFestivalLinkPayload(title: L("官网", "Official"), icon: "globe", url: website)]
+                return [LearnFestivalLinkPayload(title: LT("官网", "Official", "公式サイト"), icon: "globe", url: website)]
             }()
 
-            var created = try await wikiRepository.createLearnFestival(
+            let createResult = try await wikiRepository.createLearnFestival(
                 input: CreateLearnFestivalInput(
                     name: finalName,
                     aliases: parseFestivalAliasTokens(createFestivalAliases),
@@ -1006,6 +1006,11 @@ struct LearnModuleView: View {
                     links: links
                 )
             )
+            guard case .created(var created) = createResult else {
+                showFestivalCreateSheet = false
+                errorMessage = LT("品牌信息已提交审核", "Brand submitted for review.", "ブランド情報を審査に送信しました。")
+                return
+            }
 
             var uploadedAvatarURL: String?
             if let createFestivalAvatarData {
@@ -1053,9 +1058,9 @@ struct LearnModuleView: View {
             let hydrated = LearnFestival(web: created)
             updateFestival(hydrated)
             showFestivalCreateSheet = false
-            errorMessage = L("电音节品牌已创建", "Festival brand created.")
+            errorMessage = LT("电音节品牌已创建", "Festival brand created.", "フェスブランドを作成しました。")
         } catch {
-            errorMessage = L("创建失败：\(error.userFacingMessage ?? "")", "Creation failed: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("创建失败：\(error.userFacingMessage ?? "")", "Creation failed: \(error.userFacingMessage ?? "")", "作成に失敗しました: \(error.userFacingMessage ?? "")")
         }
     }
 
@@ -1124,10 +1129,10 @@ enum LearnModuleSection: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .rankings: return L("DJ 榜单", "DJ Rankings")
-        case .festivals: return L("电音节", "Festivals")
-        case .labels: return L("厂牌", "Labels")
-        case .genres: return L("流派树", "Genre Tree")
+        case .rankings: return LT("DJ 榜单", "DJ Rankings", "DJランキング")
+        case .festivals: return LT("电音节", "Festivals", "フェス")
+        case .labels: return LT("厂牌", "Labels", "レーベル")
+        case .genres: return LT("流派树", "Genre Tree", "ジャンルツリー")
         }
     }
 }
@@ -1154,14 +1159,14 @@ private struct LearnLabelMultiSelectPanel: View {
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer(minLength: 0)
                 if !selectedValues.isEmpty {
-                    Button(L("清空", "Clear")) {
+                    Button(LT("清空", "Clear", "クリア")) {
                         onClear()
                     }
                     .buttonStyle(.plain)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.accent)
                 }
-                Button(LL("完成")) {
+                Button(LT("完成", "完成", "完了")) {
                     onClose()
                 }
                 .buttonStyle(.plain)
@@ -1230,12 +1235,12 @@ enum LearnLabelSortOption: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .soundcloudFollowers: return L("热度", "Popularity")
+        case .soundcloudFollowers: return LT("热度", "Popularity", "人気")
         case .likes: return "Likes"
-        case .name: return L("名称", "Name")
-        case .nation: return L("国家", "Country")
-        case .latestRelease: return L("发布时间文本", "Release Time Text")
-        case .createdAt: return L("入库时间", "Created At")
+        case .name: return LT("名称", "Name", "名称")
+        case .nation: return LT("国家", "Country", "国")
+        case .latestRelease: return LT("发布时间文本", "Release Time Text", "公開日時テキスト")
+        case .createdAt: return LT("入库时间", "Created At", "登録日時")
         }
     }
 
@@ -1397,7 +1402,7 @@ struct LearnLabelCard: View {
 
     private var metaLine: String {
         let nation = label.nation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return nation.isEmpty ? L("厂牌信息", "Label info") : nation
+        return nation.isEmpty ? LT("厂牌信息", "Label info", "レーベル情報") : nation
     }
 
     private func destinationURL(_ raw: String?) -> URL? {
@@ -1433,6 +1438,7 @@ struct LearnLabelDetailView: View {
     @State private var shareMorePresentation: LabelCardSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: LabelCardSharePresentation?
+    @State private var reportTarget: ReportSheetTarget?
     @State private var errorMessage: String?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
@@ -1447,7 +1453,7 @@ struct LearnLabelDetailView: View {
                     .frame(maxWidth: .infinity)
                     .overlay {
                         Button {
-                            openPreview(urlString: label.backgroundUrl, title: L("\(label.name) 背景图", "\(label.name) banner"))
+                            openPreview(urlString: label.backgroundUrl, title: LT("\(label.name) 背景图", "\(label.name) banner", "\(label.name) の背景画像"))
                         } label: {
                             headerBanner
                         }
@@ -1458,7 +1464,7 @@ struct LearnLabelDetailView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .top, spacing: 14) {
                         Button {
-                            openPreview(urlString: label.avatarUrl, title: L("\(label.name) 头像", "\(label.name) avatar"))
+                            openPreview(urlString: label.avatarUrl, title: LT("\(label.name) 头像", "\(label.name) avatar", "\(label.name) のアバター"))
                         } label: {
                             Color.clear
                                 .aspectRatio(1, contentMode: .fit)
@@ -1489,7 +1495,7 @@ struct LearnLabelDetailView: View {
 
                     if !displayGenres.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(L("Genres", "Genres"))
+                            Text(LT("Genres", "Genres", "ジャンル"))
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(RaverTheme.secondaryText)
                             WrapFlowLayout(items: displayGenres) { genre in
@@ -1508,12 +1514,12 @@ struct LearnLabelDetailView: View {
                         if hasFounderDisplay {
                             founderSection
                         }
-                        LearnLabelInfoRow(title: L("国家", "Country"), value: label.nation)
-                        LearnLabelInfoRow(title: L("地区/时期", "Region / Era"), value: label.locationPeriod)
-                        LearnLabelInfoRow(title: L("联系邮箱", "Contact Email"), value: label.generalContactEmail)
-                        LearnLabelInfoRow(title: L("Demo 提交", "Demo Submission"), value: label.demoSubmissionDisplay ?? label.demoSubmissionUrl)
+                        LearnLabelInfoRow(title: LT("国家", "Country", "国"), value: label.nation)
+                        LearnLabelInfoRow(title: LT("地区/时期", "Region / Era", "地域 / 時期"), value: label.locationPeriod)
+                        LearnLabelInfoRow(title: LT("联系邮箱", "Contact Email", "連絡先メール"), value: label.generalContactEmail)
+                        LearnLabelInfoRow(title: LT("Demo 提交", "Demo Submission", "Demo提出"), value: label.demoSubmissionDisplay ?? label.demoSubmissionUrl)
                         if hasFoundedAtDisplay {
-                            LearnLabelInfoRow(title: L("创始时间", "Founded At"), value: foundedAtDisplay)
+                            LearnLabelInfoRow(title: LT("创始时间", "Founded At", "創設日時"), value: foundedAtDisplay)
                         }
                     }
 
@@ -1524,7 +1530,7 @@ struct LearnLabelDetailView: View {
             }
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: LL("厂牌详情"))
+        .raverSystemNavigation(title: LT("厂牌详情", "厂牌详情", "レーベル詳細"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -1559,7 +1565,7 @@ struct LearnLabelDetailView: View {
                 }
             ) { conversation in
                 showWidgetStatusBanner(
-                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                     conversation: conversation
                 )
             } preview: {
@@ -1567,14 +1573,21 @@ struct LearnLabelDetailView: View {
             }
             .presentationDetents([.fraction(0.76), .large])
         }
+        .sheet(item: $reportTarget) { target in
+            ReportSheet(target: target) { _, _ in
+                showWidgetStatusBanner(message: LT("举报已提交", "Report submitted", "報告を送信しました"))
+            }
+            .environmentObject(appState)
+            .presentationDetents([.large])
+        }
         .task(id: label.avatarUrl ?? "") {
             await resolveAvatarLuminance()
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -1602,7 +1615,7 @@ struct LearnLabelDetailView: View {
                         }
                     ) { conversation in
                         showWidgetStatusBanner(
-                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                             conversation: conversation
                         )
                     } onMoreChats: {
@@ -1696,7 +1709,7 @@ struct LearnLabelDetailView: View {
                     HStack(spacing: 10) {
                         LearnLabelFounderAvatar(urlString: founderDj.avatarUrl)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(LL("创始人"))
+                            Text(LT("创始人", "创始人", "創設者"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                             Text(founderDisplayName)
@@ -1714,7 +1727,7 @@ struct LearnLabelDetailView: View {
                 HStack(spacing: 10) {
                     LearnLabelFounderAvatar(urlString: nil)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(LL("创始人"))
+                        Text(LT("创始人", "创始人", "創設者"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                         Text(founderDisplayName)
@@ -1757,7 +1770,7 @@ struct LearnLabelDetailView: View {
             || destinationURL(label.demoSubmissionUrl) != nil
         if hasLinks {
             VStack(alignment: .leading, spacing: 10) {
-                Text(L("Links", "Links"))
+                Text(LT("Links", "Links", "リンク"))
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
                 if let url = destinationURL(label.facebookUrl) {
@@ -1767,13 +1780,13 @@ struct LearnLabelDetailView: View {
                     LearnLabelExternalLinkRow(icon: "waveform", title: "SoundCloud", url: url)
                 }
                 if let url = destinationURL(label.musicPurchaseUrl) {
-                    LearnLabelExternalLinkRow(icon: "cart.fill", title: L("音乐资产购买", "Music Asset Purchase"), url: url)
+                    LearnLabelExternalLinkRow(icon: "cart.fill", title: LT("音乐资产购买", "Music Asset Purchase", "音楽アセット購入"), url: url)
                 }
                 if let url = destinationURL(label.officialWebsiteUrl) {
-                    LearnLabelExternalLinkRow(icon: "globe", title: L("官网", "Official"), url: url)
+                    LearnLabelExternalLinkRow(icon: "globe", title: LT("官网", "Official", "公式サイト"), url: url)
                 }
                 if let url = destinationURL(label.demoSubmissionUrl) {
-                    LearnLabelExternalLinkRow(icon: "paperplane.fill", title: L("Demo 提交", "Demo Submission"), url: url)
+                    LearnLabelExternalLinkRow(icon: "paperplane.fill", title: LT("Demo 提交", "Demo Submission", "Demo提出"), url: url)
                 }
             }
         }
@@ -1839,7 +1852,7 @@ struct LearnLabelDetailView: View {
             country: label.nation?.nilIfBlank,
             genreText: genreText,
             coverImageURL: coverImageURL,
-            badgeText: L("厂牌", "Label")
+            badgeText: LT("厂牌", "Label", "レーベル")
         )
     }
 
@@ -1907,14 +1920,14 @@ struct LearnLabelDetailView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                errorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "Instagram",
                 systemImage: "camera.circle.fill",
                 accentColor: Color(red: 0.91, green: 0.30, blue: 0.48)
             ) {
-                errorMessage = L("Instagram 分享接口待接入。", "Instagram share hook is not connected yet.")
+                errorMessage = LT("Instagram 分享接口待接入。", "Instagram share hook is not connected yet.", "Instagram共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "复制链接",
@@ -1931,7 +1944,7 @@ struct LearnLabelDetailView: View {
 
         actions.append(
             SharePanelQuickAction(
-                title: L("查看二维码", "View QR"),
+                title: LT("查看二维码", "View QR", "QRを見る"),
                 systemImage: "qrcode",
                 accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
             ) {
@@ -1940,7 +1953,7 @@ struct LearnLabelDetailView: View {
         )
         actions.append(
             SharePanelQuickAction(
-                title: L("查看海报", "View Poster"),
+                title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
             ) {
@@ -1949,7 +1962,7 @@ struct LearnLabelDetailView: View {
         )
         actions.append(
             SharePanelQuickAction(
-                title: L("保存海报", "Save Poster"),
+                title: LT("保存海报", "Save Poster", "海報を保存"),
                 systemImage: "photo.badge.arrow.down",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
@@ -1959,38 +1972,45 @@ struct LearnLabelDetailView: View {
 
         actions.append(
             SharePanelQuickAction(
-                title: L("缓存", "Cache"),
+                title: LT("缓存", "Cache", "キャッシュ"),
                 systemImage: "arrow.down.circle",
                 accentColor: Color(red: 0.38, green: 0.73, blue: 0.98)
             ) {
-                errorMessage = L("该页面缓存能力正在建设中。", "Caching for this page is under construction.")
+                errorMessage = LT("该页面缓存能力正在建设中。", "Caching for this page is under construction.", "このページのキャッシュ機能は現在構築中です。")
             }
         )
 
         actions.append(
             SharePanelQuickAction(
-                title: L("贡献信息", "Incorrect Info"),
+                title: LT("贡献信息", "Incorrect Info", "情報を修正"),
                 systemImage: "info.circle",
                 accentColor: Color(red: 0.96, green: 0.69, blue: 0.25)
             ) {
-                errorMessage = L("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.")
+                errorMessage = LT("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.", "情報修正の入口は近日公開予定です。この要望は記録しました。")
             }
         )
 
         actions.append(
             SharePanelQuickAction(
-                title: L("举报", "Report"),
+                title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.93, green: 0.32, blue: 0.36)
             ) {
-                errorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+                reportTarget = ReportSheetTarget(
+                    id: label.id,
+                    type: .label,
+                    title: label.name,
+                    preview: label.introduction?.nilIfBlank ?? label.genresPreview?.nilIfBlank,
+                    targetUserID: nil,
+                    targetUserDisplayName: nil
+                )
             }
         )
 
         if let url = destinationURL(label.officialWebsiteUrl) {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("官网", "Official"),
+                    title: LT("官网", "Official", "公式サイト"),
                     systemImage: "globe",
                     accentColor: Color(red: 0.53, green: 0.45, blue: 0.96)
                 ) {
@@ -2008,11 +2028,11 @@ struct LearnLabelDetailView: View {
             let result = try await shareLinkCoordinator.copyLink(target: shareTarget())
             showWidgetStatusBanner(
                 message: result.usedDeepLinkFallback
-                    ? L("已复制 App 内链接", "Copied app-only link.")
-                    : L("已复制链接", "Link copied")
+                    ? LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました")
+                    : LT("已复制链接", "Link copied", "リンクをコピーしました")
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            errorMessage = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクをコピーできませんでした。もう一度お試しください。")
         }
     }
 
@@ -2032,7 +2052,7 @@ struct LearnLabelDetailView: View {
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -2043,20 +2063,20 @@ struct LearnLabelDetailView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("Label 海报由分享系统统一生成，名称、摘要和二维码都会跟随短链保持一致。", "Label posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
+                        hintText: LT("Label 海报由分享系统统一生成，名称、摘要和二维码都会跟随短链保持一致。", "Label posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link.", "Label海報は共有システムで生成され、名称、概要、QRコードは短縮リンクと同期されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -2065,9 +2085,9 @@ struct LearnLabelDetailView: View {
         do {
             let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(), channel: "poster_save")
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
         } catch {
-            errorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 }
@@ -2284,7 +2304,7 @@ private struct LearnFestivalRankingBoard: Identifiable, Hashable {
     static let djMagTop100Festival2025 = LearnFestivalRankingBoard(
         id: "djmag-top100-festival-2025",
         title: "DJ MAG TOP 100 Festival 2025",
-        subtitle: L("全球电子音乐节年度热度榜", "Global annual popularity ranking of electronic music festivals"),
+        subtitle: LT("全球电子音乐节年度热度榜", "Global annual popularity ranking of electronic music festivals", "世界の電子音楽フェス年間人気ランキング"),
         year: 2025,
         rankedFestivalIDs: [
             "tomorrowland",
@@ -2312,7 +2332,7 @@ private struct LearnFestivalRankingBoardCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
-                Text(LL("榜单"))
+                Text(LT("榜单", "榜单", "ランキング"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.white.opacity(0.84))
                     .padding(.horizontal, 8)
@@ -2336,7 +2356,7 @@ private struct LearnFestivalRankingBoardCard: View {
 
             Spacer(minLength: 0)
 
-            Text(L("已收录 \(rankedCount) 个电音节", "\(rankedCount) festivals included"))
+            Text(LT("已收录 \(rankedCount) 个电音节", "\(rankedCount) festivals included", "\(rankedCount)件のフェスを収録"))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(Color.white.opacity(0.82))
         }
@@ -2554,7 +2574,7 @@ struct LearnFestivalCard: View {
         let founded = festival.foundedYear.trimmingCharacters(in: .whitespacesAndNewlines)
         let freq = festival.frequency.trimmingCharacters(in: .whitespacesAndNewlines)
         let parts = [country, city, founded, freq].filter { !$0.isEmpty }
-        return parts.isEmpty ? L("电子音乐节品牌", "Festival Brand") : parts.joined(separator: " · ")
+        return parts.isEmpty ? LT("电子音乐节品牌", "Festival Brand", "電子音楽フェスブランド") : parts.joined(separator: " · ")
     }
 
     private func destinationURL(_ raw: String?) -> URL? {
@@ -2780,6 +2800,7 @@ struct LearnFestivalDetailView: View {
     @State private var shareMorePresentation: BrandCardSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: BrandCardSharePresentation?
+    @State private var reportTarget: ReportSheetTarget?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
         ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
@@ -2799,9 +2820,9 @@ struct LearnFestivalDetailView: View {
 
         var title: String {
             switch self {
-            case .basic: return L("信息", "Info")
-            case .events: return L("活动", "Events")
-            case .posts: return L("动态", "Posts")
+            case .basic: return LT("信息", "Info", "情報")
+            case .events: return LT("活动", "Events", "イベント")
+            case .posts: return LT("动态", "Posts", "投稿")
             }
         }
 
@@ -2851,16 +2872,20 @@ struct LearnFestivalDetailView: View {
                 }
             ) { conversation in
                 showWidgetStatusBanner(
-                    message: L(
-                        "已分享到 \(conversation.title)",
-                        "Shared to \(conversation.title)"
-                    ),
+                    message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                     conversation: conversation
                 )
             } preview: {
                 BrandSharePreviewCard(payload: presentation.payload)
             }
             .presentationDetents([.fraction(0.76), .large])
+        }
+        .sheet(item: $reportTarget) { target in
+            ReportSheet(target: target) { _, _ in
+                showWidgetStatusBanner(message: LT("举报已提交", "Report submitted", "報告を送信しました"))
+            }
+            .environmentObject(appState)
+            .presentationDetents([.large])
         }
         .task(id: currentFestival.id) {
             prepareFestivalEditDraft()
@@ -2885,11 +2910,11 @@ struct LearnFestivalDetailView: View {
         .onChange(of: editBackgroundItem) { _, item in
             Task { await loadFestivalEditPhoto(item, target: .background) }
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -2917,10 +2942,7 @@ struct LearnFestivalDetailView: View {
                         }
                     ) { conversation in
                         showWidgetStatusBanner(
-                            message: L(
-                                "已分享到 \(conversation.title)",
-                                "Shared to \(conversation.title)"
-                            ),
+                            message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                             conversation: conversation
                         )
                     } onMoreChats: {
@@ -2972,17 +2994,23 @@ struct LearnFestivalDetailView: View {
 
     private func openFestivalCacheEntry() {
         // TODO: Add festival-level cache workflow if needed.
-        errorMessage = L("该页面缓存能力正在建设中。", "Caching for this page is under construction.")
+        errorMessage = LT("该页面缓存能力正在建设中。", "Caching for this page is under construction.", "このページのキャッシュ機能は現在構築中です。")
     }
 
     private func openFestivalFeedbackEntry() {
         // TODO: Wire to dedicated feedback route/page when available.
-        errorMessage = L("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.")
+        errorMessage = LT("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.", "情報修正の入口は近日公開予定です。この要望は記録しました。")
     }
 
     private func openFestivalReportEntry() {
-        // TODO: Wire to dedicated report route/page when available.
-        errorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+        reportTarget = ReportSheetTarget(
+            id: currentFestival.id,
+            type: .festival,
+            title: currentFestival.name,
+            preview: currentFestival.introduction.nilIfBlank ?? currentFestival.tagline.nilIfBlank,
+            targetUserID: nil,
+            targetUserDisplayName: nil
+        )
     }
 
     private var isFollowingCurrentFestivalBrand: Bool {
@@ -3010,7 +3038,7 @@ struct LearnFestivalDetailView: View {
     @MainActor
     private func toggleFestivalBrandFollow() async {
         guard appState.session != nil else {
-            errorMessage = L("请先登录后再关注电音节。", "Please log in before following this festival.")
+            errorMessage = LT("请先登录后再关注电音节。", "Please log in before following this festival.", "フェスをフォローするにはログインしてください。")
             return
         }
         guard !isTogglingBrandFollow else { return }
@@ -3052,7 +3080,7 @@ struct LearnFestivalDetailView: View {
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("关注状态更新失败，请稍后重试。", "Failed to update follow status. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("关注状态更新失败，请稍后重试。", "Failed to update follow status. Please try again later.", "フォロー状態を更新できませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -3085,7 +3113,7 @@ struct LearnFestivalDetailView: View {
             city: festival.city.nilIfBlank,
             tagline: festival.tagline.nilIfBlank,
             coverImageURL: coverImageURL,
-            badgeText: L("品牌", "Brand")
+            badgeText: LT("品牌", "Brand", "ブランド")
         )
     }
 
@@ -3154,14 +3182,14 @@ struct LearnFestivalDetailView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                errorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "Instagram",
                 systemImage: "camera.circle.fill",
                 accentColor: Color(red: 0.91, green: 0.30, blue: 0.48)
             ) {
-                errorMessage = L("Instagram 分享接口待接入。", "Instagram share hook is not connected yet.")
+                errorMessage = LT("Instagram 分享接口待接入。", "Instagram share hook is not connected yet.", "Instagram共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "复制链接",
@@ -3179,7 +3207,7 @@ struct LearnFestivalDetailView: View {
         if let festival {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("查看二维码", "View QR"),
+                    title: LT("查看二维码", "View QR", "QRを見る"),
                     systemImage: "qrcode",
                     accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
                 ) {
@@ -3188,7 +3216,7 @@ struct LearnFestivalDetailView: View {
             )
             actions.append(
                 SharePanelQuickAction(
-                    title: L("查看海报", "View Poster"),
+                    title: LT("查看海报", "View Poster", "海報を見る"),
                     systemImage: "photo.on.rectangle",
                     accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
                 ) {
@@ -3197,7 +3225,7 @@ struct LearnFestivalDetailView: View {
             )
             actions.append(
                 SharePanelQuickAction(
-                    title: L("保存海报", "Save Poster"),
+                    title: LT("保存海报", "Save Poster", "海報を保存"),
                     systemImage: "photo.badge.arrow.down",
                     accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
                 ) {
@@ -3209,7 +3237,7 @@ struct LearnFestivalDetailView: View {
         if canEditFestival {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("编辑", "Edit"),
+                    title: LT("编辑", "Edit", "編集"),
                     systemImage: "square.and.pencil",
                     accentColor: RaverTheme.accent
                 ) {
@@ -3221,7 +3249,7 @@ struct LearnFestivalDetailView: View {
 
         actions.append(
             SharePanelQuickAction(
-                title: L("缓存", "Cache"),
+                title: LT("缓存", "Cache", "キャッシュ"),
                 systemImage: "arrow.down.circle",
                 accentColor: Color(red: 0.38, green: 0.73, blue: 0.98)
             ) {
@@ -3231,7 +3259,7 @@ struct LearnFestivalDetailView: View {
 
         actions.append(
             SharePanelQuickAction(
-                title: L("贡献信息", "Incorrect Info"),
+                title: LT("贡献信息", "Incorrect Info", "情報を修正"),
                 systemImage: "info.circle",
                 accentColor: Color(red: 0.96, green: 0.69, blue: 0.25)
             ) {
@@ -3241,7 +3269,7 @@ struct LearnFestivalDetailView: View {
 
         actions.append(
             SharePanelQuickAction(
-                title: L("举报", "Report"),
+                title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.93, green: 0.32, blue: 0.36)
             ) {
@@ -3252,7 +3280,7 @@ struct LearnFestivalDetailView: View {
         if festival?.links.first?.url != nil {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("官网", "Official"),
+                    title: LT("官网", "Official", "公式サイト"),
                     systemImage: "globe",
                     accentColor: Color(red: 0.53, green: 0.45, blue: 0.96)
                 ) {
@@ -3272,11 +3300,11 @@ struct LearnFestivalDetailView: View {
             let result = try await shareLinkCoordinator.copyLink(target: shareTarget(for: festival))
             showWidgetStatusBanner(
                 message: result.usedDeepLinkFallback
-                    ? L("已复制 App 内链接", "Copied app-only link.")
-                    : L("已复制链接", "Link copied")
+                    ? LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました")
+                    : LT("已复制链接", "Link copied", "リンクをコピーしました")
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            errorMessage = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクをコピーできませんでした。もう一度お試しください。")
         }
     }
 
@@ -3296,7 +3324,7 @@ struct LearnFestivalDetailView: View {
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -3307,20 +3335,20 @@ struct LearnFestivalDetailView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("Festival 海报由分享系统统一生成，名称、摘要和二维码都会跟随短链保持一致。", "Festival posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
+                        hintText: LT("Festival 海报由分享系统统一生成，名称、摘要和二维码都会跟随短链保持一致。", "Festival posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link.", "Festival海報は共有システムで生成され、名称、概要、QRコードは短縮リンクと同期されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -3329,9 +3357,9 @@ struct LearnFestivalDetailView: View {
         do {
             let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(for: festival), channel: "poster_save")
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
         } catch {
-            errorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -3477,7 +3505,7 @@ struct LearnFestivalDetailView: View {
                                         .lineLimit(2)
                                 }
 
-                                Text(L("\(currentFestival.country) \(currentFestival.city) · Since \(currentFestival.foundedYear)", "\(currentFestival.country) \(currentFestival.city) · Since \(currentFestival.foundedYear)"))
+                                Text(LT("\(currentFestival.country) \(currentFestival.city) · Since \(currentFestival.foundedYear)", "\(currentFestival.country) \(currentFestival.city) · Since \(currentFestival.foundedYear)", "\(currentFestival.country) \(currentFestival.city) · \(currentFestival.foundedYear)年開始"))
                                     .font(.caption)
                                     .foregroundStyle(festivalHeaderTertiaryTextColor)
                                     .lineLimit(1)
@@ -3494,7 +3522,7 @@ struct LearnFestivalDetailView: View {
                                             .tint(.white)
                                             .frame(minWidth: 48)
                                     } else {
-                                        Text(isFollowingCurrentFestivalBrand ? L("已关注", "Following") : L("关注", "Follow"))
+                                        Text(isFollowingCurrentFestivalBrand ? LT("已关注", "Following", "フォロー中") : LT("关注", "Follow", "フォロー"))
                                             .lineLimit(1)
                                     }
                                 }
@@ -3545,11 +3573,11 @@ struct LearnFestivalDetailView: View {
         LearnLabelExpandableText(text: currentFestival.introduction, collapsedLineLimit: 6)
 
         VStack(alignment: .leading, spacing: 10) {
-            LearnLabelInfoRow(title: L("国家", "Country"), value: currentFestival.country)
-            LearnLabelInfoRow(title: L("城市", "City"), value: currentFestival.city)
-            LearnLabelInfoRow(title: L("首办时间", "Founded Year"), value: currentFestival.foundedYear)
-            LearnLabelInfoRow(title: L("举办频次", "Frequency"), value: currentFestival.frequency)
-            LearnLabelInfoRow(title: L("定位", "Tagline"), value: currentFestival.tagline)
+            LearnLabelInfoRow(title: LT("国家", "Country", "国"), value: currentFestival.country)
+            LearnLabelInfoRow(title: LT("城市", "City", "都市"), value: currentFestival.city)
+            LearnLabelInfoRow(title: LT("首办时间", "Founded Year", "初開催年"), value: currentFestival.foundedYear)
+            LearnLabelInfoRow(title: LT("举办频次", "Frequency", "開催頻度"), value: currentFestival.frequency)
+            LearnLabelInfoRow(title: LT("定位", "Tagline", "タグライン"), value: currentFestival.tagline)
         }
 
         linksSection
@@ -3565,7 +3593,7 @@ struct LearnFestivalDetailView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "plus.circle.fill")
                         .font(.system(size: 16, weight: .bold))
-                    Text(LL("发布新活动"))
+                    Text(LT("发布新活动", "发布新活动", "新しいイベントを公開"))
                         .font(.subheadline.weight(.semibold))
                 }
                 .foregroundStyle(Color.white)
@@ -3577,15 +3605,15 @@ struct LearnFestivalDetailView: View {
             .buttonStyle(.plain)
 
             if isLoadingRelatedContent && relatedEvents.isEmpty {
-                ProgressView(LL("正在加载关联活动..."))
+                ProgressView(LT("正在加载关联活动...", "正在加载关联活动...", "関連イベントを読み込み中..."))
                     .padding(.vertical, 8)
             } else if upcomingRelatedEvents.isEmpty && endedRelatedEvents.isEmpty {
-                Text(LL("暂无关联活动"))
+                Text(LT("暂无关联活动", "暂无关联活动", "関連イベントはまだありません"))
                     .foregroundStyle(RaverTheme.secondaryText)
                     .padding(.vertical, 8)
             } else {
                 if !upcomingRelatedEvents.isEmpty {
-                    festivalEventsSectionHeader(L("即将开始", "Upcoming"))
+                    festivalEventsSectionHeader(LT("即将开始", "Upcoming", "近日開催"))
                     ForEach(upcomingRelatedEvents) { event in
                         Button {
                             appPush(.eventDetail(eventID: event.id))
@@ -3597,7 +3625,7 @@ struct LearnFestivalDetailView: View {
                 }
 
                 if !endedRelatedEvents.isEmpty {
-                    festivalEventsSectionHeader(L("已结束活动", "Ended"))
+                    festivalEventsSectionHeader(LT("已结束活动", "Ended", "終了済み"))
                     ForEach(endedRelatedEvents) { event in
                         Button {
                             appPush(.eventDetail(eventID: event.id))
@@ -3640,10 +3668,10 @@ struct LearnFestivalDetailView: View {
     @ViewBuilder
     private var postsTabContent: some View {
         if isLoadingRelatedContent && relatedArticles.isEmpty {
-            ProgressView(LL("正在加载品牌动态..."))
+            ProgressView(LT("正在加载品牌动态...", "正在加载品牌动态...", "ブランド投稿を読み込み中..."))
                 .padding(.vertical, 8)
         } else if relatedArticles.isEmpty {
-            Text(LL("暂无相关动态"))
+            Text(LT("暂无相关动态", "暂无相关动态", "関連投稿はまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
         } else {
@@ -3683,7 +3711,7 @@ struct LearnFestivalDetailView: View {
                     .foregroundStyle(RaverTheme.secondaryText)
                     .lineLimit(1)
 
-                Text(locationText.isEmpty ? L("地点待补充", "Location pending") : locationText)
+                Text(locationText.isEmpty ? LT("地点待补充", "Location pending", "場所は未設定") : locationText)
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .lineLimit(2)
@@ -3723,14 +3751,14 @@ struct LearnFestivalDetailView: View {
     }
 
     private func festivalEventDateText(_ event: WebEvent) -> String {
-        if AppLanguagePreference.current.effectiveLanguage == .zh {
+        if AppLanguagePreference.current.effectiveLanguage != .en {
             return event.startDate.appLocalizedDateRangeText(to: event.endDate)
         }
         let range = DateInterval(start: event.startDate, end: event.endDate)
         let formatter = DateIntervalFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
-        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
         return formatter.string(from: range) ?? event.startDate.appLocalizedYMDText()
     }
 
@@ -3755,7 +3783,7 @@ struct LearnFestivalDetailView: View {
         }
         if !validLinks.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                Text(L("Links", "Links"))
+                Text(LT("Links", "Links", "リンク"))
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
                 ForEach(validLinks, id: \.2.absoluteString) { item in
@@ -3770,7 +3798,7 @@ struct LearnFestivalDetailView: View {
         let users = currentFestival.contributors.filter { !$0.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         if !users.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Text(LL("贡献者"))
+                Text(LT("贡献者", "贡献者", "コントリビューター"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
 
@@ -3815,7 +3843,7 @@ struct LearnFestivalDetailView: View {
 
     private func contributorDisplayName(_ user: WebUserLite) -> String {
         let trimmed = user.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? L("未设置昵称", "No nickname set") : trimmed
+        return trimmed.isEmpty ? LT("未设置昵称", "No nickname set", "ニックネーム未設定") : trimmed
     }
 
     @MainActor
@@ -3830,7 +3858,7 @@ struct LearnFestivalDetailView: View {
             appPush(.userProfile(userID: resolved.id))
             return
         }
-        errorMessage = L("未找到对应用户主页", "Matched user profile not found.")
+        errorMessage = LT("未找到对应用户主页", "Matched user profile not found.", "対応するユーザープロフィールが見つかりません。")
     }
 
     @MainActor
@@ -3958,24 +3986,24 @@ struct LearnFestivalDetailView: View {
     private var festivalEditSheet: some View {
         NavigationStack {
             Form {
-                Section(LL("基础信息")) {
-                    TextField(LL("电音节名称"), text: $editName)
-                    TextField(LL("别名（英文逗号分隔）"), text: $editAliases)
-                    TextField(LL("国家"), text: $editCountry)
-                    TextField(LL("城市"), text: $editCity)
-                    TextField(LL("首办时间"), text: $editFoundedYear)
-                    TextField(LL("举办频次"), text: $editFrequency)
-                    TextField(LL("定位"), text: $editTagline)
-                    TextField(LL("简介"), text: $editIntroduction, axis: .vertical)
-                    TextField(LL("官网链接"), text: $editWebsite)
+                Section(LT("基础信息", "基础信息", "基本情報")) {
+                    TextField(LT("电音节名称", "电音节名称", "フェス名"), text: $editName)
+                    TextField(LT("别名（英文逗号分隔）", "别名（英文逗号分隔）", "別名（半角カンマ区切り）"), text: $editAliases)
+                    TextField(LT("国家", "国家", "国"), text: $editCountry)
+                    TextField(LT("城市", "城市", "都市"), text: $editCity)
+                    TextField(LT("首办时间", "首办时间", "初開催年"), text: $editFoundedYear)
+                    TextField(LT("举办频次", "举办频次", "開催頻度"), text: $editFrequency)
+                    TextField(LT("定位", "定位", "タグライン"), text: $editTagline)
+                    TextField(LT("简介", "简介", "概要"), text: $editIntroduction, axis: .vertical)
+                    TextField(LT("官网链接", "官网链接", "公式サイトリンク"), text: $editWebsite)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
                 }
 
-                Section(LL("媒体")) {
+                Section(LT("媒体", "媒体", "メディア")) {
                     HStack(spacing: 12) {
                         PhotosPicker(selection: $editAvatarItem, matching: .images) {
-                            Label(LL("更换头像"), systemImage: "person.crop.square")
+                            Label(LT("更换头像", "更换头像", "アバターを変更"), systemImage: "person.crop.square")
                         }
                         .buttonStyle(.bordered)
 
@@ -3996,7 +4024,7 @@ struct LearnFestivalDetailView: View {
 
                     HStack(spacing: 12) {
                         PhotosPicker(selection: $editBackgroundItem, matching: .images) {
-                            Label(LL("更换背景"), systemImage: "photo.rectangle")
+                            Label(LT("更换背景", "更换背景", "背景を変更"), systemImage: "photo.rectangle")
                         }
                         .buttonStyle(.bordered)
 
@@ -4017,13 +4045,13 @@ struct LearnFestivalDetailView: View {
                 }
 
                 Section {
-                    Button(isSavingFestival ? L("保存中...", "Saving...") : "保存电音节信息") {
+                    Button(isSavingFestival ? LT("保存中...", "Saving...", "保存中...") : "保存电音节信息") {
                         Task { await saveFestivalEdits() }
                     }
                     .disabled(isSavingFestival || editName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .raverSystemNavigation(title: LL("编辑电音节"))
+            .raverSystemNavigation(title: LT("编辑电音节", "编辑电音节", "フェスを編集"))
             .scrollDismissesKeyboard(.interactively)
         }
         .raverEnableCustomSwipeBack(edgeRatio: 0.2)
@@ -4071,20 +4099,20 @@ struct LearnFestivalDetailView: View {
                 editBackgroundData = loaded
             }
         } catch {
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
+            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
         }
     }
 
     @MainActor
     private func saveFestivalEdits() async {
         guard canEditFestival else {
-            errorMessage = L("仅贡献者可编辑电音节信息", "Only contributors can edit festival info.")
+            errorMessage = LT("仅贡献者可编辑电音节信息", "Only contributors can edit festival info.", "コントリビューターのみフェス情報を編集できます。")
             return
         }
 
         let finalName = editName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalName.isEmpty else {
-            errorMessage = L("电音节名称不能为空", "Festival name cannot be empty.")
+            errorMessage = LT("电音节名称不能为空", "Festival name cannot be empty.", "フェス名を入力してください。")
             return
         }
 
@@ -4126,11 +4154,11 @@ struct LearnFestivalDetailView: View {
 
             let website = normalizeURL(editWebsite)
             var preservedLinks = updated.links.filter { link in
-                !(link.icon == "globe" && (link.title == L("官网", "Official") || link.title == "Official"))
+                !(link.icon == "globe" && (link.title == LT("官网", "Official", "公式サイト") || link.title == "Official"))
             }
             if let website {
                 preservedLinks.insert(
-                    LearnFestivalLink(title: L("官网", "Official"), icon: "globe", url: website),
+                    LearnFestivalLink(title: LT("官网", "Official", "公式サイト"), icon: "globe", url: website),
                     at: 0
                 )
             }
@@ -4158,9 +4186,9 @@ struct LearnFestivalDetailView: View {
             onFestivalUpdated?(hydrated)
             showFestivalEditSheet = false
             await loadRelatedContent()
-            errorMessage = L("电音节信息已更新", "Festival info updated.")
+            errorMessage = LT("电音节信息已更新", "Festival info updated.", "フェス情報を更新しました。")
         } catch {
-            errorMessage = L("保存失败：\(error.userFacingMessage ?? "")", "Save failed: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("保存失败：\(error.userFacingMessage ?? "")", "Save failed: \(error.userFacingMessage ?? "")", "保存に失敗しました: \(error.userFacingMessage ?? "")")
         }
     }
 
@@ -4345,18 +4373,18 @@ struct LearnFestivalEditorView: View {
         var title: String {
             switch self {
             case .create:
-                return LL("新增电音节")
+                return LT("新增电音节", "新增电音节", "フェスを追加")
             case .edit:
-                return LL("编辑电音节")
+                return LT("编辑电音节", "编辑电音节", "フェスを編集")
             }
         }
 
         var commitTitle: String {
             switch self {
             case .create:
-                return L("创建电音节", "Create Festival")
+                return LT("创建电音节", "Create Festival", "フェスを作成")
             case .edit:
-                return L("保存电音节信息", "Save Festival")
+                return LT("保存电音节信息", "Save Festival", "フェス情報を保存")
             }
         }
     }
@@ -4420,24 +4448,24 @@ struct LearnFestivalEditorView: View {
 
     var body: some View {
         Form {
-            Section(LL("基础信息")) {
-                TextField(LL("电音节名称"), text: $name)
-                TextField(LL("别名（英文逗号分隔）"), text: $aliases)
-                TextField(LL("国家"), text: $country)
-                TextField(LL("城市"), text: $city)
-                TextField(LL("首办时间"), text: $foundedYear)
-                TextField(LL("举办频次"), text: $frequency)
-                TextField(LL("定位"), text: $tagline)
-                TextField(LL("简介"), text: $introduction, axis: .vertical)
-                TextField(LL("官网链接"), text: $website)
+            Section(LT("基础信息", "基础信息", "基本情報")) {
+                TextField(LT("电音节名称", "电音节名称", "フェス名"), text: $name)
+                TextField(LT("别名（英文逗号分隔）", "别名（英文逗号分隔）", "別名（半角カンマ区切り）"), text: $aliases)
+                TextField(LT("国家", "国家", "国"), text: $country)
+                TextField(LT("城市", "城市", "都市"), text: $city)
+                TextField(LT("首办时间", "首办时间", "初開催年"), text: $foundedYear)
+                TextField(LT("举办频次", "举办频次", "開催頻度"), text: $frequency)
+                TextField(LT("定位", "定位", "タグライン"), text: $tagline)
+                TextField(LT("简介", "简介", "概要"), text: $introduction, axis: .vertical)
+                TextField(LT("官网链接", "官网链接", "公式サイトリンク"), text: $website)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
             }
 
-            Section(LL("媒体")) {
+            Section(LT("媒体", "媒体", "メディア")) {
                 HStack(spacing: 12) {
                     PhotosPicker(selection: $avatarItem, matching: .images) {
-                        Label(editingFestival == nil ? LL("选择头像") : LL("更换头像"), systemImage: "person.crop.square")
+                        Label(editingFestival == nil ? LT("选择头像", "选择头像", "アバターを選択") : LT("更换头像", "更换头像", "アバターを変更"), systemImage: "person.crop.square")
                     }
                     .buttonStyle(.bordered)
 
@@ -4446,7 +4474,7 @@ struct LearnFestivalEditorView: View {
 
                 HStack(spacing: 12) {
                     PhotosPicker(selection: $backgroundItem, matching: .images) {
-                        Label(editingFestival == nil ? LL("选择背景") : LL("更换背景"), systemImage: "photo.rectangle")
+                        Label(editingFestival == nil ? LT("选择背景", "选择背景", "背景を選択") : LT("更换背景", "更换背景", "背景を変更"), systemImage: "photo.rectangle")
                     }
                     .buttonStyle(.bordered)
 
@@ -4455,7 +4483,7 @@ struct LearnFestivalEditorView: View {
             }
 
             Section {
-                Button(isSaving ? L("保存中...", "Saving...") : mode.commitTitle) {
+                Button(isSaving ? LT("保存中...", "Saving...", "保存中...") : mode.commitTitle) {
                     Task { await saveFestival() }
                 }
                 .disabled(isSaving || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -4474,11 +4502,11 @@ struct LearnFestivalEditorView: View {
         .onChange(of: backgroundItem) { _, item in
             Task { await loadPhoto(item, target: .background) }
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -4574,20 +4602,20 @@ struct LearnFestivalEditorView: View {
                 backgroundData = loaded
             }
         } catch {
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
+            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
         }
     }
 
     @MainActor
     private func saveFestival() async {
         if editingFestival != nil, !canEditFestival {
-            errorMessage = L("仅贡献者可编辑电音节信息", "Only contributors can edit festival info.")
+            errorMessage = LT("仅贡献者可编辑电音节信息", "Only contributors can edit festival info.", "コントリビューターのみフェス情報を編集できます。")
             return
         }
 
         let finalName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalName.isEmpty else {
-            errorMessage = L("电音节名称不能为空", "Festival name cannot be empty.")
+            errorMessage = LT("电音节名称不能为空", "Festival name cannot be empty.", "フェス名を入力してください。")
             return
         }
 
@@ -4631,7 +4659,7 @@ struct LearnFestivalEditorView: View {
                 var preservedLinks = editing.links.filter { $0.icon != "globe" }
                 if let normalizedWebsite {
                     preservedLinks.insert(
-                        LearnFestivalLink(title: L("官网", "Official"), icon: "globe", url: normalizedWebsite),
+                        LearnFestivalLink(title: LT("官网", "Official", "公式サイト"), icon: "globe", url: normalizedWebsite),
                         at: 0
                     )
                 }
@@ -4661,10 +4689,10 @@ struct LearnFestivalEditorView: View {
                 let normalizedWebsite = normalizeURL(website)
                 let links: [LearnFestivalLinkPayload] = {
                     guard let normalizedWebsite else { return [] }
-                    return [LearnFestivalLinkPayload(title: L("官网", "Official"), icon: "globe", url: normalizedWebsite)]
+                    return [LearnFestivalLinkPayload(title: LT("官网", "Official", "公式サイト"), icon: "globe", url: normalizedWebsite)]
                 }()
 
-                var created = try await wikiRepository.createLearnFestival(
+                let createResult = try await wikiRepository.createLearnFestival(
                     input: CreateLearnFestivalInput(
                         name: finalName,
                         aliases: parseAliasTokens(aliases),
@@ -4679,6 +4707,11 @@ struct LearnFestivalEditorView: View {
                         links: links
                     )
                 )
+                guard case .created(var created) = createResult else {
+                    OperationBannerCenter.shared.success(LT("品牌信息已提交审核", "Brand submitted for review", "ブランド情報を審査に送信しました"))
+                    dismiss()
+                    return
+                }
 
                 var uploadedAvatarURL: String?
                 if let avatarData {
@@ -4772,7 +4805,7 @@ private struct LearnLabelExpandableText: View {
                 .lineLimit(isExpanded ? nil : collapsedLineLimit)
 
             if shouldShowToggle {
-                Button(isExpanded ? L("收起", "Collapse") : L("展开全文", "Expand")) {
+                Button(isExpanded ? LT("收起", "Collapse", "閉じる") : LT("展开全文", "Expand", "全文を表示")) {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         isExpanded.toggle()
                     }
@@ -4954,7 +4987,7 @@ private struct LearnLabelImagePreviewView: View {
             ImageLoaderView(urlString: item.url.absoluteString, resizingMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(
-                    Text(LL("图片加载失败"))
+                    Text(LT("图片加载失败", "图片加载失败", "画像の読み込みに失敗しました"))
                         .foregroundStyle(Color.white.opacity(0.85))
                 )
             .padding(.horizontal, 12)
@@ -5165,7 +5198,7 @@ struct RankingBoardDetailView: View {
                 }
             ) { conversation in
                 showWidgetStatusBanner(
-                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                     conversation: conversation
                 )
             } preview: {
@@ -5197,7 +5230,7 @@ struct RankingBoardDetailView: View {
                         }
                     ) { conversation in
                         showWidgetStatusBanner(
-                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                             conversation: conversation
                         )
                     } onMoreChats: {
@@ -5221,11 +5254,11 @@ struct RankingBoardDetailView: View {
         .onChange(of: selectedYear) { _, _ in
             Task { await load() }
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -5234,12 +5267,12 @@ struct RankingBoardDetailView: View {
     @ViewBuilder
     private var contentBody: some View {
         if isLoading, detail == nil {
-            ProgressView(L("加载榜单中...", "Loading rankings..."))
+            ProgressView(LT("加载榜单中...", "Loading rankings...", "ランキングを読み込み中..."))
                 .frame(maxWidth: .infinity, minHeight: 240)
         } else if let detail {
             rankingDetailContent(detail: detail)
         } else {
-            ContentUnavailableView(LL("榜单为空"), systemImage: "list.number")
+            ContentUnavailableView(LT("榜单为空", "榜单为空", "ランキングは空です"), systemImage: "list.number")
                 .frame(maxWidth: .infinity, minHeight: 240)
         }
     }
@@ -5325,7 +5358,7 @@ struct RankingBoardDetailView: View {
             boardSubtitle: detail?.title.nilIfBlank ?? board.subtitle?.nilIfBlank ?? board.defaultSubtitle,
             year: selectedYear,
             coverImageURL: board.coverImageUrl,
-            badgeText: L("榜单", "Ranking")
+            badgeText: LT("榜单", "Ranking", "ランキング")
         )
     }
 
@@ -5399,14 +5432,14 @@ struct RankingBoardDetailView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                errorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "paperplane.circle.fill",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
-                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                errorMessage = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ共有連携は未接続です。")
             }
         ]
     }
@@ -5414,28 +5447,28 @@ struct RankingBoardDetailView: View {
     private func shareMoreQuickActions() -> [SharePanelQuickAction] {
         [
             SharePanelQuickAction(
-                title: L("复制链接", "Copy Link"),
+                title: LT("复制链接", "Copy Link", "リンクをコピー"),
                 systemImage: "link",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
             ) {
                 Task { await copyRankingBoardShareLink() }
             },
             SharePanelQuickAction(
-                title: L("查看二维码", "View QR"),
+                title: LT("查看二维码", "View QR", "QRを見る"),
                 systemImage: "qrcode",
                 accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
             ) {
                 Task { await openRankingBoardQRCode() }
             },
             SharePanelQuickAction(
-                title: L("查看海报", "View Poster"),
+                title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
             ) {
                 Task { await openRankingBoardPoster() }
             },
             SharePanelQuickAction(
-                title: L("保存海报", "Save Poster"),
+                title: LT("保存海报", "Save Poster", "海報を保存"),
                 systemImage: "photo.badge.arrow.down",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
@@ -5450,11 +5483,11 @@ struct RankingBoardDetailView: View {
             let result = try await shareLinkCoordinator.copyLink(target: shareTarget())
             showWidgetStatusBanner(
                 message: result.usedDeepLinkFallback
-                    ? L("已复制 App 内链接", "Copied app-only link.")
-                    : L("链接已复制", "Link copied")
+                    ? LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました")
+                    : LT("链接已复制", "Link copied", "リンクをコピーしました")
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            errorMessage = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクをコピーできませんでした。もう一度お試しください。")
         }
     }
 
@@ -5474,7 +5507,7 @@ struct RankingBoardDetailView: View {
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -5485,20 +5518,20 @@ struct RankingBoardDetailView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("榜单海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "Ranking posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
+                        hintText: LT("榜单海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "Ranking posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link.", "ランキング海報は共有システムで生成され、タイトル、概要、QRコードは短縮リンクと同期されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -5507,9 +5540,9 @@ struct RankingBoardDetailView: View {
         do {
             let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(), channel: "poster_save")
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
         } catch {
-            errorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -5739,14 +5772,14 @@ private struct FestivalDetailMoreActionPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L("更多操作", "More actions"))
+            Text(LT("更多操作", "More actions", "その他の操作"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(RaverTheme.primaryText)
 
             VStack(spacing: 6) {
                 if canEditFestival {
                     actionRow(
-                        title: L("编辑", "Edit"),
+                        title: LT("编辑", "Edit", "編集"),
                         systemImage: "square.and.pencil",
                         accentColor: RaverTheme.accent,
                         action: onEdit
@@ -5754,21 +5787,21 @@ private struct FestivalDetailMoreActionPanel: View {
                 }
 
                 actionRow(
-                    title: L("缓存", "Cache"),
+                    title: LT("缓存", "Cache", "キャッシュ"),
                     systemImage: "arrow.down.circle",
                     accentColor: Color(red: 0.38, green: 0.73, blue: 0.98),
                     action: onCache
                 )
 
                 actionRow(
-                    title: L("贡献信息", "Incorrect Info"),
+                    title: LT("贡献信息", "Incorrect Info", "情報を修正"),
                     systemImage: "info.circle",
                     accentColor: Color(red: 0.96, green: 0.69, blue: 0.25),
                     action: onIncorrectInfo
                 )
 
                 actionRow(
-                    title: L("举报", "Report"),
+                    title: LT("举报", "Report", "報告"),
                     systemImage: "flag",
                     accentColor: Color(red: 0.93, green: 0.32, blue: 0.36),
                     action: onReport
@@ -5838,9 +5871,9 @@ extension RankingBoard {
 
     var defaultSubtitle: String {
         switch id {
-        case "djmag": return L("全球电子音乐最有影响力榜单之一", "One of the most influential global electronic music rankings")
-        case "dongye": return L("中文圈 DJ 热度与影响力榜单", "Popularity and influence ranking for Chinese-speaking DJs")
-        default: return L("各大榜单年度排名与升降变化", "Annual ranking movements across major charts")
+        case "djmag": return LT("全球电子音乐最有影响力榜单之一", "One of the most influential global electronic music rankings", "世界で最も影響力のある電子音楽ランキングの一つ")
+        case "dongye": return LT("中文圈 DJ 热度与影响力榜单", "Popularity and influence ranking for Chinese-speaking DJs", "中国語圏DJの人気と影響力ランキング")
+        default: return LT("各大榜单年度排名与升降变化", "Annual ranking movements across major charts", "主要ランキングの年間順位と変動")
         }
     }
 

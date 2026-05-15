@@ -25,12 +25,12 @@ final class DemoAlignedChatSearchResultsViewController: UITableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = L("搜索结果", "Search Results")
+        title = LT("搜索结果", "Search Results", "検索結果")
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: Self.cellReuseID)
         tableView.rowHeight = 64
         tableView.separatorInset = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16)
         tableView.backgroundColor = UIColor(RaverTheme.background)
-        navigationItem.prompt = "\(L("关键词", "Keyword")): \(query)"
+        navigationItem.prompt = "\(LT("关键词", "Keyword", "キーワード")): \(query)"
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -65,8 +65,8 @@ final class DemoAlignedChatSearchResultsViewController: UITableViewController {
 
     private func secondaryLine(for result: ChatMessageSearchResult) -> String {
         let timeText = Self.timeFormatter.string(from: result.message.createdAt)
-        let sender = result.message.isMine ? L("我", "Me") : result.message.sender.displayName
-        let source = L("本地索引", "Local")
+        let sender = result.message.isMine ? LT("我", "Me", "自分") : result.message.sender.displayName
+        let source = LT("本地索引", "Local", "ローカル")
         return "\(sender) · \(timeText) · \(source)"
     }
 
@@ -78,29 +78,29 @@ final class DemoAlignedChatSearchResultsViewController: UITableViewController {
 
         switch message.kind {
         case .image:
-            return L("[图片]", "[Image]")
+            return LT("[图片]", "[Image]", "[画像]")
         case .video:
-            return L("[视频]", "[Video]")
+            return LT("[视频]", "[Video]", "[動画]")
         case .voice:
-            return L("[语音]", "[Voice]")
+            return LT("[语音]", "[Voice]", "[音声]")
         case .file:
-            return message.media?.fileName ?? L("[文件]", "[File]")
+            return message.media?.fileName ?? LT("[文件]", "[File]", "[ファイル]")
         case .emoji:
-            return L("[表情]", "[Emoji]")
+            return LT("[表情]", "[Emoji]", "[絵文字]")
         case .location:
-            return L("[位置]", "[Location]")
+            return LT("[位置]", "[Location]", "[位置情報]")
         case .card:
-            return L("[名片]", "[Card]")
+            return LT("[名片]", "[Card]", "[カード]")
         case .custom:
-            return L("[自定义消息]", "[Custom Message]")
+            return LT("[自定义消息]", "[Custom Message]", "[カスタムメッセージ]")
         case .system:
-            return L("[系统消息]", "[System Message]")
+            return LT("[系统消息]", "[System Message]", "[システムメッセージ]")
         case .typing:
-            return L("[输入中]", "[Typing]")
+            return LT("[输入中]", "[Typing]", "[入力中]")
         case .unknown:
-            return L("[消息]", "[Message]")
+            return LT("[消息]", "[Message]", "[メッセージ]")
         case .text:
-            return L("[文本消息]", "[Text Message]")
+            return LT("[文本消息]", "[Text Message]", "[テキストメッセージ]")
         }
     }
 

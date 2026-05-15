@@ -292,7 +292,7 @@ final class IMChatStore: ObservableObject {
         clearSearchIndex(forKeys: keys)
 
         if let index = conversations.firstIndex(where: { matchesConversation($0, conversation: conversation) }) {
-            conversations[index].lastMessage = L("暂无消息", "No messages yet")
+            conversations[index].lastMessage = LT("暂无消息", "No messages yet", "メッセージはまだありません")
             conversations[index].lastMessageSenderID = nil
             conversations[index].unreadCount = 0
             conversations = Self.sortConversations(conversations)
@@ -768,9 +768,9 @@ final class IMChatStore: ObservableObject {
         }
 
         let genericTitles = [
-            normalizedIdentifier(L("私信", "Direct")),
-            normalizedIdentifier(L("群聊", "Group chat")),
-            normalizedIdentifier(L("小队", "Squad"))
+            normalizedIdentifier(LT("私信", "Direct", "DM")),
+            normalizedIdentifier(LT("群聊", "Group chat", "グループチャット")),
+            normalizedIdentifier(LT("小队", "Squad", "Squad"))
         ]
         return genericTitles.contains(normalizedTitle)
     }

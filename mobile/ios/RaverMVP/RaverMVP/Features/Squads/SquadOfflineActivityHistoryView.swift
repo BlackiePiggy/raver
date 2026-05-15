@@ -14,14 +14,14 @@ struct SquadOfflineActivityHistoryView: View {
             if isLoading {
                 HStack(spacing: 10) {
                     ProgressView().controlSize(.small)
-                    Text(L("加载历史活动中...", "Loading activity history..."))
+                    Text(LT("加载历史活动中...", "Loading activity history...", "活動履歴を読み込み中..."))
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
             } else if activities.isEmpty {
                 ContentUnavailableView(
-                    L("暂无历史活动", "No Historical Activities"),
+                    LT("暂无历史活动", "No Historical Activities", "履歴活動はまだありません"),
                     systemImage: "clock.arrow.circlepath",
-                    description: Text(L("结束线下活动后会自动出现在这里。", "Ended offline activities will appear here automatically."))
+                    description: Text(LT("结束线下活动后会自动出现在这里。", "Ended offline activities will appear here automatically.", "終了したオフライン活動はここに自動表示されます。"))
                 )
             } else {
                 Section {
@@ -36,15 +36,15 @@ struct SquadOfflineActivityHistoryView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .raverSystemNavigation(title: L("历史活动记录", "Activity History"))
+        .raverSystemNavigation(title: LT("历史活动记录", "Activity History", "活動履歴"))
         .refreshable {
             await loadHistory()
         }
-        .alert(L("操作失败", "Operation Failed"), isPresented: Binding(
+        .alert(LT("操作失败", "Operation Failed", "操作に失敗しました"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -61,7 +61,7 @@ struct SquadOfflineActivityHistoryView: View {
             activities = try await repository.fetchSquadOfflineActivityHistory(squadID: squadID)
             errorMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage ?? L("历史活动加载失败", "Failed to load activity history")
+            errorMessage = error.userFacingMessage ?? LT("历史活动加载失败", "Failed to load activity history", "活動履歴の読み込みに失敗しました")
         }
     }
 }
@@ -74,7 +74,7 @@ private struct SquadOfflineActivityHistoryRow: View {
             cover
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(activity.displayTitle ?? L("线下活动", "Offline Activity"))
+                Text(activity.displayTitle ?? LT("线下活动", "Offline Activity", "オフライン活動"))
                     .font(.headline)
                     .lineLimit(1)
 
@@ -85,7 +85,7 @@ private struct SquadOfflineActivityHistoryRow: View {
 
                 HStack(spacing: 12) {
                     Label(durationText(activity.durationSeconds), systemImage: "clock")
-                    Label(L("\(activity.participantCount) 人次", "\(activity.participantCount) participants"), systemImage: "person.2")
+                    Label(LT("\(activity.participantCount) 人次", "\(activity.participantCount) participants", "\(activity.participantCount)人"), systemImage: "person.2")
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(RaverTheme.secondaryText)
@@ -118,7 +118,7 @@ private struct SquadOfflineActivityHistoryRow: View {
     private var subtitle: String {
         let started = activity.startedAt.formatted(date: .numeric, time: .shortened)
         if let creator = activity.createdBy?.displayName.nilIfBlank {
-            return L("\(creator) 创建 · \(started)", "Created by \(creator) · \(started)")
+            return LT("\(creator) 创建 · \(started)", "Created by \(creator) · \(started)", "\(creator) が作成 · \(started)")
         }
         return started
     }
@@ -127,12 +127,12 @@ private struct SquadOfflineActivityHistoryRow: View {
         let hours = seconds / 3600
         let minutes = (seconds % 3600) / 60
         if hours > 0 {
-            return L("\(hours) 小时 \(minutes) 分钟", "\(hours)h \(minutes)m")
+            return LT("\(hours) 小时 \(minutes) 分钟", "\(hours)h \(minutes)m", "\(hours)時間 \(minutes)分")
         }
         if minutes > 0 {
-            return L("\(minutes) 分钟", "\(minutes)m")
+            return LT("\(minutes) 分钟", "\(minutes)m", "\(minutes)分")
         }
-        return L("<1 分钟", "<1m")
+        return LT("<1 分钟", "<1m", "1分未満")
     }
 }
 
@@ -153,7 +153,7 @@ private struct SquadOfflineActivityHistoryDetailView: View {
                 routeMap
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(activity.displayTitle ?? L("线下活动", "Offline Activity"))
+                    Text(activity.displayTitle ?? LT("线下活动", "Offline Activity", "オフライン活動"))
                         .font(.title3.weight(.bold))
                         .foregroundStyle(RaverTheme.primaryText)
                         .lineLimit(2)
@@ -175,7 +175,7 @@ private struct SquadOfflineActivityHistoryDetailView: View {
             .padding(.bottom, 24)
         }
         .background(RaverTheme.background.ignoresSafeArea())
-        .raverSystemNavigation(title: L("活动详情", "Activity Detail"))
+        .raverSystemNavigation(title: LT("活动详情", "Activity Detail", "活動詳細"))
         .onAppear {
             updateCamera()
         }
@@ -188,12 +188,12 @@ private struct SquadOfflineActivityHistoryDetailView: View {
                     .stroke(RaverTheme.accent, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
             }
             if let first = routeCoordinates.first {
-                Annotation(L("起点", "Start"), coordinate: first, anchor: .center) {
+                Annotation(LT("起点", "Start", "始点"), coordinate: first, anchor: .center) {
                     routeEndpointBadge(systemImage: "play.fill", color: .green)
                 }
             }
             if let last = routeCoordinates.last {
-                Annotation(L("终点", "End"), coordinate: last, anchor: .center) {
+                Annotation(LT("终点", "End", "終点"), coordinate: last, anchor: .center) {
                     routeEndpointBadge(systemImage: "flag.checkered", color: RaverTheme.accent)
                 }
             }
@@ -203,9 +203,9 @@ private struct SquadOfflineActivityHistoryDetailView: View {
         .overlay {
             if routeCoordinates.isEmpty {
                 ContentUnavailableView(
-                    L("暂无你的轨迹", "No Route Yet"),
+                    LT("暂无你的轨迹", "No Route Yet", "あなたのルートはまだありません"),
                     systemImage: "location.slash",
-                    description: Text(L("加入并上传定位后，历史活动会展示你的个人轨迹。", "After joining and uploading location, your personal route appears here."))
+                    description: Text(LT("加入并上传定位后，历史活动会展示你的个人轨迹。", "After joining and uploading location, your personal route appears here.", "参加して位置情報をアップロードすると、履歴活動に個人ルートが表示されます。"))
                 )
                 .background(.thinMaterial)
             }
@@ -214,22 +214,22 @@ private struct SquadOfflineActivityHistoryDetailView: View {
 
     private var summaryGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            summaryCard(title: L("创建时间", "Created"), value: activity.startedAt.formatted(date: .numeric, time: .shortened), icon: "calendar")
-            summaryCard(title: L("活动时长", "Duration"), value: durationText(activity.durationSeconds), icon: "clock")
-            summaryCard(title: L("参与人次", "Participants"), value: L("\(activity.participantCount) 人", "\(activity.participantCount) people"), icon: "person.2")
-            summaryCard(title: L("轨迹点", "Route Points"), value: L("\(activity.viewerRoute?.count ?? 0) 个", "\(activity.viewerRoute?.count ?? 0) points"), icon: "point.topleft.down.curvedto.point.bottomright.up")
-            summaryCard(title: L("厕所", "Restroom"), value: L("\(activity.viewerSummary?.restroomCount ?? 0) 次", "\(activity.viewerSummary?.restroomCount ?? 0) times"), icon: "toilet.fill")
-            summaryCard(title: L("买东西", "Buying"), value: L("\(activity.viewerSummary?.buyingDrinkCount ?? 0) 次", "\(activity.viewerSummary?.buyingDrinkCount ?? 0) times"), icon: "mug.fill")
+            summaryCard(title: LT("创建时间", "Created", "作成時間"), value: activity.startedAt.formatted(date: .numeric, time: .shortened), icon: "calendar")
+            summaryCard(title: LT("活动时长", "Duration", "活動時間"), value: durationText(activity.durationSeconds), icon: "clock")
+            summaryCard(title: LT("参与人次", "Participants", "参加人数"), value: LT("\(activity.participantCount) 人", "\(activity.participantCount) people", "\(activity.participantCount)人"), icon: "person.2")
+            summaryCard(title: LT("轨迹点", "Route Points", "ルート点"), value: LT("\(activity.viewerRoute?.count ?? 0) 个", "\(activity.viewerRoute?.count ?? 0) points", "\(activity.viewerRoute?.count ?? 0)点"), icon: "point.topleft.down.curvedto.point.bottomright.up")
+            summaryCard(title: LT("厕所", "Restroom", "トイレ"), value: LT("\(activity.viewerSummary?.restroomCount ?? 0) 次", "\(activity.viewerSummary?.restroomCount ?? 0) times", "\(activity.viewerSummary?.restroomCount ?? 0)回"), icon: "toilet.fill")
+            summaryCard(title: LT("买东西", "Buying", "買い物"), value: LT("\(activity.viewerSummary?.buyingDrinkCount ?? 0) 次", "\(activity.viewerSummary?.buyingDrinkCount ?? 0) times", "\(activity.viewerSummary?.buyingDrinkCount ?? 0)回"), icon: "mug.fill")
         }
     }
 
     private var routeSummary: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(L("本次活动总结", "Activity Summary"), systemImage: "sparkles")
+            Label(LT("本次活动总结", "Activity Summary", "今回の活動まとめ"), systemImage: "sparkles")
                 .font(.headline)
                 .foregroundStyle(RaverTheme.primaryText)
 
-            Text(L("你的轨迹数据已保留在本次历史活动中。后续可以在这里接入 AI，总结同行成员、最长同处对象、舞台停留和临时状态记录。", "Your route data is saved with this activity. AI can later summarize companions, longest co-presence, stage stays, and temporary status records here."))
+            Text(LT("你的轨迹数据已保留在本次历史活动中。后续可以在这里接入 AI，总结同行成员、最长同处对象、舞台停留和临时状态记录。", "Your route data is saved with this activity. AI can later summarize companions, longest co-presence, stage stays, and temporary status records here.", "ルートデータはこの履歴活動に保存されています。今後ここでAIにより同行メンバー、最長同席相手、ステージ滞在、臨時状態記録をまとめられます。"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -324,11 +324,11 @@ private struct SquadOfflineActivityHistoryDetailView: View {
         let hours = seconds / 3600
         let minutes = (seconds % 3600) / 60
         if hours > 0 {
-            return L("\(hours) 小时 \(minutes) 分钟", "\(hours)h \(minutes)m")
+            return LT("\(hours) 小时 \(minutes) 分钟", "\(hours)h \(minutes)m", "\(hours)時間 \(minutes)分")
         }
         if minutes > 0 {
-            return L("\(minutes) 分钟", "\(minutes)m")
+            return LT("\(minutes) 分钟", "\(minutes)m", "\(minutes)分")
         }
-        return L("<1 分钟", "<1m")
+        return LT("<1 分钟", "<1m", "1分未満")
     }
 }

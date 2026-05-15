@@ -207,7 +207,7 @@ struct EventCheckinSelectionSheet: View {
     }
 
     private var dayUnitLabel: String {
-        options.contains(where: \.usesWeekLabel) ? L("Week/Day", "Week/Day") : L("Day", "Day")
+        options.contains(where: \.usesWeekLabel) ? LT("Week/Day", "Week/Day", "Week/Day") : LT("Day", "Day", "Day")
     }
 
     init(
@@ -226,7 +226,7 @@ struct EventCheckinSelectionSheet: View {
         self.djOptionsByDayID = djOptionsByDayID
         self.initialSelectedDayIDs = initialSelectedDayIDs
         self.initialSelectedDJIDsByDayID = initialSelectedDJIDsByDayID
-        self.confirmButtonTitle = confirmButtonTitle.isEmpty ? L("确认打卡", "Confirm Check-in") : confirmButtonTitle
+        self.confirmButtonTitle = confirmButtonTitle.isEmpty ? LT("确认打卡", "Confirm Check-in", "チェックインを確認") : confirmButtonTitle
         self.destructiveButtonTitle = destructiveButtonTitle
         self.onDelete = onDelete
         self.onConfirm = onConfirm
@@ -244,12 +244,12 @@ struct EventCheckinSelectionSheet: View {
                         .foregroundStyle(RaverTheme.primaryText)
                         .lineLimit(2)
 
-                    Text(L("勾选参加的\(dayUnitLabel)，展开后直接选择当天看过的 DJ", "Select attended \(dayUnitLabel), then expand to choose DJs you watched that day."))
+                    Text(LT("勾选参加的\(dayUnitLabel)，展开后直接选择当天看过的 DJ", "Select attended \(dayUnitLabel), then expand to choose DJs you watched that day.", "参加した\(dayUnitLabel)を選び、展開して当日見たDJを選択してください。"))
                         .font(.subheadline)
                         .foregroundStyle(RaverTheme.secondaryText)
 
                     if !selectedDayIDs.isEmpty {
-                        Text(L("已选 \(selectedDayIDs.count) 天 · \(selectedDJCount) 个演出", "Selected \(selectedDayIDs.count) days · \(selectedDJCount) acts"))
+                        Text(LT("已选 \(selectedDayIDs.count) 天 · \(selectedDJCount) 个演出", "Selected \(selectedDayIDs.count) days · \(selectedDJCount) acts", "選択済み \(selectedDayIDs.count)日 · \(selectedDJCount)件の出演"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color(red: 0.82, green: 0.39, blue: 0.20))
                             .padding(.horizontal, 10)
@@ -270,7 +270,7 @@ struct EventCheckinSelectionSheet: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
             }
-            .raverSystemNavigation(title: L("活动打卡", "Event Check-in"))
+            .raverSystemNavigation(title: LT("活动打卡", "Event Check-in", "イベントチェックイン"))
             .toolbar {
                 if let destructiveButtonTitle, let onDelete {
                     ToolbarItem(placement: .bottomBar) {
@@ -279,7 +279,7 @@ struct EventCheckinSelectionSheet: View {
                         } label: {
                             toolbarButtonLabel(
                                 title: destructiveButtonTitle,
-                                loadingTitle: L("取消中...", "Canceling..."),
+                                loadingTitle: LT("取消中...", "Canceling...", "キャンセル中..."),
                                 isLoading: activeOperation == .delete
                             )
                         }
@@ -292,7 +292,7 @@ struct EventCheckinSelectionSheet: View {
                     } label: {
                         toolbarButtonLabel(
                             title: confirmButtonTitle,
-                            loadingTitle: L("保存中...", "Saving..."),
+                            loadingTitle: LT("保存中...", "Saving...", "保存中..."),
                             isLoading: activeOperation == .save
                         )
                     }
@@ -330,7 +330,7 @@ struct EventCheckinSelectionSheet: View {
             try await onConfirm(normalizedSelections())
             dismiss()
         } catch {
-            operationErrorMessage = error.userFacingMessage ?? L("打卡保存失败，请稍后重试。", "Failed to save check-in. Please try again later.")
+            operationErrorMessage = error.userFacingMessage ?? LT("打卡保存失败，请稍后重试。", "Failed to save check-in. Please try again later.", "チェックインを保存できませんでした。時間をおいて再試行してください。")
         }
         activeOperation = nil
     }
@@ -344,7 +344,7 @@ struct EventCheckinSelectionSheet: View {
             try await onDelete()
             dismiss()
         } catch {
-            operationErrorMessage = error.userFacingMessage ?? L("取消打卡失败，请稍后重试。", "Failed to cancel check-in. Please try again later.")
+            operationErrorMessage = error.userFacingMessage ?? LT("取消打卡失败，请稍后重试。", "Failed to cancel check-in. Please try again later.", "チェックインを取消できませんでした。時間をおいて再試行してください。")
         }
         activeOperation = nil
     }
@@ -386,7 +386,7 @@ struct EventCheckinSelectionSheet: View {
                         Spacer(minLength: 8)
 
                         if isSelected || !selectedDJIDs.isEmpty {
-                            Text(L("\(selectedDJIDs.count) 个演出", "\(selectedDJIDs.count) acts"))
+                            Text(LT("\(selectedDJIDs.count) 个演出", "\(selectedDJIDs.count) acts", "\(selectedDJIDs.count) 件の出演"))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(RaverTheme.accent)
                         }
@@ -401,7 +401,7 @@ struct EventCheckinSelectionSheet: View {
 
             if isExpanded {
                 if djOptions.isEmpty {
-                    Text(L("这一天暂未配置可选 DJ，确认后会只记录该\(dayUnitLabel)的活动打卡。", "No DJ options are configured for this day. Confirming will record only this \(dayUnitLabel) event check-in."))
+                    Text(LT("这一天暂未配置可选 DJ，确认后会只记录该\(dayUnitLabel)的活动打卡。", "No DJ options are configured for this day. Confirming will record only this \(dayUnitLabel) event check-in.", "この日は選択可能なDJが設定されていません。確認するとこの\(dayUnitLabel)のイベントチェックインのみ記録されます。"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .padding(.leading, 2)
@@ -446,7 +446,7 @@ struct EventCheckinSelectionSheet: View {
                         if !grouped.others.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
                                 if !grouped.b2b.isEmpty || !grouped.b3b.isEmpty {
-                                    Text(LL("其他演出"))
+                                    Text(LT("其他演出", "其他演出", "その他の出演"))
                                         .font(.caption2.weight(.semibold))
                                         .foregroundStyle(RaverTheme.secondaryText)
                                 }
@@ -671,8 +671,8 @@ private struct DJCheckinBindingSheet: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .bindEvent: return L("绑定活动", "Bind Event")
-            case .manual: return L("手动填写", "Manual Input")
+            case .bindEvent: return LT("绑定活动", "Bind Event", "イベントを紐付け")
+            case .manual: return LT("手动填写", "Manual Input", "手動入力")
             }
         }
     }
@@ -706,7 +706,7 @@ private struct DJCheckinBindingSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker(LL("打卡方式"), selection: $mode) {
+                    Picker(LT("打卡方式", "打卡方式", "チェックイン方法"), selection: $mode) {
                         ForEach(Mode.allCases) { item in
                             Text(item.title).tag(item)
                         }
@@ -715,17 +715,17 @@ private struct DJCheckinBindingSheet: View {
                 }
 
                 if mode == .bindEvent {
-                    Section(LL("绑定到活动（优先）")) {
-                        TextField(L("搜索活动名称", "Search event name"), text: $eventSearchText)
+                    Section(LT("绑定到活动（优先）", "绑定到活动（优先）", "イベントに紐付け（優先）")) {
+                        TextField(LT("搜索活动名称", "Search event name", "イベント名を検索"), text: $eventSearchText)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
 
                         if isLoadingHistory && historyOptions.isEmpty {
-                            ProgressView(LL("读取你的活动历史..."))
+                            ProgressView(LT("读取你的活动历史...", "读取你的活动历史...", "イベント履歴を読み込み中..."))
                         }
 
                         if !filteredHistoryOptions.isEmpty {
-                            Text(LL("我的活动历史"))
+                            Text(LT("我的活动历史", "我的活动历史", "自分のイベント履歴"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
 
@@ -735,14 +735,14 @@ private struct DJCheckinBindingSheet: View {
                         }
 
                         if !eventSearchKeyword.isEmpty {
-                            Text(LL("搜索结果"))
+                            Text(LT("搜索结果", "搜索结果", "検索結果"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
 
                             if isSearchingEvents {
-                                ProgressView(LL("搜索活动中..."))
+                                ProgressView(LT("搜索活动中...", "搜索活动中...", "イベントを検索中..."))
                             } else if remoteOptions.isEmpty {
-                                Text(LL("没有更多匹配活动"))
+                                Text(LT("没有更多匹配活动", "没有更多匹配活动", "一致するイベントはこれ以上ありません"))
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             } else {
@@ -753,20 +753,20 @@ private struct DJCheckinBindingSheet: View {
                         }
 
                         if let selectedOption {
-                            Text(L("将自动按活动时间记录打卡：\(autoAttendedAt(for: selectedOption).appLocalizedYMDHMText())", "Check-in time will follow event schedule automatically: \(autoAttendedAt(for: selectedOption).appLocalizedYMDHMText())"))
+                            Text(LT("将自动按活动时间记录打卡：\(autoAttendedAt(for: selectedOption).appLocalizedYMDHMText())", "Check-in time will follow event schedule automatically: \(autoAttendedAt(for: selectedOption).appLocalizedYMDHMText())", "チェックイン時刻はイベント予定に合わせて自動記録されます: \(autoAttendedAt(for: selectedOption).appLocalizedYMDHMText())"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         } else {
-                            Text(LL("请在搜索或历史中选择一场活动。"))
+                            Text(LT("请在搜索或历史中选择一场活动。", "请在搜索或历史中选择一场活动。", "検索または履歴からイベントを選択してください。"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
                     }
                 } else {
-                    Section(LL("手动填写")) {
-                        TextField(LL("活动名称"), text: $manualEventName)
+                    Section(LT("手动填写", "手动填写", "手動入力")) {
+                        TextField(LT("活动名称", "活动名称", "イベント名"), text: $manualEventName)
                         DatePicker(
-                            L("观演时间", "Attended Time"),
+                            LT("观演时间", "Attended Time", "参加時間"),
                             selection: $manualAttendedAt,
                             in: ...Date(),
                             displayedComponents: [.date, .hourAndMinute]
@@ -774,7 +774,7 @@ private struct DJCheckinBindingSheet: View {
                     }
                 }
             }
-            .raverSystemNavigation(title: L("\(djName) 打卡", "\(djName) Check-in"))
+            .raverSystemNavigation(title: LT("\(djName) 打卡", "\(djName) Check-in", "\(djName) チェックイン"))
             .task {
                 await loadHistory()
             }
@@ -789,7 +789,7 @@ private struct DJCheckinBindingSheet: View {
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(L("确认打卡", "Confirm Check-in")) {
+                    Button(LT("确认打卡", "Confirm Check-in", "チェックインを確認")) {
                         switch mode {
                         case .bindEvent:
                             guard let selectedOption else { return }
@@ -889,18 +889,18 @@ private struct DJCheckinBindingSheet: View {
         if let attendedAt = option.attendedAt {
             let attendedText = attendedAt.appLocalizedYMDHMText()
             return location.isEmpty
-                ? L("我参加于 \(attendedText)", "I attended at \(attendedText)")
-                : L("\(location) · 我参加于 \(attendedText)", "\(location) · I attended at \(attendedText)")
+                ? LT("我参加于 \(attendedText)", "I attended at \(attendedText)", "\(attendedText) に参加")
+                : LT("\(location) · 我参加于 \(attendedText)", "\(location) · I attended at \(attendedText)", "\(location) · \(attendedText) に参加")
         }
 
         if let startDate = option.startDate {
             let startText = startDate.appLocalizedYMDHMText()
             return location.isEmpty
-                ? L("开始于 \(startText)", "Starts at \(startText)")
-                : L("\(location) · 开始于 \(startText)", "\(location) · Starts at \(startText)")
+                ? LT("开始于 \(startText)", "Starts at \(startText)", "\(startText) 開始")
+                : LT("\(location) · 开始于 \(startText)", "\(location) · Starts at \(startText)", "\(location) · \(startText) 開始")
         }
 
-        return location.isEmpty ? L("活动信息", "Event info") : location
+        return location.isEmpty ? LT("活动信息", "Event info", "イベント情報") : location
     }
 
     private func loadHistory() async {
@@ -1000,19 +1000,37 @@ struct EventEditorView: View {
 
         var title: String {
             switch self {
-            case .create: return L("发布活动", "Create Event")
-            case .edit: return L("编辑活动", "Edit Event")
+            case .create: return LT("发布活动", "Create Event", "イベントを作成")
+            case .edit: return LT("编辑活动", "Edit Event", "イベントを編集")
             }
         }
     }
 
     private static let eventTypeOptionKeys = EventTypeOption.allCases.map(\.rawValue)
-    private static func normalizedStartOfDay(_ date: Date) -> Date {
-        Calendar.current.startOfDay(for: date)
+    private static let commonEventTimeZoneIDs = [
+        "Asia/Shanghai",
+        "UTC",
+        "Asia/Tokyo",
+        "Asia/Singapore",
+        "Asia/Bangkok",
+        "Europe/Amsterdam",
+        "Europe/London",
+        "America/Los_Angeles",
+        "America/New_York"
+    ]
+
+    private static func eventCalendar(timeZoneID: String) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: timeZoneID) ?? .current
+        return calendar
     }
 
-    private static func normalizedEndOfDay(_ date: Date) -> Date {
-        let calendar = Calendar.current
+    private static func normalizedStartOfDay(_ date: Date, timeZoneID: String = TimeZone.current.identifier) -> Date {
+        eventCalendar(timeZoneID: timeZoneID).startOfDay(for: date)
+    }
+
+    private static func normalizedEndOfDay(_ date: Date, timeZoneID: String = TimeZone.current.identifier) -> Date {
+        let calendar = eventCalendar(timeZoneID: timeZoneID)
         let start = calendar.startOfDay(for: date)
         return calendar.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? start
     }
@@ -1148,6 +1166,7 @@ struct EventEditorView: View {
     @State private var showLocationPicker = false
     @State private var startDate = EventEditorView.normalizedStartOfDay(Date())
     @State private var endDate = EventEditorView.normalizedStartOfDay(Date())
+    @State private var eventTimeZoneIdentifier = TimeZone.current.identifier
     @State private var isWeekScheduleEnabled = false
     @State private var coverImageUrl = ""
     @State private var lineupImageUrl = ""
@@ -1174,80 +1193,81 @@ struct EventEditorView: View {
     @State private var prefillHydrationTask: Task<Void, Never>?
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var saveSuccessMessage: String?
     @State private var importSuccessMessage: String?
 
     var body: some View {
         Form {
-                Section(LL("基础信息")) {
-                    TextField(LL("活动名称"), text: $name)
-                    TextField(LL("简介"), text: $description, axis: .vertical)
-                    Picker(LL("活动性质"), selection: $eventType) {
+                Section(LT("基础信息", "基础信息", "基本情報")) {
+                    TextField(LT("活动名称", "活动名称", "イベント名"), text: $name)
+                    TextField(LT("简介", "简介", "概要"), text: $description, axis: .vertical)
+                    Picker(LT("活动性质", "活动性质", "イベント種別"), selection: $eventType) {
                         Text(EventTypeOption.pickerPrompt).tag("")
                         ForEach(Self.eventTypeOptionKeys, id: \.self) { key in
                             Text(EventTypeOption.displayTitle(for: key)).tag(key)
                         }
                     }
-                    TextField(L("City (English)", "City (English)"), text: $cityEn)
-                    TextField(LL("城市（中文）"), text: $cityZh)
-                    TextField(L("Country (English)", "Country (English)"), text: $countryEn)
-                    TextField(L("Country (English Full)", "Country (English Full)"), text: $countryEnFull)
-                    TextField(LL("国家（中文）"), text: $countryZh)
-                    TextField(LL("详细地址（中文）"), text: $detailAddressZh, axis: .vertical)
-                    TextField(L("Detailed Address (English)", "Detailed Address (English)"), text: $detailAddressEn, axis: .vertical)
-                    TextField(LL("购票链接（可选）"), text: $ticketUrl)
+                    TextField(LT("City (English)", "City (English)", "City (English)"), text: $cityEn)
+                    TextField(LT("城市（中文）", "城市（中文）", "都市（中国語）"), text: $cityZh)
+                    TextField(LT("Country (English)", "Country (English)", "Country (English)"), text: $countryEn)
+                    TextField(LT("Country (English Full)", "Country (English Full)", "Country (English Full)"), text: $countryEnFull)
+                    TextField(LT("国家（中文）", "国家（中文）", "国（中国語）"), text: $countryZh)
+                    TextField(LT("详细地址（中文）", "详细地址（中文）", "詳細住所（中国語）"), text: $detailAddressZh, axis: .vertical)
+                    TextField(LT("Detailed Address (English)", "Detailed Address (English)", "Detailed Address (English)"), text: $detailAddressEn, axis: .vertical)
+                    TextField(LT("购票链接（可选）", "购票链接（可选）", "チケット購入リンク（任意）"), text: $ticketUrl)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
                 }
 
-                Section(LL("场地定位")) {
+                Section(LT("场地定位", "场地定位", "会場位置")) {
                     Button {
                         showLocationPicker = true
                     } label: {
-                        Label(LL("地图选点"), systemImage: "map")
+                        Label(LT("地图选点", "地图选点", "地図で選択"), systemImage: "map")
                     }
 
                     if let lat = pickedLatitude, let lng = pickedLongitude {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(LL("已选定位"))
+                            Text(LT("已选定位", "已选定位", "選択済み位置"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                             Text("\(lat), \(lng)")
                                 .font(.caption2)
                                 .foregroundStyle(RaverTheme.secondaryText)
                             if !pickedMapAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Text(L("定位地址：\(pickedMapAddress)", "Address: \(pickedMapAddress)"))
+                                Text(LT("定位地址：\(pickedMapAddress)", "Address: \(pickedMapAddress)", "住所: \(pickedMapAddress)"))
                                     .font(.caption2)
                                     .foregroundStyle(RaverTheme.secondaryText)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     } else {
-                        Text(LL("尚未在地图选择定位，仍可仅使用手动输入地址。"))
+                        Text(LT("尚未在地图选择定位，仍可仅使用手动输入地址。", "尚未在地图选择定位，仍可仅使用手动输入地址。", "地図で位置をまだ選択していません。手入力住所のみでも保存できます。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
                 }
 
-                Section(LL("票务信息")) {
-                    TextField(LL("官网链接（可选）"), text: $officialWebsite)
+                Section(LT("票务信息", "票务信息", "チケット情報")) {
+                    TextField(LT("官网链接（可选）", "官网链接（可选）", "公式サイトリンク（任意）"), text: $officialWebsite)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
 
-                    TextField(LL("默认币种（例如 CNY / USD）"), text: $ticketCurrency)
+                    TextField(LT("默认币种（例如 CNY / USD）", "默认币种（例如 CNY / USD）", "デフォルト通貨（例 CNY / USD）"), text: $ticketCurrency)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled(true)
 
-                    TextField(LL("票务备注（可选）"), text: $ticketNotes, axis: .vertical)
+                    TextField(LT("票务备注（可选）", "票务备注（可选）", "チケット備考（任意）"), text: $ticketNotes, axis: .vertical)
 
                     if ticketTierDrafts.isEmpty {
-                        Text(LL("暂无票档，点击下方按钮添加。"))
+                        Text(LT("暂无票档，点击下方按钮添加。", "暂无票档，点击下方按钮添加。", "チケット区分はまだありません。下のボタンから追加してください。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     } else {
                         ForEach(ticketTierDrafts.indices, id: \.self) { index in
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(spacing: 8) {
-                                    TextField(LL("票档名称（如 Early Bird）"), text: Binding(
+                                    TextField(LT("票档名称（如 Early Bird）", "票档名称（如 Early Bird）", "チケット区分名（例 Early Bird）"), text: Binding(
                                         get: { ticketTierDrafts[index].name },
                                         set: { ticketTierDrafts[index].name = $0 }
                                     ))
@@ -1259,13 +1279,13 @@ struct EventEditorView: View {
                                 }
 
                                 HStack(spacing: 8) {
-                                    TextField(LL("价格"), text: Binding(
+                                    TextField(LT("价格", "价格", "価格"), text: Binding(
                                         get: { ticketTierDrafts[index].price },
                                         set: { ticketTierDrafts[index].price = $0 }
                                     ))
                                     .keyboardType(.decimalPad)
 
-                                    TextField(LL("币种"), text: Binding(
+                                    TextField(LT("币种", "币种", "通貨"), text: Binding(
                                         get: { ticketTierDrafts[index].currency },
                                         set: { ticketTierDrafts[index].currency = $0 }
                                     ))
@@ -1284,47 +1304,61 @@ struct EventEditorView: View {
                             TicketTierDraft(currency: fallbackCurrency.isEmpty ? "CNY" : fallbackCurrency)
                         )
                     } label: {
-                        Label(LL("添加票档"), systemImage: "plus")
+                        Label(LT("添加票档", "添加票档", "チケット区分を追加"), systemImage: "plus")
                     }
                 }
 
-                Section(LL("时间")) {
+                Section(LT("时间", "时间", "時間")) {
+                    Picker(LT("事件时区", "事件时区", "イベントのタイムゾーン"), selection: $eventTimeZoneIdentifier) {
+                        ForEach(Self.commonEventTimeZoneIDs, id: \.self) { identifier in
+                            Text(timeZonePickerTitle(identifier)).tag(identifier)
+                        }
+                        if !Self.commonEventTimeZoneIDs.contains(eventTimeZoneIdentifier) {
+                            Text(timeZonePickerTitle(eventTimeZoneIdentifier)).tag(eventTimeZoneIdentifier)
+                        }
+                    }
                     DatePicker(
-                        L("开始日期", "Start Date"),
+                        LT("开始日期", "Start Date", "開始日"),
                         selection: Binding(
                             get: { startDate },
                             set: { newValue in
-                                let normalized = Self.normalizedStartOfDay(newValue)
+                                let normalized = Self.normalizedStartOfDay(newValue, timeZoneID: eventTimeZoneIdentifier)
                                 startDate = normalized
                                 endDate = normalized
                             }
                         ),
                         displayedComponents: [.date]
                     )
+                    .environment(\.timeZone, selectedEventTimeZone)
                     DatePicker(
-                        L("结束日期", "End Date"),
+                        LT("结束日期", "End Date", "終了日"),
                         selection: Binding(
                             get: { endDate },
                             set: { newValue in
-                                endDate = Self.normalizedStartOfDay(newValue)
+                                endDate = Self.normalizedStartOfDay(newValue, timeZoneID: eventTimeZoneIdentifier)
                             }
                         ),
                         in: startDate...,
                         displayedComponents: [.date]
                     )
+                    .environment(\.timeZone, selectedEventTimeZone)
 
-                    Toggle(LL("启用多 Week 时间表"), isOn: $isWeekScheduleEnabled)
+                    Text(timeZonePreviewText)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+
+                    Toggle(LT("启用多 Week 时间表", "启用多 Week 时间表", "複数Weekタイムテーブルを有効化"), isOn: $isWeekScheduleEnabled)
                     if isWeekScheduleEnabled {
-                        Text(LL("已启用后，DJ 时间可按 WeekN · DayN 选择；未启用则按 DayN 选择。"))
+                        Text(LT("已启用后，DJ 时间可按 WeekN · DayN 选择；未启用则按 DayN 选择。", "已启用后，DJ 时间可按 WeekN · DayN 选择；未启用则按 DayN 选择。", "有効にするとDJ時間を WeekN · DayN で選択できます。無効時は DayN で選択します。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
                 }
 
-                Section(LL("图片")) {
+                Section(LT("图片", "图片", "画像")) {
                     VStack(alignment: .leading, spacing: 8) {
                         PhotosPicker(selection: $selectedCoverPhoto, matching: .images) {
-                            Label(LL("上传活动封面图"), systemImage: "photo")
+                            Label(LT("上传活动封面图", "上传活动封面图", "イベントカバー画像をアップロード"), systemImage: "photo")
                         }
                         eventImagePreview(selectedData: selectedCoverData, remoteURL: coverImageUrl)
                         if selectedCoverData != nil || !coverImageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -1333,7 +1367,7 @@ struct EventEditorView: View {
                                 selectedCoverData = nil
                                 coverImageUrl = ""
                             } label: {
-                                Label(LL("移除封面图"), systemImage: "trash")
+                                Label(LT("移除封面图", "移除封面图", "カバー画像を削除"), systemImage: "trash")
                             }
                             .buttonStyle(.borderless)
                         }
@@ -1341,7 +1375,7 @@ struct EventEditorView: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         PhotosPicker(selection: $selectedLineupPhoto, matching: .images) {
-                            Label(LL("上传活动阵容图"), systemImage: "photo.on.rectangle")
+                            Label(LT("上传活动阵容图", "上传活动阵容图", "イベントラインナップ画像をアップロード"), systemImage: "photo.on.rectangle")
                         }
                         eventImagePreview(selectedData: selectedLineupData, remoteURL: lineupImageUrl)
                         if selectedLineupData != nil || !lineupImageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -1350,25 +1384,25 @@ struct EventEditorView: View {
                                 selectedLineupData = nil
                                 lineupImageUrl = ""
                             } label: {
-                                Label(LL("移除阵容图"), systemImage: "trash")
+                                Label(LT("移除阵容图", "移除阵容图", "ラインナップ画像を削除"), systemImage: "trash")
                             }
                             .buttonStyle(.borderless)
                         }
                     }
 
-                    Text(LL("仅支持从系统相册选择图片；保存后将上传并绑定到该活动。"))
+                    Text(LT("仅支持从系统相册选择图片；保存后将上传并绑定到该活动。", "仅支持从系统相册选择图片；保存后将上传并绑定到该活动。", "システムアルバムからの画像選択のみ対応しています。保存後にアップロードしてこのイベントに紐付けます。"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
 
-                Section(LL("舞台信息")) {
-                    Text(L("已配置 \(normalizedStageEntries.count) 个舞台", "\(normalizedStageEntries.count) stages configured"))
+                Section(LT("舞台信息", "舞台信息", "ステージ情報")) {
+                    Text(LT("已配置 \(normalizedStageEntries.count) 个舞台", "\(normalizedStageEntries.count) stages configured", "\(normalizedStageEntries.count) 件のステージを設定済み"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
 
                     ForEach(stageEntries.indices, id: \.self) { index in
                         HStack(spacing: 10) {
-                            TextField(L("舞台\(index + 1)", "Stage \(index + 1)"), text: Binding(
+                            TextField(LT("舞台\(index + 1)", "Stage \(index + 1)", "ステージ\(index + 1)"), text: Binding(
                                 get: { stageEntries[index] },
                                 set: { stageEntries[index] = $0 }
                             ))
@@ -1400,14 +1434,14 @@ struct EventEditorView: View {
                     Button {
                         stageEntries.append("")
                     } label: {
-                        Label(LL("新增舞台"), systemImage: "plus")
+                        Label(LT("新增舞台", "新增舞台", "ステージを追加"), systemImage: "plus")
                     }
                 }
 
-                Section(LL("已添加阵容")) {
+                Section(LT("已添加阵容", "已添加阵容", "追加済みラインナップ")) {
                     PhotosPicker(selection: $selectedLineupImportPhoto, matching: .images) {
                         Label(
-                            isImportingLineupImage ? L("阵容图识别中...", "Recognizing lineup image...") : L("从阵容图识别并导入", "Recognize from lineup image"),
+                            isImportingLineupImage ? LT("阵容图识别中...", "Recognizing lineup image...", "ラインナップ画像を認識中...") : LT("从阵容图识别并导入", "Recognize from lineup image", "ラインナップ画像から認識して取り込み"),
                             systemImage: "text.viewfinder"
                         )
                     }
@@ -1417,7 +1451,7 @@ struct EventEditorView: View {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .controlSize(.small)
-                            Text(LL("正在识别图片并生成导入草稿..."))
+                            Text(LT("正在识别图片并生成导入草稿...", "正在识别图片并生成导入草稿...", "画像を認識して取り込み下書きを生成中..."))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
@@ -1426,27 +1460,27 @@ struct EventEditorView: View {
                     Button {
                         openLineupImportEditorForJSON()
                     } label: {
-                        Label(LL("通过 JSON 文本导入"), systemImage: "curlybraces.square")
+                        Label(LT("通过 JSON 文本导入", "通过 JSON 文本导入", "JSONテキストで取り込み"), systemImage: "curlybraces.square")
                     }
                     .disabled(isImportingLineupImage || isSaving)
 
                     Button {
                         addEmptyLineupSlot()
                     } label: {
-                        Label(LL("添加 DJ"), systemImage: "plus")
+                        Label(LT("添加 DJ", "添加 DJ", "DJを追加"), systemImage: "plus")
                     }
                     .disabled(pendingLineupEntry != nil)
 
                     Button(role: .destructive) {
                         clearAllLineupEntries()
                     } label: {
-                        Label(LL("一键清空已添加 DJ"), systemImage: "trash")
+                        Label(LT("一键清空已添加 DJ", "一键清空已添加 DJ", "追加済みDJを一括クリア"), systemImage: "trash")
                     }
                     .disabled(lineupEntries.isEmpty && pendingLineupEntry == nil)
 
                     if let pendingBinding = pendingLineupSlotBinding {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(LL("新增 DJ（点击右侧勾勾后并入下方列表）"))
+                            Text(LT("新增 DJ（点击右侧勾勾后并入下方列表）", "新增 DJ（点击右侧勾勾后并入下方列表）", "新規DJ（右側のチェックを押すと下のリストに追加）"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                             lineupEntryEditor(pendingBinding, isPending: true)
@@ -1455,7 +1489,7 @@ struct EventEditorView: View {
                     }
 
                     if lineupEntries.isEmpty {
-                        Text(LL("尚未添加 DJ，点击上方按钮新增。"))
+                        Text(LT("尚未添加 DJ，点击上方按钮新增。", "尚未添加 DJ，点击上方按钮新增。", "DJはまだ追加されていません。上のボタンから追加してください。"))
                             .font(.subheadline)
                             .foregroundStyle(RaverTheme.secondaryText)
                     } else {
@@ -1483,14 +1517,14 @@ struct EventEditorView: View {
             .raverSystemNavigation(title: mode.title)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
+                    Button(isSaving ? LT("保存中...", "Saving...", "保存中...") : LT("保存", "Save", "保存")) {
                         Task { await save() }
                     }
                     .disabled(isSaving)
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button(L("收起", "Collapse")) {
+                    Button(LT("收起", "Collapse", "閉じる")) {
                         dismissKeyboard()
                     }
                 }
@@ -1507,13 +1541,25 @@ struct EventEditorView: View {
             .onChange(of: selectedLineupImportPhoto) { _, newValue in
                 Task { await importLineupFromImage(newValue) }
             }
-            .alert(L("提示", "Notice"), isPresented: Binding(
+            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
             )) {
-                Button(L("确定", "OK"), role: .cancel) {}
+                Button(LT("确定", "OK", "OK"), role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
+            }
+            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
+                get: { saveSuccessMessage != nil },
+                set: { if !$0 { saveSuccessMessage = nil } }
+            )) {
+                Button(LT("确定", "OK", "OK"), role: .cancel) {
+                    saveSuccessMessage = nil
+                    onSaved()
+                    dismiss()
+                }
+            } message: {
+                Text(saveSuccessMessage ?? "")
             }
             .overlay(alignment: .top) {
                 if let importSuccessMessage {
@@ -1587,6 +1633,41 @@ struct EventEditorView: View {
         return Array(NSOrderedSet(array: trimmed)) as? [String] ?? trimmed
     }
 
+    private var selectedEventTimeZone: TimeZone {
+        TimeZone(identifier: eventTimeZoneIdentifier) ?? .current
+    }
+
+    private var eventCalendar: Calendar {
+        Self.eventCalendar(timeZoneID: eventTimeZoneIdentifier)
+    }
+
+    private var timeZonePreviewText: String {
+        let localRange = normalizedEventStartDate.appLocalizedDateRangeText(to: normalizedEventEndDate, timeZone: .current)
+        let eventRange = normalizedEventStartDate.appLocalizedDateRangeText(to: normalizedEventEndDate, timeZone: selectedEventTimeZone)
+        if selectedEventTimeZone.identifier == TimeZone.current.identifier {
+            return LT("当前设备时区：\(TimeZone.current.identifier) · \(localRange)", "Device time zone: \(TimeZone.current.identifier) · \(localRange)", "端末のタイムゾーン: \(TimeZone.current.identifier) · \(localRange)")
+        }
+        return LT("设备时区：\(TimeZone.current.identifier) · \(localRange)\n事件时区：\(eventTimeZoneIdentifier) · \(eventRange)", "Device time zone: \(TimeZone.current.identifier) · \(localRange)\nEvent time zone: \(eventTimeZoneIdentifier) · \(eventRange)", "端末のタイムゾーン: \(TimeZone.current.identifier) · \(localRange)\nイベントのタイムゾーン: \(eventTimeZoneIdentifier) · \(eventRange)")
+    }
+
+    private var normalizedEventStartDate: Date {
+        Self.normalizedStartOfDay(startDate, timeZoneID: eventTimeZoneIdentifier)
+    }
+
+    private var normalizedEventEndDate: Date {
+        Self.normalizedEndOfDay(max(endDate, startDate), timeZoneID: eventTimeZoneIdentifier)
+    }
+
+    private func timeZonePickerTitle(_ identifier: String) -> String {
+        if identifier == "Asia/Shanghai" {
+            return "Asia/Shanghai · 北京时间"
+        }
+        if identifier == TimeZone.current.identifier {
+            return "\(identifier) · \(LT("当前设备", "Current device", "現在の端末"))"
+        }
+        return identifier
+    }
+
     private struct StageLineupGroup: Identifiable, Hashable {
         var id: String { stageName }
         let stageName: String
@@ -1594,14 +1675,14 @@ struct EventEditorView: View {
     }
 
     private var dayOptions: [EditorDayOption] {
-        let calendar = Calendar.current
+        let calendar = eventCalendar
         let startDay = calendar.startOfDay(for: startDate)
         let candidateDates = editorDayDates()
         var allDates = Set(candidateDates.map { calendar.startOfDay(for: $0) })
 
         // Preserve already selected lineup dates so toggling Week mode won't drop existing mappings.
         for dayID in lineupReferencedDayIDs {
-            if let date = Self.editorDayKeyFormatter.date(from: dayID) {
+            if let date = editorDayKeyDate(from: dayID) {
                 allDates.insert(calendar.startOfDay(for: date))
             }
         }
@@ -1613,7 +1694,7 @@ struct EventEditorView: View {
                 : nil
             return [
                 EditorDayOption(
-                    id: Self.editorDayKey(for: startDay),
+                    id: editorDayKey(for: startDay),
                     dayIndex: 1,
                     date: startDay,
                     weekIndex: weekDay?.week,
@@ -1627,7 +1708,7 @@ struct EventEditorView: View {
                 ? EventWeekScheduleMode.weekDayIndex(for: date, anchorDate: startDay)
                 : nil
             return EditorDayOption(
-                id: Self.editorDayKey(for: date),
+                id: editorDayKey(for: date),
                 dayIndex: index + 1,
                 date: date,
                 weekIndex: weekDay?.week,
@@ -1644,17 +1725,17 @@ struct EventEditorView: View {
                 ids.insert(dayID)
             }
             if let start = slot.startTime {
-                ids.insert(Self.editorDayKey(for: start))
+                ids.insert(editorDayKey(for: start))
             }
             if let end = slot.endTime {
-                ids.insert(Self.editorDayKey(for: end))
+                ids.insert(editorDayKey(for: end))
             }
         }
         return ids
     }
 
     private func editorDayDates() -> [Date] {
-        let calendar = Calendar.current
+        let calendar = eventCalendar
         let startDay = calendar.startOfDay(for: startDate)
         let effectiveEnd = max(endDate, startDate)
         let endDay = calendar.startOfDay(for: effectiveEnd)
@@ -1781,7 +1862,7 @@ struct EventEditorView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 if isEditing {
-                    Picker(LL("演出形式"), selection: actTypeBinding(for: slot)) {
+                    Picker(LT("演出形式", "演出形式", "出演形式"), selection: actTypeBinding(for: slot)) {
                         ForEach(EventLineupActType.allCases) { type in
                             Text(type.title).tag(type)
                         }
@@ -1810,7 +1891,7 @@ struct EventEditorView: View {
 
                 if isEditing {
                     Menu {
-                        Button(LL("未选择舞台")) {
+                        Button(LT("未选择舞台", "未选择舞台", "ステージ未選択")) {
                             slot.wrappedValue.stageName = ""
                         }
                         ForEach(stageChoices, id: \.self) { stage in
@@ -1907,7 +1988,7 @@ struct EventEditorView: View {
             } else if !isSoloReadonlyCompact {
                 if slot.wrappedValue.performers.count <= 1, let performer = slot.wrappedValue.performers.first {
                     HStack(spacing: 6) {
-                        Text(performer.djName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? L("未填写 DJ 名称", "Unnamed DJ") : performer.djName)
+                        Text(performer.djName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? LT("未填写 DJ 名称", "Unnamed DJ", "DJ名未入力") : performer.djName)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
                             .lineLimit(1)
@@ -1925,7 +2006,7 @@ struct EventEditorView: View {
                                 Text("DJ\(index + 1)")
                                     .font(.caption2.weight(.semibold))
                                     .foregroundStyle(RaverTheme.secondaryText)
-                                Text(performer.djName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? L("未填写 DJ 名称", "Unnamed DJ") : performer.djName)
+                                Text(performer.djName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? LT("未填写 DJ 名称", "Unnamed DJ", "DJ名未入力") : performer.djName)
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(RaverTheme.primaryText)
                                     .lineLimit(1)
@@ -1961,7 +2042,7 @@ struct EventEditorView: View {
                         endTimeText: endTimeTextBinding(for: slot)
                     )
 
-                    Button(endNextDayBinding(for: slot).wrappedValue ? L("次日", "Next Day") : L("当日", "Same Day")) {
+                    Button(endNextDayBinding(for: slot).wrappedValue ? LT("次日", "Next Day", "翌日") : LT("当日", "Same Day", "当日")) {
                         endNextDayBinding(for: slot).wrappedValue.toggle()
                     }
                     .buttonStyle(.bordered)
@@ -1971,7 +2052,7 @@ struct EventEditorView: View {
 
                     UIKitInlineTextField(
                         text: durationMinutesBinding(for: slot),
-                        placeholder: L("分钟", "Min"),
+                        placeholder: LT("分钟", "Min", "分"),
                         keyboardType: .numberPad,
                         textAlignment: .right,
                         font: .systemFont(ofSize: 12),
@@ -1980,7 +2061,7 @@ struct EventEditorView: View {
                     )
                         .frame(width: 42)
 
-                    Text(LL("分"))
+                    Text(LT("分", "分", "分"))
                         .font(.caption2)
                         .foregroundStyle(RaverTheme.secondaryText)
 
@@ -2054,7 +2135,7 @@ struct EventEditorView: View {
                         .foregroundStyle(RaverTheme.secondaryText)
                         .frame(width: 24, alignment: .leading)
 
-                    TextField(LL("输入 DJ 名称"), text: performerNameBinding(for: slot, performerIndex: performerIndex))
+                    TextField(LT("输入 DJ 名称", "输入 DJ 名称", "DJ名を入力"), text: performerNameBinding(for: slot, performerIndex: performerIndex))
                         .font(.footnote.weight(.semibold))
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled(true)
@@ -2072,7 +2153,7 @@ struct EventEditorView: View {
                     HStack(spacing: 6) {
                         ProgressView()
                             .controlSize(.small)
-                        Text(LL("搜索 DJ 中..."))
+                        Text(LT("搜索 DJ 中...", "搜索 DJ 中...", "DJを検索中..."))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -2101,7 +2182,7 @@ struct EventEditorView: View {
 
     private func slotDisplayTitle(_ slot: EditableLineupSlot) -> String {
         let name = slot.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? L("未命名 DJ", "Unnamed DJ") : name
+        return name.isEmpty ? LT("未命名 DJ", "Unnamed DJ", "無題のDJ") : name
     }
 
     private func normalizedPerformers(
@@ -2174,18 +2255,18 @@ struct EventEditorView: View {
 
     private func stageMenuTitle(for slot: EditableLineupSlot) -> String {
         let trimmed = slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? L("舞台", "Stage") : trimmed
+        return trimmed.isEmpty ? LT("舞台", "Stage", "ステージ") : trimmed
     }
 
     private func stageBucketName(for slot: EditableLineupSlot) -> String {
         let trimmed = slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? L("未设置舞台", "Unassigned Stage") : trimmed
+        return trimmed.isEmpty ? LT("未设置舞台", "Unassigned Stage", "未割り当てステージ") : trimmed
     }
 
     private func dayMenuTitle(for slot: EditableLineupSlot) -> String {
         guard let dayID = resolveDayID(for: slot),
               let option = dayOptions.first(where: { $0.id == dayID }) else {
-            return isWeekScheduleEnabled ? L("Week1·Day1", "Week1·Day1") : L("Day1", "Day1")
+            return isWeekScheduleEnabled ? LT("Week1·Day1", "Week1·Day1", "Week1·Day1") : LT("Day1", "Day1", "Day1")
         }
         return dayDisplayTitle(for: option)
     }
@@ -2214,14 +2295,14 @@ struct EventEditorView: View {
 
     private func readonlyScheduleSummary(for slot: EditableLineupSlot) -> String {
         if slot.startTime == nil && slot.endTime == nil {
-            return L("未填写时间（不展示在时间表）", "Time not set (hidden from timetable)")
+            return LT("未填写时间（不展示在时间表）", "Time not set (hidden from timetable)", "時間未入力（タイムテーブルに表示されません）")
         }
         let draft = makeTimeDraft(from: slot)
         let start = draft.startText.isEmpty ? "--:--" : draft.startText
         let end = draft.endText.isEmpty ? "--:--" : draft.endText
-        let daySuffix = draft.endNextDay ? L(" 次日", " +1d") : ""
+        let daySuffix = draft.endNextDay ? LT(" 次日", " +1d", " 翌日") : ""
         let duration = draft.durationText.isEmpty ? "--" : draft.durationText
-        return L("\(dayMenuTitle(for: slot)) · \(start)-\(end)\(daySuffix) · \(duration)分", "\(dayMenuTitle(for: slot)) · \(start)-\(end)\(daySuffix) · \(duration) min")
+        return LT("\(dayMenuTitle(for: slot)) · \(start)-\(end)\(daySuffix) · \(duration)分", "\(dayMenuTitle(for: slot)) · \(start)-\(end)\(daySuffix) · \(duration) min", "\(dayMenuTitle(for: slot)) · \(start)-\(end)\(daySuffix) · \(duration)分")
     }
 
     private func daySelectionBinding(for slot: Binding<EditableLineupSlot>) -> Binding<String> {
@@ -2241,7 +2322,7 @@ struct EventEditorView: View {
                 if let end = slot.wrappedValue.endTime {
                     let aligned = applyDay(newDayID, to: end)
                     if dayOffset > 0 {
-                        slot.wrappedValue.endTime = Calendar.current.date(byAdding: .day, value: dayOffset, to: aligned) ?? aligned
+                        slot.wrappedValue.endTime = eventCalendar.date(byAdding: .day, value: dayOffset, to: aligned) ?? aligned
                     } else {
                         slot.wrappedValue.endTime = aligned
                     }
@@ -2365,16 +2446,16 @@ struct EventEditorView: View {
     }
 
     private func makeTimeDraft(from slot: EditableLineupSlot) -> LineupTimeDraft {
-        let startText = slot.startTime.map { Self.editorHourMinuteFormatter.string(from: $0) } ?? ""
-        var endText = slot.endTime.map { Self.editorHourMinuteFormatter.string(from: $0) } ?? ""
+        let startText = slot.startTime.map { editorHourMinuteText($0) } ?? ""
+        var endText = slot.endTime.map { editorHourMinuteText($0) } ?? ""
         var endNextDay = false
         var durationText = ""
 
         if let start = slot.startTime, let end = slot.endTime {
             let offset = dayOffset(start: start, end: end)
             endNextDay = offset > 0
-            if endNextDay, let normalized = Calendar.current.date(byAdding: .day, value: -offset, to: end) {
-                endText = Self.editorHourMinuteFormatter.string(from: normalized)
+            if endNextDay, let normalized = eventCalendar.date(byAdding: .day, value: -offset, to: end) {
+                endText = editorHourMinuteText(normalized)
             }
             if end >= start {
                 durationText = String(Int(end.timeIntervalSince(start) / 60))
@@ -2398,7 +2479,7 @@ struct EventEditorView: View {
         source: LineupTimeApplySource = .startOrEndText
     ) {
         var draft = timeDraft(for: slot.wrappedValue)
-        let resolvedDayID = resolveDayID(for: slot.wrappedValue) ?? dayOptions.first?.id ?? Self.editorDayKey(for: startDate)
+        let resolvedDayID = resolveDayID(for: slot.wrappedValue) ?? dayOptions.first?.id ?? editorDayKey(for: startDate)
         slot.wrappedValue.dayID = resolvedDayID
 
         let parsedStart = dateFrom(dayID: resolvedDayID, timeText: draft.startText, extraDays: 0)
@@ -2408,9 +2489,9 @@ struct EventEditorView: View {
            let start = parsedStart,
            let duration = Int(draft.durationText), !draft.durationText.isEmpty {
             let safeDuration = max(duration, 0)
-            let computedEnd = Calendar.current.date(byAdding: .minute, value: safeDuration, to: start) ?? start
+            let computedEnd = eventCalendar.date(byAdding: .minute, value: safeDuration, to: start) ?? start
             slot.wrappedValue.endTime = computedEnd
-            draft.endText = Self.editorHourMinuteFormatter.string(from: computedEnd)
+            draft.endText = editorHourMinuteText(computedEnd)
             draft.endNextDay = dayOffset(start: start, end: computedEnd) > 0
             lineupTimeDraftBySlotID[slot.wrappedValue.id] = draft
             return
@@ -2429,7 +2510,7 @@ struct EventEditorView: View {
            let end = parsedEnd,
            !draft.endNextDay,
            end < start {
-            parsedEnd = Calendar.current.date(byAdding: .day, value: 1, to: end)
+            parsedEnd = eventCalendar.date(byAdding: .day, value: 1, to: end)
             draft.endNextDay = true
         }
 
@@ -2472,11 +2553,11 @@ struct EventEditorView: View {
                 continue
             }
             guard !name.isEmpty, !priceText.isEmpty else {
-                errorMessage = L("请完整填写票档名称和价格，或删除空票档", "Please complete ticket tier name and price, or remove empty tiers.")
+                errorMessage = LT("请完整填写票档名称和价格，或删除空票档", "Please complete ticket tier name and price, or remove empty tiers.", "チケット区分名と価格を入力するか、空の区分を削除してください。")
                 return nil
             }
             guard let price = Double(priceText.replacingOccurrences(of: ",", with: ".")), price >= 0 else {
-                errorMessage = L("票档价格格式不正确，请输入数字", "Invalid ticket price format. Please enter a number.")
+                errorMessage = LT("票档价格格式不正确，请输入数字", "Invalid ticket price format. Please enter a number.", "チケット価格の形式が正しくありません。数字を入力してください。")
                 return nil
             }
 
@@ -2500,7 +2581,7 @@ struct EventEditorView: View {
             return nil
         }
 
-        let calendar = Calendar.current
+        let calendar = eventCalendar
         var parts = calendar.dateComponents([.year, .month, .day], from: baseDay)
         parts.hour = hour
         parts.minute = minute
@@ -2528,7 +2609,7 @@ struct EventEditorView: View {
     }
 
     private func dayOffset(start: Date, end: Date) -> Int {
-        let calendar = Calendar.current
+        let calendar = eventCalendar
         let startDay = calendar.startOfDay(for: start)
         let endDay = calendar.startOfDay(for: end)
         return calendar.dateComponents([.day], from: startDay, to: endDay).day ?? 0
@@ -2539,11 +2620,11 @@ struct EventEditorView: View {
             return dayID
         }
         if let start = slot.startTime {
-            let candidate = Self.editorDayKey(for: start)
+            let candidate = editorDayKey(for: start)
             if isKnownDay(candidate) { return candidate }
         }
         if let end = slot.endTime {
-            let candidate = Self.editorDayKey(for: end)
+            let candidate = editorDayKey(for: end)
             if isKnownDay(candidate) { return candidate }
         }
         return dayOptions.first?.id
@@ -2565,8 +2646,8 @@ struct EventEditorView: View {
             return option.dayIndex
         }
 
-        guard let parsedDate = Self.editorDayKeyFormatter.date(from: normalizedDayID) else { return nil }
-        let calendar = Calendar.current
+        guard let parsedDate = editorDayKeyDate(from: normalizedDayID) else { return nil }
+        let calendar = eventCalendar
         let baseDay = calendar.startOfDay(for: startDate)
         let targetDay = calendar.startOfDay(for: parsedDate)
         let offset = calendar.dateComponents([.day], from: baseDay, to: targetDay).day ?? 0
@@ -2576,7 +2657,7 @@ struct EventEditorView: View {
 
     private func applyDay(_ dayID: String, to date: Date) -> Date {
         guard let targetDay = dayDate(for: dayID) else { return date }
-        let calendar = Calendar.current
+        let calendar = eventCalendar
         let timeParts = calendar.dateComponents([.hour, .minute, .second], from: date)
         var dayParts = calendar.dateComponents([.year, .month, .day], from: targetDay)
         dayParts.hour = timeParts.hour
@@ -2647,8 +2728,9 @@ struct EventEditorView: View {
         pickedPlaceName = event.locationPoint?.nameI18n?.text(for: language)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty ?? ""
-        startDate = Self.normalizedStartOfDay(event.startDate)
-        endDate = Self.normalizedStartOfDay(event.endDate)
+        eventTimeZoneIdentifier = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? TimeZone.current.identifier
+        startDate = Self.normalizedStartOfDay(event.startDate, timeZoneID: eventTimeZoneIdentifier)
+        endDate = Self.normalizedStartOfDay(event.endDate, timeZoneID: eventTimeZoneIdentifier)
         coverImageUrl = event.coverImageUrl ?? ""
         lineupImageUrl = event.lineupImageUrl ?? ""
         selectedCoverPhoto = nil
@@ -2702,14 +2784,14 @@ struct EventEditorView: View {
                     stageName: slot.stageName ?? "",
                     dayID: {
                         if let dayIndex = slot.festivalDayIndex, dayIndex > 0 {
-                            let logicalDay = Calendar.current.date(
+                            let logicalDay = eventCalendar.date(
                                 byAdding: .day,
                                 value: dayIndex - 1,
-                                to: Self.normalizedStartOfDay(event.startDate)
+                                to: Self.normalizedStartOfDay(event.startDate, timeZoneID: eventTimeZoneIdentifier)
                             ) ?? slot.startTime
-                            return Self.editorDayKey(for: logicalDay)
+                            return editorDayKey(for: logicalDay)
                         }
-                        return Self.editorDayKey(for: slot.startTime)
+                        return editorDayKey(for: slot.startTime)
                     }(),
                     startTime: shouldTreatAsUnscheduled ? nil : slot.startTime,
                     endTime: shouldTreatAsUnscheduled ? nil : slot.endTime,
@@ -2769,15 +2851,16 @@ struct EventEditorView: View {
         lineupEntries = next
     }
 
+    @MainActor
     private func save() async {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
-            errorMessage = L("请输入活动名称", "Please enter an event name.")
+            errorMessage = LT("请输入活动名称", "Please enter an event name.", "イベント名を入力してください。")
             return
         }
 
-        let normalizedStartDate = Self.normalizedStartOfDay(startDate)
-        let normalizedEndDate = Self.normalizedEndOfDay(max(endDate, startDate))
+        let normalizedStartDate = normalizedEventStartDate
+        let normalizedEndDate = normalizedEventEndDate
         let resolvedCityEn = cityEn.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let resolvedCityZh = cityZh.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let resolvedCountryEn = countryEn.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -2825,12 +2908,12 @@ struct EventEditorView: View {
         )
 
         if normalizedEndDate < normalizedStartDate {
-            errorMessage = L("结束时间不能早于开始时间", "End time cannot be earlier than start time.")
+            errorMessage = LT("结束时间不能早于开始时间", "End time cannot be earlier than start time.", "終了時間は開始時間より前にできません。")
             return
         }
 
         if pendingLineupEntry != nil {
-            errorMessage = L("请先确认或删除上方新增 DJ 条目后再保存", "Please confirm or remove the newly added DJ entry before saving.")
+            errorMessage = LT("请先确认或删除上方新增 DJ 条目后再保存", "Please confirm or remove the newly added DJ entry before saving.", "上部の新規DJ項目を確定または削除してから保存してください。")
             return
         }
 
@@ -2850,7 +2933,7 @@ struct EventEditorView: View {
         do {
             switch mode {
             case .create:
-                let created = try await eventCommandRepository.createEvent(
+                let createResult = try await eventCommandRepository.createEvent(
                     input: CreateEventInput(
                         name: trimmedName,
                         description: encodedDescription,
@@ -2869,6 +2952,7 @@ struct EventEditorView: View {
                         officialWebsite: resolvedOfficialWebsite,
                         startDate: normalizedStartDate,
                         endDate: normalizedEndDate,
+                        timeZone: eventTimeZoneIdentifier,
                         stageOrder: normalizedStageEntries,
                         coverImageUrl: nil,
                         lineupImageUrl: nil,
@@ -2877,6 +2961,11 @@ struct EventEditorView: View {
                         status: resolvedStatus
                     )
                 )
+
+                guard case .created(let created) = createResult else {
+                    completeEventSubmissionSuccess()
+                    return
+                }
 
                 var uploadedCoverURL: String?
                 var uploadedLineupURL: String?
@@ -2912,6 +3001,8 @@ struct EventEditorView: View {
                         )
                     )
                 }
+                completeEventSubmissionSuccess()
+                return
             case .edit(let event):
                 var finalCover = coverImageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
                 var finalLineup = lineupImageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2958,6 +3049,7 @@ struct EventEditorView: View {
                         officialWebsite: resolvedOfficialWebsite ?? "",
                         startDate: normalizedStartDate,
                         endDate: normalizedEndDate,
+                        timeZone: eventTimeZoneIdentifier,
                         stageOrder: normalizedStageEntries,
                         coverImageUrl: finalCover.nilIfEmpty ?? "",
                         lineupImageUrl: finalLineup.nilIfEmpty ?? "",
@@ -2976,6 +3068,12 @@ struct EventEditorView: View {
         } catch {
             errorMessage = error.userFacingMessage
         }
+    }
+
+    @MainActor
+    private func completeEventSubmissionSuccess(message: String = LT("活动信息已提交审核", "Event submitted for review", "イベント情報を審査に送信しました")) {
+        errorMessage = nil
+        saveSuccessMessage = message
     }
 
     private func buildManualLocationPayload(
@@ -3081,7 +3179,7 @@ struct EventEditorView: View {
             case .lineup:
                 selectedLineupData = nil
             }
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
+            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
         }
     }
 
@@ -3097,7 +3195,7 @@ struct EventEditorView: View {
 
         do {
             guard let loaded = try await item.loadTransferable(type: Data.self) else {
-                errorMessage = L("读取阵容图失败，请重试", "Failed to read lineup image. Please try again.")
+                errorMessage = LT("读取阵容图失败，请重试", "Failed to read lineup image. Please try again.", "ラインナップ画像を読み込めませんでした。もう一度お試しください。")
                 return
             }
 
@@ -3105,18 +3203,18 @@ struct EventEditorView: View {
                 imageData: jpegData(from: loaded),
                 fileName: "lineup-import-\(UUID().uuidString).jpg",
                 mimeType: "image/jpeg",
-                startDate: Self.normalizedStartOfDay(startDate),
-                endDate: Self.normalizedEndOfDay(max(endDate, startDate))
+                startDate: normalizedEventStartDate,
+                endDate: normalizedEventEndDate
             )
 
             guard !preview.lineupInfo.isEmpty else {
-                errorMessage = L("未识别到可导入的阵容信息，请尝试更清晰的时间表图片", "No importable lineup found. Please try a clearer timetable image.")
+                errorMessage = LT("未识别到可导入的阵容信息，请尝试更清晰的时间表图片", "No importable lineup found. Please try a clearer timetable image.", "取り込めるラインナップ情報を認識できませんでした。より鮮明なタイムテーブル画像をお試しください。")
                 return
             }
 
             var importedDrafts = buildImportedLineupSlots(from: preview.lineupInfo, isEditing: false)
             guard !importedDrafts.isEmpty else {
-                errorMessage = L("识别结果中没有可导入的有效阵容信息", "Recognition result has no valid lineup entries to import.")
+                errorMessage = LT("识别结果中没有可导入的有效阵容信息", "Recognition result has no valid lineup entries to import.", "認識結果に取り込める有効なラインナップがありません。")
                 return
             }
 
@@ -3129,7 +3227,7 @@ struct EventEditorView: View {
             lineupImportShouldReplaceExistingEntries = false
             showLineupImportEditor = true
         } catch {
-            errorMessage = L("阵容识别失败：\(error.userFacingMessage ?? "")", "Lineup recognition failed: \(error.userFacingMessage ?? "")")
+            errorMessage = LT("阵容识别失败：\(error.userFacingMessage ?? "")", "Lineup recognition failed: \(error.userFacingMessage ?? "")", "ラインナップ認識に失敗しました: \(error.userFacingMessage ?? "")")
         }
     }
 
@@ -3151,11 +3249,11 @@ struct EventEditorView: View {
         var errorDescription: String? {
             switch self {
             case .emptyInput:
-                return L("请输入 JSON 内容后再解析", "Please enter JSON content before parsing.")
+                return LT("请输入 JSON 内容后再解析", "Please enter JSON content before parsing.", "JSON内容を入力してから解析してください。")
             case .invalidJSON:
-                return L("JSON 格式不正确，请检查后重试", "Invalid JSON format. Please check and try again.")
+                return LT("JSON 格式不正确，请检查后重试", "Invalid JSON format. Please check and try again.", "JSON形式が正しくありません。確認してもう一度お試しください。")
             case .missingLineupInfo:
-                return L("未找到 lineup_info，可用 Coze 返回格式或直接传数组", "No lineup_info found. Use Coze format or pass an array directly.")
+                return LT("未找到 lineup_info，可用 Coze 返回格式或直接传数组", "No lineup_info found. Use Coze format or pass an array directly.", "lineup_info が見つかりません。Coze形式または配列を直接渡してください。")
             }
         }
     }
@@ -3193,7 +3291,7 @@ struct EventEditorView: View {
             let parsed = try parseLineupImportJSON(lineupImportRawText)
             var importedDrafts = buildImportedLineupSlots(from: parsed.lineupInfo, isEditing: false)
             guard !importedDrafts.isEmpty else {
-                errorMessage = L("JSON 中没有可导入的有效阵容信息", "No valid lineup entries found in JSON.")
+                errorMessage = LT("JSON 中没有可导入的有效阵容信息", "No valid lineup entries found in JSON.", "JSON内に取り込める有効なラインナップがありません。")
                 return
             }
             importedDrafts = await autoMatchImportedLineupSlots(importedDrafts)
@@ -3337,8 +3435,8 @@ struct EventEditorView: View {
             }()
             let time: String? = {
                 guard let start = slot.startTime, let end = slot.endTime else { return nil }
-                let startText = Self.editorHourMinuteFormatter.string(from: start)
-                let endText = Self.editorHourMinuteFormatter.string(from: end)
+                let startText = editorHourMinuteText(start)
+                let endText = editorHourMinuteText(end)
                 return "\(startText)-\(endText)"
             }()
             return EventLineupImageImportItem(
@@ -3355,7 +3453,7 @@ struct EventEditorView: View {
     private func commitLineupImportDrafts() async {
         guard !isApplyingLineupImport else { return }
         if pendingLineupEntry != nil {
-            errorMessage = L("请先确认或删除上方新增 DJ 条目后再导入", "Please confirm or remove the newly added DJ entry before importing.")
+            errorMessage = LT("请先确认或删除上方新增 DJ 条目后再导入", "Please confirm or remove the newly added DJ entry before importing.", "上部の新規DJ項目を確定または削除してから取り込んでください。")
             return
         }
 
@@ -3367,7 +3465,7 @@ struct EventEditorView: View {
         }
 
         guard !importedSlots.isEmpty else {
-            errorMessage = L("暂无可导入的阵容，请先识别图片或粘贴 JSON", "No lineup to import yet. Recognize an image or paste JSON first.")
+            errorMessage = LT("暂无可导入的阵容，请先识别图片或粘贴 JSON", "No lineup to import yet. Recognize an image or paste JSON first.", "取り込めるラインナップはまだありません。画像認識またはJSON貼り付けを先に行ってください。")
             return
         }
 
@@ -3444,7 +3542,7 @@ struct EventEditorView: View {
                 start = combine(day: baseDay, hour: timeRange.startHour, minute: timeRange.startMinute)
                 end = combine(day: baseDay, hour: timeRange.endHour, minute: timeRange.endMinute)
                 if let startValue = start, let endValue = end, endValue < startValue {
-                    end = Calendar.current.date(byAdding: .day, value: 1, to: endValue) ?? endValue
+                    end = eventCalendar.date(byAdding: .day, value: 1, to: endValue) ?? endValue
                 }
             } else if let baseDay, let singleTimePoint {
                 start = combine(day: baseDay, hour: singleTimePoint.hour, minute: singleTimePoint.minute)
@@ -3453,7 +3551,7 @@ struct EventEditorView: View {
 
             let resolvedDayID: String?
             if let baseDay {
-                let candidate = Self.editorDayKey(for: baseDay)
+                let candidate = editorDayKey(for: baseDay)
                 resolvedDayID = isKnownDay(candidate) ? candidate : nil
             } else {
                 resolvedDayID = nil
@@ -3533,7 +3631,7 @@ struct EventEditorView: View {
     }
 
     private func showLineupImportSuccessToast(count: Int) {
-        let successText = L("已导入 \(count) 条阵容", "Imported \(count) lineup entries")
+        let successText = LT("已导入 \(count) 条阵容", "Imported \(count) lineup entries", "\(count) 件のラインナップを取り込みました")
         importSuccessMessage = successText
         Task {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -3547,14 +3645,14 @@ struct EventEditorView: View {
     private func lineupImportEditorSheet() -> some View {
         NavigationStack {
             Form {
-                Section(LL("导入草稿（可编辑）")) {
+                Section(LT("导入草稿（可编辑）", "导入草稿（可编辑）", "取り込み下書き（編集可）")) {
                     if lineupImportDraftEntries.isEmpty {
-                        Text(LL("暂无可导入条目，请先识别阵容图或粘贴 JSON 后解析。"))
+                        Text(LT("暂无可导入条目，请先识别阵容图或粘贴 JSON 后解析。", "暂无可导入条目，请先识别阵容图或粘贴 JSON 后解析。", "取り込める項目はまだありません。先にラインナップ画像を認識するかJSONを貼り付けて解析してください。"))
                             .font(.subheadline)
                             .foregroundStyle(RaverTheme.secondaryText)
                     } else {
                         if !lineupImportRawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text(LL("识别完成，可直接修改后一键导入。"))
+                            Text(LT("识别完成，可直接修改后一键导入。", "识别完成，可直接修改后一键导入。", "認識が完了しました。直接編集して一括取り込みできます。"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
@@ -3580,8 +3678,8 @@ struct EventEditorView: View {
                     }
                 }
 
-                Section(LL("JSON 导入文本（Coze 格式）")) {
-                    Text(LL("支持 Coze 返回格式：`normalized_text + lineup_info`，也支持直接粘贴数组。"))
+                Section(LT("JSON 导入文本（Coze 格式）", "JSON 导入文本（Coze 格式）", "JSON取り込みテキスト（Coze形式）")) {
+                    Text(LT("支持 Coze 返回格式：`normalized_text + lineup_info`，也支持直接粘贴数组。", "支持 Coze 返回格式：`normalized_text + lineup_info`，也支持直接粘贴数组。", "Cozeの戻り形式 `normalized_text + lineup_info` に対応し、配列の直接貼り付けにも対応します。"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
 
@@ -3589,16 +3687,16 @@ struct EventEditorView: View {
                         .font(.system(.caption, design: .monospaced))
                         .frame(minHeight: 150, maxHeight: 260)
 
-                    Button(isParsingLineupImportJSON ? L("解析中...", "Parsing...") : L("解析 JSON 更新草稿", "Parse JSON to Update Draft")) {
+                    Button(isParsingLineupImportJSON ? LT("解析中...", "Parsing...", "解析中...") : LT("解析 JSON 更新草稿", "Parse JSON to Update Draft", "JSONを解析して下書きを更新")) {
                         Task { await applyJSONToLineupImportDrafts() }
                     }
                     .disabled(isParsingLineupImportJSON)
                 }
             }
-            .raverSystemNavigation(title: LL("阵容导入"))
+            .raverSystemNavigation(title: LT("阵容导入", "阵容导入", "ラインナップ取り込み"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(isApplyingLineupImport ? L("导入中...", "Importing...") : L("一键导入", "Import All")) {
+                    Button(isApplyingLineupImport ? LT("导入中...", "Importing...", "取り込み中...") : LT("一键导入", "Import All", "一括取り込み")) {
                         Task { await commitLineupImportDrafts() }
                     }
                     .disabled(isApplyingLineupImport || isParsingLineupImportJSON || lineupImportDraftEntries.isEmpty)
@@ -3736,12 +3834,12 @@ struct EventEditorView: View {
     }
 
     private func dayOptionMatchingImportedDate(_ parsedDate: Date) -> EditorDayOption? {
-        let key = Self.editorDayKey(for: parsedDate)
+        let key = editorDayKey(for: parsedDate)
         if let exact = dayOptions.first(where: { $0.id == key }) {
             return exact
         }
 
-        let calendar = Calendar.current
+        let calendar = eventCalendar
         let parsedParts = calendar.dateComponents([.month, .day], from: parsedDate)
         guard let parsedMonth = parsedParts.month, let parsedDay = parsedParts.day else {
             return nil
@@ -3787,7 +3885,7 @@ struct EventEditorView: View {
         )
         normalized = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let calendar = Calendar.current
+        let calendar = eventCalendar
         let selectedYear = calendar.component(.year, from: startDate)
 
         let fullDateFormats = [
@@ -3797,7 +3895,7 @@ struct EventEditorView: View {
         for format in fullDateFormats {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone.current
+            formatter.timeZone = selectedEventTimeZone
             formatter.dateFormat = format
             if let parsed = formatter.date(from: normalized) {
                 return calendar.startOfDay(for: parsed)
@@ -3811,7 +3909,7 @@ struct EventEditorView: View {
         for format in monthDayFormats {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone.current
+            formatter.timeZone = selectedEventTimeZone
             formatter.dateFormat = format
             if let parsed = formatter.date(from: normalized) {
                 let components = calendar.dateComponents([.month, .day], from: parsed)
@@ -3829,11 +3927,11 @@ struct EventEditorView: View {
     }
 
     private func combine(day: Date, hour: Int, minute: Int) -> Date? {
-        var parts = Calendar.current.dateComponents([.year, .month, .day], from: day)
+        var parts = eventCalendar.dateComponents([.year, .month, .day], from: day)
         parts.hour = hour
         parts.minute = minute
         parts.second = 0
-        return Calendar.current.date(from: parts)
+        return eventCalendar.date(from: parts)
     }
 
     private func dismissKeyboard() {
@@ -3875,7 +3973,7 @@ struct EventEditorView: View {
         if pendingLineupEntry != nil {
             return
         }
-        let defaultDayID = dayOptions.first?.id ?? Self.editorDayKey(for: startDate)
+        let defaultDayID = dayOptions.first?.id ?? editorDayKey(for: startDate)
         let newSlot = EditableLineupSlot(
             actType: .solo,
             performers: [EditableLineupPerformer()],
@@ -3946,7 +4044,7 @@ struct EventEditorView: View {
                 await MainActor.run {
                     _ = isSearchingDJPerformerIDs.remove(performerID)
                     if djQueryByPerformerID[performerID]?.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed {
-                        errorMessage = L("DJ 搜索失败：\(error.userFacingMessage ?? "")", "DJ search failed: \(error.userFacingMessage ?? "")")
+                        errorMessage = LT("DJ 搜索失败：\(error.userFacingMessage ?? "")", "DJ search failed: \(error.userFacingMessage ?? "")", "DJ検索に失敗しました: \(error.userFacingMessage ?? "")")
                     }
                 }
             }
@@ -4035,36 +4133,36 @@ struct EventEditorView: View {
                 .map { $0.djName.trimmingCharacters(in: .whitespacesAndNewlines) }
 
             guard trimmedNames.count == expectedCount else {
-                errorMessage = L("第 \(index + 1) 条阵容数据异常，请重新编辑该条目", "Lineup item #\(index + 1) is invalid. Please edit it again.")
+                errorMessage = LT("第 \(index + 1) 条阵容数据异常，请重新编辑该条目", "Lineup item #\(index + 1) is invalid. Please edit it again.", "\(index + 1)番目のラインナップデータが無効です。再編集してください。")
                 return nil
             }
 
             guard !trimmedNames.contains(where: { $0.isEmpty }) else {
                 errorMessage = item.actType == .solo
-                    ? L("第 \(index + 1) 个 DJ 名称为空，请补全或删除后再保存", "DJ name #\(index + 1) is empty. Please complete or remove it before saving.")
-                    : L("第 \(index + 1) 个 \(item.actType.title) 条目有未填写的 DJ，请补全后再保存", "Act #\(index + 1) (\(item.actType.title)) has empty DJ names. Please complete before saving.")
+                    ? LT("第 \(index + 1) 个 DJ 名称为空，请补全或删除后再保存", "DJ name #\(index + 1) is empty. Please complete or remove it before saving.", "\(index + 1)番目のDJ名が空です。入力または削除してから保存してください。")
+                    : LT("第 \(index + 1) 个 \(item.actType.title) 条目有未填写的 DJ，请补全后再保存", "Act #\(index + 1) (\(item.actType.title)) has empty DJ names. Please complete before saving.", "\(index + 1)番目の\(item.actType.title)項目に未入力のDJがあります。入力してから保存してください。")
                 return nil
             }
 
             let normalizedStage = item.stageName.trimmingCharacters(in: .whitespacesAndNewlines)
             if !normalizedStageEntries.isEmpty && normalizedStage.isEmpty {
-                errorMessage = L("第 \(index + 1) 个 DJ 请选择舞台", "Please choose a stage for DJ #\(index + 1).")
+                errorMessage = LT("第 \(index + 1) 个 DJ 请选择舞台", "Please choose a stage for DJ #\(index + 1).", "\(index + 1)番目のDJのステージを選択してください。")
                 return nil
             }
 
             if (item.startTime == nil) != (item.endTime == nil) {
-                errorMessage = L("第 \(index + 1) 个 DJ 的开始和结束时间需要同时填写", "Start and end time for DJ #\(index + 1) must be filled together.")
+                errorMessage = LT("第 \(index + 1) 个 DJ 的开始和结束时间需要同时填写", "Start and end time for DJ #\(index + 1) must be filled together.", "\(index + 1)番目のDJの開始時間と終了時間は両方入力してください。")
                 return nil
             }
 
             if let start = item.startTime, let end = item.endTime, end < start {
-                errorMessage = L("第 \(index + 1) 个 DJ 的结束时间不能早于开始时间", "End time for DJ #\(index + 1) cannot be earlier than start time.")
+                errorMessage = LT("第 \(index + 1) 个 DJ 的结束时间不能早于开始时间", "End time for DJ #\(index + 1) cannot be earlier than start time.", "\(index + 1)番目のDJの終了時間は開始時間より前にできません。")
                 return nil
             }
 
             let composedName = EventLineupActCodec.composeName(type: item.actType, performerNames: trimmedNames)
             guard !composedName.isEmpty else {
-                errorMessage = L("第 \(index + 1) 个 DJ 名称为空，请补全后再保存", "DJ name #\(index + 1) is empty. Please complete before saving.")
+                errorMessage = LT("第 \(index + 1) 个 DJ 名称为空，请补全后再保存", "DJ name #\(index + 1) is empty. Please complete before saving.", "\(index + 1)番目のDJ名が空です。入力してから保存してください。")
                 return nil
             }
 
@@ -4091,35 +4189,37 @@ struct EventEditorView: View {
         return result
     }
 
-    private static func editorDayKey(for date: Date) -> String {
-        editorDayKeyFormatter.string(from: date)
+    private func editorDayKey(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = selectedEventTimeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 
-    private static let editorDayKeyFormatter: DateFormatter = {
+    private func editorDayKeyDate(from value: String) -> Date? {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
+        formatter.timeZone = selectedEventTimeZone
         formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
+        return formatter.date(from: value)
+    }
 
-    private static let editorDayLabelFormatter: DateFormatter = {
+    private func editorDayLabelText(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = AppLanguagePreference.current.effectiveLanguage == .en
-            ? Locale(identifier: "en_US_POSIX")
-            : Locale(identifier: "zh_CN")
-        formatter.timeZone = .current
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
+        formatter.timeZone = selectedEventTimeZone
         formatter.dateFormat = AppLanguagePreference.current.effectiveLanguage == .en ? "MMM d" : "M月d日"
-        return formatter
-    }()
+        return formatter.string(from: date)
+    }
 
-    private static let editorHourMinuteFormatter: DateFormatter = {
+    private func editorHourMinuteText(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
+        formatter.timeZone = selectedEventTimeZone
         formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
+        return formatter.string(from: date)
+    }
 
 }
 
@@ -4338,7 +4438,7 @@ private final class EventLocationSearchModel: NSObject, ObservableObject, MKLoca
                 result.append(
                     EventLocationSearchCandidate(
                         id: key,
-                        title: title.isEmpty ? L("附近地点", "Nearby place") : title,
+                        title: title.isEmpty ? LT("附近地点", "Nearby place", "近くの場所") : title,
                         subtitle: subtitle,
                         coordinate: coordinate
                     )
@@ -4377,6 +4477,7 @@ private struct EventLocationPickerSheet: View {
     @State private var nearbySearchTask: Task<Void, Never>?
     @FocusState private var isSearchFieldFocused: Bool
     @State private var hasAppliedInitialDeviceLocation = false
+    @State private var showLocationPermissionRationale = false
 
     init(
         initialLatitude: Double?,
@@ -4414,10 +4515,10 @@ private struct EventLocationPickerSheet: View {
                 locationListArea
             }
             .background(RaverTheme.background)
-            .raverSystemNavigation(title: LL("选择活动定位"))
+            .raverSystemNavigation(title: LT("选择活动定位", "选择活动定位", "イベント位置を選択"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L("确认", "Confirm")) {
+                    Button(LT("确认", "Confirm", "確認")) {
                         Task { await confirmCurrentLocation() }
                     }
                     .disabled(isResolving)
@@ -4428,7 +4529,7 @@ private struct EventLocationPickerSheet: View {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(RaverTheme.secondaryText)
-                        TextField(LL("搜索地点"), text: $query)
+                        TextField(LT("搜索地点", "搜索地点", "場所を検索"), text: $query)
                             .textInputAutocapitalization(.never)
                             .disableAutocorrection(true)
                             .focused($isSearchFieldFocused)
@@ -4446,7 +4547,7 @@ private struct EventLocationPickerSheet: View {
             .onAppear {
                 searchModel.updateQuery(query)
                 scheduleNearbySearch(for: pinCoordinate)
-                locationProvider.requestCurrentLocation()
+                requestCurrentLocationWithRationaleIfNeeded()
             }
             .onReceive(locationProvider.$coordinate) { coordinate in
                 guard let coordinate else { return }
@@ -4480,13 +4581,23 @@ private struct EventLocationPickerSheet: View {
             .onDisappear {
                 nearbySearchTask?.cancel()
             }
-            .alert(L("提示", "Notice"), isPresented: Binding(
+            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
             )) {
-                Button(L("确定", "OK"), role: .cancel) {}
+                Button(LT("确定", "OK", "OK"), role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
+            }
+            .alert(LT("允许定位用于活动地点？", "Allow location for event places?", "イベント場所に位置情報を許可しますか？"), isPresented: $showLocationPermissionRationale) {
+                Button(LT("继续", "Continue", "続ける")) {
+                    locationProvider.requestCurrentLocation()
+                }
+                Button(LT("先手动输入", "Enter Manually", "手動入力する"), role: .cancel) {
+                    isSearchFieldFocused = true
+                }
+            } message: {
+                Text(LT("Raver 只会用当前位置帮你定位活动场地和附近地点。你也可以不授权，直接搜索或输入活动地址。", "Raver uses your current location only to help position event venues and nearby places. You can skip this and search or enter the event address manually.", "Raverは現在地をイベント会場や近くの場所の特定にのみ使用します。許可しなくても、検索または手入力で住所を入力できます。"))
             }
         }
         .raverEnableCustomSwipeBack(edgeRatio: 0.2)
@@ -4554,7 +4665,7 @@ private struct EventLocationPickerSheet: View {
                     Image(systemName: listMode == .query ? "magnifyingglass" : "scope")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
-                    Text(listMode == .query ? L("搜索候选地点", "Search candidates") : L("附近推荐地点", "Nearby recommendations"))
+                    Text(listMode == .query ? LT("搜索候选地点", "Search candidates", "候補地を検索") : LT("附近推荐地点", "Nearby recommendations", "近くのおすすめ"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
                     Spacer(minLength: 0)
@@ -4651,7 +4762,7 @@ private struct EventLocationPickerSheet: View {
                 )
             }
         } catch {
-            errorMessage = L("地点解析失败，请重试", "Failed to resolve location. Please try again.")
+            errorMessage = LT("地点解析失败，请重试", "Failed to resolve location. Please try again.", "場所を解析できませんでした。もう一度お試しください。")
         }
     }
 
@@ -4729,10 +4840,10 @@ private struct EventLocationPickerSheet: View {
         switch listMode {
         case .query:
             return query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? L("输入关键词搜索地点", "Enter keywords to search places")
-                : L("未找到匹配地点", "No matching places found")
+                ? LT("输入关键词搜索地点", "Enter keywords to search places", "キーワードを入力して場所を検索")
+                : LT("未找到匹配地点", "No matching places found", "一致する場所が見つかりません")
         case .nearby:
-            return L("拖动地图后，将在这里展示 pin 附近地点", "After dragging the map, nearby places around the pin will appear here.")
+            return LT("拖动地图后，将在这里展示 pin 附近地点", "After dragging the map, nearby places around the pin will appear here.", "地図をドラッグすると、ピン付近の場所がここに表示されます。")
         }
     }
 
@@ -4760,22 +4871,30 @@ private struct EventLocationPickerSheet: View {
         }
 
         if forceRequest {
-            locationProvider.requestCurrentLocation()
+            requestCurrentLocationWithRationaleIfNeeded()
         }
 
         switch locationProvider.authorizationStatus {
         case .denied, .restricted:
-            errorMessage = L("定位权限未开启，请在系统设置中允许定位后重试", "Location permission is disabled. Please enable it in Settings and try again.")
+            errorMessage = LT("定位权限未开启，请在系统设置中允许定位后重试", "Location permission is disabled. Please enable it in Settings and try again.", "位置情報の権限が無効です。設定で許可してからもう一度お試しください。")
         default:
-            errorMessage = L("正在获取当前位置，请稍后再试", "Getting current location. Please try again shortly.")
+            errorMessage = LT("正在获取当前位置，请稍后再试", "Getting current location. Please try again shortly.", "現在地を取得中です。少し待ってからもう一度お試しください。")
         }
+    }
+
+    private func requestCurrentLocationWithRationaleIfNeeded() {
+        if locationProvider.authorizationStatus == .notDetermined {
+            showLocationPermissionRationale = true
+            return
+        }
+        locationProvider.requestCurrentLocation()
     }
 
     private func reverseGeocode(coordinate: CLLocationCoordinate2D) async throws -> CLPlacemark? {
         try await withCheckedThrowingContinuation { continuation in
             CLGeocoder().reverseGeocodeLocation(
                 CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude),
-                preferredLocale: Locale(identifier: "zh_CN")
+                preferredLocale: Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
             ) { placemarks, error in
                 if let error {
                     continuation.resume(throwing: error)

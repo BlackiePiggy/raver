@@ -11,6 +11,9 @@ protocol MessageNotificationRepository {
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
     func markNotificationRead(notificationID: String) async throws
     func markNotificationsRead(type: AppNotificationType) async throws
+    func fetchContentReviewSummary() async throws -> ContentReviewSummary
+    func fetchContentReviewNotifications(limit: Int) async throws -> [ContentReviewNotificationItem]
+    func markContentReviewNotificationRead(notificationID: String) async throws
     func fetchFollowedEventsSummary() async throws -> FollowedEventsSummary
     func fetchFollowedEventNotifications(limit: Int) async throws -> [FollowedEventNotificationItem]
     func markFollowedEventNotificationRead(notificationID: String) async throws
@@ -77,6 +80,18 @@ struct MessageNotificationRepositoryAdapter: MessageNotificationRepository {
         try await service.markNotificationsRead(type: type)
     }
 
+    func fetchContentReviewSummary() async throws -> ContentReviewSummary {
+        try await service.fetchContentReviewSummary()
+    }
+
+    func fetchContentReviewNotifications(limit: Int) async throws -> [ContentReviewNotificationItem] {
+        try await service.fetchContentReviewNotifications(limit: limit)
+    }
+
+    func markContentReviewNotificationRead(notificationID: String) async throws {
+        try await service.markContentReviewNotificationRead(notificationID: notificationID)
+    }
+
     func fetchFollowedEventsSummary() async throws -> FollowedEventsSummary {
         try await service.fetchFollowedEventsSummary()
     }
@@ -128,6 +143,7 @@ final class MessagesViewModel: ObservableObject {
     @Published var followedEventsSummary: FollowedEventsSummary = .empty
     @Published var followedDJsSummary: FollowedDJsSummary = .empty
     @Published var followedBrandsSummary: FollowedBrandsSummary = .empty
+    @Published var contentReviewSummary: ContentReviewSummary = .empty
 
     private let conversationRepository: ConversationRepository
     private let notificationRepository: MessageNotificationRepository
@@ -157,9 +173,11 @@ final class MessagesViewModel: ObservableObject {
 
         do {
             try await chatStore.loadConversations(using: conversationRepository)
+            async let contentReviewsTask = notificationRepository.fetchContentReviewSummary()
             async let followedEventsTask = notificationRepository.fetchFollowedEventsSummary()
             async let followedDJsTask = notificationRepository.fetchFollowedDJsSummary()
             async let followedBrandsTask = notificationRepository.fetchFollowedBrandsSummary()
+            contentReviewSummary = (try? await contentReviewsTask) ?? .empty
             followedEventsSummary = (try? await followedEventsTask) ?? .empty
             followedDJsSummary = (try? await followedDJsTask) ?? .empty
             followedBrandsSummary = (try? await followedBrandsTask) ?? .empty
@@ -167,7 +185,7 @@ final class MessagesViewModel: ObservableObject {
             bannerMessage = nil
             self.error = nil
         } catch {
-            let message = error.userFacingMessage ?? L("消息加载失败，请稍后重试", "Failed to load messages. Please try again later.")
+            let message = error.userFacingMessage ?? LT("消息加载失败，请稍后重试", "Failed to load messages. Please try again later.", "メッセージの読み込みに失敗しました。後でもう一度お試しください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success
@@ -179,6 +197,10 @@ final class MessagesViewModel: ObservableObject {
 
     func refreshFollowedEventsSummary() async {
         followedEventsSummary = (try? await notificationRepository.fetchFollowedEventsSummary()) ?? .empty
+    }
+
+    func refreshContentReviewSummary() async {
+        contentReviewSummary = (try? await notificationRepository.fetchContentReviewSummary()) ?? .empty
     }
 
     func refreshFollowedDJsSummary() async {

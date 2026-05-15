@@ -25,9 +25,9 @@ protocol RatingRepository {
     func fetchRatingEvents() async throws -> [WebRatingEvent]
     func fetchRatingEvent(id: String) async throws -> WebRatingEvent
     func fetchRatingUnit(id: String) async throws -> WebRatingUnit
-    func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent
+    func createRatingEvent(input: CreateRatingEventInput) async throws -> CreateContentResult<WebRatingEvent>
     func createRatingEventFromEvent(eventID: String) async throws -> WebRatingEvent
-    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit
+    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> CreateContentResult<WebRatingUnit>
     func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent
     func updateRatingUnit(id: String, input: UpdateRatingUnitInput) async throws -> WebRatingUnit
     func deleteRatingEvent(id: String) async throws
@@ -51,7 +51,7 @@ protocol EventLiveDiscussionRepository {
 }
 
 protocol EventCommandRepository {
-    func createEvent(input: CreateEventInput) async throws -> WebEvent
+    func createEvent(input: CreateEventInput) async throws -> CreateEventResult
     func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent
     func deleteEvent(id: String) async throws
 }
@@ -172,13 +172,28 @@ struct EventLiveDiscussionRepositoryAdapter: EventLiveDiscussionRepository {
 
 struct EventCommandRepositoryAdapter: EventCommandRepository {
     private let service: WebFeatureService
+    private let accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)?
 
-    init(service: WebFeatureService) {
+    init(
+        service: WebFeatureService,
+        accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)? = nil
+    ) {
         self.service = service
+        self.accountEnforcementStatusProvider = accountEnforcementStatusProvider
     }
 
-    func createEvent(input: CreateEventInput) async throws -> WebEvent {
-        try await service.createEvent(input: input)
+    private func ensureAllowed(_ scopes: [AccountEnforcementScope]) async throws {
+        guard let accountEnforcementStatusProvider else { return }
+        guard let status = await accountEnforcementStatusProvider(),
+              let restriction = status.restriction(for: scopes) else {
+            return
+        }
+        throw ServiceError.accountEnforcementRestricted(restriction)
+    }
+
+    func createEvent(input: CreateEventInput) async throws -> CreateEventResult {
+        try await ensureAllowed([.eventCreate])
+        return try await service.createEvent(input: input)
     }
 
     func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent {
@@ -192,9 +207,23 @@ struct EventCommandRepositoryAdapter: EventCommandRepository {
 
 struct EventMediaRepositoryAdapter: EventMediaRepository, EventDiscussionMediaRepository {
     private let service: WebFeatureService
+    private let accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)?
 
-    init(service: WebFeatureService) {
+    init(
+        service: WebFeatureService,
+        accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)? = nil
+    ) {
         self.service = service
+        self.accountEnforcementStatusProvider = accountEnforcementStatusProvider
+    }
+
+    private func ensureAllowed(_ scopes: [AccountEnforcementScope]) async throws {
+        guard let accountEnforcementStatusProvider else { return }
+        guard let status = await accountEnforcementStatusProvider(),
+              let restriction = status.restriction(for: scopes) else {
+            return
+        }
+        throw ServiceError.accountEnforcementRestricted(restriction)
     }
 
     func uploadEventImage(
@@ -204,7 +233,8 @@ struct EventMediaRepositoryAdapter: EventMediaRepository, EventDiscussionMediaRe
         eventID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse {
-        try await service.uploadEventImage(
+        try await ensureAllowed([.mediaUpload])
+        return try await service.uploadEventImage(
             imageData: imageData,
             fileName: fileName,
             mimeType: mimeType,
@@ -214,7 +244,8 @@ struct EventMediaRepositoryAdapter: EventMediaRepository, EventDiscussionMediaRe
     }
 
     func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
-        try await service.uploadPostImage(
+        try await ensureAllowed([.mediaUpload])
+        return try await service.uploadPostImage(
             imageData: imageData,
             fileName: fileName,
             mimeType: mimeType
@@ -228,7 +259,8 @@ struct EventMediaRepositoryAdapter: EventMediaRepository, EventDiscussionMediaRe
         startDate: Date?,
         endDate: Date?
     ) async throws -> EventLineupImageImportResponse {
-        try await service.importEventLineupFromImage(
+        try await ensureAllowed([.mediaUpload])
+        return try await service.importEventLineupFromImage(
             imageData: imageData,
             fileName: fileName,
             mimeType: mimeType,
@@ -313,7 +345,7 @@ struct RatingRepositoryAdapter: RatingRepository {
         try await service.fetchRatingUnit(id: id)
     }
 
-    func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent {
+    func createRatingEvent(input: CreateRatingEventInput) async throws -> CreateContentResult<WebRatingEvent> {
         try await service.createRatingEvent(input: input)
     }
 
@@ -321,7 +353,7 @@ struct RatingRepositoryAdapter: RatingRepository {
         try await service.createRatingEventFromEvent(eventID: eventID)
     }
 
-    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit {
+    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> CreateContentResult<WebRatingUnit> {
         try await service.createRatingUnit(eventID: eventID, input: input)
     }
 
@@ -603,7 +635,7 @@ final class EventsModuleViewModel: ObservableObject {
 
     func toggleMarked(event: WebEvent, isLoggedIn: Bool) async {
         guard isLoggedIn else {
-            errorMessage = L("请先登录再标记活动", "Please log in before marking events.")
+            errorMessage = LT("请先登录再标记活动", "Please log in before marking events.", "イベントをマークするにはログインしてください。")
             return
         }
 

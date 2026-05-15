@@ -25,7 +25,10 @@ import notificationCenterRoutes from './routes/notification-center.routes';
 import checkinsV2Routes from './routes/checkins-v2.routes';
 import searchRoutes from './routes/search.routes';
 import virtualAssetRoutes from './routes/virtual-asset.routes';
+import contentSubmissionRoutes from './routes/content-submission.routes';
+import djEnrichmentRoutes from './routes/dj-enrichment.routes';
 import { adminRoutes } from './modules/admin';
+import { startDjEnrichmentWorker } from './services/dj-enrichment.service';
 import {
   registerNotificationCenterAPNSHandler,
   startNotificationEventCountdownScheduler,
@@ -102,6 +105,8 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/labels', labelRoutes);
 app.use('/api/admin/v1', adminRoutes);
 app.use('/api', preRegistrationRoutes);
+app.use('/api/content-submissions', contentSubmissionRoutes);
+app.use('/api/admin/v1/dj-enrichment', djEnrichmentRoutes);
 app.use('/', shareRoutes);
 app.use('/v1', bffRoutes);
 app.use('/v1', bffWebRoutes);
@@ -132,6 +137,7 @@ app.get('/api', (_req: Request, res: Response) => {
       adminV1: '/api/admin/v1',
       preRegistrations: '/api/pre-registrations',
       preRegistrationAdmin: '/api/admin/pre-registrations',
+      contentSubmissions: '/api/content-submissions',
       bffV1: '/v1',
       checkinsV2: '/v2/checkins',
     },
@@ -165,4 +171,5 @@ app.listen(port, () => {
   startNotificationFollowedDJUpdateScheduler();
   startNotificationFollowedBrandUpdateScheduler();
   startNotificationOutboxWorker();
+  startDjEnrichmentWorker();
 });

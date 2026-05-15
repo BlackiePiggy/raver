@@ -17,6 +17,7 @@ final class DemoAlignedChatNavigationBridge: ObservableObject {
 struct DemoAlignedChatView: UIViewControllerRepresentable {
     @Environment(\.appPush) private var appPush
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
 
     let conversation: Conversation
     let service: SocialService
@@ -28,6 +29,11 @@ struct DemoAlignedChatView: UIViewControllerRepresentable {
             conversation: conversation,
             service: service,
             virtualAssetRepository: virtualAssetRepository,
+            accountEnforcementStatusProvider: {
+                await MainActor.run {
+                    appState.accountEnforcementStatus
+                }
+            },
             onNavigate: { route in
                 appPush(route)
             },

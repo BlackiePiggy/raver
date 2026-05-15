@@ -4,6 +4,7 @@ import { toTencentIMUserID } from './tencent-im-id';
 import type { TencentIMBootstrap } from './tencent-im-types';
 import { tencentIMUserService } from './tencent-im-user.service';
 import { tencentIMUserSigService } from './tencent-im-usersig.service';
+import { accountEnforcementService } from '../account-enforcement.service';
 
 const prisma = new PrismaClient();
 
@@ -42,6 +43,17 @@ export const tencentIMTokenService = {
 
     if (!user || !user.isActive) {
       throw new Error('Tencent IM bootstrap cannot be issued for inactive user');
+    }
+
+    const loginGate = await accountEnforcementService.assertAllowed(userId, 'login');
+    const messageGate = await accountEnforcementService.assertAllowed(userId, 'message_send');
+    if (!loginGate.allowed || !messageGate.allowed) {
+      const blockingEnforcements = [
+        ...loginGate.blockingEnforcements,
+        ...messageGate.blockingEnforcements,
+      ];
+      const reasonCodes = Array.from(new Set(blockingEnforcements.map((item) => item.reasonCode)));
+      throw new Error(`Tencent IM bootstrap blocked by account enforcement: ${reasonCodes.join(',') || 'restricted'}`);
     }
 
     const profile = await tencentIMUserService.ensureUser(user);

@@ -16,9 +16,9 @@ private enum SquadOfflineMapFocusMode: CaseIterable {
 
     var accessibilityTitle: String {
         switch self {
-        case .smartCluster: return L("聚焦大多数成员", "Focus Main Cluster")
-        case .allMembers: return L("显示所有成员", "Show All Members")
-        case .eventVenue: return L("移动到活动场地", "Move to Event Venue")
+        case .smartCluster: return LT("聚焦大多数成员", "Focus Main Cluster", "大多数メンバーにフォーカス")
+        case .allMembers: return LT("显示所有成员", "Show All Members", "すべてのメンバーを表示")
+        case .eventVenue: return LT("移动到活动场地", "Move to Event Venue", "イベント会場へ移動")
         }
     }
 }
@@ -49,8 +49,33 @@ struct SquadOfflineActivityView: View {
     @State private var showEndConfirm = false
     @State private var showCreatorLeaveConfirm = false
     @State private var showInviteSheet = false
+    @State private var pendingLocationSharingAction: LocationSharingAction?
     @State private var participantToRemove: SquadOfflineActivityParticipant?
     @State private var now = Date()
+
+    private enum LocationSharingAction: Identifiable {
+        case join(SquadOfflineActivity)
+        case manualUpload(SquadOfflineActivity)
+        case centerOnMe(SquadOfflineActivity)
+
+        var id: String {
+            switch self {
+            case .join(let activity):
+                return "join:\(activity.id)"
+            case .manualUpload(let activity):
+                return "manual:\(activity.id)"
+            case .centerOnMe(let activity):
+                return "center:\(activity.id)"
+            }
+        }
+
+        var activity: SquadOfflineActivity {
+            switch self {
+            case .join(let activity), .manualUpload(let activity), .centerOnMe(let activity):
+                return activity
+            }
+        }
+    }
 
     private var isEndedActivity: Bool {
         activity?.isEnded == true
@@ -106,49 +131,49 @@ struct SquadOfflineActivityView: View {
             }
         }
         .confirmationDialog(
-            L("结束线下活动？", "End Offline Activity?"),
+            LT("结束线下活动？", "End Offline Activity?", "オフライン活動を終了しますか？"),
             isPresented: $showEndConfirm,
             titleVisibility: .visible
         ) {
-            Button(L("结束活动", "End Activity"), role: .destructive) {
+            Button(LT("结束活动", "End Activity", "活動を終了"), role: .destructive) {
                 if let activity {
                     Task { await endActivity(activity) }
                 }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
-            Text(L("结束后会在群聊中自动生成活动卡片，并写入历史活动记录。", "A summary card will be posted to chat and saved to activity history."))
+            Text(LT("结束后会在群聊中自动生成活动卡片，并写入历史活动记录。", "A summary card will be posted to chat and saved to activity history.", "終了後、グループチャットに活動カードが自動生成され、活動履歴に保存されます。"))
         }
         .confirmationDialog(
-            L("你是活动创建者", "You Created This Activity"),
+            LT("你是活动创建者", "You Created This Activity", "あなたが活動作成者です"),
             isPresented: $showCreatorLeaveConfirm,
             titleVisibility: .visible
         ) {
-            Button(L("结束活动", "End Activity"), role: .destructive) {
+            Button(LT("结束活动", "End Activity", "活動を終了"), role: .destructive) {
                 if let activity {
                     Task { await endActivity(activity) }
                 }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
-            Text(L("创建者不能直接退出，需要结束本次线下活动。", "The creator cannot leave directly. End this offline activity instead."))
+            Text(LT("创建者不能直接退出，需要结束本次线下活动。", "The creator cannot leave directly. End this offline activity instead.", "作成者は直接退出できません。このオフライン活動を終了してください。"))
         }
         .confirmationDialog(
-            L("移除队友？", "Remove Teammate?"),
+            LT("移除队友？", "Remove Teammate?", "チームメイトを削除しますか？"),
             isPresented: Binding(
                 get: { participantToRemove != nil },
                 set: { if !$0 { participantToRemove = nil } }
             ),
             titleVisibility: .visible
         ) {
-            Button(L("移出活动", "Remove from Activity"), role: .destructive) {
+            Button(LT("移出活动", "Remove from Activity", "活動から削除"), role: .destructive) {
                 if let participant = participantToRemove, let activity {
                     Task { await removeParticipant(participant, from: activity) }
                 }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
-            Text(participantToRemove.map { L("将 \($0.displayName) 移出本次线下活动。", "Remove \($0.displayName) from this offline activity.") } ?? "")
+            Text(participantToRemove.map { LT("将 \($0.displayName) 移出本次线下活动。", "Remove \($0.displayName) from this offline activity.", "\($0.displayName) をこのオフライン活動から移除します。") } ?? "")
         }
         .sheet(isPresented: $showInviteSheet) {
             SquadOfflineActivityInviteSheet(
@@ -157,6 +182,22 @@ struct SquadOfflineActivityView: View {
                 repository: activityRepository,
                 currentUserID: appState.session?.user.id ?? ""
             )
+        }
+        .confirmationDialog(
+            LT("共享活动定位？", "Share Activity Location?", "活動位置情報を共有しますか？"),
+            isPresented: Binding(
+                get: { pendingLocationSharingAction != nil },
+                set: { if !$0 { pendingLocationSharingAction = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingLocationSharingAction
+        ) { action in
+            Button(LT("继续", "Continue", "続ける")) {
+                Task { await continueLocationSharingAction(action) }
+            }
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
+        } message: { action in
+            Text(locationSharingMessage(for: action.activity))
         }
     }
 
@@ -171,7 +212,7 @@ struct SquadOfflineActivityView: View {
                     }
                     if let first = routeCoordinates.first {
                         Annotation(
-                            L("起点", "Start"),
+                            LT("起点", "Start", "始点"),
                             coordinate: first,
                             anchor: .center
                         ) {
@@ -180,7 +221,7 @@ struct SquadOfflineActivityView: View {
                     }
                     if let last = routeCoordinates.last {
                         Annotation(
-                            L("终点", "End"),
+                            LT("终点", "End", "終点"),
                             coordinate: last,
                             anchor: .center
                         ) {
@@ -251,7 +292,7 @@ struct SquadOfflineActivityView: View {
                 mapControlIcon("scope", isSelected: false)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(L("我的定位", "My Location"))
+            .accessibilityLabel(LT("我的定位", "My Location", "自分の位置"))
 
             ForEach(SquadOfflineMapFocusMode.allCases, id: \.self) { mode in
                 Button {
@@ -288,7 +329,7 @@ struct SquadOfflineActivityView: View {
             HStack(spacing: 8) {
                 presenceToggleButton(
                     imageName: "SquadRestroomStatusIcon",
-                    title: L("厕所", "Restroom"),
+                    title: LT("厕所", "Restroom", "トイレ"),
                     selectedColor: .green,
                     selectedForegroundColor: .white,
                     isSelected: participant.isInRestroom == true
@@ -303,7 +344,7 @@ struct SquadOfflineActivityView: View {
 
                 presenceToggleButton(
                     imageName: "SquadBuyingDrinkStatusIcon",
-                    title: L("买酒", "Buying Drinks"),
+                    title: LT("买酒", "Buying Drinks", "ドリンク購入"),
                     selectedColor: .yellow,
                     selectedForegroundColor: .black,
                     isSelected: participant.isBuyingDrink == true
@@ -360,7 +401,7 @@ struct SquadOfflineActivityView: View {
             if let activity {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(activity.displayTitle ?? L("我的队伍", "My Squad"))
+                        Text(activity.displayTitle ?? LT("我的队伍", "My Squad", "自分のチーム"))
                             .font(.system(size: 17, weight: .bold))
                             .foregroundStyle(.white)
                             .lineLimit(2)
@@ -380,11 +421,11 @@ struct SquadOfflineActivityView: View {
                             }
                         }
                         if activity.isEnded {
-                            Label(L("本次线下活动已结束", "This offline activity has ended"), systemImage: "checkmark.circle.fill")
+                            Label(LT("本次线下活动已结束", "This offline activity has ended", "このオフライン活動は終了しました"), systemImage: "checkmark.circle.fill")
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(.green.opacity(0.88))
                         } else {
-                            Text(L("\(activity.participantCount) 人正在活动中", "\(activity.participantCount) active"))
+                            Text(LT("\(activity.participantCount) 人正在活动中", "\(activity.participantCount) active", "\(activity.participantCount)人が活動中"))
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.62))
                         }
@@ -409,16 +450,16 @@ struct SquadOfflineActivityView: View {
                         .foregroundStyle(.white)
                         .background(Color.black.opacity(0.92), in: Circle())
                         .buttonStyle(.plain)
-                        .accessibilityLabel(L("退出活动", "Leave Activity"))
+                        .accessibilityLabel(LT("退出活动", "Leave Activity", "活動から退出"))
                     } else {
                         Button {
-                            Task { await joinActivity(activity) }
+                            pendingLocationSharingAction = .join(activity)
                         } label: {
                             if isJoining {
                                 ProgressView()
                                     .tint(.white)
                             } else {
-                                Label(L("加入", "Join"), systemImage: "location.fill")
+                                Label(LT("加入", "Join", "参加"), systemImage: "location.fill")
                             }
                         }
                         .buttonStyle(SquadOfflinePrimaryButtonStyle())
@@ -435,8 +476,8 @@ struct SquadOfflineActivityView: View {
                         .overlay(Color.white.opacity(0.18))
 
                     HStack(spacing: 24) {
-                        infoBlock(title: L("创建", "Created"), value: activity.startedAt.formatted(date: .numeric, time: .shortened))
-                        infoBlock(title: L("时长", "Duration"), value: durationText(from: activity.startedAt, to: now))
+                        infoBlock(title: LT("创建", "Created", "作成"), value: activity.startedAt.formatted(date: .numeric, time: .shortened))
+                        infoBlock(title: LT("时长", "Duration", "時間"), value: durationText(from: activity.startedAt, to: now))
                         Spacer()
                         panelActionButtons(activity)
                     }
@@ -450,7 +491,7 @@ struct SquadOfflineActivityView: View {
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.red.opacity(0.92))
                     } else if activity.isJoined {
-                        Text(L("定位会约每 5 分钟同步一次，用于活动轨迹与后续总结。", "Location syncs about every 5 minutes for routes and summaries."))
+                        Text(LT("定位会约每 5 分钟同步一次，用于活动轨迹与后续总结。", "Location syncs about every 5 minutes for routes and summaries.", "位置情報は約5分ごとに同期され、活動ルートと後続のまとめに使われます。"))
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.white.opacity(0.45))
                     }
@@ -517,7 +558,7 @@ struct SquadOfflineActivityView: View {
                     }
                     .foregroundStyle(.white)
                     .background(Color.white.opacity(0.12), in: Circle())
-                    .accessibilityLabel(L("移除队友", "Remove Teammate"))
+                    .accessibilityLabel(LT("移除队友", "Remove Teammate", "チームメイトを削除"))
                 }
 
                 Button {
@@ -529,7 +570,7 @@ struct SquadOfflineActivityView: View {
                 }
                 .foregroundStyle(.white)
                 .background(Color.white.opacity(0.12), in: Circle())
-                .accessibilityLabel(L("邀请队友", "Invite Teammate"))
+                .accessibilityLabel(LT("邀请队友", "Invite Teammate", "チームメイトを招待"))
             }
         }
     }
@@ -541,12 +582,12 @@ struct SquadOfflineActivityView: View {
 
             HStack(spacing: 18) {
                 summaryMetric(
-                    title: L("开始", "Started"),
+                    title: LT("开始", "Started", "開始"),
                     value: activity.startedAt.formatted(date: .numeric, time: .shortened),
                     icon: "calendar"
                 )
                 summaryMetric(
-                    title: L("时长", "Duration"),
+                    title: LT("时长", "Duration", "時間"),
                     value: durationText(from: activity.startedAt, to: activity.endedAt ?? now),
                     icon: "clock"
                 )
@@ -554,40 +595,40 @@ struct SquadOfflineActivityView: View {
 
             HStack(spacing: 18) {
                 summaryMetric(
-                    title: L("参与人次", "Participants"),
-                    value: L("\(activity.participantCount) 人", "\(activity.participantCount) people"),
+                    title: LT("参与人次", "Participants", "参加人数"),
+                    value: LT("\(activity.participantCount) 人", "\(activity.participantCount) people", "\(activity.participantCount)人"),
                     icon: "person.2"
                 )
                 summaryMetric(
-                    title: L("轨迹点", "Route Points"),
-                    value: L("\(activity.viewerRoute?.count ?? 0) 个", "\(activity.viewerRoute?.count ?? 0) points"),
+                    title: LT("轨迹点", "Route Points", "ルート点"),
+                    value: LT("\(activity.viewerRoute?.count ?? 0) 个", "\(activity.viewerRoute?.count ?? 0) points", "\(activity.viewerRoute?.count ?? 0)点"),
                     icon: "point.topleft.down.curvedto.point.bottomright.up"
                 )
             }
 
             HStack(spacing: 18) {
                 summaryMetric(
-                    title: L("厕所", "Restroom"),
-                    value: L("\(activity.viewerSummary?.restroomCount ?? 0) 次", "\(activity.viewerSummary?.restroomCount ?? 0) times"),
+                    title: LT("厕所", "Restroom", "トイレ"),
+                    value: LT("\(activity.viewerSummary?.restroomCount ?? 0) 次", "\(activity.viewerSummary?.restroomCount ?? 0) times", "\(activity.viewerSummary?.restroomCount ?? 0)回"),
                     icon: "toilet.fill"
                 )
                 summaryMetric(
-                    title: L("买东西", "Buying"),
-                    value: L("\(activity.viewerSummary?.buyingDrinkCount ?? 0) 次", "\(activity.viewerSummary?.buyingDrinkCount ?? 0) times"),
+                    title: LT("买东西", "Buying", "買い物"),
+                    value: LT("\(activity.viewerSummary?.buyingDrinkCount ?? 0) 次", "\(activity.viewerSummary?.buyingDrinkCount ?? 0) times", "\(activity.viewerSummary?.buyingDrinkCount ?? 0)回"),
                     icon: "mug.fill"
                 )
             }
 
             if let endedAt = activity.endedAt {
                 Label(
-                    L("结束于 \(endedAt.formatted(date: .numeric, time: .shortened))", "Ended at \(endedAt.formatted(date: .numeric, time: .shortened))"),
+                    LT("结束于 \(endedAt.formatted(date: .numeric, time: .shortened))", "Ended at \(endedAt.formatted(date: .numeric, time: .shortened))", "\(endedAt.formatted(date: .numeric, time: .shortened)) に終了"),
                     systemImage: "checkmark.seal.fill"
                 )
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.green.opacity(0.86))
             }
 
-            Text(L("你的活动轨迹已生成，后续可在这里接入 AI 总结同行伙伴、停留区域和舞台动线。", "Your route has been generated. AI summaries can later cover companions, linger zones, and stage movement."))
+            Text(LT("你的活动轨迹已生成，后续可在这里接入 AI 总结同行伙伴、停留区域和舞台动线。", "Your route has been generated. AI summaries can later cover companions, linger zones, and stage movement.", "活動ルートが生成されました。今後ここで同行メンバー、滞在エリア、ステージ移動のAIまとめに接続できます。"))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.48))
                 .fixedSize(horizontal: false, vertical: true)
@@ -620,7 +661,11 @@ struct SquadOfflineActivityView: View {
         HStack(spacing: 10) {
             if activity.isJoined {
                 Button {
-                    Task { await manuallyUploadLocation(activity) }
+                    if locationUploader.authorizationStatus == .notDetermined {
+                        pendingLocationSharingAction = .manualUpload(activity)
+                    } else {
+                        Task { await manuallyUploadLocation(activity) }
+                    }
                 } label: {
                     if locationUploader.isUploading {
                         ProgressView()
@@ -634,7 +679,8 @@ struct SquadOfflineActivityView: View {
                 }
                 .foregroundStyle(.white)
                 .background(Color.white.opacity(0.12), in: Circle())
-                .accessibilityLabel(L("手动更新定位", "Update Location Manually"))
+                .disabled(locationUploader.isUploading)
+                .accessibilityLabel(LT("手动更新定位", "Update Location Manually", "位置情報を手動更新"))
             }
 
             if activity.canManage {
@@ -654,7 +700,7 @@ struct SquadOfflineActivityView: View {
                 .foregroundStyle(.white)
                 .background(Color.red.opacity(0.82), in: Circle())
                 .disabled(isEnding)
-                .accessibilityLabel(L("结束活动", "End Activity"))
+                .accessibilityLabel(LT("结束活动", "End Activity", "活動を終了"))
             }
         }
     }
@@ -664,8 +710,8 @@ struct SquadOfflineActivityView: View {
             HStack(spacing: 10) {
                 Label(
                     locationUploader.lastUploadAt.map {
-                        L("上次同步 \($0.formatted(date: .omitted, time: .shortened))", "Last synced \($0.formatted(date: .omitted, time: .shortened))")
-                    } ?? L("尚未同步定位", "Location not synced yet"),
+                        LT("上次同步 \($0.formatted(date: .omitted, time: .shortened))", "Last synced \($0.formatted(date: .omitted, time: .shortened))", "前回同期 \($0.formatted(date: .omitted, time: .shortened))")
+                    } ?? LT("尚未同步定位", "Location not synced yet", "位置情報はまだ同期されていません"),
                     systemImage: "clock"
                 )
                 .font(.system(size: 12, weight: .medium))
@@ -674,7 +720,7 @@ struct SquadOfflineActivityView: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                Text(L("参与成员", "Participants"))
+                Text(LT("参与成员", "Participants", "参加メンバー"))
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white.opacity(0.86))
 
@@ -692,8 +738,8 @@ struct SquadOfflineActivityView: View {
                             }
                             .frame(height: 20, alignment: .center)
                             Text(participant.latestLocation.map {
-                                L("定位 \($0.capturedAt.formatted(date: .omitted, time: .shortened))", "Located \($0.capturedAt.formatted(date: .omitted, time: .shortened))")
-                            } ?? L("暂无定位", "No location yet"))
+                                LT("定位 \($0.capturedAt.formatted(date: .omitted, time: .shortened))", "Located \($0.capturedAt.formatted(date: .omitted, time: .shortened))", "位置 \($0.capturedAt.formatted(date: .omitted, time: .shortened))")
+                            } ?? LT("暂无定位", "No location yet", "位置情報はまだありません"))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.white.opacity(0.42))
                         }
@@ -736,10 +782,10 @@ struct SquadOfflineActivityView: View {
     private func participantPresenceChips(_ participant: SquadOfflineActivityParticipant) -> [(title: String, imageName: String, backgroundColor: Color, foregroundColor: Color)] {
         var chips: [(title: String, imageName: String, backgroundColor: Color, foregroundColor: Color)] = []
         if participant.isInRestroom == true {
-            chips.append((L("厕所", "Restroom"), "SquadRestroomStatusIcon", .green.opacity(0.88), .white))
+            chips.append((LT("厕所", "Restroom", "トイレ"), "SquadRestroomStatusIcon", .green.opacity(0.88), .white))
         }
         if participant.isBuyingDrink == true {
-            chips.append((L("买东西", "Buying"), "SquadBuyingDrinkStatusIcon", .yellow.opacity(0.9), .black.opacity(0.86)))
+            chips.append((LT("买东西", "Buying", "買い物"), "SquadBuyingDrinkStatusIcon", .yellow.opacity(0.9), .black.opacity(0.86)))
         }
         return chips
     }
@@ -762,7 +808,7 @@ struct SquadOfflineActivityView: View {
         .foregroundStyle(.red.opacity(0.95))
         .buttonStyle(.plain)
         .disabled(removingParticipantID != nil)
-        .accessibilityLabel(L("移除 \(participant.displayName)", "Remove \(participant.displayName)"))
+        .accessibilityLabel(LT("移除 \(participant.displayName)", "Remove \(participant.displayName)", "\(participant.displayName) を削除"))
     }
 
     private func infoBlock(title: String, value: String) -> some View {
@@ -813,7 +859,7 @@ struct SquadOfflineActivityView: View {
             }
             errorMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage ?? L("活动加载失败", "Failed to load activity")
+            errorMessage = error.userFacingMessage ?? LT("活动加载失败", "Failed to load activity", "活動の読み込みに失敗しました")
         }
     }
 
@@ -826,23 +872,25 @@ struct SquadOfflineActivityView: View {
             _ = await locationUploader.uploadNow(repository: locationRepository, squadID: squadID, activityID: activity.id)
             errorMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage ?? L("加入失败", "Failed to join")
+            errorMessage = error.userFacingMessage ?? LT("加入失败", "Failed to join", "参加に失敗しました")
         }
     }
 
     private func manuallyUploadLocation(_ activity: SquadOfflineActivity) async {
         guard activity.isJoined else { return }
+        guard !locationUploader.isUploading else { return }
         let didUpload = await locationUploader.uploadNow(repository: locationRepository, squadID: squadID, activityID: activity.id)
         if didUpload {
             shouldPreserveCameraOnNextActivityRefresh = true
             await loadActivity()
         } else {
-            errorMessage = locationUploader.errorMessage ?? L("定位更新失败", "Failed to update location")
+            errorMessage = locationUploader.errorMessage ?? LT("定位更新失败", "Failed to update location", "位置情報の更新に失敗しました")
         }
     }
 
     private func centerOnMyLocation() async {
         guard let activity else { return }
+        guard !locationUploader.isUploading else { return }
         if centerOnJoinedUserLocation(in: activity) {
             return
         }
@@ -852,13 +900,35 @@ struct SquadOfflineActivityView: View {
             return
         }
 
+        if locationUploader.authorizationStatus == .notDetermined {
+            pendingLocationSharingAction = .centerOnMe(activity)
+            return
+        }
+
         let didUpload = await locationUploader.uploadNow(repository: locationRepository, squadID: squadID, activityID: activity.id)
         if didUpload {
             await loadActivity()
             _ = centerOnJoinedUserLocation(in: self.activity)
         } else {
-            errorMessage = locationUploader.errorMessage ?? L("定位更新失败", "Failed to update location")
+            errorMessage = locationUploader.errorMessage ?? LT("定位更新失败", "Failed to update location", "位置情報の更新に失敗しました")
         }
+    }
+
+    private func continueLocationSharingAction(_ action: LocationSharingAction) async {
+        switch action {
+        case .join(let activity):
+            await joinActivity(activity)
+        case .manualUpload(let activity):
+            await manuallyUploadLocation(activity)
+        case .centerOnMe:
+            await centerOnMyLocation()
+        }
+    }
+
+    private func locationSharingMessage(for activity: SquadOfflineActivity) -> String {
+        let interval = max(60, activity.uploadIntervalSeconds)
+        let minutes = max(1, Int(ceil(Double(interval) / 60.0)))
+        return LT("加入后，你的活动定位会对本次 Squad 线下活动中的成员可见，约每 \(minutes) 分钟同步一次，用于活动地图、轨迹和结束后的总结。退出或活动结束会停止上传；历史轨迹后续可通过数据请求或删除账号流程处理。", "After joining, your activity location is visible to members in this Squad offline activity. It syncs about every \(minutes) minutes for the live map, route, and post-activity summary. Leaving or ending the activity stops uploads; historical routes can later be handled through data requests or account deletion.", "参加すると、あなたの活動位置情報はこのSquadオフライン活動のメンバーに表示されます。約\(minutes)分ごとに同期され、ライブマップ、ルート、活動後のまとめに使われます。退出または活動終了でアップロードは停止します。履歴ルートは後からデータ請求またはアカウント削除フローで処理できます。")
     }
 
     private func refreshAfterAutomaticLocationUpload(_ uploadAt: Date) async {
@@ -897,7 +967,7 @@ struct SquadOfflineActivityView: View {
             locationUploader.stop()
             errorMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage ?? L("退出失败", "Failed to leave")
+            errorMessage = error.userFacingMessage ?? LT("退出失败", "Failed to leave", "退出に失敗しました")
         }
     }
 
@@ -911,7 +981,7 @@ struct SquadOfflineActivityView: View {
             self.activity = endedActivity
             errorMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage ?? L("结束活动失败", "Failed to end activity")
+            errorMessage = error.userFacingMessage ?? LT("结束活动失败", "Failed to end activity", "活動の終了に失敗しました")
         }
     }
 
@@ -930,7 +1000,7 @@ struct SquadOfflineActivityView: View {
             )
             errorMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage ?? L("移除队友失败", "Failed to remove teammate")
+            errorMessage = error.userFacingMessage ?? LT("移除队友失败", "Failed to remove teammate", "チームメイトの削除に失敗しました")
         }
     }
 
@@ -950,7 +1020,7 @@ struct SquadOfflineActivityView: View {
             )
             errorMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage ?? L("状态更新失败", "Failed to update status")
+            errorMessage = error.userFacingMessage ?? LT("状态更新失败", "Failed to update status", "状態の更新に失敗しました")
         }
     }
 
@@ -1116,12 +1186,12 @@ struct SquadOfflineActivityView: View {
         let hours = seconds / 3600
         let minutes = (seconds % 3600) / 60
         if hours > 0 {
-            return L("\(hours) 小时 \(minutes) 分钟", "\(hours)h \(minutes)m")
+            return LT("\(hours) 小时 \(minutes) 分钟", "\(hours)h \(minutes)m", "\(hours)時間 \(minutes)分")
         }
         if minutes > 0 {
-            return L("\(minutes) 分钟", "\(minutes)m")
+            return LT("\(minutes) 分钟", "\(minutes)m", "\(minutes)分")
         }
-        return L("<1 分钟", "<1m")
+        return LT("<1 分钟", "<1m", "1分未満")
     }
 }
 
@@ -1221,14 +1291,14 @@ private struct SquadOfflineActivityInviteSheet: View {
                 if isLoading {
                     HStack(spacing: 10) {
                         ProgressView().controlSize(.small)
-                        Text(L("加载好友中...", "Loading friends..."))
+                        Text(LT("加载好友中...", "Loading friends...", "友達を読み込み中..."))
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
                 } else if availableFriends.isEmpty {
                     ContentUnavailableView(
-                        L("暂无可邀请好友", "No Friends Available"),
+                        LT("暂无可邀请好友", "No Friends Available", "招待できる友達はありません"),
                         systemImage: "person.2.slash",
-                        description: Text(L("当前没有可邀请进入小队的好友。", "There are no friends available to invite into this squad."))
+                        description: Text(LT("当前没有可邀请进入小队的好友。", "There are no friends available to invite into this squad.", "このSquadに招待できる友達はいません。"))
                     )
                 } else {
                     Section {
@@ -1249,31 +1319,31 @@ private struct SquadOfflineActivityInviteSheet: View {
                             .buttonStyle(.plain)
                         }
                     } footer: {
-                        Text(L("邀请好友加入小队后，对方可从群聊顶部胶囊进入并加入线下活动。", "After friends join the squad, they can enter from the chat banner and join the offline activity."))
+                        Text(LT("邀请好友加入小队后，对方可从群聊顶部胶囊进入并加入线下活动。", "After friends join the squad, they can enter from the chat banner and join the offline activity.", "友達がSquadに参加すると、グループチャット上部のバナーから入ってオフライン活動に参加できます。"))
                     }
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L("邀请队友", "Invite Teammates"))
+            .navigationTitle(LT("邀请队友", "Invite Teammates", "チームメイトを招待"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(L("取消", "Cancel")) {
+                    Button(LT("取消", "Cancel", "キャンセル")) {
                         dismiss()
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L("发送", "Send")) {
+                    Button(LT("发送", "Send", "送信")) {
                         Task { await sendInvites() }
                     }
                     .disabled(selectedUserIDs.isEmpty || isSubmitting || isLoading)
                 }
             }
-            .alert(L("操作失败", "Operation Failed"), isPresented: Binding(
+            .alert(LT("操作失败", "Operation Failed", "操作に失敗しました"), isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
             )) {
-                Button(L("确定", "OK"), role: .cancel) {}
+                Button(LT("确定", "OK", "OK"), role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
             }
@@ -1282,7 +1352,7 @@ private struct SquadOfflineActivityInviteSheet: View {
             }
             .overlay {
                 if isSubmitting {
-                    ProgressView(LL("邀请中..."))
+                    ProgressView(LT("邀请中...", "Inviting...", "招待中..."))
                 }
             }
         }
@@ -1306,7 +1376,7 @@ private struct SquadOfflineActivityInviteSheet: View {
         do {
             friends = try await repository.fetchFriends(userID: currentUserID, cursor: nil).users
         } catch {
-            errorMessage = error.userFacingMessage ?? L("加载好友失败", "Failed to load friends")
+            errorMessage = error.userFacingMessage ?? LT("加载好友失败", "Failed to load friends", "友達の読み込みに失敗しました")
         }
     }
 
@@ -1323,7 +1393,7 @@ private struct SquadOfflineActivityInviteSheet: View {
             }
             dismiss()
         } catch {
-            errorMessage = error.userFacingMessage ?? L("发送邀请失败", "Failed to send invite")
+            errorMessage = error.userFacingMessage ?? LT("发送邀请失败", "Failed to send invite", "招待の送信に失敗しました")
         }
     }
 

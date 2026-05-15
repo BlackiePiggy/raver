@@ -5,6 +5,7 @@ final class AppContainer: ObservableObject {
     let socialService: SocialService
     let webService: WebFeatureService
     let virtualAssetRepository: VirtualAssetRepository
+    private let accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)?
 
     var eventListRepository: EventListRepository {
         EventListRepositoryAdapter(service: webService)
@@ -23,15 +24,24 @@ final class AppContainer: ObservableObject {
     }
 
     var eventCommandRepository: EventCommandRepository {
-        EventCommandRepositoryAdapter(service: webService)
+        EventCommandRepositoryAdapter(
+            service: webService,
+            accountEnforcementStatusProvider: accountEnforcementStatusProvider
+        )
     }
 
     var eventMediaRepository: EventMediaRepository {
-        EventMediaRepositoryAdapter(service: webService)
+        EventMediaRepositoryAdapter(
+            service: webService,
+            accountEnforcementStatusProvider: accountEnforcementStatusProvider
+        )
     }
 
     var eventDiscussionMediaRepository: EventDiscussionMediaRepository {
-        EventMediaRepositoryAdapter(service: webService)
+        EventMediaRepositoryAdapter(
+            service: webService,
+            accountEnforcementStatusProvider: accountEnforcementStatusProvider
+        )
     }
 
     var eventCheckinRepository: EventCheckinRepository {
@@ -180,11 +190,17 @@ final class AppContainer: ObservableObject {
     }
 
     var squadActivityRepository: SquadActivityRepository {
-        SquadActivityRepositoryAdapter(service: socialService)
+        SquadActivityRepositoryAdapter(
+            service: socialService,
+            accountEnforcementStatusProvider: accountEnforcementStatusProvider
+        )
     }
 
     var locationSyncRepository: LocationSyncRepository {
-        LocationSyncRepositoryAdapter(service: socialService)
+        LocationSyncRepositoryAdapter(
+            service: socialService,
+            accountEnforcementStatusProvider: accountEnforcementStatusProvider
+        )
     }
 
     var profileUserRepository: ProfileUserRepository {
@@ -205,10 +221,12 @@ final class AppContainer: ObservableObject {
     init(
         socialService: SocialService = AppEnvironment.makeService(),
         webService: WebFeatureService = AppEnvironment.makeWebService(),
-        virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
+        virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository(),
+        accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)? = nil
     ) {
         self.socialService = socialService
         self.webService = webService
         self.virtualAssetRepository = virtualAssetRepository
+        self.accountEnforcementStatusProvider = accountEnforcementStatusProvider
     }
 }

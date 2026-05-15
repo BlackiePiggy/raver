@@ -22,7 +22,7 @@ enum OperationBannerStyle {
 
 enum OperationBannerAction {
     case none
-    case appRoute(AppRoute, title: String = L("点击跳转", "Open"))
+    case appRoute(AppRoute, title: String = LT("点击跳转", "Open", "開く"))
     case custom(title: String, action: () -> Void)
 }
 

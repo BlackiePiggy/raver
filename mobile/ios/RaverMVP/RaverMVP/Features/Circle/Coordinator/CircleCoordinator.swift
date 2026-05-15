@@ -118,8 +118,13 @@ struct CircleCoordinatorView<Content: View>: View {
         case .ratingEventCreate:
             CreateRatingEventSheet { input in
                 let repository: RatingRepository = appContainer.ratingRepository
-                let created = try await repository.createRatingEvent(input: input)
-                NotificationCenter.default.post(name: .circleRatingEventDidCreate, object: created)
+                let result = try await repository.createRatingEvent(input: input)
+                switch result {
+                case .created(let created):
+                    NotificationCenter.default.post(name: .circleRatingEventDidCreate, object: created)
+                case .submittedForReview:
+                    OperationBannerCenter.shared.success(LT("打分信息已提交审核", "Rating submitted for review", "評価情報を審査に送信しました"))
+                }
             }
         case .ratingEventImportFromEvent:
             CreateRatingEventFromEventSheet { sourceEventID in
@@ -130,12 +135,17 @@ struct CircleCoordinatorView<Content: View>: View {
         case let .ratingUnitCreate(eventID):
             CreateRatingUnitSheet(eventID: eventID) { input in
                 let repository: RatingRepository = appContainer.ratingRepository
-                let created = try await repository.createRatingUnit(eventID: eventID, input: input)
-                NotificationCenter.default.post(
-                    name: .circleRatingUnitDidCreate,
-                    object: created,
-                    userInfo: ["eventID": eventID]
-                )
+                let result = try await repository.createRatingUnit(eventID: eventID, input: input)
+                switch result {
+                case .created(let created):
+                    NotificationCenter.default.post(
+                        name: .circleRatingUnitDidCreate,
+                        object: created,
+                        userInfo: ["eventID": eventID]
+                    )
+                case .submittedForReview:
+                    OperationBannerCenter.shared.success(LT("打分项目已提交审核", "Rating unit submitted for review", "評価ユニットを審査に送信しました"))
+                }
             }
         }
     }
@@ -175,7 +185,7 @@ private struct CircleRouteLoaderScaffold<Content: View>: View {
                     .background(RaverTheme.background)
             case .offline(let message):
                 ScreenErrorCard(
-                    title: L("网络不可用", "Network Unavailable"),
+                    title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                     message: message,
                     retryAction: retry
                 )
@@ -205,7 +215,7 @@ private struct CirclePostEditorLoaderView: View {
     var body: some View {
         CircleRouteLoaderScaffold(
             phase: phase,
-            title: L("动态加载失败", "Post Failed to Load"),
+            title: LT("动态加载失败", "Post Failed to Load", "投稿の読み込みに失敗しました"),
             loadingView: AnyView(VStack(spacing: 12) {
                 EventDetailSkeletonView()
                 CommentSectionSkeletonView(count: 2)
@@ -246,7 +256,7 @@ private struct CirclePostEditorLoaderView: View {
             phase = post == nil ? .empty : .success
         } catch {
             phase = .failure(
-                message: error.userFacingMessage ?? L("动态加载失败，请稍后重试", "Failed to load post. Please try again later.")
+                message: error.userFacingMessage ?? LT("动态加载失败，请稍后重试", "Failed to load post. Please try again later.", "投稿を読み込めませんでした。時間をおいて再試行してください。")
             )
         }
     }

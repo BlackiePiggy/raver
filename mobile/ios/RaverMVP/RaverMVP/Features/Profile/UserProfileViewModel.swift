@@ -67,7 +67,7 @@ final class UserProfileViewModel: ObservableObject {
             bannerMessage = nil
             error = nil
         } catch {
-            let message = error.userFacingMessage ?? L("用户主页加载失败，请稍后重试", "Failed to load profile. Please try again later.")
+            let message = error.userFacingMessage ?? LT("用户主页加载失败，请稍后重试", "Failed to load profile. Please try again later.", "ユーザープロフィールを読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success

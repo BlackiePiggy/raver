@@ -90,6 +90,11 @@ export default function LoginPage() {
                 Register
               </Link>
             </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-xs text-text-tertiary">
+              <Link href="/legal/terms" className="hover:text-text-secondary transition-colors">Terms</Link>
+              <Link href="/legal/privacy" className="hover:text-text-secondary transition-colors">Privacy</Link>
+              <Link href="/legal/contact" className="hover:text-text-secondary transition-colors">Contact</Link>
+            </div>
           </div>
         </Card>
       </div>

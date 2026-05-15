@@ -24,6 +24,31 @@ private struct EventCardSharePresentation: Identifiable {
     let payload: EventShareCardPayload
 }
 
+private enum EventTimeZoneDisplay {
+    static func eventTimeZone(for event: WebEvent) -> TimeZone? {
+        guard let raw = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return nil
+        }
+        return TimeZone(identifier: raw)
+    }
+
+    static func slotTimeRange(_ slot: WebEventLineupSlot, event: WebEvent) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm"
+        formatter.timeZone = .current
+        let deviceText = "\(formatter.string(from: slot.startTime)) - \(formatter.string(from: slot.endTime))"
+        guard let zone = eventTimeZone(for: event),
+              zone.identifier != TimeZone.current.identifier else {
+            return deviceText
+        }
+        formatter.timeZone = zone
+        let eventText = "\(formatter.string(from: slot.startTime)) - \(formatter.string(from: slot.endTime))"
+        return "\(deviceText) · \(TimeZone.current.identifier) / \(eventText) · \(zone.identifier)"
+    }
+}
+
 struct EventLiveDiscussionView: View {
     @Environment(\.appPush) private var appPush
     @Environment(\.dismiss) private var dismiss
@@ -59,7 +84,7 @@ struct EventLiveDiscussionView: View {
 
         var actName: String {
             let name = act.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-            return name.isEmpty ? LL("待公布 DJ") : name
+            return name.isEmpty ? LT("待公布 DJ", "待公布 DJ", "DJ発表待ち") : name
         }
     }
 
@@ -167,11 +192,11 @@ struct EventLiveDiscussionView: View {
             guard !newValue.isEmpty else { return }
             Task { await uploadImages(from: newValue) }
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("知道了", "OK"), role: .cancel) { errorMessage = nil }
+            Button(LT("知道了", "OK", "OK"), role: .cancel) { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
         }
@@ -244,7 +269,7 @@ struct EventLiveDiscussionView: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isLiveStagePanelCollapsed ? L("展开正在表演", "Expand now playing") : L("收起正在表演", "Collapse now playing"))
+        .accessibilityLabel(isLiveStagePanelCollapsed ? LT("展开正在表演", "Expand now playing", "現在出演中を展開") : LT("收起正在表演", "Collapse now playing", "現在出演中を閉じる"))
     }
 
     private var liveDiscussionHeaderBar: some View {
@@ -297,16 +322,16 @@ struct EventLiveDiscussionView: View {
             CommentSectionSkeletonView(count: 5)
         case .failure(let message), .offline(let message):
             ScreenErrorCard(
-                title: L("讨论区加载失败", "Discussion Failed to Load"),
+                title: LT("讨论区加载失败", "Discussion Failed to Load", "ディスカッションの読み込みに失敗しました"),
                 message: message
             ) {
                 Task { await loadComments() }
             }
         case .empty:
             ContentUnavailableView(
-                L("还没有现场讨论", "No Live Discussion Yet"),
+                LT("还没有现场讨论", "No Live Discussion Yet", "ライブディスカッションはまだありません"),
                 systemImage: "bubble.left.and.bubble.right",
-                description: Text(L("发一条评论，和现场的人一起聊。", "Post a comment and chat with people at the event."))
+                description: Text(LT("发一条评论，和现场的人一起聊。", "Post a comment and chat with people at the event.", "コメントを投稿して現地の人と話しましょう。"))
             )
             .padding(.top, 44)
         case .success:
@@ -355,7 +380,7 @@ struct EventLiveDiscussionView: View {
 
                 VStack(alignment: .leading, spacing: 7) {
                     if let reply = comment.replyToAuthor {
-                        Text(L("回复 \(reply.displayName)", "Reply to \(reply.displayName)"))
+                        Text(LT("回复 \(reply.displayName)", "Reply to \(reply.displayName)", "\(reply.displayName) に返信"))
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -384,7 +409,7 @@ struct EventLiveDiscussionView: View {
                     Button {
                         replyTarget = comment
                     } label: {
-                        Text(L("回复", "Reply"))
+                        Text(LT("回复", "Reply", "返信"))
                     }
                     .buttonStyle(.plain)
 
@@ -413,7 +438,7 @@ struct EventLiveDiscussionView: View {
         VStack(spacing: 8) {
             if let replyTarget {
                 HStack(spacing: 8) {
-                    Text(L("回复 \(replyTarget.author.displayName)", "Reply to \(replyTarget.author.displayName)"))
+                    Text(LT("回复 \(replyTarget.author.displayName)", "Reply to \(replyTarget.author.displayName)", "\(replyTarget.author.displayName) に返信"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(1)
@@ -464,7 +489,7 @@ struct EventLiveDiscussionView: View {
                 .buttonStyle(.plain)
                 .disabled(isUploadingImage || imageURLs.count >= 3)
 
-                TextField(L("发送现场评论...", "Send a live comment..."), text: $draft, axis: .vertical)
+                TextField(LT("发送现场评论...", "Send a live comment...", "現地コメントを送信..."), text: $draft, axis: .vertical)
                     .lineLimit(1...4)
                     .submitLabel(.send)
                     .onSubmit {
@@ -528,14 +553,12 @@ struct EventLiveDiscussionView: View {
     private func liveCommentTimeText(for date: Date) -> String {
         let seconds = max(0, Date().timeIntervalSince(date))
         if seconds < 60 {
-            return L("刚刚", "Just now")
+            return LT("刚刚", "Just now", "たった今")
         }
 
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
-        formatter.locale = AppLanguagePreference.current.effectiveLanguage == .en
-            ? Locale(identifier: "en_US_POSIX")
-            : Locale(identifier: "zh_Hans_CN")
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 
@@ -554,7 +577,7 @@ struct EventLiveDiscussionView: View {
         if !snapshots.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    Text(LL("正在表演"))
+                    Text(LT("正在表演", "正在表演", "出演中"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
                     Spacer(minLength: 0)
@@ -562,7 +585,7 @@ struct EventLiveDiscussionView: View {
                         showLiveStageOverlay = true
                     } label: {
                         HStack(spacing: 4) {
-                            Text(L("全部舞台", "All stages"))
+                            Text(LT("全部舞台", "All stages", "すべてのステージ"))
                             Image(systemName: "chevron.right")
                         }
                         .font(.caption.weight(.semibold))
@@ -601,12 +624,12 @@ struct EventLiveDiscussionView: View {
             } else if let next = snapshot.nextAct {
                 liveActIdentityArea(
                     next.act,
-                    timeText: L("下一场 \(next.timeText)", "Next \(next.timeText)"),
+                    timeText: LT("下一场 \(next.timeText)", "Next \(next.timeText)", "次は \(next.timeText)"),
                     avatarSize: 36,
                     font: .subheadline.weight(.semibold)
                 )
             } else {
-                Text(LL("当前暂无演出"))
+                Text(LT("当前暂无演出", "当前暂无演出", "現在の出演はありません"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
                     .lineLimit(1)
@@ -706,7 +729,7 @@ struct EventLiveDiscussionView: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
             if snapshot.currentAct != nil {
-                livePill(LL("LIVE"))
+                livePill(LT("LIVE", "LIVE", "LIVE"))
             }
         }
     }
@@ -751,7 +774,7 @@ struct EventLiveDiscussionView: View {
 
             let displayStageName: String = {
                 let raw = firstSlot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                return raw.isEmpty ? LL("未知舞台") : raw
+                return raw.isEmpty ? LT("未知舞台", "未知舞台", "不明なステージ") : raw
             }()
 
             let currentSlot = sortedSlots.first { $0.startTime <= now && now <= $0.endTime }
@@ -775,8 +798,8 @@ struct EventLiveDiscussionView: View {
                 stageName: displayStageName,
                 sortIndex: stageSortIndex(firstSlot.stageName, event: event),
                 firstStartTime: firstSlot.startTime,
-                currentAct: currentSlot.map(makeStageTimelineEntry(from:)),
-                nextAct: nextSlot.map(makeStageTimelineEntry(from:))
+                currentAct: currentSlot.map { makeStageTimelineEntry(from: $0, event: event) },
+                nextAct: nextSlot.map { makeStageTimelineEntry(from: $0, event: event) }
             )
         }
         .sorted { lhs, rhs in
@@ -786,11 +809,11 @@ struct EventLiveDiscussionView: View {
         }
     }
 
-    private func makeStageTimelineEntry(from slot: WebEventLineupSlot) -> EventStageTimelineEntry {
+    private func makeStageTimelineEntry(from slot: WebEventLineupSlot, event: WebEvent) -> EventStageTimelineEntry {
         EventStageTimelineEntry(
             id: slot.id,
             act: EventLineupActCodec.parse(slot: slot),
-            timeText: "\(Self.liveStageTimeFormatter.string(from: slot.startTime)) - \(Self.liveStageTimeFormatter.string(from: slot.endTime))",
+            timeText: EventTimeZoneDisplay.slotTimeRange(slot, event: event),
             startTime: slot.startTime,
             endTime: slot.endTime
         )
@@ -845,7 +868,7 @@ struct EventLiveDiscussionView: View {
         let content = HStack(alignment: .center, spacing: 8) {
             lineupPerformerAvatar(performer, size: avatarSize, emphasize: emphasizeAvatar)
             VStack(alignment: .leading, spacing: 2) {
-                Text(performer.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? LL("待公布 DJ") : performer.name)
+                Text(performer.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? LT("待公布 DJ", "待公布 DJ", "DJ発表待ち") : performer.name)
                     .font(font)
                     .foregroundStyle(RaverTheme.primaryText)
                     .lineLimit(1)
@@ -966,7 +989,7 @@ struct EventLiveDiscussionView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(LL("舞台实时演出"))
+                            Text(LT("舞台实时演出", "舞台实时演出", "ステージライブ出演"))
                                 .font(.title3.weight(.bold))
                                 .foregroundStyle(RaverTheme.primaryText)
                             Text(event.name)
@@ -995,7 +1018,7 @@ struct EventLiveDiscussionView: View {
                     }
 
                     if snapshots.isEmpty {
-                        Text(LL("当前还没有可展示的舞台时间表。"))
+                        Text(LT("当前还没有可展示的舞台时间表。", "当前还没有可展示的舞台时间表。", "表示できるステージタイムテーブルはまだありません。"))
                             .font(.subheadline)
                             .foregroundStyle(RaverTheme.secondaryText)
                             .padding(.vertical, 18)
@@ -1040,20 +1063,20 @@ struct EventLiveDiscussionView: View {
 
             if let current = snapshot.currentAct {
                 liveStageOverlayTimelineRow(
-                    title: L("现在", "Now"),
+                    title: LT("现在", "Now", "現在"),
                     titleColor: RaverTheme.accent,
                     entry: current,
                     emphasizeAvatar: true
                 )
             } else {
-                Text(LL("当前暂无正在演出的 DJ"))
+                Text(LT("当前暂无正在演出的 DJ", "当前暂无正在演出的 DJ", "現在出演中のDJはいません"))
                     .font(.subheadline)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
 
             if let next = snapshot.nextAct {
                 liveStageOverlayTimelineRow(
-                    title: L("接下来", "Next"),
+                    title: LT("接下来", "Next", "次へ"),
                     titleColor: RaverTheme.secondaryText,
                     entry: next
                 )
@@ -1100,7 +1123,7 @@ struct EventLiveDiscussionView: View {
             comments = page.comments
             phase = page.comments.isEmpty ? .empty : .success
         } catch {
-            phase = .failure(message: error.userFacingMessage ?? L("讨论区加载失败，请稍后重试", "Failed to load discussion. Please try again later."))
+            phase = .failure(message: error.userFacingMessage ?? LT("讨论区加载失败，请稍后重试", "Failed to load discussion. Please try again later.", "ディスカッションを読み込めませんでした。時間をおいて再試行してください。"))
         }
     }
 
@@ -1156,7 +1179,7 @@ struct EventLiveDiscussionView: View {
                 )
                 imageURLs.append(upload.url)
             } catch {
-            errorMessage = error.userFacingMessage ?? L("图片上传失败", "Image upload failed.")
+            errorMessage = error.userFacingMessage ?? LT("图片上传失败", "Image upload failed.", "画像のアップロードに失敗しました。")
         }
     }
     }
@@ -1281,9 +1304,9 @@ struct EventDetailView: View {
         var toggleTitle: String {
             switch self {
             case .alphabetical:
-                return L("按热度", "By popularity")
+                return LT("按热度", "By popularity", "人気順")
             case .popularity:
-                return L("按字母", "A-Z")
+                return LT("按字母", "A-Z", "アルファベット順")
             }
         }
 
@@ -1292,7 +1315,7 @@ struct EventDetailView: View {
             case .alphabetical:
                 return "A-Z"
             case .popularity:
-                return L("热度", "Hot")
+                return LT("热度", "Hot", "人気")
             }
         }
 
@@ -1343,6 +1366,7 @@ struct EventDetailView: View {
     @State private var shareMorePresentation: EventCardSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: EventCardSharePresentation?
+    @State private var reportTarget: ReportSheetTarget?
     @State private var eventDiscussionPosts: [Post] = []
     @State private var eventDiscussionPhase: LoadPhase = .idle
     @State private var isLoadingEventDiscussion = false
@@ -1361,12 +1385,12 @@ struct EventDetailView: View {
 
         var title: String {
             switch self {
-            case .info: return L("信息", "Info")
-            case .posts: return L("动态", "Posts")
+            case .info: return LT("信息", "Info", "情報")
+            case .posts: return LT("动态", "Posts", "投稿")
             case .news: return "News"
-            case .lineup: return L("阵容", "Lineup")
-            case .schedule: return L("时间表", "Timetable")
-            case .ratings: return L("打分", "Ratings")
+            case .lineup: return LT("阵容", "Lineup", "ラインナップ")
+            case .schedule: return LT("时间表", "Timetable", "タイムテーブル")
+            case .ratings: return LT("打分", "Ratings", "評価")
             case .sets: return "Sets"
             }
         }
@@ -1401,7 +1425,7 @@ struct EventDetailView: View {
 
         var actName: String {
             let name = act.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-            return name.isEmpty ? LL("待公布 DJ") : name
+            return name.isEmpty ? LT("待公布 DJ", "待公布 DJ", "DJ発表待ち") : name
         }
     }
 
@@ -1487,7 +1511,7 @@ struct EventDetailView: View {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .controlSize(.small)
-                            Text(LL("正在定位场地..."))
+                            Text(LT("正在定位场地...", "正在定位场地...", "会場を特定中..."))
                                 .font(.caption)
                                 .foregroundStyle(.white)
                         }
@@ -1512,7 +1536,7 @@ struct EventDetailView: View {
                     .padding(.top, 12)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 }
-                .raverSystemNavigation(title: L("活动场地", "Event Venue"))
+                .raverSystemNavigation(title: LT("活动场地", "Event Venue", "イベント会場"))
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
@@ -1543,7 +1567,7 @@ struct EventDetailView: View {
                         }
 
                         if let coordinate = resolvedCoordinate {
-                            Text(String(format: L("纬度 %.6f，经度 %.6f", "Lat %.6f, Lng %.6f"), coordinate.latitude, coordinate.longitude))
+                            Text(String(format: LT("纬度 %.6f，经度 %.6f", "Lat %.6f, Lng %.6f", "緯度 %.6f、経度 %.6f"), coordinate.latitude, coordinate.longitude))
                                 .font(.caption2)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
@@ -1552,7 +1576,7 @@ struct EventDetailView: View {
                             Button {
                                 UIPasteboard.general.string = context.venueDisplayText
                             } label: {
-                                Label(LL("复制地址"), systemImage: "doc.on.doc")
+                                Label(LT("复制地址", "复制地址", "住所をコピー"), systemImage: "doc.on.doc")
                                     .font(.caption.weight(.semibold))
                             }
                             .buttonStyle(.bordered)
@@ -1563,7 +1587,7 @@ struct EventDetailView: View {
                                     showMapAppPicker = true
                                 }
                             } label: {
-                                Label(LL("打开地图App"), systemImage: "arrow.up.right.square")
+                                Label(LT("打开地图App", "打开地图App", "地図アプリを開く"), systemImage: "arrow.up.right.square")
                                     .font(.caption.weight(.semibold))
                             }
                             .buttonStyle(.borderedProminent)
@@ -1581,13 +1605,13 @@ struct EventDetailView: View {
                         Divider().opacity(0.25)
                     }
                 }
-                .confirmationDialog(L("选择地图应用", "Choose Map App"), isPresented: $showMapAppPicker, titleVisibility: .visible) {
+                .confirmationDialog(LT("选择地图应用", "Choose Map App", "地図アプリを選択"), isPresented: $showMapAppPicker, titleVisibility: .visible) {
                     ForEach(availableMapApps) { app in
                         Button(app.rawValue) {
                             openExternalMap(app)
                         }
                     }
-                    Button(L("取消", "Cancel"), role: .cancel) {}
+                    Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
                 }
                 .task {
                     refreshAvailableMapApps()
@@ -1651,7 +1675,7 @@ struct EventDetailView: View {
 
         private func geocodeAddress(_ address: String) async throws -> CLPlacemark? {
             try await withCheckedThrowingContinuation { continuation in
-                CLGeocoder().geocodeAddressString(address, in: nil, preferredLocale: Locale(identifier: "zh_CN")) { placemarks, error in
+                CLGeocoder().geocodeAddressString(address, in: nil, preferredLocale: Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)) { placemarks, error in
                     if let error {
                         continuation.resume(throwing: error)
                         return
@@ -1806,7 +1830,7 @@ struct EventDetailView: View {
                                 ProgressView()
                                     .controlSize(.small)
                                     .tint(.white)
-                                Text(LL("加载地图中..."))
+                                Text(LT("加载地图中...", "Loading map...", "地図を読み込み中..."))
                                     .font(.caption2)
                                     .foregroundStyle(Color.white.opacity(0.82))
                             }
@@ -1842,7 +1866,7 @@ struct EventDetailView: View {
 
         private func geocodeAddress(_ address: String) async throws -> CLPlacemark? {
             try await withCheckedThrowingContinuation { continuation in
-                CLGeocoder().geocodeAddressString(address, in: nil, preferredLocale: Locale(identifier: "zh_CN")) { placemarks, error in
+                CLGeocoder().geocodeAddressString(address, in: nil, preferredLocale: Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)) { placemarks, error in
                     if let error {
                         continuation.resume(throwing: error)
                         return
@@ -1867,7 +1891,7 @@ struct EventDetailView: View {
                 .padding(16)
                 .padding(.top, 96)
             case .empty:
-                ContentUnavailableView(LL("活动不存在"), systemImage: "calendar.badge.exclamationmark")
+                ContentUnavailableView(LT("活动不存在", "活动不存在", "イベントが存在しません"), systemImage: "calendar.badge.exclamationmark")
             case .success:
                 if let event {
                     ZStack(alignment: .top) {
@@ -1892,13 +1916,13 @@ struct EventDetailView: View {
                         if isRefreshing || bannerMessage != nil {
                             VStack(alignment: .leading, spacing: 10) {
                                 if isRefreshing {
-                                    InlineLoadingBadge(title: L("正在更新活动详情", "Updating event details"))
+                                    InlineLoadingBadge(title: LT("正在更新活动详情", "Updating event details", "イベント詳細を更新中"))
                                 }
                                 if let bannerMessage {
                                     ScreenStatusBanner(
                                         message: bannerMessage,
                                         style: .error,
-                                        actionTitle: L("重试", "Retry")
+                                        actionTitle: LT("重试", "Retry", "再試行")
                                     ) {
                                         Task { await load() }
                                     }
@@ -1922,8 +1946,8 @@ struct EventDetailView: View {
                             ),
                             initialSelectedDayIDs: selectedEventCheckinDayIDs,
                             initialSelectedDJIDsByDayID: selectedEventCheckinDJIDsByDayID,
-                            confirmButtonTitle: activeAttendanceCheckin == nil ? L("确认打卡", "Confirm Check-in") : L("保存修改", "Save Changes"),
-                            destructiveButtonTitle: activeAttendanceCheckin == nil ? nil : L("取消打卡", "Cancel Check-in"),
+                            confirmButtonTitle: activeAttendanceCheckin == nil ? LT("确认打卡", "Confirm Check-in", "チェックインを確認") : LT("保存修改", "Save Changes", "変更を保存"),
+                            destructiveButtonTitle: activeAttendanceCheckin == nil ? nil : LT("取消打卡", "Cancel Check-in", "チェックインを取消"),
                             onDelete: activeAttendanceCheckin == nil ? nil : {
                                 try await cancelEventCheckin()
                             }
@@ -1938,7 +1962,7 @@ struct EventDetailView: View {
                         EventVenueMapSheet(context: context)
                     }
                 } else {
-                    ContentUnavailableView(LL("活动不存在"), systemImage: "calendar.badge.exclamationmark")
+                    ContentUnavailableView(LT("活动不存在", "活动不存在", "イベントが存在しません"), systemImage: "calendar.badge.exclamationmark")
                 }
             }
         }
@@ -1982,16 +2006,20 @@ struct EventDetailView: View {
                 }
             ) { conversation in
                 showWidgetStatusBanner(
-                    message: L(
-                    "已分享到 \(conversation.title)",
-                    "Shared to \(conversation.title)"
-                    ),
+                    message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                     conversation: conversation
                 )
             } preview: {
                 EventSharePreviewCard(payload: presentation.payload)
             }
             .presentationDetents([.fraction(0.76), .large])
+        }
+        .sheet(item: $reportTarget) { target in
+            ReportSheet(target: target) { _, _ in
+                showWidgetStatusBanner(message: LT("举报已提交", "Report submitted", "報告を送信しました"))
+            }
+            .environmentObject(appState)
+            .presentationDetents([.large])
         }
         .task {
             await refreshManualCacheState()
@@ -2010,28 +2038,28 @@ struct EventDetailView: View {
                   created.boundEventIDs.contains(eventID) || created.eventID == eventID else { return }
             mergeEventDiscussionPost(created)
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
-        .alert(L("DJ 信息待补充", "DJ Info Needed"), isPresented: Binding(
+        .alert(LT("DJ 信息待补充", "DJ Info Needed", "DJ情報が不足しています"), isPresented: Binding(
             get: { pendingUnboundDJName != nil },
             set: { if !$0 { pendingUnboundDJName = nil } }
         )) {
-            Button(L("关闭", "Close"), role: .cancel) {
+            Button(LT("关闭", "Close", "閉じる"), role: .cancel) {
                 pendingUnboundDJName = nil
             }
-            Button(L("去补充", "Add Info")) {
+            Button(LT("去补充", "Add Info", "情報を追加")) {
                 let name = pendingUnboundDJName
                 pendingUnboundDJName = nil
                 appPush(.discover(.djImport(initialName: name)))
             }
         } message: {
-            Text(L("这个 DJ 暂未建立唯一档案，补充资料后就可以跳转到详情页。", "This DJ does not have a unique profile yet. Add the info to enable detail navigation."))
+            Text(LT("这个 DJ 暂未建立唯一档案，补充资料后就可以跳转到详情页。", "This DJ does not have a unique profile yet. Add the info to enable detail navigation.", "このDJにはまだ固有プロフィールがありません。情報を追加すると詳細ページへ移動できます。"))
         }
         .overlay {
             if let presentation = shareMorePresentation {
@@ -2057,10 +2085,7 @@ struct EventDetailView: View {
                             }
                         ) { conversation in
                             showWidgetStatusBanner(
-                                message: L(
-                                "已分享到 \(conversation.title)",
-                                "Shared to \(conversation.title)"
-                                ),
+                                message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                                 conversation: conversation
                             )
                         } onMoreChats: {
@@ -2212,16 +2237,16 @@ struct EventDetailView: View {
                 .task { await loadEventDiscussionPosts(force: false) }
         case .failure(let message), .offline(let message):
             ScreenErrorCard(
-                title: L("讨论区加载失败", "Discussion Failed to Load"),
+                title: LT("讨论区加载失败", "Discussion Failed to Load", "ディスカッションの読み込みに失敗しました"),
                 message: message
             ) {
                 Task { await loadEventDiscussionPosts(force: true) }
             }
         case .empty:
             ContentUnavailableView(
-                L("还没有讨论", "No Discussion Yet"),
+                LT("还没有讨论", "No Discussion Yet", "ディスカッションはまだありません"),
                 systemImage: "bubble.left.and.bubble.right",
-                description: Text(LL("发布带活动标签的动态，会自动出现在这里。"))
+                description: Text(LT("发布带活动标签的动态，会自动出现在这里。", "发布带活动标签的动态，会自动出现在这里。", "イベントタグ付きの投稿はここに自動表示されます。"))
             )
             .padding(.vertical, 10)
         case .success:
@@ -2264,7 +2289,7 @@ struct EventDetailView: View {
             if isLoadingEventDiscussion {
                 HStack {
                     Spacer()
-                    ProgressView(L("加载更多...", "Loading more..."))
+                    ProgressView(LT("加载更多...", "Loading more...", "さらに読み込み中..."))
                     Spacer()
                 }
                 .padding(.vertical, 8)
@@ -2275,10 +2300,10 @@ struct EventDetailView: View {
     @ViewBuilder
     private var eventNewsTabContent: some View {
         if isLoadingRelatedArticles && relatedArticles.isEmpty {
-            ProgressView(LL("正在加载相关资讯..."))
+            ProgressView(LT("正在加载相关资讯...", "正在加载相关资讯...", "関連ニュースを読み込み中..."))
                 .padding(.vertical, 8)
         } else if relatedArticles.isEmpty {
-            Text(LL("暂无相关资讯"))
+            Text(LT("暂无相关资讯", "暂无相关资讯", "関連ニュースはありません"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
@@ -2312,10 +2337,10 @@ struct EventDetailView: View {
                     .background(RaverTheme.accent.opacity(0.14), in: Circle())
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(L("发布活动讨论", "Post to Event Discussion"))
+                    Text(LT("发布活动讨论", "Post to Event Discussion", "イベントディスカッションに投稿"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
-                    Text(L("自动带上 \(event.name) 标签", "Tagged with \(event.name) automatically"))
+                    Text(LT("自动带上 \(event.name) 标签", "Tagged with \(event.name) automatically", "\(event.name) タグが自動で付きます"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(1)
@@ -2341,12 +2366,12 @@ struct EventDetailView: View {
                 LiveActivityBarsView(color: Color(red: 0.18, green: 0.88, blue: 0.42))
                     .frame(width: 15, height: 14)
 
-                Text(LL("现场讨论区"))
+                Text(LT("现场讨论区", "现场讨论区", "ライブディスカッション"))
                     .font(.caption.weight(.bold))
 
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.bold))
-                    .accessibilityLabel(LL("进入现场讨论区"))
+                    .accessibilityLabel(LT("进入现场讨论区", "进入现场讨论区", "ライブディスカッションへ"))
             }
             .foregroundStyle(Color.white)
             .padding(.horizontal, 10)
@@ -2370,16 +2395,16 @@ struct EventDetailView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "dot.radiowaves.left.and.right")
                         .foregroundStyle(RaverTheme.accent)
-                    Text(LL("正在表演"))
+                    Text(LT("正在表演", "正在表演", "出演中"))
                         .font(.headline)
                     Spacer()
-                    Text(L("\(acts.count) 个舞台", "\(acts.count) stages"))
+                    Text(LT("\(acts.count) 个舞台", "\(acts.count) stages", "\(acts.count) ステージ"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
 
                 if acts.isEmpty {
-                    Text(LL("当前没有匹配到正在演出的时间表。"))
+                    Text(LT("当前没有匹配到正在演出的时间表。", "当前没有匹配到正在演出的时间表。", "現在出演中のタイムテーブルは見つかりません。"))
                         .font(.subheadline)
                         .foregroundStyle(RaverTheme.secondaryText)
                 } else {
@@ -2453,7 +2478,7 @@ struct EventDetailView: View {
 
             let displayStageName: String = {
                 let raw = firstSlot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                return raw.isEmpty ? LL("未知舞台") : raw
+                return raw.isEmpty ? LT("未知舞台", "未知舞台", "不明なステージ") : raw
             }()
 
             let currentSlot = sortedSlots.first { $0.startTime <= now && now <= $0.endTime }
@@ -2465,8 +2490,8 @@ struct EventDetailView: View {
                 stageName: displayStageName,
                 sortIndex: stageSortIndex(firstSlot.stageName, event: event),
                 firstStartTime: firstSlot.startTime,
-                currentAct: currentSlot.map(makeStageTimelineEntry(from:)),
-                nextAct: nextSlot.map(makeStageTimelineEntry(from:))
+                currentAct: currentSlot.map { makeStageTimelineEntry(from: $0, event: event) },
+                nextAct: nextSlot.map { makeStageTimelineEntry(from: $0, event: event) }
             )
         }
         .sorted { lhs, rhs in
@@ -2476,11 +2501,11 @@ struct EventDetailView: View {
         }
     }
 
-    private func makeStageTimelineEntry(from slot: WebEventLineupSlot) -> EventStageTimelineEntry {
+    private func makeStageTimelineEntry(from slot: WebEventLineupSlot, event: WebEvent) -> EventStageTimelineEntry {
         EventStageTimelineEntry(
             id: slot.id,
             act: EventLineupActCodec.parse(slot: slot),
-            timeText: "\(Self.eventSlotTimeFormatter.string(from: slot.startTime)) - \(Self.eventSlotTimeFormatter.string(from: slot.endTime))",
+            timeText: EventTimeZoneDisplay.slotTimeRange(slot, event: event),
             startTime: slot.startTime,
             endTime: slot.endTime
         )
@@ -2523,7 +2548,7 @@ struct EventDetailView: View {
             eventDiscussionNextCursor = page.nextCursor
             eventDiscussionPhase = page.posts.isEmpty ? .empty : .success
         } catch {
-            eventDiscussionPhase = .failure(message: error.userFacingMessage ?? L("讨论区加载失败，请稍后重试", "Failed to load discussion. Please try again later."))
+            eventDiscussionPhase = .failure(message: error.userFacingMessage ?? LT("讨论区加载失败，请稍后重试", "Failed to load discussion. Please try again later.", "ディスカッションを読み込めませんでした。時間をおいて再試行してください。"))
         }
     }
 
@@ -2540,7 +2565,7 @@ struct EventDetailView: View {
             eventDiscussionNextCursor = page.nextCursor
             eventDiscussionPhase = eventDiscussionPosts.isEmpty ? .empty : .success
         } catch {
-            showBannerMessageAutoDismiss(error.userFacingMessage ?? L("加载更多讨论失败", "Failed to load more discussion."))
+            showBannerMessageAutoDismiss(error.userFacingMessage ?? LT("加载更多讨论失败", "Failed to load more discussion.", "ディスカッションの追加読み込みに失敗しました。"))
         }
     }
 
@@ -2604,16 +2629,16 @@ struct EventDetailView: View {
 
                 eventInfoRow(
                     icon: "calendar",
-                    title: L("开始时间", "Start Time"),
-                    value: eventInfoDateText(event.startDate)
+                    title: LT("开始时间", "Start Time", "開始時間"),
+                    value: eventInfoDateText(event.startDate, event: event)
                 )
                 eventInfoRow(
                     icon: "clock",
-                    title: L("结束时间", "End Time"),
-                    value: eventInfoDateText(event.endDate)
+                    title: LT("结束时间", "End Time", "終了時間"),
+                    value: eventInfoDateText(event.endDate, event: event)
                 )
                 if !unifiedAddress.isEmpty {
-                    eventInfoRow(icon: "mappin.and.ellipse", title: L("活动地址", "Address"), value: unifiedAddress)
+                    eventInfoRow(icon: "mappin.and.ellipse", title: LT("活动地址", "Address", "住所"), value: unifiedAddress)
                 }
                 if hasEventVenueContent(event) {
                     eventVenueActionRow(event)
@@ -2622,11 +2647,11 @@ struct EventDetailView: View {
                 if let website = event.officialWebsite, !website.isEmpty {
                     if let websiteURL = normalizedEventURL(website) {
                         Link(destination: websiteURL) {
-                            eventInfoRow(icon: "globe", title: L("官网", "Website"), value: website, linkStyle: true)
+                            eventInfoRow(icon: "globe", title: LT("官网", "Website", "公式サイト"), value: website, linkStyle: true)
                         }
                         .buttonStyle(.plain)
                     } else {
-                        eventInfoRow(icon: "globe", title: L("官网", "Website"), value: website)
+                        eventInfoRow(icon: "globe", title: LT("官网", "Website", "公式サイト"), value: website)
                     }
                 }
                 if let festival = event.wikiFestival {
@@ -2640,7 +2665,7 @@ struct EventDetailView: View {
         if !displayDescription.isEmpty {
             GlassCard {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(LL("活动介绍"))
+                    Text(LT("活动介绍", "活动介绍", "イベント紹介"))
                         .font(.headline)
                         .foregroundStyle(RaverTheme.primaryText)
                     Text(displayDescription)
@@ -2656,7 +2681,7 @@ struct EventDetailView: View {
         if !event.ticketTiers.isEmpty || ((event.ticketNotes ?? "").isEmpty == false) || ticketLinkURL != nil {
             GlassCard {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(LL("票档信息"))
+                    Text(LT("票档信息", "票档信息", "チケット情報"))
                         .font(.headline)
                         .foregroundStyle(RaverTheme.primaryText)
                     ForEach(event.ticketTiers) { tier in
@@ -2667,7 +2692,7 @@ struct EventDetailView: View {
                                     .foregroundStyle(RaverTheme.primaryText)
                             }
                             Spacer()
-                            Text("\(tier.currency ?? event.ticketCurrency ?? "CNY") \(Int(tier.price ?? 0))")
+                            Text((tier.price ?? 0).appLocalizedCurrencyText(currencyCode: tier.currency ?? event.ticketCurrency))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(RaverTheme.accent)
                         }
@@ -2685,8 +2710,8 @@ struct EventDetailView: View {
                         Link(destination: ticketLinkURL) {
                             eventInfoRow(
                                 icon: "ticket.fill",
-                                title: L("购票链接", "Ticket Link"),
-                                value: L("前往购票", "Buy Tickets"),
+                                title: LT("票务外链", "Ticket Link", "チケット外部リンク"),
+                                value: LT("打开外部链接", "Open Link", "外部リンクを開く"),
                                 linkStyle: true
                             )
                         }
@@ -2708,7 +2733,7 @@ struct EventDetailView: View {
                             .frame(width: 38, height: 38)
                             .clipShape(Circle())
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(LL("发布方"))
+                            Text(LT("发布方", "发布方", "公開元"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                             Text(organizer.displayName ?? organizer.username)
@@ -2726,7 +2751,7 @@ struct EventDetailView: View {
             .frame(width: cardWidth, alignment: .leading)
         } else if let organizerName = event.organizerName, !organizerName.isEmpty {
             GlassCard {
-                eventInfoRow(icon: "person.2", title: L("发布方", "Publisher"), value: organizerName)
+                eventInfoRow(icon: "person.2", title: LT("发布方", "Publisher", "公開元"), value: organizerName)
             }
             .frame(width: cardWidth, alignment: .leading)
         }
@@ -2749,7 +2774,7 @@ struct EventDetailView: View {
 
         if !allLineupMediaURLs.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                Text(LL("活动阵容图"))
+                Text(LT("活动阵容图", "活动阵容图", "イベントラインナップ画像"))
                     .font(.headline)
 
                 ForEach(Array(allLineupMediaURLs.enumerated()), id: \.offset) { index, rawURL in
@@ -2805,7 +2830,7 @@ struct EventDetailView: View {
         }
 
         if allLineupMediaURLs.isEmpty && !hasLineupDJs {
-            Text(LL("暂无阵容信息"))
+            Text(LT("暂无阵容信息", "暂无阵容信息", "ラインナップ情報はまだありません"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
@@ -2819,7 +2844,7 @@ struct EventDetailView: View {
             .sorted(by: { $0.startTime < $1.startTime })
 
         if scheduledSlots.isEmpty {
-            Text(LL("等待时间表发布"))
+            Text(LT("等待时间表发布", "等待时间表发布", "タイムテーブル公開待ち"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
@@ -2835,7 +2860,7 @@ struct EventDetailView: View {
     @ViewBuilder
     private func eventRatingsTabContent() -> some View {
         if relatedRatingEvents.isEmpty {
-            Text(LL("暂无对应打分事件"))
+            Text(LT("暂无对应打分事件", "暂无对应打分事件", "対応する評価イベントはありません"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
@@ -2852,7 +2877,7 @@ struct EventDetailView: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(RaverTheme.primaryText)
                                 .lineLimit(2)
-                            Text(L("\(ratingEvent.units.count) 个打分对象", "\(ratingEvent.units.count) rating targets"))
+                            Text(LT("\(ratingEvent.units.count) 个打分对象", "\(ratingEvent.units.count) rating targets", "\(ratingEvent.units.count) 件の評価対象"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                                 .lineLimit(1)
@@ -2877,7 +2902,7 @@ struct EventDetailView: View {
     @ViewBuilder
     private func eventSetsTabContent() -> some View {
         if relatedEventSets.isEmpty {
-            Text(LL("暂无对应 Sets"))
+            Text(LT("暂无对应 Sets", "暂无对应 Sets", "対応するSetはありません"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
@@ -2938,7 +2963,7 @@ struct EventDetailView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private func eventSchedulePreviewRow(_ slot: WebEventLineupSlot) -> some View {
+    private func eventSchedulePreviewRow(_ slot: WebEventLineupSlot, event: WebEvent) -> some View {
         let act = EventLineupActCodec.parse(slot: slot)
         let stageName = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
@@ -2964,7 +2989,7 @@ struct EventDetailView: View {
 
             Spacer(minLength: 8)
 
-            Text("\(Self.eventSlotTimeFormatter.string(from: slot.startTime)) - \(Self.eventSlotTimeFormatter.string(from: slot.endTime))")
+            Text(EventTimeZoneDisplay.slotTimeRange(slot, event: event))
                 .font(.caption)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .lineLimit(1)
@@ -3096,7 +3121,7 @@ struct EventDetailView: View {
                             Task { await beginEventCheckinFlow(for: event) }
                         } label: {
                             eventHeroActionButton(
-                                title: activeAttendanceCheckin == nil ? L("打卡", "Check-in") : L("编辑打卡", "Edit Check-in"),
+                                title: activeAttendanceCheckin == nil ? LT("打卡", "Check-in", "チェックイン") : LT("编辑打卡", "Edit Check-in", "チェックインを編集"),
                                 icon: "postage.stamp.fill",
                                 fill: RaverTheme.accent
                             )
@@ -3163,13 +3188,13 @@ struct EventDetailView: View {
 
     private func eventVenueDisplayText(_ event: WebEvent) -> String {
         guard let point = eventBoundLocationPoint(event) else {
-            return L("未填写场地信息", "Venue not provided")
+            return LT("未填写场地信息", "Venue not provided", "会場情報未入力")
         }
         let formatted = localizedPointText(point.formattedAddressI18n).trimmingCharacters(in: .whitespacesAndNewlines)
         if !formatted.isEmpty { return formatted }
         let unified = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         if !unified.isEmpty { return unified }
-        return L("未填写场地信息", "Venue not provided")
+        return LT("未填写场地信息", "Venue not provided", "会場情報未入力")
     }
 
     private func eventMapURL(for event: WebEvent) -> URL? {
@@ -3195,7 +3220,7 @@ struct EventDetailView: View {
             city: cityText,
             startAtISO8601: Self.eventCardISO8601Formatter.string(from: event.startDate),
             coverImageURL: coverURL,
-            badgeText: L("活动", "Event")
+            badgeText: LT("活动", "Event", "イベント")
         )
     }
 
@@ -3215,7 +3240,7 @@ struct EventDetailView: View {
 
     private func copyEventVenueText(_ event: WebEvent) {
         UIPasteboard.general.string = eventVenueDisplayText(event)
-        errorMessage = L("场地信息已复制", "Venue information copied.")
+        errorMessage = LT("场地信息已复制", "Venue information copied.", "会場情報をコピーしました。")
     }
 
     private func openEventVenueInMap(_ event: WebEvent) {
@@ -3223,7 +3248,7 @@ struct EventDetailView: View {
         let fallbackQuery = eventVenueFallbackQuery(event)
         let coordinate = eventVenueCoordinate(event)
         guard coordinate != nil || !fallbackQuery.isEmpty else {
-            errorMessage = L("暂无场地定位信息", "No venue location information available.")
+            errorMessage = LT("暂无场地定位信息", "No venue location information available.", "会場の位置情報がありません。")
             return
         }
 
@@ -3249,7 +3274,7 @@ struct EventDetailView: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(LL("场地"))
+                Text(LT("场地", "场地", "会場"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText.opacity(0.88))
                 Text(eventVenueDisplayText(event))
@@ -3276,7 +3301,7 @@ struct EventDetailView: View {
 
                 HStack(spacing: 6) {
                     Image(systemName: "location.viewfinder")
-                    Text(LL("查看地图"))
+                    Text(LT("查看地图", "查看地图", "地図を見る"))
                 }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(RaverTheme.primaryText)
@@ -3425,14 +3450,14 @@ struct EventDetailView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                errorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "paperplane.circle.fill",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
-                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                errorMessage = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ共有連携は未接続です。")
             }
         ]
     }
@@ -3443,7 +3468,7 @@ struct EventDetailView: View {
         if let event, isMine(event) {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("编辑", "Edit"),
+                    title: LT("编辑", "Edit", "編集"),
                     systemImage: "square.and.pencil",
                     accentColor: Color(red: 0.99, green: 0.65, blue: 0.20)
                 ) {
@@ -3452,7 +3477,7 @@ struct EventDetailView: View {
             )
             actions.append(
                 SharePanelQuickAction(
-                    title: LL("删除活动"),
+                    title: LT("删除活动", "删除活动", "イベントを削除"),
                     systemImage: "trash",
                     accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
                 ) {
@@ -3465,8 +3490,8 @@ struct EventDetailView: View {
         actions.append(
             SharePanelQuickAction(
                 title: isTogglingMarkedEvent
-                    ? L("处理中", "Working")
-                    : (isMarked ? L("取消收藏", "Unfavorite") : L("收藏活动", "Favorite")),
+                    ? LT("处理中", "Working", "処理中")
+                    : (isMarked ? LT("取消收藏", "Unfavorite", "お気に入り解除") : LT("收藏活动", "Favorite", "お気に入り")),
                 systemImage: isMarked ? "star.fill" : "star",
                 accentColor: Color(red: 0.99, green: 0.82, blue: 0.22)
             ) {
@@ -3476,7 +3501,7 @@ struct EventDetailView: View {
         )
         actions.append(
             SharePanelQuickAction(
-                title: L("复制链接", "Copy Link"),
+                title: LT("复制链接", "Copy Link", "リンクをコピー"),
                 systemImage: "link",
                 accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
             ) {
@@ -3486,7 +3511,7 @@ struct EventDetailView: View {
         )
         actions.append(
             SharePanelQuickAction(
-                title: L("查看二维码", "View QR"),
+                title: LT("查看二维码", "View QR", "QRを見る"),
                 systemImage: "qrcode",
                 accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
             ) {
@@ -3496,7 +3521,7 @@ struct EventDetailView: View {
         )
         actions.append(
             SharePanelQuickAction(
-                title: L("查看海报", "View Poster"),
+                title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
             ) {
@@ -3506,7 +3531,7 @@ struct EventDetailView: View {
         )
         actions.append(
             SharePanelQuickAction(
-                title: L("保存海报", "Save Poster"),
+                title: LT("保存海报", "Save Poster", "海報を保存"),
                 systemImage: "photo.badge.arrow.down",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
@@ -3517,7 +3542,7 @@ struct EventDetailView: View {
 
         actions.append(
             SharePanelQuickAction(
-                title: isCachingManualSnapshot ? L("缓存中", "Caching") : L("缓存", "Cache"),
+                title: isCachingManualSnapshot ? LT("缓存中", "Caching", "キャッシュ中") : LT("缓存", "Cache", "キャッシュ"),
                 systemImage: "arrow.down.circle",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
             ) {
@@ -3528,7 +3553,7 @@ struct EventDetailView: View {
         if let event {
             actions.append(
                 SharePanelQuickAction(
-                    title: isInWidgetCountdownPool ? L("移出倒计时", "Remove Countdown") : L("桌面倒计时", "Widget Countdown"),
+                    title: isInWidgetCountdownPool ? LT("移出倒计时", "Remove Countdown", "カウントダウンから削除") : LT("桌面倒计时", "Widget Countdown", "ウィジェットカウントダウン"),
                     systemImage: isInWidgetCountdownPool ? "minus.circle" : "apps.iphone",
                     accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
                 ) {
@@ -3539,7 +3564,7 @@ struct EventDetailView: View {
 
         actions.append(
             SharePanelQuickAction(
-                title: L("贡献信息", "Incorrect Info"),
+                title: LT("贡献信息", "Incorrect Info", "情報を修正"),
                 systemImage: "info.circle",
                 accentColor: Color(red: 0.96, green: 0.47, blue: 0.26)
             ) {
@@ -3548,7 +3573,7 @@ struct EventDetailView: View {
         )
         actions.append(
             SharePanelQuickAction(
-                title: L("举报", "Report"),
+                title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
             ) {
@@ -3577,12 +3602,12 @@ struct EventDetailView: View {
             )
 
             if result.usedDeepLinkFallback {
-                showWidgetStatusBanner(message: L("已复制 App 内链接", "Copied app-only link."))
+                showWidgetStatusBanner(message: LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました"))
             } else {
-                showWidgetStatusBanner(message: L("已复制链接", "Link copied"))
+                showWidgetStatusBanner(message: LT("已复制链接", "Link copied", "リンクをコピーしました"))
             }
         } catch {
-            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            errorMessage = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクをコピーできませんでした。もう一度お試しください。")
         }
     }
 
@@ -3615,7 +3640,7 @@ struct EventDetailView: View {
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -3639,20 +3664,20 @@ struct EventDetailView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("活动海报由分享系统统一生成，活动标题、摘要和二维码都会跟随短链保持一致。", "Event posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
+                        hintText: LT("活动海报由分享系统统一生成，活动标题、摘要和二维码都会跟随短链保持一致。", "Event posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link.", "イベント海報は共有システムで生成され、タイトル、概要、QRコードは短縮リンクと同期されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -3674,15 +3699,15 @@ struct EventDetailView: View {
                 channel: "poster_save"
             )
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
         } catch {
-            errorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 
     private func openEventFeedbackEntry() {
         // TODO: Wire to dedicated feedback route/page when available.
-        errorMessage = L("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.")
+        errorMessage = LT("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.", "情報修正の入口は近日公開予定です。この要望は記録しました。")
     }
 
     @MainActor
@@ -3693,38 +3718,23 @@ struct EventDetailView: View {
                 switch result {
                 case .removed:
                     isInWidgetCountdownPool = false
-                    showWidgetStatusBanner(message: L(
-                        "已从桌面倒计时候选活动移除。",
-                        "Removed from widget countdown candidates."
-                    ))
+                    showWidgetStatusBanner(message: LT("已从桌面倒计时候选活动移除。", "Removed from widget countdown candidates.", "ウィジェットカウントダウン候補から削除しました。"))
                 case .notFound:
                     isInWidgetCountdownPool = false
-                    showWidgetStatusBanner(message: L(
-                        "该活动已不在桌面倒计时候选列表中。",
-                        "This event is no longer in widget countdown candidates."
-                    ))
+                    showWidgetStatusBanner(message: LT("该活动已不在桌面倒计时候选列表中。", "This event is no longer in widget countdown candidates.", "このイベントはウィジェットカウントダウン候補ではありません。"))
                 }
             } else {
                 let result = try await WidgetSelectableEventsSyncService.shared.add(event: event)
                 isInWidgetCountdownPool = true
                 switch result {
                 case .added:
-                    showWidgetStatusBanner(message: L(
-                        "已加入桌面倒计时候选活动，长按组件即可选择。",
-                        "Added to widget countdown candidates. Long-press the widget to choose it."
-                    ))
+                    showWidgetStatusBanner(message: LT("已加入桌面倒计时候选活动，长按组件即可选择。", "Added to widget countdown candidates. Long-press the widget to choose it.", "ウィジェットカウントダウン候補に追加しました。ウィジェットを長押しして選択できます。"))
                 case .refreshed:
-                    showWidgetStatusBanner(message: L(
-                        "已更新桌面倒计时候选活动。",
-                        "Updated in widget countdown candidates."
-                    ))
+                    showWidgetStatusBanner(message: LT("已更新桌面倒计时候选活动。", "Updated in widget countdown candidates.", "ウィジェットカウントダウン候補を更新しました。"))
                 }
             }
         } catch {
-            errorMessage = error.userFacingMessage ?? L(
-                "加入桌面倒计时失败，请稍后重试。",
-                "Failed to add to widget countdown. Please try again later."
-            )
+            errorMessage = error.userFacingMessage ?? LT("加入桌面倒计时失败，请稍后重试。", "Failed to add to widget countdown. Please try again later.", "ウィジェットカウントダウンに追加できませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -3734,8 +3744,18 @@ struct EventDetailView: View {
     }
 
     private func openEventReportEntry() {
-        // TODO: Wire to dedicated report route/page when available.
-        errorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+        guard let event else {
+            errorMessage = LT("活动信息尚未加载完成。", "Event details are still loading.", "イベント情報はまだ読み込み中です。")
+            return
+        }
+        reportTarget = ReportSheetTarget(
+            id: event.id,
+            type: .event,
+            title: event.name,
+            preview: event.description?.nilIfBlank ?? [event.city, event.organizerName].compactMap { $0?.nilIfBlank }.joined(separator: " · "),
+            targetUserID: event.organizer?.id,
+            targetUserDisplayName: event.organizer?.displayName ?? event.organizerName
+        )
     }
 
     @ViewBuilder
@@ -3745,7 +3765,7 @@ struct EventDetailView: View {
         if !djs.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    Text(LL("参演 DJ"))
+                    Text(LT("参演 DJ", "参演 DJ", "出演DJ"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                     Text(lineupSortMode.activeTitle)
@@ -3774,7 +3794,7 @@ struct EventDetailView: View {
                             }
                         } label: {
                             Label(
-                                showExpandedLineupList ? L("收起名单", "Collapse lineup") : L("下拉完整名单", "Expand full lineup"),
+                                showExpandedLineupList ? LT("收起名单", "Collapse lineup", "ラインナップを閉じる") : LT("下拉完整名单", "Expand full lineup", "全ラインナップを表示"),
                                 systemImage: showExpandedLineupList ? "chevron.up" : "chevron.down"
                             )
                             .font(.caption.weight(.semibold))
@@ -4270,13 +4290,25 @@ struct EventDetailView: View {
         }
     }
 
-    private func eventInfoDateText(_ date: Date) -> String {
+    private func eventInfoDateText(_ date: Date, event: WebEvent) -> String {
+        let deviceText: String
         switch AppLanguagePreference.current.effectiveLanguage {
         case .zh:
-            return date.appLocalizedYMDText()
+            deviceText = date.appLocalizedYMDText()
+        case .ja:
+            deviceText = date.appLocalizedYMDText()
         case .en, .system:
-            return date.formatted(date: .complete, time: .omitted)
+            deviceText = date.formatted(date: .complete, time: .omitted)
         }
+        guard let zone = EventTimeZoneDisplay.eventTimeZone(for: event),
+              zone.identifier != TimeZone.current.identifier else {
+            return "\(deviceText) · \(TimeZone.current.identifier)"
+        }
+        return "\(deviceText) · \(TimeZone.current.identifier)\n\(date.appLocalizedYMDText(in: zone)) · \(zone.identifier)"
+    }
+
+    private func eventSlotTimeRangeText(_ slot: WebEventLineupSlot, event: WebEvent) -> String {
+        EventTimeZoneDisplay.slotTimeRange(slot, event: event)
     }
 
     private func organizerAvatarFallback(_ organizer: WebUserLite) -> some View {
@@ -4293,7 +4325,7 @@ struct EventDetailView: View {
                     .fill(status.badgeBorder.opacity(0.95))
                     .frame(width: 7, height: 7)
             }
-            Text(L("状态：\(status.title)", "Status: \(status.title)"))
+            Text(LT("状态：\(status.title)", "Status: \(status.title)", "状態: \(status.title)"))
                 .foregroundStyle(RaverTheme.secondaryText)
                 .font(.subheadline)
         }
@@ -4389,17 +4421,17 @@ struct EventDetailView: View {
                 applyManualCacheSnapshot(snapshot)
                 phase = .success
                 if isRequestTimeoutError(error) {
-                    showBannerMessageAutoDismiss(L("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version."))
+                    showBannerMessageAutoDismiss(LT("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version.", "リクエストがタイムアウトしました。最新のオフラインキャッシュを表示しています。"))
                 } else {
-                    showBannerMessageAutoDismiss(L("网络较弱，已展示活动缓存数据。", "Network is weak. Showing cached event data."))
+                    showBannerMessageAutoDismiss(LT("网络较弱，已展示活动缓存数据。", "Network is weak. Showing cached event data.", "ネットワークが弱いため、イベントのキャッシュデータを表示しています。"))
                 }
             } else if hadContent {
                 isLoadingRelatedArticles = false
-                showBannerMessageAutoDismiss(error.userFacingMessage ?? L("活动详情更新失败，请稍后重试", "Failed to refresh event details. Please try again later."))
+                showBannerMessageAutoDismiss(error.userFacingMessage ?? LT("活动详情更新失败，请稍后重试", "Failed to refresh event details. Please try again later.", "イベント詳細を更新できませんでした。時間をおいて再試行してください。"))
                 phase = .success
             } else {
                 isLoadingRelatedArticles = false
-                let message = error.userFacingMessage ?? L("活动详情加载失败，请稍后重试", "Failed to load event details. Please try again later.")
+                let message = error.userFacingMessage ?? LT("活动详情加载失败，请稍后重试", "Failed to load event details. Please try again later.", "イベント詳細を読み込めませんでした。時間をおいて再試行してください。")
                 phase = isOfflineRecoverableError(error)
                     ? .offline(message: message)
                     : .failure(message: message)
@@ -4455,9 +4487,9 @@ struct EventDetailView: View {
 
             await persistManualCacheSnapshot(snapshot, prefetchImages: true)
             applyManualCacheSnapshot(snapshot)
-            errorMessage = L("活动已缓存，弱网环境也可查看。", "Event cached. You can view it in weak-network conditions.")
+            errorMessage = LT("活动已缓存，弱网环境也可查看。", "Event cached. You can view it in weak-network conditions.", "イベントをキャッシュしました。弱いネットワークでも確認できます。")
         } catch {
-            errorMessage = L("缓存失败，请稍后重试。", "Caching failed. Please try again later.")
+            errorMessage = LT("缓存失败，请稍后重试。", "Caching failed. Please try again later.", "キャッシュに失敗しました。時間をおいて再試行してください。")
         }
     }
 
@@ -4479,7 +4511,7 @@ struct EventDetailView: View {
         if let event {
             return event
         }
-        throw ServiceError.message(L("活动详情加载失败，请稍后重试。", "Failed to load event details. Please try again later."))
+        throw ServiceError.message(LT("活动详情加载失败，请稍后重试。", "Failed to load event details. Please try again later.", "イベント詳細を読み込めませんでした。時間をおいて再試行してください。"))
     }
 
     private func prefetchManualCacheImages(from snapshot: EventManualCacheSnapshot) {
@@ -4599,7 +4631,7 @@ struct EventDetailView: View {
             relatedEventCheckins = page.items
         } catch {
             if relatedEventCheckins.isEmpty {
-                errorMessage = L("打卡记录加载失败，请稍后重试", "Failed to load check-in records. Please try again later.")
+                errorMessage = LT("打卡记录加载失败，请稍后重试", "Failed to load check-in records. Please try again later.", "チェックイン記録を読み込めませんでした。時間をおいて再試行してください。")
                 return
             }
         }
@@ -4738,7 +4770,7 @@ struct EventDetailView: View {
             .sorted { $0.dayIndex < $1.dayIndex }
 
         guard !selectedDays.isEmpty else {
-            throw ServiceError.message(L("请至少选择一个参加日", "Please select at least one attended day."))
+            throw ServiceError.message(LT("请至少选择一个参加日", "Please select at least one attended day.", "参加日を少なくとも1つ選択してください。"))
         }
 
         let payloads = selectedDays.map { day in
@@ -4749,7 +4781,7 @@ struct EventDetailView: View {
             )
         }
         guard let note = WebCheckin.makeEventAttendanceNote(selections: payloads) else {
-            throw ServiceError.message(L("打卡信息生成失败，请重试", "Failed to generate check-in payload. Please try again."))
+            throw ServiceError.message(LT("打卡信息生成失败，请重试", "Failed to generate check-in payload. Please try again.", "チェックイン情報を生成できませんでした。もう一度お試しください。"))
         }
         let attendedAt = selectedDays.map(\.attendedAt).max() ?? Date()
 
@@ -4798,7 +4830,7 @@ struct EventDetailView: View {
             .filter { $0.id == primaryCheckin.id || !shouldCleanupEventCheckin($0, keeping: primaryCheckin.id) }
 
         showCheckinOperationSuccessBanner(
-            message: didUpdateExisting ? L("打卡信息已更新", "Check-in updated.") : L("活动打卡成功", "Event check-in successful.")
+            message: didUpdateExisting ? LT("打卡信息已更新", "Check-in updated.", "チェックイン情報を更新しました。") : LT("活动打卡成功", "Event check-in successful.", "イベントチェックインに成功しました。")
         )
     }
 
@@ -4840,7 +4872,7 @@ struct EventDetailView: View {
         }
         selectedEventCheckinDayIDs = []
         selectedEventCheckinDJIDsByDayID = [:]
-        showCheckinOperationSuccessBanner(message: L("已取消活动打卡", "Event check-in canceled."))
+        showCheckinOperationSuccessBanner(message: LT("已取消活动打卡", "Event check-in canceled.", "イベントチェックインを取消しました。"))
     }
 
     private func refreshRelatedEventCheckins() async throws {
@@ -4857,7 +4889,7 @@ struct EventDetailView: View {
     @MainActor
     private func toggleMarkedEvent(_ event: WebEvent) async {
         guard appState.session != nil else {
-            errorMessage = L("请先登录再收藏活动", "Please log in before saving events.")
+            errorMessage = LT("请先登录再收藏活动", "Please log in before saving events.", "イベントを保存するにはログインしてください。")
             return
         }
         guard !isTogglingMarkedEvent else { return }
@@ -4869,16 +4901,16 @@ struct EventDetailView: View {
             if eventFavoriteID != nil {
                 try await eventCheckinRepository.unfavoriteEvent(eventID: event.id)
                 eventFavoriteID = nil
-                showEventFavoriteSuccessBanner(message: L("已取消收藏活动", "Event removed from favorites."))
+                showEventFavoriteSuccessBanner(message: LT("已取消收藏活动", "Event removed from favorites.", "イベントのお気に入りを解除しました。"))
             } else {
                 let favorite = try await eventCheckinRepository.favoriteEvent(eventID: event.id)
                 eventFavoriteID = favorite.id ?? event.id
-                showEventFavoriteSuccessBanner(message: L("已收藏活动", "Event added to favorites."))
+                showEventFavoriteSuccessBanner(message: LT("已收藏活动", "Event added to favorites.", "イベントをお気に入りに追加しました。"))
             }
 
             NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
         } catch {
-            errorMessage = error.userFacingMessage ?? L("收藏活动失败，请稍后重试", "Failed to update favorite. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("收藏活动失败，请稍后重试", "Failed to update favorite. Please try again later.", "お気に入りを更新できませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -4894,7 +4926,7 @@ struct EventDetailView: View {
             message,
             action: .appRoute(
                 .profile(.myCheckins(targetUserID: nil, title: "", ownerDisplayName: nil)),
-                title: L("查看我的打卡", "View My Check-ins")
+                title: LT("查看我的打卡", "View My Check-ins", "自分のチェックインを見る")
             )
         )
     }
@@ -5045,7 +5077,7 @@ struct EventDetailView: View {
     private func deleteEvent() async {
         do {
             try await eventCommandRepository.deleteEvent(id: eventID)
-            errorMessage = L("活动已删除，请返回列表刷新", "Event deleted. Please return to the list and refresh.")
+            errorMessage = LT("活动已删除，请返回列表刷新", "Event deleted. Please return to the list and refresh.", "イベントは削除されました。リストに戻って更新してください。")
         } catch {
             errorMessage = error.userFacingMessage
         }
@@ -5909,7 +5941,7 @@ struct EventRoutePlannerLoaderView: View {
                 }
                 .background(RaverTheme.background)
             case .empty:
-                ContentUnavailableView(LL("活动不存在"), systemImage: "music.note.house")
+                ContentUnavailableView(LT("活动不存在", "活动不存在", "イベントが存在しません"), systemImage: "music.note.house")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(RaverTheme.background)
             case .success:
@@ -5928,7 +5960,7 @@ struct EventRoutePlannerLoaderView: View {
                         routeOwnerDisplayName: ownerDisplayName
                     )
                 } else {
-                    ContentUnavailableView(LL("活动不存在"), systemImage: "music.note.house")
+                    ContentUnavailableView(LT("活动不存在", "活动不存在", "イベントが存在しません"), systemImage: "music.note.house")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(RaverTheme.background)
                 }
@@ -5950,7 +5982,7 @@ struct EventRoutePlannerLoaderView: View {
         } catch {
             phase = .failure(
                 message: error.userFacingMessage
-                    ?? L("路线加载失败，请稍后重试", "Failed to load route. Please try again later.")
+                    ?? LT("路线加载失败，请稍后重试", "Failed to load route. Please try again later.", "ルートを読み込めませんでした。時間をおいて再試行してください。")
             )
         }
     }
@@ -6043,7 +6075,7 @@ private struct EventRoutePlannerShareSnapshotView: View {
                     )
                     .frame(width: contentWidth, height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots), alignment: .leading)
                 } else {
-                    ContentUnavailableView(LL("等待时间表发布"), systemImage: "calendar.badge.exclamationmark")
+                    ContentUnavailableView(LT("等待时间表发布", "等待时间表发布", "タイムテーブル公開待ち"), systemImage: "calendar.badge.exclamationmark")
                         .frame(width: contentWidth, alignment: .leading)
                 }
             }
@@ -6140,7 +6172,7 @@ private struct EventRoutePlannerView: View {
 
     private var currentUserDisplayName: String {
         let trimmed = appState.session?.user.displayName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? L("我", "Me") : trimmed
+        return trimmed.isEmpty ? LT("我", "Me", "自分") : trimmed
     }
 
     private var normalizedRouteOwnerUserID: String? {
@@ -6164,17 +6196,17 @@ private struct EventRoutePlannerView: View {
         if isViewingOwnRoute {
             return currentUserDisplayName
         }
-        return normalizedRouteOwnerDisplayName ?? L("Ta", "They")
+        return normalizedRouteOwnerDisplayName ?? LT("Ta", "They", "相手")
     }
 
     private var navigationTitleText: String {
         isViewingOwnRoute
-            ? L("我的路线", "My Route")
-            : L("\(routeOwnerName)的路线", "\(routeOwnerName)'s Route")
+            ? LT("我的路线", "My Route", "自分のルート")
+            : LT("\(routeOwnerName)的路线", "\(routeOwnerName)'s Route", "\(routeOwnerName) のルート")
     }
 
     private var shareCardTitleText: String {
-        L("\(routeOwnerName)的路线", "\(routeOwnerName)'s Route")
+        LT("\(routeOwnerName)的路线", "\(routeOwnerName)'s Route", "\(routeOwnerName) のルート")
     }
 
     private var routePlannerTimelineStickyTopInset: CGFloat {
@@ -6247,7 +6279,7 @@ private struct EventRoutePlannerView: View {
                         )
                         .frame(height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots))
                     } else {
-                        ContentUnavailableView(LL("等待时间表发布"), systemImage: "calendar.badge.exclamationmark")
+                        ContentUnavailableView(LT("等待时间表发布", "等待时间表发布", "タイムテーブル公開待ち"), systemImage: "calendar.badge.exclamationmark")
                     }
                 }
                 .padding(.horizontal, 10)
@@ -6257,7 +6289,7 @@ private struct EventRoutePlannerView: View {
         }
         .overlay {
             if showRouteSavedToast {
-                Text(LL("在个人主页-我的行程可以快速查看路线"))
+                Text(LT("在个人主页-我的行程可以快速查看路线", "在个人主页-我的行程可以快速查看路线", "プロフィールの「マイ旅程」からルートをすばやく確認できます"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.white)
                     .multilineTextAlignment(.center)
@@ -6291,7 +6323,7 @@ private struct EventRoutePlannerView: View {
                         onSendToConversation: { conversation, note in
                             guard let payload = makeSharePayload() else {
                                 throw ServiceError.message(
-                                    L("当前路线还没有可分享的演出内容。", "This route has no selected sets to share yet.")
+                                    LT("当前路线还没有可分享的演出内容。", "This route has no selected sets to share yet.", "現在のルートには共有できる出演内容がありません。")
                                 )
                             }
                             try await sendSharePayload(
@@ -6305,18 +6337,12 @@ private struct EventRoutePlannerView: View {
                         }
                     ) { conversation in
                         showWidgetStatusBanner(
-                            message: L(
-                                "已分享到 \(conversation.title)",
-                                "Shared to \(conversation.title)"
-                            ),
+                            message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                             conversation: conversation
                         )
                     } onMoreChats: {
                         guard let payload = makeSharePayload() else {
-                            feedbackMessage = L(
-                                "当前路线还没有可分享的演出内容。",
-                                "This route has no selected sets to share yet."
-                            )
+                            feedbackMessage = LT("当前路线还没有可分享的演出内容。", "This route has no selected sets to share yet.", "現在のルートには共有できる出演内容がありません。")
                             dismissShareMorePanel()
                             return
                         }
@@ -6368,10 +6394,7 @@ private struct EventRoutePlannerView: View {
                 }
             ) { conversation in
                 showWidgetStatusBanner(
-                    message: L(
-                        "已分享到 \(conversation.title)",
-                        "Shared to \(conversation.title)"
-                    ),
+                    message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                     conversation: conversation
                 )
             } preview: {
@@ -6379,11 +6402,11 @@ private struct EventRoutePlannerView: View {
             }
             .presentationDetents([.fraction(0.76), .large])
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { feedbackMessage != nil },
             set: { if !$0 { feedbackMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(feedbackMessage ?? "")
         }
@@ -6432,14 +6455,14 @@ private struct EventRoutePlannerView: View {
         if isViewingOwnRoute {
             return [
                 SharePanelQuickAction(
-                    title: L("保存图片", "Save Image"),
+                    title: LT("保存图片", "Save Image", "画像を保存"),
                     systemImage: "photo.badge.arrow.down",
                     accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
                 ) {
                     savePosterImage()
                 },
                 SharePanelQuickAction(
-                    title: L("保存路线", "Save Route"),
+                    title: LT("保存路线", "Save Route", "ルートを保存"),
                     systemImage: "square.and.arrow.down",
                     accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
                 ) {
@@ -6450,7 +6473,7 @@ private struct EventRoutePlannerView: View {
 
         return [
             SharePanelQuickAction(
-                title: L("定制我的路线", "Customize Mine"),
+                title: LT("定制我的路线", "Customize Mine", "自分のルートを作る"),
                 systemImage: "point.topleft.down.curvedto.point.bottomright.up",
                 accentColor: RaverTheme.accent
             ) {
@@ -6465,7 +6488,7 @@ private struct EventRoutePlannerView: View {
                 )
             },
             SharePanelQuickAction(
-                title: L("保存图片", "Save Image"),
+                title: LT("保存图片", "Save Image", "画像を保存"),
                 systemImage: "photo.badge.arrow.down",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
             ) {
@@ -6481,14 +6504,14 @@ private struct EventRoutePlannerView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                feedbackMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                feedbackMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "paperplane.circle.fill",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
-                feedbackMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                feedbackMessage = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ共有連携は未接続です。")
             }
         ]
     }
@@ -6536,7 +6559,7 @@ private struct EventRoutePlannerView: View {
             title: shareCardTitleText,
             subtitle: event.name,
             coverImageURL: event.coverAssetURL,
-            badgeText: L("路线", "Route"),
+            badgeText: LT("路线", "Route", "ルート"),
             selectedDayID: selectedDayID.nilIfBlank,
             selectedSlotIDs: selectedSlotIDs.sorted()
         )
@@ -6575,7 +6598,7 @@ private struct EventRoutePlannerView: View {
     private func generatePosterImage() async -> UIImage? {
         guard !isGeneratingShare else { return nil }
         guard let selectedDay else {
-            feedbackMessage = L("暂无可保存的路线图片", "No route image is available to save.")
+            feedbackMessage = LT("暂无可保存的路线图片", "No route image is available to save.", "保存できるルート画像がありません。")
             return nil
         }
 
@@ -6608,7 +6631,7 @@ private struct EventRoutePlannerView: View {
         renderer.proposedSize = ProposedViewSize(width: snapshotContentWidth + 20, height: nil)
 
         guard let image = renderer.uiImage else {
-            feedbackMessage = L("路线图生成失败，请重试", "Failed to generate route image. Please try again.")
+            feedbackMessage = LT("路线图生成失败，请重试", "Failed to generate route image. Please try again.", "ルート画像を生成できませんでした。もう一度お試しください。")
             return nil
         }
         return image
@@ -6618,10 +6641,7 @@ private struct EventRoutePlannerView: View {
     private func savePosterToPhotos(_ image: UIImage) async {
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard status == .authorized || status == .limited else {
-            feedbackMessage = L(
-                "未获得相册权限，可稍后重新授权后再试。",
-                "Photo permission denied. Please grant access and try again."
-            )
+            feedbackMessage = LT("未获得相册权限，可稍后重新授权后再试。", "Photo permission denied. Please grant access and try again.", "写真へのアクセスが拒否されています。許可してからもう一度お試しください。")
             return
         }
 
@@ -6631,14 +6651,15 @@ private struct EventRoutePlannerView: View {
             }) { success, error in
                 DispatchQueue.main.async {
                     if success {
-                        feedbackMessage = L("已保存到相册", "Saved to Photos.")
+                        feedbackMessage = LT("已保存到相册", "Saved to Photos.", "写真に保存しました。")
                     } else if let error {
-                        feedbackMessage = L(
+                        feedbackMessage = LT(
                             "保存失败：\(error.userFacingMessage ?? "")",
-                            "Save failed: \(error.userFacingMessage ?? "")"
+                            "Save failed: \(error.userFacingMessage ?? "")",
+                            "保存に失敗しました: \(error.userFacingMessage ?? "")"
                         )
                     } else {
-                        feedbackMessage = L("保存失败，请重试", "Save failed. Please try again.")
+                        feedbackMessage = LT("保存失败，请重试", "Save failed. Please try again.", "保存に失敗しました。もう一度お試しください。")
                     }
                     continuation.resume()
                 }
@@ -6752,7 +6773,7 @@ private struct EventRoutineView: View {
     var body: some View {
         Group {
             if days.isEmpty {
-                ContentUnavailableView(LL("等待时间表发布"), systemImage: "calendar.badge.exclamationmark")
+                ContentUnavailableView(LT("等待时间表发布", "等待时间表发布", "タイムテーブル公開待ち"), systemImage: "calendar.badge.exclamationmark")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
             } else if isEmbedded {
@@ -6788,24 +6809,24 @@ private struct EventRoutineView: View {
                     clearPendingDJSelection()
                 }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {
                 clearPendingDJSelection()
             }
         }
-        .alert(L("DJ 信息待补充", "DJ Info Needed"), isPresented: Binding(
+        .alert(LT("DJ 信息待补充", "DJ Info Needed", "DJ情報が不足しています"), isPresented: Binding(
             get: { pendingUnboundDJName != nil },
             set: { if !$0 { pendingUnboundDJName = nil } }
         )) {
-            Button(L("关闭", "Close"), role: .cancel) {
+            Button(LT("关闭", "Close", "閉じる"), role: .cancel) {
                 pendingUnboundDJName = nil
             }
-            Button(L("去补充", "Add Info")) {
+            Button(LT("去补充", "Add Info", "情報を追加")) {
                 let name = pendingUnboundDJName
                 pendingUnboundDJName = nil
                 appPush(.discover(.djImport(initialName: name)))
             }
         } message: {
-            Text(L("这个 DJ 暂未建立唯一档案，补充资料后就可以跳转到详情页。", "This DJ does not have a unique profile yet. Add the info to enable detail navigation."))
+            Text(LT("这个 DJ 暂未建立唯一档案，补充资料后就可以跳转到详情页。", "This DJ does not have a unique profile yet. Add the info to enable detail navigation.", "このDJにはまだ固有プロフィールがありません。情報を追加すると詳細ページへ移動できます。"))
         }
     }
 
@@ -6843,7 +6864,7 @@ private struct EventRoutineView: View {
                 endPoint: .bottom
             )
         )
-        .raverSystemNavigation(title: L("活动日程", "Event Schedule"))
+        .raverSystemNavigation(title: LT("活动日程", "Event Schedule", "イベント日程"))
     }
 
     private var routeControlRow: some View {
@@ -6855,7 +6876,7 @@ private struct EventRoutineView: View {
                     showsSavedRouteOverlay.toggle()
                 } label: {
                     Label(
-                        showsSavedRouteOverlay ? LL("隐藏路线") : LL("显示路线"),
+                        showsSavedRouteOverlay ? LT("隐藏路线", "隐藏路线", "ルートを非表示") : LT("显示路线", "显示路线", "ルートを表示"),
                         systemImage: showsSavedRouteOverlay ? "eye.slash.fill" : "eye.fill"
                     )
                 }
@@ -6870,7 +6891,7 @@ private struct EventRoutineView: View {
             Button {
                 showRoutePlanner = true
             } label: {
-                Label(LL("定制路线"), systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                Label(LT("定制路线", "定制路线", "ルートを作成"), systemImage: "point.topleft.down.curvedto.point.bottomright.up")
             }
             .buttonStyle(.plain)
             .font(.caption.weight(.semibold))
@@ -6906,7 +6927,7 @@ private struct EventRoutineView: View {
             )
             .frame(height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots))
         } else {
-            ContentUnavailableView(LL("等待时间表发布"), systemImage: "calendar.badge.exclamationmark")
+            ContentUnavailableView(LT("等待时间表发布", "等待时间表发布", "タイムテーブル公開待ち"), systemImage: "calendar.badge.exclamationmark")
         }
     }
 
@@ -6947,7 +6968,7 @@ private struct EventRoutineView: View {
             let optionID = normalizedID.isEmpty ? fallbackID : normalizedID
             guard seenIDs.insert(optionID).inserted else { return }
             let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let resolvedName = trimmedName.isEmpty ? (normalizedID.isEmpty ? LL("待补充 DJ") : normalizedID) : trimmedName
+            let resolvedName = trimmedName.isEmpty ? (normalizedID.isEmpty ? LT("待补充 DJ", "DJ info needed", "DJ情報未入力") : normalizedID) : trimmedName
             options.append(
                 EventScheduleDJSelectionOption(
                     id: optionID,
@@ -7008,7 +7029,7 @@ private struct EventRoutineView: View {
 
     private func presentUnboundDJPrompt(name: String) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        pendingUnboundDJName = trimmedName.isEmpty ? LL("待补充 DJ") : trimmedName
+        pendingUnboundDJName = trimmedName.isEmpty ? LT("待补充 DJ", "DJ info needed", "DJ情報未入力") : trimmedName
     }
 
     private var daySelector: some View {

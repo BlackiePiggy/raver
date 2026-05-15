@@ -101,6 +101,6 @@ final class DemoAlignedSystemMessageCell: UICollectionViewCell {
 
     func configure(text: String) {
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        label.text = normalized.isEmpty ? L("[系统消息]", "[System Message]") : normalized
+        label.text = normalized.isEmpty ? LT("[系统消息]", "[System Message]", "[システムメッセージ]") : normalized
     }
 }

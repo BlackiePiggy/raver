@@ -20,6 +20,22 @@ import { rebuildUserCheckinProjection } from '../services/checkin-projection';
 import {
   normalizeCountryBiTextPayload,
 } from '../utils/country-i18n';
+import {
+  analyzeI18nCompleteness,
+  normalizeTriTextPayload,
+  resolveTriTextWithFallback,
+  type TriTextPayload,
+} from '../utils/i18n';
+import {
+  diffEventDays,
+  getEventHour,
+  normalizeEventTimeZone,
+  parseEventDateInput,
+  setEventDayAndKeepTime,
+  startOfEventDay,
+} from '../utils/event-timezone';
+import { regionalCompliance, type RegionalComplianceUser } from '../config/regional-compliance';
+import { contentCompliance } from '../utils/content-compliance';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -34,9 +50,11 @@ const refreshUserCheckinProjectionBestEffort = async (userId: string): Promise<v
 
 interface BFFAuthRequest extends Request {
   user?: JWTPayload;
+  authUserId?: string;
+  authAccountStatus?: 'active' | 'inactive' | 'missing';
 }
 
-const optionalAuth = (req: Request, _res: Response, next: NextFunction): void => {
+const optionalAuth = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     next();
@@ -46,7 +64,20 @@ const optionalAuth = (req: Request, _res: Response, next: NextFunction): void =>
   const token = authHeader.substring(7);
   try {
     const decoded = verifyToken(token);
-    (req as BFFAuthRequest).user = decoded;
+    const authReq = req as BFFAuthRequest;
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, email: true, role: true, isActive: true },
+    });
+    authReq.authUserId = decoded.userId;
+    authReq.authAccountStatus = !user ? 'missing' : user.isActive ? 'active' : 'inactive';
+    if (user?.isActive) {
+      authReq.user = {
+          ...decoded,
+          email: user.email,
+          role: user.role,
+        };
+    }
   } catch (_error) {
     // Ignore invalid token for public endpoints.
   }
@@ -60,7 +91,89 @@ const requireAuth = (req: BFFAuthRequest, res: Response): string | null => {
     res.status(401).json({ error: 'Unauthorized' });
     return null;
   }
+  if (req.authAccountStatus && req.authAccountStatus !== 'active') {
+    res.status(401).json({
+      error: 'Account is no longer active',
+      code: 'ACCOUNT_INACTIVE',
+      accountStatus: req.authAccountStatus === 'inactive' ? 'deleted' : 'missing',
+    });
+    return null;
+  }
   return userId;
+};
+
+const resolveRegionalComplianceUser = async (userId?: string | null): Promise<RegionalComplianceUser | null> => {
+  if (!userId) return null;
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: { regionCode: true, ageBand: true },
+  });
+};
+
+const canBypassContentReview = (role?: string | null): boolean =>
+  role === 'admin' || role === 'operator';
+
+const CONTENT_I18N_FIELDS_BY_ENTITY: Record<string, string[]> = {
+  event: ['nameI18n', 'descriptionI18n'],
+  dj: ['nameI18n', 'bioI18n'],
+  news: ['titleI18n', 'summaryI18n', 'bodyI18n'],
+  set: ['titleI18n', 'descriptionI18n'],
+  brand: ['nameI18n', 'descriptionI18n'],
+  label: ['nameI18n', 'descriptionI18n'],
+  rating: ['titleI18n', 'descriptionI18n'],
+  id: ['titleI18n', 'descriptionI18n'],
+};
+
+const buildI18nReviewNotes = (entityType: string, payload: Record<string, unknown>): Prisma.InputJsonObject => ({
+  i18n: analyzeI18nCompleteness(payload, CONTENT_I18N_FIELDS_BY_ENTITY[entityType] || ['titleI18n']) as unknown as Prisma.InputJsonValue,
+  compliance: contentCompliance.reviewNotes(entityType, payload),
+});
+
+const createPendingContentSubmission = async (input: {
+  submitterId: string;
+  entityType: 'event' | 'dj' | 'news' | 'set' | 'brand' | 'label' | 'id' | 'rating';
+  title: string;
+  payload: Record<string, unknown>;
+}) => {
+  return prisma.$transaction(async (tx) => {
+    const submission = await tx.contentSubmission.create({
+      data: {
+        submitterId: input.submitterId,
+        entityType: input.entityType,
+        title: input.title,
+        payload: input.payload as Prisma.InputJsonObject,
+        reviewNotes: buildI18nReviewNotes(input.entityType, input.payload),
+        status: 'pending',
+      },
+    });
+
+    await (tx as any).contentSubmissionVersion.create({
+      data: {
+        submissionId: submission.id,
+        version: 1,
+        title: input.title,
+        payload: input.payload as Prisma.InputJsonObject,
+        submittedBy: input.submitterId,
+        changeNote: 'Initial submission',
+      },
+    });
+
+    return submission;
+  });
+};
+
+const acceptedSubmission = (
+  res: Response,
+  submission: Awaited<ReturnType<typeof createPendingContentSubmission>>,
+  message: string
+): void => {
+  res.status(202).json({
+    data: {
+      status: 'submitted_for_review',
+      message,
+      submission,
+    },
+  });
 };
 
 type BFFPagination = {
@@ -110,11 +223,7 @@ const toNumber = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-type EventBiTextPayload = {
-  en: string;
-  zh: string;
-  enFull?: string;
-};
+type EventBiTextPayload = TriTextPayload;
 
 type EventSocialLinkPayload = {
   type: string;
@@ -141,42 +250,14 @@ const normalizeEventText = (value: unknown): string => {
   return text;
 };
 
-const normalizeEventBiText = (value: unknown, fallback = ''): EventBiTextPayload | null => {
-  const fallbackText = normalizeEventText(fallback);
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const row = value as Record<string, unknown>;
-    const en = normalizeEventText(row.en ?? row.EN ?? row.english) || fallbackText;
-    const zh = normalizeEventText(row.zh ?? row.ZH ?? row.cn ?? row.chinese) || en || fallbackText;
-    const enFull = normalizeEventText(
-      row.enFull
-      ?? row.en_full
-      ?? row.englishFull
-      ?? row.country_en_full
-    );
-    const normalizedEn = en || zh || fallbackText;
-    const normalizedZh = zh || en || fallbackText;
-    if (!normalizedEn && !normalizedZh) return null;
-    const out: EventBiTextPayload = {
-      en: normalizedEn,
-      zh: normalizedZh,
-    };
-    if (enFull) out.enFull = enFull;
-    return out;
-  }
-
-  const plain = normalizeEventText(value) || fallbackText;
-  if (!plain) return null;
-  return {
-    en: plain,
-    zh: plain,
-  };
-};
+const normalizeEventBiText = (value: unknown, fallback = ''): EventBiTextPayload | null =>
+  normalizeTriTextPayload(value, fallback);
 
 const normalizeDJBiText = (value: unknown, fallback = ''): EventBiTextPayload | null =>
   normalizeEventBiText(value, fallback);
 
 const resolveBiTextWithFallback = (value: unknown, fallback = ''): EventBiTextPayload | null =>
-  normalizeEventBiText(value, fallback);
+  resolveTriTextWithFallback(value, fallback);
 
 const normalizeCountryBiText = (value: unknown, fallback = ''): EventBiTextPayload | null => {
   const normalized = normalizeCountryBiTextPayload(value, fallback);
@@ -548,29 +629,6 @@ type NormalizedLineupArtistInput = {
   sortOrder: number;
 };
 
-const parseDateInput = (value: unknown): Date | null => {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value;
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const fromTimestamp = new Date(value);
-    return Number.isNaN(fromTimestamp.getTime()) ? null : fromTimestamp;
-  }
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dateOnlyMatch) {
-    const year = Number(dateOnlyMatch[1]);
-    const month = Number(dateOnlyMatch[2]);
-    const day = Number(dateOnlyMatch[3]);
-    const parsedLocalDate = new Date(year, month - 1, day);
-    return Number.isNaN(parsedLocalDate.getTime()) ? null : parsedLocalDate;
-  }
-  const parsed = new Date(trimmed);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
 const EVENT_DEFAULT_START_TIME = '00:00:00';
 const EVENT_DEFAULT_END_TIME = '23:59:59';
 
@@ -588,16 +646,11 @@ const normalizeEventClockTime = (value: unknown, fallback: string): string => {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
 };
 
-const normalizeEventStartDate = (date: Date): Date => {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
-};
+const normalizeEventStartDate = (date: Date, timeZone = 'UTC'): Date => startOfEventDay(date, timeZone);
 
-const normalizeEventEndDate = (date: Date): Date => {
-  const next = new Date(date);
-  next.setHours(23, 59, 59, 0);
-  return next;
+const normalizeEventEndDate = (date: Date, timeZone = 'UTC'): Date => {
+  const start = startOfEventDay(date, timeZone);
+  return new Date(start.getTime() + 86_400_000 - 1000);
 };
 
 const resolveEventStatus = (
@@ -683,16 +736,14 @@ const normalizeEventStageOrder = (value: unknown): string[] => {
 const inferFestivalDayIndex = (
   startTime: Date,
   eventStartDate: Date,
-  dayRolloverHour: number
+  dayRolloverHour: number,
+  timeZone = 'UTC'
 ): number | null => {
   if (Number.isNaN(startTime.getTime()) || Number.isNaN(eventStartDate.getTime())) {
     return null;
   }
-  const calendar = CalendarJS;
-  const eventStartDay = calendar.startOfDay(eventStartDate);
-  const slotStartDay = calendar.startOfDay(startTime);
-  let dayOffset = calendar.diffDays(eventStartDay, slotStartDay);
-  if (dayOffset > 0 && startTime.getHours() < dayRolloverHour) {
+  let dayOffset = diffEventDays(eventStartDate, startTime, timeZone);
+  if (dayOffset > 0 && getEventHour(startTime, timeZone) < dayRolloverHour) {
     dayOffset -= 1;
   }
   return Math.max(1, dayOffset + 1);
@@ -701,18 +752,9 @@ const inferFestivalDayIndex = (
 const applyFestivalDayIndexToDate = (
   timeSource: Date,
   eventStartDate: Date,
-  festivalDayIndex: number
-): Date => {
-  const targetDay = CalendarJS.startOfDay(eventStartDate);
-  targetDay.setDate(targetDay.getDate() + Math.max(0, festivalDayIndex - 1));
-  targetDay.setHours(
-    timeSource.getHours(),
-    timeSource.getMinutes(),
-    timeSource.getSeconds(),
-    timeSource.getMilliseconds()
-  );
-  return targetDay;
-};
+  festivalDayIndex: number,
+  timeZone = 'UTC'
+): Date => setEventDayAndKeepTime(timeSource, eventStartDate, festivalDayIndex, timeZone);
 
 type ExistingLineupSlotForRebase = {
   id: string;
@@ -725,16 +767,17 @@ const rebaseExistingLineupSlotsToEventStart = (
   slots: ExistingLineupSlotForRebase[],
   previousEventStartDate: Date,
   nextEventStartDate: Date,
-  dayRolloverHour: number
+  dayRolloverHour: number,
+  timeZone = 'UTC'
 ): Array<{ id: string; festivalDayIndex: number; startTime: Date; endTime: Date }> =>
   slots.map((slot) => {
     const festivalDayIndex =
       slot.festivalDayIndex
-      ?? inferFestivalDayIndex(slot.startTime, previousEventStartDate, dayRolloverHour)
+      ?? inferFestivalDayIndex(slot.startTime, previousEventStartDate, dayRolloverHour, timeZone)
       ?? 1;
-    const endDayOffset = Math.max(0, CalendarJS.diffDays(slot.startTime, slot.endTime));
-    const startTime = applyFestivalDayIndexToDate(slot.startTime, nextEventStartDate, festivalDayIndex);
-    let endTime = applyFestivalDayIndexToDate(slot.endTime, nextEventStartDate, festivalDayIndex + endDayOffset);
+    const endDayOffset = Math.max(0, diffEventDays(slot.startTime, slot.endTime, timeZone));
+    const startTime = applyFestivalDayIndexToDate(slot.startTime, nextEventStartDate, festivalDayIndex, timeZone);
+    let endTime = applyFestivalDayIndexToDate(slot.endTime, nextEventStartDate, festivalDayIndex + endDayOffset, timeZone);
 
     while (endTime < startTime) {
       endTime = new Date(endTime.getTime() + 86_400_000);
@@ -748,34 +791,24 @@ const rebaseExistingLineupSlotsToEventStart = (
     };
   });
 
-const CalendarJS = {
-  startOfDay(date: Date): Date {
-    const out = new Date(date);
-    out.setHours(0, 0, 0, 0);
-    return out;
-  },
-  diffDays(from: Date, to: Date): number {
-    const millis = this.startOfDay(to).getTime() - this.startOfDay(from).getTime();
-    return Math.floor(millis / 86_400_000);
-  },
-};
-
 const normalizeLineupSlots = (
   slots: unknown,
   eventStartDate: Date,
-  dayRolloverHourRaw: unknown = 6
+  dayRolloverHourRaw: unknown = 6,
+  timeZoneRaw: unknown = 'UTC'
 ): NormalizedLineupSlot[] => {
   if (!Array.isArray(slots)) {
     return [];
   }
 
   const dayRolloverHour = normalizeDayRolloverHour(dayRolloverHourRaw, 6);
+  const timeZone = normalizeEventTimeZone(timeZoneRaw);
   const safeEventStart = Number.isNaN(eventStartDate.getTime()) ? new Date() : eventStartDate;
   return slots
     .filter((slot): slot is Record<string, unknown> => typeof slot === 'object' && slot !== null)
     .map((slot, index) => {
-      const parsedStart = parseDateInput(slot.startTime);
-      const parsedEnd = parseDateInput(slot.endTime);
+      const parsedStart = parseEventDateInput(slot.startTime, timeZone, 'start');
+      const parsedEnd = parseEventDateInput(slot.endTime, timeZone, 'end');
       const fallbackBase = new Date(safeEventStart.getTime() + index * 60_000);
       const explicitFestivalDayIndex =
         typeof slot.festivalDayIndex === 'number' && Number.isFinite(slot.festivalDayIndex)
@@ -797,8 +830,8 @@ const normalizeLineupSlots = (
       }
 
       if (explicitFestivalDayIndex) {
-        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex);
-        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex);
+        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex, timeZone);
+        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex, timeZone);
         if (endTime < startTime) {
           endTime = new Date(endTime.getTime() + 86_400_000);
         }
@@ -816,7 +849,7 @@ const normalizeLineupSlots = (
       const festivalDayIndex =
         explicitFestivalDayIndex
         // When the editor submits Day1/Day2 explicitly, that becomes the source of truth.
-        ?? inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour);
+        ?? inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour, timeZone);
       const djIds = cleanedDjIds.length
         ? cleanedDjIds
         : (effectiveDjId ? [effectiveDjId] : []);
@@ -1724,6 +1757,17 @@ const uniqueDJSlugForName = async (name: string): Promise<string> => {
     seq += 1;
     candidate = `${base}-${seq}`;
   }
+};
+
+const uniqueLabelSlug = async (name: string, requestedSlug?: string): Promise<string> => {
+  const base = slugify(requestedSlug || name) || `label-${Date.now()}`;
+  let candidate = base;
+  let seq = 1;
+  while (await prisma.label.findUnique({ where: { slug: candidate }, select: { id: true } })) {
+    seq += 1;
+    candidate = `${base}-${seq}`;
+  }
+  return candidate;
 };
 
 const buildDJAvatarObjectKey = (djId: string, mimeType: string, sourceUrl?: string | null): string => {
@@ -2916,12 +2960,15 @@ const mapDJ = (
     bannerUrl: row.bannerUrl,
     country: row.country,
     countryI18n: countryI18n ?? null,
+    spotifyUrl: row.spotifyUrl ?? null,
     spotifyId: row.spotifyId,
     spotifyFollowers: row.spotifyFollowers ?? null,
     appleMusicId: row.appleMusicId,
     soundcloudUrl: row.soundcloudUrl,
     soundcloudId: row.soundcloudId ?? null,
     soundCloudId: row.soundcloudId ?? null,
+    neteaseUrl: row.neteaseUrl ?? null,
+    qqMusicUrl: row.qqMusicUrl ?? null,
     website: row.website ?? null,
     trackCount: row.trackCount ?? null,
     playlistCount: row.playlistCount ?? null,
@@ -3135,7 +3182,7 @@ const mapWikiFestival = (
   };
 };
 
-const mapEvent = (row: any) => {
+const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
   const latitude = toNumber(row.latitude);
   const longitude = toNumber(row.longitude);
   const locationFallback =
@@ -3194,11 +3241,12 @@ const mapEvent = (row: any) => {
     longitude,
     startDate: row.startDate,
     endDate: row.endDate,
+    timeZone: normalizeEventTimeZone(row.timeZone ?? row.timezone ?? 'UTC'),
     startTime: normalizeEventClockTime(row.startTime, EVENT_DEFAULT_START_TIME),
     endTime: normalizeEventClockTime(row.endTime, EVENT_DEFAULT_END_TIME),
     dayRolloverHour: row.dayRolloverHour ?? 6,
     stageOrder: normalizeEventStageOrder(row.stageOrder ?? null),
-    ticketUrl: row.ticketUrl,
+    ticketUrl: regionalCompliance.shouldHideLateNightTicketLink(complianceUser, row.startDate) ? null : row.ticketUrl,
     ticketPriceMin: toNumber(row.ticketPriceMin),
     ticketPriceMax: toNumber(row.ticketPriceMax),
     ticketCurrency: row.ticketCurrency,
@@ -4123,9 +4171,10 @@ router.get('/events/recommendations', optionalAuth, async (req: Request, res: Re
 
     const favoriteIdsByEventId = await resolveEventFavoriteIds(userId, orderedRows.map((row) => row.id));
     const rowsWithFavorites = attachEventFavoriteState(orderedRows, favoriteIdsByEventId);
+    const complianceUser = await resolveRegionalComplianceUser(userId);
 
     ok(res, {
-      items: rowsWithFavorites.map(mapEvent),
+      items: rowsWithFavorites.map((row) => mapEvent(row, complianceUser)),
       meta: {
         limit,
         selected: orderedRows.length,
@@ -4245,10 +4294,11 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
     const rowsWithPerformers = await withLineupSlotPerformers(rows);
     const favoriteIdsByEventId = await resolveEventFavoriteIds(userId, rowsWithPerformers.map((row) => row.id));
     const rowsWithFavorites = attachEventFavoriteState(rowsWithPerformers, favoriteIdsByEventId);
+    const complianceUser = await resolveRegionalComplianceUser(userId);
 
     ok(
       res,
-      { items: rowsWithFavorites.map(mapEvent) },
+      { items: rowsWithFavorites.map((row) => mapEvent(row, complianceUser)) },
       {
         page,
         limit,
@@ -4276,8 +4326,9 @@ router.get('/events/my', optionalAuth, async (req: Request, res: Response): Prom
     const rowsWithPerformers = await withLineupSlotPerformers(rows);
     const favoriteIdsByEventId = await resolveEventFavoriteIds(userId, rowsWithPerformers.map((row) => row.id));
     const rowsWithFavorites = attachEventFavoriteState(rowsWithPerformers, favoriteIdsByEventId);
+    const complianceUser = await resolveRegionalComplianceUser(userId);
 
-    ok(res, { items: rowsWithFavorites.map(mapEvent) });
+    ok(res, { items: rowsWithFavorites.map((row) => mapEvent(row, complianceUser)) });
   } catch (error) {
     console.error('BFF web my events error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -4313,10 +4364,11 @@ router.get('/events/favorites', optionalAuth, async (req: Request, res: Response
       favoriteId: row.id,
     }));
     const rowsWithPerformers = await withLineupSlotPerformers(events);
+    const complianceUser = await resolveRegionalComplianceUser(userId);
 
     ok(
       res,
-      { items: rowsWithPerformers.map(mapEvent) },
+      { items: rowsWithPerformers.map((row) => mapEvent(row, complianceUser)) },
       {
         page,
         limit,
@@ -4435,8 +4487,9 @@ router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Pro
     const rowWithPerformers = await withLineupSlotPerformersOne(row);
     const favoriteIdsByEventId = await resolveEventFavoriteIds(userId, [rowWithPerformers.id]);
     const rowWithFavorite = attachEventFavoriteState([rowWithPerformers], favoriteIdsByEventId)[0];
+    const complianceUser = await resolveRegionalComplianceUser(userId);
 
-    ok(res, mapEvent(rowWithFavorite));
+    ok(res, mapEvent(rowWithFavorite, complianceUser));
   } catch (error) {
     console.error('BFF web event detail error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -4658,7 +4711,7 @@ router.post('/events/:id/timetable', optionalAuth, async (req: Request, res: Res
     const eventId = req.params.id as string;
     const event = await prisma.event.findUnique({
       where: { id: eventId },
-      select: { id: true, organizerId: true, startDate: true, dayRolloverHour: true },
+      select: { id: true, organizerId: true, startDate: true, dayRolloverHour: true, timeZone: true },
     });
     if (!event) {
       res.status(404).json({ error: 'Event not found' });
@@ -4669,7 +4722,7 @@ router.post('/events/:id/timetable', optionalAuth, async (req: Request, res: Res
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
-    const [slot] = normalizeLineupSlots([req.body || {}], event.startDate, event.dayRolloverHour ?? 6);
+    const [slot] = normalizeLineupSlots([req.body || {}], event.startDate, event.dayRolloverHour ?? 6, event.timeZone);
     if (!slot) {
       res.status(400).json({ error: 'Valid timetable slot is required' });
       return;
@@ -4724,7 +4777,7 @@ router.patch('/events/:id/timetable/:slotId', optionalAuth, async (req: Request,
     const slotId = req.params.slotId as string;
     const event = await prisma.event.findUnique({
       where: { id: eventId },
-      select: { id: true, organizerId: true, startDate: true, dayRolloverHour: true },
+      select: { id: true, organizerId: true, startDate: true, dayRolloverHour: true, timeZone: true },
     });
     if (!event) {
       res.status(404).json({ error: 'Event not found' });
@@ -4751,7 +4804,7 @@ router.patch('/events/:id/timetable/:slotId', optionalAuth, async (req: Request,
       sortOrder: existing.sortOrder,
       ...(req.body || {}),
     };
-    const [slot] = normalizeLineupSlots([merged], event.startDate, event.dayRolloverHour ?? 6);
+    const [slot] = normalizeLineupSlots([merged], event.startDate, event.dayRolloverHour ?? 6, event.timeZone);
     if (!slot) {
       res.status(400).json({ error: 'Valid timetable slot is required' });
       return;
@@ -4909,6 +4962,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     const authReq = req as BFFAuthRequest;
     const userId = requireAuth(authReq, res);
     if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
 
     const body = req.body as Record<string, unknown>;
     const name = String(body.name || '').trim();
@@ -4920,16 +4974,28 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       return;
     }
 
-    const parsedStartDateInput = new Date(startDate);
-    const parsedEndDateInput = new Date(endDate);
-    if (Number.isNaN(parsedStartDateInput.getTime()) || Number.isNaN(parsedEndDateInput.getTime())) {
+    if (!canBypassContentReview(viewerRole)) {
+      const submission = await createPendingContentSubmission({
+        submitterId: userId,
+        entityType: 'event',
+        title: name,
+        payload: body,
+      });
+      acceptedSubmission(res, submission, '活动信息已提交审核，管理员审核通过后才会入库');
+      return;
+    }
+
+    const timeZone = normalizeEventTimeZone(body.timeZone ?? body.timezone ?? body.eventTimeZone ?? 'UTC');
+    const startTime = normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME);
+    const endTime = normalizeEventClockTime(body.endTime, EVENT_DEFAULT_END_TIME);
+    const parsedStartDateInput = parseEventDateInput(startDate, timeZone, 'start', startTime);
+    const parsedEndDateInput = parseEventDateInput(endDate, timeZone, 'end', endTime);
+    if (!parsedStartDateInput || !parsedEndDateInput) {
       res.status(400).json({ error: 'Invalid event date range' });
       return;
     }
-    const parsedStartDate = normalizeEventStartDate(parsedStartDateInput);
-    const parsedEndDate = normalizeEventEndDate(parsedEndDateInput);
-    const startTime = normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME);
-    const endTime = normalizeEventClockTime(body.endTime, EVENT_DEFAULT_END_TIME);
+    const parsedStartDate = normalizeEventStartDate(parsedStartDateInput, timeZone);
+    const parsedEndDate = normalizeEventEndDate(parsedEndDateInput, timeZone);
 
     const desiredSlug = String(body.slug || '').trim() || `${slugify(name)}-${Date.now().toString().slice(-6)}`;
     const slugUsed = await prisma.event.findUnique({ where: { slug: desiredSlug }, select: { id: true } });
@@ -4940,7 +5006,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
 
     const dayRolloverHour = normalizeDayRolloverHour(body.dayRolloverHour, 6);
     const rawSlots = Array.isArray(body.lineupSlots) ? body.lineupSlots : [];
-    const lineupSlots = normalizeLineupSlots(rawSlots, parsedStartDate, dayRolloverHour);
+    const lineupSlots = normalizeLineupSlots(rawSlots, parsedStartDate, dayRolloverHour, timeZone);
     const lineupArtists = normalizeLineupArtistsInput(body.lineupArtists, lineupSlots);
     const stageOrder = normalizeEventStageOrder(body.stageOrder ?? body.stage_order);
     const coverImageUrlInput =
@@ -5070,6 +5136,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         longitude: longitudeInput ?? locationPointLongitude,
         startDate: parsedStartDate,
         endDate: parsedEndDate,
+        timeZone,
         startTime,
         endTime,
         dayRolloverHour,
@@ -5120,6 +5187,7 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         wikiFestivalId: true,
         startDate: true,
         endDate: true,
+        timeZone: true,
         startTime: true,
         endTime: true,
         dayRolloverHour: true,
@@ -5182,6 +5250,9 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       || Object.prototype.hasOwnProperty.call(body, 'stage_order');
     const hasStartTimeField = Object.prototype.hasOwnProperty.call(body, 'startTime');
     const hasEndTimeField = Object.prototype.hasOwnProperty.call(body, 'endTime');
+    const hasTimeZoneField = Object.prototype.hasOwnProperty.call(body, 'timeZone')
+      || Object.prototype.hasOwnProperty.call(body, 'timezone')
+      || Object.prototype.hasOwnProperty.call(body, 'eventTimeZone');
     const hasLatitudeField = Object.prototype.hasOwnProperty.call(body, 'latitude');
     const hasLongitudeField = Object.prototype.hasOwnProperty.call(body, 'longitude');
 
@@ -5279,10 +5350,19 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       ? (normalizeEventText(nextCountryI18n?.en) || normalizeEventText(nextCountryI18n?.zh))
       : null;
 
-    const parsedStartDateRaw = body.startDate !== undefined ? parseDateInput(body.startDate) : null;
-    const parsedEndDateRaw = body.endDate !== undefined ? parseDateInput(body.endDate) : null;
-    const parsedStartDate = parsedStartDateRaw ? normalizeEventStartDate(parsedStartDateRaw) : null;
-    const parsedEndDate = parsedEndDateRaw ? normalizeEventEndDate(parsedEndDateRaw) : null;
+    const nextTimeZone = hasTimeZoneField
+      ? normalizeEventTimeZone(body.timeZone ?? body.timezone ?? body.eventTimeZone, existing.timeZone ?? 'UTC')
+      : normalizeEventTimeZone(existing.timeZone ?? 'UTC');
+    const nextStartTime = hasStartTimeField
+      ? normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME)
+      : normalizeEventClockTime(existing.startTime, EVENT_DEFAULT_START_TIME);
+    const nextEndTime = hasEndTimeField
+      ? normalizeEventClockTime(body.endTime, EVENT_DEFAULT_END_TIME)
+      : normalizeEventClockTime(existing.endTime, EVENT_DEFAULT_END_TIME);
+    const parsedStartDateRaw = body.startDate !== undefined ? parseEventDateInput(body.startDate, nextTimeZone, 'start', nextStartTime) : null;
+    const parsedEndDateRaw = body.endDate !== undefined ? parseEventDateInput(body.endDate, nextTimeZone, 'end', nextEndTime) : null;
+    const parsedStartDate = parsedStartDateRaw ? normalizeEventStartDate(parsedStartDateRaw, nextTimeZone) : null;
+    const parsedEndDate = parsedEndDateRaw ? normalizeEventEndDate(parsedEndDateRaw, nextTimeZone) : null;
     if (body.startDate !== undefined && parsedStartDate === null) {
       res.status(400).json({ error: 'Invalid startDate' });
       return;
@@ -5295,22 +5375,16 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const nextDayRolloverHour = body.dayRolloverHour !== undefined
       ? normalizeDayRolloverHour(body.dayRolloverHour, existing.dayRolloverHour ?? 6)
       : (existing.dayRolloverHour ?? 6);
-    const nextStartTime = hasStartTimeField
-      ? normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME)
-      : normalizeEventClockTime(existing.startTime, EVENT_DEFAULT_START_TIME);
-    const nextEndTime = hasEndTimeField
-      ? normalizeEventClockTime(body.endTime, EVENT_DEFAULT_END_TIME)
-      : normalizeEventClockTime(existing.endTime, EVENT_DEFAULT_END_TIME);
     const lineupBaseDate = parsedStartDate ?? existing.startDate;
     const effectiveStartDate = parsedStartDate ?? existing.startDate;
     const effectiveEndDate = parsedEndDate ?? existing.endDate;
-    const lineupSlots = normalizeLineupSlots(rawSlots || [], lineupBaseDate, nextDayRolloverHour);
+    const lineupSlots = normalizeLineupSlots(rawSlots || [], lineupBaseDate, nextDayRolloverHour, nextTimeZone);
     const rawArtists = Array.isArray(body.lineupArtists) ? body.lineupArtists : null;
     const lineupArtists = normalizeLineupArtistsInput(rawArtists, lineupSlots);
     const shouldSyncLineupTimetable = rawSlots !== null || rawArtists !== null;
     const shouldRebaseExistingLineupSlots =
       rawSlots === null
-      && (body.startDate !== undefined || body.dayRolloverHour !== undefined)
+      && (body.startDate !== undefined || body.dayRolloverHour !== undefined || hasTimeZoneField)
       && existing.lineupSlots.length > 0;
 
     const ticketCurrency = typeof body.ticketCurrency === 'string' ? body.ticketCurrency : null;
@@ -5383,6 +5457,7 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
           : (hasLocationPointField ? (nextLongitude ?? null) : undefined),
         startDate: body.startDate !== undefined ? parsedStartDate ?? undefined : undefined,
         endDate: body.endDate !== undefined ? parsedEndDate ?? undefined : undefined,
+        timeZone: hasTimeZoneField ? nextTimeZone : undefined,
         startTime: hasStartTimeField ? nextStartTime : undefined,
         endTime: hasEndTimeField ? nextEndTime : undefined,
         dayRolloverHour: body.dayRolloverHour !== undefined ? nextDayRolloverHour : undefined,
@@ -5424,7 +5499,8 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         existing.lineupSlots,
         existing.startDate,
         effectiveStartDate,
-        nextDayRolloverHour
+        nextDayRolloverHour,
+        nextTimeZone
       );
 
       await prisma.$transaction(
@@ -6407,6 +6483,29 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
       return;
     }
 
+    if (!canBypassContentReview(viewerRole)) {
+      const submission = await createPendingContentSubmission({
+        submitterId: userId,
+        entityType: 'dj',
+        title: finalName,
+        payload: {
+          ...payload,
+          name: finalName,
+          spotifyId: spotifyArtist.id,
+          avatarUrl: spotifyArtist.imageUrl,
+          importSource: 'spotify',
+          spotifyPreview: {
+            name: spotifyArtist.name,
+            followers: spotifyArtist.followers,
+            genres: spotifyArtist.genres,
+            imageUrl: spotifyArtist.imageUrl,
+          },
+        },
+      });
+      acceptedSubmission(res, submission, 'DJ 信息已提交审核，管理员审核通过后才会入库');
+      return;
+    }
+
     const hasAliasesInput = Object.prototype.hasOwnProperty.call(payload, 'aliases');
     let requestedAliases: string[] = [];
     if (hasAliasesInput) {
@@ -6432,6 +6531,9 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
     const requestedSoundcloud = typeof payload.soundcloudUrl === 'string' ? payload.soundcloudUrl.trim() : '';
     const requestedTwitter = typeof payload.twitterUrl === 'string' ? payload.twitterUrl.trim() : '';
     const requestedYoutube = typeof payload.youtubeUrl === 'string' ? payload.youtubeUrl.trim() : '';
+    const requestedSpotifyUrl = typeof payload.spotifyUrl === 'string' ? payload.spotifyUrl.trim() : '';
+    const requestedNeteaseUrl = typeof payload.neteaseUrl === 'string' ? payload.neteaseUrl.trim() : '';
+    const requestedQqMusicUrl = typeof payload.qqMusicUrl === 'string' ? payload.qqMusicUrl.trim() : '';
     const requestedSoundcloudId = parseOptionalStringFromPayload(payload, ['soundcloudId', 'soundcloudid']);
     const requestedWebsite = parseOptionalStringFromPayload(payload, ['website', 'websiteUrl', 'officialWebsite']);
     const hasTrackCountInput = payloadHasAnyKey(payload, ['trackCount', 'track_count']);
@@ -6543,6 +6645,7 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
           bioI18n: (normalizeDJBiText(target.bioI18n ?? null, requestedBio || target.bio || derivedBio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: requestedCountry || target.country || null,
           countryI18n: (normalizeCountryBiText(target.countryI18n ?? null, requestedCountry || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+          spotifyUrl: requestedSpotifyUrl || target.spotifyUrl || null,
           spotifyId: spotifyArtist.id,
           spotifyFollowers: hasSpotifyFollowersInput ? requestedSpotifyFollowers : derivedSpotifyFollowers,
           followerCount: spotifyArtist.followers || target.followerCount || 0,
@@ -6550,6 +6653,8 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
           facebookUrl: requestedFacebook || target.facebookUrl || null,
           soundcloudUrl: requestedSoundcloud || target.soundcloudUrl || null,
           soundcloudId: requestedSoundcloudId || target.soundcloudId || null,
+          neteaseUrl: requestedNeteaseUrl || target.neteaseUrl || null,
+          qqMusicUrl: requestedQqMusicUrl || target.qqMusicUrl || null,
           website: requestedWebsite || target.website || null,
           trackCount: hasTrackCountInput ? requestedTrackCount : (target.trackCount ?? null),
           playlistCount: hasPlaylistCountInput ? requestedPlaylistCount : (target.playlistCount ?? null),
@@ -6579,6 +6684,7 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
           bioI18n: (normalizeDJBiText(payload.bioI18n ?? null, requestedBio || derivedBio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: requestedCountry || null,
           countryI18n: (normalizeCountryBiText(payload.countryI18n ?? null, requestedCountry || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+          spotifyUrl: requestedSpotifyUrl || `https://open.spotify.com/artist/${spotifyArtist.id}`,
           spotifyId: spotifyArtist.id,
           spotifyFollowers: hasSpotifyFollowersInput ? requestedSpotifyFollowers : derivedSpotifyFollowers,
           followerCount: spotifyArtist.followers || 0,
@@ -6586,6 +6692,8 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
           facebookUrl: requestedFacebook || null,
           soundcloudUrl: requestedSoundcloud || null,
           soundcloudId: requestedSoundcloudId || null,
+          neteaseUrl: requestedNeteaseUrl || null,
+          qqMusicUrl: requestedQqMusicUrl || null,
           website: requestedWebsite || null,
           trackCount: hasTrackCountInput ? requestedTrackCount : null,
           playlistCount: hasPlaylistCountInput ? requestedPlaylistCount : null,
@@ -6688,6 +6796,30 @@ router.post('/djs/discogs/import', optionalAuth, async (req: Request, res: Respo
     const finalName = requestedName || discogsArtist.name.trim();
     if (!finalName) {
       res.status(400).json({ error: 'DJ name is empty' });
+      return;
+    }
+
+    if (!canBypassContentReview(viewerRole)) {
+      const submission = await createPendingContentSubmission({
+        submitterId: userId,
+        entityType: 'dj',
+        title: finalName,
+        payload: {
+          ...payload,
+          name: finalName,
+          avatarUrl: discogsArtist.primaryImageUrl,
+          importSource: 'discogs',
+          discogsArtistId: Math.floor(discogsArtistId),
+          discogsPreview: {
+            name: discogsArtist.name,
+            realName: discogsArtist.realName,
+            profile: discogsArtist.profile,
+            primaryImageUrl: discogsArtist.primaryImageUrl,
+            urls: discogsArtist.urls,
+          },
+        },
+      });
+      acceptedSubmission(res, submission, 'DJ 信息已提交审核，管理员审核通过后才会入库');
       return;
     }
 
@@ -6965,6 +7097,21 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
       return;
     }
 
+    if (!canBypassContentReview(viewerRole)) {
+      const submission = await createPendingContentSubmission({
+        submitterId: userId,
+        entityType: 'dj',
+        title: name,
+        payload: {
+          ...payload,
+          name,
+          importSource: 'manual',
+        },
+      });
+      acceptedSubmission(res, submission, 'DJ 信息已提交审核，管理员审核通过后才会入库');
+      return;
+    }
+
     const spotifyId = typeof payload.spotifyId === 'string' ? payload.spotifyId.trim() : '';
     const aliases = Array.isArray(payload.aliases)
       ? payload.aliases.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
@@ -6992,6 +7139,9 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
     const soundcloudUrl = typeof payload.soundcloudUrl === 'string' ? payload.soundcloudUrl.trim() : '';
     const twitterUrl = typeof payload.twitterUrl === 'string' ? payload.twitterUrl.trim() : '';
     const youtubeUrl = typeof payload.youtubeUrl === 'string' ? payload.youtubeUrl.trim() : '';
+    const spotifyUrl = typeof payload.spotifyUrl === 'string' ? payload.spotifyUrl.trim() : '';
+    const neteaseUrl = typeof payload.neteaseUrl === 'string' ? payload.neteaseUrl.trim() : '';
+    const qqMusicUrl = typeof payload.qqMusicUrl === 'string' ? payload.qqMusicUrl.trim() : '';
     const soundcloudId = parseOptionalStringFromPayload(payload, ['soundcloudId', 'soundcloudid']);
     const website = parseOptionalStringFromPayload(payload, ['website', 'websiteUrl', 'officialWebsite']);
     const hasTrackCountInput = payloadHasAnyKey(payload, ['trackCount', 'track_count']);
@@ -7078,12 +7228,15 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
           bioI18n: (normalizeDJBiText(target.bioI18n ?? null, bio || target.bio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: country || target.country || null,
           countryI18n: (normalizeCountryBiText(target.countryI18n ?? null, country || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+          spotifyUrl: spotifyUrl || target.spotifyUrl || null,
           spotifyId: spotifyId || target.spotifyId || null,
           spotifyFollowers: hasSpotifyFollowersInput ? spotifyFollowers : (target.spotifyFollowers ?? null),
           instagramUrl: instagramUrl || target.instagramUrl || null,
           facebookUrl: facebookUrl || target.facebookUrl || null,
           soundcloudUrl: soundcloudUrl || target.soundcloudUrl || null,
           soundcloudId: soundcloudId || target.soundcloudId || null,
+          neteaseUrl: neteaseUrl || target.neteaseUrl || null,
+          qqMusicUrl: qqMusicUrl || target.qqMusicUrl || null,
           website: website || target.website || null,
           trackCount: hasTrackCountInput ? trackCount : (target.trackCount ?? null),
           playlistCount: hasPlaylistCountInput ? playlistCount : (target.playlistCount ?? null),
@@ -7112,12 +7265,15 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
           bioI18n: (normalizeDJBiText(payload.bioI18n ?? null, bio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           country: country || null,
           countryI18n: (normalizeCountryBiText(payload.countryI18n ?? null, country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+          spotifyUrl: spotifyUrl || null,
           spotifyId: spotifyId || null,
           spotifyFollowers,
           instagramUrl: instagramUrl || null,
           facebookUrl: facebookUrl || null,
           soundcloudUrl: soundcloudUrl || null,
           soundcloudId: soundcloudId || null,
+          neteaseUrl: neteaseUrl || null,
+          qqMusicUrl: qqMusicUrl || null,
           website: website || null,
           trackCount: hasTrackCountInput ? trackCount : null,
           playlistCount: hasPlaylistCountInput ? playlistCount : null,
@@ -7387,17 +7543,56 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
       }
     }
 
+    if (Object.prototype.hasOwnProperty.call(payload, 'spotifyUrl')) {
+      const value = payload.spotifyUrl;
+      if (value === null) {
+        updateData.spotifyUrl = null;
+      } else if (typeof value === 'string') {
+        updateData.spotifyUrl = value.trim() || null;
+      } else {
+        res.status(400).json({ error: 'spotifyUrl must be a string or null' });
+        return;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'neteaseUrl')) {
+      const value = payload.neteaseUrl;
+      if (value === null) {
+        updateData.neteaseUrl = null;
+      } else if (typeof value === 'string') {
+        updateData.neteaseUrl = value.trim() || null;
+      } else {
+        res.status(400).json({ error: 'neteaseUrl must be a string or null' });
+        return;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'qqMusicUrl')) {
+      const value = payload.qqMusicUrl;
+      if (value === null) {
+        updateData.qqMusicUrl = null;
+      } else if (typeof value === 'string') {
+        updateData.qqMusicUrl = value.trim() || null;
+      } else {
+        res.status(400).json({ error: 'qqMusicUrl must be a string or null' });
+        return;
+      }
+    }
+
     const assignOptionalString = (
       payloadKey: string,
       targetKey:
         | 'bio'
         | 'country'
+        | 'spotifyUrl'
         | 'spotifyId'
         | 'appleMusicId'
         | 'instagramUrl'
         | 'facebookUrl'
         | 'soundcloudUrl'
         | 'soundcloudId'
+        | 'neteaseUrl'
+        | 'qqMusicUrl'
         | 'website'
         | 'twitterUrl'
         | 'youtubeUrl'
@@ -7418,12 +7613,15 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
     try {
       assignOptionalString('bio', 'bio');
       assignOptionalString('country', 'country');
+      assignOptionalString('spotifyUrl', 'spotifyUrl');
       assignOptionalString('spotifyId', 'spotifyId');
       assignOptionalString('appleMusicId', 'appleMusicId');
       assignOptionalString('instagramUrl', 'instagramUrl');
       assignOptionalString('facebookUrl', 'facebookUrl');
       assignOptionalString('soundcloudUrl', 'soundcloudUrl');
       assignOptionalString('soundcloudId', 'soundcloudId');
+      assignOptionalString('neteaseUrl', 'neteaseUrl');
+      assignOptionalString('qqMusicUrl', 'qqMusicUrl');
       assignOptionalString('website', 'website');
       assignOptionalString('twitterUrl', 'twitterUrl');
       assignOptionalString('youtubeUrl', 'youtubeUrl');
@@ -7575,6 +7773,7 @@ router.get('/djs/:id/sets', optionalAuth, async (req: Request, res: Response): P
 
 router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = (req as BFFAuthRequest).user?.userId;
     const djId = req.params.id as string;
     const rows = await prisma.event.findMany({
       where: {
@@ -7614,7 +7813,8 @@ router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response):
       },
     });
 
-    ok(res, { items: rows.map(mapEvent) });
+    const complianceUser = await resolveRegionalComplianceUser(userId);
+    ok(res, { items: rows.map((row) => mapEvent(row, complianceUser)) });
   } catch (error) {
     console.error('BFF web dj events error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -8067,8 +8267,10 @@ router.post('/dj-sets/:id/tracklists', optionalAuth, async (req: Request, res: R
 
 router.post('/dj-sets', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = requireAuth(req as BFFAuthRequest, res);
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
     if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
 
     const body = req.body as Record<string, unknown>;
     const djId = String(body.djId || '').trim();
@@ -8077,6 +8279,23 @@ router.post('/dj-sets', optionalAuth, async (req: Request, res: Response): Promi
 
     if (!djId || !title || !videoUrl) {
       res.status(400).json({ error: 'djId, title and videoUrl are required' });
+      return;
+    }
+
+    const complianceError = contentCompliance.validationError('set', body);
+    if (complianceError) {
+      res.status(400).json({ error: complianceError });
+      return;
+    }
+
+    if (!canBypassContentReview(viewerRole)) {
+      const submission = await createPendingContentSubmission({
+        submitterId: userId,
+        entityType: 'set',
+        title,
+        payload: body,
+      });
+      acceptedSubmission(res, submission, 'Set 信息已提交审核，管理员审核通过后才会入库');
       return;
     }
 
@@ -8928,13 +9147,26 @@ router.get('/rating-events/:id', optionalAuth, async (req: Request, res: Respons
 
 router.post('/rating-events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = requireAuth(req as BFFAuthRequest, res);
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
     if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
 
     const body = req.body as Record<string, unknown>;
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) {
       res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    if (!canBypassContentReview(viewerRole)) {
+      const submission = await createPendingContentSubmission({
+        submitterId: userId,
+        entityType: 'rating',
+        title: name,
+        payload: body,
+      });
+      acceptedSubmission(res, submission, '打分信息已提交审核，管理员审核通过后才会入库');
       return;
     }
 
@@ -9143,8 +9375,10 @@ router.post('/rating-events/from-event', optionalAuth, async (req: Request, res:
 
 router.post('/rating-events/:id/units', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = requireAuth(req as BFFAuthRequest, res);
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
     if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
 
     const eventId = req.params.id as string;
     const event = await prisma.ratingEvent.findUnique({
@@ -9160,6 +9394,21 @@ router.post('/rating-events/:id/units', optionalAuth, async (req: Request, res: 
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) {
       res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    if (!canBypassContentReview(viewerRole)) {
+      const submission = await createPendingContentSubmission({
+        submitterId: userId,
+        entityType: 'rating',
+        title: name,
+        payload: {
+          ...body,
+          name,
+          ratingEventId: eventId,
+        },
+      });
+      acceptedSubmission(res, submission, '打分项目已提交审核，管理员审核通过后才会入库');
       return;
     }
 
@@ -9587,6 +9836,17 @@ router.post('/learn/festivals', optionalAuth, async (req: Request, res: Response
     const name = rawName || pickWikiFestivalPrimaryText(nameI18n);
     if (!name) {
       res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    if (!canBypassContentReview(viewerRole)) {
+      const submission = await createPendingContentSubmission({
+        submitterId: userId,
+        entityType: 'brand',
+        title: name,
+        payload: body,
+      });
+      acceptedSubmission(res, submission, '品牌信息已提交审核，管理员审核通过后才会入库');
       return;
     }
 
@@ -10122,6 +10382,56 @@ router.get('/learn/labels', async (req: Request, res: Response): Promise<void> =
     );
   } catch (error) {
     console.error('BFF web learn labels error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/learn/labels', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    const body = req.body as Record<string, unknown>;
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+
+    if (!canBypassContentReview(viewerRole)) {
+      const submission = await createPendingContentSubmission({
+        submitterId: userId,
+        entityType: 'label',
+        title: name,
+        payload: body,
+      });
+      acceptedSubmission(res, submission, '厂牌信息已提交审核，管理员审核通过后才会入库');
+      return;
+    }
+
+    const slug = await uniqueLabelSlug(name, typeof body.slug === 'string' ? body.slug.trim() : undefined);
+    const created = await prisma.label.create({
+      data: {
+        name,
+        slug,
+        profileUrl: typeof body.profileUrl === 'string' && body.profileUrl.trim() ? body.profileUrl.trim() : `community://${slug}`,
+        profileSlug: typeof body.profileSlug === 'string' && body.profileSlug.trim() ? body.profileSlug.trim() : slug,
+        logoUrl: typeof body.logoUrl === 'string' && body.logoUrl.trim() ? body.logoUrl.trim() : null,
+        avatarUrl: typeof body.avatarUrl === 'string' && body.avatarUrl.trim() ? body.avatarUrl.trim() : null,
+        backgroundUrl: typeof body.backgroundUrl === 'string' && body.backgroundUrl.trim() ? body.backgroundUrl.trim() : null,
+        nation: typeof body.nation === 'string' && body.nation.trim() ? body.nation.trim() : (typeof body.country === 'string' && body.country.trim() ? body.country.trim() : null),
+        genresPreview: typeof body.genresPreview === 'string' && body.genresPreview.trim() ? body.genresPreview.trim() : null,
+        introductionPreview: typeof body.introductionPreview === 'string' && body.introductionPreview.trim() ? body.introductionPreview.trim() : null,
+        introduction: typeof body.introduction === 'string' && body.introduction.trim() ? body.introduction.trim() : (typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null),
+        genres: Array.isArray(body.genres) ? body.genres.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean) : [],
+      },
+    });
+
+    ok(res, created);
+  } catch (error) {
+    console.error('BFF web create learn label error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

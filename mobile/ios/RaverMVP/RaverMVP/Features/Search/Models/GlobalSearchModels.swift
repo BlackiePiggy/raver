@@ -19,18 +19,18 @@ enum GlobalSearchTab: String, CaseIterable, Codable, Hashable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: return L("全部", "All")
-        case .events: return L("活动", "Events")
+        case .all: return LT("全部", "All", "すべて")
+        case .events: return LT("活动", "Events", "イベント")
         case .djs: return "DJ"
-        case .peopleSquads: return L("用户/小队", "User & Team")
-        case .posts: return L("圈子", "Posts")
-        case .news: return L("资讯", "News")
+        case .peopleSquads: return LT("用户/小队", "User & Team", "ユーザー/Squad")
+        case .posts: return LT("圈子", "Posts", "投稿")
+        case .news: return LT("资讯", "News", "ニュース")
         case .sets: return "Sets"
-        case .rankings: return L("榜单", "Rankings")
-        case .ratings: return L("打分", "Ratings")
-        case .festivals: return L("品牌", "Brand")
-        case .labels: return L("厂牌", "Labels")
-        case .genreTree: return L("风格树", "Genre Tree")
+        case .rankings: return LT("榜单", "Rankings", "ランキング")
+        case .ratings: return LT("打分", "Ratings", "評価")
+        case .festivals: return LT("品牌", "Brand", "ブランド")
+        case .labels: return LT("厂牌", "Labels", "レーベル")
+        case .genreTree: return LT("风格树", "Genre Tree", "ジャンルツリー")
         }
     }
 
@@ -115,20 +115,20 @@ enum GlobalSearchItemType: String, CaseIterable, Codable, Hashable {
 
     var title: String {
         switch self {
-        case .event: return L("活动", "Event")
-        case .news: return L("资讯", "News")
+        case .event: return LT("活动", "Event", "イベント")
+        case .news: return LT("资讯", "News", "ニュース")
         case .dj: return "DJ"
         case .set: return "Set"
-        case .rankingBoard: return L("榜单", "Ranking")
-        case .rankingEntry: return L("榜单条目", "Ranking Entry")
-        case .ratingEvent: return L("打分活动", "Rating Event")
-        case .ratingUnit: return L("打分单位", "Rating Unit")
-        case .post: return L("圈子", "Post")
-        case .label: return L("厂牌", "Label")
-        case .festival: return L("音乐节", "Festival")
-        case .genre: return L("风格", "Genre")
-        case .user: return L("用户", "User")
-        case .squad: return L("小队", "Squad")
+        case .rankingBoard: return LT("榜单", "Ranking", "ランキング")
+        case .rankingEntry: return LT("榜单条目", "Ranking Entry", "ランキング項目")
+        case .ratingEvent: return LT("打分活动", "Rating Event", "評価イベント")
+        case .ratingUnit: return LT("打分单位", "Rating Unit", "評価ユニット")
+        case .post: return LT("圈子", "Post", "投稿")
+        case .label: return LT("厂牌", "Label", "レーベル")
+        case .festival: return LT("音乐节", "Festival", "フェス")
+        case .genre: return LT("风格", "Genre", "ジャンル")
+        case .user: return LT("用户", "User", "ユーザー")
+        case .squad: return LT("小队", "Squad", "Squad")
         }
     }
 
@@ -236,17 +236,17 @@ struct GlobalSearchScopeHint: Identifiable, Hashable {
 
     static var all: [GlobalSearchScopeHint] {
         [
-            GlobalSearchScopeHint(id: "events", title: L("活动", "Events"), systemImage: "calendar", tint: Color(red: 0.95, green: 0.30, blue: 0.38)),
-            GlobalSearchScopeHint(id: "news", title: L("资讯", "News"), systemImage: "newspaper", tint: Color(red: 0.28, green: 0.58, blue: 0.95)),
+            GlobalSearchScopeHint(id: "events", title: LT("活动", "Events", "イベント"), systemImage: "calendar", tint: Color(red: 0.95, green: 0.30, blue: 0.38)),
+            GlobalSearchScopeHint(id: "news", title: LT("资讯", "News", "ニュース"), systemImage: "newspaper", tint: Color(red: 0.28, green: 0.58, blue: 0.95)),
             GlobalSearchScopeHint(id: "djs", title: "DJ", systemImage: "headphones", tint: RaverTheme.accent),
             GlobalSearchScopeHint(id: "sets", title: "Sets", systemImage: "play.rectangle", tint: Color(red: 0.24, green: 0.70, blue: 0.78)),
-            GlobalSearchScopeHint(id: "rankings", title: L("榜单", "Rankings"), systemImage: "list.number", tint: Color(red: 0.98, green: 0.71, blue: 0.22)),
-            GlobalSearchScopeHint(id: "ratings", title: L("打分", "Ratings"), systemImage: "star", tint: Color(red: 0.92, green: 0.42, blue: 0.80)),
-            GlobalSearchScopeHint(id: "posts", title: L("圈子", "Posts"), systemImage: "bubble.left.and.bubble.right", tint: Color(red: 0.52, green: 0.76, blue: 0.34)),
-            GlobalSearchScopeHint(id: "festivals", title: L("品牌", "Brand"), systemImage: "sparkles", tint: Color(red: 0.76, green: 0.47, blue: 0.95)),
-            GlobalSearchScopeHint(id: "labels", title: L("厂牌", "Labels"), systemImage: "tag", tint: Color(red: 0.62, green: 0.50, blue: 0.92)),
-            GlobalSearchScopeHint(id: "genreTree", title: L("风格树", "Genre Tree"), systemImage: "tree", tint: Color(red: 0.24, green: 0.70, blue: 0.78)),
-            GlobalSearchScopeHint(id: "peopleSquads", title: L("用户/小队", "People & Squads"), systemImage: "person.2", tint: Color(red: 0.96, green: 0.45, blue: 0.28))
+            GlobalSearchScopeHint(id: "rankings", title: LT("榜单", "Rankings", "ランキング"), systemImage: "list.number", tint: Color(red: 0.98, green: 0.71, blue: 0.22)),
+            GlobalSearchScopeHint(id: "ratings", title: LT("打分", "Ratings", "評価"), systemImage: "star", tint: Color(red: 0.92, green: 0.42, blue: 0.80)),
+            GlobalSearchScopeHint(id: "posts", title: LT("圈子", "Posts", "投稿"), systemImage: "bubble.left.and.bubble.right", tint: Color(red: 0.52, green: 0.76, blue: 0.34)),
+            GlobalSearchScopeHint(id: "festivals", title: LT("品牌", "Brand", "ブランド"), systemImage: "sparkles", tint: Color(red: 0.76, green: 0.47, blue: 0.95)),
+            GlobalSearchScopeHint(id: "labels", title: LT("厂牌", "Labels", "レーベル"), systemImage: "tag", tint: Color(red: 0.62, green: 0.50, blue: 0.92)),
+            GlobalSearchScopeHint(id: "genreTree", title: LT("风格树", "Genre Tree", "ジャンルツリー"), systemImage: "tree", tint: Color(red: 0.24, green: 0.70, blue: 0.78)),
+            GlobalSearchScopeHint(id: "peopleSquads", title: LT("用户/小队", "People & Squads", "ユーザー/Squad"), systemImage: "person.2", tint: Color(red: 0.96, green: 0.45, blue: 0.28))
         ]
     }
 }
@@ -261,49 +261,49 @@ struct GlobalSearchPlatformStatHint: Identifiable, Hashable {
         [
             GlobalSearchPlatformStatHint(
                 id: "events",
-                title: L("探索 1000+ 场电音活动", "Explore 1,000+ electronic music events"),
+                title: LT("探索 1000+ 场电音活动", "Explore 1,000+ electronic music events", "1,000件以上の電子音楽イベントを探索"),
                 systemImage: "calendar",
                 tint: Color(red: 0.95, green: 0.30, blue: 0.38)
             ),
             GlobalSearchPlatformStatHint(
                 id: "djs",
-                title: L("探索 10000+ 位 DJ", "Explore 10,000+ DJs"),
+                title: LT("探索 10000+ 位 DJ", "Explore 10,000+ DJs", "10,000人以上のDJを探索"),
                 systemImage: "headphones",
                 tint: RaverTheme.accent
             ),
             GlobalSearchPlatformStatHint(
                 id: "sets",
-                title: L("探索 100+ 个现场 Set", "Explore 100+ live sets"),
+                title: LT("探索 100+ 个现场 Set", "Explore 100+ live sets", "100件以上のライブSetを探索"),
                 systemImage: "play.rectangle",
                 tint: Color(red: 0.24, green: 0.70, blue: 0.78)
             ),
             GlobalSearchPlatformStatHint(
                 id: "rankings",
-                title: L("发现热门榜单与年度排名", "Discover charts and yearly rankings"),
+                title: LT("发现热门榜单与年度排名", "Discover charts and yearly rankings", "人気ランキングと年間順位を発見"),
                 systemImage: "list.number",
                 tint: Color(red: 0.98, green: 0.71, blue: 0.22)
             ),
             GlobalSearchPlatformStatHint(
                 id: "ratings",
-                title: L("查看打分活动与打分单位", "Browse rating events and rating units"),
+                title: LT("查看打分活动与打分单位", "Browse rating events and rating units", "評価イベントと評価ユニットを見る"),
                 systemImage: "star",
                 tint: Color(red: 0.92, green: 0.42, blue: 0.80)
             ),
             GlobalSearchPlatformStatHint(
                 id: "wiki",
-                title: L("探索音乐节、厂牌与风格树", "Explore festivals, labels, and genre trees"),
+                title: LT("探索音乐节、厂牌与风格树", "Explore festivals, labels, and genre trees", "フェス、レーベル、ジャンルツリーを探索"),
                 systemImage: "sparkles",
                 tint: Color(red: 0.76, green: 0.47, blue: 0.95)
             ),
             GlobalSearchPlatformStatHint(
                 id: "posts",
-                title: L("浏览圈子动态与玩家内容", "Browse circle posts and community content"),
+                title: LT("浏览圈子动态与玩家内容", "Browse circle posts and community content", "投稿とコミュニティコンテンツを見る"),
                 systemImage: "bubble.left.and.bubble.right",
                 tint: Color(red: 0.52, green: 0.76, blue: 0.34)
             ),
             GlobalSearchPlatformStatHint(
                 id: "peopleSquads",
-                title: L("找到用户与小队", "Find users and squads"),
+                title: LT("找到用户与小队", "Find users and squads", "ユーザーとSquadを見つける"),
                 systemImage: "person.2",
                 tint: Color(red: 0.96, green: 0.45, blue: 0.28)
             )

@@ -18,7 +18,7 @@ final class DemoAlignedMessageFailureFeedbackCoordinator {
             conversationID: chatContextProvider.conversationID
         )
         hintPresenter?.show(
-            message: L("消息发送失败，点按气泡重试", "Send failed. Tap bubble to retry")
+            message: LT("消息发送失败，点按气泡重试", "Send failed. Tap bubble to retry", "送信に失敗しました。吹き出しをタップして再試行")
         )
     }
 

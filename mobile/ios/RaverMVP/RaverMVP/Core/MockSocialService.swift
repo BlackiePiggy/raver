@@ -24,7 +24,22 @@ actor MockSocialService: SocialService {
     private var followedEventNotifications: [FollowedEventNotificationItem] = []
     private var followedDJNotifications: [FollowedDJNotificationItem] = []
     private var followedBrandNotifications: [FollowedBrandNotificationItem] = []
+    private var notificationCategoryPreferences: [NotificationCategoryPreference] = [
+        NotificationCategoryPreference(category: "chat_message", enabled: true),
+        NotificationCategoryPreference(category: "community_interaction", enabled: true),
+        NotificationCategoryPreference(category: "event_countdown", enabled: true),
+        NotificationCategoryPreference(category: "event_daily_digest", enabled: true),
+        NotificationCategoryPreference(category: "route_dj_reminder", enabled: true),
+        NotificationCategoryPreference(category: "followed_dj_update", enabled: true),
+        NotificationCategoryPreference(category: "followed_brand_update", enabled: true),
+        NotificationCategoryPreference(category: "account_enforcement", enabled: true),
+        NotificationCategoryPreference(category: "major_news", enabled: true)
+    ]
     private var followedBrandUpdatePreference = FollowedBrandUpdatePreference.empty
+    private var accountEnforcements: [AccountEnforcement] = []
+    private var accountEnforcementAppeals: [AccountEnforcementAppeal] = []
+    private var contentReports: [ContentReport] = []
+    private var blockedUserIDs: Set<String> = []
 
     private var followersByUserID: [String: Set<String>] = [:]
     private var followingByUserID: [String: Set<String>] = [:]
@@ -99,9 +114,17 @@ actor MockSocialService: SocialService {
         return 300
     }
 
-    func register(email: String, password: String, displayName: String) async throws -> Session {
+    func register(
+        email: String,
+        password: String,
+        displayName: String,
+        birthYear: Int?,
+        regionCode: String?
+    ) async throws -> Session {
         _ = email
         _ = password
+        _ = birthYear
+        _ = regionCode
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         currentUser.username = name.isEmpty ? "mock_user" : name.lowercased().replacingOccurrences(of: " ", with: "_")
         currentUser.displayName = name.isEmpty ? "Mock User" : name
@@ -135,10 +158,149 @@ actor MockSocialService: SocialService {
         SessionTokenStore.shared.clear()
     }
 
+    func deleteAccount() async throws {
+        SessionTokenStore.shared.clear()
+    }
+
+    func fetchAccountEnforcementStatus() async throws -> AccountEnforcementStatus {
+        let active = accountEnforcements.filter { item in
+            let isActive = item.status == nil || item.status == .active || item.status == .scheduled
+            let hasNotEnded = item.endsAt.map { $0 > Date() } ?? true
+            return isActive && item.revokedAt == nil && hasNotEnded
+        }
+        let scopes = Array(Set(active.flatMap(\.scopes))).sorted()
+        let status: AccountEnforcementStatusKind
+        if active.contains(where: { $0.type == .ban }) {
+            status = .banned
+        } else if active.contains(where: { $0.type == .suspension }) {
+            status = .suspended
+        } else if active.contains(where: { $0.type == .restriction || $0.type == .riskFreeze }) {
+            status = .restricted
+        } else {
+            status = .none
+        }
+        return AccountEnforcementStatus(
+            userId: currentUser.id,
+            accountStatus: .active,
+            enforcementStatus: status,
+            scopes: scopes,
+            nextReviewAt: active.compactMap(\.endsAt).sorted().first,
+            appealable: !active.isEmpty,
+            activeEnforcements: active
+        )
+    }
+
+    func fetchAccountEnforcements() async throws -> [AccountEnforcement] {
+        accountEnforcements.sorted { ($0.createdAt ?? $0.startsAt) > ($1.createdAt ?? $1.startsAt) }
+    }
+
+    func fetchAccountEnforcementAppeals() async throws -> [AccountEnforcementAppeal] {
+        accountEnforcementAppeals.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func submitAccountEnforcementAppeal(enforcementID: String, input: AccountEnforcementAppealInput) async throws -> AccountEnforcementAppeal {
+        guard accountEnforcements.contains(where: { $0.id == enforcementID }) else {
+            throw ServiceError.message("enforcement_not_found")
+        }
+        let appeal = AccountEnforcementAppeal(
+            id: UUID().uuidString,
+            enforcementId: enforcementID,
+            userId: currentUser.id,
+            status: .submitted,
+            appealReason: input.appealReason,
+            contactEmail: input.contactEmail,
+            reviewerId: nil,
+            decision: nil,
+            decisionNote: nil,
+            reviewedAt: nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        accountEnforcementAppeals.insert(appeal, at: 0)
+        return appeal
+    }
+
+    func submitContentReport(input: ContentReportInput) async throws -> ContentReport {
+        if let index = contentReports.firstIndex(where: { $0.targetType == input.targetType && $0.targetId == input.targetId }) {
+            contentReports[index].reason = input.reason
+            contentReports[index].detail = input.detail
+            contentReports[index].attachments = input.attachments?.map {
+                ContentReportAttachment(type: $0.type, url: $0.url, label: $0.label)
+            }
+            contentReports[index].source = input.source
+            contentReports[index].status = "pending"
+            contentReports[index].updatedAt = Date()
+            return contentReports[index]
+        }
+
+        let targetUser = usersByID[input.targetId]
+        let report = ContentReport(
+            id: UUID().uuidString,
+            targetType: input.targetType,
+            targetId: input.targetId,
+            targetUserId: targetUser?.id,
+            targetUser: targetUser,
+            reason: input.reason,
+            detail: input.detail,
+            attachments: input.attachments?.map {
+                ContentReportAttachment(type: $0.type, url: $0.url, label: $0.label)
+            },
+            source: input.source,
+            status: "pending",
+            resolutionNote: nil,
+            resolvedAt: nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        contentReports.append(report)
+        return report
+    }
+
+    func fetchMyContentReports(limit: Int) async throws -> [ContentReport] {
+        Array(contentReports.sorted { ($0.updatedAt ?? $0.createdAt) > ($1.updatedAt ?? $1.createdAt) }.prefix(max(1, limit)))
+    }
+
+    func fetchBlockedUsers(limit: Int) async throws -> [UserBlockListItem] {
+        let now = Date()
+        return blockedUserIDs
+            .compactMap { usersByID[$0] }
+            .sorted { $0.displayName < $1.displayName }
+            .prefix(max(1, limit))
+            .map { user in
+                UserBlockListItem(
+                    id: user.id,
+                    user: user,
+                    reason: nil,
+                    note: nil,
+                    source: "mock",
+                    createdAt: now,
+                    updatedAt: now
+                )
+            }
+    }
+
+    func fetchUserBlockStatus(userID: String) async throws -> UserBlockStatus {
+        UserBlockStatus(isBlocked: blockedUserIDs.contains(userID), blockedAt: nil)
+    }
+
+    func blockUser(userID: String, input: UserBlockInput) async throws -> UserBlockStatus {
+        _ = input
+        guard userID != currentUser.id else {
+            throw ServiceError.message(LT("不能拉黑自己", "You cannot block yourself", "自分自身はブロックできません"))
+        }
+        blockedUserIDs.insert(userID)
+        return UserBlockStatus(isBlocked: true, blockedAt: Date())
+    }
+
+    func unblockUser(userID: String) async throws -> UserBlockStatus {
+        blockedUserIDs.remove(userID)
+        return UserBlockStatus(isBlocked: false, blockedAt: nil)
+    }
+
     private func issueMockSession() -> Session {
         SessionTokenStore.shared.token = mockAccessToken
         SessionTokenStore.shared.refreshToken = mockRefreshToken
-        return Session(token: mockAccessToken, refreshToken: mockRefreshToken, user: currentUser)
+        return Session(token: mockAccessToken, refreshToken: mockRefreshToken, user: currentUser, accountStatus: AccountEnforcementStatus.clear)
     }
 
     func fetchTencentIMBootstrap() async throws -> TencentIMBootstrap {
@@ -178,7 +340,7 @@ actor MockSocialService: SocialService {
                 .map { post in
                     var copied = post
                     copied.recommendationReasonCode = "trending"
-                    copied.recommendationReason = L("热门推荐", "Trending for you")
+                    copied.recommendationReason = LT("热门推荐", "Trending for you", "人気のおすすめ")
                     return copied
                 }
         case .following:
@@ -214,7 +376,7 @@ actor MockSocialService: SocialService {
         return post
     }
 
-    func createPost(input: CreatePostInput) async throws -> Post {
+    func createPost(input: CreatePostInput) async throws -> CreatePostResult {
         let trimmed = input.content.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedImages = input.images.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let normalizedLocation: String? = {
@@ -246,7 +408,7 @@ actor MockSocialService: SocialService {
         posts.insert(new, at: 0)
         commentsByPost[new.id] = []
         profilesByID[currentUser.id]?.postsCount = posts.filter { $0.author.id == currentUser.id }.count
-        return new
+        return .created(new)
     }
 
     func updatePost(postID: String, input: UpdatePostInput) async throws -> Post {
@@ -695,7 +857,7 @@ actor MockSocialService: SocialService {
         onProgress?(100)
         return appendOutgoingMessage(
             conversationID: conversationID,
-            content: L("[图片]", "[Image]"),
+            content: LT("[图片]", "[Image]", "[画像]"),
             kind: .image,
             media: ChatMessageMediaPayload(
                 mediaURL: fileURL.absoluteString,
@@ -716,7 +878,7 @@ actor MockSocialService: SocialService {
         onProgress?(100)
         return appendOutgoingMessage(
             conversationID: conversationID,
-            content: L("[视频]", "[Video]"),
+            content: LT("[视频]", "[Video]", "[動画]"),
             kind: .video,
             media: ChatMessageMediaPayload(
                 mediaURL: fileURL.absoluteString
@@ -727,7 +889,7 @@ actor MockSocialService: SocialService {
     func sendVoiceMessage(conversationID: String, fileURL: URL) async throws -> ChatMessage {
         appendOutgoingMessage(
             conversationID: conversationID,
-            content: L("[语音]", "[Voice]"),
+            content: LT("[语音]", "[Voice]", "[音声]"),
             kind: .voice,
             media: ChatMessageMediaPayload(
                 mediaURL: fileURL.absoluteString,
@@ -1619,6 +1781,16 @@ actor MockSocialService: SocialService {
         }
     }
 
+    func fetchContentReviewSummary() async throws -> ContentReviewSummary {
+        .empty
+    }
+
+    func fetchContentReviewNotifications(limit: Int) async throws -> [ContentReviewNotificationItem] {
+        []
+    }
+
+    func markContentReviewNotificationRead(notificationID: String) async throws {}
+
     func fetchFollowedEventsSummary() async throws -> FollowedEventsSummary {
         let unreadItems = followedEventNotifications.filter { !$0.isRead }
         let latest = followedEventNotifications.sorted(by: { $0.occurredAt > $1.occurredAt }).first
@@ -1720,6 +1892,18 @@ actor MockSocialService: SocialService {
             followedBrandUpdatePreference.includeEvents = includeEvents
         }
         return followedBrandUpdatePreference
+    }
+
+    func fetchNotificationCategoryPreferences() async throws -> [NotificationCategoryPreference] {
+        notificationCategoryPreferences
+    }
+
+    func updateNotificationCategoryPreferences(_ input: NotificationCategoryPreferencesInput) async throws -> [NotificationCategoryPreference] {
+        let updatesByCategory = Dictionary(uniqueKeysWithValues: input.preferences.map { ($0.category, $0.enabled) })
+        notificationCategoryPreferences = notificationCategoryPreferences.map { item in
+            NotificationCategoryPreference(category: item.category, enabled: updatesByCategory[item.category] ?? item.enabled)
+        }
+        return notificationCategoryPreferences
     }
 
     func registerDevicePushToken(

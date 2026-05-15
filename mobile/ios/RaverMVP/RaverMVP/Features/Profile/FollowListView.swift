@@ -9,9 +9,9 @@ enum FollowListKind: String, Identifiable {
 
     var title: String {
         switch self {
-        case .followers: return L("粉丝", "Followers")
-        case .following: return L("关注", "Following")
-        case .friends: return L("好友", "Friends")
+        case .followers: return LT("粉丝", "Followers", "フォロワー")
+        case .following: return LT("关注", "Following", "フォロー中")
+        case .friends: return LT("好友", "Friends", "友達")
         }
     }
 }
@@ -34,13 +34,13 @@ struct FollowListView: View {
             if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if viewModel.isRefreshing {
-                        InlineLoadingBadge(title: L("正在更新列表", "Updating list"))
+                        InlineLoadingBadge(title: LT("正在更新列表", "Updating list", "一覧を更新中"))
                     }
                     if let bannerMessage = viewModel.bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task { await viewModel.load() }
                         }
@@ -61,7 +61,7 @@ struct FollowListView: View {
                 Spacer()
             case .empty:
                 ContentUnavailableView(
-                    L("暂无\(viewModel.kind.title)", "No \(viewModel.kind.title) Yet"),
+                    LT("暂无\(viewModel.kind.title)", "No \(viewModel.kind.title) Yet", "\(viewModel.kind.title) はまだありません"),
                     systemImage: "person.2"
                 )
             case .success:
@@ -89,7 +89,7 @@ struct FollowListView: View {
                                             await viewModel.toggleFollow(user: user)
                                         }
                                     } label: {
-                                        Text(user.isFollowing ? L("已关注", "Following") : L("关注", "Follow"))
+                                        Text(user.isFollowing ? LT("已关注", "Following", "フォロー中") : LT("关注", "Follow", "フォロー"))
                                             .font(.caption.bold())
                                             .foregroundStyle(user.isFollowing ? RaverTheme.secondaryText : Color.white)
                                             .padding(.horizontal, 16)
@@ -112,7 +112,7 @@ struct FollowListView: View {
                     if viewModel.isLoadingMore {
                         HStack {
                             Spacer()
-                            ProgressView(L("加载更多...", "Loading more..."))
+                            ProgressView(LT("加载更多...", "Loading more...", "さらに読み込み中..."))
                             Spacer()
                         }
                         .listRowBackground(RaverTheme.background)
@@ -129,11 +129,11 @@ struct FollowListView: View {
         .task {
             await viewModel.load()
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { viewModel.error != nil },
             set: { if !$0 { viewModel.error = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
         }

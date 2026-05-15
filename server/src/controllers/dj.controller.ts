@@ -343,6 +343,8 @@ export const getDJ = async (req: Request, res: Response): Promise<void> => {
 
 export const createDJ = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const userId = req.user?.userId;
+    const role = req.user?.role;
     const {
       name,
       slug,
@@ -357,7 +359,34 @@ export const createDJ = async (req: AuthRequest, res: Response): Promise<void> =
       twitterUrl,
     } = req.body;
 
-    if (!name || !slug) {
+    if (!name) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    if (role !== 'admin' && role !== 'operator') {
+      const submission = await prisma.contentSubmission.create({
+        data: {
+          submitterId: userId,
+          entityType: 'dj',
+          title: String(name).trim(),
+          payload: req.body,
+          status: 'pending',
+        },
+      });
+      res.status(202).json({
+        message: 'DJ 信息已提交审核，管理员审核通过后才会入库',
+        submission,
+      });
+      return;
+    }
+
+    if (!slug) {
       res.status(400).json({ error: 'Name and slug are required' });
       return;
     }

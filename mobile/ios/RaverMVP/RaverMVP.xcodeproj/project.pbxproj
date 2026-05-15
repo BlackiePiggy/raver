@@ -112,6 +112,7 @@
 		62896BBA532DF30A7A86869A /* RaverNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 37D09674854B1606E2D0363F /* RaverNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		62B16A77B9B42A4668E95E96 /* SquadProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B72680D6A119DEDC285359 /* SquadProfileView.swift */; };
 		63661A8F6ADD0F77D126BC41 /* RaverCountdownWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 12681E3DE969D5F5A96950EC /* RaverCountdownWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6359F05FEE80E1BD073F1A69 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1462B44766310EEF197A7F11 /* PrivacyInfo.xcprivacy */; };
 		636BCEC3415AA5AA44456A24 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F434E041601C9F1BB795B02F /* SettingsView.swift */; };
 		643700CC4D94BC5699C456C9 /* DemoAlignedChatAssemblyDependencyResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24198B7A3409789A67778017 /* DemoAlignedChatAssemblyDependencyResolver.swift */; };
 		64FEBEA5E117D9B11260BC62 /* CircleCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 442FAF8659FBE3EF3FC44572 /* CircleCoordinator.swift */; };
@@ -156,6 +157,7 @@
 		904A944C0347388050414A19 /* ChatLayoutAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC543D5452CE84A829F88272 /* ChatLayoutAttributes.swift */; };
 		9197161544529AE82E33B872 /* FollowListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16E5645F1BBC6C366601B5F /* FollowListViewModel.swift */; };
 		921DA79B7E9158F25B8C25EE /* PostCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A10D4C2B18B58489A03E3FD /* PostCardView.swift */; };
+		9276C5C0A80D449A9A7D6331 /* ReportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1E0814F4D44EF8A2117EAA /* ReportSheet.swift */; };
 		928884A49E019D8C2B1C286D /* DemoAlignedMediaMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DD043D6D7706F23E3EB672D /* DemoAlignedMediaMessageCell.swift */; };
 		9520E46479B73B964E7430C2 /* EventDetailHostingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B88282F628420E611F6FA379 /* EventDetailHostingController.swift */; };
 		961DA46776C44D574FBFE8CE /* DemoAlignedChatScreenAssemblyActionDispatcherBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25A23BEA98CBEC6298AB9580 /* DemoAlignedChatScreenAssemblyActionDispatcherBundle.swift */; };
@@ -261,6 +263,8 @@
 		FA9899B15DB41CDE8229205C /* IndexPath+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEFF3D1B256AA3DD964CC0BD /* IndexPath+Extension.swift */; };
 		FA9EB243AC318CBA466C42AD /* RaverCountdownWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07D4EBEBADD9F1E279111DD4 /* RaverCountdownWidgetsBundle.swift */; };
 		FB5A18854CEFE99F1BB2D9AE /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED7D9D9CBAF6906AE336154 /* MainTabView.swift */; };
+		7A278F5AACAC3D28B1158F0C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 52ED97273272AF619A656DBD /* PrivacyInfo.xcprivacy */; };
+		ABE046E1797F175D0AE47666 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 9C63F3090C0D4349E368842F /* PrivacyInfo.xcprivacy */; };
 		FED85BDCFF1296B7A86E015D /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 581792D7AA4E89244B39D8B2 /* Theme.swift */; };
 		FFB30D45B60919A6D8AD891F /* CGRect+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6C0124C1138D3F38384AA88 /* CGRect+Extension.swift */; };
 /* End PBXBuildFile section */
@@ -326,6 +330,7 @@
 		114ED8D770D2BFD44A5EA67E /* DemoAlignedFailureFeedbackActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedFailureFeedbackActions.swift; sourceTree = "<group>"; };
 		11785751273F1910086A0B62 /* RaverChatCollectionDataSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverChatCollectionDataSource.swift; sourceTree = "<group>"; };
 		12681E3DE969D5F5A96950EC /* RaverCountdownWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = RaverCountdownWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		1462B44766310EEF197A7F11 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		136CFF692EE3C0AAFF780867 /* GlobalSearchTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSearchTelemetry.swift; sourceTree = "<group>"; };
 		13D46D18F393E271B5237379 /* EventsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsModuleView.swift; sourceTree = "<group>"; };
 		14B8DEE5661D47AABAB7F519 /* DemoAlignedMediaMessageSendCoordinatorFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedMediaMessageSendCoordinatorFactory.swift; sourceTree = "<group>"; };
@@ -395,6 +400,7 @@
 		48CC2F876AB61D96BFCA8518 /* SquadOfflineActivityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SquadOfflineActivityModels.swift; sourceTree = "<group>"; };
 		4958B3D3F94282A421A7D5FA /* DemoAlignedMessageFlowCoordinatorFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedMessageFlowCoordinatorFactory.swift; sourceTree = "<group>"; };
 		4A10D4C2B18B58489A03E3FD /* PostCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostCardView.swift; sourceTree = "<group>"; };
+		0B1E0814F4D44EF8A2117EAA /* ReportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportSheet.swift; sourceTree = "<group>"; };
 		4AA05995D82C1FC190CD72F5 /* CollectionViewChatLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionViewChatLayout.swift; sourceTree = "<group>"; };
 		4AB9FDAB6A078D8DA5D4D4CA /* EventCalendarSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCalendarSupport.swift; sourceTree = "<group>"; };
 		4B8FF198478D461F949BE540 /* EventDetailScrollViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailScrollViewController.swift; sourceTree = "<group>"; };
@@ -454,11 +460,13 @@
 		9099BF56A5AEA1C629175C03 /* RaverNotificationService.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RaverNotificationService.entitlements; sourceTree = "<group>"; };
 		90ACB5B1A7433350223A079C /* DiscoverRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverRoute.swift; sourceTree = "<group>"; };
 		9108C5AE13CD02161DC903E2 /* RaverCountdownWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RaverCountdownWidgets.entitlements; sourceTree = "<group>"; };
+		52ED97273272AF619A656DBD /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		918CC540D2667709C2E22AEE /* VirtualAssetCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualAssetCenterView.swift; sourceTree = "<group>"; };
 		9319E7C2ECCDC77451781C6B /* DemoAlignedChatScreenAssemblyCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedChatScreenAssemblyCoordinator.swift; sourceTree = "<group>"; };
 		93D5E00041C5689BD07853B7 /* PrimaryButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryButtonStyle.swift; sourceTree = "<group>"; };
 		93F03BC5D8661326C73E0C34 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		94A818FEAAB56139A7847EAC /* Pods-RaverMVP.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RaverMVP.release.xcconfig"; path = "Target Support Files/Pods-RaverMVP/Pods-RaverMVP.release.xcconfig"; sourceTree = "<group>"; };
+		9C63F3090C0D4349E368842F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		961463E6BC6F60F0B156107F /* RecentSearchStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentSearchStore.swift; sourceTree = "<group>"; };
 		C4337D912C5F72B7C2C06311 /* ChatCardRouteTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCardRouteTarget.swift; sourceTree = "<group>"; };
 		98F0C459C7EE8A2A3F7CDB3A /* EventEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEditorView.swift; sourceTree = "<group>"; };
@@ -635,6 +643,7 @@
 			children = (
 				D9C7ECF0AC0BCA7866DF9D2A /* Info.plist */,
 				AC80DEFB4FDFD2BCD1A33280 /* NotificationService.swift */,
+				9C63F3090C0D4349E368842F /* PrivacyInfo.xcprivacy */,
 				9099BF56A5AEA1C629175C03 /* RaverNotificationService.entitlements */,
 			);
 			path = RaverNotificationService;
@@ -1315,6 +1324,7 @@
 				22DACDC6883B8B285DE1D62B /* Assets.xcassets */,
 				93F03BC5D8661326C73E0C34 /* Info.plist */,
 				A7BE2DE303DA1C5FA1BC26C7 /* login-background-placeholder.mp4 */,
+				1462B44766310EEF197A7F11 /* PrivacyInfo.xcprivacy */,
 				A48ABEFD056FEEE07C8A2C23 /* RaverMVP.entitlements */,
 				09147CC250EE9B48A01FAA78 /* RaverMVPApp.swift */,
 				027A9F883E02CF838F5E891D /* Application */,
@@ -1448,6 +1458,7 @@
 				7E13ABD9EE466C03068DACF1 /* CountdownEventIntent.swift */,
 				CC145477582BF63B7F00131E /* EventCountdownWidget.swift */,
 				FFEADB71E1EC75E8AD5D6604 /* Info.plist */,
+				52ED97273272AF619A656DBD /* PrivacyInfo.xcprivacy */,
 				9108C5AE13CD02161DC903E2 /* RaverCountdownWidgets.entitlements */,
 				07D4EBEBADD9F1E279111DD4 /* RaverCountdownWidgetsBundle.swift */,
 			);
@@ -1503,6 +1514,7 @@
 				D0B45B928FAA36BEC68A7B7E /* GlassCard.swift */,
 				587F3AE5F94F3B906F641F5C /* ImageLoaderView.swift */,
 				4A10D4C2B18B58489A03E3FD /* PostCardView.swift */,
+				0B1E0814F4D44EF8A2117EAA /* ReportSheet.swift */,
 				93D5E00041C5689BD07853B7 /* PrimaryButtonStyle.swift */,
 				251FD05102AAEC3A1C79511B /* RaverNavigationChrome.swift */,
 				3A69B02150BD11F5B7A67A7F /* RaverScrollableTabPager.swift */,
@@ -1565,6 +1577,7 @@
 			buildConfigurationList = 56E01C56BDE84138E6F0B2E2 /* Build configuration list for PBXNativeTarget "RaverNotificationService" */;
 			buildPhases = (
 				97C02965CEAB9ABF222343DD /* Sources */,
+				1CFD41BDE2A24FAEA65CC50C /* Resources */,
 			);
 			buildRules = (
 			);
@@ -1580,6 +1593,7 @@
 			buildConfigurationList = F4932F945E33F6E4A4741F67 /* Build configuration list for PBXNativeTarget "RaverCountdownWidgets" */;
 			buildPhases = (
 				77A256B6EB35268331AF8BE2 /* Sources */,
+				B62110A1E5FBB65FF26DC2C2 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -1648,7 +1662,24 @@
 				BFFDECAA0508516FE35108E8 /* Assets.xcassets in Resources */,
 				1FBBA16E3A548770DFE7B279 /* Preview Assets.xcassets in Resources */,
 				6B6EE0B9F7BB79F7DB7C04BB /* altehaasgroteskbold.ttf in Resources */,
+				6359F05FEE80E1BD073F1A69 /* PrivacyInfo.xcprivacy in Resources */,
 				830A86BDAE8AE230A646F536 /* login-background-placeholder.mp4 in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1CFD41BDE2A24FAEA65CC50C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ABE046E1797F175D0AE47666 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B62110A1E5FBB65FF26DC2C2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7A278F5AACAC3D28B1158F0C /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1902,6 +1933,7 @@
 				3892F13EB0982506C95ACE3F /* NotificationsViewModel.swift in Sources */,
 				F784C75014AFF3C646BAADA4 /* OperationBanner.swift in Sources */,
 				921DA79B7E9158F25B8C25EE /* PostCardView.swift in Sources */,
+				9276C5C0A80D449A9A7D6331 /* ReportSheet.swift in Sources */,
 				0891E480ACD029C80916089F /* PostDetailView.swift in Sources */,
 				484571D1CEA1F887D558A195 /* PrimaryButtonStyle.swift in Sources */,
 				CF43C595191E9B599B2475F8 /* ProfileCoordinator.swift in Sources */,
@@ -2125,8 +2157,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 21D8EB2176DEF6C37E0EA400 /* Pods-RaverMVP.debug.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = RaverMVP/RaverMVP.entitlements;
+					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+					APS_ENVIRONMENT = development;
+					CODE_SIGN_ENTITLEMENTS = RaverMVP/RaverMVP.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = RaverMVP/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2248,8 +2281,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 94A818FEAAB56139A7847EAC /* Pods-RaverMVP.release.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = RaverMVP/RaverMVP.entitlements;
+					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+					APS_ENVIRONMENT = production;
+					CODE_SIGN_ENTITLEMENTS = RaverMVP/RaverMVP.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = RaverMVP/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

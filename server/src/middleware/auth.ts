@@ -1,15 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
+import { PrismaClient } from '@prisma/client';
 import { verifyToken, JWTPayload } from '../utils/auth';
+
+const prisma = new PrismaClient();
 
 export interface AuthRequest extends Request {
   user?: JWTPayload;
 }
 
-export const authenticate = (
+export const authenticate = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-): void => {
+): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -20,7 +23,25 @@ export const authenticate = (
 
     const token = authHeader.substring(7);
     const decoded = verifyToken(token);
-    req.user = decoded;
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, email: true, role: true, isActive: true },
+    });
+
+    if (!user || !user.isActive) {
+      res.status(401).json({
+        error: 'Account is no longer active',
+        code: 'ACCOUNT_INACTIVE',
+        accountStatus: 'deleted',
+      });
+      return;
+    }
+
+    req.user = {
+      ...decoded,
+      email: user.email,
+      role: user.role,
+    };
     next();
   } catch (error) {
     res.status(401).json({ error: 'Invalid or expired token' });

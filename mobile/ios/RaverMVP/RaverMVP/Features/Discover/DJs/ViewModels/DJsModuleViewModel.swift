@@ -70,7 +70,7 @@ final class DJsModuleViewModel: ObservableObject {
             bannerMessage = nil
             hasLoadedInitial = true
         } catch {
-            let message = error.userFacingMessage ?? L("DJ 列表加载失败，请稍后重试", "Failed to load DJs. Please try again later.")
+            let message = error.userFacingMessage ?? LT("DJ 列表加载失败，请稍后重试", "Failed to load DJs. Please try again later.", "DJ一覧を読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success

@@ -358,7 +358,7 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
         VirtualAssetUIKitChatAvatarRenderer.removeFrameOverlay(from: senderAvatarView)
         VirtualAssetUIKitChatMetaRenderer.removeDecorations(from: senderMetaRow)
         if isMine {
-            senderNameLabel.text = L("我", "Me")
+            senderNameLabel.text = LT("我", "Me", "自分")
         } else {
             senderNameLabel.text = sender.displayName.isEmpty ? sender.username : sender.displayName
         }
@@ -557,20 +557,20 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
         switch message.kind {
         case .image:
             let sizeText = formatFileSize(message.media?.fileSizeBytes)
-            return ("photo", L("图片", "Image"), sizeText)
+            return ("photo", LT("图片", "Image", "画像"), sizeText)
         case .video:
             let duration = formatDuration(message.media?.durationSeconds)
-            return ("video", L("视频", "Video"), duration)
+            return ("video", LT("视频", "Video", "動画"), duration)
         case .voice:
             let duration = formatDuration(message.media?.durationSeconds)
             let symbol = isVoicePlaying ? "waveform.circle.fill" : "waveform"
-            let title = isVoicePlaying ? L("语音播放中", "Voice Playing") : L("语音", "Voice")
+            let title = isVoicePlaying ? LT("语音播放中", "Voice Playing", "音声を再生中") : LT("语音", "Voice", "音声")
             let detail = isVoicePlaying
-                ? L("点击停止", "Tap to stop")
-                : (duration ?? L("点击播放", "Tap to play"))
+                ? LT("点击停止", "Tap to stop", "タップして停止")
+                : (duration ?? LT("点击播放", "Tap to play", "タップして再生"))
             return (symbol, title, detail)
         case .file:
-            let title = message.media?.fileName ?? L("文件", "File")
+            let title = message.media?.fileName ?? LT("文件", "File", "ファイル")
             let sizeText = formatFileSize(message.media?.fileSizeBytes)
             return ("doc", title, sizeText)
         default:
@@ -608,14 +608,14 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
             stopSendingIconAnimation()
             if let readCount = message.readReceiptReadCount, readCount > 0 {
                 if let unreadCount = message.readReceiptUnreadCount {
-                    statusPillLabel.text = "\(L("已读", "Read")) \(readCount)\(L("人", "")) · \(L("未读", "Unread")) \(max(unreadCount, 0))"
+                    statusPillLabel.text = "\(LT("已读", "Read", "既読")) \(readCount)\(LT("人", "", "人")) · \(LT("未读", "Unread", "未読")) \(max(unreadCount, 0))"
                 } else {
-                    statusPillLabel.text = "\(L("已读", "Read")) \(readCount)\(L("人", ""))"
+                    statusPillLabel.text = "\(LT("已读", "Read", "既読")) \(readCount)\(LT("人", "", "人"))"
                 }
             } else if let peerRead = message.peerRead {
-                statusPillLabel.text = peerRead ? L("已读", "Read") : L("未读", "Unread")
+                statusPillLabel.text = peerRead ? LT("已读", "Read", "既読") : LT("未读", "Unread", "未読")
             } else {
-                statusPillLabel.text = L("已发送", "Sent")
+                statusPillLabel.text = LT("已发送", "Sent", "送信済み")
             }
             statusPillView.backgroundColor = isMine
                 ? UIColor.white.withAlphaComponent(0.2)
@@ -626,7 +626,7 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
             statusPillIconView.isHidden = false
             statusPillView.isHidden = false
         case .sending:
-            statusPillLabel.text = L("发送中", "Sending")
+            statusPillLabel.text = LT("发送中", "Sending", "送信中")
             statusPillView.backgroundColor = isMine
                 ? UIColor.white.withAlphaComponent(0.22)
                 : UIColor(RaverTheme.cardBorder).withAlphaComponent(0.6)
@@ -638,7 +638,7 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
             statusPillView.isHidden = false
         case .failed:
             stopSendingIconAnimation()
-            statusPillLabel.text = L("失败·点重试", "Failed · Tap retry")
+            statusPillLabel.text = LT("失败·点重试", "Failed · Tap retry", "失敗・タップして再試行")
             statusPillView.backgroundColor = isMine
                 ? UIColor.systemRed.withAlphaComponent(0.28)
                 : UIColor.systemRed.withAlphaComponent(0.12)

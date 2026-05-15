@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth';
+import { normalizeEventTimeZone, parseEventDateInput } from '../utils/event-timezone';
 
 const prisma = new PrismaClient();
 
@@ -12,23 +13,20 @@ const normalizeDjIds = (value: unknown, fallback: string | null = null): string[
   return out;
 };
 
-async function assertEventAccess(eventId: string, userId: string, role: string | undefined): Promise<{ id: string; organizerId: string | null } | null> {
+async function assertEventAccess(eventId: string, userId: string, role: string | undefined): Promise<{ id: string; organizerId: string | null; timeZone: string } | null> {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { id: true, organizerId: true, startDate: true, dayRolloverHour: true },
+    select: { id: true, organizerId: true, startDate: true, dayRolloverHour: true, timeZone: true },
   });
   if (!event) return null;
   if (role !== 'admin' && event.organizerId !== userId) return null;
   return event;
 }
 
-const parseOptionalDate = (value: unknown): Date | null => {
+const parseOptionalDate = (value: unknown, timeZoneRaw: unknown): Date | null => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = new Date(trimmed);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  return parseEventDateInput(value, normalizeEventTimeZone(timeZoneRaw), 'start');
 };
 
 export const getTimetable = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -61,8 +59,8 @@ export const addTimetableSlot = async (req: AuthRequest, res: Response): Promise
 
     const { djId, djIds, djName, lineupArtistId, stageName, festivalDayIndex, startTime, endTime, sortOrder } = req.body;
 
-    const parsedStart = parseOptionalDate(startTime);
-    const parsedEnd = parseOptionalDate(endTime);
+    const parsedStart = parseOptionalDate(startTime, event.timeZone);
+    const parsedEnd = parseOptionalDate(endTime, event.timeZone);
     if (!parsedStart || !parsedEnd) {
       res.status(400).json({ error: 'startTime and endTime are required' });
       return;
@@ -163,8 +161,8 @@ export const updateTimetableSlot = async (req: AuthRequest, res: Response): Prom
     const { djId, djIds, djName, lineupArtistId, stageName, festivalDayIndex, startTime, endTime, sortOrder } = req.body;
     const normalizedDjId = String(djId || '').trim() || null;
 
-    const parsedStart = startTime ? parseOptionalDate(startTime) : null;
-    const parsedEnd = endTime ? parseOptionalDate(endTime) : null;
+    const parsedStart = startTime ? parseOptionalDate(startTime, event.timeZone) : null;
+    const parsedEnd = endTime ? parseOptionalDate(endTime, event.timeZone) : null;
 
     if (lineupArtistId !== undefined && lineupArtistId !== null) {
       const artist = await prisma.eventLineupArtist.findFirst({ where: { id: String(lineupArtistId), eventId } });

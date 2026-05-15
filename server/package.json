@@ -46,6 +46,7 @@
     "checkins:snapshots:rebuild": "ts-node src/scripts/checkin-rebuild-snapshots.ts",
     "auth:smoke": "ts-node src/scripts/auth-smoke.ts",
     "auth:integration": "ts-node src/scripts/auth-integration.ts",
+    "account-deletion:run": "NODE_OPTIONS='--use-env-proxy' ts-node src/scripts/account-deletion-run.ts",
     "share-links:smoke": "ts-node src/scripts/share-link-smoke.ts",
     "share-invites:smoke": "ts-node src/scripts/share-invite-smoke.ts",
     "squad:offline-demo": "ts-node src/scripts/seed-squad-offline-activity-demo.ts",

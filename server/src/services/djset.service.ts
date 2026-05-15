@@ -58,6 +58,25 @@ export class DJSetService {
     favoriteGenres: true,
   } as const;
 
+  private async filterActiveCopyrightTakedowns<T extends { id: string }>(sets: T[]): Promise<T[]> {
+    if (sets.length === 0) return sets;
+    const takedowns = await prisma.contentReport.findMany({
+      where: {
+        targetType: 'dj_set',
+        targetId: { in: sets.map((set) => set.id) },
+        reason: 'copyright',
+        metadata: {
+          path: ['copyright', 'takedownStatus'],
+          equals: 'active',
+        },
+      },
+      select: { targetId: true },
+    });
+    if (takedowns.length === 0) return sets;
+    const hiddenIds = new Set(takedowns.map((row) => row.targetId));
+    return sets.filter((set) => !hiddenIds.has(set.id));
+  }
+
   private async mapContributorProfile(
     user:
       | {
@@ -461,8 +480,9 @@ export class DJSetService {
       orderBy: { createdAt: 'desc' },
     });
 
+    const visibleSets = await this.filterActiveCopyrightTakedowns(sets);
     return await Promise.all(
-      sets.map(async (set) => {
+      visibleSets.map(async (set) => {
         const contributor = await this.mapContributorProfile(set.uploader);
         const withLineup = await this.attachLineupInfo(set as any);
         return {
@@ -489,8 +509,9 @@ export class DJSetService {
       orderBy: { createdAt: 'desc' },
     });
 
+    const visibleSets = await this.filterActiveCopyrightTakedowns(sets);
     return await Promise.all(
-      sets.map(async (set) => {
+      visibleSets.map(async (set) => {
         const contributor = await this.mapContributorProfile(set.uploader);
         const withLineup = await this.attachLineupInfo(set as any);
         return {
@@ -522,6 +543,10 @@ export class DJSetService {
     if (!djSet) {
       return null;
     }
+    const visibleSets = await this.filterActiveCopyrightTakedowns([djSet]);
+    if (visibleSets.length === 0) {
+      return null;
+    }
 
     const contributor = await this.mapContributorProfile(djSet.uploader);
     const withLineup = await this.attachLineupInfo(djSet as any);
@@ -550,8 +575,9 @@ export class DJSetService {
       orderBy: { createdAt: 'desc' },
     });
 
+    const visibleSets = await this.filterActiveCopyrightTakedowns(sets);
     return await Promise.all(
-      sets.map(async (set) => {
+      visibleSets.map(async (set) => {
         const contributor = await this.mapContributorProfile(set.uploader);
         const withLineup = await this.attachLineupInfo(set as any);
         return {

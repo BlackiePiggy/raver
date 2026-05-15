@@ -100,6 +100,7 @@ actor MockWebFeatureService: WebFeatureService {
             longitude: nil,
             startDate: now.addingTimeInterval(86400 * 6),
             endDate: now.addingTimeInterval(86400 * 6 + 36000),
+            timeZone: "Asia/Shanghai",
             ticketUrl: nil,
             ticketPriceMin: 120,
             ticketPriceMax: 320,
@@ -533,7 +534,7 @@ actor MockWebFeatureService: WebFeatureService {
         favoriteEventIDs.remove(eventID)
     }
 
-    func createEvent(input: CreateEventInput) async throws -> WebEvent {
+    func createEvent(input: CreateEventInput) async throws -> CreateEventResult {
         let now = Date()
         let eventID = "evt_\(UUID().uuidString)"
         let normalizedTicketCurrency = normalizedOptional(input.ticketCurrency)
@@ -576,6 +577,7 @@ actor MockWebFeatureService: WebFeatureService {
             longitude: input.longitude,
             startDate: input.startDate,
             endDate: input.endDate,
+            timeZone: input.timeZone,
             stageOrder: input.stageOrder,
             ticketUrl: {
                 let trimmed = input.ticketUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -595,7 +597,7 @@ actor MockWebFeatureService: WebFeatureService {
             lineupSlots: lineupSlots
         )
         events.insert(event, at: 0)
-        return event
+        return .created(event)
     }
 
     func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent {
@@ -972,7 +974,7 @@ actor MockWebFeatureService: WebFeatureService {
         )
     }
 
-    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportSpotifyDJResponse {
+    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportDJResult<ImportSpotifyDJResponse> {
         let spotifyId = input.spotifyId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !spotifyId.isEmpty else {
             throw ServiceError.message("spotifyId 不能为空")
@@ -1003,12 +1005,12 @@ actor MockWebFeatureService: WebFeatureService {
             updated.isVerified = input.isVerified ?? updated.isVerified ?? true
             updated.updatedAt = Date()
             djs[index] = updated
-            return ImportSpotifyDJResponse(
+            return .imported(ImportSpotifyDJResponse(
                 action: "updated",
                 avatarUploadedToOss: false,
                 replacedExistingAvatar: false,
                 dj: updated
-            )
+            ))
         }
 
         let created = WebDJ(
@@ -1032,15 +1034,15 @@ actor MockWebFeatureService: WebFeatureService {
             isFollowing: false
         )
         djs.insert(created, at: 0)
-        return ImportSpotifyDJResponse(
+        return .imported(ImportSpotifyDJResponse(
             action: "created",
             avatarUploadedToOss: false,
             replacedExistingAvatar: false,
             dj: created
-        )
+        ))
     }
 
-    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDiscogsDJResponse {
+    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDJResult<ImportDiscogsDJResponse> {
         let discogsArtistId = input.discogsArtistId
         guard discogsArtistId > 0 else {
             throw ServiceError.message("discogsArtistId 不能为空")
@@ -1074,12 +1076,12 @@ actor MockWebFeatureService: WebFeatureService {
             updated.isVerified = input.isVerified ?? updated.isVerified ?? true
             updated.updatedAt = Date()
             djs[index] = updated
-            return ImportDiscogsDJResponse(
+            return .imported(ImportDiscogsDJResponse(
                 action: "updated",
                 avatarUploadedToOss: false,
                 replacedExistingAvatar: false,
                 dj: updated
-            )
+            ))
         }
 
         let created = WebDJ(
@@ -1103,15 +1105,15 @@ actor MockWebFeatureService: WebFeatureService {
             isFollowing: false
         )
         djs.insert(created, at: 0)
-        return ImportDiscogsDJResponse(
+        return .imported(ImportDiscogsDJResponse(
             action: "created",
             avatarUploadedToOss: false,
             replacedExistingAvatar: false,
             dj: created
-        )
+        ))
     }
 
-    func importManualDJ(input: ImportManualDJInput) async throws -> ImportManualDJResponse {
+    func importManualDJ(input: ImportManualDJInput) async throws -> ImportDJResult<ImportManualDJResponse> {
         let finalName = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalName.isEmpty else {
             throw ServiceError.message("DJ 名称不能为空")
@@ -1141,7 +1143,7 @@ actor MockWebFeatureService: WebFeatureService {
             updated.isVerified = input.isVerified ?? updated.isVerified ?? true
             updated.updatedAt = Date()
             djs[index] = updated
-            return ImportManualDJResponse(action: "updated", dj: updated)
+            return .imported(ImportManualDJResponse(action: "updated", dj: updated))
         }
 
         let created = WebDJ(
@@ -1165,7 +1167,7 @@ actor MockWebFeatureService: WebFeatureService {
             isFollowing: false
         )
         djs.insert(created, at: 0)
-        return ImportManualDJResponse(action: "created", dj: created)
+        return .imported(ImportManualDJResponse(action: "created", dj: created))
     }
 
     func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ {
@@ -1329,7 +1331,7 @@ actor MockWebFeatureService: WebFeatureService {
         sets.filter { $0.uploadedById == currentUser.id }.sorted(by: { $0.createdAt > $1.createdAt })
     }
 
-    func createDJSet(input: CreateDJSetInput) async throws -> WebDJSet {
+    func createDJSet(input: CreateDJSetInput) async throws -> CreateContentResult<WebDJSet> {
         guard let dj = djs.first(where: { $0.id == input.djId }) else {
             throw ServiceError.message("DJ 不存在")
         }
@@ -1368,7 +1370,7 @@ actor MockWebFeatureService: WebFeatureService {
 
         sets.insert(set, at: 0)
         tracklistsBySetID[set.id] = []
-        return set
+        return .created(set)
     }
 
     func updateDJSet(id: String, input: UpdateDJSetInput) async throws -> WebDJSet {
@@ -2309,7 +2311,7 @@ actor MockWebFeatureService: WebFeatureService {
             .sorted(by: { $0.createdAt > $1.createdAt })
     }
 
-    func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent {
+    func createRatingEvent(input: CreateRatingEventInput) async throws -> CreateContentResult<WebRatingEvent> {
         let name = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             throw ServiceError.message("事件名称不能为空")
@@ -2327,7 +2329,7 @@ actor MockWebFeatureService: WebFeatureService {
             units: []
         )
         ratingEvents.insert(created, at: 0)
-        return created
+        return .created(created)
     }
 
     func createRatingEventFromEvent(eventID: String) async throws -> WebRatingEvent {
@@ -2385,7 +2387,7 @@ actor MockWebFeatureService: WebFeatureService {
         return created
     }
 
-    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit {
+    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> CreateContentResult<WebRatingUnit> {
         guard let eventIndex = ratingEvents.firstIndex(where: { $0.id == eventID }) else {
             throw ServiceError.message("打分事件不存在")
         }
@@ -2411,7 +2413,7 @@ actor MockWebFeatureService: WebFeatureService {
         )
         ratingEvents[eventIndex].units.append(created)
         ratingEvents[eventIndex].updatedAt = now
-        return created
+        return .created(created)
     }
 
     func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent {
@@ -2730,7 +2732,49 @@ actor MockWebFeatureService: WebFeatureService {
         }
     }
 
-    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> WebLearnFestival {
+    func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel> {
+        let finalName = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !finalName.isEmpty else {
+            throw ServiceError.message("厂牌名称不能为空")
+        }
+
+        let rawBase = (input.slug ?? finalName)
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9\\u4e00-\\u9fa5]+", with: "-", options: .regularExpression)
+            .replacingOccurrences(of: "^-+|-+$", with: "", options: .regularExpression)
+        let slug = rawBase.isEmpty ? "label-\(UUID().uuidString.prefix(8))" : rawBase
+
+        let label = LearnLabel(
+            id: "label-\(UUID().uuidString.prefix(8))",
+            name: finalName,
+            slug: slug,
+            profileUrl: input.profileUrl?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "community://\(slug)",
+            profileSlug: input.profileSlug?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? slug,
+            avatarUrl: input.avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            backgroundUrl: input.backgroundUrl?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            nation: input.nation?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? input.country?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            soundcloudFollowers: 0,
+            likes: 0,
+            genres: input.genres ?? [],
+            genresPreview: input.genresPreview?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            latestReleaseListing: nil,
+            locationPeriod: nil,
+            introduction: input.introduction?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? input.description?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            generalContactEmail: nil,
+            demoSubmissionUrl: nil,
+            demoSubmissionDisplay: nil,
+            facebookUrl: nil,
+            soundcloudUrl: nil,
+            musicPurchaseUrl: nil,
+            officialWebsiteUrl: nil,
+            founderName: nil,
+            foundedAt: nil,
+            founderDj: nil
+        )
+        return .created(label)
+    }
+
+    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> CreateContentResult<WebLearnFestival> {
         let finalName = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalName.isEmpty else {
             throw ServiceError.message("电音节名称不能为空")
@@ -2782,7 +2826,7 @@ actor MockWebFeatureService: WebFeatureService {
         )
 
         learnFestivals.insert(festival, at: 0)
-        return festival
+        return .created(festival)
     }
 
     func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival {
@@ -2955,6 +2999,64 @@ actor MockWebFeatureService: WebFeatureService {
             .sorted(by: { $0.createdAt > $1.createdAt })
 
         return MyPublishes(djSets: mySets, events: myEvents, ratingEvents: myRatingEvents, ratingUnits: myRatingUnits)
+    }
+
+    func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary] {
+        []
+    }
+
+    func fetchMyContentSubmission(id: String) async throws -> ContentSubmissionDetail {
+        ContentSubmissionDetail(
+            id: id,
+            entityType: "event",
+            status: "pending",
+            title: "Mock submission",
+            payload: ["name": .string("Mock submission")],
+            createdAt: Date(),
+            updatedAt: Date(),
+            versions: []
+        )
+    }
+
+    func createContentSubmission(
+        entityType: String,
+        payload: [String: ContentSubmissionJSONValue]
+    ) async throws -> ContentSubmissionDetail {
+        ContentSubmissionDetail(
+            id: "submission_\(UUID().uuidString)",
+            entityType: entityType,
+            status: "pending",
+            title: {
+                if case .string(let title)? = payload["title"] { return title }
+                if case .string(let name)? = payload["name"] { return name }
+                if case .string(let songName)? = payload["songName"] { return songName }
+                return "Mock submission"
+            }(),
+            payload: payload,
+            createdAt: Date(),
+            updatedAt: Date(),
+            versions: []
+        )
+    }
+
+    func resubmitMyContentSubmission(
+        id: String,
+        payload: [String: ContentSubmissionJSONValue],
+        changeNote: String?
+    ) async throws -> ContentSubmissionDetail {
+        ContentSubmissionDetail(
+            id: id,
+            entityType: "event",
+            status: "pending",
+            title: {
+                if case .string(let name)? = payload["name"] { return name }
+                return "Mock submission"
+            }(),
+            payload: payload,
+            createdAt: Date(),
+            updatedAt: Date(),
+            versions: []
+        )
     }
 
     private func slugify(_ text: String) -> String {
@@ -3132,20 +3234,20 @@ actor MockWebFeatureService: WebFeatureService {
 
     private static func mockGlobalSearchItems(for query: String) -> [GlobalSearchItem] {
         [
-            mockGlobalSearchItem(.event, "event-ultra-2026", query, "Ultra Shanghai 2026", L("上海 · Expo Park · 2026.09.12", "Shanghai · Expo Park · Sep 12, 2026"), L("包含主舞台、Afterlife 舞台和多位 Techno / Trance DJ。", "Includes main stage, Afterlife stage, and Techno / Trance artists."), "2026", 0.98),
-            mockGlobalSearchItem(.dj, "dj-charlotte-de-witte", query, "Charlotte de Witte", L("Techno · KNTXT", "Techno · KNTXT"), L("相关活动、Sets 和打分单位都在 Raver 内有内容。", "Related events, sets, and rating units are available in Raver."), "DJ", 0.94),
-            mockGlobalSearchItem(.news, "news-ultra-lineup", query, L("Ultra 公布首批阵容", "Ultra announces first lineup wave"), L("Raver News · 2 小时前", "Raver News · 2h ago"), L("官方公布首批出演名单，更多舞台信息将在下周更新。", "The first wave is announced, with more stage details next week."), L("资讯", "News"), 0.88),
-            mockGlobalSearchItem(.set, "set-afterlife-2025", query, "Afterlife Shanghai Closing Set", L("Tale Of Us · 92 min", "Tale Of Us · 92 min"), L("旋律 Techno 现场录音，收藏热度持续上升。", "A melodic techno live recording with rising saves."), "Set", 0.84),
-            mockGlobalSearchItem(.ratingEvent, "rating-event-ultra-2025", query, L("Ultra 2025 现场体验打分", "Ultra 2025 Experience Rating"), L("3,428 人参与 · 平均 8.7", "3,428 ratings · Avg 8.7"), L("只搜索打分活动和打分单位，不包含评论内容。", "Searches rating events and units only, excluding comments."), L("打分活动", "Rating Event"), 0.81),
-            mockGlobalSearchItem(.post, "post-circle-ultra-guide", query, L("第一次去 Ultra 应该怎么安排？", "How should first-timers plan Ultra?"), L("圈子 · 128 赞", "Circle · 128 likes"), L("用户分享交通、舞台动线和散场建议；不包含评论搜索。", "A post about transport, stages, and exit tips; comments excluded."), L("圈子", "Post"), 0.78),
-            mockGlobalSearchItem(.rankingBoard, "ranking-dj-2025", query, "Raver Top DJs 2025", L("年度榜单 · 2025", "Annual ranking · 2025"), L("按 Raver 站内热度、收藏和打分综合生成。", "Generated from Raver popularity, saves, and ratings."), L("榜单", "Ranking"), 0.73, rankingYear: 2025),
-            mockGlobalSearchItem(.festival, "festival-edc-china", query, "EDC China", L("音乐节品牌 · 中国", "Festival brand · China"), L("音乐节介绍、历史阵容和相关活动。", "Festival intro, past lineups, and related events."), L("音乐节", "Festival"), 0.68),
-            mockGlobalSearchItem(.label, "label-kntxt", query, "KNTXT", L("厂牌 · Techno", "Label · Techno"), L("Charlotte de Witte 创立的 Techno 厂牌。", "A techno label founded by Charlotte de Witte."), L("厂牌", "Label"), 0.64),
-            mockGlobalSearchItem(.genre, "genre-melodic-techno", query, "Melodic Techno", L("风格树 · Techno", "Genre Tree · Techno"), L("在 Techno 框架中加入旋律与情绪线。", "Adds melody and emotional lines within a techno framework."), L("风格", "Genre"), 0.61),
-            mockGlobalSearchItem(.user, "user-raver-alex", query, "Alex Chen", L("@alexraves · 上海", "@alexraves · Shanghai"), L("关注 Techno、Trance 和大型音乐节攻略。", "Follows techno, trance, and festival guides."), L("用户", "User"), 0.59),
-            mockGlobalSearchItem(.squad, "squad-techno-shanghai", query, L("上海 Techno 小队", "Shanghai Techno Squad"), L("892 成员 · 公开小队", "892 members · Public squad"), L("线下活动、拼车和舞台集合点讨论。", "Offline meetups, rides, and stage gathering points."), L("小队", "Squad"), 0.56),
-            mockGlobalSearchItem(.ratingUnit, "rating-unit-mainstage", query, L("Ultra 主舞台音响", "Ultra Mainstage Sound"), L("打分单位 · 平均 8.3", "Rating unit · Avg 8.3"), L("声音、灯光、视觉和拥挤度单项打分。", "Sound, lights, visuals, and crowding ratings."), L("打分单位", "Rating Unit"), 0.53),
-            mockGlobalSearchItem(.rankingEntry, "ranking-dj-2025", query, "#3 Charlotte de Witte", L("Raver Top DJs 2025", "Raver Top DJs 2025"), L("榜单条目会进入所属榜单详情。", "Ranking entries open their parent ranking board."), L("榜单条目", "Ranking Entry"), 0.51, rankingYear: 2025)
+            mockGlobalSearchItem(.event, "event-ultra-2026", query, "Ultra Shanghai 2026", LT("上海 · Expo Park · 2026.09.12", "Shanghai · Expo Park · Sep 12, 2026", "上海 · Expo Park · 2026.09.12"), LT("包含主舞台、Afterlife 舞台和多位 Techno / Trance DJ。", "Includes main stage, Afterlife stage, and Techno / Trance artists.", "メインステージ、Afterlifeステージ、複数のTechno / Trance DJを含みます。"), "2026", 0.98),
+            mockGlobalSearchItem(.dj, "dj-charlotte-de-witte", query, "Charlotte de Witte", LT("Techno · KNTXT", "Techno · KNTXT", "Techno · KNTXT"), LT("相关活动、Sets 和打分单位都在 Raver 内有内容。", "Related events, sets, and rating units are available in Raver.", "関連イベント、Sets、評価ユニットはRaver内で確認できます。"), "DJ", 0.94),
+            mockGlobalSearchItem(.news, "news-ultra-lineup", query, LT("Ultra 公布首批阵容", "Ultra announces first lineup wave", "Ultraが第1弾ラインナップを発表"), LT("Raver News · 2 小时前", "Raver News · 2h ago", "Raver News · 2時間前"), LT("官方公布首批出演名单，更多舞台信息将在下周更新。", "The first wave is announced, with more stage details next week.", "第1弾出演者が発表され、追加ステージ情報は来週更新予定です。"), LT("资讯", "News", "ニュース"), 0.88),
+            mockGlobalSearchItem(.set, "set-afterlife-2025", query, "Afterlife Shanghai Closing Set", LT("Tale Of Us · 92 min", "Tale Of Us · 92 min", "Tale Of Us · 92分"), LT("旋律 Techno 现场录音，收藏热度持续上升。", "A melodic techno live recording with rising saves.", "メロディックTechnoのライブ録音で、保存数が伸びています。"), "Set", 0.84),
+            mockGlobalSearchItem(.ratingEvent, "rating-event-ultra-2025", query, LT("Ultra 2025 现场体验打分", "Ultra 2025 Experience Rating", "Ultra 2025 現地体験評価"), LT("3,428 人参与 · 平均 8.7", "3,428 ratings · Avg 8.7", "3,428件参加 · 平均8.7"), LT("只搜索打分活动和打分单位，不包含评论内容。", "Searches rating events and units only, excluding comments.", "評価イベントと評価ユニットのみ検索し、コメント内容は含みません。"), LT("打分活动", "Rating Event", "評価イベント"), 0.81),
+            mockGlobalSearchItem(.post, "post-circle-ultra-guide", query, LT("第一次去 Ultra 应该怎么安排？", "How should first-timers plan Ultra?", "初めてUltraに行くならどう計画する？"), LT("圈子 · 128 赞", "Circle · 128 likes", "投稿 · 128いいね"), LT("用户分享交通、舞台动线和散场建议；不包含评论搜索。", "A post about transport, stages, and exit tips; comments excluded.", "交通、ステージ導線、退場のコツに関する投稿です。コメント検索は含みません。"), LT("圈子", "Post", "投稿"), 0.78),
+            mockGlobalSearchItem(.rankingBoard, "ranking-dj-2025", query, "Raver Top DJs 2025", LT("年度榜单 · 2025", "Annual ranking · 2025", "年間ランキング · 2025"), LT("按 Raver 站内热度、收藏和打分综合生成。", "Generated from Raver popularity, saves, and ratings.", "Raver内の人気、保存、評価を総合して生成。"), LT("榜单", "Ranking", "ランキング"), 0.73, rankingYear: 2025),
+            mockGlobalSearchItem(.festival, "festival-edc-china", query, "EDC China", LT("音乐节品牌 · 中国", "Festival brand · China", "フェスブランド · 中国"), LT("音乐节介绍、历史阵容和相关活动。", "Festival intro, past lineups, and related events.", "フェス紹介、過去ラインナップ、関連イベント。"), LT("音乐节", "Festival", "フェス"), 0.68),
+            mockGlobalSearchItem(.label, "label-kntxt", query, "KNTXT", LT("厂牌 · Techno", "Label · Techno", "レーベル · Techno"), LT("Charlotte de Witte 创立的 Techno 厂牌。", "A techno label founded by Charlotte de Witte.", "Charlotte de Witteが創設したTechnoレーベル。"), LT("厂牌", "Label", "レーベル"), 0.64),
+            mockGlobalSearchItem(.genre, "genre-melodic-techno", query, "Melodic Techno", LT("风格树 · Techno", "Genre Tree · Techno", "ジャンルツリー · Techno"), LT("在 Techno 框架中加入旋律与情绪线。", "Adds melody and emotional lines within a techno framework.", "Technoの枠組みにメロディと感情の流れを加えます。"), LT("风格", "Genre", "ジャンル"), 0.61),
+            mockGlobalSearchItem(.user, "user-raver-alex", query, "Alex Chen", LT("@alexraves · 上海", "@alexraves · Shanghai", "@alexraves · 上海"), LT("关注 Techno、Trance 和大型音乐节攻略。", "Follows techno, trance, and festival guides.", "Techno、Trance、大型フェス攻略をフォロー。"), LT("用户", "User", "ユーザー"), 0.59),
+            mockGlobalSearchItem(.squad, "squad-techno-shanghai", query, LT("上海 Techno 小队", "Shanghai Techno Squad", "上海Techno Squad"), LT("892 成员 · 公开小队", "892 members · Public squad", "892メンバー · 公開Squad"), LT("线下活动、拼车和舞台集合点讨论。", "Offline meetups, rides, and stage gathering points.", "オフライン活動、相乗り、ステージ集合場所の相談。"), LT("小队", "Squad", "Squad"), 0.56),
+            mockGlobalSearchItem(.ratingUnit, "rating-unit-mainstage", query, LT("Ultra 主舞台音响", "Ultra Mainstage Sound", "Ultraメインステージ音響"), LT("打分单位 · 平均 8.3", "Rating unit · Avg 8.3", "評価ユニット · 平均8.3"), LT("声音、灯光、视觉和拥挤度单项打分。", "Sound, lights, visuals, and crowding ratings.", "音響、照明、映像、混雑度の個別評価。"), LT("打分单位", "Rating Unit", "評価ユニット"), 0.53),
+            mockGlobalSearchItem(.rankingEntry, "ranking-dj-2025", query, "#3 Charlotte de Witte", LT("Raver Top DJs 2025", "Raver Top DJs 2025", "Raver Top DJs 2025"), LT("榜单条目会进入所属榜单详情。", "Ranking entries open their parent ranking board.", "ランキング項目は所属するランキング詳細を開きます。"), LT("榜单条目", "Ranking Entry", "ランキング項目"), 0.51, rankingYear: 2025)
         ]
     }
 

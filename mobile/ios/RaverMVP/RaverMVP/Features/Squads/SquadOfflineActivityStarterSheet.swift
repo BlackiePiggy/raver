@@ -26,8 +26,8 @@ struct SquadOfflineActivityStarterSheet: View {
                                 selectedEventID = nil
                             } label: {
                                 eventChoiceRow(
-                                    title: L("不绑定具体活动", "No Event"),
-                                    subtitle: L("直接开启小队线下活动", "Start squad offline activity directly"),
+                                    title: LT("不绑定具体活动", "No Event", "特定イベントに紐付けない"),
+                                    subtitle: LT("直接开启小队线下活动", "Start squad offline activity directly", "Squadオフライン活動を直接開始"),
                                     isSelected: selectedEventID == nil
                                 )
                             }
@@ -58,11 +58,11 @@ struct SquadOfflineActivityStarterSheet: View {
                     .listStyle(.insetGrouped)
                 }
             }
-            .navigationTitle(L("开启线下活动", "Start Offline Activity"))
+            .navigationTitle(LT("开启线下活动", "Start Offline Activity", "オフライン活動を開始"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(L("取消", "Cancel")) {
+                    Button(LT("取消", "Cancel", "キャンセル")) {
                         dismiss()
                     }
                 }
@@ -73,7 +73,7 @@ struct SquadOfflineActivityStarterSheet: View {
                         if isStarting {
                             ProgressView()
                         } else {
-                            Text(L("开启", "Start"))
+                            Text(LT("开启", "Start", "開始"))
                                 .fontWeight(.semibold)
                         }
                     }
@@ -93,7 +93,7 @@ struct SquadOfflineActivityStarterSheet: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(RaverTheme.primaryText)
                     .lineLimit(1)
-                Text(subtitle.isEmpty ? L("活动库", "Event library") : subtitle)
+                Text(subtitle.isEmpty ? LT("活动库", "Event library", "イベントライブラリ") : subtitle)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(RaverTheme.secondaryText)
                     .lineLimit(1)
@@ -122,7 +122,7 @@ struct SquadOfflineActivityStarterSheet: View {
             events = page.items
             errorMessage = nil
         } catch {
-            errorMessage = error.userFacingMessage ?? L("活动列表加载失败", "Failed to load events")
+            errorMessage = error.userFacingMessage ?? LT("活动列表加载失败", "Failed to load events", "イベント一覧の読み込みに失敗しました")
         }
     }
 
@@ -142,7 +142,7 @@ struct SquadOfflineActivityStarterSheet: View {
             onStarted(created)
             dismiss()
         } catch {
-            errorMessage = error.userFacingMessage ?? L("开启失败", "Failed to start")
+            errorMessage = error.userFacingMessage ?? LT("开启失败", "Failed to start", "開始に失敗しました")
         }
     }
 }

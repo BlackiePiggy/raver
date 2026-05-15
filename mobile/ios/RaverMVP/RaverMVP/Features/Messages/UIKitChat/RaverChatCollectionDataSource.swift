@@ -139,10 +139,10 @@ final class RaverChatCollectionDataSource: NSObject, UICollectionViewDataSource 
         let calendar = Calendar.current
         let timeText = Self.timeFormatter.string(from: date)
         if calendar.isDateInToday(date) {
-            return L("今天 \(timeText)", "Today \(timeText)")
+            return LT("今天 \(timeText)", "Today \(timeText)", "今日 \(timeText)")
         }
         if calendar.isDateInYesterday(date) {
-            return L("昨天 \(timeText)", "Yesterday \(timeText)")
+            return LT("昨天 \(timeText)", "Yesterday \(timeText)", "昨日 \(timeText)")
         }
         if calendar.isDate(date, equalTo: Date(), toGranularity: .year) {
             return Self.sameYearFormatter.string(from: date)

@@ -30,14 +30,14 @@ final class RatingEventEditorViewModel: ObservableObject {
             selectedCoverData = try await item.loadTransferable(type: Data.self)
         } catch {
             selectedCoverData = nil
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
+            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
         }
     }
 
     func save(repository: RatingRepository) async -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
-            errorMessage = L("名称不能为空", "Name cannot be empty.")
+            errorMessage = LT("名称不能为空", "Name cannot be empty.", "名前を入力してください。")
             return false
         }
         isSaving = true
@@ -110,14 +110,14 @@ final class RatingUnitEditorViewModel: ObservableObject {
             selectedCoverData = try await item.loadTransferable(type: Data.self)
         } catch {
             selectedCoverData = nil
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
+            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
         }
     }
 
     func save(repository: RatingRepository) async -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
-            errorMessage = L("名称不能为空", "Name cannot be empty.")
+            errorMessage = LT("名称不能为空", "Name cannot be empty.", "名前を入力してください。")
             return false
         }
         isSaving = true
@@ -181,15 +181,15 @@ struct RatingEventEditorSheet: View {
 
     var body: some View {
         Form {
-                Section(LL("编辑打分事件")) {
-                    TextField(LL("名称"), text: $viewModel.name)
+                Section(LT("编辑打分事件", "Edit Rating Event", "評価イベントを編集")) {
+                    TextField(LT("名称", "Name", "名称"), text: $viewModel.name)
                         .submitLabel(.done)
                         .onSubmit {
                             dismissKeyboard()
                         }
-                    TextField(LL("描述（选填）"), text: $viewModel.description, axis: .vertical)
+                    TextField(LT("描述（选填）", "Description (optional)", "説明（任意）"), text: $viewModel.description, axis: .vertical)
                         .lineLimit(2...4)
-                    TextField(LL("封面 URL（选填）"), text: $viewModel.imageUrl)
+                    TextField(LT("封面 URL（选填）", "Cover URL (optional)", "カバーURL（任意）"), text: $viewModel.imageUrl)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.done)
@@ -198,7 +198,7 @@ struct RatingEventEditorSheet: View {
                         }
                     let hasSelectedCover = viewModel.selectedCoverData != nil
                     PhotosPicker(selection: $selectedCoverPhoto, matching: .images) {
-                        Label(hasSelectedCover ? L("更换封面图", "Replace cover") : L("从相册上传封面图", "Upload cover from Photos"), systemImage: "photo")
+                        Label(hasSelectedCover ? LT("更换封面图", "Replace cover", "カバー画像を変更") : LT("从相册上传封面图", "Upload cover from Photos", "写真からカバー画像をアップロード"), systemImage: "photo")
                     }
                     if let selectedCoverData = viewModel.selectedCoverData,
                        let preview = UIImage(data: selectedCoverData) {
@@ -210,17 +210,17 @@ struct RatingEventEditorSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     if viewModel.selectedCoverData != nil {
-                        Text(LL("已选择本地封面图，保存时会自动上传并使用该图片。"))
+                        Text(LT("已选择本地封面图，保存时会自动上传并使用该图片。", "A local cover image is selected. It will be uploaded and used when you save.", "ローカルカバー画像を選択済みです。保存時に自動アップロードして使用します。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
                 }
             }
-            .raverSystemNavigation(title: LL("编辑打分事件"))
+            .raverSystemNavigation(title: LT("编辑打分事件", "Edit Rating Event", "評価イベントを編集"))
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(viewModel.isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
+                    Button(viewModel.isSaving ? LT("保存中...", "Saving...", "保存中...") : LT("保存", "Save", "保存")) {
                         Task {
                             if await viewModel.save(repository: ratingRepository) {
                                 onSaved()
@@ -232,7 +232,7 @@ struct RatingEventEditorSheet: View {
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button(L("收起", "Dismiss")) {
+                    Button(LT("收起", "Dismiss", "閉じる")) {
                         dismissKeyboard()
                     }
                 }
@@ -240,11 +240,11 @@ struct RatingEventEditorSheet: View {
             .onChange(of: selectedCoverPhoto) { _, newValue in
                 Task { await viewModel.loadSelectedCoverPhoto(newValue) }
             }
-            .alert(L("提示", "Notice"), isPresented: Binding(
+            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
                 get: { viewModel.errorMessage != nil },
                 set: { if !$0 { viewModel.errorMessage = nil } }
             )) {
-                Button(L("确定", "OK"), role: .cancel) {}
+                Button(LT("确定", "OK", "OK"), role: .cancel) {}
             } message: {
                 Text(viewModel.errorMessage ?? "")
             }
@@ -280,15 +280,15 @@ struct RatingUnitEditorSheet: View {
 
     var body: some View {
         Form {
-                Section(LL("编辑打分单位")) {
-                    TextField(LL("名称"), text: $viewModel.name)
+                Section(LT("编辑打分单位", "Edit Rating Unit", "評価ユニットを編集")) {
+                    TextField(LT("名称", "Name", "名称"), text: $viewModel.name)
                         .submitLabel(.done)
                         .onSubmit {
                             dismissKeyboard()
                         }
-                    TextField(LL("描述（选填）"), text: $viewModel.description, axis: .vertical)
+                    TextField(LT("描述（选填）", "Description (optional)", "説明（任意）"), text: $viewModel.description, axis: .vertical)
                         .lineLimit(2...4)
-                    TextField(LL("封面 URL（选填）"), text: $viewModel.imageUrl)
+                    TextField(LT("封面 URL（选填）", "Cover URL (optional)", "カバーURL（任意）"), text: $viewModel.imageUrl)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.done)
@@ -297,7 +297,7 @@ struct RatingUnitEditorSheet: View {
                         }
                     let hasSelectedCover = viewModel.selectedCoverData != nil
                     PhotosPicker(selection: $selectedCoverPhoto, matching: .images) {
-                        Label(hasSelectedCover ? L("更换单位图片", "Replace unit image") : L("从相册上传单位图", "Upload unit image from Photos"), systemImage: "photo")
+                        Label(hasSelectedCover ? LT("更换单位图片", "Replace unit image", "ユニット画像を変更") : LT("从相册上传单位图", "Upload unit image from Photos", "写真からユニット画像をアップロード"), systemImage: "photo")
                     }
                     if let selectedCoverData = viewModel.selectedCoverData,
                        let preview = UIImage(data: selectedCoverData) {
@@ -309,17 +309,17 @@ struct RatingUnitEditorSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     if viewModel.selectedCoverData != nil {
-                        Text(LL("已选择本地单位图，保存时会自动上传并使用该图片。"))
+                        Text(LT("已选择本地单位图，保存时会自动上传并使用该图片。", "A local unit image is selected. It will be uploaded and used when you save.", "ローカルユニット画像を選択済みです。保存時に自動アップロードして使用します。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
                 }
             }
-            .raverSystemNavigation(title: LL("编辑打分单位"))
+            .raverSystemNavigation(title: LT("编辑打分单位", "Edit Rating Unit", "評価ユニットを編集"))
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(viewModel.isSaving ? L("保存中...", "Saving...") : L("保存", "Save")) {
+                    Button(viewModel.isSaving ? LT("保存中...", "Saving...", "保存中...") : LT("保存", "Save", "保存")) {
                         Task {
                             if await viewModel.save(repository: ratingRepository) {
                                 onSaved()
@@ -331,7 +331,7 @@ struct RatingUnitEditorSheet: View {
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button(L("收起", "Dismiss")) {
+                    Button(LT("收起", "Dismiss", "閉じる")) {
                         dismissKeyboard()
                     }
                 }
@@ -339,11 +339,11 @@ struct RatingUnitEditorSheet: View {
             .onChange(of: selectedCoverPhoto) { _, newValue in
                 Task { await viewModel.loadSelectedCoverPhoto(newValue) }
             }
-            .alert(L("提示", "Notice"), isPresented: Binding(
+            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
                 get: { viewModel.errorMessage != nil },
                 set: { if !$0 { viewModel.errorMessage = nil } }
             )) {
-                Button(L("确定", "OK"), role: .cancel) {}
+                Button(LT("确定", "OK", "OK"), role: .cancel) {}
             } message: {
                 Text(viewModel.errorMessage ?? "")
             }

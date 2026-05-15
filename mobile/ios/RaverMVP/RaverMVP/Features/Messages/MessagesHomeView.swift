@@ -12,10 +12,10 @@ enum MessageAlertCategory: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .like: return L("点赞消息", "Like Notifications")
-        case .comment: return L("评论消息", "Comment Notifications")
-        case .follow: return L("关注消息", "Follow Notifications")
-        case .squadInvite: return L("小队邀请", "Squad Invites")
+        case .like: return LT("点赞消息", "Like Notifications", "いいね通知")
+        case .comment: return LT("评论消息", "Comment Notifications", "コメント通知")
+        case .follow: return LT("关注消息", "Follow Notifications", "フォロー通知")
+        case .squadInvite: return LT("小队邀请", "Squad Invites", "Squad 招待")
         }
     }
 
@@ -46,15 +46,15 @@ struct CreateSquadView: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .public: return L("公开小队", "Public Squad")
-            case .private: return L("私密小队", "Private Squad")
+            case .public: return LT("公开小队", "Public Squad", "公開 Squad")
+            case .private: return LT("私密小队", "Private Squad", "非公開 Squad")
             }
         }
 
         var subtitle: String {
             switch self {
-            case .public: return L("所有人可发现并申请加入", "Anyone can discover and request to join")
-            case .private: return L("仅邀请成员可加入", "Invite-only members can join")
+            case .public: return LT("所有人可发现并申请加入", "Anyone can discover and request to join", "誰でも見つけて参加申請できます")
+            case .private: return LT("仅邀请成员可加入", "Invite-only members can join", "招待されたメンバーのみ参加できます")
             }
         }
 
@@ -86,13 +86,25 @@ struct CreateSquadView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if appState.accountEnforcementStatus.blocks(.squadCreate) {
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(LT("账号当前受限，无法创建小队", "Account restricted. Cannot create squads.", "アカウントが現在制限されているため Squad を作成できません"))
+                                .font(.subheadline.weight(.semibold))
+                            Text(appState.accountEnforcementStatus.restrictionSummary)
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                    }
+                }
+
                 avatarPicker
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(LL("小队名称（可选）"))
+                    Text(LT("小队名称（可选）", "Squad name (optional)", "Squad 名（任意）"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
-                    TextField(LL("不填则使用默认名称"), text: $squadName)
+                    TextField(LT("不填则使用默认名称", "If left blank, use the default name.", "未入力の場合は既定名を使用します"), text: $squadName)
                         .submitLabel(.done)
                         .onSubmit {
                             dismissKeyboard()
@@ -103,7 +115,7 @@ struct CreateSquadView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(LL("小队简介（可选）"))
+                    Text(LT("小队简介（可选）", "Team introduction (optional)", "Squad 紹介（任意）"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                     TextEditor(text: $squadDescription)
@@ -114,7 +126,7 @@ struct CreateSquadView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(LL("小队性质（必选）"))
+                    Text(LT("小队性质（必选）", "Team nature (required)", "Squad 種別（必須）"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
 
@@ -151,11 +163,11 @@ struct CreateSquadView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(LL("小队旗帜图（可选，用于小队卡片背景）"))
+                    Text(LT("小队旗帜图（可选，用于小队卡片背景）", "Squad flag image (optional, used for squad card background)", "Squad フラッグ画像（任意、カード背景に使用）"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
 
-                    TextField(LL("输入旗帜图 URL 或选择本地图片上传"), text: $squadFlagURL)
+                    TextField(LT("输入旗帜图 URL 或选择本地图片上传", "Enter the flag image URL or select a local image to upload", "フラッグ画像 URL を入力するか、ローカル画像を選択してアップロード"), text: $squadFlagURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.done)
@@ -169,16 +181,16 @@ struct CreateSquadView: View {
                     HStack(spacing: 10) {
                         PhotosPicker(selection: $selectedFlagPhotoItem, matching: .images) {
                             if isUploadingFlag {
-                                Label(L("上传中...", "Uploading..."), systemImage: "arrow.trianglehead.2.clockwise")
+                                Label(LT("上传中...", "Uploading...", "アップロード中..."), systemImage: "arrow.trianglehead.2.clockwise")
                             } else {
-                                Label(LL("选择旗帜图"), systemImage: "flag.pattern.checkered")
+                                Label(LT("选择旗帜图", "Select flag chart", "フラッグ画像を選択"), systemImage: "flag.pattern.checkered")
                             }
                         }
                         .buttonStyle(.bordered)
                         .disabled(isUploadingFlag)
 
                         if !squadFlagURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Button(L("清空", "Clear")) {
+                            Button(LT("清空", "Clear", "クリア")) {
                                 squadFlagURL = ""
                                 selectedFlagPhotoItem = nil
                             }
@@ -208,25 +220,25 @@ struct CreateSquadView: View {
                 GlassCard {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text(LL("选择好友"))
+                            Text(LT("选择好友", "Select friends", "友達を選択"))
                                 .font(.headline)
                             Spacer()
-                            Text(L("已选 \(selectedFriendIDs.count)/2", "Selected \(selectedFriendIDs.count)/2"))
+                            Text(LT("已选 \\(selectedFriendIDs.count)/2", "Selected \\(selectedFriendIDs.count)/2", "選択済み \\(selectedFriendIDs.count)/2"))
                                 .font(.caption)
                                 .foregroundStyle(selectedFriendIDs.count >= 2 ? RaverTheme.secondaryText : .orange)
                         }
 
-                        Text(L("创建小队至少需要 3 人，请至少选择 2 位好友。", "Squads need at least 3 people. Select at least 2 friends."))
+                        Text(LT("创建小队至少需要 3 人，请至少选择 2 位好友。", "Squads need at least 3 people. Select at least 2 friends.", "Squad の作成には少なくとも3人が必要です。友達を2人以上選択してください。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
 
                         if isLoadingFriends {
-                            ProgressView(L("加载好友中...", "Loading friends..."))
+                            ProgressView(LT("加载好友中...", "Loading friends...", "友達を読み込み中..."))
                         } else if friends.isEmpty {
                             ContentUnavailableView(
-                                L("暂无好友", "No Friends Yet"),
+                                LT("暂无好友", "No Friends Yet", "友達はいません"),
                                 systemImage: "person.2.slash",
-                                description: Text(LL("双方互相关注后会出现在这里"))
+                                description: Text(LT("双方互相关注后会出现在这里", "Both parties will appear here after paying attention to each other", "相互フォローするとここに表示されます"))
                             )
                         } else {
                             ForEach(friends) { friend in
@@ -257,21 +269,21 @@ struct CreateSquadView: View {
                     if isSubmitting {
                         ProgressView().tint(.white)
                     } else {
-                        Text(LL("创建"))
+                        Text(LT("创建", "create", "作成"))
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(isSubmitting || squadPrivacy == nil || selectedFriendIDs.count < 2)
+                .disabled(isSubmitting || squadPrivacy == nil || selectedFriendIDs.count < 2 || appState.accountEnforcementStatus.blocks(.squadCreate))
             }
             .padding(16)
         }
         .background(RaverTheme.background)
         .scrollDismissesKeyboard(.interactively)
-        .raverSystemNavigation(title: L("创建小队", "Create Squad"))
+        .raverSystemNavigation(title: LT("创建小队", "Create Squad", "Squad を作成"))
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button(L("收起", "Dismiss")) {
+                Button(LT("收起", "Dismiss", "閉じる")) {
                     dismissKeyboard()
                 }
             }
@@ -294,11 +306,11 @@ struct CreateSquadView: View {
                 await uploadFlagImage(data: data)
             }
         }
-        .alert(L("操作失败", "Operation Failed"), isPresented: Binding(
+        .alert(LT("操作失败", "Operation Failed", "操作に失敗しました"), isPresented: Binding(
             get: { error != nil },
             set: { if !$0 { error = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(error ?? "")
         }
@@ -325,12 +337,12 @@ struct CreateSquadView: View {
             .clipShape(Circle())
 
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                Label(customAvatarData == nil ? L("选择小队头像（可选）", "Choose squad avatar (optional)") : L("更换小队头像", "Replace squad avatar"), systemImage: "photo")
+                Label(customAvatarData == nil ? LT("选择小队头像（可选）", "Choose squad avatar (optional)", "Squad アイコンを選択（任意）") : LT("更换小队头像", "Replace squad avatar", "Squad アイコンを変更"), systemImage: "photo")
             }
             .buttonStyle(.bordered)
 
             if customAvatarData != nil {
-                Button(L("移除", "Remove")) {
+                Button(LT("移除", "Remove", "削除")) {
                     customAvatarData = nil
                     selectedPhotoItem = nil
                 }
@@ -384,11 +396,15 @@ struct CreateSquadView: View {
     @MainActor
     private func createSquad() async {
         guard let squadPrivacy else {
-            error = L("请选择小队性质（公开或私密）", "Please choose a squad type (public or private).")
+            error = LT("请选择小队性质（公开或私密）", "Please choose a squad type (public or private).", "Squad 種別（公開または非公開）を選択してください。")
+            return
+        }
+        guard !appState.accountEnforcementStatus.blocks(.squadCreate) else {
+            error = appState.accountEnforcementStatus.restrictionSummary
             return
         }
         guard selectedFriendIDs.count >= 2 else {
-            error = L("创建小队至少需要 3 人，请至少选择 2 位好友。", "Squads need at least 3 people. Select at least 2 friends.")
+            error = LT("创建小队至少需要 3 人，请至少选择 2 位好友。", "Squads need at least 3 people. Select at least 2 friends.", "Squad の作成には少なくとも3人が必要です。友達を2人以上選択してください。")
             return
         }
         isSubmitting = true
@@ -433,6 +449,10 @@ struct CreateSquadView: View {
 
     @MainActor
     private func uploadFlagImage(data: Data) async {
+        guard !appState.accountEnforcementStatus.blocks(.mediaUpload) else {
+            self.error = appState.accountEnforcementStatus.restrictionSummary
+            return
+        }
         isUploadingFlag = true
         defer { isUploadingFlag = false }
         do {
@@ -547,6 +567,7 @@ struct CreateSquadView: View {
 
 struct MessagesHomeView: View {
     private enum ConversationListEntry: Identifiable {
+        case contentReviews
         case followedEvents
         case followedDJs
         case followedBrands
@@ -554,6 +575,8 @@ struct MessagesHomeView: View {
 
         var id: String {
             switch self {
+            case .contentReviews:
+                return "content-reviews"
             case .followedEvents:
                 return "followed-events"
             case .followedDJs:
@@ -603,7 +626,7 @@ struct MessagesHomeView: View {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task { await refreshAll() }
                         }
@@ -618,7 +641,7 @@ struct MessagesHomeView: View {
             case .failure(let message), .offline(let message):
                 Spacer()
                 ScreenErrorCard(
-                    title: L("消息加载失败", "Messages Failed to Load"),
+                    title: LT("消息加载失败", "Messages Failed to Load", "メッセージの読み込みに失敗しました"),
                     message: message,
                     retryAction: {
                     Task { await refreshAll() }
@@ -629,13 +652,14 @@ struct MessagesHomeView: View {
             case .empty:
                 Spacer()
                 VStack(spacing: 16) {
+                    contentReviewsEntryCard
                     followedEventsEntryCard
                     followedDJsEntryCard
                     followedBrandsEntryCard
                     ContentUnavailableView(
-                        L("暂无会话", "No Conversations Yet"),
+                        LT("暂无会话", "No Conversations Yet", "会話はありません"),
                         systemImage: "bubble.left.and.bubble.right",
-                        description: Text(LL("从用户主页发起私信或加入小队后会显示在这里"))
+                        description: Text(LT("从用户主页发起私信或加入小队后会显示在这里", "After you send a private message or join a team from the user's homepage, it will be displayed here.", "ユーザープロフィールからメッセージを開始するか Squad に参加するとここに表示されます"))
                     )
                 }
                 .padding(.horizontal, 16)
@@ -644,6 +668,8 @@ struct MessagesHomeView: View {
                 List {
                     ForEach(sortedConversationEntries) { entry in
                         switch entry {
+                        case .contentReviews:
+                            contentReviewsEntryRow
                         case .followedEvents:
                             followedEventsEntryRow
                         case .followedDJs:
@@ -669,7 +695,7 @@ struct MessagesHomeView: View {
                             .buttonStyle(.plain)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 if !chatViewModel.isEditingConversations {
-                                    Button(conversation.isPinned ? L("取消置顶", "Unpin") : L("置顶", "Pin")) {
+                                    Button(conversation.isPinned ? LT("取消置顶", "Unpin", "ピン留め解除") : LT("置顶", "Pin", "ピン留め")) {
                                         Task {
                                             await chatViewModel.setConversationPinned(
                                                 conversationID: conversation.id,
@@ -679,7 +705,7 @@ struct MessagesHomeView: View {
                                     }
                                     .tint(RaverTheme.accent)
 
-                                    Button(conversation.unreadCount > 0 ? L("已读", "Read") : L("未读", "Unread")) {
+                                    Button(conversation.unreadCount > 0 ? LT("已读", "Read", "既読") : LT("未读", "Unread", "未読")) {
                                         Task {
                                             if conversation.unreadCount > 0 {
                                                 await chatViewModel.markConversationRead(conversationID: conversation.id)
@@ -694,7 +720,7 @@ struct MessagesHomeView: View {
                                     }
                                     .tint(.blue)
 
-                                    Button(L("隐藏", "Hide"), role: .destructive) {
+                                    Button(LT("隐藏", "Hide", "非表示"), role: .destructive) {
                                         Task {
                                             await chatViewModel.hideConversation(conversationID: conversation.id)
                                             onUnreadStateChanged()
@@ -703,7 +729,7 @@ struct MessagesHomeView: View {
                                 }
                             }
                             .contextMenu {
-                                Button(conversation.isPinned ? L("取消置顶", "Unpin") : L("置顶", "Pin")) {
+                                Button(conversation.isPinned ? LT("取消置顶", "Unpin", "ピン留め解除") : LT("置顶", "Pin", "ピン留め")) {
                                     Task {
                                         await chatViewModel.setConversationPinned(
                                             conversationID: conversation.id,
@@ -712,7 +738,7 @@ struct MessagesHomeView: View {
                                     }
                                 }
 
-                                Button(conversation.unreadCount > 0 ? L("标记已读", "Mark Read") : L("标记未读", "Mark Unread")) {
+                                Button(conversation.unreadCount > 0 ? LT("标记已读", "Mark Read", "既読にする") : LT("标记未读", "Mark Unread", "未読にする")) {
                                     Task {
                                         if conversation.unreadCount > 0 {
                                             await chatViewModel.markConversationRead(conversationID: conversation.id)
@@ -726,7 +752,7 @@ struct MessagesHomeView: View {
                                     }
                                 }
 
-                                Button(L("隐藏会话", "Hide Conversation"), role: .destructive) {
+                                Button(LT("隐藏会话", "Hide Conversation", "会話を非表示"), role: .destructive) {
                                     Task {
                                         await chatViewModel.hideConversation(conversationID: conversation.id)
                                         onUnreadStateChanged()
@@ -770,6 +796,12 @@ struct MessagesHomeView: View {
                 onUnreadStateChanged()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .raverContentReviewsDidMutate)) { _ in
+            Task {
+                await chatViewModel.refreshContentReviewSummary()
+                onUnreadStateChanged()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .raverFollowedEventsDidMutate)) { _ in
             Task {
                 await chatViewModel.refreshFollowedEventsSummary()
@@ -788,7 +820,7 @@ struct MessagesHomeView: View {
                 onUnreadStateChanged()
             }
         }
-        .alert(L("消息加载失败", "Failed to Load Messages"), isPresented: Binding(
+        .alert(LT("消息加载失败", "Failed to Load Messages", "メッセージの読み込みに失敗しました"), isPresented: Binding(
             get: { chatViewModel.error != nil || alertViewModel.error != nil },
             set: { newValue in
                 if !newValue {
@@ -798,10 +830,10 @@ struct MessagesHomeView: View {
                 }
             }
         )) {
-            Button(L("重试", "Retry")) {
+            Button(LT("重试", "Retry", "再試行")) {
                 Task { await refreshAll() }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
             Text(chatViewModel.error ?? alertViewModel.error ?? "")
         }
@@ -837,6 +869,31 @@ struct MessagesHomeView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(category.title)
         }
+    }
+
+    private var contentReviewsEntryCard: some View {
+        Button {
+            appPush(.contentReviewsInbox)
+        } label: {
+            contentReviewsRowContent
+                .padding(14)
+                .background(RaverTheme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var contentReviewsEntryRow: some View {
+        Button {
+            appPush(.contentReviewsInbox)
+        } label: {
+            contentReviewsRowContent
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(RaverTheme.card)
     }
 
     private var followedEventsEntryCard: some View {
@@ -916,6 +973,7 @@ struct MessagesHomeView: View {
 
     private var sortedConversationEntries: [ConversationListEntry] {
         var entries = chatViewModel.conversations.map { ConversationListEntry.conversation($0) }
+        entries.append(.contentReviews)
         entries.append(.followedEvents)
         entries.append(.followedDJs)
         entries.append(.followedBrands)
@@ -940,6 +998,8 @@ struct MessagesHomeView: View {
 
     private func isPinnedEntry(_ entry: ConversationListEntry) -> Bool {
         switch entry {
+        case .contentReviews:
+            return false
         case .followedEvents:
             return false
         case .followedDJs:
@@ -953,6 +1013,8 @@ struct MessagesHomeView: View {
 
     private func updatedAt(for entry: ConversationListEntry) -> Date {
         switch entry {
+        case .contentReviews:
+            return chatViewModel.contentReviewSummary.latestOccurredAt ?? .distantPast
         case .followedEvents:
             return chatViewModel.followedEventsSummary.latestOccurredAt ?? .distantPast
         case .followedDJs:
@@ -961,6 +1023,65 @@ struct MessagesHomeView: View {
             return chatViewModel.followedBrandsSummary.latestOccurredAt ?? .distantPast
         case .conversation(let conversation):
             return conversation.updatedAt
+        }
+    }
+
+    private var contentReviewsRowContent: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.green.opacity(0.20),
+                                Color.orange.opacity(0.18)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.green)
+            }
+            .frame(width: 40, height: 40)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(LT("审核通知", "Review Updates", "審査通知"))
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Spacer(minLength: 8)
+                    if let latestOccurredAt = chatViewModel.contentReviewSummary.latestOccurredAt {
+                        Text(latestOccurredAt.chatTimeText)
+                            .font(.system(size: 12))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Text(
+                        chatViewModel.contentReviewSummary.latestItemPreview
+                            ?? LT("你提交的活动和DJ审核结果会显示在这里", "Review results for your submissions will appear here.", "送信したイベントと DJ の審査結果がここに表示されます")
+                    )
+                    .font(.system(size: 13))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                    Spacer(minLength: 0)
+
+                    if chatViewModel.contentReviewSummary.unreadCount > 0 {
+                        Text(unreadBadgeText(for: chatViewModel.contentReviewSummary.unreadCount))
+                            .font(.system(size: 11, weight: .semibold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.red)
+                            .clipShape(Capsule())
+                            .foregroundStyle(Color.white)
+                    }
+                }
+            }
         }
     }
 
@@ -986,7 +1107,7 @@ struct MessagesHomeView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(L("关注的活动", "Followed Events"))
+                    Text(LT("关注的活动", "Followed Events", "フォロー中のイベント"))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer(minLength: 8)
@@ -1000,7 +1121,7 @@ struct MessagesHomeView: View {
                 HStack(spacing: 8) {
                     Text(
                         chatViewModel.followedEventsSummary.latestItemPreview
-                            ?? L("你关注的活动有新资讯时会显示在这里", "Updates from followed events will appear here.")
+                            ?? LT("你关注的活动有新资讯时会显示在这里", "Updates from followed events will appear here.", "フォロー中のイベントに新着情報があるとここに表示されます")
                     )
                     .font(.system(size: 13))
                     .foregroundStyle(RaverTheme.secondaryText)
@@ -1045,7 +1166,7 @@ struct MessagesHomeView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(L("关注的DJ", "Followed DJs"))
+                    Text(LT("关注的DJ", "Followed DJs", "フォロー中の DJ"))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer(minLength: 8)
@@ -1059,7 +1180,7 @@ struct MessagesHomeView: View {
                 HStack(spacing: 8) {
                     Text(
                         chatViewModel.followedDJsSummary.latestItemPreview
-                            ?? L("你关注的DJ发布新资讯后会显示在这里", "Updates from followed DJs will appear here.")
+                            ?? LT("你关注的DJ发布新资讯后会显示在这里", "Updates from followed DJs will appear here.", "フォロー中の DJ が新着情報を投稿するとここに表示されます")
                     )
                     .font(.system(size: 13))
                     .foregroundStyle(RaverTheme.secondaryText)
@@ -1088,7 +1209,7 @@ struct MessagesHomeView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(L("关注的音乐节", "Followed Festivals"))
+                    Text(LT("关注的音乐节", "Followed Festivals", "フォロー中のフェス"))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer(minLength: 8)
@@ -1102,7 +1223,7 @@ struct MessagesHomeView: View {
                 HStack(spacing: 8) {
                     Text(
                         chatViewModel.followedBrandsSummary.latestItemPreview
-                            ?? L("你关注的音乐节发布新资讯后会显示在这里", "Updates from followed festivals will appear here.")
+                            ?? LT("你关注的音乐节发布新资讯后会显示在这里", "Updates from followed festivals will appear here.", "フォロー中のフェスが新着情報を投稿するとここに表示されます")
                     )
                     .font(.system(size: 13))
                     .foregroundStyle(RaverTheme.secondaryText)
@@ -1163,7 +1284,7 @@ struct MessagesHomeView: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(chatViewModel.isEditingConversations ? L("完成编辑", "Finish Editing") : L("编辑会话", "Edit Conversations"))
+        .accessibilityLabel(chatViewModel.isEditingConversations ? LT("完成编辑", "Finish Editing", "編集を完了") : LT("编辑会话", "Edit Conversations", "会話を編集"))
     }
 
     @ViewBuilder
@@ -1196,7 +1317,7 @@ struct MessagesHomeView: View {
                         }
 
                         if conversation.type == .group {
-                            Text(LL("小队"))
+                            Text(LT("小队", "squad", "Squad"))
                                 .font(.caption2.bold())
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -1251,8 +1372,8 @@ struct MessagesHomeView: View {
                 } label: {
                     Text(
                         chatViewModel.selectedConversationIDs.count == chatViewModel.conversations.count
-                            ? L("取消全选", "Clear All")
-                            : L("全选", "Select All")
+                            ? LT("取消全选", "Clear All", "すべて解除")
+                            : LT("全选", "Select All", "すべて選択")
                     )
                     .font(.subheadline.weight(.semibold))
                 }
@@ -1261,7 +1382,7 @@ struct MessagesHomeView: View {
                 Spacer(minLength: 12)
 
                 Text(
-                    L("已选 \(chatViewModel.selectedConversationIDs.count) 项", "Selected \(chatViewModel.selectedConversationIDs.count)")
+                    LT("已选 \\(chatViewModel.selectedConversationIDs.count) 项", "Selected \\(chatViewModel.selectedConversationIDs.count)", "\\(chatViewModel.selectedConversationIDs.count) 件選択済み")
                 )
                 .font(.caption)
                 .foregroundStyle(RaverTheme.secondaryText)
@@ -1274,7 +1395,7 @@ struct MessagesHomeView: View {
                         onUnreadStateChanged()
                     }
                 } label: {
-                    Text(L("标为已读", "Mark Read"))
+                    Text(LT("标为已读", "Mark Read", "既読にする"))
                         .font(.subheadline.weight(.semibold))
                 }
                 .buttonStyle(.plain)
@@ -1286,7 +1407,7 @@ struct MessagesHomeView: View {
                         onUnreadStateChanged()
                     }
                 } label: {
-                    Text(L("隐藏", "Hide"))
+                    Text(LT("隐藏", "Hide", "非表示"))
                         .font(.subheadline.weight(.semibold))
                 }
                 .buttonStyle(.plain)
@@ -1348,7 +1469,7 @@ struct MessageAlertDetailView: View {
             let items = viewModel.items(for: category.type)
             if items.isEmpty {
                 ContentUnavailableView(
-                    L("暂无\(category.title)", "No \(category.title) Yet"),
+                    LT("暂无\\(category.title)", "No \\(category.title) Yet", "\\(category.title) はまだありません"),
                     systemImage: category.iconName
                 )
             } else {
@@ -1462,7 +1583,7 @@ final class FollowedEventsInboxViewModel: ObservableObject {
             self.bannerMessage = nil
             self.error = nil
         } catch {
-            let message = error.userFacingMessage ?? L("关注活动加载失败，请稍后重试", "Failed to load followed events. Please try again later.")
+            let message = error.userFacingMessage ?? LT("关注活动加载失败，请稍后重试", "Failed to load followed events. Please try again later.", "フォロー中イベントの読み込みに失敗しました。後でもう一度お試しください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success
@@ -1502,13 +1623,13 @@ struct FollowedEventsInboxView: View {
             if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if viewModel.isRefreshing {
-                        InlineLoadingBadge(title: L("正在更新关注活动", "Updating followed events"))
+                        InlineLoadingBadge(title: LT("正在更新关注活动", "Updating followed events", "フォロー中イベントを更新中"))
                     }
                     if let bannerMessage = viewModel.bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task { await viewModel.load() }
                         }
@@ -1519,12 +1640,12 @@ struct FollowedEventsInboxView: View {
 
             switch viewModel.phase {
             case .idle, .initialLoading:
-                ProgressView(LL("正在加载关注活动..."))
+                ProgressView(LT("正在加载关注活动...", "Loading followed events...", "フォロー中イベントを読み込み中..."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             case .failure(let message), .offline(let message):
                 Spacer()
                 ScreenErrorCard(
-                    title: L("关注活动加载失败", "Followed Events Failed to Load"),
+                    title: LT("关注活动加载失败", "Followed Events Failed to Load", "フォロー中イベントの読み込みに失敗しました"),
                     message: message,
                     retryAction: {
                     Task { await viewModel.load() }
@@ -1534,9 +1655,9 @@ struct FollowedEventsInboxView: View {
                 Spacer()
             case .empty:
                 ContentUnavailableView(
-                    L("暂无活动更新", "No Event Updates"),
+                    LT("暂无活动更新", "No Event Updates", "イベント更新はありません"),
                     systemImage: "sparkles.rectangle.stack",
-                    description: Text(LL("你关注的活动发布新资讯后，会显示在这里"))
+                    description: Text(LT("你关注的活动发布新资讯后，会显示在这里", "Updates from events you follow will appear here.", "フォロー中のイベントが新着情報を投稿するとここに表示されます"))
                 )
             case .success:
                 List(viewModel.items) { item in
@@ -1558,10 +1679,10 @@ struct FollowedEventsInboxView: View {
             }
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: L("关注的活动", "Followed Events"))
+        .raverSystemNavigation(title: LT("关注的活动", "Followed Events", "フォロー中のイベント"))
         .toolbar {
             if viewModel.summary.unreadCount > 0 {
-                Text(L("未读", "Unread") + " \(viewModel.summary.unreadCount)")
+                Text(LT("未读", "Unread", "未読") + " \(viewModel.summary.unreadCount)")
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -1589,7 +1710,7 @@ struct FollowedEventsInboxView: View {
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
 
-                Text(L("发布了新资讯", "Published a new article"))
+                Text(LT("发布了新资讯", "Published a new article", "新着情報を投稿しました"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.accent)
 
@@ -1650,6 +1771,204 @@ struct FollowedEventsInboxView: View {
 }
 
 @MainActor
+final class ContentReviewsInboxViewModel: ObservableObject {
+    @Published var items: [ContentReviewNotificationItem] = []
+    @Published var summary: ContentReviewSummary = .empty
+    @Published var phase: LoadPhase = .idle
+    @Published var isRefreshing = false
+    @Published var bannerMessage: String?
+    @Published var error: String?
+
+    private let repository: MessageNotificationRepository
+
+    init(repository: MessageNotificationRepository) {
+        self.repository = repository
+    }
+
+    func load() async {
+        let hadContent = !items.isEmpty
+        if hadContent {
+            isRefreshing = true
+        } else {
+            phase = .initialLoading
+        }
+        defer { isRefreshing = false }
+
+        do {
+            async let summaryTask = repository.fetchContentReviewSummary()
+            async let itemsTask = repository.fetchContentReviewNotifications(limit: 50)
+            let (summary, items) = try await (summaryTask, itemsTask)
+            self.summary = summary
+            self.items = items
+            self.phase = items.isEmpty ? .empty : .success
+            self.bannerMessage = nil
+            self.error = nil
+        } catch {
+            let message = error.userFacingMessage ?? LT("审核通知加载失败，请稍后重试", "Failed to load review updates. Please try again later.", "審査通知の読み込みに失敗しました。後でもう一度お試しください。")
+            if hadContent {
+                bannerMessage = message
+                phase = .success
+            } else {
+                phase = .failure(message: message)
+            }
+            self.error = message
+        }
+    }
+
+    func markRead(_ item: ContentReviewNotificationItem) async {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        guard items[index].isRead == false else { return }
+        items[index].isRead = true
+        summary.unreadCount = max(0, summary.unreadCount - 1)
+        do {
+            try await repository.markContentReviewNotificationRead(notificationID: item.id)
+            NotificationCenter.default.post(name: .raverContentReviewsDidMutate, object: nil)
+        } catch {
+            items[index].isRead = false
+            summary.unreadCount += 1
+            self.error = error.userFacingMessage
+        }
+    }
+}
+
+struct ContentReviewsInboxView: View {
+    @Environment(\.appPush) private var appPush
+    @StateObject private var viewModel: ContentReviewsInboxViewModel
+
+    init(repository: MessageNotificationRepository) {
+        _viewModel = StateObject(wrappedValue: ContentReviewsInboxViewModel(repository: repository))
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if viewModel.isRefreshing || viewModel.bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if viewModel.isRefreshing {
+                        InlineLoadingBadge(title: LT("正在更新审核通知", "Updating review updates", "審査通知を更新中"))
+                    }
+                    if let bannerMessage = viewModel.bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: LT("重试", "Retry", "再試行")
+                        ) {
+                            Task { await viewModel.load() }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            switch viewModel.phase {
+            case .idle, .initialLoading:
+                ProgressView(LT("正在加载审核通知...", "Loading review updates...", "審査通知を読み込み中..."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            case .failure(let message), .offline(let message):
+                Spacer()
+                ScreenErrorCard(
+                    title: LT("审核通知加载失败", "Review Updates Failed to Load", "審査通知の読み込みに失敗しました"),
+                    message: message,
+                    retryAction: {
+                        Task { await viewModel.load() }
+                    }
+                )
+                .padding(.horizontal, 16)
+                Spacer()
+            case .empty:
+                ContentUnavailableView(
+                    LT("暂无审核通知", "No Review Updates", "審査通知はありません"),
+                    systemImage: "checkmark.seal",
+                    description: Text(LT("活动和DJ提交审核后，审核结果会显示在这里", "Review results for submitted events and DJs will appear here.", "イベントと DJ を審査に送信すると、結果がここに表示されます"))
+                )
+            case .success:
+                List(viewModel.items) { item in
+                    Button {
+                        Task {
+                            await viewModel.markRead(item)
+                            openReviewedContent(item)
+                        }
+                    } label: {
+                        contentReviewRow(item)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(RaverTheme.card)
+                }
+                .scrollContentBackground(.hidden)
+                .refreshable {
+                    await viewModel.load()
+                }
+            }
+        }
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: LT("审核通知", "Review Updates", "審査通知"))
+        .toolbar {
+            if viewModel.summary.unreadCount > 0 {
+                Text(LT("未读", "Unread", "未読") + " \(viewModel.summary.unreadCount)")
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .task {
+            await viewModel.load()
+        }
+    }
+
+    private func openReviewedContent(_ item: ContentReviewNotificationItem) {
+        guard item.isApproved, let id = item.createdEntityId else { return }
+        if item.entityType == "event" {
+            appPush(.eventDetail(eventID: id))
+        } else if item.entityType == "dj" {
+            appPush(.djDetail(djID: id))
+        }
+    }
+
+    private func contentReviewRow(_ item: ContentReviewNotificationItem) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(item.isApproved ? Color.green.opacity(0.14) : Color.red.opacity(0.12))
+                Image(systemName: item.isApproved ? "checkmark.seal.fill" : "xmark.seal.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(item.isApproved ? Color.green : Color.red)
+            }
+            .frame(width: 52, height: 52)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(item.title)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 8)
+
+                    Text(item.occurredAt.feedTimeText)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+
+                Text(item.isApproved ? LT("审核通过", "Approved", "承認済み") : LT("审核未通过", "Rejected", "却下"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(item.isApproved ? Color.green : Color.red)
+
+                Text(item.body)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(3)
+            }
+
+            if !item.isRead {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, 8)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+@MainActor
 final class FollowedDJsInboxViewModel: ObservableObject {
     @Published var items: [FollowedDJNotificationItem] = []
     @Published var summary: FollowedDJsSummary = .empty
@@ -1683,7 +2002,7 @@ final class FollowedDJsInboxViewModel: ObservableObject {
             self.bannerMessage = nil
             self.error = nil
         } catch {
-            let message = error.userFacingMessage ?? L("关注DJ加载失败，请稍后重试", "Failed to load followed DJs. Please try again later.")
+            let message = error.userFacingMessage ?? LT("关注DJ加载失败，请稍后重试", "Failed to load followed DJs. Please try again later.", "フォロー中 DJ の読み込みに失敗しました。後でもう一度お試しください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success
@@ -1723,13 +2042,13 @@ struct FollowedDJsInboxView: View {
             if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if viewModel.isRefreshing {
-                        InlineLoadingBadge(title: L("正在更新关注DJ", "Updating followed DJs"))
+                        InlineLoadingBadge(title: LT("正在更新关注DJ", "Updating followed DJs", "フォロー中 DJ を更新中"))
                     }
                     if let bannerMessage = viewModel.bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task { await viewModel.load() }
                         }
@@ -1740,12 +2059,12 @@ struct FollowedDJsInboxView: View {
 
             switch viewModel.phase {
             case .idle, .initialLoading:
-                ProgressView(LL("正在加载关注的DJ..."))
+                ProgressView(LT("正在加载关注的DJ...", "Loading followed DJs...", "フォロー中の DJ を読み込み中..."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             case .failure(let message), .offline(let message):
                 Spacer()
                 ScreenErrorCard(
-                    title: L("关注DJ加载失败", "Followed DJs Failed to Load"),
+                    title: LT("关注DJ加载失败", "Followed DJs Failed to Load", "フォロー中 DJ の読み込みに失敗しました"),
                     message: message,
                     retryAction: {
                         Task { await viewModel.load() }
@@ -1755,9 +2074,9 @@ struct FollowedDJsInboxView: View {
                 Spacer()
             case .empty:
                 ContentUnavailableView(
-                    L("暂无DJ更新", "No DJ Updates"),
+                    LT("暂无DJ更新", "No DJ Updates", "DJ 更新はありません"),
                     systemImage: "music.mic",
-                    description: Text(LL("你关注的DJ发布新资讯后，会显示在这里"))
+                    description: Text(LT("你关注的DJ发布新资讯后，会显示在这里", "Updates from DJs you follow will appear here.", "フォロー中の DJ が新着情報を投稿するとここに表示されます"))
                 )
             case .success:
                 List(viewModel.items) { item in
@@ -1779,10 +2098,10 @@ struct FollowedDJsInboxView: View {
             }
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: L("关注的DJ", "Followed DJs"))
+        .raverSystemNavigation(title: LT("关注的DJ", "Followed DJs", "フォロー中の DJ"))
         .toolbar {
             if viewModel.summary.unreadCount > 0 {
-                Text(L("未读", "Unread") + " \(viewModel.summary.unreadCount)")
+                Text(LT("未读", "Unread", "未読") + " \(viewModel.summary.unreadCount)")
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -1810,7 +2129,7 @@ struct FollowedDJsInboxView: View {
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
 
-                Text(L("发布了新资讯", "Published a new article"))
+                Text(LT("发布了新资讯", "Published a new article", "新着情報を投稿しました"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.blue)
 
@@ -1898,7 +2217,7 @@ final class FollowedBrandsInboxViewModel: ObservableObject {
             self.bannerMessage = nil
             self.error = nil
         } catch {
-            let message = error.userFacingMessage ?? L("关注音乐节加载失败，请稍后重试", "Failed to load followed festivals. Please try again later.")
+            let message = error.userFacingMessage ?? LT("关注音乐节加载失败，请稍后重试", "Failed to load followed festivals. Please try again later.", "フォロー中フェスの読み込みに失敗しました。後でもう一度お試しください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success
@@ -1938,13 +2257,13 @@ struct FollowedBrandsInboxView: View {
             if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if viewModel.isRefreshing {
-                        InlineLoadingBadge(title: L("正在更新关注音乐节", "Updating followed festivals"))
+                        InlineLoadingBadge(title: LT("正在更新关注音乐节", "Updating followed festivals", "フォロー中フェスを更新中"))
                     }
                     if let bannerMessage = viewModel.bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task { await viewModel.load() }
                         }
@@ -1955,12 +2274,12 @@ struct FollowedBrandsInboxView: View {
 
             switch viewModel.phase {
             case .idle, .initialLoading:
-                ProgressView(LL("正在加载关注的音乐节..."))
+                ProgressView(LT("正在加载关注的音乐节...", "Loading followed festivals...", "フォロー中のフェスを読み込み中..."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             case .failure(let message), .offline(let message):
                 Spacer()
                 ScreenErrorCard(
-                    title: L("关注音乐节加载失败", "Followed Festivals Failed to Load"),
+                    title: LT("关注音乐节加载失败", "Followed Festivals Failed to Load", "フォロー中フェスの読み込みに失敗しました"),
                     message: message,
                     retryAction: {
                         Task { await viewModel.load() }
@@ -1970,9 +2289,9 @@ struct FollowedBrandsInboxView: View {
                 Spacer()
             case .empty:
                 ContentUnavailableView(
-                    L("暂无音乐节更新", "No Festival Updates"),
+                    LT("暂无音乐节更新", "No Festival Updates", "フェス更新はありません"),
                     systemImage: "fireworks",
-                    description: Text(LL("你关注的音乐节发布新资讯后，会显示在这里"))
+                    description: Text(LT("你关注的音乐节发布新资讯后，会显示在这里", "Updates from festivals you follow will appear here.", "フォロー中のフェスが新着情報を投稿するとここに表示されます"))
                 )
             case .success:
                 List(viewModel.items) { item in
@@ -1994,10 +2313,10 @@ struct FollowedBrandsInboxView: View {
             }
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: L("关注的音乐节", "Followed Festivals"))
+        .raverSystemNavigation(title: LT("关注的音乐节", "Followed Festivals", "フォロー中のフェス"))
         .toolbar {
             if viewModel.summary.unreadCount > 0 {
-                Text(L("未读", "Unread") + " \(viewModel.summary.unreadCount)")
+                Text(LT("未读", "Unread", "未読") + " \(viewModel.summary.unreadCount)")
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -2025,7 +2344,7 @@ struct FollowedBrandsInboxView: View {
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
 
-                Text(L("发布了新资讯", "Published a new article"))
+                Text(LT("发布了新资讯", "Published a new article", "新着情報を投稿しました"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.pink)
 

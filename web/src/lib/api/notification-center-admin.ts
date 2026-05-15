@@ -1,6 +1,6 @@
 import { getApiUrl } from '@/lib/config';
 
-type NotificationChannel = 'in_app' | 'apns' | 'openim';
+type NotificationChannel = 'in_app' | 'apns' | 'email' | 'sms';
 type NotificationCategory =
   | 'chat_message'
   | 'community_interaction'
@@ -9,6 +9,9 @@ type NotificationCategory =
   | 'route_dj_reminder'
   | 'followed_dj_update'
   | 'followed_brand_update'
+  | 'account_enforcement'
+  | 'content_review'
+  | 'report_decision'
   | 'major_news';
 
 export interface NotificationCenterGlobalConfig {

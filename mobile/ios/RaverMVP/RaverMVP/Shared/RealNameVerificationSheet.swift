@@ -32,11 +32,11 @@ struct RealNameVerificationSheet: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(RaverTheme.background)
-            .navigationTitle(LL("实名认证"))
+            .navigationTitle(LT("实名认证", "Real-Name Verification", "実名認証"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L("关闭", "Close")) {
+                    Button(LT("关闭", "Close", "閉じる")) {
                         dismiss()
                     }
                 }
@@ -76,10 +76,10 @@ struct RealNameVerificationSheet: View {
     private var formContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(LL("真实姓名"))
+                Text(LT("真实姓名", "Legal Name", "本名"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
-                TextField(LL("请输入本人姓名"), text: $legalName)
+                TextField(LT("请输入本人姓名", "Enter your legal name", "本人の名前を入力してください"), text: $legalName)
                     .textContentType(.name)
                     .submitLabel(.next)
                     .padding(14)
@@ -87,10 +87,10 @@ struct RealNameVerificationSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(LL("身份证号"))
+                Text(LT("身份证号", "Identity Document Number", "身分証番号"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
-                TextField(LL("请输入18位身份证号"), text: $idNumber)
+                TextField(LT("请输入18位身份证号", "Enter an 18-character identity number", "18桁の身分証番号を入力してください"), text: $idNumber)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
                     .keyboardType(.asciiCapable)
@@ -105,7 +105,7 @@ struct RealNameVerificationSheet: View {
                     .foregroundStyle(Color(red: 0.95, green: 0.25, blue: 0.30))
             }
 
-            Text(LL("认证信息仅用于平台合规审核。审核通过后即可使用发布、评论、关注、私信等社交功能。"))
+            Text(LT("认证信息仅用于平台合规审核。审核通过后即可使用发布、评论、关注、私信等社交功能。", "Verification information is used only for platform compliance review. After approval, you can use posting, comments, follows, DMs, and other social features.", "認証情報はプラットフォームのコンプライアンス審査にのみ使用します。承認後、投稿、コメント、フォロー、DMなどを利用できます。"))
                 .font(.footnote)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -113,7 +113,7 @@ struct RealNameVerificationSheet: View {
             Button {
                 submit()
             } label: {
-                Text(LL("提交认证"))
+                Text(LT("提交认证", "Submit Verification", "認証を送信"))
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(PrimaryButtonStyle())
@@ -125,10 +125,10 @@ struct RealNameVerificationSheet: View {
     private var pendingContent: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
-                Label(LL("资料已提交"), systemImage: "clock.badge.checkmark")
+                Label(LT("资料已提交", "Information Submitted", "資料を送信しました"), systemImage: "clock.badge.checkmark")
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
-                Text(LL("我们会尽快完成审核。审核通过后，社交功能会自动开放。"))
+                Text(LT("我们会尽快完成审核。审核通过后，社交功能会自动开放。", "We will review it as soon as possible. Social features will unlock automatically after approval.", "できるだけ早く審査します。承認後、ソーシャル機能は自動で利用可能になります。"))
                     .font(.subheadline)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -138,10 +138,10 @@ struct RealNameVerificationSheet: View {
     private var verifiedContent: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
-                Label(LL("认证已通过"), systemImage: "checkmark.seal.fill")
+                Label(LT("认证已通过", "Verification Approved", "認証済み"), systemImage: "checkmark.seal.fill")
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
-                Text(LL("你现在可以正常使用发布、评论、关注、私信等社交功能。"))
+                Text(LT("你现在可以正常使用发布、评论、关注、私信等社交功能。", "You can now use posting, comments, follows, DMs, and other social features normally.", "投稿、コメント、フォロー、DMなどのソーシャル機能を通常通り利用できます。"))
                     .font(.subheadline)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -169,18 +169,18 @@ struct RealNameVerificationSheet: View {
     private func submit() {
         let name = legalName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            errorMessage = LL("请输入真实姓名")
+            errorMessage = LT("请输入真实姓名", "Please enter your legal name", "本名を入力してください")
             return
         }
 
         guard normalizedIDNumber.count == 18 else {
-            errorMessage = LL("请输入18位身份证号")
+            errorMessage = LT("请输入18位身份证号", "Please enter an 18-character identity number", "18桁の身分証番号を入力してください")
             return
         }
 
         errorMessage = nil
         appState.realNameVerificationStatus = .pending
-        OperationBannerCenter.shared.success(LL("实名认证资料已提交"))
+        OperationBannerCenter.shared.success(LT("实名认证资料已提交", "Real-name verification submitted", "実名認証資料を送信しました"))
     }
 }
 
@@ -188,26 +188,26 @@ extension RealNameVerificationStatus {
     var title: String {
         switch self {
         case .unverified:
-            return LL("未实名认证")
+            return LT("未实名认证", "Not Verified", "未認証")
         case .pending:
-            return LL("认证审核中")
+            return LT("认证审核中", "Verification Pending", "認証審査中")
         case .verified:
-            return LL("已实名认证")
+            return LT("已实名认证", "Verified", "実名認証済み")
         case .rejected:
-            return LL("认证未通过")
+            return LT("认证未通过", "Verification Rejected", "認証未承認")
         }
     }
 
     var description: String {
         switch self {
         case .unverified:
-            return LL("使用社交功能前，需要先完成实名认证。")
+            return LT("使用社交功能前，需要先完成实名认证。", "Complete real-name verification before using social features.", "ソーシャル機能を使う前に実名認証を完了する必要があります。")
         case .pending:
-            return LL("你的实名认证资料正在审核中，请稍后查看结果。")
+            return LT("你的实名认证资料正在审核中，请稍后查看结果。", "Your real-name verification is under review. Please check again later.", "実名認証資料は審査中です。後ほど結果をご確認ください。")
         case .verified:
-            return LL("你的实名认证已通过，可以使用全部社交功能。")
+            return LT("你的实名认证已通过，可以使用全部社交功能。", "Your real-name verification has been approved. All social features are available.", "実名認証が承認され、すべてのソーシャル機能を利用できます。")
         case .rejected:
-            return LL("认证资料未通过，请核对后重新提交。")
+            return LT("认证资料未通过，请核对后重新提交。", "Verification was rejected. Please check your information and submit again.", "認証資料が承認されませんでした。確認して再送信してください。")
         }
     }
 
@@ -249,8 +249,8 @@ extension AppState {
 
     var socialFeatureUnavailableMessage: String {
         if session == nil {
-            return L("请先登录后再使用社交功能", "Please sign in before using social features.")
+            return LT("请先登录后再使用社交功能", "Please sign in before using social features.", "ソーシャル機能を使うにはログインしてください。")
         }
-        return LL("请先完成实名认证")
+        return LT("请先完成实名认证", "Please complete real-name verification first.", "先に実名認証を完了してください")
     }
 }

@@ -242,6 +242,24 @@ const isTabRequested = (requested: GlobalSearchTab, tab: GlobalSearchTab): boole
 const emptyCounts = (): Record<GlobalSearchTab, number> =>
   SEARCH_TABS.reduce((result, tab) => ({ ...result, [tab]: 0 }), {} as Record<GlobalSearchTab, number>);
 
+const buildBlockedRelationUserIds = async (viewerId: string | undefined | null): Promise<Set<string>> => {
+  if (!viewerId) return new Set<string>();
+  const rows = await prisma.userBlock.findMany({
+    where: {
+      OR: [
+        { blockerUserId: viewerId },
+        { blockedUserId: viewerId },
+      ],
+    },
+    select: { blockerUserId: true, blockedUserId: true },
+  });
+  return new Set(
+    rows
+      .map((row) => (row.blockerUserId === viewerId ? row.blockedUserId : row.blockerUserId))
+      .filter((id): id is string => Boolean(id && id !== viewerId))
+  );
+};
+
 const itemTab = (type: GlobalSearchItemType): GlobalSearchTab => {
   switch (type) {
     case 'event':
@@ -571,11 +589,12 @@ const searchEvents = async (query: string, limit: number): Promise<GlobalSearchI
   ).slice(0, limit);
 };
 
-const searchNews = async (query: string, limit: number): Promise<GlobalSearchItem[]> => {
+const searchNews = async (query: string, limit: number, _userId: string, blockedRelationUserIds: Set<string>): Promise<GlobalSearchItem[]> => {
   const rows = await prisma.post.findMany({
     where: {
       visibility: 'public',
       content: { contains: NEWS_MARKER },
+      userId: blockedRelationUserIds.size > 0 ? { notIn: Array.from(blockedRelationUserIds) } : undefined,
     },
     select: {
       id: true,
@@ -585,7 +604,7 @@ const searchNews = async (query: string, limit: number): Promise<GlobalSearchIte
       createdAt: true,
       updatedAt: true,
       user: {
-        select: { username: true, displayName: true },
+        select: { id: true, username: true, displayName: true },
       },
     },
     orderBy: [{ displayPublishedAt: 'desc' }, { createdAt: 'desc' }],
@@ -975,12 +994,13 @@ const searchRatings = async (query: string, limit: number): Promise<GlobalSearch
   return sortItems([...eventItems, ...unitItems]).slice(0, limit);
 };
 
-const searchPosts = async (query: string, limit: number, userId: string): Promise<GlobalSearchItem[]> => {
+const searchPosts = async (query: string, limit: number, userId: string, blockedRelationUserIds: Set<string>): Promise<GlobalSearchItem[]> => {
   const rows = await prisma.post.findMany({
     where: {
       visibility: 'public',
       NOT: { content: { contains: NEWS_MARKER } },
       hides: { none: { userId } },
+      userId: blockedRelationUserIds.size > 0 ? { notIn: Array.from(blockedRelationUserIds) } : undefined,
       OR: [
         { content: containsInsensitive(query) },
         {
@@ -1004,7 +1024,7 @@ const searchPosts = async (query: string, limit: number, userId: string): Promis
       displayPublishedAt: true,
       createdAt: true,
       updatedAt: true,
-      user: { select: { username: true, displayName: true, avatarUrl: true } },
+      user: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
       squad: { select: { name: true, avatarUrl: true } },
     },
     orderBy: [{ displayPublishedAt: 'desc' }, { createdAt: 'desc' }],
@@ -1241,12 +1261,12 @@ const searchWiki = async (query: string, limit: number): Promise<GlobalSearchIte
   return sortItems([...labels, ...festivals, ...genres]).slice(0, limit);
 };
 
-const searchPeopleSquads = async (query: string, limit: number, userId: string): Promise<GlobalSearchItem[]> => {
+const searchPeopleSquads = async (query: string, limit: number, userId: string, blockedRelationUserIds: Set<string>): Promise<GlobalSearchItem[]> => {
   const [users, squads] = await Promise.all([
     prisma.user.findMany({
       where: {
         isActive: true,
-        id: { not: userId },
+        id: blockedRelationUserIds.size > 0 ? { not: userId, notIn: Array.from(blockedRelationUserIds) } : { not: userId },
         OR: [
           { username: containsInsensitive(query) },
           { displayName: containsInsensitive(query) },
@@ -1271,6 +1291,8 @@ const searchPeopleSquads = async (query: string, limit: number, userId: string):
     prisma.squad.findMany({
       where: {
         isPublic: true,
+        leaderId: blockedRelationUserIds.size > 0 ? { notIn: Array.from(blockedRelationUserIds) } : undefined,
+        members: blockedRelationUserIds.size > 0 ? { none: { userId: { in: Array.from(blockedRelationUserIds) } } } : undefined,
         OR: [{ name: containsInsensitive(query) }, { description: containsInsensitive(query) }, { notice: containsInsensitive(query) }],
       },
       select: {
@@ -1345,20 +1367,21 @@ export const globalSearchService = {
   async search(params: SearchParams): Promise<GlobalSearchResponse> {
     const query = normalizeQuery(params.query);
     const taskLimit = params.tab === 'all' ? params.limit : Math.max(params.limit, 20);
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(params.userId);
     const tasks: SearchTask[] = [
       ...(isTabRequested(params.tab, 'events') ? [{ tab: 'events' as const, run: () => searchEvents(query, taskLimit) }] : []),
-      ...(isTabRequested(params.tab, 'news') ? [{ tab: 'news' as const, run: () => searchNews(query, taskLimit) }] : []),
+      ...(isTabRequested(params.tab, 'news') ? [{ tab: 'news' as const, run: () => searchNews(query, taskLimit, params.userId, blockedRelationUserIds) }] : []),
       ...(isTabRequested(params.tab, 'djs') ? [{ tab: 'djs' as const, run: () => searchDJs(query, taskLimit) }] : []),
       ...(isTabRequested(params.tab, 'sets') ? [{ tab: 'sets' as const, run: () => searchSets(query, taskLimit) }] : []),
       ...(isTabRequested(params.tab, 'rankings') ? [{ tab: 'rankings' as const, run: () => searchRankings(query, taskLimit) }] : []),
       ...(isTabRequested(params.tab, 'ratings') ? [{ tab: 'ratings' as const, run: () => searchRatings(query, taskLimit) }] : []),
-      ...(isTabRequested(params.tab, 'posts') ? [{ tab: 'posts' as const, run: () => searchPosts(query, taskLimit, params.userId) }] : []),
+      ...(isTabRequested(params.tab, 'posts') ? [{ tab: 'posts' as const, run: () => searchPosts(query, taskLimit, params.userId, blockedRelationUserIds) }] : []),
       ...(isTabRequested(params.tab, 'festivals') ? [{ tab: 'festivals' as const, run: () => searchFestivals(query, taskLimit) }] : []),
       ...(isTabRequested(params.tab, 'labels') ? [{ tab: 'labels' as const, run: () => searchLabels(query, taskLimit) }] : []),
       ...(isTabRequested(params.tab, 'genreTree') ? [{ tab: 'genreTree' as const, run: () => searchGenreTree(query, taskLimit) }] : []),
       ...(isTabRequested(params.tab, 'wiki') ? [{ tab: 'wiki' as const, run: () => searchWiki(query, taskLimit) }] : []),
       ...(isTabRequested(params.tab, 'peopleSquads')
-        ? [{ tab: 'peopleSquads' as const, run: () => searchPeopleSquads(query, taskLimit, params.userId) }]
+        ? [{ tab: 'peopleSquads' as const, run: () => searchPeopleSquads(query, taskLimit, params.userId, blockedRelationUserIds) }]
         : []),
     ];
 

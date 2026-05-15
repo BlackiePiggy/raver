@@ -40,7 +40,7 @@ final class SquadProfileViewModel: ObservableObject {
             bannerMessage = nil
             error = nil
         } catch {
-            let message = error.userFacingMessage ?? L("小队加载失败，请稍后重试", "Failed to load squad. Please try again later.")
+            let message = error.userFacingMessage ?? LT("小队加载失败，请稍后重试", "Failed to load squad. Please try again later.", "Squadを読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success
@@ -76,7 +76,7 @@ final class SquadProfileViewModel: ObservableObject {
             type: .group,
             title: profile.name,
             avatarURL: profile.avatarURL,
-            lastMessage: profile.lastMessage ?? L("暂无消息", "No messages yet"),
+            lastMessage: profile.lastMessage ?? LT("暂无消息", "No messages yet", "メッセージはまだありません"),
             lastMessageSenderID: nil,
             unreadCount: 0,
             updatedAt: profile.updatedAt,

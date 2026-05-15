@@ -5,6 +5,84 @@ enum AppRuntimeMode: String {
     case live
 }
 
+enum RegionalComplianceRegion: String, Codable {
+    case global = "GLOBAL"
+    case japan = "JP"
+}
+
+enum UserAgeBand: String, Codable, Hashable {
+    case under13 = "under_13"
+    case minor
+    case adult
+    case unknown
+}
+
+struct RegionalCompliancePolicy {
+    struct MinorRestrictions {
+        let strangerDirectMessages: Bool
+        let locationSharing: Bool
+        let lateNightEventTicketLinks: Bool
+        let adultContentExposure: Bool
+    }
+
+    let region: RegionalComplianceRegion
+    let isEnabled: Bool
+    let requiresAgeDeclaration: Bool
+    let minimumAge: Int
+    let minorAgeThreshold: Int
+    let minorRestrictions: MinorRestrictions
+}
+
+enum RegionalCompliance {
+    static var activePolicy: RegionalCompliancePolicy {
+        let raw = ProcessInfo.processInfo.environment["RAVER_COMPLIANCE_DEFAULT_REGION"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        if raw == "GLOBAL" || raw == "OFF" || raw == "DISABLED" {
+            return globalPolicy
+        }
+
+        return japanPolicy
+    }
+
+    static let globalPolicy = RegionalCompliancePolicy(
+        region: .global,
+        isEnabled: true,
+        requiresAgeDeclaration: false,
+        minimumAge: 13,
+        minorAgeThreshold: 18,
+        minorRestrictions: .init(
+            strangerDirectMessages: false,
+            locationSharing: false,
+            lateNightEventTicketLinks: false,
+            adultContentExposure: false
+        )
+    )
+
+    static let japanPolicy = RegionalCompliancePolicy(
+        region: .japan,
+        isEnabled: true,
+        requiresAgeDeclaration: true,
+        minimumAge: 13,
+        minorAgeThreshold: 18,
+        minorRestrictions: .init(
+            strangerDirectMessages: true,
+            locationSharing: true,
+            lateNightEventTicketLinks: true,
+            adultContentExposure: true
+        )
+    )
+
+    static func ageBand(for birthYear: Int, now: Date = Date()) -> UserAgeBand {
+        let currentYear = Calendar(identifier: .gregorian).component(.year, from: now)
+        let age = currentYear - birthYear
+        if age < activePolicy.minimumAge { return .under13 }
+        if age < activePolicy.minorAgeThreshold { return .minor }
+        return .adult
+    }
+}
+
 enum AppConfig {
     enum DJAvatarSize {
         case original
@@ -64,26 +142,36 @@ enum AppConfig {
             return envMode
         }
 
+#if DEBUG
         if let persisted = UserDefaults.standard.string(forKey: persistedRuntimeModeKey),
            let mode = AppRuntimeMode(rawValue: persisted) {
             return mode
         }
 
         return .mock
+#else
+        return .live
+#endif
     }
 
     static var bffBaseURL: URL {
         if let custom = normalizedBaseURLString(ProcessInfo.processInfo.environment["RAVER_BFF_BASE_URL"]),
            let url = URL(string: custom) {
+#if DEBUG
             UserDefaults.standard.set(custom, forKey: persistedBFFBaseURLKey)
+#endif
             return url
         }
 
+#if DEBUG
         if let persisted = normalizedBaseURLString(UserDefaults.standard.string(forKey: persistedBFFBaseURLKey)),
            let url = URL(string: persisted) {
             return url
         }
         return URL(string: "http://localhost:8787")!
+#else
+        return URL(string: "https://api.raver.app")!
+#endif
     }
 
     static var tencentIMAPNSBusinessID: Int {

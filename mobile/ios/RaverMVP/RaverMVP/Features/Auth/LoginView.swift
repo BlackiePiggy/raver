@@ -64,7 +64,7 @@ struct LoginView: View {
                         Button {
                             Task { await submitAuth(oneTap: true) }
                         } label: {
-                            Text(LL("先看看"))
+                            Text(LT("先看看", "Preview", "先に見る"))
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.94))
                         }
@@ -91,7 +91,7 @@ struct LoginView: View {
                                 Image(systemName: hasAgreedTerms ? "checkmark.circle.fill" : "circle")
                                     .font(.system(size: 18, weight: .regular))
                                     .foregroundStyle(hasAgreedTerms ? Color.white.opacity(0.96) : Color.white.opacity(0.56))
-                                Text(LL("我同意《用户服务条款》《用户协议》《隐私政策》"))
+                                Text(LT("我同意《用户服务条款》《用户协议》《隐私政策》", "I agree to the User Terms of Service, User Agreement, and Privacy Policy", "利用規約、ユーザー契約、プライバシーポリシーに同意します"))
                                     .font(.system(size: 14, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.84))
                                     .multilineTextAlignment(.leading)
@@ -110,7 +110,7 @@ struct LoginView: View {
                                 if isLoading {
                                     ProgressView().tint(.white)
                                 } else {
-                                    Text(LL("一键登录"))
+                                    Text(LT("一键登录", "One-Tap Sign In", "ワンタップでログイン"))
                                         .font(.system(size: 17, weight: .semibold))
                                         .foregroundStyle(.white.opacity(0.96))
                                 }
@@ -127,7 +127,7 @@ struct LoginView: View {
                             }
                             videoController.resumeIfNeeded()
                         } label: {
-                            Text(LL("其他手机号登录"))
+                            Text(LT("其他手机号登录", "Use Another Phone Number", "別の電話番号でログイン"))
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.92))
                         }
@@ -138,7 +138,7 @@ struct LoginView: View {
                         Button {
                             openRegistrationProfile()
                         } label: {
-                            Text(LL("注册新账号"))
+                            Text(LT("注册新账号", "Create New Account", "新規登録"))
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.92))
                         }
@@ -155,7 +155,7 @@ struct LoginView: View {
                     Spacer()
 
                     VStack(spacing: 14) {
-                        Text(LL("— 其他登录方式 —"))
+                        Text(LT("— 其他登录方式 —", "- Other sign-in methods -", "- その他のログイン方法 -"))
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(.white.opacity(0.82))
 
@@ -202,7 +202,7 @@ struct LoginView: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button(L("收起", "Collapse")) {
+                Button(LT("收起", "Collapse", "閉じる")) {
                     focusedField = nil
                     dismissKeyboard()
                 }
@@ -213,7 +213,7 @@ struct LoginView: View {
     @ViewBuilder
     private var manualLoginPanel: some View {
         VStack(spacing: 10) {
-            Picker(L("登录方式", "Login Method"), selection: $loginMethod) {
+            Picker(LT("登录方式", "Login Method", "ログイン方法"), selection: $loginMethod) {
                 ForEach(LoginMethod.allCases, id: \.self) { item in
                     Text(item.title).tag(item)
                 }
@@ -226,7 +226,7 @@ struct LoginView: View {
             )
 
             if loginMethod == .sms {
-                TextField(L("手机号（含区号）", "Phone Number (with country code)"), text: $phoneNumber)
+                TextField(LT("手机号（含区号）", "Phone Number (with country code)", "電話番号（国番号を含む）"), text: $phoneNumber)
                     .keyboardType(.phonePad)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -239,7 +239,7 @@ struct LoginView: View {
                     .background(inputFieldBackground)
 
                 HStack(spacing: 10) {
-                    TextField(L("验证码", "Verification Code"), text: $smsCode)
+                    TextField(LT("验证码", "Verification Code", "認証コード"), text: $smsCode)
                         .keyboardType(.numberPad)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -258,7 +258,7 @@ struct LoginView: View {
                         Text(
                             smsCooldownSeconds > 0
                             ? "\(smsCooldownSeconds)s"
-                            : L("发送验证码", "Send Code")
+                            : LT("发送验证码", "Send Code", "コードを送信")
                         )
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.95))
@@ -278,7 +278,7 @@ struct LoginView: View {
                     .accessibilityIdentifier("login.sendSmsCodeButton")
                 }
             } else {
-                TextField(LL("用户名"), text: $username)
+                TextField(LT("用户名", "Username", "ユーザー名"), text: $username)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .focused($focusedField, equals: .username)
@@ -291,7 +291,7 @@ struct LoginView: View {
             }
 
             if loginMethod == .account {
-                SecureField(L("密码", "Password"), text: $password)
+                SecureField(LT("密码", "Password", "パスワード"), text: $password)
                     .focused($focusedField, equals: .password)
                     .submitLabel(.done)
                     .onSubmit {
@@ -322,7 +322,7 @@ struct LoginView: View {
                 openRegistrationProfile()
             } label: {
                 HStack(spacing: 6) {
-                    Text(LL("还没有账号？注册"))
+                    Text(LT("还没有账号？注册", "No account yet? Register", "アカウントをお持ちでない方は登録"))
                     Image(systemName: "arrow.right")
                         .font(.system(size: 12, weight: .semibold))
                 }
@@ -367,9 +367,9 @@ struct LoginView: View {
     private var submitTitle: String {
         switch loginMethod {
         case .account:
-            return L("账号登录", "Sign In")
+            return LT("账号登录", "Sign In", "アカウントでログイン")
         case .sms:
-            return L("验证码登录", "SMS Sign In")
+            return LT("验证码登录", "SMS Sign In", "SMSでログイン")
         }
     }
 
@@ -426,7 +426,7 @@ struct LoginView: View {
         style: ThirdPartyButtonStyle
     ) -> some View {
         Button {
-            appState.errorMessage = L("第三方登录即将开放，先使用账号登录", "Third-party login is coming soon. Please use account login for now.")
+            appState.errorMessage = LT("第三方登录即将开放，先使用账号登录", "Third-party login is coming soon. Please use account login for now.", "外部ログインは準備中です。先にアカウントログインをご利用ください。")
             withAnimation(.easeInOut(duration: 0.2)) {
                 showManualLogin = true
             }
@@ -522,13 +522,13 @@ struct LoginView: View {
     private func sendSmsCode() async {
         guard !isLoading else { return }
         if !hasAgreedTerms {
-            appState.errorMessage = L("请先勾选并同意用户协议", "Please agree to the user terms first.")
+            appState.errorMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
             return
         }
 
         let normalizedPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedPhone.isEmpty else {
-            appState.errorMessage = L("请先输入手机号", "Please enter phone number first.")
+            appState.errorMessage = LT("请先输入手机号", "Please enter phone number first.", "電話番号を入力してください。")
             return
         }
 
@@ -544,7 +544,7 @@ struct LoginView: View {
     private func submitAuth(oneTap: Bool) async {
         guard !isLoading else { return }
         if !hasAgreedTerms {
-            appState.errorMessage = L("请先勾选并同意用户协议", "Please agree to the user terms first.")
+            appState.errorMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
             return
         }
 
@@ -589,6 +589,7 @@ private struct RegisterProfileView: View {
     @State private var displayName = ""
     @State private var password = ""
     @State private var confirmPassword = ""
+    @State private var selectedBirthYear = Calendar(identifier: .gregorian).component(.year, from: Date()) - 18
     @State private var selectedAvatarItem: PhotosPickerItem?
     @State private var selectedAvatarData: Data?
     @State private var selectedAvatarImage: UIImage?
@@ -601,6 +602,10 @@ private struct RegisterProfileView: View {
         case displayName
         case password
         case confirmPassword
+    }
+
+    private var compliancePolicy: RegionalCompliancePolicy {
+        RegionalCompliance.activePolicy
     }
 
     var body: some View {
@@ -638,7 +643,7 @@ private struct RegisterProfileView: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button(L("收起", "Collapse")) {
+                Button(LT("收起", "Collapse", "閉じる")) {
                     focusedField = nil
                     dismissKeyboard()
                 }
@@ -661,10 +666,10 @@ private struct RegisterProfileView: View {
             .accessibilityIdentifier("register.backButton")
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(LL("创建账号"))
+                Text(LT("创建账号", "Create Account", "アカウントを作成"))
                     .font(.system(size: 32, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.98))
-                Text(LL("补充头像、昵称和登录信息，完成后即可进入 Raver。"))
+                Text(LT("补充头像、昵称和登录信息，完成后即可进入 RaveHub。", "Add your avatar, nickname, and sign-in details to start using RaveHub.", "アイコン、ニックネーム、ログイン情報を入力すると RaveHub を始められます。"))
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.white.opacity(0.66))
                     .fixedSize(horizontal: false, vertical: true)
@@ -678,10 +683,10 @@ private struct RegisterProfileView: View {
                 avatarPreview
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(selectedAvatarImage == nil ? LL("上传头像") : LL("更换头像"))
+                    Text(selectedAvatarImage == nil ? LT("上传头像", "Upload Avatar", "アイコンをアップロード") : LT("更换头像", "Change Avatar", "アイコンを変更"))
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.97))
-                    Text(LL("上传头像"))
+                    Text(LT("上传头像", "Upload Avatar", "アイコンをアップロード"))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.white.opacity(0.62))
                 }
@@ -725,8 +730,8 @@ private struct RegisterProfileView: View {
 
     private var formFields: some View {
         VStack(spacing: 12) {
-            TextField(text: $email, prompt: registerPlaceholder(LL("邮箱"))) {
-                Text(LL("邮箱"))
+            TextField(text: $email, prompt: registerPlaceholder(LT("邮箱", "Email", "メールアドレス"))) {
+                Text(LT("邮箱", "Email", "メールアドレス"))
             }
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
@@ -738,8 +743,8 @@ private struct RegisterProfileView: View {
                 .background(fieldBackground)
                 .accessibilityIdentifier("register.emailField")
 
-            TextField(text: $displayName, prompt: registerPlaceholder(LL("昵称"))) {
-                Text(LL("昵称"))
+            TextField(text: $displayName, prompt: registerPlaceholder(LT("昵称", "Nickname", "ニックネーム"))) {
+                Text(LT("昵称", "Nickname", "ニックネーム"))
             }
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -750,13 +755,13 @@ private struct RegisterProfileView: View {
                 .background(fieldBackground)
                 .accessibilityIdentifier("register.displayNameField")
 
-            Text(LL("昵称全平台唯一，不区分大小写，提交后进入审核。"))
+            Text(LT("昵称全平台唯一，不区分大小写，提交后进入审核。", "Nicknames are unique across the platform, case-insensitive, and reviewed after submission.", "ニックネームは全体で一意です。大文字小文字は区別されず、送信後に審査されます。"))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.58))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            SecureField(text: $password, prompt: registerPlaceholder(L("密码", "Password"))) {
-                Text(L("密码", "Password"))
+            SecureField(text: $password, prompt: registerPlaceholder(LT("密码", "Password", "パスワード"))) {
+                Text(LT("密码", "Password", "パスワード"))
             }
                 .focused($focusedField, equals: .password)
                 .submitLabel(.next)
@@ -765,8 +770,8 @@ private struct RegisterProfileView: View {
                 .background(fieldBackground)
                 .accessibilityIdentifier("register.passwordField")
 
-            SecureField(text: $confirmPassword, prompt: registerPlaceholder(LL("确认密码"))) {
-                Text(LL("确认密码"))
+            SecureField(text: $confirmPassword, prompt: registerPlaceholder(LT("确认密码", "Confirm Password", "パスワード確認"))) {
+                Text(LT("确认密码", "Confirm Password", "パスワード確認"))
             }
                 .focused($focusedField, equals: .confirmPassword)
                 .submitLabel(.done)
@@ -777,6 +782,31 @@ private struct RegisterProfileView: View {
                 .padding(15)
                 .background(fieldBackground)
                 .accessibilityIdentifier("register.confirmPasswordField")
+
+            if compliancePolicy.requiresAgeDeclaration {
+                birthYearPicker
+            }
+        }
+    }
+
+    private var birthYearPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker(selection: $selectedBirthYear) {
+                ForEach(birthYearOptions, id: \.self) { year in
+                    Text(String(year)).tag(year)
+                }
+            } label: {
+                Text(LT("出生年份", "Birth Year", "生年"))
+            }
+            .pickerStyle(.menu)
+            .padding(15)
+            .background(fieldBackground)
+            .accessibilityIdentifier("register.birthYearPicker")
+
+            Text(LT("出生年份仅用于年龄分级和未成年人安全保护。", "Birth year is used only for age rating and minor safety protections.", "生年は年齢区分と未成年者保護のためにのみ使用されます。"))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.58))
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -788,7 +818,7 @@ private struct RegisterProfileView: View {
                 Image(systemName: hasAgreedTerms ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 18, weight: .regular))
                     .foregroundStyle(hasAgreedTerms ? Color.white.opacity(0.96) : Color.white.opacity(0.56))
-                Text(LL("我同意《用户服务条款》《用户协议》《隐私政策》"))
+                Text(LT("我同意《用户服务条款》《用户协议》《隐私政策》", "I agree to the User Terms of Service, User Agreement, and Privacy Policy", "利用規約、ユーザー契約、プライバシーポリシーに同意します"))
                     .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(.white.opacity(0.8))
                     .multilineTextAlignment(.leading)
@@ -809,7 +839,7 @@ private struct RegisterProfileView: View {
                 if isSubmitting {
                     ProgressView().tint(.black)
                 } else {
-                    Text(LL("完成注册"))
+                    Text(LT("完成注册", "Complete Registration", "登録を完了"))
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(canSubmit ? Color.black.opacity(0.88) : Color.white.opacity(0.56))
                 }
@@ -838,6 +868,17 @@ private struct RegisterProfileView: View {
             && password.count >= 6
             && password == confirmPassword
             && hasAgreedTerms
+            && isAgeDeclarationAcceptable
+    }
+
+    private var birthYearOptions: [Int] {
+        let currentYear = Calendar(identifier: .gregorian).component(.year, from: Date())
+        return Array(stride(from: currentYear - 13, through: 1900, by: -1))
+    }
+
+    private var isAgeDeclarationAcceptable: Bool {
+        guard compliancePolicy.requiresAgeDeclaration else { return true }
+        return RegionalCompliance.ageBand(for: selectedBirthYear) != .under13
     }
 
     private var fieldBackground: some View {
@@ -869,7 +910,7 @@ private struct RegisterProfileView: View {
             }
         } catch {
             await MainActor.run {
-                appState.errorMessage = L("头像读取失败，请重新选择", "Failed to read avatar. Please choose again.")
+                appState.errorMessage = LT("头像读取失败，请重新选择", "Failed to read avatar. Please choose again.", "アイコンの読み込みに失敗しました。もう一度選択してください。")
             }
         }
     }
@@ -892,27 +933,36 @@ private struct RegisterProfileView: View {
         let resolvedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !resolvedEmail.isEmpty else {
-            appState.errorMessage = LL("请输入邮箱")
+            appState.errorMessage = LT("请输入邮箱", "Please enter email", "メールアドレスを入力してください。")
             return
         }
 
         guard !resolvedDisplayName.isEmpty else {
-            appState.errorMessage = LL("请输入昵称")
+            appState.errorMessage = LT("请输入昵称", "Please enter nickname", "ニックネームを入力してください。")
             return
         }
 
         guard password.count >= 6 else {
-            appState.errorMessage = LL("密码至少需要 6 位")
+            appState.errorMessage = LT("密码至少需要 6 位", "Password must be at least 6 characters", "パスワードは6文字以上で入力してください。")
             return
         }
 
         guard password == confirmPassword else {
-            appState.errorMessage = LL("两次输入的密码不一致")
+            appState.errorMessage = LT("两次输入的密码不一致", "Passwords do not match", "入力したパスワードが一致しません。")
             return
         }
 
         guard hasAgreedTerms else {
-            appState.errorMessage = L("请先勾选并同意用户协议", "Please agree to the user terms first.")
+            appState.errorMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
+            return
+        }
+
+        let birthYear = compliancePolicy.requiresAgeDeclaration ? selectedBirthYear : nil
+        let regionCode = compliancePolicy.requiresAgeDeclaration ? compliancePolicy.region.rawValue : nil
+
+        if compliancePolicy.requiresAgeDeclaration,
+           RegionalCompliance.ageBand(for: selectedBirthYear) == .under13 {
+            appState.errorMessage = LT("未达到本地区最低年龄要求，暂不能注册。", "You do not meet the minimum age requirement for this region.", "この地域の最低年齢要件を満たしていないため登録できません。")
             return
         }
 
@@ -922,7 +972,9 @@ private struct RegisterProfileView: View {
         await appState.register(
             email: resolvedEmail,
             password: password,
-            displayName: resolvedDisplayName
+            displayName: resolvedDisplayName,
+            birthYear: birthYear,
+            regionCode: regionCode
         )
 
         if appState.errorMessage == nil, let selectedAvatarData {
@@ -933,7 +985,7 @@ private struct RegisterProfileView: View {
                     mimeType: "image/jpeg"
                 )
             } catch {
-                appState.errorMessage = L("注册成功，但头像上传失败，请稍后在个人主页重试", "Registered, but avatar upload failed. Please retry from your profile later.")
+                appState.errorMessage = LT("注册成功，但头像上传失败，请稍后在个人主页重试", "Registered, but avatar upload failed. Please retry from your profile later.", "登録は完了しましたが、アイコンのアップロードに失敗しました。後ほどプロフィールから再試行してください。")
             }
         }
     }
@@ -956,9 +1008,9 @@ private enum LoginMethod: String, CaseIterable {
     var title: String {
         switch self {
         case .account:
-            return L("账号", "Account")
+            return LT("账号", "Account", "アカウント")
         case .sms:
-            return L("短信", "SMS")
+            return LT("短信", "SMS", "SMS")
         }
     }
 }

@@ -93,9 +93,14 @@ final class LiveWebFeatureService: WebFeatureService {
         )
     }
 
-    func createEvent(input: CreateEventInput) async throws -> WebEvent {
-        let response: BFFEnvelope<WebEvent> = try await request(path: "/v1/events", method: "POST", body: input)
-        return localizedEvent(response.data)
+    func createEvent(input: CreateEventInput) async throws -> CreateEventResult {
+        let response: BFFEnvelope<CreateEventResponsePayload> = try await request(path: "/v1/events", method: "POST", body: input)
+        switch response.data {
+        case .event(let event):
+            return .created(localizedEvent(event))
+        case .submission(let payload):
+            return .submittedForReview(payload)
+        }
     }
 
     func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent {
@@ -288,37 +293,49 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data
     }
 
-    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportSpotifyDJResponse {
-        let response: BFFEnvelope<ImportSpotifyDJResponse> = try await request(
+    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportDJResult<ImportSpotifyDJResponse> {
+        let response: BFFEnvelope<ImportDJResult<ImportSpotifyDJResponse>> = try await request(
             path: "/v1/djs/spotify/import",
             method: "POST",
             body: input
         )
-        var payload = response.data
-        payload.dj = localizedDJ(payload.dj)
-        return payload
+        switch response.data {
+        case .imported(var payload):
+            payload.dj = localizedDJ(payload.dj)
+            return .imported(payload)
+        case .submittedForReview(let payload):
+            return .submittedForReview(payload)
+        }
     }
 
-    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDiscogsDJResponse {
-        let response: BFFEnvelope<ImportDiscogsDJResponse> = try await request(
+    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDJResult<ImportDiscogsDJResponse> {
+        let response: BFFEnvelope<ImportDJResult<ImportDiscogsDJResponse>> = try await request(
             path: "/v1/djs/discogs/import",
             method: "POST",
             body: input
         )
-        var payload = response.data
-        payload.dj = localizedDJ(payload.dj)
-        return payload
+        switch response.data {
+        case .imported(var payload):
+            payload.dj = localizedDJ(payload.dj)
+            return .imported(payload)
+        case .submittedForReview(let payload):
+            return .submittedForReview(payload)
+        }
     }
 
-    func importManualDJ(input: ImportManualDJInput) async throws -> ImportManualDJResponse {
-        let response: BFFEnvelope<ImportManualDJResponse> = try await request(
+    func importManualDJ(input: ImportManualDJInput) async throws -> ImportDJResult<ImportManualDJResponse> {
+        let response: BFFEnvelope<ImportDJResult<ImportManualDJResponse>> = try await request(
             path: "/v1/djs/manual/import",
             method: "POST",
             body: input
         )
-        var payload = response.data
-        payload.dj = localizedDJ(payload.dj)
-        return payload
+        switch response.data {
+        case .imported(var payload):
+            payload.dj = localizedDJ(payload.dj)
+            return .imported(payload)
+        case .submittedForReview(let payload):
+            return .submittedForReview(payload)
+        }
     }
 
     func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ {
@@ -422,9 +439,14 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data.items.map(localizedDJSet)
     }
 
-    func createDJSet(input: CreateDJSetInput) async throws -> WebDJSet {
-        let response: BFFEnvelope<WebDJSet> = try await request(path: "/v1/dj-sets", method: "POST", body: input)
-        return localizedDJSet(response.data)
+    func createDJSet(input: CreateDJSetInput) async throws -> CreateContentResult<WebDJSet> {
+        let response: BFFEnvelope<CreateContentResult<WebDJSet>> = try await request(path: "/v1/dj-sets", method: "POST", body: input)
+        switch response.data {
+        case .created(let set):
+            return .created(localizedDJSet(set))
+        case .submittedForReview(let payload):
+            return .submittedForReview(payload)
+        }
     }
 
     func updateDJSet(id: String, input: UpdateDJSetInput) async throws -> WebDJSet {
@@ -764,8 +786,8 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data.items
     }
 
-    func createRatingEvent(input: CreateRatingEventInput) async throws -> WebRatingEvent {
-        let response: BFFEnvelope<WebRatingEvent> = try await request(path: "/v1/rating-events", method: "POST", body: input)
+    func createRatingEvent(input: CreateRatingEventInput) async throws -> CreateContentResult<WebRatingEvent> {
+        let response: BFFEnvelope<CreateContentResult<WebRatingEvent>> = try await request(path: "/v1/rating-events", method: "POST", body: input)
         return response.data
     }
 
@@ -788,8 +810,8 @@ final class LiveWebFeatureService: WebFeatureService {
         let _: BFFEnvelope<GenericSuccess> = try await request(path: "/v1/rating-events/\(id)", method: "DELETE")
     }
 
-    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> WebRatingUnit {
-        let response: BFFEnvelope<WebRatingUnit> = try await request(path: "/v1/rating-events/\(eventID)/units", method: "POST", body: input)
+    func createRatingUnit(eventID: String, input: CreateRatingUnitInput) async throws -> CreateContentResult<WebRatingUnit> {
+        let response: BFFEnvelope<CreateContentResult<WebRatingUnit>> = try await request(path: "/v1/rating-events/\(eventID)/units", method: "POST", body: input)
         return response.data
     }
 
@@ -863,13 +885,27 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data.items.map(localizedLearnFestival)
     }
 
-    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> WebLearnFestival {
-        let response: BFFEnvelope<WebLearnFestival> = try await request(
+    func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel> {
+        let response: BFFEnvelope<CreateContentResult<LearnLabel>> = try await request(
+            path: "/v1/learn/labels",
+            method: "POST",
+            body: input
+        )
+        return response.data
+    }
+
+    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> CreateContentResult<WebLearnFestival> {
+        let response: BFFEnvelope<CreateContentResult<WebLearnFestival>> = try await request(
             path: "/v1/learn/festivals",
             method: "POST",
             body: input
         )
-        return localizedLearnFestival(response.data)
+        switch response.data {
+        case .created(let festival):
+            return .created(localizedLearnFestival(festival))
+        case .submittedForReview(let payload):
+            return .submittedForReview(payload)
+        }
     }
 
     func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival {
@@ -920,6 +956,49 @@ final class LiveWebFeatureService: WebFeatureService {
     func fetchMyPublishes() async throws -> MyPublishes {
         let response: BFFEnvelope<MyPublishes> = try await request(path: "/v1/publishes/me", method: "GET")
         return response.data
+    }
+
+    func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary] {
+        let response: MyContentSubmissionsResponse = try await request(
+            path: "/api/content-submissions/mine?limit=100",
+            method: "GET"
+        )
+        return response.items
+    }
+
+    func fetchMyContentSubmission(id: String) async throws -> ContentSubmissionDetail {
+        let response: ContentSubmissionDetailResponse = try await request(
+            path: "/api/content-submissions/mine/\(id)",
+            method: "GET"
+        )
+        return response.submission
+    }
+
+    func createContentSubmission(
+        entityType: String,
+        payload: [String: ContentSubmissionJSONValue]
+    ) async throws -> ContentSubmissionDetail {
+        let input = ContentSubmissionCreateInput(entityType: entityType, payload: payload)
+        let response: ContentSubmissionCreateResponse = try await request(
+            path: "/api/content-submissions",
+            method: "POST",
+            body: input
+        )
+        return response.submission
+    }
+
+    func resubmitMyContentSubmission(
+        id: String,
+        payload: [String: ContentSubmissionJSONValue],
+        changeNote: String?
+    ) async throws -> ContentSubmissionDetail {
+        let input = ContentSubmissionResubmitInput(payload: payload, changeNote: changeNote)
+        let response: ContentSubmissionResubmitResponse = try await request(
+            path: "/api/content-submissions/mine/\(id)",
+            method: "PATCH",
+            body: input
+        )
+        return response.submission
     }
 
     private func request<T: Decodable>(
@@ -1192,6 +1271,10 @@ final class LiveWebFeatureService: WebFeatureService {
         }
 
         guard (200...299).contains(http.statusCode) else {
+            if let enforcementRestriction = try? JSONDecoder.raver.decode(AccountEnforcementRestrictionEnvelope.self, from: data),
+               enforcementRestriction.error == "account_enforcement_restricted" {
+                throw ServiceError.accountEnforcementRestricted(enforcementRestriction.toRestriction())
+            }
             if let apiError = try? JSONDecoder.raver.decode(BFFErrorResponse.self, from: data),
                !apiError.error.isEmpty {
                 throw ServiceError.message(apiError.error)
@@ -1241,6 +1324,21 @@ private struct VideoPreviewPayload: Decodable {
 
 private struct BFFErrorResponse: Decodable {
     var error: String
+}
+
+private struct AccountEnforcementRestrictionEnvelope: Decodable {
+    var error: String
+    var scope: String
+    var accountStatus: AccountEnforcementStatus?
+    var blockingEnforcements: [AccountEnforcement]
+
+    func toRestriction() -> AccountEnforcementRestriction {
+        AccountEnforcementRestriction(
+            scope: scope,
+            accountStatus: accountStatus,
+            blockingEnforcements: blockingEnforcements
+        )
+    }
 }
 
 private struct AnyEncodable: Encodable {

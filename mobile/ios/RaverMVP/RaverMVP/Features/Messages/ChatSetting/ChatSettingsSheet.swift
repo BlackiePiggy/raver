@@ -189,6 +189,7 @@ struct ChatSettingsView: View {
     @State private var groupInfoDraft = ""
     @State private var selectedGroupAvatarPhotoItem: PhotosPickerItem?
     @State private var isUploadingGroupAvatar = false
+    @State private var reportTarget: ReportSheetTarget?
 
     private var platformSquadID: String {
         TencentIMIdentity.normalizePlatformSquadID(conversation.id)
@@ -232,11 +233,22 @@ struct ChatSettingsView: View {
             sharedSections
         }
         .listStyle(.insetGrouped)
-        .raverSystemNavigation(title: L("聊天详情", "Chat Details"))
+        .raverSystemNavigation(title: LT("聊天详情", "Chat Details", "チャット詳細"))
         .overlay {
             if isClearing || isLeaving || isDisbanding {
-                ProgressView(LL("同步中..."))
+                ProgressView(LT("同步中...", "Syncing...", "同期中..."))
             }
+        }
+        .sheet(item: $reportTarget) { target in
+            ReportSheet(target: target) { _, blocked in
+                OperationBannerCenter.shared.success(
+                    blocked
+                        ? LT("举报已提交，并已拉黑该用户", "Report submitted and user blocked", "通報を送信し、このユーザーをブロックしました")
+                        : LT("举报已提交", "Report submitted", "通報を送信しました")
+                )
+            }
+            .environmentObject(appState)
+            .presentationDetents([.large])
         }
         .overlay(alignment: .top) {
             if let inviteFeedbackMessage {
@@ -253,71 +265,71 @@ struct ChatSettingsView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .alert(L("操作失败", "Operation Failed"), isPresented: Binding(
+        .alert(LT("操作失败", "Operation Failed", "操作に失敗しました"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
         .confirmationDialog(
-            L("确认退出群聊？", "Leave this group?"),
+            LT("确认退出群聊？", "Leave this group?", "グループチャットを退出しますか？"),
             isPresented: $showLeaveConfirm,
             titleVisibility: .visible
         ) {
-            Button(L("删除并退出", "Delete and Leave"), role: .destructive) {
+            Button(LT("删除并退出", "Delete and Leave", "削除して退出"), role: .destructive) {
                 Task { await leaveSquad() }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
-            Text(L("退出后你将无法继续查看群聊内容。", "After leaving, you won't be able to view this chat until rejoining."))
+            Text(LT("退出后你将无法继续查看群聊内容。", "After leaving, you won't be able to view this chat until rejoining.", "退出すると、再参加するまでこのチャット内容を確認できません。"))
         }
         .confirmationDialog(
-            L("确认解散小队？", "Disband this squad?"),
+            LT("确认解散小队？", "Disband this squad?", "Squad を解散しますか？"),
             isPresented: $showDisbandConfirm,
             titleVisibility: .visible
         ) {
-            Button(L("解散小队", "Disband Squad"), role: .destructive) {
+            Button(LT("解散小队", "Disband Squad", "Squad を解散"), role: .destructive) {
                 Task { await disbandSquad() }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
-            Text(L("解散后小队成员与群聊将被移除，且无法恢复。", "Disbanding removes members and group chat and cannot be undone."))
+            Text(LT("解散后小队成员与群聊将被移除，且无法恢复。", "Disbanding removes members and group chat and cannot be undone.", "解散すると Squad メンバーとグループチャットは削除され、元に戻せません。"))
         }
-        .alert(L("需要先转让队长", "Transfer Leader First"), isPresented: $showLeaderLeaveGuide) {
-            Button(L("查看群成员", "View Members")) {
+        .alert(LT("需要先转让队长", "Transfer Leader First", "先にリーダーを譲渡してください"), isPresented: $showLeaderLeaveGuide) {
+            Button(LT("查看群成员", "View Members", "グループメンバーを見る")) {
                 showGroupMembers = true
             }
-            Button(L("我知道了", "Got It"), role: .cancel) {}
+            Button(LT("我知道了", "Got It", "了解しました"), role: .cancel) {}
         } message: {
-            Text(L("当前你是队长，需先在群成员页转让队长后再退出。", "You're the group owner. Transfer ownership in the member list before leaving."))
+            Text(LT("当前你是队长，需先在群成员页转让队长后再退出。", "You're the group owner. Transfer ownership in the member list before leaving.", "現在あなたはリーダーです。退出する前にメンバー画面でリーダーを譲渡してください。"))
         }
         .confirmationDialog(
             isBlacklisted
-                ? L("确认将对方移出黑名单？", "Remove this user from blacklist?")
-                : L("确认将对方加入黑名单？", "Add this user to blacklist?"),
+                ? LT("确认将对方移出黑名单？", "Remove this user from blacklist?", "相手をブラックリストから解除しますか？")
+                : LT("确认将对方加入黑名单？", "Add this user to blacklist?", "相手をブラックリストに追加しますか？"),
             isPresented: $showBlacklistConfirm,
             titleVisibility: .visible
         ) {
             Button(
                 isBlacklisted
-                    ? L("移出黑名单", "Remove from Blacklist")
-                    : L("加入黑名单", "Add to Blacklist"),
+                    ? LT("移出黑名单", "Remove from Blacklist", "ブラックリストから解除")
+                    : LT("加入黑名单", "Add to Blacklist", "ブラックリストに追加"),
                 role: .destructive
             ) {
                 Task { await updateBlacklistStatus(!isBlacklisted) }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
             Text(
                 isBlacklisted
-                    ? L("移出黑名单后，对方将恢复正常聊天权限。", "Removing from blacklist restores normal chat access.")
-                    : L("加入黑名单后，你将不会再接收对方的消息。", "After adding to blacklist, you won't receive this user's messages.")
+                    ? LT("移出黑名单后，对方将恢复正常聊天权限。", "Removing from blacklist restores normal chat access.", "解除すると、相手の通常のチャット権限が復元されます。")
+                    : LT("加入黑名单后，你将不会再接收对方的消息。", "After adding to blacklist, you won't receive this user's messages.", "追加すると、このユーザーからのメッセージを受信しなくなります。")
             )
         }
         .confirmationDialog(
-            L("邀请方式", "Invite Type"),
+            LT("邀请方式", "Invite Type", "招待方式"),
             isPresented: $showInviteOptionPicker,
             titleVisibility: .visible
         ) {
@@ -326,9 +338,9 @@ struct ChatSettingsView: View {
                     Task { await updateInviteOption(option) }
                 }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
-            Text(L("参考腾讯群聊逻辑，只有允许邀请时，成员区的邀请入口才可用。", "Aligned with Tencent group chat logic, member invites are only available when invite is enabled."))
+            Text(LT("参考腾讯群聊逻辑，只有允许邀请时，成员区的邀请入口才可用。", "Aligned with Tencent group chat logic, member invites are only available when invite is enabled.", "Tencent グループチャットの仕様に合わせ、招待が許可されている場合のみメンバー欄の招待入口が利用できます。"))
         }
         .sheet(item: $editingGroupInfoField) { field in
             NavigationStack {
@@ -402,14 +414,14 @@ struct ChatSettingsView: View {
     private var directSections: some View {
         Group {
             Section {
-                placeholderRow(titleCN: "聊天历史搜索", titleEN: "Search Chat History", icon: "magnifyingglass") {
+                placeholderRow(titleCN: "聊天历史搜索", titleEN: "Search Chat History", titleJA: "チャット履歴を検索", icon: "magnifyingglass") {
                     popThenOpenConversationSearch()
                 }
                 HStack(spacing: 12) {
-                    Label(L("设置备注名", "Nickname"), systemImage: "pencil")
+                    Label(LT("设置备注名", "Nickname", "メモ名を設定"), systemImage: "pencil")
                     Spacer(minLength: 12)
                     TextField(
-                        L("输入备注名", "Enter remark"),
+                        LT("输入备注名", "Enter remark", "メモ名を入力"),
                         text: Binding(
                             get: { directRemarkName },
                             set: { directRemarkName = String($0.prefix(Self.remarkNameLimit)) }
@@ -426,16 +438,16 @@ struct ChatSettingsView: View {
                     }
                 }
                 if !isTencentFriend {
-                    Text(L("仅好友支持备注名", "Nickname is available for friends only"))
+                    Text(LT("仅好友支持备注名", "Nickname is available for friends only", "メモ名は友達にのみ設定できます"))
                         .font(.caption2)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
             }
 
             Section {
-                Toggle(L("消息免打扰", "Mute Notifications"), isOn: $notificationsMuted)
+                Toggle(LT("消息免打扰", "Mute Notifications", "通知をミュート"), isOn: $notificationsMuted)
                     .disabled(isMuting)
-                Toggle(L("置顶聊天", "Pin Chat"), isOn: $topPinned)
+                Toggle(LT("置顶聊天", "Pin Chat", "チャットをピン留め"), isOn: $topPinned)
             }
 
             Section {
@@ -444,24 +456,28 @@ struct ChatSettingsView: View {
                 } label: {
                     Label(
                         isBlacklisted
-                            ? L("移出黑名单", "Remove from Blacklist")
-                            : L("加入黑名单", "Add to Blacklist"),
+                            ? LT("移出黑名单", "Remove from Blacklist", "ブラックリストから解除")
+                            : LT("加入黑名单", "Add to Blacklist", "ブラックリストに追加"),
                         systemImage: isBlacklisted ? "person.crop.circle.badge.checkmark" : "hand.raised"
                     )
                 }
                 .disabled(isUpdatingBlacklist || isLoadingDirectSettings)
-                placeholderRow(titleCN: "举报", titleEN: "Report", icon: "exclamationmark.bubble")
+                Button(role: .destructive) {
+                    openDirectReportSheet()
+                } label: {
+                    Label(LT("举报", "Report", "通報"), systemImage: "exclamationmark.bubble")
+                }
             }
 
             Section {
                 Button(role: .destructive) {
                     Task { await clearHistory() }
                 } label: {
-                    Label(L("清空聊天记录", "Clear Chat History"), systemImage: "trash")
+                    Label(LT("清空聊天记录", "Clear Chat History", "チャット履歴を消去"), systemImage: "trash")
                 }
                 .disabled(isClearing)
 
-                placeholderRow(titleCN: "删除好友", titleEN: "Delete Friend", icon: "person.crop.circle.badge.xmark", destructive: true)
+                placeholderRow(titleCN: "删除好友", titleEN: "Delete Friend", titleJA: "友達を削除", icon: "person.crop.circle.badge.xmark", destructive: true)
             }
         }
     }
@@ -472,7 +488,7 @@ struct ChatSettingsView: View {
                 if isLoadingSquadProfile && squadProfile == nil {
                     HStack(spacing: 10) {
                         ProgressView().controlSize(.small)
-                        Text(L("同步群信息中...", "Syncing group info..."))
+                        Text(LT("同步群信息中...", "Syncing group info...", "グループ情報を同期中..."))
                             .font(.footnote)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -526,7 +542,7 @@ struct ChatSettingsView: View {
                             onShowAll: { showGroupMembers = true },
                             onInvite: {
                                 guard groupInviteOption != .forbid else {
-                                    errorMessage = L("当前群聊已禁止邀请成员，请先在“邀请方式”中开启。", "Group invites are disabled. Enable them in Invite Type first.")
+                                    errorMessage = LT("当前群聊已禁止邀请成员，请先在“邀请方式”中开启。", "Group invites are disabled. Enable them in Invite Type first.", "このグループチャットではメンバー招待が無効です。「招待方式」で有効にしてください。")
                                     return
                                 }
                                 showInviteMembers = true
@@ -534,14 +550,14 @@ struct ChatSettingsView: View {
                         )
                     }
                 } else {
-                    placeholderRow(titleCN: "群成员", titleEN: "Group Members", icon: "person.3")
+                    placeholderRow(titleCN: "群成员", titleEN: "Group Members", titleJA: "グループメンバー", icon: "person.3")
                 }
             }
 
             Section {
                 PhotosPicker(selection: $selectedGroupAvatarPhotoItem, matching: .images) {
                     HStack(spacing: 12) {
-                        Text(L("群头像", "Group Avatar"))
+                        Text(LT("群头像", "Group Avatar", "グループアイコン"))
                             .foregroundStyle(Color.primary)
                         Spacer(minLength: 12)
                         groupAvatarAccessory(size: 34)
@@ -559,19 +575,19 @@ struct ChatSettingsView: View {
                 .disabled(!canManageInviteOption || isUploadingGroupAvatar)
 
                 groupInfoActionRow(
-                    title: L("群名称", "Group Name"),
+                    title: LT("群名称", "Group Name", "グループ名"),
                     value: squadProfile?.name ?? "",
                     editable: canManageInviteOption,
                     action: { beginEditingGroupInfo(.groupName) }
                 )
                 groupInfoActionRow(
-                    title: L("群公告", "Group Notice"),
+                    title: LT("群公告", "Group Notice", "グループお知らせ"),
                     value: squadProfile?.notice ?? "",
                     editable: canManageInviteOption,
                     action: { beginEditingGroupInfo(.notice) }
                 )
                 groupInfoActionRow(
-                    title: L("群简介", "Group Introduction"),
+                    title: LT("群简介", "Group Introduction", "グループ紹介"),
                     value: squadProfile?.description ?? "",
                     editable: canManageInviteOption,
                     action: { beginEditingGroupInfo(.introduction) }
@@ -579,13 +595,13 @@ struct ChatSettingsView: View {
                 Button {
                     pushRoute(.squadOfflineActivityHistory(squadID: platformSquadID))
                 } label: {
-                    Label(L("历史活动记录", "Activity History"), systemImage: "clock.arrow.circlepath")
+                    Label(LT("历史活动记录", "Activity History", "過去の活動記録"), systemImage: "clock.arrow.circlepath")
                 }
                 HStack(spacing: 12) {
-                    Label(L("我在本群的昵称", "My Group Nickname"), systemImage: "person.text.rectangle")
+                    Label(LT("我在本群的昵称", "My Group Nickname", "このグループでの自分のニックネーム"), systemImage: "person.text.rectangle")
                     Spacer(minLength: 12)
                     TextField(
-                        L("输入群昵称", "Enter nickname"),
+                        LT("输入群昵称", "Enter nickname", "グループニックネームを入力"),
                         text: Binding(
                             get: { groupNicknameDraft },
                             set: { groupNicknameDraft = String($0.prefix(Self.remarkNameLimit)) }
@@ -607,7 +623,7 @@ struct ChatSettingsView: View {
                     }
                 } label: {
                     HStack(spacing: 12) {
-                        Text(L("邀请方式", "Invite Type"))
+                        Text(LT("邀请方式", "Invite Type", "招待方式"))
                             .foregroundStyle(Color.primary)
                         Spacer(minLength: 12)
                         if isUpdatingInviteOption {
@@ -628,23 +644,27 @@ struct ChatSettingsView: View {
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
                 .disabled(isUpdatingInviteOption || !canManageInviteOption)
-                placeholderRow(titleCN: "查找聊天记录", titleEN: "Search Chat History", icon: "magnifyingglass") {
+                placeholderRow(titleCN: "查找聊天记录", titleEN: "Search Chat History", titleJA: "チャット履歴を検索", icon: "magnifyingglass") {
                     popThenOpenConversationSearch()
                 }
             }
 
             Section {
-                Toggle(L("消息免打扰", "Mute Notifications"), isOn: $notificationsMuted)
+                Toggle(LT("消息免打扰", "Mute Notifications", "通知をミュート"), isOn: $notificationsMuted)
                     .disabled(isMuting)
-                Toggle(L("置顶聊天", "Pin Chat"), isOn: $topPinned)
-                placeholderRow(titleCN: "举报", titleEN: "Report", icon: "exclamationmark.bubble")
+                Toggle(LT("置顶聊天", "Pin Chat", "チャットをピン留め"), isOn: $topPinned)
+                Button(role: .destructive) {
+                    openGroupReportSheet()
+                } label: {
+                    Label(LT("举报", "Report", "通報"), systemImage: "exclamationmark.bubble")
+                }
             }
 
             Section {
                 Button(role: .destructive) {
                     Task { await clearHistory() }
                 } label: {
-                    Label(L("清空聊天记录", "Clear Chat History"), systemImage: "trash")
+                    Label(LT("清空聊天记录", "Clear Chat History", "チャット履歴を消去"), systemImage: "trash")
                 }
                 .disabled(isClearing)
 
@@ -652,7 +672,7 @@ struct ChatSettingsView: View {
                     Button(role: .destructive) {
                         showDisbandConfirm = true
                     } label: {
-                        Label(L("解散群聊", "Disband Group"), systemImage: "xmark.circle")
+                        Label(LT("解散群聊", "Disband Group", "グループチャットを解散"), systemImage: "xmark.circle")
                     }
                     .disabled(isDisbanding || isLeaving)
                 }
@@ -660,7 +680,7 @@ struct ChatSettingsView: View {
                 Button(role: .destructive) {
                     showLeaveConfirm = true
                 } label: {
-                    Label(L("删除并退出", "Delete and Leave"), systemImage: "rectangle.portrait.and.arrow.right")
+                    Label(LT("删除并退出", "Delete and Leave", "削除して退出"), systemImage: "rectangle.portrait.and.arrow.right")
                 }
                 .disabled(isLeaving || isDisbanding)
             }
@@ -697,7 +717,7 @@ struct ChatSettingsView: View {
                     .font(.headline)
                     .foregroundStyle(Color.primary)
                 if conversation.type == .group {
-                    Text(L("群聊", "Group Chat"))
+                    Text(LT("群聊", "Group Chat", "グループチャット"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
@@ -718,6 +738,7 @@ struct ChatSettingsView: View {
     private func placeholderRow(
         titleCN: String,
         titleEN: String,
+        titleJA: String,
         icon: String,
         destructive: Bool = false,
         action: (() -> Void)? = nil
@@ -726,10 +747,10 @@ struct ChatSettingsView: View {
             if let action {
                 action()
             } else {
-                errorMessage = L("该功能暂未接入，先保留入口。", "This feature is not wired yet. Placeholder for now.")
+                errorMessage = LT("该功能暂未接入，先保留入口。", "This feature is not wired yet. Placeholder for now.", "この機能はまだ接続されていません。入口のみ保持しています。")
             }
         } label: {
-            Label(L(titleCN, titleEN), systemImage: icon)
+            Label(LT(titleCN, titleEN, titleJA), systemImage: icon)
                 .foregroundStyle(destructive ? Color.red : Color.primary)
         }
     }
@@ -745,7 +766,7 @@ struct ChatSettingsView: View {
                 Text(title)
                     .foregroundStyle(Color.primary)
                 Spacer(minLength: 12)
-                Text(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? L("未设置", "Not Set") : value)
+                Text(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? LT("未设置", "Not Set", "未設定") : value)
                     .font(.subheadline)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .lineLimit(1)
@@ -795,6 +816,34 @@ struct ChatSettingsView: View {
         pushRoute(.squadProfile(squadID: platformSquadID))
     }
 
+    private func openDirectReportSheet() {
+        guard conversation.type == .direct else { return }
+        let targetUserID = TencentIMIdentity.normalizePlatformUserIDForProfile(
+            directChatUserID ?? conversation.id
+        )
+        reportTarget = ReportSheetTarget(
+            id: targetUserID,
+            type: .user,
+            title: displayTitle,
+            preview: conversation.lastMessage,
+            targetUserID: targetUserID,
+            targetUserDisplayName: displayTitle
+        )
+    }
+
+    private func openGroupReportSheet() {
+        guard conversation.type == .group else { return }
+        let targetID = conversation.sdkConversationID?.nilIfBlank ?? platformSquadID
+        reportTarget = ReportSheetTarget(
+            id: targetID,
+            type: .groupChat,
+            title: displayTitle,
+            preview: conversation.lastMessage,
+            targetUserID: nil,
+            targetUserDisplayName: nil
+        )
+    }
+
     private func popThenOpenConversationSearch() {
         let targetConversationID = conversation.sdkConversationID ?? conversation.id
         dismiss()
@@ -841,7 +890,7 @@ struct ChatSettingsView: View {
             }
         } catch {
             if force {
-                errorMessage = error.userFacingMessage ?? L("加载群成员失败", "Failed to load group members")
+                errorMessage = error.userFacingMessage ?? LT("加载群成员失败", "Failed to load group members", "グループメンバーの読み込みに失敗しました")
             }
         }
     }
@@ -855,7 +904,7 @@ struct ChatSettingsView: View {
             groupInviteOption = try await repository.fetchSquadInviteOption(squadID: platformSquadID)
         } catch {
             if force {
-                errorMessage = error.userFacingMessage ?? L("加载邀请方式失败", "Failed to load invite option")
+                errorMessage = error.userFacingMessage ?? LT("加载邀请方式失败", "Failed to load invite option", "招待方式の読み込みに失敗しました")
             }
         }
     }
@@ -917,7 +966,7 @@ struct ChatSettingsView: View {
             chatStore.updateConversationMuteState(conversationID: conversation.id, muted: muted)
         } catch {
             notificationsMuted = oldValue
-            errorMessage = error.userFacingMessage ?? L("更新免打扰失败", "Failed to update mute status")
+            errorMessage = error.userFacingMessage ?? LT("更新免打扰失败", "Failed to update mute status", "ミュート設定の更新に失敗しました")
         }
     }
 
@@ -931,7 +980,7 @@ struct ChatSettingsView: View {
             )
         } catch {
             topPinned = oldValue
-            errorMessage = error.userFacingMessage ?? L("更新置顶状态失败", "Failed to update pin status")
+            errorMessage = error.userFacingMessage ?? LT("更新置顶状态失败", "Failed to update pin status", "ピン留め状態の更新に失敗しました")
         }
     }
 
@@ -941,7 +990,7 @@ struct ChatSettingsView: View {
         guard !isSavingRemark else { return }
         guard let peerID = directChatUserID else { return }
         guard isTencentFriend else {
-            errorMessage = L("当前仅支持为好友设置备注名", "Nickname can only be set for friends")
+            errorMessage = LT("当前仅支持为好友设置备注名", "Nickname can only be set for friends", "現在、メモ名は友達にのみ設定できます")
             directRemarkName = committedDirectRemarkName
             return
         }
@@ -1077,7 +1126,7 @@ struct ChatSettingsView: View {
             squadProfile = try await repository.fetchSquadProfile(squadID: platformSquadID)
             editingGroupInfoField = nil
         } catch {
-            errorMessage = error.userFacingMessage ?? L("更新群资料失败", "Failed to update group info")
+            errorMessage = error.userFacingMessage ?? LT("更新群资料失败", "Failed to update group info", "グループ情報の更新に失敗しました")
         }
     }
 
@@ -1116,7 +1165,7 @@ struct ChatSettingsView: View {
             committedGroupNickname = groupNicknameDraft
         } catch {
             groupNicknameDraft = committedGroupNickname
-            errorMessage = error.userFacingMessage ?? L("更新群昵称失败", "Failed to update group nickname")
+            errorMessage = error.userFacingMessage ?? LT("更新群昵称失败", "Failed to update group nickname", "グループニックネームの更新に失敗しました")
         }
     }
 
@@ -1135,7 +1184,7 @@ struct ChatSettingsView: View {
         do {
             guard let rawData = try await item.loadTransferable(type: Data.self),
                   !rawData.isEmpty else {
-                throw ServiceError.message(L("无法读取所选图片", "Unable to read the selected image"))
+                throw ServiceError.message(LT("无法读取所选图片", "Unable to read the selected image", "選択した画像を読み取れません"))
             }
 
             let uploadData: Data
@@ -1165,7 +1214,7 @@ struct ChatSettingsView: View {
             try await repository.updateSquadInfo(squadID: platformSquadID, input: input)
             await loadSquadProfile(force: true)
         } catch {
-            errorMessage = error.userFacingMessage ?? L("更新群头像失败", "Failed to update group avatar")
+            errorMessage = error.userFacingMessage ?? LT("更新群头像失败", "Failed to update group avatar", "グループアイコンの更新に失敗しました")
         }
     }
 
@@ -1195,7 +1244,7 @@ struct ChatSettingsView: View {
             try await repository.setUserBlacklisted(userID: peerID, blacklisted: shouldBlacklist)
             isBlacklisted = shouldBlacklist
         } catch {
-            errorMessage = error.userFacingMessage ?? L("更新黑名单状态失败", "Failed to update blacklist status")
+            errorMessage = error.userFacingMessage ?? LT("更新黑名单状态失败", "Failed to update blacklist status", "ブラックリスト状態の更新に失敗しました")
         }
     }
 
@@ -1208,7 +1257,7 @@ struct ChatSettingsView: View {
             try await repository.clearConversationHistory(conversationID: conversation.id)
             chatStore.clearMessages(for: conversation)
         } catch {
-            errorMessage = error.userFacingMessage ?? L("清空聊天记录失败", "Failed to clear chat history")
+            errorMessage = error.userFacingMessage ?? LT("清空聊天记录失败", "Failed to clear chat history", "チャット履歴の消去に失敗しました")
         }
     }
 
@@ -1229,7 +1278,7 @@ struct ChatSettingsView: View {
             dismiss()
             onLeaveConversation?()
         } catch {
-            let message = error.userFacingMessage ?? L("退出小队失败", "Failed to leave squad")
+            let message = error.userFacingMessage ?? LT("退出小队失败", "Failed to leave squad", "Squad の退出に失敗しました")
             if requiresLeaderTransfer(message) {
                 showLeaderLeaveGuide = true
                 await loadSquadProfile(force: true)
@@ -1252,7 +1301,7 @@ struct ChatSettingsView: View {
             dismiss()
             onLeaveConversation?()
         } catch {
-            errorMessage = error.userFacingMessage ?? L("解散小队失败", "Failed to disband squad")
+            errorMessage = error.userFacingMessage ?? LT("解散小队失败", "Failed to disband squad", "Squad の解散に失敗しました")
         }
     }
 
@@ -1278,7 +1327,7 @@ struct ChatSettingsView: View {
             groupInviteOption = option
         } catch {
             groupInviteOption = previous
-            errorMessage = error.userFacingMessage ?? L("更新邀请方式失败", "Failed to update invite option")
+            errorMessage = error.userFacingMessage ?? LT("更新邀请方式失败", "Failed to update invite option", "招待方式の更新に失敗しました")
         }
     }
 
@@ -1334,8 +1383,8 @@ struct ChatSettingsView: View {
         }
 
         inviteFeedbackMessage = invitedUsers.count == 1
-            ? L("邀请成功", "Invite sent")
-            : L("已邀请 \(invitedUsers.count) 位成员", "Invited \(invitedUsers.count) members")
+            ? LT("邀请成功", "Invite sent", "招待を送信しました")
+            : LT("已邀请 \\(invitedUsers.count) 位成员", "Invited \\(invitedUsers.count) members", "\\(invitedUsers.count) 人のメンバーを招待しました")
 
         Task {
             try? await Task.sleep(nanoseconds: 1_600_000_000)
@@ -1363,22 +1412,22 @@ private enum GroupInfoEditableField: String, Identifiable {
     var title: String {
         switch self {
         case .groupName:
-            return L("群名称", "Group Name")
+            return LT("群名称", "Group Name", "グループ名")
         case .notice:
-            return L("群公告", "Group Notice")
+            return LT("群公告", "Group Notice", "グループお知らせ")
         case .introduction:
-            return L("群简介", "Group Introduction")
+            return LT("群简介", "Group Introduction", "グループ紹介")
         }
     }
 
     var placeholder: String {
         switch self {
         case .groupName:
-            return L("输入群名称", "Enter group name")
+            return LT("输入群名称", "Enter group name", "グループ名を入力")
         case .notice:
-            return L("输入群公告", "Enter group notice")
+            return LT("输入群公告", "Enter group notice", "グループお知らせを入力")
         case .introduction:
-            return L("输入群简介", "Enter group introduction")
+            return LT("输入群简介", "Enter group introduction", "グループ紹介を入力")
         }
     }
 }
@@ -1402,7 +1451,7 @@ private struct GroupInfoFieldEditorView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button(L("取消", "Cancel")) {
+                Button(LT("取消", "Cancel", "キャンセル")) {
                     dismiss()
                 }
             }
@@ -1413,7 +1462,7 @@ private struct GroupInfoFieldEditorView: View {
                     if isSaving {
                         ProgressView()
                     } else {
-                        Text(L("保存", "Save"))
+                        Text(LT("保存", "Save", "保存"))
                     }
                 }
                 .disabled(isSaving)
@@ -1452,12 +1501,12 @@ private struct GroupMembersPreviewView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(L("群成员（\(memberCount)）", "Members (\(memberCount))"))
+                Text(LT("群成员（\\(memberCount)）", "Members (\\(memberCount))", "グループメンバー（\\(memberCount)）"))
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 Button(action: onShowAll) {
                     HStack(spacing: 4) {
-                        Text(L("全部", "All"))
+                        Text(LT("全部", "All", "すべて"))
                             .font(.footnote)
                         Image(systemName: "chevron.right")
                             .font(.caption.weight(.semibold))
@@ -1508,7 +1557,7 @@ private struct GroupMembersPreviewView: View {
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
                 }
-                Text(L("邀请", "Invite"))
+                Text(LT("邀请", "Invite", "招待"))
                     .font(.caption2)
                     .foregroundStyle(Color.primary)
                     .lineLimit(1)
@@ -1563,14 +1612,14 @@ private struct InviteSquadMembersView: View {
             if isLoading {
                 HStack(spacing: 10) {
                     ProgressView().controlSize(.small)
-                    Text(L("加载好友中...", "Loading friends..."))
+                    Text(LT("加载好友中...", "Loading friends...", "友達を読み込み中..."))
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
             } else if availableFriends.isEmpty {
                 ContentUnavailableView(
-                    L("暂无可邀请好友", "No Friends Available"),
+                    LT("暂无可邀请好友", "No Friends Available", "招待できる友達はいません"),
                     systemImage: "person.2.slash",
-                    description: Text(L("当前没有可邀请进入该群聊的好友。", "There are no friends available to invite into this group chat."))
+                    description: Text(LT("当前没有可邀请进入该群聊的好友。", "There are no friends available to invite into this group chat.", "現在、このグループチャットに招待できる友達はいません。"))
                 )
             } else {
                 Section {
@@ -1593,27 +1642,27 @@ private struct InviteSquadMembersView: View {
                         .buttonStyle(.plain)
                     }
                 } header: {
-                    Text(L("选择好友", "Select Friends"))
+                    Text(LT("选择好友", "Select Friends", "友達を選択"))
                 } footer: {
-                    Text(L("参考腾讯群聊逻辑，这里通过发送群邀请的方式邀请好友加入。", "Aligned with Tencent group chat flow, invitations are sent to selected friends."))
+                    Text(LT("参考腾讯群聊逻辑，这里通过发送群邀请的方式邀请好友加入。", "Aligned with Tencent group chat flow, invitations are sent to selected friends.", "Tencent グループチャットの流れに合わせ、ここではグループ招待を送信して友達を招待します。"))
                 }
             }
         }
         .listStyle(.insetGrouped)
-        .raverSystemNavigation(title: L("邀请成员", "Invite Members"))
+        .raverSystemNavigation(title: LT("邀请成员", "Invite Members", "メンバーを招待"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(L("发送", "Send")) {
+                Button(LT("发送", "Send", "送信")) {
                     Task { await sendInvites() }
                 }
                 .disabled(selectedUserIDs.isEmpty || isSubmitting || isLoading)
             }
         }
-        .alert(L("操作失败", "Operation Failed"), isPresented: Binding(
+        .alert(LT("操作失败", "Operation Failed", "操作に失敗しました"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -1622,7 +1671,7 @@ private struct InviteSquadMembersView: View {
         }
         .overlay {
             if isSubmitting {
-                ProgressView(LL("邀请中..."))
+                ProgressView(LT("邀请中...", "Inviting...", "招待中..."))
             }
         }
     }
@@ -1645,7 +1694,7 @@ private struct InviteSquadMembersView: View {
         do {
             friends = try await repository.fetchFriends(userID: currentUserID, cursor: nil).users
         } catch {
-            errorMessage = error.userFacingMessage ?? L("加载好友失败", "Failed to load friends")
+            errorMessage = error.userFacingMessage ?? LT("加载好友失败", "Failed to load friends", "友達の読み込みに失敗しました")
         }
     }
 
@@ -1664,7 +1713,7 @@ private struct InviteSquadMembersView: View {
             onInvited(invitedUsers)
             dismiss()
         } catch {
-            errorMessage = error.userFacingMessage ?? L("发送邀请失败", "Failed to send invite")
+            errorMessage = error.userFacingMessage ?? LT("发送邀请失败", "Failed to send invite", "招待の送信に失敗しました")
         }
     }
 
@@ -1722,9 +1771,9 @@ private struct GroupMemberListView: View {
 
     var body: some View {
         List {
-            memberSection(title: L("群主", "Owner"), data: leaders)
-            memberSection(title: L("管理员", "Admins"), data: admins)
-            memberSection(title: L("成员", "Members"), data: members)
+            memberSection(title: LT("群主", "Owner", "オーナー"), data: leaders)
+            memberSection(title: LT("管理员", "Admins", "管理者"), data: admins)
+            memberSection(title: LT("成员", "Members", "メンバー"), data: members)
         }
         .background {
             NavigationLink(
@@ -1743,29 +1792,29 @@ private struct GroupMemberListView: View {
             .hidden()
         }
         .listStyle(.insetGrouped)
-        .raverSystemNavigation(title: L("群成员", "Group Members"))
+        .raverSystemNavigation(title: LT("群成员", "Group Members", "グループメンバー"))
         .confirmationDialog(
-            L("确认移除该成员？", "Remove this member?"),
+            LT("确认移除该成员？", "Remove this member?", "このメンバーを削除しますか？"),
             isPresented: Binding(
                 get: { pendingRemoveMember != nil },
                 set: { if !$0 { pendingRemoveMember = nil } }
             ),
             titleVisibility: .visible
         ) {
-            Button(L("移除成员", "Remove Member"), role: .destructive) {
+            Button(LT("移除成员", "Remove Member", "メンバーを削除"), role: .destructive) {
                 guard let member = pendingRemoveMember else { return }
                 Task { await removeMember(member) }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
             Text(
                 pendingRemoveMember == nil
                     ? ""
-                    : L("移除后，该成员将立即被踢出群聊。", "After removal, this member will be kicked from the group immediately.")
+                    : LT("移除后，该成员将立即被踢出群聊。", "After removal, this member will be kicked from the group immediately.", "削除すると、このメンバーは直ちにグループチャットから退出させられます。")
             )
         }
         .confirmationDialog(
-            L("成员管理", "Member Management"),
+            LT("成员管理", "Member Management", "メンバー管理"),
             isPresented: Binding(
                 get: { memberActionTarget != nil },
                 set: { if !$0 { memberActionTarget = nil } }
@@ -1775,18 +1824,18 @@ private struct GroupMemberListView: View {
             if let member = memberActionTarget {
                 memberRoleButtons(for: member)
                 if canRemove(member) {
-                    Button(L("移除成员", "Remove Member"), role: .destructive) {
+                    Button(LT("移除成员", "Remove Member", "メンバーを削除"), role: .destructive) {
                         pendingRemoveMember = member
                     }
                 }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         }
-        .alert(L("操作失败", "Operation Failed"), isPresented: Binding(
+        .alert(LT("操作失败", "Operation Failed", "操作に失敗しました"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -1818,11 +1867,11 @@ private struct GroupMemberListView: View {
                             Text(member.shownName)
                                 .foregroundStyle(Color.primary)
                             if member.isCaptain {
-                                Text(L("队长", "Leader"))
+                                Text(LT("队长", "Leader", "リーダー"))
                                     .font(.caption2)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             } else if member.isAdmin {
-                                Text(L("管理员", "Admin"))
+                                Text(LT("管理员", "Admin", "管理者"))
                                     .font(.caption2)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             }
@@ -1853,7 +1902,7 @@ private struct GroupMemberListView: View {
                             Button(role: .destructive) {
                                 pendingRemoveMember = member
                             } label: {
-                                Label(L("移除成员", "Remove Member"), systemImage: "person.crop.circle.badge.xmark")
+                                Label(LT("移除成员", "Remove Member", "メンバーを削除"), systemImage: "person.crop.circle.badge.xmark")
                             }
                         }
                     }
@@ -1862,7 +1911,7 @@ private struct GroupMemberListView: View {
                             Button(role: .destructive) {
                                 pendingRemoveMember = member
                             } label: {
-                                Label(L("移除", "Remove"), systemImage: "person.crop.circle.badge.xmark")
+                                Label(LT("移除", "Remove", "削除"), systemImage: "person.crop.circle.badge.xmark")
                             }
                         }
                     }
@@ -1919,7 +1968,7 @@ private struct GroupMemberListView: View {
                 Button {
                     Task { await updateMemberRole(member, role: "admin") }
                 } label: {
-                    Label(L("设为管理员", "Promote to Admin"), systemImage: "person.badge.plus")
+                    Label(LT("设为管理员", "Promote to Admin", "管理者に設定"), systemImage: "person.badge.plus")
                 }
             }
 
@@ -1927,7 +1976,7 @@ private struct GroupMemberListView: View {
                 Button {
                     Task { await updateMemberRole(member, role: "member") }
                 } label: {
-                    Label(L("降为成员", "Demote to Member"), systemImage: "person.badge.minus")
+                    Label(LT("降为成员", "Demote to Member", "メンバーに戻す"), systemImage: "person.badge.minus")
                 }
             }
 
@@ -1935,7 +1984,7 @@ private struct GroupMemberListView: View {
                 Button {
                     Task { await updateMemberRole(member, role: "leader") }
                 } label: {
-                    Label(L("转让队长", "Transfer Leader"), systemImage: "crown")
+                    Label(LT("转让队长", "Transfer Leader", "リーダーを譲渡"), systemImage: "crown")
                 }
             }
         case "admin":
@@ -1950,17 +1999,17 @@ private struct GroupMemberListView: View {
         switch memberDirectory.myRole {
         case "leader":
             if member.role == "member" {
-                Button(L("设为管理员", "Promote to Admin")) {
+                Button(LT("设为管理员", "Promote to Admin", "管理者に設定")) {
                     Task { await updateMemberRole(member, role: "admin") }
                 }
             }
             if member.role == "admin" {
-                Button(L("降为成员", "Demote to Member")) {
+                Button(LT("降为成员", "Demote to Member", "メンバーに戻す")) {
                     Task { await updateMemberRole(member, role: "member") }
                 }
             }
             if member.role != "leader" {
-                Button(L("转让队长", "Transfer Leader")) {
+                Button(LT("转让队长", "Transfer Leader", "リーダーを譲渡")) {
                     Task { await updateMemberRole(member, role: "leader") }
                 }
             }
@@ -1980,9 +2029,9 @@ private struct GroupMemberListView: View {
             pendingRemoveMember = nil
             memberDirectory.members.removeAll { $0.id == member.id }
             onDirectoryChanged(memberDirectory)
-            showFeedback(L("移除成功", "Member removed"))
+            showFeedback(LT("移除成功", "Member removed", "削除しました"))
         } catch {
-            errorMessage = error.userFacingMessage ?? L("移除成员失败", "Failed to remove member")
+            errorMessage = error.userFacingMessage ?? LT("移除成员失败", "Failed to remove member", "メンバー削除に失敗しました")
         }
     }
 
@@ -2018,13 +2067,13 @@ private struct GroupMemberListView: View {
             }
             onDirectoryChanged(memberDirectory)
             let feedback = switch role {
-            case "leader": L("已转让队长", "Ownership transferred")
-            case "admin": L("已设为管理员", "Promoted to admin")
-            default: L("已降为成员", "Demoted to member")
+            case "leader": LT("已转让队长", "Ownership transferred", "リーダーを譲渡しました")
+            case "admin": LT("已设为管理员", "Promoted to admin", "管理者に設定しました")
+            default: LT("已降为成员", "Demoted to member", "メンバーに戻しました")
             }
             showFeedback(feedback)
         } catch {
-            errorMessage = error.userFacingMessage ?? L("更新成员角色失败", "Failed to update member role")
+            errorMessage = error.userFacingMessage ?? LT("更新成员角色失败", "Failed to update member role", "メンバー権限の更新に失敗しました")
         }
     }
 

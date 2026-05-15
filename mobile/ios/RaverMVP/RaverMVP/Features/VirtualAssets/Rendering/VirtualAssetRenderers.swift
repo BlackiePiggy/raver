@@ -307,7 +307,7 @@ struct VirtualAssetRenderPreviewView: View {
             }
 
             VirtualAssetChatBubbleContainer(asset: appearance.chatBubbleSkin, isMine: true) { style in
-                Text(L("这是一条装扮气泡预览", "This is a bubble skin preview"))
+                Text(LT("这是一条装扮气泡预览", "This is a bubble skin preview", "これは吹き出しスキンのプレビューです"))
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Color(style.textColor))
             }

@@ -330,7 +330,7 @@ final class IMSession {
         )
         let image = UIImage(cgImage: frame)
         guard let imageData = image.jpegData(compressionQuality: 0.78) else {
-            throw ServiceError.message(L("生成视频封面失败", "Failed to generate video snapshot"))
+            throw ServiceError.message(LT("生成视频封面失败", "Failed to generate video snapshot", "動画サムネイルの生成に失敗しました"))
         }
 
         let folder = FileManager.default.temporaryDirectory
@@ -468,9 +468,9 @@ final class IMSession {
         case .direct:
             return decodeRaverID(fromIMUserID: normalizedText(item.userID), expectedPrefix: "u")
                 ?? normalizedText(item.userID)
-                ?? L("私信", "Direct")
+                ?? LT("私信", "Direct", "DM")
         case .group:
-            return normalizedText(item.groupID) ?? L("小队", "Squad")
+            return normalizedText(item.groupID) ?? LT("小队", "Squad", "Squad")
         }
     }
 
@@ -653,7 +653,7 @@ final class IMSession {
 
     private func previewText(from message: OIMMessageInfo?) -> String {
         guard let message else {
-            return L("暂无消息", "No messages yet")
+            return LT("暂无消息", "No messages yet", "メッセージはまだありません")
         }
 
         if let atText = normalizedText(message.atTextElem?.text) {
@@ -673,41 +673,41 @@ final class IMSession {
         }
 
         if message.pictureElem != nil {
-            return L("[图片]", "[Image]")
+            return LT("[图片]", "[Image]", "[画像]")
         }
         if message.videoElem != nil {
-            return L("[视频]", "[Video]")
+            return LT("[视频]", "[Video]", "[動画]")
         }
         if message.soundElem != nil {
-            return L("[语音]", "[Voice]")
+            return LT("[语音]", "[Voice]", "[音声]")
         }
         if message.fileElem != nil {
-            return L("[文件]", "[File]")
+            return LT("[文件]", "[File]", "[ファイル]")
         }
         if message.cardElem != nil {
-            return L("[名片]", "[Card]")
+            return LT("[名片]", "[Card]", "[カード]")
         }
         if message.locationElem != nil {
-            return L("[位置]", "[Location]")
+            return LT("[位置]", "[Location]", "[位置情報]")
         }
         if message.quoteElem != nil {
-            return L("[引用消息]", "[Quote]")
+            return LT("[引用消息]", "[Quote]", "[引用メッセージ]")
         }
         if message.faceElem != nil {
-            return L("[表情]", "[Emoji]")
+            return LT("[表情]", "[Emoji]", "[絵文字]")
         }
         if message.notificationElem != nil {
             return systemNotificationPreviewText(from: message)
         }
         if message.customElem != nil {
-            return L("[自定义消息]", "[Custom Message]")
+            return LT("[自定义消息]", "[Custom Message]", "[カスタムメッセージ]")
         }
 
         if let content = normalizedText(message.content) {
             return content
         }
 
-        return L("[消息]", "[Message]")
+        return LT("[消息]", "[Message]", "[メッセージ]")
     }
 
     private func mentionAlertType(from item: OIMConversationInfo) -> GroupMentionAlertType {
@@ -772,7 +772,7 @@ final class IMSession {
         let notification = message.notificationElem
         let actorName = normalizedText(notification?.opUser?.nickname)
             ?? normalizedText(message.senderNickname)
-            ?? L("系统", "System")
+            ?? LT("系统", "System", "システム")
         let groupName = normalizedText(notification?.group?.groupName)
         let kickedName = normalizedText(notification?.kickedUserList?.first?.nickname)
         let invitedName = normalizedText(notification?.invitedUserList?.first?.nickname)
@@ -782,49 +782,49 @@ final class IMSession {
         switch message.contentType {
         case .groupCreated:
             if let groupName {
-                return L("已创建群聊：\(groupName)", "Created group: \(groupName)")
+                return LT("已创建群聊：\(groupName)", "Created group: \(groupName)", "グループチャットを作成しました: \(groupName)")
             }
-            return L("已创建群聊", "Created group")
+            return LT("已创建群聊", "Created group", "グループチャットを作成しました")
         case .memberQuit:
             if let quitName {
-                return L("\(quitName) 已退出群聊", "\(quitName) left the group")
+                return LT("\(quitName) 已退出群聊", "\(quitName) left the group", "\(quitName) がグループを退出しました")
             }
-            return L("有成员退出群聊", "A member left the group")
+            return LT("有成员退出群聊", "A member left the group", "メンバーがグループを退出しました")
         case .memberKicked:
             if let kickedName {
-                return L("\(kickedName) 已被移出群聊", "\(kickedName) was removed from the group")
+                return LT("\(kickedName) 已被移出群聊", "\(kickedName) was removed from the group", "\(kickedName) がグループから削除されました")
             }
-            return L("有成员被移出群聊", "A member was removed from the group")
+            return LT("有成员被移出群聊", "A member was removed from the group", "メンバーがグループから削除されました")
         case .memberInvited:
             if let invitedName {
-                return L("\(invitedName) 已加入群聊", "\(invitedName) joined the group")
+                return LT("\(invitedName) 已加入群聊", "\(invitedName) joined the group", "\(invitedName) がグループに参加しました")
             }
-            return L("有成员被邀请加入群聊", "A member was invited to the group")
+            return LT("有成员被邀请加入群聊", "A member was invited to the group", "メンバーがグループに招待されました")
         case .memberEnter:
             if let entrantName {
-                return L("\(entrantName) 已加入群聊", "\(entrantName) joined the group")
+                return LT("\(entrantName) 已加入群聊", "\(entrantName) joined the group", "\(entrantName) がグループに参加しました")
             }
-            return L("有成员加入群聊", "A member joined the group")
+            return LT("有成员加入群聊", "A member joined the group", "メンバーがグループに参加しました")
         case .dismissGroup:
             if let groupName {
-                return L("群聊已解散：\(groupName)", "Group dismissed: \(groupName)")
+                return LT("群聊已解散：\(groupName)", "Group dismissed: \(groupName)", "グループチャットは解散しました: \(groupName)")
             }
-            return L("群聊已解散", "Group dismissed")
+            return LT("群聊已解散", "Group dismissed", "グループチャットは解散しました")
         case .groupAnnouncement:
-            return L("群公告已更新", "Group announcement updated")
+            return LT("群公告已更新", "Group announcement updated", "グループのお知らせを更新しました")
         case .groupSetNameNotification:
             if let groupName {
-                return L("群名称已更新为 \(groupName)", "Group renamed to \(groupName)")
+                return LT("群名称已更新为 \(groupName)", "Group renamed to \(groupName)", "グループ名を \(groupName) に更新しました")
             }
-            return L("群名称已更新", "Group name updated")
+            return LT("群名称已更新", "Group name updated", "グループ名を更新しました")
         default:
             if let detail = normalizedText(notification?.detail) {
                 return detail
             }
-            if actorName == L("系统", "System") {
-                return L("[系统消息]", "[System Message]")
+            if actorName == LT("系统", "System", "システム") {
+                return LT("[系统消息]", "[System Message]", "[システムメッセージ]")
             }
-            return L("\(actorName) 更新了群系统消息", "\(actorName) updated a group system message")
+            return LT("\(actorName) 更新了群系统消息", "\(actorName) updated a group system message", "\(actorName) がグループシステムメッセージを更新しました")
         }
     }
 

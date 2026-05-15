@@ -57,10 +57,10 @@ struct MainTabView: View {
         }
         .background(RaverTheme.background.ignoresSafeArea(.all))
         .ignoresSafeArea(.keyboard, edges: .bottom)
-        .alert(L("请先登录", "Login Required"), isPresented: $showsLoginRequiredPrompt) {
-            Button(L("知道了", "OK"), role: .cancel) {}
+        .alert(LT("请先登录", "Login Required", "ログインが必要です"), isPresented: $showsLoginRequiredPrompt) {
+            Button(LT("知道了", "OK", "OK"), role: .cancel) {}
         } message: {
-            Text(L("登录后才能使用全局聚合搜索。", "Log in to use global search."))
+            Text(LT("登录后才能使用全局聚合搜索。", "Log in to use global search.", "グローバル統合検索を使うにはログインしてください。"))
         }
         .task {
             await appState.refreshUnreadMessages()
@@ -265,8 +265,8 @@ struct MainTabView: View {
         .buttonStyle(.plain)
         .frame(width: 52, height: 52)
         .accessibilityIdentifier("mainTab.action.globalSearch")
-        .accessibilityLabel(L("搜索", "Search"))
-        .accessibilityHint(L("打开全局聚合搜索", "Opens global aggregated search"))
+        .accessibilityLabel(LT("搜索", "Search", "検索"))
+        .accessibilityHint(LT("打开全局聚合搜索", "Opens global aggregated search", "グローバル統合検索を開きます"))
     }
 
     private func tabIcon(for tab: MainTab) -> some View {
@@ -307,7 +307,7 @@ private struct TabUnreadBadge: View {
                             .stroke(Color.white.opacity(0.86), lineWidth: 1)
                     )
                     .shadow(color: color.opacity(0.35), radius: 4, x: 0, y: 1)
-                    .accessibilityLabel(L("未读消息 \(displayText)", "\(displayText) unread messages"))
+                    .accessibilityLabel(LT("未读消息 \(displayText)", "\(displayText) unread messages", "未読メッセージ \(displayText) 件"))
             }
         }
         .frame(width: 24, height: 16)
@@ -330,10 +330,10 @@ private extension MainTab {
 
     var title: String {
         switch self {
-        case .discover: return L("发现", "Discover")
-        case .circle: return L("圈子", "Circle")
-        case .messages: return L("消息", "Messages")
-        case .profile: return L("我的", "Me")
+        case .discover: return LT("发现", "Discover", "発見")
+        case .circle: return LT("圈子", "Circle", "サークル")
+        case .messages: return LT("收件箱", "Inbox", "受信箱")
+        case .profile: return LT("我的", "Me", "マイページ")
         }
     }
 
@@ -366,10 +366,10 @@ private struct CircleHomeView: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .feed: return L("动态", "Feed")
-            case .squads: return L("小队", "Squads")
+            case .feed: return LT("动态", "Feed", "フィード")
+            case .squads: return LT("小队", "Squads", "Squad")
             case .ids: return "ID"
-            case .ratings: return L("打分", "Ratings")
+            case .ratings: return LT("打分", "Ratings", "評価")
             }
         }
 
@@ -552,12 +552,12 @@ struct CircleIDDetailLoaderView: View {
                 .environmentObject(appState)
             } else {
                 ContentUnavailableView(
-                    L("该 ID 已不存在", "This ID no longer exists"),
+                    LT("该 ID 已不存在", "This ID no longer exists", "このIDは存在しません"),
                     systemImage: "music.note.slash"
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(RaverTheme.background)
-                .raverSystemNavigation(title: L("ID详情", "ID Detail"))
+                .raverSystemNavigation(title: LT("ID详情", "ID Detail", "ID詳細"))
             }
         }
         .task {
@@ -598,6 +598,7 @@ private struct CircleIDHubView: View {
     @State private var errorMessage: String?
     @State private var shareMorePresentation: CircleIDShareCardPresentation?
     @State private var fullChatSharePresentation: CircleIDShareCardPresentation?
+    @State private var reportTarget: ReportSheetTarget?
     @State private var isShareMorePanelVisible = false
 
     private var shareMessageRepository: ShareMessageRepository { appContainer.shareMessageRepository }
@@ -612,14 +613,14 @@ private struct CircleIDHubView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Text(L("ID（未发行）", "ID (Unreleased)"))
+                Text(LT("ID（未发行）", "ID (Unreleased)", "ID（未リリース）"))
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
                 Button {
                     circlePush(.idCreate)
                 } label: {
-                    Label(L("发布 ID", "Post ID"), systemImage: "plus.circle.fill")
+                    Label(LT("发布 ID", "Post ID", "IDを投稿"), systemImage: "plus.circle.fill")
                         .font(.subheadline.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
@@ -634,9 +635,9 @@ private struct CircleIDHubView: View {
             if sortedEntries.isEmpty {
                 Spacer()
                 ContentUnavailableView(
-                    L("还没有 ID 讨论", "No ID Discussion Yet"),
+                    LT("还没有 ID 讨论", "No ID Discussion Yet", "IDディスカッションはまだありません"),
                     systemImage: "music.note.list",
-                    description: Text(L("点击右上角“发布 ID”，记录一首未发行歌曲。", "Tap “Post ID” to record an unreleased track."))
+                    description: Text(LT("点击右上角“发布 ID”，记录一首未发行歌曲。", "Tap “Post ID” to record an unreleased track.", "右上の「IDを投稿」をタップして未リリース曲を記録しましょう。"))
                 )
                 Spacer()
             } else {
@@ -673,10 +674,10 @@ private struct CircleIDHubView: View {
                 .environmentObject(appContainer)
             } else {
                 VStack(spacing: 12) {
-                    Text(L("该 ID 已不存在", "This ID no longer exists"))
+                    Text(LT("该 ID 已不存在", "This ID no longer exists", "このIDは存在しません"))
                         .font(.headline)
                         .foregroundStyle(RaverTheme.primaryText)
-                    Button(L("返回", "Back")) {
+                    Button(LT("返回", "Back", "戻る")) {
                         selectedDetailRoute = nil
                     }
                     .buttonStyle(.borderedProminent)
@@ -701,13 +702,24 @@ private struct CircleIDHubView: View {
             ) { conversation in
                 errorMessage = nil
                 showWidgetStatusBanner(
-                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                     conversation: conversation
                 )
             } preview: {
                 CircleIDSharePreviewCard(payload: presentation.payload)
             }
             .presentationDetents([.fraction(0.76), .large])
+        }
+        .sheet(item: $reportTarget) { target in
+            ReportSheet(target: target) { _, blocked in
+                showWidgetStatusBanner(
+                    message: blocked
+                        ? LT("举报已提交，并已拉黑该用户", "Report submitted and user blocked", "報告を送信し、このユーザーをブロックしました")
+                        : LT("举报已提交", "Report submitted", "報告を送信しました")
+                )
+            }
+            .environmentObject(appState)
+            .presentationDetents([.large])
         }
         .overlay {
             if let presentation = shareMorePresentation {
@@ -735,7 +747,7 @@ private struct CircleIDHubView: View {
                     ) { conversation in
                         errorMessage = nil
                         showWidgetStatusBanner(
-                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                             conversation: conversation
                         )
                     } onMoreChats: {
@@ -752,11 +764,11 @@ private struct CircleIDHubView: View {
             }
         }
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
-        .alert(LL("提示"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -887,7 +899,7 @@ private struct CircleIDHubView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(RaverTheme.primaryText)
                                 .lineLimit(1)
-                            Text(L("贡献者", "Contributor"))
+                            Text(LT("贡献者", "Contributor", "投稿者"))
                                 .font(.caption2)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
@@ -1072,7 +1084,7 @@ private struct CircleIDHubView: View {
                 avatarURL: user.avatarURL
             )
         }
-        let fallbackName = L("游客", "Guest")
+        let fallbackName = LT("游客", "Guest", "ゲスト")
         return CircleIDUserSnapshot(
             id: "local-guest",
             username: fallbackName,
@@ -1140,14 +1152,14 @@ private struct CircleIDHubView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                errorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat 共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "paperplane.circle.fill",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
-                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                errorMessage = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ 共有連携は未接続です。")
             }
         ]
     }
@@ -1155,39 +1167,46 @@ private struct CircleIDHubView: View {
     private func shareMoreQuickActions(for payload: CircleIDShareCardPayload) -> [SharePanelQuickAction] {
         [
             SharePanelQuickAction(
-                title: L("复制链接", "Copy link"),
+                title: LT("复制链接", "Copy link", "リンクをコピー"),
                 systemImage: "link",
                 accentColor: Color(red: 0.26, green: 0.57, blue: 0.96)
             ) {
                 Task { await copyCircleIDShareLink(payload) }
             },
             SharePanelQuickAction(
-                title: L("查看二维码", "View QR"),
+                title: LT("查看二维码", "View QR", "QRを見る"),
                 systemImage: "qrcode",
                 accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
             ) {
                 Task { await openCircleIDQRCode(payload) }
             },
             SharePanelQuickAction(
-                title: L("查看海报", "View Poster"),
+                title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
             ) {
                 Task { await openCircleIDPoster(payload) }
             },
             SharePanelQuickAction(
-                title: L("保存海报", "Save Poster"),
+                title: LT("保存海报", "Save Poster", "海報を保存"),
                 systemImage: "photo.badge.arrow.down",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
                 Task { await saveCircleIDPoster(payload) }
             },
             SharePanelQuickAction(
-                title: L("举报", "Report"),
+                title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
             ) {
-                errorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+                reportTarget = ReportSheetTarget(
+                    id: payload.entryID,
+                    type: .circleID,
+                    title: payload.songName,
+                    preview: [payload.contributorName, payload.djNames.joined(separator: " · "), payload.eventName].compactMap { $0?.nilIfBlank }.joined(separator: " · "),
+                    targetUserID: nil,
+                    targetUserDisplayName: nil
+                )
             }
         ]
     }
@@ -1198,11 +1217,11 @@ private struct CircleIDHubView: View {
             let result = try await shareLinkCoordinator.copyLink(target: circleIDShareTarget(from: payload))
             showWidgetStatusBanner(
                 message: result.usedDeepLinkFallback
-                    ? L("已复制 App 内链接", "Copied app-only link.")
-                    : L("已复制链接", "Link copied")
+                    ? LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました")
+                    : LT("已复制链接", "Link copied", "リンクをコピーしました")
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            errorMessage = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクをコピーできませんでした。もう一度お試しください。")
         }
     }
 
@@ -1222,7 +1241,7 @@ private struct CircleIDHubView: View {
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -1233,20 +1252,20 @@ private struct CircleIDHubView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("ID 海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "ID posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
+                        hintText: LT("ID 海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "ID posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link.", "ID海報は共有システムで生成され、タイトル、概要、QRコードは短縮リンクと同期されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -1255,9 +1274,9 @@ private struct CircleIDHubView: View {
         do {
             let resolved = try await shareLinkCoordinator.resolveLink(target: circleIDShareTarget(from: payload), channel: "poster_save")
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
         } catch {
-            errorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 }
@@ -1275,6 +1294,7 @@ private struct CircleIDDetailView: View {
     @State private var actionErrorMessage: String?
     @State private var shareMorePresentation: CircleIDShareCardPresentation?
     @State private var fullChatSharePresentation: CircleIDShareCardPresentation?
+    @State private var reportTarget: ReportSheetTarget?
     @State private var isShareMorePanelVisible = false
 
     private var shareMessageRepository: ShareMessageRepository { appContainer.shareMessageRepository }
@@ -1384,7 +1404,7 @@ private struct CircleIDDetailView: View {
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(RaverTheme.primaryText)
                                     .lineLimit(1)
-                                Text(L("贡献者", "Contributor"))
+                                Text(LT("贡献者", "Contributor", "投稿者"))
                                     .font(.caption2)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             }
@@ -1400,12 +1420,12 @@ private struct CircleIDDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(LL("评论区"))
+                    Text(LT("评论区", "Comments", "コメント欄"))
                         .font(.headline)
                         .foregroundStyle(RaverTheme.primaryText)
 
                     if entry.comments.isEmpty {
-                        Text(LL("还没有评论，来抢沙发吧。"))
+                        Text(LT("还没有评论，来抢沙发吧。", "No comments yet. Be the first to write one.", "コメントはまだありません。最初のコメントを書きましょう。"))
                             .font(.subheadline)
                             .foregroundStyle(RaverTheme.secondaryText)
                     } else {
@@ -1436,12 +1456,12 @@ private struct CircleIDDetailView: View {
                     }
 
                     HStack(spacing: 8) {
-                        TextField(L("说点什么...", "Say something..."), text: $commentDraft)
+                        TextField(LT("说点什么...", "Say something...", "何か書いてください..."), text: $commentDraft)
                             .padding(12)
                             .background(RaverTheme.card)
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-                        Button(L("发送", "Send")) {
+                        Button(LT("发送", "Send", "送信")) {
                             addComment()
                         }
                         .buttonStyle(.borderedProminent)
@@ -1462,7 +1482,7 @@ private struct CircleIDDetailView: View {
             .padding(.bottom, 20)
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: L("ID详情", "ID Detail"))
+        .raverSystemNavigation(title: LT("ID详情", "ID Detail", "ID詳細"))
         .operationBannerHost()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -1495,13 +1515,24 @@ private struct CircleIDDetailView: View {
             ) { conversation in
                 actionErrorMessage = nil
                 showWidgetStatusBanner(
-                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                     conversation: conversation
                 )
             } preview: {
                 CircleIDSharePreviewCard(payload: presentation.payload)
             }
             .presentationDetents([.fraction(0.76), .large])
+        }
+        .sheet(item: $reportTarget) { target in
+            ReportSheet(target: target) { _, blocked in
+                showWidgetStatusBanner(
+                    message: blocked
+                        ? LT("举报已提交，并已拉黑该用户", "Report submitted and user blocked", "報告を送信し、このユーザーをブロックしました")
+                        : LT("举报已提交", "Report submitted", "報告を送信しました")
+                )
+            }
+            .environmentObject(appState)
+            .presentationDetents([.large])
         }
         .overlay {
             if let presentation = shareMorePresentation {
@@ -1529,7 +1560,7 @@ private struct CircleIDDetailView: View {
                     ) { conversation in
                         actionErrorMessage = nil
                         showWidgetStatusBanner(
-                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                             conversation: conversation
                         )
                     } onMoreChats: {
@@ -1546,11 +1577,11 @@ private struct CircleIDDetailView: View {
             }
         }
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
-        .alert(LL("提示"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { actionErrorMessage != nil },
             set: { if !$0 { actionErrorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(actionErrorMessage ?? "")
         }
@@ -1628,7 +1659,7 @@ private struct CircleIDDetailView: View {
                 avatarURL: user.avatarURL
             )
         }
-        let fallbackName = L("游客", "Guest")
+        let fallbackName = LT("游客", "Guest", "ゲスト")
         return CircleIDUserSnapshot(
             id: "local-guest",
             username: fallbackName,
@@ -1728,7 +1759,7 @@ private struct CircleIDDetailView: View {
         OperationBannerCenter.shared.success(
             message,
             action: conversation.map { conversation in
-                .custom(title: L("点击跳转", "Open chat")) {
+                .custom(title: LT("点击跳转", "Open chat", "タップしてチャットを開く")) {
                     dismissAndPush(.conversation(target: .fromConversation(conversation)))
                 }
             } ?? .none
@@ -1742,14 +1773,14 @@ private struct CircleIDDetailView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                actionErrorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                actionErrorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat 共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "paperplane.circle.fill",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
-                actionErrorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                actionErrorMessage = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ 共有連携は未接続です。")
             }
         ]
     }
@@ -1757,39 +1788,46 @@ private struct CircleIDDetailView: View {
     private func shareMoreQuickActions(for payload: CircleIDShareCardPayload) -> [SharePanelQuickAction] {
         [
             SharePanelQuickAction(
-                title: L("复制链接", "Copy link"),
+                title: LT("复制链接", "Copy link", "リンクをコピー"),
                 systemImage: "link",
                 accentColor: Color(red: 0.26, green: 0.57, blue: 0.96)
             ) {
                 Task { await copyCircleIDShareLink(payload) }
             },
             SharePanelQuickAction(
-                title: L("查看二维码", "View QR"),
+                title: LT("查看二维码", "View QR", "QRを見る"),
                 systemImage: "qrcode",
                 accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
             ) {
                 Task { await openCircleIDQRCode(payload) }
             },
             SharePanelQuickAction(
-                title: L("查看海报", "View Poster"),
+                title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
             ) {
                 Task { await openCircleIDPoster(payload) }
             },
             SharePanelQuickAction(
-                title: L("保存海报", "Save Poster"),
+                title: LT("保存海报", "Save Poster", "海報を保存"),
                 systemImage: "photo.badge.arrow.down",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
                 Task { await saveCircleIDPoster(payload) }
             },
             SharePanelQuickAction(
-                title: L("举报", "Report"),
+                title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
             ) {
-                actionErrorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+                reportTarget = ReportSheetTarget(
+                    id: payload.entryID,
+                    type: .circleID,
+                    title: payload.songName,
+                    preview: [payload.contributorName, payload.djNames.joined(separator: " · "), payload.eventName].compactMap { $0?.nilIfBlank }.joined(separator: " · "),
+                    targetUserID: entry.contributor.id,
+                    targetUserDisplayName: entry.contributor.shownName
+                )
             }
         ]
     }
@@ -1800,11 +1838,11 @@ private struct CircleIDDetailView: View {
             let result = try await shareLinkCoordinator.copyLink(target: circleIDShareTarget(from: payload))
             showWidgetStatusBanner(
                 message: result.usedDeepLinkFallback
-                    ? L("已复制 App 内链接", "Copied app-only link.")
-                    : L("已复制链接", "Link copied")
+                    ? LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました")
+                    : LT("已复制链接", "Link copied", "リンクをコピーしました")
             )
         } catch {
-            actionErrorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            actionErrorMessage = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクをコピーできませんでした。もう一度お試しください。")
         }
     }
 
@@ -1824,7 +1862,7 @@ private struct CircleIDDetailView: View {
                 )
             )
         } catch {
-            actionErrorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            actionErrorMessage = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -1835,20 +1873,20 @@ private struct CircleIDDetailView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("ID 海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "ID posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
+                        hintText: LT("ID 海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "ID posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link.", "ID海報は共有システムで生成され、タイトル、概要、QRコードは短縮リンクと同期されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            actionErrorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            actionErrorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -1857,9 +1895,9 @@ private struct CircleIDDetailView: View {
         do {
             let resolved = try await shareLinkCoordinator.resolveLink(target: circleIDShareTarget(from: payload), channel: "poster_save")
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
         } catch {
-            actionErrorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            actionErrorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 }
@@ -2005,6 +2043,7 @@ private struct CircleIDCardPlayerView: View {
 struct CircleIDComposerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
 
     let onCreated: (CircleIDEntry) -> Void
 
@@ -2016,15 +2055,16 @@ struct CircleIDComposerSheet: View {
     @State private var showEventPicker = false
     @State private var showDJPicker = false
     @State private var errorMessage: String?
+    @State private var rightsConfirmed = false
 
     var body: some View {
         ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(L("歌曲名", "Song Name"))
+                        Text(LT("歌曲名", "Song Name", "曲名"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(RaverTheme.secondaryText)
-                        TextField(L("例如：ID - Intro Edit", "e.g. ID - Intro Edit"), text: $songName)
+                        TextField(LT("例如：ID - Intro Edit", "e.g. ID - Intro Edit", "例: ID - Intro Edit"), text: $songName)
                             .textInputAutocapitalization(.never)
                             .padding(10)
                             .background(RaverTheme.card)
@@ -2032,7 +2072,7 @@ struct CircleIDComposerSheet: View {
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(L("音频链接（可选）", "Audio URL (optional)"))
+                        Text(LT("音频链接（可选）", "Audio URL (optional)", "音声URL（任意）"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(RaverTheme.secondaryText)
                         TextField("https://", text: $audioUrl)
@@ -2044,7 +2084,7 @@ struct CircleIDComposerSheet: View {
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(L("视频链接（可选）", "Video URL (optional)"))
+                        Text(LT("视频链接（可选）", "Video URL (optional)", "動画URL（任意）"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(RaverTheme.secondaryText)
                         TextField("https://", text: $videoUrl)
@@ -2055,13 +2095,19 @@ struct CircleIDComposerSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
 
+                    Toggle(isOn: $rightsConfirmed) {
+                        Text(LT("我确认拥有发布该音乐/视频链接的权利，或确认链接来源合法且可公开引用。", "I confirm I have the right to post this music/video link, or that the link source is lawful and publicly referenceable.", "この音楽/動画リンクを投稿する権利がある、またはリンク元が合法で公開参照可能であることを確認します。"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(L("关联活动", "Linked Event"))
+                            Text(LT("关联活动", "Linked Event", "関連イベント"))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(RaverTheme.secondaryText)
                             Spacer()
-                            Button(selectedEvent == nil ? L("选择活动", "Select Event") : L("更换活动", "Change Event")) {
+                            Button(selectedEvent == nil ? LT("选择活动", "Select Event", "イベントを選択") : LT("更换活动", "Change Event", "イベントを変更")) {
                                 showEventPicker = true
                             }
                             .buttonStyle(.bordered)
@@ -2089,18 +2135,18 @@ struct CircleIDComposerSheet: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(L("关联 DJ（可多选）", "Linked DJs (multi-select)"))
+                            Text(LT("关联 DJ（可多选）", "Linked DJs (multi-select)", "関連DJ（複数選択可）"))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(RaverTheme.secondaryText)
                             Spacer()
-                            Button(L("选择 DJ", "Select DJs")) {
+                            Button(LT("选择 DJ", "Select DJs", "DJを選択")) {
                                 showDJPicker = true
                             }
                             .buttonStyle(.bordered)
                         }
 
                         if selectedDJs.isEmpty {
-                            Text(L("尚未选择 DJ", "No DJ selected"))
+                            Text(LT("尚未选择 DJ", "No DJ selected", "DJが選択されていません"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         } else {
@@ -2146,10 +2192,10 @@ struct CircleIDComposerSheet: View {
                 .padding(16)
             }
             .background(RaverTheme.background)
-            .raverSystemNavigation(title: L("发布 ID", "Post ID"))
+            .raverSystemNavigation(title: LT("发布 ID", "Post ID", "IDを投稿"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L("发布", "Post")) {
+                    Button(LT("发布", "Post", "投稿")) {
                         createEntry()
                     }
                 }
@@ -2164,11 +2210,11 @@ struct CircleIDComposerSheet: View {
                     selectedDJs = picked
                 }
             }
-            .alert(LL("提示"), isPresented: Binding(
+            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
             )) {
-                Button(L("确定", "OK"), role: .cancel) {}
+                Button(LT("确定", "OK", "OK"), role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
             }
@@ -2180,22 +2226,37 @@ struct CircleIDComposerSheet: View {
         let trimmedVideoURL = videoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmedSongName.isEmpty else {
-            errorMessage = L("请填写歌曲名", "Please enter the song name")
+            errorMessage = LT("请填写歌曲名", "Please enter the song name", "曲名を入力してください")
             return
         }
         guard selectedEvent != nil else {
-            errorMessage = L("请先选择活动", "Please select an event")
+            errorMessage = LT("请先选择活动", "Please select an event", "先にイベントを選択してください")
             return
         }
         guard !selectedDJs.isEmpty else {
-            errorMessage = L("请至少选择一位 DJ", "Please select at least one DJ")
+            errorMessage = LT("请至少选择一位 DJ", "Please select at least one DJ", "DJを少なくとも1人選択してください")
             return
         }
         guard !trimmedAudioURL.isEmpty || !trimmedVideoURL.isEmpty else {
-            errorMessage = L("请至少填写音频或视频链接", "Please provide at least one audio or video URL")
+            errorMessage = LT("请至少填写音频或视频链接", "Please provide at least one audio or video URL", "音声または動画URLを少なくとも1つ入力してください")
+            return
+        }
+        guard rightsConfirmed else {
+            errorMessage = LT("请先确认你拥有发布权利，或链接来源合法且可公开引用。", "Please confirm you have posting rights, or that the link source is lawful and publicly referenceable.", "投稿権利がある、またはリンク元が合法で公開参照可能であることを確認してください。")
             return
         }
 
+        Task {
+            await submitIDEntry(
+                songName: trimmedSongName,
+                audioURL: trimmedAudioURL,
+                videoURL: trimmedVideoURL
+            )
+        }
+    }
+
+    @MainActor
+    private func submitIDEntry(songName: String, audioURL: String, videoURL: String) async {
         let contributor = currentUserSnapshot()
         let eventSnapshot: CircleIDEventSnapshot?
         if let selectedEvent {
@@ -2212,11 +2273,11 @@ struct CircleIDComposerSheet: View {
 
         let entry = CircleIDEntry(
             id: UUID().uuidString,
-            songName: trimmedSongName,
+            songName: songName,
             event: eventSnapshot,
             djs: selectedDJs,
-            audioUrl: trimmedAudioURL.isEmpty ? nil : trimmedAudioURL,
-            videoUrl: trimmedVideoURL.isEmpty ? nil : trimmedVideoURL,
+            audioUrl: audioURL.isEmpty ? nil : audioURL,
+            videoUrl: videoURL.isEmpty ? nil : videoURL,
             contributor: contributor,
             createdAt: Date(),
             likedUserIDs: [],
@@ -2224,6 +2285,27 @@ struct CircleIDComposerSheet: View {
             repostedUserIDs: [],
             comments: []
         )
+
+        do {
+            let payload: [String: ContentSubmissionJSONValue] = [
+                "songName": .string(songName),
+                "audioUrl": audioURL.isEmpty ? .null : .string(audioURL),
+                "videoUrl": videoURL.isEmpty ? .null : .string(videoURL),
+                "eventId": eventSnapshot.map { .string($0.id) } ?? .null,
+                "eventName": eventSnapshot.map { .string($0.name) } ?? .null,
+                "djIds": .array(selectedDJs.map { .string($0.id) }),
+                "djNames": .array(selectedDJs.map { .string($0.name) }),
+                "rightsConfirmed": .bool(true)
+            ]
+            _ = try await appContainer.webService.createContentSubmission(
+                entityType: "id",
+                payload: payload
+            )
+            OperationBannerCenter.shared.success(LT("ID 已提交审核", "ID submitted for review", "IDを審査に送信しました"))
+        } catch {
+            errorMessage = error.userFacingMessage
+            return
+        }
 
         onCreated(entry)
         dismiss()
@@ -2238,7 +2320,7 @@ struct CircleIDComposerSheet: View {
                 avatarURL: user.avatarURL
             )
         }
-        let fallbackName = L("游客", "Guest")
+        let fallbackName = LT("游客", "Guest", "ゲスト")
         return CircleIDUserSnapshot(
             id: "local-guest",
             username: fallbackName,
@@ -2275,7 +2357,7 @@ private struct CircleIDEventPickerSheet: View {
 
     var body: some View {
         VStack(spacing: 10) {
-                TextField(L("搜索活动名/城市/国家", "Search event/city/country"), text: $searchText)
+                TextField(LT("搜索活动名/城市/国家", "Search event/city/country", "イベント名/都市/国を検索"), text: $searchText)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .padding(10)
@@ -2291,7 +2373,7 @@ private struct CircleIDEventPickerSheet: View {
                 } else if case .failure(let message) = phase {
                     Spacer()
                     ScreenErrorCard(
-                        title: L("活动加载失败", "Events Failed to Load"),
+                        title: LT("活动加载失败", "Events Failed to Load", "イベントの読み込みに失敗しました"),
                         message: message
                     ) {
                         Task { await loadEvents() }
@@ -2301,7 +2383,7 @@ private struct CircleIDEventPickerSheet: View {
                 } else if case .offline(let message) = phase {
                     Spacer()
                     ScreenErrorCard(
-                        title: L("网络不可用", "Network Unavailable"),
+                        title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                         message: message
                     ) {
                         Task { await loadEvents() }
@@ -2311,7 +2393,7 @@ private struct CircleIDEventPickerSheet: View {
                 } else if filteredEvents.isEmpty {
                     Spacer()
                     ContentUnavailableView(
-                        L("没有匹配活动", "No Matching Events"),
+                        LT("没有匹配活动", "No Matching Events", "一致するイベントがありません"),
                         systemImage: "calendar.badge.exclamationmark"
                     )
                     Spacer()
@@ -2337,7 +2419,7 @@ private struct CircleIDEventPickerSheet: View {
                 }
             }
             .background(RaverTheme.background)
-            .raverSystemNavigation(title: L("选择活动", "Select Event"))
+            .raverSystemNavigation(title: LT("选择活动", "Select Event", "イベントを選択"))
             .task {
                 await loadEvents()
             }
@@ -2382,7 +2464,7 @@ private struct CircleIDEventPickerSheet: View {
             phase = events.isEmpty ? .empty : .success
             errorMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("活动加载失败，请稍后重试", "Failed to load events. Please try again later.")
+            let message = error.userFacingMessage ?? LT("活动加载失败，请稍后重试", "Failed to load events. Please try again later.", "イベントを読み込めませんでした。時間をおいて再試行してください。")
             phase = .failure(message: message)
             errorMessage = message
         }
@@ -2417,7 +2499,7 @@ private struct CircleIDDJPickerSheet: View {
 
     var body: some View {
         VStack(spacing: 10) {
-                TextField(L("搜索 DJ 名称或别名", "Search DJ name or alias"), text: $searchText)
+                TextField(LT("搜索 DJ 名称或别名", "Search DJ name or alias", "DJ名または別名を検索"), text: $searchText)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .padding(10)
@@ -2433,7 +2515,7 @@ private struct CircleIDDJPickerSheet: View {
                 } else if case .failure(let message) = phase {
                     Spacer()
                     ScreenErrorCard(
-                        title: L("DJ 加载失败", "DJs Failed to Load"),
+                        title: LT("DJ 加载失败", "DJs Failed to Load", "DJの読み込みに失敗しました"),
                         message: message
                     ) {
                         Task { await loadDJs() }
@@ -2443,7 +2525,7 @@ private struct CircleIDDJPickerSheet: View {
                 } else if case .offline(let message) = phase {
                     Spacer()
                     ScreenErrorCard(
-                        title: L("网络不可用", "Network Unavailable"),
+                        title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                         message: message
                     ) {
                         Task { await loadDJs() }
@@ -2453,7 +2535,7 @@ private struct CircleIDDJPickerSheet: View {
                 } else if filteredDJs.isEmpty {
                     Spacer()
                     ContentUnavailableView(
-                        L("没有匹配 DJ", "No Matching DJs"),
+                        LT("没有匹配 DJ", "No Matching DJs", "一致するDJがありません"),
                         systemImage: "person.crop.circle.badge.questionmark"
                     )
                     Spacer()
@@ -2489,10 +2571,10 @@ private struct CircleIDDJPickerSheet: View {
                 }
             }
             .background(RaverTheme.background)
-            .raverSystemNavigation(title: L("选择 DJ", "Select DJs"))
+            .raverSystemNavigation(title: LT("选择 DJ", "Select DJs", "DJを選択"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L("完成", "Done")) {
+                    Button(LT("完成", "Done", "完了")) {
                         finishSelection()
                     }
                 }
@@ -2594,7 +2676,7 @@ private struct CircleIDDJPickerSheet: View {
             phase = djs.isEmpty ? .empty : .success
             errorMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("DJ 加载失败，请稍后重试", "Failed to load DJs. Please try again later.")
+            let message = error.userFacingMessage ?? LT("DJ 加载失败，请稍后重试", "Failed to load DJs. Please try again later.", "DJを読み込めませんでした。時間をおいて再試行してください。")
             phase = .failure(message: message)
             errorMessage = message
         }
@@ -2662,8 +2744,8 @@ private struct SquadHallView: View {
 
         var title: String {
             switch self {
-            case .plaza: return L("小队广场", "Squad Plaza")
-            case .mine: return L("我的小队", "My Squads")
+            case .plaza: return LT("小队广场", "Squad Plaza", "Squad 広場")
+            case .mine: return LT("我的小队", "My Squads", "自分のSquad")
             }
         }
     }
@@ -2690,7 +2772,7 @@ private struct SquadHallView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Text(L("小队广场", "Squad Plaza"))
+                Text(LT("小队广场", "Squad Plaza", "Squad 広場"))
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
@@ -2700,7 +2782,7 @@ private struct SquadHallView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.circle.fill")
                             .font(.subheadline.weight(.bold))
-                        Text(L("创建小队", "Create Squad"))
+                        Text(LT("创建小队", "Create Squad", "Squadを作成"))
                             .font(.subheadline.weight(.semibold))
                     }
                     .foregroundStyle(RaverTheme.primaryText)
@@ -2743,13 +2825,13 @@ private struct SquadHallView: View {
             if isRefreshing || bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if isRefreshing {
-                        InlineLoadingBadge(title: L("正在更新小队", "Updating squads"))
+                        InlineLoadingBadge(title: LT("正在更新小队", "Updating squads", "Squadを更新中"))
                     }
                     if let bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task { await loadSquads() }
                         }
@@ -2764,7 +2846,7 @@ private struct SquadHallView: View {
             case .failure(let message), .offline(let message):
                 Spacer()
                 ScreenErrorCard(
-                    title: L("小队加载失败", "Squads Failed to Load"),
+                    title: LT("小队加载失败", "Squads Failed to Load", "Squadの読み込みに失敗しました"),
                     message: message
                 ) {
                     Task { await loadSquads() }
@@ -2774,9 +2856,9 @@ private struct SquadHallView: View {
             case .empty:
                 Spacer()
                 ContentUnavailableView(
-                    selectedMode == .mine ? L("还没有加入小队", "Not Joined Any Squad Yet") : L("暂无小队", "No Squads Yet"),
+                    selectedMode == .mine ? LT("还没有加入小队", "Not Joined Any Squad Yet", "参加中のSquadはまだありません") : LT("暂无小队", "No Squads Yet", "Squadはまだありません"),
                     systemImage: "flag.2.crossed",
-                    description: Text(selectedMode == .mine ? L("去小队广场逛逛，加入你感兴趣的小队。", "Visit the squad square and join squads you like.") : L("创建一个小队，和朋友一起记录活动。", "Create a squad and record events with friends."))
+                    description: Text(selectedMode == .mine ? LT("去小队广场逛逛，加入你感兴趣的小队。", "Visit the squad square and join squads you like.", "Squad広場で気になるSquadに参加しましょう。") : LT("创建一个小队，和朋友一起记录活动。", "Create a squad and record events with friends.", "Squadを作成して、友達と一緒にイベントを記録しましょう。"))
                 )
                 Spacer()
             case .success:
@@ -2815,14 +2897,14 @@ private struct SquadHallView: View {
             }
             .environmentObject(appState)
         }
-        .alert(L("加载失败", "Load Failed"), isPresented: Binding(
+        .alert(LT("加载失败", "Load Failed", "読み込みに失敗しました"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("重试", "Retry")) {
+            Button(LT("重试", "Retry", "再試行")) {
                 Task { await loadSquads() }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -2893,7 +2975,7 @@ private struct SquadHallView: View {
 
     private func squadIPText(_ squad: SquadSummary) -> String {
         // 当前数据模型暂未提供地区字段，先保留展示位以满足卡片结构。
-        L("IP地区：暂未公开", "IP region: not disclosed")
+        LT("IP地区：暂未公开", "IP region: not disclosed", "IP地域: 未公開")
     }
 
     private func squadFlagCard(_ squad: SquadSummary) -> some View {
@@ -2954,7 +3036,7 @@ private struct SquadHallView: View {
                         Text("·")
                             .foregroundStyle(Color.white.opacity(0.72))
 
-                        Text(L("\(squad.memberCount) 人", "\(squad.memberCount) members"))
+                        Text(LT("\(squad.memberCount) 人", "\(squad.memberCount) members", "\(squad.memberCount)人"))
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(Color.white.opacity(0.92))
                     }
@@ -2968,9 +3050,9 @@ private struct SquadHallView: View {
     private func leaderLabelText(for squad: SquadSummary) -> String {
         if let name = leaderUserSummary(for: squad)?.displayName,
            !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return L("队长 \(name)", "Leader \(name)")
+            return LT("队长 \(name)", "Leader \(name)", "リーダー \(name)")
         }
-        return L("队长", "Leader")
+        return LT("队长", "Leader", "リーダー")
     }
 
     @MainActor
@@ -2997,7 +3079,7 @@ private struct SquadHallView: View {
             bannerMessage = nil
             errorMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("小队加载失败，请稍后重试", "Failed to load squads. Please try again later.")
+            let message = error.userFacingMessage ?? LT("小队加载失败，请稍后重试", "Failed to load squads. Please try again later.", "Squadを読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success
@@ -3066,14 +3148,14 @@ private struct CircleRatingHubView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text(LL("事件驱动打分"))
+                    Text(LT("事件驱动打分", "Event-driven ratings", "イベント連動評価"))
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer()
                     Button {
                         circlePush(.ratingEventImportFromEvent)
                     } label: {
-                        Label(L("从活动导入", "Import from Event"), systemImage: "square.and.arrow.down")
+                        Label(LT("从活动导入", "Import from Event", "イベントから取り込む"), systemImage: "square.and.arrow.down")
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
@@ -3084,7 +3166,7 @@ private struct CircleRatingHubView: View {
                     Button {
                         circlePush(.ratingEventCreate)
                     } label: {
-                        Label(L("发布事件", "Publish Event"), systemImage: "plus")
+                        Label(LT("发布事件", "Publish Event", "イベントを公開"), systemImage: "plus")
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
@@ -3099,13 +3181,13 @@ private struct CircleRatingHubView: View {
                 if isRefreshing || bannerMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if isRefreshing {
-                            InlineLoadingBadge(title: L("正在更新打分事件", "Updating rating events"))
+                            InlineLoadingBadge(title: LT("正在更新打分事件", "Updating rating events", "評価イベントを更新中"))
                         }
                         if let bannerMessage {
                             ScreenStatusBanner(
                                 message: bannerMessage,
                                 style: .error,
-                                actionTitle: L("重试", "Retry")
+                                actionTitle: LT("重试", "Retry", "再試行")
                             ) {
                                 Task { await loadEvents() }
                             }
@@ -3119,7 +3201,7 @@ private struct CircleRatingHubView: View {
                         .padding(.top, 8)
                 } else if case .failure(let message) = phase {
                     ScreenErrorCard(
-                        title: L("打分事件加载失败", "Rating Events Failed to Load"),
+                        title: LT("打分事件加载失败", "Rating Events Failed to Load", "評価イベントの読み込みに失敗しました"),
                         message: message
                     ) {
                         Task { await loadEvents() }
@@ -3128,7 +3210,7 @@ private struct CircleRatingHubView: View {
                     .padding(.top, 8)
                 } else if case .offline(let message) = phase {
                     ScreenErrorCard(
-                        title: L("网络不可用", "Network Unavailable"),
+                        title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                         message: message
                     ) {
                         Task { await loadEvents() }
@@ -3137,10 +3219,10 @@ private struct CircleRatingHubView: View {
                     .padding(.top, 8)
                 } else if events.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(LL("还没有打分事件"))
+                        Text(LT("还没有打分事件", "No rating events yet", "評価イベントはまだありません"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
-                        Text(LL("点击右上角“发布事件”，先创建一个事件，再在事件内添加打分单位。"))
+                        Text(LT("点击右上角“发布事件”，先创建一个事件，再在事件内添加打分单位。", "Tap “Publish Event” in the top-right corner to create an event first, then add rating units inside it.", "右上の「イベントを公開」から先にイベントを作成し、その中に評価ユニットを追加してください。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -3200,11 +3282,11 @@ private struct CircleRatingHubView: View {
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(RaverTheme.primaryText)
                         .lineLimit(1)
-                    Text((event.description?.isEmpty == false ? event.description : L("暂无事件描述", "No event description")) ?? L("暂无事件描述", "No event description"))
+                    Text((event.description?.isEmpty == false ? event.description : LT("暂无事件描述", "No event description", "イベント説明はまだありません")) ?? LT("暂无事件描述", "No event description", "イベント説明はまだありません"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(3)
-                    Text(L("发布者：\(event.createdBy?.shownName ?? "匿名用户")", "Publisher: \(event.createdBy?.shownName ?? L("匿名用户", "Anonymous"))"))
+                    Text(LT("发布者：\(event.createdBy?.shownName ?? "匿名用户")", "Publisher: \(event.createdBy?.shownName ?? "Anonymous")", "投稿者: \(event.createdBy?.shownName ?? "匿名ユーザー")"))
                         .font(.caption2)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(1)
@@ -3218,15 +3300,16 @@ private struct CircleRatingHubView: View {
             }
 
             HStack(spacing: 8) {
-                Label(L("\(event.units.count) 个单位", "\(event.units.count) units"), systemImage: "square.grid.2x2")
+                Label(LT("\(event.units.count) 个单位", "\(event.units.count) units", "\(event.units.count) 件のユニット"), systemImage: "square.grid.2x2")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
                 Text("·")
                     .foregroundStyle(RaverTheme.secondaryText.opacity(0.7))
                 Text(
-                    L(
+                    LT(
                         "均分 \(String(format: "%.1f", average))/10",
-                        "Average \(String(format: "%.1f", average))/10"
+                        "Average \(String(format: "%.1f", average))/10",
+                        "平均 \(String(format: "%.1f", average))/10"
                     )
                 )
                     .font(.caption2.weight(.semibold))
@@ -3260,7 +3343,7 @@ private struct CircleRatingHubView: View {
             bannerMessage = nil
             errorMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("打分事件加载失败，请稍后重试", "Failed to load rating events. Please try again later.")
+            let message = error.userFacingMessage ?? LT("打分事件加载失败，请稍后重试", "Failed to load rating events. Please try again later.", "評価イベントを読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success
@@ -3275,6 +3358,7 @@ struct CircleRatingEventDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appPush) private var appPush
     @Environment(\.circlePush) private var circlePush
+    @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
     private var ratingRepository: RatingRepository { appContainer.ratingRepository }
 
@@ -3292,6 +3376,7 @@ struct CircleRatingEventDetailView: View {
     @State private var isShareMorePanelVisible = false
     @State private var actionErrorMessage: String?
     @State private var resolvedEventID: String?
+    @State private var reportTarget: ReportSheetTarget?
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
         ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
@@ -3325,13 +3410,13 @@ struct CircleRatingEventDetailView: View {
                 if isRefreshing || bannerMessage != nil || actionErrorMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if isRefreshing {
-                            InlineLoadingBadge(title: L("正在更新事件详情", "Updating event details"))
+                            InlineLoadingBadge(title: LT("正在更新事件详情", "Updating event details", "イベント詳細を更新中"))
                         }
                         if let bannerMessage {
                             ScreenStatusBanner(
                                 message: bannerMessage,
                                 style: .error,
-                                actionTitle: L("重试", "Retry")
+                                actionTitle: LT("重试", "Retry", "再試行")
                             ) {
                                 Task { await loadEvent() }
                             }
@@ -3351,10 +3436,10 @@ struct CircleRatingEventDetailView: View {
 
                     if event.units.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(LL("还没有打分单位"))
+                            Text(LT("还没有打分单位", "No rating units yet", "評価ユニットはまだありません"))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(RaverTheme.primaryText)
-                            Text(LL("点击右上角更多，在这个事件下发布第一个打分单位。"))
+                            Text(LT("点击右上角更多，在这个事件下发布第一个打分单位。", "Use the top-right menu to publish the first rating unit for this event.", "右上のその他から、このイベントに最初の評価ユニットを公開してください。"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
@@ -3375,21 +3460,21 @@ struct CircleRatingEventDetailView: View {
                     EventDetailSkeletonView()
                 } else if case .failure(let message) = phase {
                     ScreenErrorCard(
-                        title: L("事件加载失败", "Event Failed to Load"),
+                        title: LT("事件加载失败", "Event Failed to Load", "イベントの読み込みに失敗しました"),
                         message: message
                     ) {
                         Task { await loadEvent() }
                     }
                 } else if case .offline(let message) = phase {
                     ScreenErrorCard(
-                        title: L("网络不可用", "Network Unavailable"),
+                        title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                         message: message
                     ) {
                         Task { await loadEvent() }
                     }
                 } else if phase == .empty {
                     ContentUnavailableView(
-                        L("事件不存在", "Event Not Found"),
+                        LT("事件不存在", "Event Not Found", "イベントが見つかりません"),
                         systemImage: "sparkles.rectangle.stack"
                     )
                 } else {
@@ -3403,7 +3488,7 @@ struct CircleRatingEventDetailView: View {
         }
         .background(RaverTheme.background)
         .raverGradientNavigationChrome(
-            title: LL("打分事件详情"),
+            title: LT("打分事件详情", "Rating Event Details", "評価イベント詳細"),
             trailing: RaverNavigationCircleIconButton(
                 systemName: "ellipsis",
                 style: .dimmed,
@@ -3439,13 +3524,24 @@ struct CircleRatingEventDetailView: View {
             ) { conversation in
                 actionErrorMessage = nil
                 showWidgetStatusBanner(
-                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                     conversation: conversation
                 )
             } preview: {
                 RatingDetailSharePreviewCard(payload: presentation.payload)
             }
             .presentationDetents([.fraction(0.76), .large])
+        }
+        .sheet(item: $reportTarget) { target in
+            ReportSheet(target: target) { _, blocked in
+                showWidgetStatusBanner(
+                    message: blocked
+                        ? LT("举报已提交，并已拉黑该用户", "Report submitted and user blocked", "報告を送信し、このユーザーをブロックしました")
+                        : LT("举报已提交", "Report submitted", "報告を送信しました")
+                )
+            }
+            .environmentObject(appState)
+            .presentationDetents([.large])
         }
         .overlay {
             if let presentation = shareMorePresentation {
@@ -3473,7 +3569,7 @@ struct CircleRatingEventDetailView: View {
                     ) { conversation in
                         actionErrorMessage = nil
                         showWidgetStatusBanner(
-                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                             conversation: conversation
                         )
                     } onMoreChats: {
@@ -3541,11 +3637,11 @@ struct CircleRatingEventDetailView: View {
                     Text(event.name)
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(RaverTheme.primaryText)
-                    Text((event.description?.isEmpty == false ? event.description : L("暂无事件描述", "No event description")) ?? L("暂无事件描述", "No event description"))
+                    Text((event.description?.isEmpty == false ? event.description : LT("暂无事件描述", "No event description", "イベント説明はまだありません")) ?? LT("暂无事件描述", "No event description", "イベント説明はまだありません"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(4)
-                    Text(L("发布者：\(event.createdBy?.shownName ?? "匿名用户")", "Publisher: \(event.createdBy?.shownName ?? L("匿名用户", "Anonymous"))"))
+                    Text(LT("发布者：\(event.createdBy?.shownName ?? "匿名用户")", "Publisher: \(event.createdBy?.shownName ?? "Anonymous")", "投稿者: \(event.createdBy?.shownName ?? "匿名ユーザー")"))
                         .font(.caption2)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(1)
@@ -3581,7 +3677,7 @@ struct CircleRatingEventDetailView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "calendar.badge.clock")
                             .font(.caption2.weight(.semibold))
-                        Text(LL("进入对应电音节活动详情"))
+                        Text(LT("进入对应电音节活动详情", "Open related festival event details", "対応する電子音楽フェスのイベント詳細へ"))
                             .font(.caption2.weight(.semibold))
                     }
                     .foregroundStyle(RaverTheme.accent)
@@ -3608,11 +3704,11 @@ struct CircleRatingEventDetailView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
                     .lineLimit(1)
-                Text((unit.description?.isEmpty == false ? unit.description : L("暂无单位描述", "No unit description")) ?? L("暂无单位描述", "No unit description"))
+                Text((unit.description?.isEmpty == false ? unit.description : LT("暂无单位描述", "No unit description", "ユニット説明はまだありません")) ?? LT("暂无单位描述", "No unit description", "ユニット説明はまだありません"))
                     .font(.caption2)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .lineLimit(1)
-                Text(L("发布者：\(unit.createdBy?.shownName ?? "匿名用户")", "Publisher: \(unit.createdBy?.shownName ?? L("匿名用户", "Anonymous"))"))
+                Text(LT("发布者：\(unit.createdBy?.shownName ?? "匿名用户")", "Publisher: \(unit.createdBy?.shownName ?? "Anonymous")", "投稿者: \(unit.createdBy?.shownName ?? "匿名ユーザー")"))
                     .font(.caption2)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .lineLimit(1)
@@ -3624,7 +3720,7 @@ struct CircleRatingEventDetailView: View {
                 Text("\(unit.rating, specifier: "%.1f")")
                     .font(.system(size: 21, weight: .bold))
                     .foregroundStyle(RaverTheme.primaryText)
-                Text(L("\(unit.ratingCount) 人评分", "\(unit.ratingCount) ratings"))
+                Text(LT("\(unit.ratingCount) 人评分", "\(unit.ratingCount) ratings", "\(unit.ratingCount)件の評価"))
                     .font(.caption2)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -3664,7 +3760,7 @@ struct CircleRatingEventDetailView: View {
 #if DEBUG
             print("[RatingEventResolve] load-failure requestedID=\(eventID) error=\(error)")
 #endif
-            let message = error.userFacingMessage ?? L("事件加载失败，请稍后重试", "Failed to load event. Please try again later.")
+            let message = error.userFacingMessage ?? LT("事件加载失败，请稍后重试", "Failed to load event. Please try again later.", "イベントを読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 phase = .success
@@ -3704,10 +3800,7 @@ struct CircleRatingEventDetailView: View {
         }
 
         throw ServiceError.message(
-            L(
-                "未找到对应的打分事件（请求 ID：\(requestedID)）",
-                "Rating event not found (requested ID: \(requestedID))"
-            )
+            LT("未找到对应的打分事件（请求 ID：\(requestedID)）", "Rating event not found (requested ID: \(requestedID))", "該当する評価イベントが見つかりません（リクエストID: \(requestedID)）")
         )
     }
 
@@ -3717,7 +3810,7 @@ struct CircleRatingEventDetailView: View {
         return RatingDetailSharePayload(
             kind: .event,
             entityID: shareID,
-            title: current?.name ?? L("打分事件", "Rating Event"),
+            title: current?.name ?? LT("打分事件", "Rating Event", "評価イベント"),
             subtitle: current?.description?.nilIfBlank,
             coverImageURL: current?.imageUrl?.nilIfBlank,
             rating: nil,
@@ -3756,14 +3849,14 @@ struct CircleRatingEventDetailView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                actionErrorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                actionErrorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat 共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "paperplane.circle.fill",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
-                actionErrorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                actionErrorMessage = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ 共有連携は未接続です。")
             }
         ]
     }
@@ -3771,46 +3864,54 @@ struct CircleRatingEventDetailView: View {
     private func shareMoreQuickActions() -> [SharePanelQuickAction] {
         [
             SharePanelQuickAction(
-                title: L("复制链接", "Copy Link"),
+                title: LT("复制链接", "Copy Link", "リンクをコピー"),
                 systemImage: "link",
                 accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
             ) {
                 Task { await copyRatingEventShareLink() }
             },
             SharePanelQuickAction(
-                title: L("查看二维码", "View QR"),
+                title: LT("查看二维码", "View QR", "QRを見る"),
                 systemImage: "qrcode",
                 accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
             ) {
                 Task { await openRatingEventQRCode() }
             },
             SharePanelQuickAction(
-                title: L("查看海报", "View Poster"),
+                title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
             ) {
                 Task { await openRatingEventPoster() }
             },
             SharePanelQuickAction(
-                title: L("保存海报", "Save Poster"),
+                title: LT("保存海报", "Save Poster", "海報を保存"),
                 systemImage: "photo.badge.arrow.down",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
                 Task { await saveRatingEventPoster() }
             },
             SharePanelQuickAction(
-                title: L("新增打分单位", "Add Rating Unit"),
+                title: LT("新增打分单位", "Add Rating Unit", "評価ユニットを追加"),
                 systemImage: "plus.circle",
                 accentColor: Color(red: 0.99, green: 0.65, blue: 0.20)
             ) {
                 circlePush(.ratingUnitCreate(eventID: eventID))
             },
             SharePanelQuickAction(
-                title: L("举报", "Report"),
+                title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
             ) {
-                actionErrorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+                let payload = makeSharePayload()
+                reportTarget = ReportSheetTarget(
+                    id: payload.entityID,
+                    type: .ratingEvent,
+                    title: payload.title,
+                    preview: payload.subtitle,
+                    targetUserID: event?.createdBy?.id,
+                    targetUserDisplayName: event?.createdBy?.shownName
+                )
             }
         ]
     }
@@ -3821,11 +3922,11 @@ struct CircleRatingEventDetailView: View {
             let result = try await shareLinkCoordinator.copyLink(target: ratingShareTarget(from: makeSharePayload()))
             showWidgetStatusBanner(
                 message: result.usedDeepLinkFallback
-                    ? L("已复制 App 内链接", "Copied app-only link.")
-                    : L("已复制链接", "Link copied")
+                    ? LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました")
+                    : LT("已复制链接", "Link copied", "リンクをコピーしました")
             )
         } catch {
-            actionErrorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            actionErrorMessage = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクをコピーできませんでした。もう一度お試しください。")
         }
     }
 
@@ -3845,7 +3946,7 @@ struct CircleRatingEventDetailView: View {
                 )
             )
         } catch {
-            actionErrorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            actionErrorMessage = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -3856,20 +3957,20 @@ struct CircleRatingEventDetailView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("打分事件海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "Rating event posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
+                        hintText: LT("打分事件海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "Rating event posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link.", "評価イベント海報は共有システムで生成され、タイトル、概要、QRコードは短縮リンクと同期されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            actionErrorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            actionErrorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -3878,9 +3979,9 @@ struct CircleRatingEventDetailView: View {
         do {
             let resolved = try await shareLinkCoordinator.resolveLink(target: ratingShareTarget(from: makeSharePayload()), channel: "poster_save")
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
         } catch {
-            actionErrorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            actionErrorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 }
@@ -3908,6 +4009,7 @@ struct CircleRatingUnitDetailView: View {
     @State private var isSubmitting = false
     @State private var shareMorePresentation: RatingDetailSharePresentation?
     @State private var fullChatSharePresentation: RatingDetailSharePresentation?
+    @State private var reportTarget: ReportSheetTarget?
     @State private var isShareMorePanelVisible = false
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
@@ -3920,13 +4022,13 @@ struct CircleRatingUnitDetailView: View {
                 if isRefreshing || loadBannerMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
                         if isRefreshing {
-                            InlineLoadingBadge(title: L("正在更新评分单位", "Updating rating unit"))
+                            InlineLoadingBadge(title: LT("正在更新评分单位", "Updating rating unit", "評価ユニットを更新中"))
                         }
                         if let loadBannerMessage {
                             ScreenStatusBanner(
                                 message: loadBannerMessage,
                                 style: .error,
-                                actionTitle: L("重试", "Retry")
+                                actionTitle: LT("重试", "Retry", "再試行")
                             ) {
                                 Task { await loadUnit() }
                             }
@@ -3947,11 +4049,11 @@ struct CircleRatingUnitDetailView: View {
                                 Text(unit.name)
                                     .font(.headline.weight(.bold))
                                     .foregroundStyle(RaverTheme.primaryText)
-                                Text((unit.description?.isEmpty == false ? unit.description : L("暂无单位描述", "No unit description")) ?? L("暂无单位描述", "No unit description"))
+                                Text((unit.description?.isEmpty == false ? unit.description : LT("暂无单位描述", "No unit description", "ユニット説明はまだありません")) ?? LT("暂无单位描述", "No unit description", "ユニット説明はまだありません"))
                                     .font(.caption)
                                     .foregroundStyle(RaverTheme.secondaryText)
                                     .lineLimit(3)
-                                Text(L("发布者：\(unit.createdBy?.shownName ?? "匿名用户")", "Publisher: \(unit.createdBy?.shownName ?? L("匿名用户", "Anonymous"))"))
+                                Text(LT("发布者：\(unit.createdBy?.shownName ?? "匿名用户")", "Publisher: \(unit.createdBy?.shownName ?? "Anonymous")", "投稿者: \(unit.createdBy?.shownName ?? "匿名ユーザー")"))
                                     .font(.caption2)
                                     .foregroundStyle(RaverTheme.secondaryText)
                                     .lineLimit(1)
@@ -3959,7 +4061,7 @@ struct CircleRatingUnitDetailView: View {
                         }
                         if let linkedDJs = unit.linkedDJs, !linkedDJs.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text(LL("相关 DJ"))
+                                Text(LT("相关 DJ", "Related DJs", "関連DJ"))
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(RaverTheme.secondaryText)
 
@@ -4010,7 +4112,7 @@ struct CircleRatingUnitDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(LL("评分"))
+                        Text(LT("评分", "Rating", "評価"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
                         HalfStarDragRatingControl(
@@ -4025,12 +4127,12 @@ struct CircleRatingUnitDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(LL("评论"))
+                        Text(LT("评论", "Comments", "コメント"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
 
                         if unit.comments.isEmpty {
-                            Text(LL("还没有评论，来写第一条吧"))
+                            Text(LT("还没有评论，来写第一条吧", "No comments yet. Write the first one.", "コメントはまだありません。最初のコメントを書きましょう"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                                 .padding(.vertical, 4)
@@ -4073,14 +4175,14 @@ struct CircleRatingUnitDetailView: View {
                         }
 
                         HStack(spacing: 8) {
-                            TextField(LL("写评论…"), text: $commentDraft)
+                            TextField(LT("写评论…", "Write a comment...", "コメントを書く…"), text: $commentDraft)
                                 .font(.caption)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 7)
                                 .background(RaverTheme.background)
                                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-                            Button(L("发送", "Send")) {
+                            Button(LT("发送", "Send", "送信")) {
                                 Task {
                                     await addComment()
                                 }
@@ -4109,21 +4211,21 @@ struct CircleRatingUnitDetailView: View {
                     }
                 } else if case .failure(let message) = phase {
                     ScreenErrorCard(
-                        title: L("评分单位加载失败", "Rating Unit Failed to Load"),
+                        title: LT("评分单位加载失败", "Rating Unit Failed to Load", "評価ユニットの読み込みに失敗しました"),
                         message: message
                     ) {
                         Task { await loadUnit() }
                     }
                 } else if case .offline(let message) = phase {
                     ScreenErrorCard(
-                        title: L("网络不可用", "Network Unavailable"),
+                        title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                         message: message
                     ) {
                         Task { await loadUnit() }
                     }
                 } else if phase == .empty {
                     ContentUnavailableView(
-                        L("评分单位不存在", "Rating Unit Not Found"),
+                        LT("评分单位不存在", "Rating Unit Not Found", "評価ユニットが見つかりません"),
                         systemImage: "music.mic"
                     )
                 } else {
@@ -4138,7 +4240,7 @@ struct CircleRatingUnitDetailView: View {
             .padding(.bottom, 20)
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: LL("评论列表"))
+        .raverSystemNavigation(title: LT("评论列表", "Comments", "コメント一覧"))
         .operationBannerHost()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -4175,13 +4277,24 @@ struct CircleRatingUnitDetailView: View {
             ) { conversation in
                 actionErrorMessage = nil
                 showWidgetStatusBanner(
-                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                     conversation: conversation
                 )
             } preview: {
                 RatingDetailSharePreviewCard(payload: presentation.payload)
             }
             .presentationDetents([.fraction(0.76), .large])
+        }
+        .sheet(item: $reportTarget) { target in
+            ReportSheet(target: target) { _, blocked in
+                showWidgetStatusBanner(
+                    message: blocked
+                        ? LT("举报已提交，并已拉黑该用户", "Report submitted and user blocked", "報告を送信し、このユーザーをブロックしました")
+                        : LT("举报已提交", "Report submitted", "報告を送信しました")
+                )
+            }
+            .environmentObject(appState)
+            .presentationDetents([.large])
         }
         .overlay {
             if let presentation = shareMorePresentation {
@@ -4209,7 +4322,7 @@ struct CircleRatingUnitDetailView: View {
                     ) { conversation in
                         actionErrorMessage = nil
                         showWidgetStatusBanner(
-                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                             conversation: conversation
                         )
                     } onMoreChats: {
@@ -4247,14 +4360,14 @@ struct CircleRatingUnitDetailView: View {
             return (
                 userID: myID,
                 username: myProfile?.username ?? appState.session?.user.username ?? "me",
-                displayName: myProfile?.displayName ?? appState.session?.user.displayName ?? L("我", "Me"),
+                displayName: myProfile?.displayName ?? appState.session?.user.displayName ?? LT("我", "Me", "自分"),
                 avatarURL: myProfile?.avatarURL ?? appState.session?.user.avatarURL
             )
         }
         return (
             userID: comment.userId,
             username: "user",
-            displayName: L("用户", "User"),
+            displayName: LT("用户", "User", "ユーザー"),
             avatarURL: nil
         )
     }
@@ -4301,7 +4414,7 @@ struct CircleRatingUnitDetailView: View {
             phase = unit == nil ? .empty : .success
             loadBannerMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? L("评分单位加载失败，请稍后重试", "Failed to load rating unit. Please try again later.")
+            let message = error.userFacingMessage ?? LT("评分单位加载失败，请稍后重试", "Failed to load rating unit. Please try again later.", "評価ユニットを読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 loadBannerMessage = message
                 phase = .success
@@ -4349,7 +4462,7 @@ struct CircleRatingUnitDetailView: View {
         return RatingDetailSharePayload(
             kind: .unit,
             entityID: unitID,
-            title: current?.name ?? L("打分单位", "Rating Unit"),
+            title: current?.name ?? LT("打分单位", "Rating Unit", "評価ユニット"),
             subtitle: current?.event?.name ?? current?.description?.nilIfBlank,
             coverImageURL: current?.imageUrl?.nilIfBlank,
             rating: current?.rating,
@@ -4388,14 +4501,14 @@ struct CircleRatingUnitDetailView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                actionErrorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                actionErrorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat 共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "paperplane.circle.fill",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
-                actionErrorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                actionErrorMessage = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ 共有連携は未接続です。")
             }
         ]
     }
@@ -4403,39 +4516,47 @@ struct CircleRatingUnitDetailView: View {
     private func shareMoreQuickActions() -> [SharePanelQuickAction] {
         [
             SharePanelQuickAction(
-                title: L("复制链接", "Copy Link"),
+                title: LT("复制链接", "Copy Link", "リンクをコピー"),
                 systemImage: "link",
                 accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
             ) {
                 Task { await copyRatingUnitShareLink() }
             },
             SharePanelQuickAction(
-                title: L("查看二维码", "View QR"),
+                title: LT("查看二维码", "View QR", "QRを見る"),
                 systemImage: "qrcode",
                 accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
             ) {
                 Task { await openRatingUnitQRCode() }
             },
             SharePanelQuickAction(
-                title: L("查看海报", "View Poster"),
+                title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
             ) {
                 Task { await openRatingUnitPoster() }
             },
             SharePanelQuickAction(
-                title: L("保存海报", "Save Poster"),
+                title: LT("保存海报", "Save Poster", "海報を保存"),
                 systemImage: "photo.badge.arrow.down",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
                 Task { await saveRatingUnitPoster() }
             },
             SharePanelQuickAction(
-                title: L("举报", "Report"),
+                title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
             ) {
-                actionErrorMessage = L("举报入口即将开放，当前已记录该需求。", "Report entry is coming soon. We have recorded this request.")
+                let payload = makeSharePayload()
+                reportTarget = ReportSheetTarget(
+                    id: payload.entityID,
+                    type: .ratingUnit,
+                    title: payload.title,
+                    preview: payload.subtitle,
+                    targetUserID: unit?.createdBy?.id,
+                    targetUserDisplayName: unit?.createdBy?.shownName
+                )
             }
         ]
     }
@@ -4446,11 +4567,11 @@ struct CircleRatingUnitDetailView: View {
             let result = try await shareLinkCoordinator.copyLink(target: ratingShareTarget(from: makeSharePayload()))
             showWidgetStatusBanner(
                 message: result.usedDeepLinkFallback
-                    ? L("已复制 App 内链接", "Copied app-only link.")
-                    : L("已复制链接", "Link copied")
+                    ? LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました")
+                    : LT("已复制链接", "Link copied", "リンクをコピーしました")
             )
         } catch {
-            actionErrorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            actionErrorMessage = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクをコピーできませんでした。もう一度お試しください。")
         }
     }
 
@@ -4470,7 +4591,7 @@ struct CircleRatingUnitDetailView: View {
                 )
             )
         } catch {
-            actionErrorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            actionErrorMessage = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -4481,20 +4602,20 @@ struct CircleRatingUnitDetailView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("打分单位海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "Rating unit posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
+                        hintText: LT("打分单位海报由分享系统统一生成，标题、摘要和二维码都会跟随短链保持一致。", "Rating unit posters are generated by the share system, so the title, summary, and QR code stay aligned with the short link.", "評価ユニット海報は共有システムで生成され、タイトル、概要、QRコードは短縮リンクと同期されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            actionErrorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            actionErrorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -4503,9 +4624,9 @@ struct CircleRatingUnitDetailView: View {
         do {
             let resolved = try await shareLinkCoordinator.resolveLink(target: ratingShareTarget(from: makeSharePayload()), channel: "poster_save")
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
         } catch {
-            actionErrorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            actionErrorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 }
@@ -4529,9 +4650,9 @@ private struct RatingDetailSharePayload: Identifiable {
     var tagTitle: String {
         switch kind {
         case .event:
-            return L("Rating Event", "Rating Event")
+            return LT("Rating Event", "Rating Event", "評価イベント")
         case .unit:
-            return L("Rating Unit", "Rating Unit")
+            return LT("Rating Unit", "Rating Unit", "評価ユニット")
         }
     }
 
@@ -4560,7 +4681,7 @@ private struct RatingDetailSharePayload: Identifiable {
             eventName: title,
             description: subtitle,
             coverImageURL: coverImageURL,
-            badgeText: L("Rating Event", "Rating Event")
+            badgeText: LT("Rating Event", "Rating Event", "評価イベント")
         )
     }
 
@@ -4575,7 +4696,7 @@ private struct RatingDetailSharePayload: Identifiable {
             coverImageURL: coverImageURL,
             rating: rating,
             ratingCount: ratingCount,
-            badgeText: L("Rating Unit", "Rating Unit")
+            badgeText: LT("Rating Unit", "Rating Unit", "評価ユニット")
         )
     }
 }
@@ -4799,7 +4920,7 @@ private func circleIDSharePreviewSubtitle(_ payload: CircleIDShareCardPayload) -
         payload.eventName?.nilIfBlank,
         payload.contributorName.nilIfBlank
     ].compactMap { $0 }
-    return parts.isEmpty ? L("未发行歌曲分享", "Unreleased track share") : parts.joined(separator: " · ")
+    return parts.isEmpty ? LT("未发行歌曲分享", "Unreleased track share", "未リリース曲の共有") : parts.joined(separator: " · ")
 }
 
 private func loadRatingSharePanelConversations(using repository: ShareMessageRepository) async throws -> [Conversation] {
@@ -4864,15 +4985,15 @@ struct CreateRatingEventSheet: View {
 
     var body: some View {
         Form {
-                Section(LL("基础信息")) {
-                    TextField(LL("事件名称"), text: $name)
-                    TextField(LL("事件描述（选填）"), text: $description, axis: .vertical)
+                Section(LT("基础信息", "Basic Info", "基本情報")) {
+                    TextField(LT("事件名称", "Event Name", "イベント名"), text: $name)
+                    TextField(LT("事件描述（选填）", "Event Description (optional)", "イベント説明（任意）"), text: $description, axis: .vertical)
                         .lineLimit(2...4)
-                    TextField(LL("封面图 URL（选填）"), text: $imageURL)
+                    TextField(LT("封面图 URL（选填）", "Cover Image URL (optional)", "カバー画像URL（任意）"), text: $imageURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     PhotosPicker(selection: $selectedCoverPhoto, matching: .images) {
-                        Label(selectedCoverData == nil ? L("上传封面图", "Upload Cover") : L("更换封面图", "Replace Cover"), systemImage: "photo")
+                        Label(selectedCoverData == nil ? LT("上传封面图", "Upload Cover", "カバー画像をアップロード") : LT("更换封面图", "Replace Cover", "カバー画像を変更"), systemImage: "photo")
                     }
                     if let selectedCoverData,
                        let preview = UIImage(data: selectedCoverData) {
@@ -4884,7 +5005,7 @@ struct CreateRatingEventSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     if selectedCoverData != nil {
-                        Text(LL("已选择本地封面图，发布时会自动上传并使用该图片。"))
+                        Text(LT("已选择本地封面图，发布时会自动上传并使用该图片。", "A local cover image is selected. It will be uploaded and used when publishing.", "ローカルカバー画像を選択済みです。公開時に自動アップロードして使用します。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -4897,10 +5018,10 @@ struct CreateRatingEventSheet: View {
                     }
                 }
             }
-            .raverSystemNavigation(title: L("发布打分事件", "Publish Rating Event"))
+            .raverSystemNavigation(title: LT("发布打分事件", "Publish Rating Event", "評価イベントを公開"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L("发布", "Publish")) {
+                    Button(LT("发布", "Publish", "公開")) {
                         Task { await submit() }
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting || isUploadingCover)
@@ -4956,7 +5077,7 @@ struct CreateRatingEventSheet: View {
             selectedCoverData = try await item.loadTransferable(type: Data.self)
         } catch {
             selectedCoverData = nil
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
+            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
         }
     }
 
@@ -4994,7 +5115,7 @@ struct CreateRatingEventFromEventSheet: View {
                     .listRowBackground(Color.clear)
                 } else if case .failure(let message) = phase {
                     ScreenErrorCard(
-                        title: L("活动加载失败", "Events Failed to Load"),
+                        title: LT("活动加载失败", "Events Failed to Load", "イベントの読み込みに失敗しました"),
                         message: message
                     ) {
                         Task { await loadEvents() }
@@ -5002,7 +5123,7 @@ struct CreateRatingEventFromEventSheet: View {
                     .listRowBackground(Color.clear)
                 } else if case .offline(let message) = phase {
                     ScreenErrorCard(
-                        title: L("网络不可用", "Network Unavailable"),
+                        title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                         message: message
                     ) {
                         Task { await loadEvents() }
@@ -5010,10 +5131,10 @@ struct CreateRatingEventFromEventSheet: View {
                     .listRowBackground(Color.clear)
                 } else if events.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(LL("没有找到可导入活动"))
+                        Text(LT("没有找到可导入活动", "No importable events found", "取り込めるイベントが見つかりません"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
-                        Text(LL("请尝试修改关键词，或先创建活动。"))
+                        Text(LT("请尝试修改关键词，或先创建活动。", "Try a different keyword, or create an event first.", "キーワードを変更するか、先にイベントを作成してください。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -5041,7 +5162,7 @@ struct CreateRatingEventFromEventSheet: View {
                                         .foregroundStyle(RaverTheme.secondaryText)
                                         .lineLimit(1)
                                     let addressText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    Text(addressText.isEmpty ? L("地点待补充", "Location pending") : addressText)
+                                    Text(addressText.isEmpty ? LT("地点待补充", "Location pending", "場所は未設定") : addressText)
                                         .font(.caption2)
                                         .foregroundStyle(RaverTheme.secondaryText)
                                         .lineLimit(1)
@@ -5065,14 +5186,14 @@ struct CreateRatingEventFromEventSheet: View {
             }
             .scrollContentBackground(.hidden)
             .background(RaverTheme.background)
-            .searchable(text: $searchKeyword, prompt: L("搜索活动名称", "Search event name"))
+            .searchable(text: $searchKeyword, prompt: LT("搜索活动名称", "Search event name", "イベント名を検索"))
             .onSubmit(of: .search) {
                 Task { await loadEvents() }
             }
-            .raverSystemNavigation(title: L("从活动导入打分", "Import Ratings from Event"))
+            .raverSystemNavigation(title: LT("从活动导入打分", "Import Ratings from Event", "イベントから評価を取り込む"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(isSubmitting ? L("导入中...", "Importing...") : L("导入", "Import")) {
+                    Button(isSubmitting ? LT("导入中...", "Importing...", "取り込み中...") : LT("导入", "Import", "取り込む")) {
                         Task { await submit() }
                     }
                     .disabled(selectedEventID == nil || isSubmitting || isLoading)
@@ -5107,7 +5228,7 @@ struct CreateRatingEventFromEventSheet: View {
             errorMessage = nil
         } catch {
             events = []
-            let message = error.userFacingMessage ?? L("活动加载失败，请稍后重试", "Failed to load events. Please try again later.")
+            let message = error.userFacingMessage ?? LT("活动加载失败，请稍后重试", "Failed to load events. Please try again later.", "イベントを読み込めませんでした。時間をおいて再試行してください。")
             phase = .failure(message: message)
             errorMessage = message
         }
@@ -5145,15 +5266,15 @@ struct CreateRatingUnitSheet: View {
 
     var body: some View {
         Form {
-                Section(LL("单位信息")) {
-                    TextField(LL("单位名称"), text: $name)
-                    TextField(LL("单位描述（选填）"), text: $description, axis: .vertical)
+                Section(LT("单位信息", "Unit Info", "ユニット情報")) {
+                    TextField(LT("单位名称", "Unit Name", "ユニット名"), text: $name)
+                    TextField(LT("单位描述（选填）", "Unit Description (optional)", "ユニット説明（任意）"), text: $description, axis: .vertical)
                         .lineLimit(2...4)
-                    TextField(LL("图片 URL（选填）"), text: $imageURL)
+                    TextField(LT("图片 URL（选填）", "Image URL (optional)", "画像URL（任意）"), text: $imageURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     PhotosPicker(selection: $selectedCoverPhoto, matching: .images) {
-                        Label(selectedCoverData == nil ? L("上传单位图片", "Upload Unit Image") : L("更换单位图片", "Replace Unit Image"), systemImage: "photo")
+                        Label(selectedCoverData == nil ? LT("上传单位图片", "Upload Unit Image", "ユニット画像をアップロード") : LT("更换单位图片", "Replace Unit Image", "ユニット画像を変更"), systemImage: "photo")
                     }
                     if let selectedCoverData,
                        let preview = UIImage(data: selectedCoverData) {
@@ -5165,7 +5286,7 @@ struct CreateRatingUnitSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     if selectedCoverData != nil {
-                        Text(LL("已选择本地图片，发布时会自动上传并作为打分单位封面。"))
+                        Text(LT("已选择本地图片，发布时会自动上传并作为打分单位封面。", "A local image is selected. It will be uploaded and used as the rating unit cover.", "ローカル画像を選択済みです。公開時に自動アップロードして評価ユニットのカバーに使用します。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -5178,10 +5299,10 @@ struct CreateRatingUnitSheet: View {
                     }
                 }
             }
-            .raverSystemNavigation(title: L("发布打分单位", "Publish Rating Unit"))
+            .raverSystemNavigation(title: LT("发布打分单位", "Publish Rating Unit", "評価ユニットを公開"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L("发布", "Publish")) {
+                    Button(LT("发布", "Publish", "公開")) {
                         Task { await submit() }
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting || isUploadingCover)
@@ -5237,7 +5358,7 @@ struct CreateRatingUnitSheet: View {
             selectedCoverData = try await item.loadTransferable(type: Data.self)
         } catch {
             selectedCoverData = nil
-            errorMessage = L("读取图片失败，请重试", "Failed to read image. Please try again.")
+            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
         }
     }
 
@@ -5340,8 +5461,8 @@ private struct HalfStarDragRatingControl: View {
                 )
             }
         }
-        .accessibilityLabel(L("星级评分", "Star Rating"))
-        .accessibilityValue(L("\(Int(score))/10 分", "\(Int(score))/10 points"))
+        .accessibilityLabel(LT("星级评分", "Star Rating", "星評価"))
+        .accessibilityValue(LT("\(Int(score))/10 分", "\(Int(score))/10 points", "\(Int(score))/10 点"))
     }
 
     private var controlWidth: CGFloat {

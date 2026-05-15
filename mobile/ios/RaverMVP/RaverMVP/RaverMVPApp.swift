@@ -15,15 +15,21 @@ struct RaverMVPApp: App {
         let socialService = AppEnvironment.makeService()
         let webService = AppEnvironment.makeWebService()
         let virtualAssetRepository = AppEnvironment.makeVirtualAssetRepository()
+        let appState = AppState(service: socialService)
         VirtualAssetTelemetry.configure { socialService }
         _appContainer = StateObject(
             wrappedValue: AppContainer(
                 socialService: socialService,
                 webService: webService,
-                virtualAssetRepository: virtualAssetRepository
+                virtualAssetRepository: virtualAssetRepository,
+                accountEnforcementStatusProvider: {
+                    await MainActor.run {
+                        appState.accountEnforcementStatus
+                    }
+                }
             )
         )
-        _appState = StateObject(wrappedValue: AppState(service: socialService))
+        _appState = StateObject(wrappedValue: appState)
     }
 
     var body: some Scene {
@@ -160,14 +166,7 @@ final class RaverAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
                     application.registerForRemoteNotifications()
                 }
             case .notDetermined:
-                center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
-                    Self.pushRouteLog("requestAuthorization result granted=\(granted)")
-                    guard granted else { return }
-                    DispatchQueue.main.async {
-                        Self.pushRouteLog("registerForRemoteNotifications after prompt")
-                        application.registerForRemoteNotifications()
-                    }
-                }
+                Self.pushRouteLog("notifications notDetermined; defer prompt until user action")
             case .denied:
                 Self.pushRouteLog("notifications denied")
                 break

@@ -6,11 +6,13 @@ type CountryRow = {
   alpha3?: string;
   en?: string;
   zh?: string;
+  ja?: string;
 };
 
 export type CountryBiTextPayload = {
   en: string;
   zh: string;
+  ja?: string;
   enFull?: string;
 };
 
@@ -128,12 +130,14 @@ export const normalizeCountryBiTextPayload = (value: unknown, fallback = ''): Co
   const fallbackText = normalizeText(fallback);
   let en = '';
   let zh = '';
+  let ja = '';
   let enFull = '';
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const row = value as Record<string, unknown>;
     en = normalizeText(row.en ?? row.EN ?? row.english ?? row.name_en ?? '');
     zh = normalizeText(row.zh ?? row.ZH ?? row.cn ?? row.chinese ?? row.name_zh ?? '');
+    ja = normalizeText(row.ja ?? row.JA ?? row.jp ?? row.japanese ?? row.name_ja ?? '');
     enFull = extractCountryEnFull(row);
   } else {
     const text = normalizeText(value);
@@ -165,6 +169,7 @@ export const normalizeCountryBiTextPayload = (value: unknown, fallback = ''): Co
   return {
     en: normalizedEn || normalizedZh || '',
     zh: normalizedZh || normalizedEn || '',
+    ...(ja ? { ja } : {}),
     ...(normalizedEnFull ? { enFull: normalizedEnFull } : {}),
   };
 };

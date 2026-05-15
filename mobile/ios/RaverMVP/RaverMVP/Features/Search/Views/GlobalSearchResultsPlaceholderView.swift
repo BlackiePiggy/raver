@@ -37,7 +37,7 @@ struct GlobalSearchResultsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: L("搜索", "Search"))
+        .raverSystemNavigation(title: LT("搜索", "Search", "検索"))
         .onAppear {
             viewModel.loadInitial()
         }
@@ -54,7 +54,7 @@ struct GlobalSearchResultsView: View {
                     .foregroundStyle(isSearchFocused ? RaverTheme.accent : RaverTheme.secondaryText)
 
                 TextField(
-                    L("搜索活动、资讯、DJ、Sets、榜单、打分、圈子内容", "Search events, news, DJs, sets, rankings, ratings, posts"),
+                    LT("搜索活动、资讯、DJ、Sets、榜单、打分、圈子内容", "Search events, news, DJs, sets, rankings, ratings, posts", "イベント、ニュース、DJ、Sets、ランキング、評価、投稿を検索"),
                     text: $searchText
                 )
                     .font(.subheadline.weight(.semibold))
@@ -67,7 +67,7 @@ struct GlobalSearchResultsView: View {
                         submitSearch()
                     }
                     .accessibilityIdentifier("globalSearch.results.input")
-                    .accessibilityLabel(L("搜索关键词", "Search query"))
+                    .accessibilityLabel(LT("搜索关键词", "Search query", "検索キーワード"))
 
                 Spacer(minLength: 0)
 
@@ -80,7 +80,7 @@ struct GlobalSearchResultsView: View {
                             .foregroundStyle(RaverTheme.secondaryText.opacity(0.75))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(L("清空关键词", "Clear query"))
+                    .accessibilityLabel(LT("清空关键词", "Clear query", "キーワードをクリア"))
                     .accessibilityIdentifier("globalSearch.results.clear")
                 }
 
@@ -98,7 +98,7 @@ struct GlobalSearchResultsView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSubmitSearch)
-                .accessibilityLabel(L("重新搜索", "Search again"))
+                .accessibilityLabel(LT("重新搜索", "Search again", "再検索"))
                 .accessibilityIdentifier("globalSearch.results.submit")
             }
             .padding(.horizontal, 12)
@@ -109,7 +109,7 @@ struct GlobalSearchResultsView: View {
                     .strokeBorder(isSearchFocused ? RaverTheme.accent.opacity(0.55) : RaverTheme.cardBorder, lineWidth: 1)
             )
 
-            Text(L("结果按相关性优先排序，部分分类可单独下拉刷新。", "Results are sorted by relevance. Pull individual tabs to refresh."))
+            Text(LT("结果按相关性优先排序，部分分类可单独下拉刷新。", "Results are sorted by relevance. Pull individual tabs to refresh.", "結果は関連度順に並びます。一部カテゴリは個別に下へ引いて更新できます。"))
                 .font(.caption)
                 .foregroundStyle(RaverTheme.secondaryText)
         }
@@ -155,7 +155,7 @@ struct GlobalSearchResultsView: View {
 
                 if !viewModel.topMatches.isEmpty {
                     section(
-                        title: L("最佳匹配", "Top Matches"),
+                        title: LT("最佳匹配", "Top Matches", "最適な一致"),
                         items: viewModel.topMatches,
                         showsViewAll: false,
                         targetTab: nil
@@ -190,7 +190,7 @@ struct GlobalSearchResultsView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text(L("\(tab.title)结果", "\(tab.title) Results"))
+                    Text(LT("\(tab.title)结果", "\(tab.title) Results", "\(tab.title)結果"))
                         .font(.headline.weight(.bold))
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer()
@@ -231,12 +231,12 @@ struct GlobalSearchResultsView: View {
                     Button {
                         selectedTab = targetTab
                     } label: {
-                        Text(L("查看全部", "View All"))
+                        Text(LT("查看全部", "View All", "すべて表示"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(targetTab.themeColor)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(L("查看全部\(targetTab.title)结果", "View all \(targetTab.title) results"))
+                    .accessibilityLabel(LT("查看全部\(targetTab.title)结果", "View all \(targetTab.title) results", "\(targetTab.title)結果をすべて表示"))
                 }
             }
 
@@ -257,7 +257,7 @@ struct GlobalSearchResultsView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.caption.weight(.bold))
-                            Text(L("\(tab.title)结果加载失败，点此重试", "\(tab.title) results failed. Tap to retry."))
+                            Text(LT("\(tab.title)结果加载失败，点此重试", "\(tab.title) results failed. Tap to retry.", "\(tab.title)結果の読み込みに失敗しました。タップして再試行"))
                                 .font(.caption.weight(.semibold))
                             Spacer()
                             Image(systemName: "arrow.clockwise")

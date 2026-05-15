@@ -1,6 +1,70 @@
 import CoreLocation
 import Foundation
 
+private enum SquadOfflineCoordinateTransform {
+    private static let a = 6378245.0
+    private static let ee = 0.00669342162296594323
+
+    static func wgs84ToGcj02IfNeeded(_ coordinate: CLLocationCoordinate2D) -> CLLocationCoordinate2D {
+        guard isInsideChina(coordinate) else {
+            return coordinate
+        }
+
+        var dLat = transformLat(
+            x: coordinate.longitude - 105.0,
+            y: coordinate.latitude - 35.0
+        )
+        var dLng = transformLng(
+            x: coordinate.longitude - 105.0,
+            y: coordinate.latitude - 35.0
+        )
+        let radLat = coordinate.latitude / 180.0 * .pi
+        var magic = sin(radLat)
+        magic = 1 - ee * magic * magic
+        let sqrtMagic = sqrt(magic)
+        dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * .pi)
+        dLng = (dLng * 180.0) / (a / sqrtMagic * cos(radLat) * .pi)
+
+        return CLLocationCoordinate2D(
+            latitude: coordinate.latitude + dLat,
+            longitude: coordinate.longitude + dLng
+        )
+    }
+
+    private static func isInsideChina(_ coordinate: CLLocationCoordinate2D) -> Bool {
+        coordinate.longitude >= 72.004
+            && coordinate.longitude <= 137.8347
+            && coordinate.latitude >= 0.8293
+            && coordinate.latitude <= 55.8271
+    }
+
+    private static func transformLat(x: Double, y: Double) -> Double {
+        var result = -100.0
+            + 2.0 * x
+            + 3.0 * y
+            + 0.2 * y * y
+            + 0.1 * x * y
+            + 0.2 * sqrt(abs(x))
+        result += (20.0 * sin(6.0 * x * .pi) + 20.0 * sin(2.0 * x * .pi)) * 2.0 / 3.0
+        result += (20.0 * sin(y * .pi) + 40.0 * sin(y / 3.0 * .pi)) * 2.0 / 3.0
+        result += (160.0 * sin(y / 12.0 * .pi) + 320.0 * sin(y * .pi / 30.0)) * 2.0 / 3.0
+        return result
+    }
+
+    private static func transformLng(x: Double, y: Double) -> Double {
+        var result = 300.0
+            + x
+            + 2.0 * y
+            + 0.1 * x * x
+            + 0.1 * x * y
+            + 0.1 * sqrt(abs(x))
+        result += (20.0 * sin(6.0 * x * .pi) + 20.0 * sin(2.0 * x * .pi)) * 2.0 / 3.0
+        result += (20.0 * sin(x * .pi) + 40.0 * sin(x / 3.0 * .pi)) * 2.0 / 3.0
+        result += (150.0 * sin(x / 12.0 * .pi) + 300.0 * sin(x / 30.0 * .pi)) * 2.0 / 3.0
+        return result
+    }
+}
+
 @MainActor
 final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var authorizationStatus: CLAuthorizationStatus
@@ -38,9 +102,7 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
         activityID: String,
         intervalSeconds: Int
     ) {
-        if authorizationStatus == .notDetermined {
-            manager.requestWhenInUseAuthorization()
-        }
+        guard hasLocationAuthorization else { return }
         manager.startUpdatingLocation()
         uploadTask?.cancel()
         uploadTask = Task { [weak self] in
@@ -63,11 +125,15 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
     }
 
     func uploadNow(repository: LocationSyncRepository, squadID: String, activityID: String) async -> Bool {
+        guard !isUploading else { return false }
+        isUploading = true
+        defer { isUploading = false }
+
         if !hasLocationAuthorization {
             if authorizationStatus == .notDetermined {
                 manager.requestWhenInUseAuthorization()
             }
-            errorMessage = L("定位权限未开启，请在系统设置中允许定位后重试", "Location permission is disabled. Please enable it in Settings and try again.")
+            errorMessage = LT("定位权限未开启，请在系统设置中允许定位后重试", "Location permission is disabled. Please enable it in Settings and try again.", "位置情報の権限が無効です。設定で許可してからもう一度お試しください。")
             return false
         }
         let location = await requestFreshLocation(allowsCachedLocation: false)
@@ -113,6 +179,10 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
         squadID: String,
         activityID: String
     ) async -> Bool {
+        guard !isUploading else { return false }
+        isUploading = true
+        defer { isUploading = false }
+
         let location = await requestFreshLocation(allowsCachedLocation: true)
         return await uploadLocation(location, repository: repository, squadID: squadID, activityID: activityID)
     }
@@ -125,26 +195,25 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
         activityID: String
     ) async -> Bool {
         guard let location else {
-            errorMessage = L("还没有获取到定位，请稍后再试", "Location is not ready yet. Try again shortly.")
+            errorMessage = LT("还没有获取到定位，请稍后再试", "Location is not ready yet. Try again shortly.", "位置情報はまだ取得できていません。少し待ってから再試行してください。")
             return false
         }
         guard isFreshEnough(location) else {
-            errorMessage = L("定位结果已过期，请稍后重试", "Location is stale. Try again shortly.")
+            errorMessage = LT("定位结果已过期，请稍后重试", "Location is stale. Try again shortly.", "位置情報が古くなっています。少し待ってから再試行してください。")
             return false
         }
         if #available(iOS 14.0, *), manager.accuracyAuthorization == .reducedAccuracy {
-            errorMessage = L("当前为大概位置，请在系统定位权限中开启精确位置", "Precise Location is off. Enable Precise Location in system settings.")
+            errorMessage = LT("当前为大概位置，请在系统定位权限中开启精确位置", "Precise Location is off. Enable Precise Location in system settings.", "現在はおおよその位置です。システム設定で正確な位置情報を有効にしてください。")
             return false
         }
-        isUploading = true
-        defer { isUploading = false }
+        let uploadCoordinate = SquadOfflineCoordinateTransform.wgs84ToGcj02IfNeeded(location.coordinate)
         do {
             try await repository.uploadSquadOfflineActivityLocation(
                 squadID: squadID,
                 activityID: activityID,
                 input: SquadOfflineLocationUploadInput(
-                    latitude: location.coordinate.latitude,
-                    longitude: location.coordinate.longitude,
+                    latitude: uploadCoordinate.latitude,
+                    longitude: uploadCoordinate.longitude,
                     accuracy: location.horizontalAccuracy >= 0 ? location.horizontalAccuracy : nil,
                     altitude: location.verticalAccuracy >= 0 ? location.altitude : nil,
                     speed: location.speed >= 0 ? location.speed : nil,
@@ -162,9 +231,6 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
     }
 
     private func requestFreshLocation(allowsCachedLocation: Bool) async -> CLLocation? {
-        if authorizationStatus == .notDetermined {
-            manager.requestWhenInUseAuthorization()
-        }
         guard hasLocationAuthorization else { return nil }
         if allowsCachedLocation, let lastLocation, isFreshEnough(lastLocation), isPreciseEnough(lastLocation) {
             return lastLocation

@@ -32,9 +32,9 @@ protocol DJImportRepository {
     func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate]
     func searchDiscogsDJs(query: String, limit: Int) async throws -> [DiscogsDJCandidate]
     func fetchDiscogsDJArtist(id: Int) async throws -> DiscogsDJArtistDetail
-    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportSpotifyDJResponse
-    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDiscogsDJResponse
-    func importManualDJ(input: ImportManualDJInput) async throws -> ImportManualDJResponse
+    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportDJResult<ImportSpotifyDJResponse>
+    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDJResult<ImportDiscogsDJResponse>
+    func importManualDJ(input: ImportManualDJInput) async throws -> ImportDJResult<ImportManualDJResponse>
 }
 
 protocol DJMediaRepository {
@@ -154,15 +154,15 @@ struct DJImportRepositoryAdapter: DJImportRepository {
         try await service.fetchDiscogsDJArtist(id: id)
     }
 
-    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportSpotifyDJResponse {
+    func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportDJResult<ImportSpotifyDJResponse> {
         try await service.importSpotifyDJ(input: input)
     }
 
-    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDiscogsDJResponse {
+    func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDJResult<ImportDiscogsDJResponse> {
         try await service.importDiscogsDJ(input: input)
     }
 
-    func importManualDJ(input: ImportManualDJInput) async throws -> ImportManualDJResponse {
+    func importManualDJ(input: ImportManualDJInput) async throws -> ImportDJResult<ImportManualDJResponse> {
         try await service.importManualDJ(input: input)
     }
 }
@@ -206,7 +206,7 @@ protocol SetCommentRepository {
 
 protocol SetCommandRepository {
     func deleteDJSet(id: String) async throws
-    func createDJSet(input: CreateDJSetInput) async throws -> WebDJSet
+    func createDJSet(input: CreateDJSetInput) async throws -> CreateContentResult<WebDJSet>
     func updateDJSet(id: String, input: UpdateDJSetInput) async throws -> WebDJSet
 }
 
@@ -279,7 +279,7 @@ struct SetCommandRepositoryAdapter: SetCommandRepository {
         try await service.deleteDJSet(id: id)
     }
 
-    func createDJSet(input: CreateDJSetInput) async throws -> WebDJSet {
+    func createDJSet(input: CreateDJSetInput) async throws -> CreateContentResult<WebDJSet> {
         try await service.createDJSet(input: input)
     }
 
@@ -359,8 +359,9 @@ protocol DiscoverWikiRepository {
         nation: String?,
         genre: String?
     ) async throws -> LearnLabelListPage
+    func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel>
     func fetchLearnFestivals(search: String?) async throws -> [WebLearnFestival]
-    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> WebLearnFestival
+    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> CreateContentResult<WebLearnFestival>
     func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival
     func uploadWikiBrandImage(
         imageData: Data,
@@ -412,7 +413,11 @@ struct DiscoverWikiRepositoryAdapter: DiscoverWikiRepository {
         try await service.fetchLearnFestivals(search: search)
     }
 
-    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> WebLearnFestival {
+    func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel> {
+        try await service.createLearnLabel(input: input)
+    }
+
+    func createLearnFestival(input: CreateLearnFestivalInput) async throws -> CreateContentResult<WebLearnFestival> {
         try await service.createLearnFestival(input: input)
     }
 

@@ -70,11 +70,11 @@ struct ShareActionPanel: View {
     let onDismiss: () -> Void
     let onConversationShared: (Conversation) -> Void
     let onMoreChats: () -> Void
-    var shareTitle: String = L("分享至", "Share to")
-    var quickActionsTitle: String = L("更多操作", "More actions")
-    var noteTitle: String = L("留言并发送", "Add a message")
-    var notePlaceholder: String = L("说点什么（可选）", "Say something (optional)")
-    var moreChatsTitle: String = L("更多聊天", "More chats")
+    var shareTitle: String = LT("分享至", "Share to", "共有先")
+    var quickActionsTitle: String = LT("更多操作", "More actions", "その他の操作")
+    var noteTitle: String = LT("留言并发送", "Add a message", "メッセージを添えて送信")
+    var notePlaceholder: String = LT("说点什么（可选）", "Say something (optional)", "何か書く（任意）")
+    var moreChatsTitle: String = LT("更多聊天", "More chats", "その他のチャット")
     var itemSize: CGFloat = 44
     var itemSpacing: CGFloat = 5
     var itemLabelWidth: CGFloat = 60
@@ -253,11 +253,11 @@ struct ShareActionPanel: View {
         .task {
             await loadRecentConversations()
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -271,7 +271,7 @@ struct ShareActionPanel: View {
         do {
             conversations = try await loadConversations()
         } catch {
-            errorMessage = error.userFacingMessage ?? L("聊天列表加载失败，请稍后重试", "Failed to load chats. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("聊天列表加载失败，请稍后重试", "Failed to load chats. Please try again later.", "チャット一覧を読み込めませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -304,7 +304,7 @@ struct ShareActionPanel: View {
             onDismiss()
             onConversationShared(selectedConversation)
         } catch {
-            errorMessage = error.userFacingMessage ?? L("分享失败，请稍后重试", "Share failed. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("分享失败，请稍后重试", "Share failed. Please try again later.", "共有に失敗しました。時間をおいて再試行してください。")
         }
     }
 }
@@ -316,8 +316,8 @@ struct ChatShareSheet<PreviewContent: View>: View {
     let onShareToConversation: (Conversation) async throws -> Void
     let onComplete: (Conversation) -> Void
     @ViewBuilder let preview: () -> PreviewContent
-    var title: String = L("分享到聊天", "Share to Chat")
-    var searchPlaceholder: String = L("搜索聊天", "Search chats")
+    var title: String = LT("分享到聊天", "Share to Chat", "チャットに共有")
+    var searchPlaceholder: String = LT("搜索聊天", "Search chats", "チャットを検索")
 
     @State private var conversations: [Conversation] = []
     @State private var searchText = ""
@@ -383,14 +383,14 @@ struct ChatShareSheet<PreviewContent: View>: View {
                 if isLoading {
                     VStack(spacing: 10) {
                         ProgressView()
-                        Text(L("正在加载聊天列表", "Loading chats"))
+                        Text(LT("正在加载聊天列表", "Loading chats", "チャット一覧を読み込み中"))
                             .font(.footnote)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredConversations.isEmpty {
                     ContentUnavailableView(
-                        L("暂无可分享的聊天", "No chats available"),
+                        LT("暂无可分享的聊天", "No chats available", "共有できるチャットはありません"),
                         systemImage: "bubble.left.and.bubble.right"
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -418,11 +418,11 @@ struct ChatShareSheet<PreviewContent: View>: View {
         .task {
             await loadConversationList()
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -436,7 +436,7 @@ struct ChatShareSheet<PreviewContent: View>: View {
         do {
             conversations = try await loadConversations()
         } catch {
-            errorMessage = error.userFacingMessage ?? L("聊天列表加载失败，请稍后重试", "Failed to load chats. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("聊天列表加载失败，请稍后重试", "Failed to load chats. Please try again later.", "チャット一覧を読み込めませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -450,7 +450,7 @@ struct ChatShareSheet<PreviewContent: View>: View {
             dismiss()
             onComplete(conversation)
         } catch {
-            errorMessage = error.userFacingMessage ?? L("分享失败，请稍后重试", "Share failed. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("分享失败，请稍后重试", "Share failed. Please try again later.", "共有に失敗しました。時間をおいて再試行してください。")
         }
     }
 }

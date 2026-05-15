@@ -78,7 +78,8 @@ func makeDiscoverRouteDestination(
         DJsModuleView(
             viewModel: DJsModuleViewModel(repository: appContainer.djListRepository),
             initialImportName: initialName,
-            openImportOnAppear: true
+            openImportOnAppear: true,
+            dismissAfterSuccessfulImport: true
         )
 
     case .newsPublish:
@@ -126,7 +127,7 @@ private struct DiscoverRouteLoaderScaffold<Content: View>: View {
                 .background(RaverTheme.background)
             case .empty:
                 ContentUnavailableView(
-                    L("内容不存在", "Content Unavailable"),
+                    LT("内容不存在", "Content Unavailable", "コンテンツがありません"),
                     systemImage: "exclamationmark.circle"
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -175,7 +176,7 @@ private struct DiscoverEventEditorLoaderView: View {
             event = try await eventReadRepository.fetchEvent(id: eventID)
             phase = .success
         } catch {
-            phase = .failure(message: error.userFacingMessage ?? L("活动加载失败，请稍后重试", "Failed to load event. Please try again later."))
+            phase = .failure(message: error.userFacingMessage ?? LT("活动加载失败，请稍后重试", "Failed to load event. Please try again later.", "イベントを読み込めませんでした。時間をおいて再試行してください。"))
         }
     }
 }
@@ -217,7 +218,7 @@ private struct DiscoverSetEditorLoaderView: View {
             set = try await setReadRepository.fetchDJSet(id: setID)
             phase = .success
         } catch {
-            phase = .failure(message: error.userFacingMessage ?? L("Set 加载失败，请稍后重试", "Failed to load set. Please try again later."))
+            phase = .failure(message: error.userFacingMessage ?? LT("Set 加载失败，请稍后重试", "Failed to load set. Please try again later.", "Setを読み込めませんでした。時間をおいて再試行してください。"))
         }
     }
 }
@@ -252,7 +253,7 @@ private struct DiscoverNewsDetailLoaderView: View {
             article = try await repository.fetchArticle(id: articleID)
             phase = .success
         } catch {
-            phase = .failure(message: error.userFacingMessage ?? L("资讯加载失败，请稍后重试", "Failed to load article. Please try again later."))
+            phase = .failure(message: error.userFacingMessage ?? LT("资讯加载失败，请稍后重试", "Failed to load article. Please try again later.", "記事を読み込めませんでした。時間をおいて再試行してください。"))
         }
     }
 }
@@ -287,7 +288,7 @@ private struct DiscoverLabelDetailLoaderView: View {
             label = try await fetchLearnLabelByID(labelID, repository: repository)
             phase = .success
         } catch {
-            phase = .failure(message: error.userFacingMessage ?? L("厂牌加载失败，请稍后重试", "Failed to load label. Please try again later."))
+            phase = .failure(message: error.userFacingMessage ?? LT("厂牌加载失败，请稍后重试", "Failed to load label. Please try again later.", "レーベルを読み込めませんでした。時間をおいて再試行してください。"))
         }
     }
 }
@@ -322,7 +323,7 @@ private struct DiscoverFestivalDetailLoaderView: View {
             festival = try await fetchLearnFestivalByID(festivalID, repository: repository)
             phase = .success
         } catch {
-            phase = .failure(message: error.userFacingMessage ?? L("电音节加载失败，请稍后重试", "Failed to load festival. Please try again later."))
+            phase = .failure(message: error.userFacingMessage ?? LT("电音节加载失败，请稍后重试", "Failed to load festival. Please try again later.", "フェスを読み込めませんでした。時間をおいて再試行してください。"))
         }
     }
 }
@@ -358,7 +359,7 @@ private struct DiscoverFestivalEditorLoaderView: View {
             festival = try await fetchLearnFestivalByID(festivalID, repository: repository)
             phase = .success
         } catch {
-            phase = .failure(message: error.userFacingMessage ?? L("电音节加载失败，请稍后重试", "Failed to load festival. Please try again later."))
+            phase = .failure(message: error.userFacingMessage ?? LT("电音节加载失败，请稍后重试", "Failed to load festival. Please try again later.", "フェスを読み込めませんでした。時間をおいて再試行してください。"))
         }
     }
 }
@@ -388,7 +389,7 @@ private func fetchLearnLabelByID(_ labelID: String, repository: DiscoverWikiRepo
         page += 1
     }
 
-    throw ServiceError.message(L("厂牌不存在或已被移除", "Label not found"))
+    throw ServiceError.message(LT("厂牌不存在或已被移除", "Label not found", "レーベルが存在しないか削除されました"))
 }
 
 private func fetchLearnFestivalByID(_ festivalID: String, repository: DiscoverWikiRepository) async throws -> LearnFestival {
@@ -396,5 +397,5 @@ private func fetchLearnFestivalByID(_ festivalID: String, repository: DiscoverWi
     if let matched = festivals.first(where: { $0.id == festivalID }) {
         return LearnFestival(web: matched)
     }
-    throw ServiceError.message(L("电音节不存在或已被移除", "Festival not found"))
+    throw ServiceError.message(LT("电音节不存在或已被移除", "Festival not found", "フェスが存在しないか削除されました"))
 }

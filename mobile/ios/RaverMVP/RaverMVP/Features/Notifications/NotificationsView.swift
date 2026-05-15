@@ -32,13 +32,13 @@ private struct NotificationsScreen: View {
             if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if viewModel.isRefreshing {
-                        InlineLoadingBadge(title: L("正在更新通知", "Updating notifications"))
+                        InlineLoadingBadge(title: LT("正在更新通知", "Updating notifications", "通知を更新中"))
                     }
                     if let bannerMessage = viewModel.bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task { await viewModel.load() }
                         }
@@ -59,9 +59,9 @@ private struct NotificationsScreen: View {
                 Spacer()
             case .empty:
                 ContentUnavailableView(
-                    L("暂无通知", "No Notifications"),
+                    LT("暂无通知", "No Notifications", "通知はまだありません"),
                     systemImage: "bell.slash",
-                    description: Text(LL("收到新的关注、点赞、评论或小队邀请后会显示在这里"))
+                    description: Text(LT("收到新的关注、点赞、评论或小队邀请后会显示在这里", "New follows, likes, comments, or squad invites will appear here.", "新しいフォロー、いいね、コメント、Squad招待を受け取るとここに表示されます"))
                 )
             case .success:
                 List(viewModel.notifications) { item in
@@ -103,10 +103,10 @@ private struct NotificationsScreen: View {
             }
         }
         .background(RaverTheme.background)
-        .navigationTitle(L("通知", "Notifications"))
+        .navigationTitle(LT("通知", "Notifications", "通知"))
         .toolbar {
             if viewModel.unreadCount > 0 {
-                Text(L("未读", "Unread") + " \(viewModel.unreadCount)")
+                Text(LT("未读", "Unread", "未読") + " \(viewModel.unreadCount)")
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -117,14 +117,14 @@ private struct NotificationsScreen: View {
         .onChange(of: viewModel.notifications) { _, notifications in
             appearanceResolver.warmAppearances(for: notifications.compactMap { $0.actor?.id })
         }
-        .alert(L("通知加载失败", "Failed to Load Notifications"), isPresented: Binding(
+        .alert(LT("通知加载失败", "Failed to Load Notifications", "通知の読み込みに失敗しました"), isPresented: Binding(
             get: { viewModel.error != nil },
             set: { if !$0 { viewModel.error = nil } }
         )) {
-            Button(L("重试", "Retry")) {
+            Button(LT("重试", "Retry", "再試行")) {
                 Task { await viewModel.load() }
             }
-            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
         }

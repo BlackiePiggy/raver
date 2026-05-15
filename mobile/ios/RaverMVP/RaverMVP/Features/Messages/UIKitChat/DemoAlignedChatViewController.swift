@@ -21,6 +21,7 @@ final class DemoAlignedChatViewController: UIViewController {
     private var conversation: Conversation
     private var service: SocialService
     private var messageRepository: ChatMessageRepository
+    private let accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)?
     private let appearanceResolver: VirtualAssetChatAppearanceResolver
     private var onNavigate: ((AppRoute) -> Void)?
     private var onLeaveConversation: (() -> Void)?
@@ -113,12 +114,17 @@ final class DemoAlignedChatViewController: UIViewController {
         conversation: Conversation,
         service: SocialService,
         virtualAssetRepository: VirtualAssetRepository = AppEnvironment.makeVirtualAssetRepository(),
+        accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)? = nil,
         onNavigate: ((AppRoute) -> Void)? = nil,
         onLeaveConversation: (() -> Void)? = nil
     ) {
         self.conversation = conversation
         self.service = service
-        let messageRepository = ChatMessageRepositoryAdapter(service: service)
+        self.accountEnforcementStatusProvider = accountEnforcementStatusProvider
+        let messageRepository = ChatMessageRepositoryAdapter(
+            service: service,
+            accountEnforcementStatusProvider: accountEnforcementStatusProvider
+        )
         self.messageRepository = messageRepository
         self.appearanceResolver = VirtualAssetChatAppearanceResolver(repository: virtualAssetRepository)
         self.onNavigate = onNavigate
@@ -199,7 +205,10 @@ final class DemoAlignedChatViewController: UIViewController {
     ) {
         messageActionCoordinator?.stopVoicePlaybackIfNeeded()
         self.service = service
-        self.messageRepository = ChatMessageRepositoryAdapter(service: service)
+        self.messageRepository = ChatMessageRepositoryAdapter(
+            service: service,
+            accountEnforcementStatusProvider: accountEnforcementStatusProvider
+        )
         self.onNavigate = onNavigate
         self.onLeaveConversation = onLeaveConversation
         if let chatScreenLifecycleCoordinator {
@@ -225,7 +234,7 @@ final class DemoAlignedChatViewController: UIViewController {
                 navigationItem: navigationItem,
                 actionTarget: self,
                 settingsTappedAction: #selector(handleSettingsTapped),
-                accessibilityLabel: L("聊天设置", "Chat Settings")
+                accessibilityLabel: LT("聊天设置", "Chat Settings", "チャット設定")
             )
         )
         let searchButton = UIBarButtonItem(
@@ -234,7 +243,7 @@ final class DemoAlignedChatViewController: UIViewController {
             target: self,
             action: #selector(handleSearchTapped)
         )
-        searchButton.accessibilityLabel = L("会话内搜索", "Search in Conversation")
+        searchButton.accessibilityLabel = LT("会话内搜索", "Search in Conversation", "会話内検索")
 
         if let settingsButton = navigationItem.rightBarButtonItem {
             navigationItem.rightBarButtonItems = [settingsButton, searchButton]
@@ -299,9 +308,9 @@ final class DemoAlignedChatViewController: UIViewController {
                 dividerColor: UIColor(RaverTheme.cardBorder),
                 accentColor: UIColor(RaverTheme.accent),
                 secondaryTextColor: UIColor(RaverTheme.secondaryText),
-                mediaProgressText: L("发送媒体 0%", "Sending media 0%"),
-                inputPlaceholder: L("发消息...", "Message..."),
-                sendButtonTitle: L("发送", "Send"),
+                mediaProgressText: LT("发送媒体 0%", "Sending media 0%", "メディア送信中 0%"),
+                inputPlaceholder: LT("发消息...", "Message...", "メッセージ..."),
+                sendButtonTitle: LT("发送", "Send", "送信"),
                 actionTarget: self,
                 inputChangedAction: #selector(handleInputFieldEditingChanged),
                 imageTappedAction: #selector(handleImageTapped(_:)),
@@ -358,7 +367,7 @@ final class DemoAlignedChatViewController: UIViewController {
     private func configureHoldToTalkButton() {
         holdToTalkButton.translatesAutoresizingMaskIntoConstraints = false
         var config = UIButton.Configuration.filled()
-        config.title = L("按住说话", "Hold to Talk")
+        config.title = LT("按住说话", "Hold to Talk", "押し続けて話す")
         config.baseBackgroundColor = UIColor(RaverTheme.card)
         config.baseForegroundColor = UIColor(RaverTheme.secondaryText)
         config.cornerStyle = .capsule
@@ -391,7 +400,7 @@ final class DemoAlignedChatViewController: UIViewController {
         recordingHUDTitleLabel.translatesAutoresizingMaskIntoConstraints = false
         recordingHUDTitleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         recordingHUDTitleLabel.textColor = .white
-        recordingHUDTitleLabel.text = L("上滑取消", "Slide Up to Cancel")
+        recordingHUDTitleLabel.text = LT("上滑取消", "Slide Up to Cancel", "上にスライドしてキャンセル")
         recordingHUDContainer.addSubview(recordingHUDTitleLabel)
 
         recordingHUDDurationLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -808,11 +817,11 @@ final class DemoAlignedChatViewController: UIViewController {
     private func handleReplyDraftChanged(_ draft: ChatMessage?) {
         if let draft {
             let preview = replyDraftPreviewText(for: draft)
-            inputField.placeholder = L("回复: ", "Reply: ") + String(preview.prefix(22))
-            replyDraftLabel.text = L("正在回复: ", "Replying: ") + String(preview.prefix(44))
+            inputField.placeholder = LT("回复: ", "Reply: ", "返信: ") + String(preview.prefix(22))
+            replyDraftLabel.text = LT("正在回复: ", "Replying: ", "返信中: ") + String(preview.prefix(44))
             replyDraftContainer.isHidden = false
         } else {
-            inputField.placeholder = L("发消息...", "Message...")
+            inputField.placeholder = LT("发消息...", "Message...", "メッセージ...")
             replyDraftLabel.text = nil
             replyDraftContainer.isHidden = true
         }
@@ -820,11 +829,11 @@ final class DemoAlignedChatViewController: UIViewController {
 
     private func replyDraftPreviewText(for message: ChatMessage) -> String {
         let senderName: String = {
-            if message.isMine { return L("我", "Me") }
+            if message.isMine { return LT("我", "Me", "自分") }
             let shown = message.sender.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
             if !shown.isEmpty { return shown }
             let username = message.sender.username.trimmingCharacters(in: .whitespacesAndNewlines)
-            return username.isEmpty ? L("用户", "User") : username
+            return username.isEmpty ? LT("用户", "User", "ユーザー") : username
         }()
 
         let body: String = {
@@ -832,19 +841,19 @@ final class DemoAlignedChatViewController: UIViewController {
             if !content.isEmpty { return String(content.prefix(36)) }
             switch message.kind {
             case .image:
-                return L("[图片]", "[Image]")
+                return LT("[图片]", "[Image]", "[画像]")
             case .video:
-                return L("[视频]", "[Video]")
+                return LT("[视频]", "[Video]", "[動画]")
             case .voice:
-                return L("[语音]", "[Voice]")
+                return LT("[语音]", "[Voice]", "[音声]")
             case .file:
                 if let fileName = message.media?.fileName?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !fileName.isEmpty {
                     return "[\(fileName)]"
                 }
-                return L("[文件]", "[File]")
+                return LT("[文件]", "[File]", "[ファイル]")
             default:
-                return L("[消息]", "[Message]")
+                return LT("[消息]", "[Message]", "[メッセージ]")
             }
         }()
 
@@ -898,6 +907,10 @@ final class DemoAlignedChatViewController: UIViewController {
         guard audioRecorder == nil else { return }
         recordingWillCancel = false
         updateHoldToTalkButtonState(isRecording: true, willCancel: false)
+        if presentMicrophoneRationaleIfNeeded() {
+            updateHoldToTalkButtonState(isRecording: false, willCancel: false)
+            return
+        }
         requestRecordPermission { [weak self] granted in
             guard let self else { return }
             Task { @MainActor in
@@ -919,6 +932,28 @@ final class DemoAlignedChatViewController: UIViewController {
                 }
             }
         }
+    }
+
+    private func presentMicrophoneRationaleIfNeeded() -> Bool {
+        guard AVAudioSession.sharedInstance().recordPermission == .undetermined else {
+            return false
+        }
+        let alert = UIAlertController(
+            title: LT("允许麦克风发送语音？", "Allow microphone for voice messages?", "音声メッセージにマイクを許可しますか？"),
+            message: LT("Raver 只会在你按住说话时录制语音消息。你也可以不授权，继续发送文字消息。", "Raver records only while you hold to talk. You can skip this and keep sending text messages.", "Raver は押し続けている間だけ音声メッセージを録音します。許可しなくてもテキストメッセージは送信できます。"),
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: LT("先发文字", "Use Text", "テキストを使う"), style: .cancel))
+        alert.addAction(UIAlertAction(title: LT("继续", "Continue", "続ける"), style: .default) { [weak self] _ in
+            self?.requestRecordPermission { granted in
+                guard !granted else { return }
+                Task { @MainActor in
+                    self?.failureFeedbackActions?.showSendFailureHint()
+                }
+            }
+        })
+        present(alert, animated: true)
+        return true
     }
 
     private func endVoiceRecording(send: Bool) {
@@ -969,13 +1004,13 @@ final class DemoAlignedChatViewController: UIViewController {
     private func updateHoldToTalkButtonState(isRecording: Bool, willCancel: Bool) {
         var config = holdToTalkButton.configuration ?? .filled()
         if isRecording {
-            config.title = willCancel ? L("松开取消", "Release to Cancel") : L("松开发送", "Release to Send")
+            config.title = willCancel ? LT("松开取消", "Release to Cancel", "離してキャンセル") : LT("松开发送", "Release to Send", "離して送信")
             config.baseBackgroundColor = willCancel ? UIColor.systemRed.withAlphaComponent(0.85) : UIColor(RaverTheme.accent)
             config.baseForegroundColor = .white
             holdToTalkButton.transform = CGAffineTransform(scaleX: 0.96, y: 0.96)
             holdToTalkButton.alpha = 0.96
         } else {
-            config.title = L("按住说话", "Hold to Talk")
+            config.title = LT("按住说话", "Hold to Talk", "押し続けて話す")
             config.baseBackgroundColor = UIColor(RaverTheme.card)
             config.baseForegroundColor = UIColor(RaverTheme.secondaryText)
             holdToTalkButton.transform = .identity
@@ -991,7 +1026,7 @@ final class DemoAlignedChatViewController: UIViewController {
     }
 
     private func showRecordingHUD() {
-        recordingHUDTitleLabel.text = L("上滑取消", "Slide Up to Cancel")
+        recordingHUDTitleLabel.text = LT("上滑取消", "Slide Up to Cancel", "上にスライドしてキャンセル")
         recordingHUDTitleLabel.textColor = .white
         recordingHUDContainer.isHidden = false
     }
@@ -1018,10 +1053,10 @@ final class DemoAlignedChatViewController: UIViewController {
 
     private func updateRecordingHUDCancelState(willCancel: Bool) {
         if willCancel {
-            recordingHUDTitleLabel.text = L("松开取消", "Release to Cancel")
+            recordingHUDTitleLabel.text = LT("松开取消", "Release to Cancel", "離してキャンセル")
             recordingHUDTitleLabel.textColor = UIColor.systemRed.withAlphaComponent(0.95)
         } else {
-            recordingHUDTitleLabel.text = L("上滑取消", "Slide Up to Cancel")
+            recordingHUDTitleLabel.text = LT("上滑取消", "Slide Up to Cancel", "上にスライドしてキャンセル")
             recordingHUDTitleLabel.textColor = .white
         }
     }
@@ -1041,7 +1076,7 @@ final class DemoAlignedChatViewController: UIViewController {
         isMentionPickerPresented = true
 
         let sheet = UIAlertController(
-            title: L("选择要@的人", "Choose Mention"),
+            title: LT("选择要@的人", "Choose Mention", "メンションする相手を選択"),
             message: nil,
             preferredStyle: .actionSheet
         )
@@ -1050,7 +1085,7 @@ final class DemoAlignedChatViewController: UIViewController {
                 self?.applyMentionCandidate(candidate)
             })
         }
-        sheet.addAction(UIAlertAction(title: L("取消", "Cancel"), style: .cancel) { [weak self] _ in
+        sheet.addAction(UIAlertAction(title: LT("取消", "Cancel", "キャンセル"), style: .cancel) { [weak self] _ in
             self?.isMentionPickerPresented = false
         })
 
@@ -1139,14 +1174,14 @@ final class DemoAlignedChatViewController: UIViewController {
     @objc
     private func handleVideoTapped(_ sender: UIButton) {
         let sheet = UIAlertController(
-            title: L("发送视频", "Send Video"),
+            title: LT("发送视频", "Send Video", "動画を送信"),
             message: nil,
             preferredStyle: .actionSheet
         )
-        sheet.addAction(UIAlertAction(title: L("从相册选择视频", "Choose Video"), style: .default) { [weak self] _ in
+        sheet.addAction(UIAlertAction(title: LT("从相册选择视频", "Choose Video", "アルバムから動画を選択"), style: .default) { [weak self] _ in
             self?.composerActionCoordinator?.handleVideoTapped()
         })
-        sheet.addAction(UIAlertAction(title: L("取消", "Cancel"), style: .cancel))
+        sheet.addAction(UIAlertAction(title: LT("取消", "Cancel", "キャンセル"), style: .cancel))
 
         if let popover = sheet.popoverPresentationController {
             popover.sourceView = sender
@@ -1157,20 +1192,20 @@ final class DemoAlignedChatViewController: UIViewController {
 
     private func presentMediaEntryMenu(anchor: UIView) {
         let sheet = UIAlertController(
-            title: L("发送媒体", "Send Media"),
+            title: LT("发送媒体", "Send Media", "メディアを送信"),
             message: nil,
             preferredStyle: .actionSheet
         )
-        sheet.addAction(UIAlertAction(title: L("发送图片", "Send Image"), style: .default) { [weak self] _ in
+        sheet.addAction(UIAlertAction(title: LT("发送图片", "Send Image", "画像を送信"), style: .default) { [weak self] _ in
             self?.composerActionCoordinator?.handleImageTapped()
         })
-        sheet.addAction(UIAlertAction(title: L("发送视频", "Send Video"), style: .default) { [weak self] _ in
+        sheet.addAction(UIAlertAction(title: LT("发送视频", "Send Video", "動画を送信"), style: .default) { [weak self] _ in
             self?.composerActionCoordinator?.handleVideoTapped()
         })
-        sheet.addAction(UIAlertAction(title: L("发送语音（文件）", "Send Voice (File)"), style: .default) { [weak self] _ in
+        sheet.addAction(UIAlertAction(title: LT("发送语音（文件）", "Send Voice (File)", "音声を送信（ファイル）"), style: .default) { [weak self] _ in
             self?.presentVoicePicker()
         })
-        sheet.addAction(UIAlertAction(title: L("取消", "Cancel"), style: .cancel))
+        sheet.addAction(UIAlertAction(title: LT("取消", "Cancel", "キャンセル"), style: .cancel))
 
         if let popover = sheet.popoverPresentationController {
             popover.sourceView = anchor
@@ -1299,24 +1334,18 @@ final class DemoAlignedChatViewController: UIViewController {
         let message: String
         switch context {
         case .search:
-            title = L("未定位到消息", "Message Not Located")
-            message = L(
-                "该结果暂不在当前加载窗口，请上滑加载更多历史后再试。",
-                "This result is outside the current loaded window. Load more history and try again."
-            )
+            title = LT("未定位到消息", "Message Not Located", "メッセージを特定できません")
+            message = LT("该结果暂不在当前加载窗口，请上滑加载更多历史后再试。", "This result is outside the current loaded window. Load more history and try again.", "この結果は現在読み込まれている範囲外です。履歴をさらに読み込んでからもう一度お試しください。")
         case .reply:
-            title = L("未找到被回复消息", "Original Message Not Found")
-            message = L(
-                "已尝试加载更多历史，仍未定位到被回复内容，可能已被清理或不可见。",
-                "More history was loaded, but the referenced message is still unavailable."
-            )
+            title = LT("未找到被回复消息", "Original Message Not Found", "返信元メッセージが見つかりません")
+            message = LT("已尝试加载更多历史，仍未定位到被回复内容，可能已被清理或不可见。", "More history was loaded, but the referenced message is still unavailable.", "履歴をさらに読み込みましたが、返信元を特定できませんでした。削除済みまたは表示できない可能性があります。")
         }
         let alert = UIAlertController(
             title: title,
             message: message,
             preferredStyle: .alert
         )
-        alert.addAction(UIAlertAction(title: L("好的", "OK"), style: .default))
+        alert.addAction(UIAlertAction(title: LT("好的", "OK", "OK"), style: .default))
         present(alert, animated: true)
     }
 
@@ -1392,14 +1421,14 @@ private extension DemoAlignedChatViewController {
 
     func makeMessageContextMenu(for message: ChatMessage) -> UIMenu {
         let copyAction = UIAction(
-            title: L("复制", "Copy"),
+            title: LT("复制", "Copy", "コピー"),
             image: UIImage(systemName: "doc.on.doc")
         ) { _ in
             UIPasteboard.general.string = message.content
         }
 
         let replyAction = UIAction(
-            title: L("引用回复", "Reply"),
+            title: LT("引用回复", "Reply", "引用返信"),
             image: UIImage(systemName: "arrowshape.turn.up.left")
         ) { [weak self] _ in
             self?.chatController.toggleReplyDraft(for: message.id)
@@ -1407,7 +1436,7 @@ private extension DemoAlignedChatViewController {
         }
 
         let mentionAction = UIAction(
-            title: L("@TA", "@Mention"),
+            title: LT("@TA", "@Mention", "@メンション"),
             image: UIImage(systemName: "at")
         ) { [weak self] _ in
             guard let self else { return }
@@ -1420,7 +1449,7 @@ private extension DemoAlignedChatViewController {
         }
 
         let deleteAction = UIAction(
-            title: L("删除", "Delete"),
+            title: LT("删除", "Delete", "削除"),
             image: UIImage(systemName: "trash"),
             attributes: message.isMine && message.deliveryStatus == .failed ? .destructive : .disabled
         ) { [weak self] _ in
@@ -1428,7 +1457,7 @@ private extension DemoAlignedChatViewController {
         }
 
         let resendAction = UIAction(
-            title: L("重发", "Resend"),
+            title: LT("重发", "Resend", "再送信"),
             image: UIImage(systemName: "arrow.clockwise"),
             attributes: message.isMine && message.deliveryStatus == .failed ? [] : .disabled
         ) { [weak self] _ in

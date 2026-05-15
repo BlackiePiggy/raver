@@ -10,11 +10,11 @@ struct SquadOfflineActivityBanner: View {
                 SquadOfflineEqualizerIcon(color: RaverTheme.accent)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(activity.displayTitle ?? L("小队正在活动中", "Squad is active"))
+                    Text(activity.displayTitle ?? LT("小队正在活动中", "Squad is active", "Squadが活動中"))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                         .lineLimit(1)
-                    Text(L("小队 \(activity.participantCount) 人正在活动中", "\(activity.participantCount) squad members active"))
+                    Text(LT("小队 \(activity.participantCount) 人正在活动中", "\(activity.participantCount) squad members active", "Squadの\(activity.participantCount)人が活動中"))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(RaverTheme.secondaryText)
                         .lineLimit(1)
@@ -38,7 +38,7 @@ struct SquadOfflineActivityBanner: View {
             .padding(.bottom, 10)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(L("进入小队线下活动", "Open squad offline activity"))
+        .accessibilityLabel(LT("进入小队线下活动", "Open squad offline activity", "Squadオフライン活動を開く"))
     }
 }
 

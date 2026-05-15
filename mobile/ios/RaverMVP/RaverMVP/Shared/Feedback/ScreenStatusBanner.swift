@@ -93,7 +93,7 @@ struct ScreenStatusBanner: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(L("关闭", "Close"))
+                .accessibilityLabel(LT("关闭", "Close", "閉じる"))
             }
         }
         .padding(.horizontal, 14)
@@ -110,7 +110,7 @@ struct ScreenStatusBanner: View {
 }
 
 struct InlineLoadingBadge: View {
-    var title: String = L("正在更新", "Updating")
+    var title: String = LT("正在更新", "Updating", "更新中")
 
     var body: some View {
         HStack(spacing: 8) {

@@ -140,9 +140,23 @@ protocol LocationSyncRepository {
 
 struct SquadActivityRepositoryAdapter: SquadActivityRepository {
     private let service: SocialService
+    private let accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)?
 
-    init(service: SocialService) {
+    init(
+        service: SocialService,
+        accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)? = nil
+    ) {
         self.service = service
+        self.accountEnforcementStatusProvider = accountEnforcementStatusProvider
+    }
+
+    private func ensureAllowed(_ scopes: [AccountEnforcementScope]) async throws {
+        guard let accountEnforcementStatusProvider else { return }
+        guard let status = await accountEnforcementStatusProvider(),
+              let restriction = status.restriction(for: scopes) else {
+            return
+        }
+        throw ServiceError.accountEnforcementRestricted(restriction)
     }
 
     func fetchCurrentSquadOfflineActivity(squadID: String) async throws -> SquadOfflineActivity? {
@@ -158,7 +172,8 @@ struct SquadActivityRepositoryAdapter: SquadActivityRepository {
     }
 
     func startSquadOfflineActivity(squadID: String, input: StartSquadOfflineActivityInput) async throws -> SquadOfflineActivity {
-        try await service.startSquadOfflineActivity(squadID: squadID, input: input)
+        try await ensureAllowed([.eventCreate])
+        return try await service.startSquadOfflineActivity(squadID: squadID, input: input)
     }
 
     func endSquadOfflineActivity(squadID: String, activityID: String) async throws -> SquadOfflineActivity? {
@@ -196,9 +211,23 @@ struct SquadActivityRepositoryAdapter: SquadActivityRepository {
 
 struct LocationSyncRepositoryAdapter: LocationSyncRepository {
     private let service: SocialService
+    private let accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)?
 
-    init(service: SocialService) {
+    init(
+        service: SocialService,
+        accountEnforcementStatusProvider: (() async -> AccountEnforcementStatus?)? = nil
+    ) {
         self.service = service
+        self.accountEnforcementStatusProvider = accountEnforcementStatusProvider
+    }
+
+    private func ensureAllowed(_ scopes: [AccountEnforcementScope]) async throws {
+        guard let accountEnforcementStatusProvider else { return }
+        guard let status = await accountEnforcementStatusProvider(),
+              let restriction = status.restriction(for: scopes) else {
+            return
+        }
+        throw ServiceError.accountEnforcementRestricted(restriction)
     }
 
     func uploadSquadOfflineActivityLocation(
@@ -206,6 +235,7 @@ struct LocationSyncRepositoryAdapter: LocationSyncRepository {
         activityID: String,
         input: SquadOfflineLocationUploadInput
     ) async throws {
+        try await ensureAllowed([.locationShare])
         try await service.uploadSquadOfflineActivityLocation(
             squadID: squadID,
             activityID: activityID,

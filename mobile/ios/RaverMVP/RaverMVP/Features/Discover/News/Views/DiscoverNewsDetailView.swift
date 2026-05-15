@@ -132,7 +132,7 @@ struct DiscoverNewsDetailView: View {
 
                     Spacer(minLength: 8)
 
-                    Label(L("\(article.replyCount) 回复", "\(article.replyCount) replies"), systemImage: "bubble.left")
+                    Label(LT("\(article.replyCount) 回复", "\(article.replyCount) replies", "\(article.replyCount) 件の返信"), systemImage: "bubble.left")
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
@@ -144,7 +144,7 @@ struct DiscoverNewsDetailView: View {
                     Text("·")
                         .font(.caption2)
                         .foregroundStyle(RaverTheme.secondaryText)
-                    Text(L("回复 \(article.replyCount)", "Replies \(article.replyCount)"))
+                    Text(LT("回复 \(article.replyCount)", "Replies \(article.replyCount)", "返信 \(article.replyCount)"))
                         .font(.caption2)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
@@ -169,7 +169,7 @@ struct DiscoverNewsDetailView: View {
                 if let link = article.link,
                    let url = URL(string: link) {
                     Link(destination: url) {
-                        Label(LL("查看原文链接"), systemImage: "arrow.up.right.square")
+                        Label(LT("查看原文链接", "查看原文链接", "原文リンクを見る"), systemImage: "arrow.up.right.square")
                             .font(.subheadline.weight(.semibold))
                     }
                     .foregroundStyle(RaverTheme.accent)
@@ -189,7 +189,7 @@ struct DiscoverNewsDetailView: View {
         }
         .background(RaverTheme.background)
         .raverGradientNavigationChrome(
-            title: LL("资讯详情"),
+            title: LT("资讯详情", "资讯详情", "ニュース詳細"),
             trailing: navigationShareButton.eraseToAnyView()
         ) {
             dismiss()
@@ -212,7 +212,7 @@ struct DiscoverNewsDetailView: View {
                 }
             ) { conversation in
                 showWidgetStatusBanner(
-                    message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                    message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                     conversation: conversation
                 )
             } preview: {
@@ -220,11 +220,11 @@ struct DiscoverNewsDetailView: View {
             }
             .presentationDetents([.fraction(0.76), .large])
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -252,7 +252,7 @@ struct DiscoverNewsDetailView: View {
                         }
                     ) { conversation in
                         showWidgetStatusBanner(
-                            message: L("已分享到 \(conversation.title)", "Shared to \(conversation.title)"),
+                            message: LT("已分享到 \(conversation.title)", "Shared to \(conversation.title)", "\(conversation.title) に共有しました"),
                             conversation: conversation
                         )
                     } onMoreChats: {
@@ -327,7 +327,7 @@ struct DiscoverNewsDetailView: View {
                 Image(systemName: "link")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
-                Text(LL("关联实体"))
+                Text(LT("关联实体", "关联实体", "関連エンティティ"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
                 if isLoadingBindings {
@@ -467,7 +467,7 @@ struct DiscoverNewsDetailView: View {
             Divider()
                 .padding(.top, 2)
 
-            Text(LL("评论"))
+            Text(LT("评论", "评论", "コメント"))
                 .font(.headline)
                 .foregroundStyle(RaverTheme.primaryText)
 
@@ -479,20 +479,20 @@ struct DiscoverNewsDetailView: View {
                 CommentSectionSkeletonView(count: 3)
             } else if case .failure(let message) = commentsPhase {
                 ScreenErrorCard(
-                    title: L("评论加载失败", "Comments Failed to Load"),
+                    title: LT("评论加载失败", "Comments Failed to Load", "コメントの読み込みに失敗しました"),
                     message: message
                 ) {
                     Task { await loadComments(reset: true) }
                 }
             } else if case .offline(let message) = commentsPhase {
                 ScreenErrorCard(
-                    title: L("网络不可用", "Network Unavailable"),
+                    title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                     message: message
                 ) {
                     Task { await loadComments(reset: true) }
                 }
             } else if comments.isEmpty {
-                Text(LL("还没有评论，来抢沙发吧。"))
+                Text(LT("还没有评论，来抢沙发吧。", "还没有评论，来抢沙发吧。", "コメントはまだありません。最初のコメントを書きましょう。"))
                     .font(.subheadline)
                     .foregroundStyle(RaverTheme.secondaryText)
             } else {
@@ -543,13 +543,13 @@ struct DiscoverNewsDetailView: View {
             }
 
             HStack(spacing: 8) {
-                TextField(LL("说点什么..."), text: $commentInput, axis: .vertical)
+                TextField(LT("说点什么...", "说点什么...", "何か書いてください..."), text: $commentInput, axis: .vertical)
                     .lineLimit(1...4)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-                Button(L("发送", "Send")) {
+                Button(LT("发送", "Send", "送信")) {
                     Task { await submitComment() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -632,7 +632,7 @@ struct DiscoverNewsDetailView: View {
             commentsPhase = comments.isEmpty ? .empty : .success
         } catch {
             commentsPhase = .failure(
-                message: error.userFacingMessage ?? L("评论加载失败，请稍后重试", "Failed to load comments. Please try again later.")
+                message: error.userFacingMessage ?? LT("评论加载失败，请稍后重试", "Failed to load comments. Please try again later.", "コメントを読み込めませんでした。時間をおいて再試行してください。")
             )
         }
     }
@@ -653,7 +653,7 @@ struct DiscoverNewsDetailView: View {
             commentsPhase = .success
             commentActionMessage = nil
         } catch {
-            commentActionMessage = error.userFacingMessage ?? L("评论发送失败，请稍后重试", "Failed to send comment. Please try again later.")
+            commentActionMessage = error.userFacingMessage ?? LT("评论发送失败，请稍后重试", "Failed to send comment. Please try again later.", "コメントを送信できませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -724,7 +724,7 @@ struct DiscoverNewsDetailView: View {
             coverImageURL: article.coverImageURL?.nilIfBlank,
             publishedAtISO8601: ISO8601DateFormatter().string(from: article.publishedAt),
             authorName: article.authorName.nilIfBlank,
-            badgeText: L("资讯", "News")
+            badgeText: LT("资讯", "News", "ニュース")
         )
     }
 
@@ -771,14 +771,14 @@ struct DiscoverNewsDetailView: View {
                 systemImage: "message.circle.fill",
                 accentColor: Color(red: 0.18, green: 0.76, blue: 0.35)
             ) {
-                errorMessage = L("微信分享接口待接入。", "WeChat share hook is not connected yet.")
+                errorMessage = LT("微信分享接口待接入。", "WeChat share hook is not connected yet.", "WeChat共有連携は未接続です。")
             },
             SharePanelPrimaryAction(
                 title: "QQ",
                 systemImage: "bubble.left.and.bubble.right.fill",
                 accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
             ) {
-                errorMessage = L("QQ 分享接口待接入。", "QQ share hook is not connected yet.")
+                errorMessage = LT("QQ 分享接口待接入。", "QQ share hook is not connected yet.", "QQ共有連携は未接続です。")
             }
         ]
     }
@@ -786,40 +786,40 @@ struct DiscoverNewsDetailView: View {
     private func shareMoreQuickActions() -> [SharePanelQuickAction] {
         var actions: [SharePanelQuickAction] = [
             SharePanelQuickAction(
-                title: L("复制链接", "Copy Link"),
+                title: LT("复制链接", "Copy Link", "リンクをコピー"),
                 systemImage: "link",
                 accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
             ) {
                 Task { await copyNewsShareLink() }
             },
             SharePanelQuickAction(
-                title: L("查看二维码", "View QR"),
+                title: LT("查看二维码", "View QR", "QRを見る"),
                 systemImage: "qrcode",
                 accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
             ) {
                 Task { await openNewsQRCode() }
             },
             SharePanelQuickAction(
-                title: L("查看海报", "View Poster"),
+                title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
             ) {
                 Task { await openNewsPoster() }
             },
             SharePanelQuickAction(
-                title: L("保存海报", "Save Poster"),
+                title: LT("保存海报", "Save Poster", "海報を保存"),
                 systemImage: "photo.badge.arrow.down",
                 accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
             ) {
                 Task { await saveNewsPoster() }
             },
             SharePanelQuickAction(
-                title: L("复制 App 内链接", "Copy App Link"),
+                title: LT("复制 App 内链接", "Copy App Link", "アプリ内リンクをコピー"),
                 systemImage: "link",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
             ) {
                 UIPasteboard.general.string = newsDeeplink(for: makeNewsShareCardPayload())
-                showWidgetStatusBanner(message: L("链接已复制", "Link copied"))
+                showWidgetStatusBanner(message: LT("链接已复制", "Link copied", "リンクをコピーしました"))
             }
         ]
 
@@ -827,7 +827,7 @@ struct DiscoverNewsDetailView: View {
            let url = URL(string: raw) {
             actions.append(
                 SharePanelQuickAction(
-                    title: L("查看原文", "Open Source"),
+                    title: LT("查看原文", "Open Source", "原文を見る"),
                     systemImage: "arrow.up.right.square",
                     accentColor: Color(red: 0.53, green: 0.45, blue: 0.96)
                 ) {
@@ -853,12 +853,12 @@ struct DiscoverNewsDetailView: View {
             )
 
             if result.usedDeepLinkFallback {
-                showWidgetStatusBanner(message: L("已复制 App 内链接", "Copied app-only link."))
+                showWidgetStatusBanner(message: LT("已复制 App 内链接", "Copied app-only link.", "アプリ内リンクをコピーしました"))
             } else {
-                showWidgetStatusBanner(message: L("已复制链接", "Link copied"))
+                showWidgetStatusBanner(message: LT("已复制链接", "Link copied", "リンクをコピーしました"))
             }
         } catch {
-            errorMessage = error.userFacingMessage ?? L("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.")
+            errorMessage = error.userFacingMessage ?? LT("复制链接失败，请稍后重试。", "Failed to copy link. Please try again.", "リンクをコピーできませんでした。もう一度お試しください。")
         }
     }
 
@@ -887,7 +887,7 @@ struct DiscoverNewsDetailView: View {
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "QRコードを開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -907,20 +907,20 @@ struct DiscoverNewsDetailView: View {
             appPush(
                 .profile(
                     .shareAsset(
-                        navigationTitle: L("分享海报", "Share Poster"),
+                        navigationTitle: LT("分享海报", "Share Poster", "海報を共有"),
                         title: resolved.payload.title,
                         subtitle: resolved.payload.subtitle,
                         imageURL: resolved.payload.imageURL,
                         assetURL: resolved.payload.posterURL,
-                        emptyTitle: L("海报暂未生成", "Poster Unavailable"),
-                        emptyMessage: L("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later."),
-                        hintText: L("资讯海报由分享系统统一生成，标题、摘要和二维码都会和短链保持一致。", "News posters are generated by the share system, so the headline, summary, and QR code stay aligned with the short link."),
-                        saveButtonTitle: L("保存海报", "Save Poster")
+                        emptyTitle: LT("海报暂未生成", "Poster Unavailable", "海報はまだ生成されていません"),
+                        emptyMessage: LT("当前分享海报还没有准备好，请稍后再试。", "The share poster is not ready yet. Please try again later.", "共有海報はまだ準備できていません。時間をおいて再試行してください。"),
+                        hintText: LT("资讯海报由分享系统统一生成，标题、摘要和二维码都会和短链保持一致。", "News posters are generated by the share system, so the headline, summary, and QR code stay aligned with the short link.", "ニュース海報は共有システムで生成され、見出し、概要、QRコードは短縮リンクと同期されます。"),
+                        saveButtonTitle: LT("保存海报", "Save Poster", "海報を保存")
                     )
                 )
             )
         } catch {
-            errorMessage = error.userFacingMessage ?? L("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -938,9 +938,9 @@ struct DiscoverNewsDetailView: View {
                 channel: "poster_save"
             )
             try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: L("海报已保存到相册", "Poster saved to Photos"))
+            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
         } catch {
-            errorMessage = error.userFacingMessage ?? L("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 

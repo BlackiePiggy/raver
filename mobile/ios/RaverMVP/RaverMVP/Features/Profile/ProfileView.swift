@@ -19,13 +19,26 @@ struct ProfileView: View {
 
     var body: some View {
         VStack(spacing: 12) {
+            if appState.accountEnforcementStatus.enforcementStatus.isLimited {
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(LT("账号当前受限", "Account restricted", "アカウントが制限中"))
+                            .font(.subheadline.weight(.semibold))
+                        Text(appState.accountEnforcementStatus.restrictionSummary)
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
             if viewModel.bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if let bannerMessage = viewModel.bannerMessage {
                         ScreenStatusBanner(
                             message: bannerMessage,
                             style: .error,
-                            actionTitle: L("重试", "Retry")
+                            actionTitle: LT("重试", "Retry", "再試行")
                         ) {
                             Task { await viewModel.load() }
                         }
@@ -53,9 +66,9 @@ struct ProfileView: View {
                     VStack(spacing: 14) {
                         profileTopActions
                         ContentUnavailableView(
-                            L("离线模式", "Offline Mode"),
+                            LT("离线模式", "Offline Mode", "オフラインモード"),
                             systemImage: "wifi.slash",
-                            description: Text(L("网络不可用，已切换离线入口。你仍可进入我的行程和小工具。", "Network unavailable. Switched to offline entry. You can still access My Routes and Tools."))
+                            description: Text(LT("网络不可用，已切换离线入口。你仍可进入我的行程和小工具。", "Network unavailable. Switched to offline entry. You can still access My Routes and Tools.", "ネットワークを利用できません。オフライン入口に切り替えました。マイルートとツールは引き続き利用できます。"))
                         )
 
                         profileQuickActions
@@ -90,13 +103,13 @@ struct ProfileView: View {
                             )
 
                             ProfileRecentCheckinsCard(
-                                title: L("我的近期打卡", "My Recent Check-ins"),
+                                title: LT("我的近期打卡", "My Recent Check-ins", "最近のチェックイン"),
                                 checkins: viewModel.recentCheckins,
-                                emptyText: L("去发现页完成活动或 DJ 打卡，记录会显示在这里。", "Complete event or DJ check-ins from Discover. Records will appear here.")
+                                emptyText: LT("去发现页完成活动或 DJ 打卡，记录会显示在这里。", "Complete event or DJ check-ins from Discover. Records will appear here.", "発見ページでイベントまたはDJチェックインを完了すると、記録がここに表示されます。")
                             ) {
                                 profilePush(.myCheckins(
                                     targetUserID: nil,
-                                    title: L("我的打卡", "My Check-ins"),
+                                    title: LT("我的打卡", "My Check-ins", "自分のチェックイン"),
                                     ownerDisplayName: viewModel.profile?.displayName
                                 ))
                             }
@@ -127,11 +140,11 @@ struct ProfileView: View {
                 .environmentObject(appState)
                 .presentationDetents([.large])
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { viewModel.error != nil },
             set: { if !$0 { viewModel.error = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
         }
@@ -143,7 +156,7 @@ struct ProfileView: View {
             HStack {
                 profileTopIconButton(
                     systemName: "square.and.pencil",
-                    accessibilityLabel: L("编辑", "Edit")
+                    accessibilityLabel: LT("编辑", "Edit", "編集")
                 ) {
                     profilePush(.editProfile)
                 }
@@ -152,7 +165,7 @@ struct ProfileView: View {
 
                 profileTopIconButton(
                     systemName: "ellipsis",
-                    accessibilityLabel: L("更多", "More")
+                    accessibilityLabel: LT("更多", "More", "その他")
                 ) {
                     profilePush(.settings)
                 }
@@ -200,14 +213,14 @@ struct ProfileView: View {
                 )
             )
         } catch {
-            viewModel.error = error.userFacingMessage ?? L("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.")
+            viewModel.error = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "Failed to open QR code. Please try again later.")
         }
     }
 
     private var profileQuickActions: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 14) {
-                Text(L("快捷入口", "Quick Actions"))
+                Text(LT("快捷入口", "Quick Actions", "クイックアクション"))
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
 
@@ -215,24 +228,24 @@ struct ProfileView: View {
                     columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top), count: 4),
                     spacing: 14
                 ) {
-                    quickActionTile(title: L("我的发布", "My Posts"), icon: "square.stack.3d.up") {
+                    quickActionTile(title: LT("我的发布", "My Posts", "自分の投稿"), icon: "square.stack.3d.up") {
                         profilePush(.myPublishes)
                     }
-                    quickActionTile(title: L("我的收藏", "My Saves"), icon: "star.fill") {
+                    quickActionTile(title: LT("我的收藏", "My Saves", "保存済み"), icon: "star.fill") {
                         profilePush(.mySaves)
                     }
-                    quickActionTile(title: L("我的路线", "My Routes"), icon: "point.topleft.down.curvedto.point.bottomright.up") {
+                    quickActionTile(title: LT("我的路线", "My Routes", "マイルート"), icon: "point.topleft.down.curvedto.point.bottomright.up") {
                         profilePush(.myRoutes)
                     }
                     if AppConfig.virtualAssetsEnabled {
-                        quickActionTile(title: L("装扮中心", "Style Center"), icon: "sparkles") {
+                        quickActionTile(title: LT("装扮中心", "Style Center", "スタイルセンター"), icon: "sparkles") {
                             profilePush(.virtualAssetCenter)
                         }
                     }
-                    quickActionTile(title: L("小工具", "Tools"), icon: "wand.and.stars") {
+                    quickActionTile(title: LT("小工具", "Tools", "ツール"), icon: "wand.and.stars") {
                         profilePush(.tools)
                     }
-                    quickActionTile(title: L("二维码", "QR Code"), icon: "qrcode") {
+                    quickActionTile(title: LT("二维码", "QR Code", "QRコード"), icon: "qrcode") {
                         guard let profile = viewModel.profile else { return }
                         Task { await openMyProfileQRCode(profile) }
                     }
@@ -278,13 +291,13 @@ struct ProfileView: View {
             switch viewModel.selectedSection {
             case .published:
                 if viewModel.recentPosts.isEmpty {
-                    ContentUnavailableView(LL("还没有动态"), systemImage: "square.and.pencil")
+                    ContentUnavailableView(LT("还没有动态", "No posts yet", "投稿はまだありません"), systemImage: "square.and.pencil")
                 } else {
                     feedList(viewModel.recentPosts, actionAt: nil)
                 }
             case .saves:
                 if viewModel.savedItems.isEmpty {
-                    ContentUnavailableView(L("暂无收藏帖子", "No saved posts yet"), systemImage: "star")
+                    ContentUnavailableView(LT("暂无收藏帖子", "No saved posts yet", "保存済み投稿はまだありません"), systemImage: "star")
                 } else {
                     feedList(
                         viewModel.savedItems.map(\.post),
@@ -296,7 +309,7 @@ struct ProfileView: View {
                 }
             case .likes:
                 if viewModel.likedItems.isEmpty {
-                    ContentUnavailableView(L("暂无 Like 过的帖子", "No liked posts yet"), systemImage: "heart")
+                    ContentUnavailableView(LT("暂无 Like 过的帖子", "No liked posts yet", "いいねした投稿はまだありません"), systemImage: "heart")
                 } else {
                     feedList(
                         viewModel.likedItems.map(\.post),
@@ -317,7 +330,7 @@ struct ProfileView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     if let actionAt,
                        let at = actionAt[post.id] {
-                        Text(L("操作于 \(at.feedTimeText)", "Action at \(at.feedTimeText)"))
+                        Text(LT("操作于 \(at.feedTimeText)", "Action at \(at.feedTimeText)", "操作日時 \(at.feedTimeText)"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                             .padding(.horizontal, 4)
@@ -470,7 +483,7 @@ final class MySavesViewModel: ObservableObject {
             errorMessage = nil
         } catch {
             guard !error.isUserInitiatedCancellation else { return }
-            errorMessage = error.userFacingMessage ?? L("收藏内容加载失败，请稍后重试", "Failed to load saves. Please try again later.")
+            errorMessage = error.userFacingMessage ?? LT("收藏内容加载失败，请稍后重试", "Failed to load saves. Please try again later.", "保存内容を読み込めませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -510,8 +523,8 @@ struct MySavesView: View {
 
         var title: String {
             switch self {
-            case .events: return L("收藏活动", "Events")
-            case .djs: return L("关注的DJ", "DJs")
+            case .events: return LT("收藏活动", "Events", "Events")
+            case .djs: return LT("关注的DJ", "DJs", "DJ")
             }
         }
 
@@ -557,18 +570,18 @@ struct MySavesView: View {
         .listStyle(.insetGrouped)
         .environment(\.defaultMinListRowHeight, 52)
         .listSectionSpacing(.compact)
-        .raverSystemNavigation(title: L("我的收藏", "My Saves"))
+        .raverSystemNavigation(title: LT("我的收藏", "My Saves", "保存済み"))
         .task {
             await viewModel.load()
         }
         .refreshable {
             await viewModel.load(force: true)
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { viewModel.errorMessage != nil },
             set: { if !$0 { viewModel.errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
@@ -577,7 +590,7 @@ struct MySavesView: View {
     @ViewBuilder
     private var savedEventsSection: some View {
         if viewModel.markedEvents.isEmpty, !viewModel.isLoading {
-            ContentUnavailableView(L("暂无收藏活动", "No favorite events yet"), systemImage: "star")
+            ContentUnavailableView(LT("暂无收藏活动", "No favorite events yet", "お気に入りイベントはまだありません"), systemImage: "star")
                 .listRowBackground(Color.clear)
         }
 
@@ -592,7 +605,7 @@ struct MySavesView: View {
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                     let addressText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-                    Text(addressText.isEmpty ? L("地点待补充", "Location pending") : addressText)
+                    Text(addressText.isEmpty ? LT("地点待补充", "Location pending", "場所は未設定") : addressText)
                         .font(.caption2)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
@@ -606,7 +619,7 @@ struct MySavesView: View {
     @ViewBuilder
     private var followedDJsSection: some View {
         if viewModel.followedDJs.isEmpty, !viewModel.isLoading {
-            ContentUnavailableView(L("暂无关注的 DJ", "No followed DJs yet"), systemImage: "headphones")
+            ContentUnavailableView(LT("暂无关注的 DJ", "No followed DJs yet", "フォロー中のDJはまだありません"), systemImage: "headphones")
                 .listRowBackground(Color.clear)
         }
 
@@ -626,7 +639,7 @@ struct MySavesView: View {
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
                         if let followerCount = dj.followerCount {
-                            Text(L("\(followerCount) 位关注者", "\(followerCount) followers"))
+                            Text(LT("\(followerCount) 位关注者", "\(followerCount) followers", "\(followerCount)人のフォロワー"))
                                 .font(.caption2)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
@@ -743,10 +756,10 @@ struct ProfileHeaderCard<Actions: View>: View {
             }
 
             HStack(spacing: 24) {
-                stat(L("动态", "Posts"), value: profile.postsCount)
-                stat(L("粉丝", "Followers"), value: profile.followersCount, onTap: onFollowersTap)
-                stat(L("关注", "Following"), value: profile.followingCount, onTap: onFollowingTap)
-                stat(L("好友", "Friends"), value: profile.friendsCount, onTap: onFriendsTap)
+                stat(LT("动态", "Posts", "投稿"), value: profile.postsCount)
+                stat(LT("粉丝", "Followers", "フォロワー"), value: profile.followersCount, onTap: onFollowersTap)
+                stat(LT("关注", "Following", "フォロー中"), value: profile.followingCount, onTap: onFollowingTap)
+                stat(LT("好友", "Friends", "友達"), value: profile.friendsCount, onTap: onFriendsTap)
             }
 
             actions()
@@ -952,7 +965,7 @@ struct ProfileRecentCheckinsCard: View {
                         .font(.headline)
                         .foregroundStyle(RaverTheme.primaryText)
                     Spacer()
-                    Button(LL("查看全部")) {
+                    Button(LT("查看全部", "View all", "すべて表示")) {
                         onShowAll()
                     }
                     .font(.subheadline.weight(.semibold))
@@ -1006,21 +1019,21 @@ struct ProfileRecentCheckinsCard: View {
                 let fallback = event.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !fallback.isEmpty { return fallback }
             }
-            return L("活动打卡", "Event Check-in")
+            return LT("活动打卡", "Event Check-in", "イベントチェックイン")
         }
-        return item.dj?.name ?? L("DJ 打卡", "DJ Check-in")
+        return item.dj?.name ?? LT("DJ 打卡", "DJ Check-in", "DJチェックイン")
     }
 
     private func checkinSubtitle(_ item: WebCheckin) -> String {
         let location: String = {
             if let event = item.event {
                 let unified = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-                return unified.isEmpty ? L("现场记录", "Live Record") : unified
+                return unified.isEmpty ? LT("现场记录", "Live Record", "ライブ記録") : unified
             }
             if let country = item.dj?.country, !country.isEmpty {
                 return country
             }
-            return L("现场记录", "Live Record")
+            return LT("现场记录", "Live Record", "ライブ記録")
         }()
         return "\(item.attendedAt.appLocalizedYMDText()) · \(location)"
     }
@@ -1133,17 +1146,17 @@ struct MyRoutesView: View {
             LazyVStack(alignment: .leading, spacing: 12) {
                 if routeStore.routes.isEmpty, cachedSnapshots.isEmpty {
                     ContentUnavailableView(
-                        L("暂无我的行程", "No Saved Routes"),
+                        LT("暂无我的行程", "No Saved Routes", "保存済みルートはまだありません"),
                         systemImage: "point.topleft.down.curvedto.point.bottomright.up",
-                        description: Text(L("在活动时间表中定制并保存路线，或在活动详情缓存后，会显示在这里。", "Saved routes and cached events will appear here."))
+                        description: Text(LT("在活动时间表中定制并保存路线，或在活动详情缓存后，会显示在这里。", "Saved routes and cached events will appear here.", "イベントタイムテーブルでカスタム保存したルートや、イベント詳細のキャッシュがここに表示されます。"))
                     )
                     .padding(.top, 80)
                 }
 
                 if !routeStore.routes.isEmpty {
                     sectionHeader(
-                        title: L("我的路线", "My Saved Routes"),
-                        subtitle: L("按你在时间表中的选择生成", "Built from your timetable selections")
+                        title: LT("我的路线", "My Saved Routes", "マイルート"),
+                        subtitle: LT("按你在时间表中的选择生成", "Built from your timetable selections", "タイムテーブルでの選択から生成")
                     )
 
                     ForEach(routeStore.routes) { route in
@@ -1165,7 +1178,7 @@ struct MyRoutesView: View {
                             Button(role: .destructive) {
                                 routeStore.delete(eventID: route.eventID)
                             } label: {
-                                Label(L("删除", "Delete"), systemImage: "trash")
+                                Label(LT("删除", "Delete", "削除"), systemImage: "trash")
                             }
                         }
                     }
@@ -1173,12 +1186,12 @@ struct MyRoutesView: View {
 
                 if !cachedSnapshots.isEmpty || isLoadingCachedSnapshots {
                     sectionHeader(
-                        title: L("离线缓存活动", "Offline Cached Events"),
-                        subtitle: L("弱网或离线时可直接打开", "Open directly in weak-network or offline mode")
+                        title: LT("离线缓存活动", "Offline Cached Events", "オフラインキャッシュイベント"),
+                        subtitle: LT("弱网或离线时可直接打开", "Open directly in weak-network or offline mode", "弱いネットワークやオフライン時も直接開けます")
                     )
 
                     if isLoadingCachedSnapshots, cachedSnapshots.isEmpty {
-                        ProgressView(L("加载缓存中...", "Loading cache..."))
+                        ProgressView(LT("加载缓存中...", "Loading cache...", "キャッシュを読み込み中..."))
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 12)
                     } else {
@@ -1196,7 +1209,7 @@ struct MyRoutesView: View {
                                         await loadCachedSnapshots()
                                     }
                                 } label: {
-                                    Label(L("删除缓存", "Delete Cache"), systemImage: "trash")
+                                    Label(LT("删除缓存", "Delete Cache", "キャッシュを削除"), systemImage: "trash")
                                 }
                             }
                         }
@@ -1206,7 +1219,7 @@ struct MyRoutesView: View {
             .padding(16)
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: L("我的行程", "My Routes"))
+        .raverSystemNavigation(title: LT("我的行程", "My Routes", "マイルート"))
         .task {
             await loadCachedSnapshots()
         }
@@ -1237,7 +1250,7 @@ struct MyRoutesView: View {
                         .foregroundStyle(RaverTheme.secondaryText)
 
                     Label(
-                        L("\(route.selectedSlotIDs.count) 个已选演出", "\(route.selectedSlotIDs.count) selected sets"),
+                        LT("\(route.selectedSlotIDs.count) 个已选演出", "\(route.selectedSlotIDs.count) selected sets", "選択済み出演 \(route.selectedSlotIDs.count)件"),
                         systemImage: "checkmark.circle.fill"
                     )
                     .font(.caption.weight(.semibold))
@@ -1281,7 +1294,7 @@ struct MyRoutesView: View {
                         .foregroundStyle(RaverTheme.secondaryText)
 
                     Label(
-                        L("缓存于 \(Self.dateTimeFormatter.string(from: snapshot.cachedAt))", "Cached at \(Self.dateTimeFormatter.string(from: snapshot.cachedAt))"),
+                        LT("缓存于 \(Self.dateTimeFormatter.string(from: snapshot.cachedAt))", "Cached at \(Self.dateTimeFormatter.string(from: snapshot.cachedAt))", "キャッシュ日時 \(Self.dateTimeFormatter.string(from: snapshot.cachedAt))"),
                         systemImage: "externaldrive.fill.badge.checkmark"
                     )
                     .font(.caption.weight(.semibold))
@@ -1333,7 +1346,7 @@ struct MyRoutesView: View {
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage == .zh ? "zh_Hans_CN" : "en_US_POSIX")
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
         formatter.timeZone = .current
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
@@ -1342,7 +1355,7 @@ struct MyRoutesView: View {
 
     private static let dateTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage == .zh ? "zh_Hans_CN" : "en_US_POSIX")
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
         formatter.timeZone = .current
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
@@ -1360,8 +1373,8 @@ struct ProfileToolsHubView: View {
                     profilePush(.widgetManager)
                 } label: {
                     ProfileToolFeatureCard(
-                        title: L("桌面倒计时管理", "Widget Countdown"),
-                        subtitle: L("集中管理已加入桌面小组件的活动。", "Manage events added to your home screen widget."),
+                        title: LT("桌面倒计时管理", "Widget Countdown", "ウィジェットカウントダウン"),
+                        subtitle: LT("集中管理已加入桌面小组件的活动。", "Manage events added to your home screen widget.", "ホーム画面ウィジェットに追加したイベントをまとめて管理します。"),
                         systemImage: "apps.iphone",
                         accent: Color(red: 0.38, green: 0.54, blue: 0.96)
                     )
@@ -1372,8 +1385,8 @@ struct ProfileToolsHubView: View {
                     profilePush(.movieBanner)
                 } label: {
                     ProfileToolFeatureCard(
-                        title: L("Movie Banner 弹幕", "Movie Banner"),
-                        subtitle: L("超大字体全屏弹幕，支持静态与跑马灯。", "Huge full-screen banner with static and marquee modes."),
+                        title: LT("Movie Banner 弹幕", "Movie Banner", "Movie Banner"),
+                        subtitle: LT("超大字体全屏弹幕，支持静态与跑马灯。", "Huge full-screen banner with static and marquee modes.", "超大文字のフルスクリーンバナー。静止表示とマーキーに対応します。"),
                         systemImage: "textformat.size.larger",
                         accent: Color(red: 0.93, green: 0.36, blue: 0.52)
                     )
@@ -1383,7 +1396,7 @@ struct ProfileToolsHubView: View {
             .padding(16)
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: L("小工具", "Tools"))
+        .raverSystemNavigation(title: LT("小工具", "Tools", "ツール"))
     }
 }
 
@@ -1468,13 +1481,10 @@ struct WidgetEventManagerView: View {
                         .background(RaverTheme.background)
                 } else if events.isEmpty {
                     ContentUnavailableView(
-                        L("还没有已添加的小组件活动", "No widget events yet"),
+                        LT("还没有已添加的小组件活动", "No widget events yet", "追加済みウィジェットイベントはまだありません"),
                         systemImage: "apps.iphone",
                         description: Text(
-                            L(
-                                "去活动详情页点击“添加到桌面倒计时”，这里就会集中显示。",
-                                "Add events from the event detail page and they will appear here."
-                            )
+                            LT("去活动详情页点击“添加到桌面倒计时”，这里就会集中显示。", "Add events from the event detail page and they will appear here.", "イベント詳細で「ウィジェットカウントダウンに追加」を押すと、ここにまとめて表示されます。")
                         )
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1516,14 +1526,14 @@ struct WidgetEventManagerView: View {
                                 Button {
                                     startRenaming(event)
                                 } label: {
-                                    Label(L("命名", "Rename"), systemImage: "pencil")
+                                    Label(LT("命名", "Rename", "名前変更"), systemImage: "pencil")
                                 }
                                 .tint(.blue)
 
                                 Button(role: .destructive) {
                                     remove(event)
                                 } label: {
-                                    Label(L("移除", "Remove"), systemImage: "trash")
+                                    Label(LT("移除", "Remove", "削除"), systemImage: "trash")
                                 }
                             }
                         }
@@ -1541,18 +1551,18 @@ struct WidgetEventManagerView: View {
         .task {
             await load()
         }
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
         .sheet(item: $editingEvent) { event in
             widgetRenameSheet(for: event)
         }
-        .raverSystemNavigation(title: L("桌面倒计时", "Widget Countdown"))
+        .raverSystemNavigation(title: LT("桌面倒计时", "Widget Countdown", "ウィジェットカウントダウン"))
     }
 
     @MainActor
@@ -1565,10 +1575,7 @@ struct WidgetEventManagerView: View {
             events = snapshot.events
             selectedLayoutStyle = snapshot.selectedLayoutStyle
         } catch {
-            errorMessage = L(
-                "读取桌面倒计时列表失败，请稍后重试。",
-                "Failed to load widget countdown events. Please try again later."
-            )
+            errorMessage = LT("读取桌面倒计时列表失败，请稍后重试。", "Failed to load widget countdown events. Please try again later.", "ウィジェットカウントダウン一覧を読み込めませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -1578,10 +1585,7 @@ struct WidgetEventManagerView: View {
             try WidgetSelectableEventsSyncService.shared.updateLayoutStyle(layoutStyle)
             selectedLayoutStyle = layoutStyle
         } catch {
-            errorMessage = L(
-                "切换文字排版方案失败，请稍后重试。",
-                "Failed to switch the widget text layout. Please try again later."
-            )
+            errorMessage = LT("切换文字排版方案失败，请稍后重试。", "Failed to switch the widget text layout. Please try again later.", "文字レイアウトを切り替えられませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -1590,10 +1594,7 @@ struct WidgetEventManagerView: View {
             _ = try WidgetSelectableEventsSyncService.shared.remove(eventID: event.id)
             events.removeAll { $0.id == event.id }
         } catch {
-            errorMessage = L(
-                "移除桌面倒计时活动失败，请稍后重试。",
-                "Failed to remove widget countdown event. Please try again later."
-            )
+            errorMessage = LT("移除桌面倒计时活动失败，请稍后重试。", "Failed to remove widget countdown event. Please try again later.", "ウィジェットカウントダウンイベントを削除できませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -1628,10 +1629,7 @@ struct WidgetEventManagerView: View {
             }
             editingEvent = nil
         } catch {
-            errorMessage = L(
-                "保存自定义名称失败，请稍后重试。",
-                "Failed to save the custom widget name. Please try again later."
-            )
+            errorMessage = LT("保存自定义名称失败，请稍后重试。", "Failed to save the custom widget name. Please try again later.", "カスタム名を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -1650,37 +1648,34 @@ struct WidgetEventManagerView: View {
             Form {
                 Section {
                     TextField(
-                        L("输入小组件名称", "Enter widget name"),
+                        LT("输入小组件名称", "Enter widget name", "ウィジェット名を入力"),
                         text: $customNameDraft
                     )
                     .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
                 } footer: {
                     Text(
-                        L(
-                            "仅保存在当前设备，用于小组件展示和选择，不会同步到线上或其他设备。留空则恢复活动原名。",
-                            "Saved only on this device for widget display and selection. It will not sync online or to other devices. Leave blank to restore the original event name."
-                        )
+                        LT("仅保存在当前设备，用于小组件展示和选择，不会同步到线上或其他设备。留空则恢复活动原名。", "Saved only on this device for widget display and selection. It will not sync online or to other devices. Leave blank to restore the original event name.", "この端末にのみ保存され、ウィジェット表示と選択に使われます。オンラインや他の端末には同期されません。空欄にすると元のイベント名に戻ります。")
                     )
                 }
 
-                Section(L("原活动名称", "Original Event Name")) {
+                Section(LT("原活动名称", "Original Event Name", "元のイベント名")) {
                     Text(event.name)
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
             }
             .scrollContentBackground(.hidden)
             .background(RaverTheme.background)
-            .navigationTitle(L("自定义名称", "Custom Name"))
+            .navigationTitle(LT("自定义名称", "Custom Name", "カスタム名"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(L("取消", "Cancel")) {
+                    Button(LT("取消", "Cancel", "キャンセル")) {
                         editingEvent = nil
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(L("保存", "Save")) {
+                    Button(LT("保存", "Save", "保存")) {
                         saveCustomName(for: event)
                     }
                 }
@@ -1691,7 +1686,7 @@ struct WidgetEventManagerView: View {
 
     private var widgetLayoutStyleSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(L("文字排版方案", "Text Layout Styles"))
+            Text(LT("文字排版方案", "Text Layout Styles", "Text Layout Styles"))
                 .font(.headline)
                 .foregroundStyle(RaverTheme.primaryText)
                 .padding(.horizontal, 16)
@@ -1790,7 +1785,7 @@ private struct WidgetLayoutStylePreviewCard: View {
                         .foregroundStyle(.white)
                         .lineLimit(2)
 
-                    Text("还有 5 天")
+                    Text(LT("还有 5 天", "5 days left", "あと5日"))
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(.white.opacity(0.92))
                         .lineLimit(1)
@@ -1799,7 +1794,7 @@ private struct WidgetLayoutStylePreviewCard: View {
             case .distance:
                 VStack(alignment: .leading, spacing: 0) {
                     (
-                        Text("距离")
+                        Text(LT("距离", "Until ", "あと"))
                             .font(.system(size: 10, weight: .regular))
                         + Text("Rave City")
                             .font(.system(size: 10, weight: .bold))
@@ -1815,7 +1810,7 @@ private struct WidgetLayoutStylePreviewCard: View {
                             .foregroundStyle(.white)
                             .lineLimit(1)
 
-                        Text("天")
+                        Text(LT("天", "days", "日"))
                             .font(.system(size: 10, weight: .regular))
                             .foregroundStyle(.white.opacity(0.92))
                             .lineLimit(1)
@@ -1855,12 +1850,12 @@ struct MovieBannerEditorView: View {
             VStack(spacing: 14) {
                 GlassCard {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(L("弹幕内容", "Banner Message"))
+                        Text(LT("弹幕内容", "Banner Message", "バナーメッセージ"))
                             .font(.headline)
                             .foregroundStyle(RaverTheme.primaryText)
 
                         TextField(
-                            L("例如：XXX看这里 / 前排求互动", "For example: Look here / Front row says hi"),
+                            LT("例如：XXX看这里 / 前排求互动", "For example: Look here / Front row says hi", "例: XXXこっち見て / 最前列からリアクション希望"),
                             text: $configuration.message,
                             axis: .vertical
                         )
@@ -1885,7 +1880,7 @@ struct MovieBannerEditorView: View {
                         } label: {
                             HStack {
                                 Image(systemName: "play.fill")
-                                Text(L("开始展示", "Start"))
+                                Text(LT("开始展示", "Start", "表示開始"))
                             }
                         }
                         .buttonStyle(PrimaryButtonStyle())
@@ -1895,12 +1890,12 @@ struct MovieBannerEditorView: View {
 
                 GlassCard {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text(L("展示设置", "Display Settings"))
+                        Text(LT("展示设置", "Display Settings", "表示設定"))
                             .font(.headline)
                             .foregroundStyle(RaverTheme.primaryText)
 
                         Picker(
-                            L("展示模式", "Display Mode"),
+                            LT("展示模式", "Display Mode", "表示モード"),
                             selection: $configuration.mode
                         ) {
                             ForEach(MovieBannerMode.allCases) { mode in
@@ -1910,7 +1905,7 @@ struct MovieBannerEditorView: View {
                         .pickerStyle(.segmented)
 
                         settingSliderRow(
-                            title: L("字体大小", "Font Size"),
+                            title: LT("字体大小", "Font Size", "文字サイズ"),
                             valueText: "\(Int(configuration.fontSize))",
                             value: $configuration.fontSize,
                             range: MovieBannerConfiguration.fontSizeRange,
@@ -1918,28 +1913,28 @@ struct MovieBannerEditorView: View {
                         )
 
                         settingSliderRow(
-                            title: L("滚动速度", "Scroll Speed"),
+                            title: LT("滚动速度", "Scroll Speed", "スクロール速度"),
                             valueText: "\(Int(configuration.scrollSpeed))",
                             value: $configuration.scrollSpeed,
                             range: 20 ... 280,
                             step: 5
                         )
 
-                        Toggle(L("闪烁效果", "Blink"), isOn: $configuration.isBlinkEnabled)
+                        Toggle(LT("闪烁效果", "Blink", "点滅効果"), isOn: $configuration.isBlinkEnabled)
                             .tint(RaverTheme.accent)
                             .foregroundStyle(RaverTheme.primaryText)
 
-                        Toggle(L("自动滚动", "Auto Scroll"), isOn: $configuration.autoScroll)
+                        Toggle(LT("自动滚动", "Auto Scroll", "自動スクロール"), isOn: $configuration.autoScroll)
                             .tint(RaverTheme.accent)
                             .foregroundStyle(RaverTheme.primaryText)
 
                         MovieBannerColorPickerRow(
-                            title: L("文字颜色", "Text Color"),
+                            title: LT("文字颜色", "Text Color", "Text Color"),
                             selection: $configuration.textColor
                         )
 
                         MovieBannerColorPickerRow(
-                            title: L("背景颜色", "Background"),
+                            title: LT("背景颜色", "Background", "背景色"),
                             selection: $configuration.backgroundColor
                         )
                     }
@@ -1948,7 +1943,7 @@ struct MovieBannerEditorView: View {
             .padding(16)
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: L("Movie Banner", "Movie Banner"))
+        .raverSystemNavigation(title: LT("Movie Banner", "Movie Banner", "Movie Banner"))
         .fullScreenCover(isPresented: $showDisplay) {
             MovieBannerDisplayView(
                 configuration: $configuration,
@@ -2146,7 +2141,7 @@ private struct MovieBannerDisplayView: View {
                     Button {
                         isPresented = false
                     } label: {
-                        Label(L("返回", "Back"), systemImage: "chevron.backward")
+                        Label(LT("返回", "Back", "戻る"), systemImage: "chevron.backward")
                     }
                     .buttonStyle(.borderedProminent)
 
@@ -2162,8 +2157,8 @@ private struct MovieBannerDisplayView: View {
                         } label: {
                             Label(
                                 configuration.autoScroll
-                                    ? (isPaused ? L("继续", "Resume") : L("暂停", "Pause"))
-                                    : L("开始滚动", "Start Scroll"),
+                                    ? (isPaused ? LT("继续", "Resume", "再開") : LT("暂停", "Pause", "Pause"))
+                                    : LT("开始滚动", "Start Scroll", "スクロール開始"),
                                 systemImage: configuration.autoScroll
                                     ? (isPaused ? "play.fill" : "pause.fill")
                                     : "play.fill"
@@ -2178,7 +2173,7 @@ private struct MovieBannerDisplayView: View {
                         configuration.textColor = configuration.textColor.next
                         keepControlsVisible()
                     } label: {
-                        Label(L("文字色", "Text"), systemImage: "paintpalette")
+                        Label(LT("文字色", "Text", "Text"), systemImage: "paintpalette")
                     }
                     .buttonStyle(.bordered)
 
@@ -2186,13 +2181,13 @@ private struct MovieBannerDisplayView: View {
                         configuration.backgroundColor = configuration.backgroundColor.next
                         keepControlsVisible()
                     } label: {
-                        Label(L("背景色", "BG"), systemImage: "circle.lefthalf.filled")
+                        Label(LT("背景色", "BG", "BG"), systemImage: "circle.lefthalf.filled")
                     }
                     .buttonStyle(.bordered)
                 }
 
                 Picker(
-                    L("模式", "Mode"),
+                    LT("模式", "Mode", "モード"),
                     selection: $configuration.mode
                 ) {
                     ForEach(MovieBannerMode.allCases) { mode in
@@ -2207,7 +2202,7 @@ private struct MovieBannerDisplayView: View {
                 if configuration.mode == .scrolling {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text(L("速度", "Speed"))
+                            Text(LT("速度", "Speed", "速度"))
                                 .font(.caption)
                                 .foregroundStyle(Color.white.opacity(0.85))
                             Spacer(minLength: 8)
@@ -2220,12 +2215,12 @@ private struct MovieBannerDisplayView: View {
                             in: 20 ... 280,
                             step: 5
                         ) {
-                            Text(L("速度", "Speed"))
+                            Text(LT("速度", "Speed", "速度"))
                         } minimumValueLabel: {
-                            Text(L("慢", "Slow"))
+                            Text(LT("慢", "Slow", "遅い"))
                                 .font(.caption2)
                         } maximumValueLabel: {
-                            Text(L("快", "Fast"))
+                            Text(LT("快", "Fast", "速い"))
                                 .font(.caption2)
                         } onEditingChanged: { _ in
                             keepControlsVisible()
@@ -2236,7 +2231,7 @@ private struct MovieBannerDisplayView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(L("字号", "Size"))
+                        Text(LT("字号", "Size", "文字サイズ"))
                             .font(.caption)
                             .foregroundStyle(Color.white.opacity(0.85))
                         Spacer(minLength: 8)
@@ -2249,12 +2244,12 @@ private struct MovieBannerDisplayView: View {
                         in: MovieBannerConfiguration.fontSizeRange,
                         step: 2
                     ) {
-                        Text(L("字号", "Size"))
+                        Text(LT("字号", "Size", "文字サイズ"))
                     } minimumValueLabel: {
-                        Text(L("小", "Small"))
+                        Text(LT("小", "Small", "小"))
                             .font(.caption2)
                     } maximumValueLabel: {
-                        Text(L("大", "Large"))
+                        Text(LT("大", "Large", "大"))
                             .font(.caption2)
                     } onEditingChanged: { _ in
                         keepControlsVisible()
@@ -2313,7 +2308,7 @@ private struct MovieBannerDisplayView: View {
 
     private var resolvedMessage: String {
         let trimmed = configuration.message.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? L("请输入内容", "Type Something") : trimmed
+        return trimmed.isEmpty ? LT("请输入内容", "Type Something", "内容を入力") : trimmed
     }
 
     private func blinkOpacity(at date: Date) -> Double {
@@ -2499,18 +2494,18 @@ private enum MovieBannerMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .staticCentered:
-            return L("静态居中", "Static Center")
+            return LT("静态居中", "Static Center", "中央固定")
         case .scrolling:
-            return L("横向滚动", "Scrolling")
+            return LT("横向滚动", "Scrolling", "横スクロール")
         }
     }
 
     var shortTitle: String {
         switch self {
         case .staticCentered:
-            return L("静态", "Static")
+            return LT("静态", "Static", "静止")
         case .scrolling:
-            return L("滚动", "Scroll")
+            return LT("滚动", "Scroll", "スクロール")
         }
     }
 }
@@ -2532,25 +2527,25 @@ private enum MovieBannerColorPreset: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .white:
-            return L("白", "White")
+            return LT("白", "White", "白")
         case .black:
-            return L("黑", "Black")
+            return LT("黑", "Black", "黒")
         case .red:
-            return L("红", "Red")
+            return LT("红", "Red", "赤")
         case .yellow:
-            return L("黄", "Yellow")
+            return LT("黄", "Yellow", "黄")
         case .green:
-            return L("绿", "Green")
+            return LT("绿", "Green", "緑")
         case .cyan:
-            return L("青", "Cyan")
+            return LT("青", "Cyan", "シアン")
         case .pink:
-            return L("粉", "Pink")
+            return LT("粉", "Pink", "ピンク")
         case .purple:
-            return L("紫", "Purple")
+            return LT("紫", "Purple", "紫")
         case .orange:
-            return L("橙", "Orange")
+            return LT("橙", "Orange", "オレンジ")
         case .blue:
-            return L("蓝", "Blue")
+            return LT("蓝", "Blue", "青")
         }
     }
 
@@ -2607,7 +2602,7 @@ struct ShareQRCodeDetailView: View {
             .padding(16)
         }
         .background(RaverTheme.background)
-        .raverSystemNavigation(title: L("分享二维码", "Share QR Code"))
+        .raverSystemNavigation(title: LT("分享二维码", "Share QR Code", "QRコードを共有"))
     }
 
     private var resolvedShortURL: String? {
@@ -2641,7 +2636,7 @@ struct ShareQRCodeDetailView: View {
     private var shortLinkCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text(L("短链", "Short Link"))
+                Text(LT("短链", "Short Link", "短縮リンク"))
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
 
@@ -2657,13 +2652,13 @@ struct ShareQRCodeDetailView: View {
                     Button {
                         guard let resolvedShortURL else { return }
                         UIPasteboard.general.string = resolvedShortURL
-                        OperationBannerCenter.shared.success(L("已复制短链", "Short link copied"))
+                        OperationBannerCenter.shared.success(LT("已复制短链", "Short link copied", "短縮リンクをコピーしました"))
                     } label: {
                         Image(systemName: "doc.on.doc")
                             .frame(width: 34, height: 34)
                     }
                     .buttonStyle(.bordered)
-                    .accessibilityLabel(Text(L("复制短链", "Copy short link")))
+                    .accessibilityLabel(Text(LT("复制短链", "Copy short link", "短縮リンクをコピー")))
                 }
             }
         }
@@ -2674,7 +2669,7 @@ struct ShareQRCodeDetailView: View {
             VStack(spacing: 14) {
                 qrImage
 
-                Text(L("扫码后可在 iPhone 中打开对应页面", "Scan to open the related page on iPhone"))
+                Text(LT("扫码后可在 iPhone 中打开对应页面", "Scan to open the related page on iPhone", "スキャンするとiPhoneで関連ページを開けます"))
                     .font(.footnote)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .multilineTextAlignment(.center)
@@ -2686,11 +2681,11 @@ struct ShareQRCodeDetailView: View {
     private var hintCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 8) {
-                Text(L("当前说明", "Notes"))
+                Text(LT("当前说明", "Notes", "説明"))
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
 
-                Text(L("此二维码由系统自动生成，与短链保持一致。后续切换分享域名时，历史二维码仍应继续可用。", "This QR code is generated by the system and stays aligned with the share short link. Historical QR codes should remain valid even after future share-domain migrations."))
+                Text(LT("此二维码由系统自动生成，与短链保持一致。后续切换分享域名时，历史二维码仍应继续可用。", "This QR code is generated by the system and stays aligned with the share short link. Historical QR codes should remain valid even after future share-domain migrations.", "このQRコードはシステムで自動生成され、短縮リンクと同期されます。今後共有ドメインを切り替えても過去のQRコードは引き続き利用できる必要があります。"))
                     .font(.subheadline)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -2738,7 +2733,7 @@ struct ShareQRCodeDetailView: View {
                     VStack(spacing: 10) {
                         Image(systemName: "qrcode")
                             .font(.system(size: 56, weight: .medium))
-                        Text(L("二维码生成中", "QR code is loading"))
+                        Text(LT("二维码生成中", "QR code is loading", "QRコードを生成中"))
                             .font(.footnote)
                     }
                     .foregroundStyle(RaverTheme.secondaryText)
@@ -2771,11 +2766,11 @@ struct ShareAssetDetailView: View {
         }
         .background(RaverTheme.background)
         .raverSystemNavigation(title: navigationTitle)
-        .alert(L("提示", "Notice"), isPresented: Binding(
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { feedbackMessage != nil },
             set: { if !$0 { feedbackMessage = nil } }
         )) {
-            Button(L("确定", "OK"), role: .cancel) {}
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(feedbackMessage ?? "")
         }
@@ -2826,7 +2821,7 @@ struct ShareAssetDetailView: View {
     private var hintCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 8) {
-                Text(L("当前说明", "Notes"))
+                Text(LT("当前说明", "Notes", "説明"))
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
 
@@ -2902,7 +2897,7 @@ struct ShareAssetDetailView: View {
     private func saveAssetToPhotos() async {
         do {
             try await ShareAssetPhotoSaver.saveRemoteImage(from: assetURL)
-            feedbackMessage = L("已保存到相册", "Saved to Photos.")
+            feedbackMessage = LT("已保存到相册", "Saved to Photos.", "写真に保存しました。")
         } catch {
             feedbackMessage = error.userFacingMessage ?? emptyMessage
         }
@@ -2955,13 +2950,13 @@ enum ShareAssetPhotoSaverError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return L("海报地址无效，请稍后重试。", "Poster URL is invalid. Please try again later.")
+            return LT("海报地址无效，请稍后重试。", "Poster URL is invalid. Please try again later.", "海報URLが無効です。時間をおいて再試行してください。")
         case .permissionDenied:
-            return L("未获得相册权限，可稍后重新授权后再试。", "Photo permission denied. Please grant access and try again.")
+            return LT("未获得相册权限，可稍后重新授权后再试。", "Photo permission denied. Please grant access and try again.", "写真へのアクセスが拒否されています。許可してからもう一度お試しください。")
         case .imageDecodeFailed:
-            return L("图片读取失败，请稍后重试。", "Failed to read image. Please try again later.")
+            return LT("图片读取失败，请稍后重试。", "Failed to read image. Please try again later.", "画像を読み込めませんでした。時間をおいて再試行してください。")
         case .saveFailed:
-            return L("保存失败，请重试。", "Save failed. Please try again.")
+            return LT("保存失败，请重试。", "Save failed. Please try again.", "保存に失敗しました。もう一度お試しください。")
         }
     }
 }

@@ -64,7 +64,7 @@ final class DemoAlignedMediaSendCoordinator: NSObject {
 
             guard let url else {
                 self.dispatchError(
-                    L("读取媒体失败，请重试", "Failed to read media. Please retry."),
+                    LT("读取媒体失败，请重试", "Failed to read media. Please retry.", "メディアの読み込みに失敗しました。もう一度お試しください。"),
                     reason: "picker_file_url_missing"
                 )
                 return
@@ -112,7 +112,7 @@ final class DemoAlignedMediaSendCoordinator: NSObject {
         if let message = error.userFacingMessage, !message.isEmpty {
             return message
         }
-        return L("发送失败，请重试", "Send failed. Please retry.")
+        return LT("发送失败，请重试", "Send failed. Please retry.", "送信に失敗しました。もう一度お試しください。")
     }
 }
 
@@ -147,7 +147,7 @@ extension DemoAlignedMediaSendCoordinator: PHPickerViewControllerDelegate {
         }
 
         dispatchError(
-            L("暂不支持该媒体类型", "This media type is not supported yet."),
+            LT("暂不支持该媒体类型", "This media type is not supported yet.", "このメディアタイプはまだ対応していません。"),
             reason: "picker_unsupported_media_type"
         )
     }

@@ -16,6 +16,7 @@ enum AppRoute: Hashable {
     case followedEventsInbox
     case followedDJsInbox
     case followedBrandsInbox
+    case contentReviewsInbox
     case postDetail(postID: String)
     case eventDetail(eventID: String)
     case newsDetail(articleID: String)
@@ -56,6 +57,7 @@ extension AppRoute {
              .followedEventsInbox,
              .followedDJsInbox,
              .followedBrandsInbox,
+             .contentReviewsInbox,
              .postDetail,
              .eventDetail,
              .newsDetail,
@@ -98,6 +100,8 @@ extension AppRoute {
             return "followed.djs.inbox"
         case .followedBrandsInbox:
             return "followed.brands.inbox"
+        case .contentReviewsInbox:
+            return "content.reviews.inbox"
         case .postDetail:
             return "post.detail"
         case .eventDetail:
@@ -158,6 +162,8 @@ extension AppRoute {
         case .followedDJsInbox:
             return .messages
         case .followedBrandsInbox:
+            return .messages
+        case .contentReviewsInbox:
             return .messages
         case .postDetail, .squadProfile, .squadManage, .circleIDDetail, .ratingEventDetail, .ratingUnitDetail:
             return .circle
@@ -235,6 +241,8 @@ final class AppRouter: ObservableObject {
                 return "followedDJsInbox"
             case .followedBrandsInbox:
                 return "followedBrandsInbox"
+            case .contentReviewsInbox:
+                return "contentReviewsInbox"
             case .newsDetail(let articleID):
                 return "newsDetail(\(articleID))"
             case .eventSchedule(let eventID):
@@ -465,8 +473,13 @@ struct MainTabCoordinatorView: View {
             case .ratingEventCreate:
                 CreateRatingEventSheet { input in
                     let repository: RatingRepository = appContainer.ratingRepository
-                    let created = try await repository.createRatingEvent(input: input)
-                    NotificationCenter.default.post(name: .circleRatingEventDidCreate, object: created)
+                    let result = try await repository.createRatingEvent(input: input)
+                    switch result {
+                    case .created(let created):
+                        NotificationCenter.default.post(name: .circleRatingEventDidCreate, object: created)
+                    case .submittedForReview:
+                        OperationBannerCenter.shared.success(LT("打分信息已提交审核", "Rating submitted for review", "評価情報を審査に送信しました"))
+                    }
                 }
 
             case .ratingEventImportFromEvent:
@@ -479,12 +492,17 @@ struct MainTabCoordinatorView: View {
             case let .ratingUnitCreate(eventID):
                 CreateRatingUnitSheet(eventID: eventID) { input in
                     let repository: RatingRepository = appContainer.ratingRepository
-                    let created = try await repository.createRatingUnit(eventID: eventID, input: input)
-                    NotificationCenter.default.post(
-                        name: .circleRatingUnitDidCreate,
-                        object: created,
-                        userInfo: ["eventID": eventID]
-                    )
+                    let result = try await repository.createRatingUnit(eventID: eventID, input: input)
+                    switch result {
+                    case .created(let created):
+                        NotificationCenter.default.post(
+                            name: .circleRatingUnitDidCreate,
+                            object: created,
+                            userInfo: ["eventID": eventID]
+                        )
+                    case .submittedForReview:
+                        OperationBannerCenter.shared.success(LT("打分项目已提交审核", "Rating unit submitted for review", "評価ユニットを審査に送信しました"))
+                    }
                 }
             }
 
@@ -526,9 +544,9 @@ struct MainTabCoordinatorView: View {
                 }
             case .virtualAssetCenter:
                 ContentUnavailableView(
-                    L("装扮中心已关闭", "Style Center Disabled"),
+                    LT("装扮中心已关闭", "Style Center Disabled", "スタイルセンターは無効です"),
                     systemImage: "sparkles",
-                    description: Text(L("当前灰度开关已关闭，展示会回退为普通头像和昵称。", "The rollout flag is off. Display falls back to standard avatars and names."))
+                    description: Text(LT("当前灰度开关已关闭，展示会回退为普通头像和昵称。", "The rollout flag is off. Display falls back to standard avatars and names.", "ロールアウトフラグがオフです。表示は通常のアバターとニックネームに戻ります。"))
                 )
             case .widgetManager:
                 WidgetEventManagerView()
@@ -538,6 +556,11 @@ struct MainTabCoordinatorView: View {
                 MyPublishesView(
                     userRepository: appContainer.profileUserRepository,
                     contentRepository: appContainer.profileContentRepository
+                )
+            case let .contentSubmissionDetail(submissionID):
+                ContentSubmissionDetailView(
+                    submissionID: submissionID,
+                    repository: appContainer.profileContentRepository
                 )
             case .mySaves:
                 MySavesView(
@@ -614,6 +637,9 @@ struct MainTabCoordinatorView: View {
 
         case .followedBrandsInbox:
             FollowedBrandsInboxView(repository: appContainer.messageNotificationRepository)
+
+        case .contentReviewsInbox:
+            ContentReviewsInboxView(repository: appContainer.messageNotificationRepository)
 
         case let .postDetail(postID):
             PostDetailLoaderView(
@@ -824,6 +850,7 @@ struct MainTabCoordinatorView: View {
                 .widgetManager,
                 .movieBanner,
                 .myPublishes,
+                .contentSubmissionDetail,
                 .mySaves,
                 .myRoutes,
                 .editProfile,
@@ -899,6 +926,10 @@ struct MainTabCoordinatorView: View {
             return .followedBrandsInbox
         }
 
+        if host == "messages", pathParts.count >= 1, pathParts[0].lowercased() == "content-reviews" {
+            return .contentReviewsInbox
+        }
+
         if host == "community", pathParts.count >= 2, pathParts[0].lowercased() == "post" {
             return .postDetail(postID: pathParts[1])
         }
@@ -929,7 +960,7 @@ struct MainTabCoordinatorView: View {
 
         if host == "ranking-board", let boardID = pathParts.first {
             let year = queryItems.first(where: { $0.name == "year" })?.value.flatMap(Int.init)
-            let title = queryItems.first(where: { $0.name == "title" })?.value ?? L("榜单", "Ranking Board")
+            let title = queryItems.first(where: { $0.name == "title" })?.value ?? LT("榜单", "Ranking Board", "ランキング")
             let subtitle = queryItems.first(where: { $0.name == "subtitle" })?.value
             let coverImageURL = queryItems.first(where: { $0.name == "coverImageURL" })?.value
             let board = RankingBoard(
@@ -984,6 +1015,9 @@ struct MainTabCoordinatorView: View {
         if normalizedParts.count >= 2, normalizedParts[0] == "messages", normalizedParts[1] == "followed-brands" {
             return .followedBrandsInbox
         }
+        if normalizedParts.count >= 2, normalizedParts[0] == "messages", normalizedParts[1] == "content-reviews" {
+            return .contentReviewsInbox
+        }
         if normalizedParts.count >= 3, normalizedParts[0] == "community", normalizedParts[1] == "post" {
             return .postDetail(postID: normalizedParts[2])
         }
@@ -1007,7 +1041,7 @@ struct MainTabCoordinatorView: View {
         }
         if normalizedParts.count >= 2, normalizedParts[0] == "ranking-board" {
             let year = queryItems.first(where: { $0.name == "year" })?.value.flatMap(Int.init)
-            let title = queryItems.first(where: { $0.name == "title" })?.value ?? L("榜单", "Ranking Board")
+            let title = queryItems.first(where: { $0.name == "title" })?.value ?? LT("榜单", "Ranking Board", "ランキング")
             let subtitle = queryItems.first(where: { $0.name == "subtitle" })?.value
             let coverImageURL = queryItems.first(where: { $0.name == "coverImageURL" })?.value
             let board = RankingBoard(
@@ -1049,6 +1083,8 @@ struct MainTabCoordinatorView: View {
             return "followedDJsInbox"
         case .followedBrandsInbox:
             return "followedBrandsInbox"
+        case .contentReviewsInbox:
+            return "contentReviewsInbox"
         case .eventDetail(let eventID):
             return "eventDetail(\(eventID))"
         case .newsDetail(let articleID):
@@ -1173,7 +1209,7 @@ private struct RouteLoaderScaffold<Content: View>: View {
                     .background(RaverTheme.background)
             case .offline(let message):
                 ScreenErrorCard(
-                    title: L("网络不可用", "Network Unavailable"),
+                    title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                     message: message,
                     retryAction: retry
                 )
@@ -1205,7 +1241,7 @@ private struct ConversationLoaderView: View {
     var body: some View {
         RouteLoaderScaffold(
             phase: phase,
-            title: L("会话加载失败", "Conversation Failed to Load"),
+            title: LT("会话加载失败", "Conversation Failed to Load", "会話の読み込みに失敗しました"),
             loadingView: AnyView(FeedSkeletonView(count: 4)),
             retry: {
                 Task { await loadConversation(force: true) }
@@ -1216,7 +1252,12 @@ private struct ConversationLoaderView: View {
                     conversation: conversation,
                     service: service,
                     webService: webService,
-                    virtualAssetRepository: virtualAssetRepository
+                    virtualAssetRepository: virtualAssetRepository,
+                    accountEnforcementStatusProvider: {
+                        await MainActor.run {
+                            appState.accountEnforcementStatus
+                        }
+                    }
                 )
                 .navigationBarTitleDisplayMode(.inline)
             } else {
@@ -1309,10 +1350,7 @@ private struct ConversationLoaderView: View {
                 phase = .failure(message: message)
             } else {
                 phase = .failure(
-                    message: L(
-                        "聊天连接恢复中，请稍后重试",
-                        "Chat connection is recovering. Please retry in a moment."
-                    )
+                    message: LT("聊天连接恢复中，请稍后重试", "Chat connection is recovering. Please retry in a moment.", "チャット接続を復旧中です。少し待ってから再試行してください。")
                 )
             }
             debug("set loader phase failure")
@@ -1422,9 +1460,9 @@ private struct ConversationLoaderView: View {
         }
 
         let genericTitles = [
-            normalizedIdentifier(L("私信", "Direct")),
-            normalizedIdentifier(L("群聊", "Group chat")),
-            normalizedIdentifier(L("小队", "Squad"))
+            normalizedIdentifier(LT("私信", "Direct", "DM")),
+            normalizedIdentifier(LT("群聊", "Group chat", "グループチャット")),
+            normalizedIdentifier(LT("小队", "Squad", "Squad"))
         ]
         return genericTitles.contains(normalizedTitle)
     }
@@ -1450,12 +1488,12 @@ private struct ConversationLoaderView: View {
             group.addTask {
                 try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
                 throw ServiceError.message(
-                    L("会话加载超时，请稍后重试", "Conversation loading timed out. Please retry.")
+                    LT("会话加载超时，请稍后重试", "Conversation loading timed out. Please retry.", "会話の読み込みがタイムアウトしました。もう一度お試しください。")
                 )
             }
             guard let result = try await group.next() else {
                 throw ServiceError.message(
-                    L("会话加载失败，请稍后重试", "Failed to load conversation. Please retry.")
+                    LT("会话加载失败，请稍后重试", "Failed to load conversation. Please retry.", "会話を読み込めませんでした。もう一度お試しください。")
                 )
             }
             group.cancelAll()
@@ -1567,7 +1605,7 @@ private struct PostDetailLoaderView: View {
     var body: some View {
         RouteLoaderScaffold(
             phase: phase,
-            title: L("动态加载失败", "Post Failed to Load"),
+            title: LT("动态加载失败", "Post Failed to Load", "投稿の読み込みに失敗しました"),
             loadingView: AnyView(VStack(spacing: 12) {
                 EventDetailSkeletonView()
                 CommentSectionSkeletonView(count: 2)
@@ -1606,7 +1644,7 @@ private struct PostDetailLoaderView: View {
             phase = post == nil ? .empty : .success
         } catch {
             phase = .failure(
-                message: error.userFacingMessage ?? L("动态加载失败，请稍后重试", "Failed to load post. Please try again later.")
+                message: error.userFacingMessage ?? LT("动态加载失败，请稍后重试", "Failed to load post. Please try again later.", "投稿を読み込めませんでした。時間をおいて再試行してください。")
             )
         }
     }
@@ -1625,7 +1663,7 @@ private struct CirclePostEditorLoaderView: View {
     var body: some View {
         RouteLoaderScaffold(
             phase: phase,
-            title: L("动态加载失败", "Post Failed to Load"),
+            title: LT("动态加载失败", "Post Failed to Load", "投稿の読み込みに失敗しました"),
             loadingView: AnyView(VStack(spacing: 12) {
                 EventDetailSkeletonView()
                 CommentSectionSkeletonView(count: 2)
@@ -1666,7 +1704,7 @@ private struct CirclePostEditorLoaderView: View {
             phase = post == nil ? .empty : .success
         } catch {
             phase = .failure(
-                message: error.userFacingMessage ?? L("动态加载失败，请稍后重试", "Failed to load post. Please try again later.")
+                message: error.userFacingMessage ?? LT("动态加载失败，请稍后重试", "Failed to load post. Please try again later.", "投稿を読み込めませんでした。時間をおいて再試行してください。")
             )
         }
     }
@@ -1712,7 +1750,7 @@ private struct ProfileResourceLoaderView<Resource, Content: View>: View {
             phase = resource == nil ? .empty : .success
         } catch {
             phase = .failure(
-                message: error.userFacingMessage ?? L("资源加载失败，请稍后重试", "Failed to load resource. Please try again later.")
+                message: error.userFacingMessage ?? LT("资源加载失败，请稍后重试", "Failed to load resource. Please try again later.", "リソースを読み込めませんでした。時間をおいて再試行してください。")
             )
         }
     }
@@ -1724,7 +1762,7 @@ private struct ProfileEventEditorLoaderView: View {
 
     var body: some View {
         ProfileResourceLoaderView(
-            loadingText: L("加载活动中...", "Loading event...")
+            loadingText: LT("加载活动中...", "Loading event...", "イベントを読み込み中...")
         ) {
             try await eventReadRepository.fetchEvent(id: eventID)
         } content: { event in
@@ -1739,7 +1777,7 @@ private struct ProfileSetEditorLoaderView: View {
 
     var body: some View {
         ProfileResourceLoaderView(
-            loadingText: L("加载 Set 中...", "Loading set...")
+            loadingText: LT("加载 Set 中...", "Loading set...", "Setを読み込み中...")
         ) {
             try await setReadRepository.fetchDJSet(id: setID)
         } content: { set in
@@ -1754,7 +1792,7 @@ private struct ProfileRatingEventEditorLoaderView: View {
 
     var body: some View {
         ProfileResourceLoaderView(
-            loadingText: L("加载打分事件中...", "Loading rating event...")
+            loadingText: LT("加载打分事件中...", "Loading rating event...", "評価イベントを読み込み中...")
         ) {
             try await ratingRepository.fetchRatingEvent(id: eventID)
         } content: { event in
@@ -1769,7 +1807,7 @@ private struct ProfileRatingUnitEditorLoaderView: View {
 
     var body: some View {
         ProfileResourceLoaderView(
-            loadingText: L("加载打分单位中...", "Loading rating unit...")
+            loadingText: LT("加载打分单位中...", "Loading rating unit...", "評価ユニットを読み込み中...")
         ) {
             try await ratingRepository.fetchRatingUnit(id: unitID)
         } content: { unit in
@@ -1796,7 +1834,7 @@ private struct CurrentUserProfileLoaderView<Content: View>: View {
     var body: some View {
         RouteLoaderScaffold(
             phase: phase,
-            title: L("个人资料加载失败", "Profile Failed to Load"),
+            title: LT("个人资料加载失败", "Profile Failed to Load", "プロフィールの読み込みに失敗しました"),
             loadingView: AnyView(ProfileSkeletonView()),
             retry: {
                 Task { await loadProfile(force: true) }
@@ -1822,7 +1860,7 @@ private struct CurrentUserProfileLoaderView<Content: View>: View {
             phase = profile == nil ? .empty : .success
         } catch {
             phase = .failure(
-                message: error.userFacingMessage ?? L("个人资料加载失败，请稍后重试", "Failed to load profile. Please try again later.")
+                message: error.userFacingMessage ?? LT("个人资料加载失败，请稍后重试", "Failed to load profile. Please try again later.", "プロフィールを読み込めませんでした。時間をおいて再試行してください。")
             )
         }
     }
