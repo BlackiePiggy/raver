@@ -30,6 +30,10 @@ struct DJSetListPage: Codable {
     var pagination: BFFPagination?
 }
 
+struct DJWatchedCountResponse: Codable, Hashable {
+    var count: Int
+}
+
 struct CheckinListPage: Codable {
     var items: [WebCheckin]
     var pagination: BFFPagination?
@@ -873,6 +877,7 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var setCount: Int? = nil
     var setsCount: Int? = nil
     var djSetCount: Int? = nil
+    var viewerWatchedCount: Int? = nil
     var honors: [WebDJHonor]? = nil
     var sourceDataSource: String? = nil
     var contributors: [WebUserLite]? = nil

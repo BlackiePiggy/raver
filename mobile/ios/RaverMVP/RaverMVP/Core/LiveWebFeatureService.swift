@@ -681,15 +681,11 @@ final class LiveWebFeatureService: WebFeatureService {
     }
 
     func fetchMyDJCheckinCount(djID: String) async throws -> Int {
-        let page = try await fetchCheckins(
-            page: 1,
-            limit: 1,
-            type: "dj",
-            userID: nil,
-            eventID: nil,
-            djID: djID
+        let response: BFFEnvelope<DJWatchedCountResponse> = try await request(
+            path: "/v1/djs/\(djID)/watched-count",
+            method: "GET"
         )
-        return page.pagination?.total ?? page.items.count
+        return max(0, response.data.count)
     }
 
     private func fetchCheckins(

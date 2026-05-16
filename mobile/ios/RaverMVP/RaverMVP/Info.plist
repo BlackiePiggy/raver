@@ -28,6 +28,14 @@
 				<string>raver</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.raver.mvp.firebase-auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app-1-377174862257-ios-79778d9d5dc0254d08b590</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>

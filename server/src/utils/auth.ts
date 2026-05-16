@@ -48,6 +48,13 @@ export interface JWTPayload {
   role: string;
 }
 
+export interface ReauthProofPayload {
+  userId: string;
+  role: string;
+  scope: string;
+  typ: 'reauth';
+}
+
 export const hashPassword = async (password: string): Promise<string> => {
   const salt = await bcrypt.genSalt(10);
   return bcrypt.hash(password, salt);
@@ -66,6 +73,18 @@ export const generateAccessToken = (payload: JWTPayload): string => {
 
 export const verifyAccessToken = (token: string): JWTPayload => {
   return jwt.verify(token, ACCESS_TOKEN_SECRET) as JWTPayload;
+};
+
+export const generateReauthProof = (payload: Omit<ReauthProofPayload, 'typ'>, expiresIn = '10m'): string => {
+  return jwt.sign({ ...payload, typ: 'reauth' }, ACCESS_TOKEN_SECRET, { expiresIn } as jwt.SignOptions);
+};
+
+export const verifyReauthProof = (token: string): ReauthProofPayload => {
+  const decoded = jwt.verify(token, ACCESS_TOKEN_SECRET) as ReauthProofPayload;
+  if (decoded.typ !== 'reauth') {
+    throw new Error('Invalid reauth proof');
+  }
+  return decoded;
 };
 
 // Backward-compatible aliases.

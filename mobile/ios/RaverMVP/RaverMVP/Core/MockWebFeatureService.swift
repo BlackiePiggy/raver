@@ -1988,11 +1988,18 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func fetchMyDJCheckinCount(djID: String) async throws -> Int {
-        checkins.filter { item in
+        let directCount = checkins.filter { item in
             item.userId == currentUser.id
                 && item.type == "dj"
                 && item.djId == djID
         }.count
+        let selectedCount = checkins.reduce(into: 0) { total, item in
+            guard item.userId == currentUser.id else { return }
+            for selection in item.eventAttendanceSelections where selection.djSelections.contains(where: { $0.djId == djID }) {
+                total += 1
+            }
+        }
+        return directCount + selectedCount
     }
 
     func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin {

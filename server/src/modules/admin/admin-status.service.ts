@@ -5,6 +5,9 @@ import {
   getNotificationOutboxWorkerStatus,
   notificationCenterService,
 } from '../../modules/notifications';
+import { getSmsMetrics } from '../../services/sms/sms-metrics';
+import { getSmsProviderStatus } from '../../services/sms/sms-provider';
+import { getFirebasePhoneAuthStatus } from '../../services/firebase-phone-auth.service';
 
 const prisma = new PrismaClient();
 
@@ -33,14 +36,25 @@ export const adminStatusService = {
 
     const apns = getNotificationCenterAPNSStatus();
     const outboxWorker = getNotificationOutboxWorkerStatus();
+    const smsProvider = getSmsProviderStatus();
+    const smsMetrics = getSmsMetrics(windowHours);
+    const firebasePhoneAuth = getFirebasePhoneAuthStatus();
     const notificationStatus: AdminHealthStatus =
       delivery.alerts.triggeredCount > 0 || (apns.enabled && !apns.configured) ? 'degraded' : 'healthy';
+    const smsStatus: AdminHealthStatus =
+      !smsProvider.productionSafe || (smsProvider.provider === 'aliyun' && !smsProvider.aliyunConfigured)
+        ? 'critical'
+        : smsMetrics.rates.sendFailureRate >= 0.2 || smsMetrics.rates.rateLimitRate >= 0.5
+          ? 'degraded'
+          : 'healthy';
 
-    const overallStatus = mergeStatus([notificationStatus, checkinProjection.status]);
+    const overallStatus = mergeStatus([notificationStatus, checkinProjection.status, smsStatus]);
     const alertReasons = [
       ...delivery.alerts.items.filter((item) => item.triggered).map((item) => `notification.${item.code}`),
       ...(apns.enabled && !apns.configured ? ['notification.apns_not_configured'] : []),
       ...checkinProjection.alertReasons.map((reason) => `checkin_projection.${reason}`),
+      ...(smsStatus !== 'healthy' ? ['auth_sms.status_attention'] : []),
+      ...smsProvider.missingAliyunConfig.map((key) => `auth_sms.missing_${key.toLowerCase()}`),
     ];
 
     return {
@@ -55,6 +69,12 @@ export const adminStatusService = {
         outboxWorker,
       },
       checkinProjection,
+      authSms: {
+        status: smsStatus,
+        provider: smsProvider,
+        firebasePhoneAuth,
+        metrics: smsMetrics,
+      },
     };
   },
 };

@@ -1,4 +1,5 @@
 import { getApiUrl } from '@/lib/config';
+import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 
 export interface PreRegistrationPayload {
   email: string;
@@ -103,7 +104,7 @@ class PreRegistrationAPI {
   }
 
   async listAdminRegistrations(
-    token: string,
+    _token: string,
     params?: Record<string, string | number | boolean | undefined>
   ): Promise<AdminPreRegistrationListResponse> {
     const search = new URLSearchParams();
@@ -115,59 +116,39 @@ class PreRegistrationAPI {
     }
 
     const suffix = search.toString() ? `?${search.toString()}` : '';
-    const response = await fetch(getApiUrl(`/admin/v1/pre-registrations${suffix}`), {
-      headers: this.getHeaders(token),
-    });
-
-    if (!response.ok) {
-      throw new Error(await parseError(response));
-    }
-    return response.json();
+    return authenticatedJsonFetch<AdminPreRegistrationListResponse>(getApiUrl(`/admin/v1/pre-registrations${suffix}`));
   }
 
-  async listAdminBatches(token: string): Promise<{ items: PreRegistrationBatch[] }> {
-    const response = await fetch(getApiUrl('/admin/v1/pre-registration-batches'), {
-      headers: this.getHeaders(token),
-    });
-    if (!response.ok) {
-      throw new Error(await parseError(response));
-    }
-    return response.json();
+  async listAdminBatches(_token: string): Promise<{ items: PreRegistrationBatch[] }> {
+    return authenticatedJsonFetch<{ items: PreRegistrationBatch[] }>(getApiUrl('/admin/v1/pre-registration-batches'));
   }
 
   async createAdminBatch(
-    token: string,
+    _token: string,
     data: { batchName: string; plannedSlots?: number; note?: string }
   ): Promise<PreRegistrationBatch> {
-    const response = await fetch(getApiUrl('/admin/v1/pre-registration-batches'), {
+    return authenticatedJsonFetch<PreRegistrationBatch>(getApiUrl('/admin/v1/pre-registration-batches'), {
       method: 'POST',
-      headers: this.getHeaders(token),
       body: JSON.stringify(data),
     });
-    if (!response.ok) {
-      throw new Error(await parseError(response));
-    }
-    return response.json();
   }
 
   async applyAdminBatchDecision(
-    token: string,
+    _token: string,
     batchId: string,
     data: { decision: 'SELECTED' | 'NOT_SELECTED' | 'WAITLIST'; registrationIds: string[]; decisionReason?: string }
   ): Promise<{ message: string; affectedCount: number; decision: string }> {
-    const response = await fetch(getApiUrl(`/admin/v1/pre-registration-batches/${batchId}/decisions`), {
-      method: 'POST',
-      headers: this.getHeaders(token),
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      throw new Error(await parseError(response));
-    }
-    return response.json();
+    return authenticatedJsonFetch<{ message: string; affectedCount: number; decision: string }>(
+      getApiUrl(`/admin/v1/pre-registration-batches/${batchId}/decisions`),
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
   }
 
   async enqueueNotifications(
-    token: string,
+    _token: string,
     data: {
       channel: 'EMAIL' | 'SMS' | 'WECHAT' | 'IN_APP';
       templateKey: string;
@@ -175,15 +156,13 @@ class PreRegistrationAPI {
       batchId?: string;
     }
   ): Promise<{ message: string; createdCount: number }> {
-    const response = await fetch(getApiUrl('/admin/v1/pre-registration-notifications'), {
-      method: 'POST',
-      headers: this.getHeaders(token),
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      throw new Error(await parseError(response));
-    }
-    return response.json();
+    return authenticatedJsonFetch<{ message: string; createdCount: number }>(
+      getApiUrl('/admin/v1/pre-registration-notifications'),
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
   }
 }
 

@@ -24,6 +24,11 @@ private struct RegisterRequest: Encodable {
     let regionCode: String?
 }
 
+struct DisplayNameAvailability: Decodable {
+    let available: Bool
+    let code: String?
+}
+
 final class LiveSocialService: SocialService {
     private let friendChatGreeting = "你们已成功添加好友，现在可以开始聊天了"
     private let baseURL: URL
@@ -92,6 +97,28 @@ final class LiveSocialService: SocialService {
         return sessionResponse
     }
 
+    func loginWithFirebasePhoneIdToken(_ idToken: String, birthYear: Int?, regionCode: String?, displayName: String?) async throws -> Session {
+        struct FirebasePhoneLoginRequest: Encodable {
+            let idToken: String
+            let birthYear: Int?
+            let regionCode: String?
+            let displayName: String?
+        }
+
+        let body = FirebasePhoneLoginRequest(idToken: idToken, birthYear: birthYear, regionCode: regionCode, displayName: displayName)
+        let sessionResponse: Session = try await request(
+            path: "/v1/auth/firebase-phone/login",
+            method: "POST",
+            body: body,
+            allowAuthRetry: false,
+            includeAccessToken: false,
+            postSessionExpiredOnUnauthorized: false
+        )
+        token = sessionResponse.token
+        refreshToken = sessionResponse.refreshToken
+        return sessionResponse
+    }
+
     func sendLoginSmsCode(phoneNumber: String) async throws -> Int {
         let body = ["phone": phoneNumber, "scene": "login"]
         let response: SmsCodeSendResponse = try await request(
@@ -103,6 +130,17 @@ final class LiveSocialService: SocialService {
             postSessionExpiredOnUnauthorized: false
         )
         return max(0, response.expiresInSeconds)
+    }
+
+    func checkDisplayNameAvailability(_ displayName: String) async throws -> DisplayNameAvailability {
+        let encoded = displayName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? displayName
+        return try await request(
+            path: "/v1/auth/display-name/check?displayName=\(encoded)",
+            method: "GET",
+            allowAuthRetry: false,
+            includeAccessToken: false,
+            postSessionExpiredOnUnauthorized: false
+        )
     }
 
     func register(
@@ -150,6 +188,27 @@ final class LiveSocialService: SocialService {
         }
         token = nil
         refreshToken = nil
+    }
+
+    func logoutAll() async throws {
+        let _: GenericSuccessResponse = try await request(path: "/v1/auth/logout-all", method: "POST")
+        token = nil
+        refreshToken = nil
+    }
+
+    func fetchAuthSessions() async throws -> [AuthSessionItem] {
+        let response: AuthSessionListResponse = try await request(path: "/v1/auth/sessions", method: "GET")
+        return response.items
+    }
+
+    func revokeAuthSession(sessionID: String) async throws -> AuthSessionRevokeResult {
+        let encodedID = sessionID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? sessionID
+        let response: AuthSessionRevokeResult = try await request(path: "/v1/auth/sessions/\(encodedID)", method: "DELETE")
+        if response.revokedCurrent {
+            token = nil
+            refreshToken = nil
+        }
+        return response
     }
 
     func deleteAccount() async throws {
@@ -1336,9 +1395,9 @@ final class LiveSocialService: SocialService {
         var (data, http) = try await performRequest(urlRequest)
 
         if http.statusCode == 401,
-           (try? JSONDecoder.raver.decode(BFFErrorEnvelope.self, from: data).code) == "ACCOUNT_INACTIVE" {
+           sessionExpirationReason(from: data) == .accountInactive {
             if postSessionExpiredOnUnauthorized {
-                NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+                postSessionExpired(.accountInactive)
             }
             token = nil
             refreshToken = nil
@@ -1358,9 +1417,9 @@ final class LiveSocialService: SocialService {
                     retryRequest.setValue("Bearer \(refreshed.token)", forHTTPHeaderField: "Authorization")
                     (data, http) = try await performRequest(retryRequest)
                     if http.statusCode == 401,
-                       (try? JSONDecoder.raver.decode(BFFErrorEnvelope.self, from: data).code) == "ACCOUNT_INACTIVE" {
+                       sessionExpirationReason(from: data) == .accountInactive {
                         if postSessionExpiredOnUnauthorized {
-                            NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+                            postSessionExpired(.accountInactive)
                         }
                         token = nil
                         refreshToken = nil
@@ -1370,24 +1429,30 @@ final class LiveSocialService: SocialService {
                     if case ServiceError.accountInactive = error {
                         throw error
                     }
-                    if postSessionExpiredOnUnauthorized {
-                        NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+                    if case ServiceError.sessionExpired = error {
+                        throw error
                     }
-                    throw ServiceError.unauthorized
+                    let reason = sessionExpirationReason(from: error)
+                    if postSessionExpiredOnUnauthorized {
+                        postSessionExpired(reason)
+                    }
+                    throw ServiceError.sessionExpired(reason)
                 }
             } else {
+                let reason = sessionExpirationReason(from: data)
                 if postSessionExpiredOnUnauthorized {
-                    NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+                    postSessionExpired(reason)
                 }
-                throw ServiceError.unauthorized
+                throw ServiceError.sessionExpired(reason)
             }
         }
 
         if http.statusCode == 401 {
+            let reason = sessionExpirationReason(from: data)
             if postSessionExpiredOnUnauthorized {
-                NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+                postSessionExpired(reason)
             }
-            throw ServiceError.unauthorized
+            throw ServiceError.sessionExpired(reason)
         }
 
         guard (200...299).contains(http.statusCode) else {
@@ -1691,6 +1756,40 @@ final class LiveSocialService: SocialService {
         let code: String?
     }
 
+    private func postSessionExpired(_ reason: SessionExpirationReason) {
+        NotificationCenter.default.post(name: .raverSessionExpired, object: reason)
+    }
+
+    private func sessionExpirationReason(from error: Error) -> SessionExpirationReason {
+        if case ServiceError.accountInactive = error {
+            return .accountInactive
+        }
+        if case ServiceError.sessionExpired(let reason) = error {
+            return reason
+        }
+        return .expired
+    }
+
+    private func sessionExpirationReason(from data: Data) -> SessionExpirationReason {
+        guard let code = try? JSONDecoder.raver.decode(BFFErrorEnvelope.self, from: data).code else {
+            return .expired
+        }
+        switch code {
+        case "AUTH_SESSION_REVOKED":
+            return .revoked
+        case "AUTH_SESSION_IDLE_EXPIRED":
+            return .idleTimeout
+        case "AUTH_SESSION_ABSOLUTE_EXPIRED":
+            return .absoluteTimeout
+        case "AUTH_ACCOUNT_INACTIVE", "ACCOUNT_INACTIVE":
+            return .accountInactive
+        case "AUTH_REFRESH_TOKEN_INVALID_OR_EXPIRED", "AUTH_REFRESH_EXPIRED", "AUTH_REFRESH_TOKEN_MISSING":
+            return .expired
+        default:
+            return .unknown
+        }
+    }
+
     private struct AccountEnforcementRestrictionEnvelope: Decodable {
         let error: String
         let scope: String
@@ -1717,6 +1816,10 @@ private struct JoinSquadResponse: Decodable {
 
 private struct GenericSuccessResponse: Decodable {
     let success: Bool
+}
+
+private struct AuthSessionListResponse: Decodable {
+    let items: [AuthSessionItem]
 }
 
 private struct AccountStatusResponse: Decodable {

@@ -1,4 +1,5 @@
 import { getApiUrl } from '@/lib/config';
+import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 
 export interface ContentReportUser {
   id: string;
@@ -68,20 +69,6 @@ export interface ModerationDecisionTemplate {
   updatedAt: string;
 }
 
-const parseError = async (response: Response): Promise<string> => {
-  try {
-    const data = await response.json();
-    return data.error || data.message || `Content report request failed (${response.status})`;
-  } catch {
-    return `Content report request failed (${response.status})`;
-  }
-};
-
-const authHeaders = (token: string): HeadersInit => ({
-  'Content-Type': 'application/json',
-  Authorization: `Bearer ${token}`,
-});
-
 const buildQuery = (params?: Record<string, string | number | undefined>): string => {
   const search = new URLSearchParams();
   if (params) {
@@ -95,128 +82,116 @@ const buildQuery = (params?: Record<string, string | number | undefined>): strin
 };
 
 export const contentReportsApi = {
-  async summary(token: string): Promise<{ success: true; summary: ContentReportSummary }> {
-    const response = await fetch(getApiUrl('/admin/v1/content-reports/summary'), {
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+  async summary(_token: string): Promise<{ success: true; summary: ContentReportSummary }> {
+    return authenticatedJsonFetch<{ success: true; summary: ContentReportSummary }>(
+      getApiUrl('/admin/v1/content-reports/summary')
+    );
   },
 
-  async alerts(token: string): Promise<{ success: true; alert: unknown }> {
-    const response = await fetch(getApiUrl('/admin/v1/content-reports/alerts'), {
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+  async alerts(_token: string): Promise<{ success: true; alert: unknown }> {
+    return authenticatedJsonFetch<{ success: true; alert: unknown }>(
+      getApiUrl('/admin/v1/content-reports/alerts')
+    );
   },
 
-  async dailyReport(token: string): Promise<{ success: true; report: unknown }> {
-    const response = await fetch(getApiUrl('/admin/v1/content-reports/daily-report'), {
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+  async dailyReport(_token: string): Promise<{ success: true; report: unknown }> {
+    return authenticatedJsonFetch<{ success: true; report: unknown }>(
+      getApiUrl('/admin/v1/content-reports/daily-report')
+    );
   },
 
   async list(
-    token: string,
+    _token: string,
     params?: { status?: string; targetType?: string; reason?: string; priority?: string; limit?: number }
   ): Promise<{ success: true; items: AdminContentReport[]; nextCursor: string | null }> {
-    const response = await fetch(getApiUrl(`/admin/v1/content-reports${buildQuery(params)}`), {
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+    return authenticatedJsonFetch<{ success: true; items: AdminContentReport[]; nextCursor: string | null }>(
+      getApiUrl(`/admin/v1/content-reports${buildQuery(params)}`)
+    );
   },
 
-  async get(token: string, reportId: string): Promise<{ success: true; report: AdminContentReport }> {
-    const response = await fetch(getApiUrl(`/admin/v1/content-reports/${encodeURIComponent(reportId)}`), {
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+  async get(_token: string, reportId: string): Promise<{ success: true; report: AdminContentReport }> {
+    return authenticatedJsonFetch<{ success: true; report: AdminContentReport }>(
+      getApiUrl(`/admin/v1/content-reports/${encodeURIComponent(reportId)}`)
+    );
   },
 
   async decide(
-    token: string,
+    _token: string,
     reportId: string,
     input: { action: string; note?: string; durationDays?: number }
   ): Promise<{ success: true; report: AdminContentReport; enforcement?: unknown }> {
-    const response = await fetch(getApiUrl(`/admin/v1/content-reports/${encodeURIComponent(reportId)}/decision`), {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify(input),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+    return authenticatedJsonFetch<{ success: true; report: AdminContentReport; enforcement?: unknown }>(
+      getApiUrl(`/admin/v1/content-reports/${encodeURIComponent(reportId)}/decision`),
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
   },
 
   async batchDecide(
-    token: string,
+    _token: string,
     input: { reportIds: string[]; action: 'resolve' | 'dismiss'; note?: string }
   ): Promise<{ success: true; updatedCount: number; items: AdminContentReport[] }> {
-    const response = await fetch(getApiUrl('/admin/v1/content-reports/batch-decision'), {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify(input),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+    return authenticatedJsonFetch<{ success: true; updatedCount: number; items: AdminContentReport[] }>(
+      getApiUrl('/admin/v1/content-reports/batch-decision'),
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
   },
 
   async listTemplates(
-    token: string,
+    _token: string,
     params?: { templateKey?: string; locale?: string }
   ): Promise<{ success: true; items: ModerationDecisionTemplate[] }> {
-    const response = await fetch(getApiUrl(`/admin/v1/content-reports/templates${buildQuery(params)}`), {
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+    return authenticatedJsonFetch<{ success: true; items: ModerationDecisionTemplate[] }>(
+      getApiUrl(`/admin/v1/content-reports/templates${buildQuery(params)}`)
+    );
   },
 
   async previewTemplate(
-    token: string,
+    _token: string,
     input: { title: string; body: string; variables?: Record<string, string | number> }
   ): Promise<{ success: true; preview: { title: string; body: string } }> {
-    const response = await fetch(getApiUrl('/admin/v1/content-reports/templates/preview'), {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify(input),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+    return authenticatedJsonFetch<{ success: true; preview: { title: string; body: string } }>(
+      getApiUrl('/admin/v1/content-reports/templates/preview'),
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
   },
 
   async createTemplate(
-    token: string,
+    _token: string,
     input: { templateKey: string; locale: string; title: string; body: string }
   ): Promise<{ success: true; item: ModerationDecisionTemplate }> {
-    const response = await fetch(getApiUrl('/admin/v1/content-reports/templates'), {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify(input),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+    return authenticatedJsonFetch<{ success: true; item: ModerationDecisionTemplate }>(
+      getApiUrl('/admin/v1/content-reports/templates'),
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
   },
 
-  async publishTemplate(token: string, templateId: string): Promise<{ success: true; item: ModerationDecisionTemplate }> {
-    const response = await fetch(getApiUrl(`/admin/v1/content-reports/templates/${encodeURIComponent(templateId)}/publish`), {
-      method: 'POST',
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+  async publishTemplate(_token: string, templateId: string): Promise<{ success: true; item: ModerationDecisionTemplate }> {
+    return authenticatedJsonFetch<{ success: true; item: ModerationDecisionTemplate }>(
+      getApiUrl(`/admin/v1/content-reports/templates/${encodeURIComponent(templateId)}/publish`),
+      {
+        method: 'POST',
+      }
+    );
   },
 
-  async rollbackTemplate(token: string, templateId: string): Promise<{ success: true; item: ModerationDecisionTemplate }> {
-    const response = await fetch(getApiUrl(`/admin/v1/content-reports/templates/${encodeURIComponent(templateId)}/rollback`), {
-      method: 'POST',
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+  async rollbackTemplate(_token: string, templateId: string): Promise<{ success: true; item: ModerationDecisionTemplate }> {
+    return authenticatedJsonFetch<{ success: true; item: ModerationDecisionTemplate }>(
+      getApiUrl(`/admin/v1/content-reports/templates/${encodeURIComponent(templateId)}/rollback`),
+      {
+        method: 'POST',
+      }
+    );
   },
 };

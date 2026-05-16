@@ -19,13 +19,13 @@ struct MainTabView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @EnvironmentObject private var router: AppRouter
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.requestLoginGate) private var requestLoginGate
     @Environment(\.scenePhase) private var scenePhase
     @Namespace private var tabBarIndicatorNamespace
     private let tabs: [MainTab] = [.discover, .circle, .messages, .profile]
     @State private var loadedTabs: Set<MainTab> = [.discover]
     @StateObject private var recentSearchStore = RecentSearchStore()
     @State private var isGlobalSearchPresented = false
-    @State private var showsLoginRequiredPrompt = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -57,11 +57,6 @@ struct MainTabView: View {
         }
         .background(RaverTheme.background.ignoresSafeArea(.all))
         .ignoresSafeArea(.keyboard, edges: .bottom)
-        .alert(LT("请先登录", "Login Required", "ログインが必要です"), isPresented: $showsLoginRequiredPrompt) {
-            Button(LT("知道了", "OK", "OK"), role: .cancel) {}
-        } message: {
-            Text(LT("登录后才能使用全局聚合搜索。", "Log in to use global search.", "グローバル統合検索を使うにはログインしてください。"))
-        }
         .task {
             await appState.refreshUnreadMessages()
         }
@@ -74,6 +69,11 @@ struct MainTabView: View {
         }
         .onChange(of: currentTab) { _, newTab in
             loadedTabs.insert(newTab)
+        }
+        .onChange(of: appState.session?.user.id) { oldUserID, newUserID in
+            guard oldUserID != newUserID else { return }
+            loadedTabs = [.discover]
+            isGlobalSearchPresented = false
         }
     }
 
@@ -139,6 +139,7 @@ struct MainTabView: View {
                 checkinRepository: appContainer.profileCheckinRepository,
                 virtualAssetRepository: appContainer.virtualAssetRepository
             )
+            .id(appState.session?.user.id ?? "anonymous-profile")
         }
     }
 
@@ -146,7 +147,7 @@ struct MainTabView: View {
         HStack(spacing: 6) {
             ForEach(tabs, id: \.self) { tab in
                 Button {
-                    router.switchTab(tab)
+                    switchTab(tab)
                 } label: {
                     VStack(spacing: 3) {
                         tabIcon(for: tab)
@@ -232,7 +233,7 @@ struct MainTabView: View {
     private var globalSearchButton: some View {
         Button {
             guard appState.isLoggedIn else {
-                showsLoginRequiredPrompt = true
+                requestLoginGate()
                 return
             }
             GlobalSearchTelemetry.overlayOpened(source: "main_tab")
@@ -284,6 +285,19 @@ struct MainTabView: View {
             }
         }
         .frame(width: 48, height: 22)
+    }
+
+    private func switchTab(_ tab: MainTab) {
+        switch tab {
+        case .discover:
+            router.switchTab(tab)
+        case .circle, .messages, .profile:
+            guard appState.isLoggedIn else {
+                requestLoginGate()
+                return
+            }
+            router.switchTab(tab)
+        }
     }
 }
 
@@ -507,6 +521,83 @@ struct CircleIDEntry: Identifiable, Codable, Hashable {
     var comments: [CircleIDComment]
 }
 
+private extension CircleIDEntry {
+    init?(approvedPost post: Post) {
+        guard post.content
+            .split(whereSeparator: \.isNewline)
+            .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .contains("#RAVER_ID") else {
+            return nil
+        }
+
+        let fields = Self.fields(from: post.content)
+        let songName = fields["标题"] ?? fields["Title"] ?? fields["title"]
+        let normalizedSongName = songName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let normalizedSongName, !normalizedSongName.isEmpty else { return nil }
+
+        let artistNames = (fields["艺人"] ?? fields["Artist"] ?? fields["artist"])
+            .map(Self.commaSeparatedValues(from:)) ?? []
+        let eventName = fields["活动"] ?? fields["Event"] ?? fields["event"]
+        let audioUrl = fields["音频"] ?? fields["Audio"] ?? fields["audioUrl"]
+        let videoUrl = fields["视频"] ?? fields["Video"] ?? fields["videoUrl"]
+
+        self.init(
+            id: post.id,
+            songName: normalizedSongName,
+            event: eventName.flatMap { name in
+                let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                return CircleIDEventSnapshot(
+                    id: post.boundEventIDs.first ?? post.eventID ?? "event-\(post.id)",
+                    name: trimmed,
+                    startDate: post.displayPublishedAt ?? post.createdAt,
+                    endDate: post.displayPublishedAt ?? post.createdAt,
+                    coverImageUrl: post.images.first
+                )
+            },
+            djs: zip(post.boundDjIDs, artistNames).map { id, name in
+                CircleIDDJSnapshot(id: id, name: name, avatarUrl: nil, avatarSmallUrl: nil)
+            } + artistNames.dropFirst(post.boundDjIDs.count).map { name in
+                CircleIDDJSnapshot(id: "artist-\(name)", name: name, avatarUrl: nil, avatarSmallUrl: nil)
+            },
+            audioUrl: audioUrl?.nilIfBlank,
+            videoUrl: videoUrl?.nilIfBlank,
+            contributor: CircleIDUserSnapshot(
+                id: post.author.id,
+                username: post.author.username,
+                displayName: post.author.displayName,
+                avatarURL: post.author.avatarURL
+            ),
+            createdAt: post.displayPublishedAt ?? post.createdAt,
+            likedUserIDs: [],
+            favoritedUserIDs: [],
+            repostedUserIDs: [],
+            comments: []
+        )
+    }
+
+    private static func fields(from content: String) -> [String: String] {
+        var result: [String: String] = [:]
+        for rawLine in content.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let separator = line.firstIndex(of: "：") ?? line.firstIndex(of: ":") else { continue }
+            let key = String(line[..<separator]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = String(line[line.index(after: separator)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !key.isEmpty, !value.isEmpty {
+                result[key] = value
+            }
+        }
+        return result
+    }
+
+    private static func commaSeparatedValues(from value: String) -> [String] {
+        value
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+}
+
 private enum CircleIDReaction {
     case like
     case favorite
@@ -603,6 +694,7 @@ private struct CircleIDHubView: View {
 
     private var shareMessageRepository: ShareMessageRepository { appContainer.shareMessageRepository }
     private var shareLinkCoordinator: ShareLinkCoordinator { ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository()) }
+    private var feedStreamRepository: FeedStreamRepository { appContainer.feedStreamRepository }
 
     private var sortedEntries: [CircleIDEntry] {
         entries.sorted { lhs, rhs in
@@ -990,14 +1082,7 @@ private struct CircleIDHubView: View {
     }
 
     private func circleIDDJAvatarFallback(dj: CircleIDDJSnapshot, size: CGFloat) -> some View {
-        Circle()
-            .fill(RaverTheme.cardBorder)
-            .frame(width: size, height: size)
-            .overlay(
-                Text(String(dj.name.prefix(1)).uppercased())
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.secondaryText)
-            )
+        DefaultDJAvatarPlaceholderView(size: size, backgroundColor: RaverTheme.cardBorder)
     }
 
     @ViewBuilder
@@ -1046,6 +1131,28 @@ private struct CircleIDHubView: View {
         guard !hasLoaded else { return }
         hasLoaded = true
         loadEntries()
+        await loadApprovedEntriesFromServer()
+    }
+
+    @MainActor
+    private func loadApprovedEntriesFromServer() async {
+        do {
+            let page = try await feedStreamRepository.fetchFeed(cursor: nil, mode: .latest, eventID: nil)
+            let remoteEntries = page.posts.compactMap(CircleIDEntry.init(approvedPost:))
+            guard !remoteEntries.isEmpty else { return }
+
+            var mergedByID: [String: CircleIDEntry] = [:]
+            for entry in entries {
+                mergedByID[entry.id] = entry
+            }
+            for remote in remoteEntries {
+                mergedByID[remote.id] = remote
+            }
+            entries = Array(mergedByID.values).sorted { $0.createdAt > $1.createdAt }
+            persistEntries()
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
     }
 
     private func loadEntries() {
@@ -1699,14 +1806,7 @@ private struct CircleIDDetailView: View {
     }
 
     private func circleIDDJAvatarFallback(dj: CircleIDDJSnapshot, size: CGFloat) -> some View {
-        Circle()
-            .fill(RaverTheme.cardBorder)
-            .frame(width: size, height: size)
-            .overlay(
-                Text(String(dj.name.prefix(1)).uppercased())
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.secondaryText)
-            )
+        DefaultDJAvatarPlaceholderView(size: size, backgroundColor: RaverTheme.cardBorder)
     }
 
     @ViewBuilder
@@ -2159,14 +2259,7 @@ struct CircleIDComposerSheet: View {
                             ) {
                                 ForEach(selectedDJs) { dj in
                                     HStack(spacing: 8) {
-                                        Circle()
-                                            .fill(RaverTheme.cardBorder)
-                                            .frame(width: 22, height: 22)
-                                            .overlay(
-                                                Text(String(dj.name.prefix(1)).uppercased())
-                                                    .font(.caption2.weight(.semibold))
-                                                    .foregroundStyle(RaverTheme.secondaryText)
-                                            )
+                                        DefaultDJAvatarPlaceholderView(size: 22, backgroundColor: RaverTheme.cardBorder)
                                         Text(dj.name)
                                             .font(.caption.weight(.semibold))
                                             .foregroundStyle(RaverTheme.primaryText)
@@ -2288,12 +2381,19 @@ struct CircleIDComposerSheet: View {
 
         do {
             let payload: [String: ContentSubmissionJSONValue] = [
+                "title": .string(songName),
                 "songName": .string(songName),
                 "audioUrl": audioURL.isEmpty ? .null : .string(audioURL),
                 "videoUrl": videoURL.isEmpty ? .null : .string(videoURL),
+                "images": .array([videoURL, eventSnapshot?.coverImageUrl ?? ""].compactMap { value -> ContentSubmissionJSONValue? in
+                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return trimmed.isEmpty ? nil : .string(trimmed)
+                }),
                 "eventId": eventSnapshot.map { .string($0.id) } ?? .null,
                 "eventName": eventSnapshot.map { .string($0.name) } ?? .null,
+                "boundEventIDs": eventSnapshot.map { .array([.string($0.id)]) } ?? .array([]),
                 "djIds": .array(selectedDJs.map { .string($0.id) }),
+                "boundDjIDs": .array(selectedDJs.map { .string($0.id) }),
                 "djNames": .array(selectedDJs.map { .string($0.name) }),
                 "rightsConfirmed": .bool(true)
             ]
@@ -2621,26 +2721,11 @@ private struct CircleIDDJPickerSheet: View {
            resolved.hasPrefix("http://") || resolved.hasPrefix("https://"),
            URL(string: resolved) != nil {
             ImageLoaderView(urlString: resolved)
-                .background(
-                    Circle()
-                        .fill(RaverTheme.cardBorder)
-                        .overlay(
-                            Text(String(dj.name.prefix(1)).uppercased())
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        )
-                )
+                .background(DefaultDJAvatarPlaceholderView(size: size, backgroundColor: RaverTheme.cardBorder))
             .frame(width: size, height: size)
             .clipShape(Circle())
         } else {
-            Circle()
-                .fill(RaverTheme.cardBorder)
-                .frame(width: size, height: size)
-                .overlay(
-                    Text(String(dj.name.prefix(1)).uppercased())
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(RaverTheme.secondaryText)
-                )
+            DefaultDJAvatarPlaceholderView(size: size, backgroundColor: RaverTheme.cardBorder)
         }
     }
 
@@ -4077,14 +4162,9 @@ struct CircleRatingUnitDetailView: View {
                                                            imageURL.hasPrefix("http://") || imageURL.hasPrefix("https://"),
                                                            URL(string: imageURL) != nil {
                                                             ImageLoaderView(urlString: imageURL)
-                                                                .background(Circle().fill(RaverTheme.cardBorder))
+                                                                .background(DefaultDJAvatarPlaceholderView(size: 34, backgroundColor: RaverTheme.cardBorder))
                                                         } else {
-                                                            Circle().fill(RaverTheme.cardBorder)
-                                                                .overlay(
-                                                                    Text(String(dj.name.prefix(1)).uppercased())
-                                                                        .font(.caption.weight(.semibold))
-                                                                        .foregroundStyle(RaverTheme.secondaryText)
-                                                                )
+                                                            DefaultDJAvatarPlaceholderView(size: 34, backgroundColor: RaverTheme.cardBorder)
                                                         }
                                                     }
                                                     .frame(width: 34, height: 34)

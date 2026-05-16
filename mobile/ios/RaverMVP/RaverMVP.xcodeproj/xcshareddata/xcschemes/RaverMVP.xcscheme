@@ -85,6 +85,11 @@
             value = "192.168.0.9:3901"
             isEnabled = "YES">
          </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "RAVER_DEV_PHONE_AUTH_BYPASS"
+            value = "1"
+            isEnabled = "YES">
+         </EnvironmentVariable>
       </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { authAPI } from '@/lib/api/auth';
 import {
   AccountEnforcement,
   EnforcementAppeal,
@@ -68,6 +69,8 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${statusClassName(status)}`}>{status}</span>;
 }
 
+const REAUTH_SCOPE = 'account_enforcement.write';
+
 export default function AccountEnforcementsAdminPage() {
   const { user, token, isLoading } = useAuth();
   const canOperate = user?.role === 'admin' || user?.role === 'operator';
@@ -79,6 +82,12 @@ export default function AccountEnforcementsAdminPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [reauthProof, setReauthProof] = useState<string | null>(null);
+  const [reauthExpiresAt, setReauthExpiresAt] = useState(0);
+  const [reauthPassword, setReauthPassword] = useState('');
+  const [reauthError, setReauthError] = useState<string | null>(null);
+  const [reauthLoading, setReauthLoading] = useState(false);
+  const [pendingReauthAction, setPendingReauthAction] = useState<null | ((proof: string) => Promise<void>)>(null);
 
   const [targetUserId, setTargetUserId] = useState('');
   const [type, setType] = useState('suspension');
@@ -89,6 +98,44 @@ export default function AccountEnforcementsAdminPage() {
   const [internalNote, setInternalNote] = useState('');
 
   const selectedType = useMemo(() => ENFORCEMENT_TYPES.find((item) => item.value === type), [type]);
+
+  const getFreshReauthProof = (): string | null => {
+    if (reauthProof && reauthExpiresAt > Date.now() + 15_000) {
+      return reauthProof;
+    }
+    return null;
+  };
+
+  const runWithReauth = (action: (proof: string) => Promise<void>) => {
+    const proof = getFreshReauthProof();
+    if (proof) {
+      void action(proof);
+      return;
+    }
+
+    setReauthPassword('');
+    setReauthError(null);
+    setPendingReauthAction(() => action);
+  };
+
+  const submitReauth = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      setReauthLoading(true);
+      setReauthError(null);
+      const result = await authAPI.reauth(reauthPassword, REAUTH_SCOPE);
+      setReauthProof(result.reauthProof);
+      setReauthExpiresAt(Date.now() + result.expiresInSeconds * 1000);
+      setReauthPassword('');
+      const action = pendingReauthAction;
+      setPendingReauthAction(null);
+      await action?.(result.reauthProof);
+    } catch (reauthSubmitError) {
+      setReauthError(reauthSubmitError instanceof Error ? reauthSubmitError.message : '复验失败');
+    } finally {
+      setReauthLoading(false);
+    }
+  };
 
   const loadAll = useCallback(async () => {
     if (!token || !canOperate) return;
@@ -123,18 +170,21 @@ export default function AccountEnforcementsAdminPage() {
       setError(null);
       setNotice(null);
       const duration = Number(durationDays);
-      await accountEnforcementsApi.create(token, targetUserId.trim(), {
+      const performCreate = async (proof: string) => {
+        await accountEnforcementsApi.create(token, targetUserId.trim(), {
         type,
         reasonCode,
         scopes: splitScopes(scopes),
         durationDays: Number.isFinite(duration) && duration > 0 ? Math.floor(duration) : undefined,
         endsAt: customEndsAt ? new Date(customEndsAt).toISOString() : undefined,
         internalNote: internalNote.trim() || undefined,
-      });
-      setNotice('处罚已创建');
-      setTargetUserId('');
-      setInternalNote('');
-      await loadAll();
+        }, proof);
+        setNotice('处罚已创建');
+        setTargetUserId('');
+        setInternalNote('');
+        await loadAll();
+      };
+      runWithReauth(performCreate);
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : '创建处罚失败');
     }
@@ -146,9 +196,11 @@ export default function AccountEnforcementsAdminPage() {
     if (!reason) return;
     try {
       setError(null);
-      await accountEnforcementsApi.revoke(token, item.id, reason);
-      setNotice('处罚已撤销');
-      await loadAll();
+      runWithReauth(async (proof) => {
+        await accountEnforcementsApi.revoke(token, item.id, reason, proof);
+        setNotice('处罚已撤销');
+        await loadAll();
+      });
     } catch (revokeError) {
       setError(revokeError instanceof Error ? revokeError.message : '撤销失败');
     }
@@ -157,9 +209,11 @@ export default function AccountEnforcementsAdminPage() {
   const expireDue = async () => {
     if (!token) return;
     try {
-      const result = await accountEnforcementsApi.expireDue(token);
-      setNotice(`已激活 ${result.activatedCount} 条计划处罚，过期 ${result.expiredCount} 条临时处罚`);
-      await loadAll();
+      runWithReauth(async (proof) => {
+        const result = await accountEnforcementsApi.expireDue(token, proof);
+        setNotice(`已激活 ${result.activatedCount} 条计划处罚，过期 ${result.expiredCount} 条临时处罚`);
+        await loadAll();
+      });
     } catch (expireError) {
       setError(expireError instanceof Error ? expireError.message : '处理到期处罚失败');
     }
@@ -414,6 +468,42 @@ export default function AccountEnforcementsAdminPage() {
           </div>
         </section>
       </section>
+      {pendingReauthAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <form onSubmit={submitReauth} className="w-full max-w-md rounded-lg border border-border-secondary bg-bg-secondary p-6 shadow-2xl">
+            <h2 className="text-xl font-semibold">安全复验</h2>
+            <p className="mt-3 text-sm leading-6 text-text-secondary">该操作会影响用户账号状态，请输入当前账号密码后继续。</p>
+            <label className="mt-5 block text-sm">
+              <span className="text-text-secondary">密码</span>
+              <input
+                type="password"
+                value={reauthPassword}
+                onChange={(event) => setReauthPassword(event.target.value)}
+                required
+                autoFocus
+                className="mt-2 w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm"
+              />
+            </label>
+            {reauthError && <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">{reauthError}</div>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingReauthAction(null)}
+                className="rounded-lg border border-border-secondary px-4 py-2 text-sm text-text-secondary hover:border-red-500 hover:text-red-300"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                disabled={reauthLoading}
+                className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {reauthLoading ? '验证中...' : '确认继续'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </main>
   );
 }

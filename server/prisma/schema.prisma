@@ -588,6 +588,7 @@ model DJ {
   youtubeUrl          String?  @map("youtube_url")
   isVerified          Boolean  @default(false) @map("is_verified")
   followerCount       Int      @default(0) @map("follower_count")
+  honors              Json?
 
   // EDM Dance Directory source fields
   sourceId                 String?   @map("source_id")
@@ -659,6 +660,52 @@ model DJContributor {
   @@index([djId])
   @@index([userId])
   @@map("dj_contributors")
+}
+
+model RankingBoard {
+  id            String        @id
+  title         String
+  subtitle      String        @default("")
+  description   String        @default("") @db.Text
+  coverImageUrl String?       @map("cover_image_url") @db.Text
+  entityType    String        @default("dj") @map("entity_type")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  years         RankingYear[]
+
+  @@index([entityType])
+  @@map("ranking_boards")
+}
+
+model RankingYear {
+  id        String         @id @default(uuid())
+  boardId   String         @map("board_id")
+  year      Int
+  source    String?
+  updatedAt DateTime       @default(now()) @map("updated_at")
+  createdAt DateTime       @default(now()) @map("created_at")
+  board     RankingBoard   @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  entries   RankingEntry[]
+
+  @@unique([boardId, year])
+  @@index([year])
+  @@map("ranking_years")
+}
+
+model RankingEntry {
+  id            String      @id @default(uuid())
+  rankingYearId String      @map("ranking_year_id")
+  rank          Int
+  name          String
+  entityId      String?     @map("entity_id")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  rankingYear   RankingYear @relation(fields: [rankingYearId], references: [id], onDelete: Cascade)
+
+  @@unique([rankingYearId, rank])
+  @@index([entityId])
+  @@index([name])
+  @@map("ranking_entries")
 }
 
 model Genre {
@@ -2189,10 +2236,18 @@ model AuthRefreshToken {
   tokenHash         String    @unique @map("token_hash")
   userAgent         String?   @map("user_agent")
   ipAddress         String?   @map("ip_address")
+  clientType        String?   @map("client_type")
+  deviceId          String?   @map("device_id")
+  deviceName        String?   @map("device_name")
+  platform          String?   @map("platform")
+  appVersion        String?   @map("app_version")
   expiresAt         DateTime  @map("expires_at")
+  idleExpiresAt     DateTime? @map("idle_expires_at")
+  absoluteExpiresAt DateTime? @map("absolute_expires_at")
   lastUsedAt        DateTime? @map("last_used_at")
   revokedAt         DateTime? @map("revoked_at")
   replacedByTokenId String?   @map("replaced_by_token_id")
+  riskLevel         String?   @map("risk_level")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
@@ -2201,6 +2256,8 @@ model AuthRefreshToken {
   previousTokens AuthRefreshToken[] @relation("AuthRefreshTokenRotation")
 
   @@index([userId, revokedAt, expiresAt])
+  @@index([userId, clientType, revokedAt, expiresAt])
+  @@index([deviceId])
   @@index([expiresAt])
   @@map("auth_refresh_tokens")
 }

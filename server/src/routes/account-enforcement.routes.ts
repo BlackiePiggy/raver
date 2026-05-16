@@ -5,6 +5,7 @@ import { requireAdmin, requireAdminOrOperator } from '../modules/admin/admin-aut
 import { notificationCenterService } from '../modules/notifications';
 import { accountEnforcementService } from '../services/account-enforcement.service';
 import { DEFAULT_EVENT_TIME_ZONE } from '../utils/event-timezone';
+import { verifyReauthProof } from '../utils/auth';
 import { normalizeTriTextPayload, resolveLocalizedText, type TriTextPayload } from '../utils/i18n';
 
 const router: Router = Router();
@@ -35,6 +36,26 @@ const parseDurationDays = (value: unknown): number | null => {
 const routeParam = (value: unknown): string => {
   if (Array.isArray(value)) return String(value[0] || '');
   return String(value || '');
+};
+
+const requireReauthProof = (scope: string) => (req: AuthRequest, res: Response, next: () => void): void => {
+  const rawProof = req.headers['x-raver-reauth-proof'];
+  const proof = Array.isArray(rawProof) ? rawProof[0] : rawProof;
+  if (!proof) {
+    res.status(403).json({ error: 'Reauthentication required', code: 'AUTH_REAUTH_REQUIRED' });
+    return;
+  }
+
+  try {
+    const payload = verifyReauthProof(proof);
+    if (payload.userId !== req.user?.userId || payload.scope !== scope) {
+      res.status(403).json({ error: 'Reauthentication proof is invalid for this operation', code: 'AUTH_REAUTH_INVALID' });
+      return;
+    }
+    next();
+  } catch (_error) {
+    res.status(403).json({ error: 'Reauthentication proof expired or invalid', code: 'AUTH_REAUTH_EXPIRED' });
+  }
 };
 
 const enforcementTypeLabel = (type: string): string => {
@@ -168,6 +189,7 @@ router.post(
   '/admin/users/:id/enforcements',
   authenticate,
   requireAdminOrOperator,
+  requireReauthProof('account_enforcement.write'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const body = req.body as {
@@ -258,6 +280,7 @@ router.post(
   '/admin/account-enforcements/:id/revoke',
   authenticate,
   requireAdminOrOperator,
+  requireReauthProof('account_enforcement.write'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const body = req.body as { reason?: string };
@@ -312,6 +335,7 @@ router.post(
   '/admin/account-enforcements/expire-due',
   authenticate,
   requireAdmin,
+  requireReauthProof('account_enforcement.write'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const [activated, expired] = await Promise.all([

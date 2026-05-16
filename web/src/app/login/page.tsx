@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,7 +15,18 @@ export default function LoginPage() {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const reason = searchParams.get('reason');
+    if (reason === 'session-expired') {
+      setNotice('登录状态已过期，请重新登录。');
+    } else if (reason === 'idle-timeout') {
+      setNotice('你已 30 分钟没有操作，后台会话已自动退出。');
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +35,9 @@ export default function LoginPage() {
 
     try {
       await login(identifier, password);
-      router.push('/');
+      const searchParams = new URLSearchParams(window.location.search);
+      const next = searchParams.get('next');
+      router.push(next && next.startsWith('/') ? next : '/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
@@ -46,6 +59,12 @@ export default function LoginPage() {
 
         <Card>
           <h2 className="text-2xl font-bold text-text-primary mb-6">Login</h2>
+
+          {notice && (
+            <div className="mb-4 bg-yellow-500/10 border border-yellow-500/40 text-yellow-200 px-4 py-3 rounded-lg text-sm">
+              {notice}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input

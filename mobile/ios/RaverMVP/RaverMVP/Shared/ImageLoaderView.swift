@@ -88,6 +88,26 @@ struct AvatarPlaceholderView: View {
     }
 }
 
+struct DefaultDJAvatarPlaceholderView: View {
+    let size: CGFloat
+    var backgroundColor: Color = RaverTheme.card
+    var imageScale: CGFloat = 0.94
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(backgroundColor)
+            Image("DefaultDJAvatarPlaceholder")
+                .resizable()
+                .scaledToFit()
+                .padding(size * max(0, (1 - imageScale) / 2))
+                .accessibilityHidden(true)
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+}
+
 struct FullscreenMediaItem: Identifiable, Hashable {
     let id: String
     let rawURL: String

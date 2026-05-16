@@ -592,19 +592,12 @@ struct EventCheckinSelectionSheet: View {
     }
 
     private func performerAvatar(_ performer: EventLineupPerformer?, fallbackName: String, size: CGFloat) -> some View {
-        let performerName = performer?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? fallbackName
         return Group {
             if let avatar = AppConfig.resolvedDJAvatarURLString(performer?.avatarUrl, size: .small) {
                 ImageLoaderView(urlString: avatar)
-                    .background(Circle().fill(RaverTheme.card))
+                    .background(DefaultDJAvatarPlaceholderView(size: size, backgroundColor: RaverTheme.card))
             } else {
-                Circle()
-                    .fill(RaverTheme.card)
-                    .overlay(
-                        Text(String((performerName.isEmpty ? "?" : performerName).prefix(1)).uppercased())
-                            .font(.system(size: max(9, size * 0.33), weight: .bold))
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    )
+                DefaultDJAvatarPlaceholderView(size: size, backgroundColor: RaverTheme.card)
             }
         }
         .frame(width: size, height: size)
@@ -4070,26 +4063,11 @@ struct EventEditorView: View {
         if let urlString = AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarUrl, size: .small),
            URL(string: urlString) != nil {
             ImageLoaderView(urlString: urlString)
-                .background(
-                    Circle()
-                        .fill(RaverTheme.card)
-                        .overlay(
-                            Text(String(dj.name.prefix(1)).uppercased())
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        )
-                )
+                .background(DefaultDJAvatarPlaceholderView(size: 22, backgroundColor: RaverTheme.card))
             .frame(width: 22, height: 22)
             .clipShape(Circle())
         } else {
-            Circle()
-                .fill(RaverTheme.card)
-                .overlay(
-                    Text(String(dj.name.prefix(1)).uppercased())
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(RaverTheme.secondaryText)
-                )
-                .frame(width: 22, height: 22)
+            DefaultDJAvatarPlaceholderView(size: 22, backgroundColor: RaverTheme.card)
         }
     }
 

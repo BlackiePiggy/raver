@@ -1967,16 +1967,7 @@ private struct DJWebAvatar: View {
     }
 
     private var fallback: some View {
-        ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.42, green: 0.22, blue: 0.78), Color(red: 0.15, green: 0.45, blue: 1.0)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Text(initials(of: dj.name))
-                .font(.headline.bold())
-                .foregroundStyle(.white)
-        }
+        DefaultDJAvatarPlaceholderView(size: size, backgroundColor: RaverTheme.card)
     }
 }
 
@@ -2065,15 +2056,7 @@ private struct DJWebCard: View {
     }
 
     private var fallbackCover: some View {
-        LinearGradient(
-            colors: [Color(red: 0.42, green: 0.22, blue: 0.78), Color(red: 0.15, green: 0.45, blue: 1.0)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .overlay(
-            Text("🎧")
-                .font(.system(size: 52))
-        )
+        DefaultDJAvatarPlaceholderView(size: Self.cardWidth, backgroundColor: RaverTheme.card, imageScale: 0.88)
     }
 
     private func tag(_ text: String, color: Color) -> some View {
@@ -2554,6 +2537,13 @@ struct DJDetailView: View {
     @State private var editBannerData: Data?
     @State private var relatedArticles: [DiscoverNewsArticle] = []
     @State private var isLoadingRelatedArticles = false
+    @State private var isLoadingSets = false
+    @State private var isLoadingEvents = false
+    @State private var isLoadingRatings = false
+    @State private var didLoadSets = false
+    @State private var didLoadEvents = false
+    @State private var didLoadRatings = false
+    @State private var didLoadRelatedArticles = false
     @State private var historyEventSearchText = ""
     @State private var historyEventRegionFilter: DJEventRegionFilter = .all
     @State private var historyEventStartDate: Date?
@@ -2703,8 +2693,14 @@ struct DJDetailView: View {
         .onChange(of: editBannerItem) { _, item in
             Task { await loadDJEditPhoto(item, target: .banner) }
         }
+        .onChange(of: selectedTab) { _, tab in
+            Task { await loadContentIfNeeded(for: tab) }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .discoverRatingUnitDidUpdate)) { _ in
             Task { await reloadDJRatingUnits() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .raverCheckinsDidMutate)) { _ in
+            Task { await reloadWatchedSetCount() }
         }
     }
 
@@ -2876,42 +2872,28 @@ struct DJDetailView: View {
         defer { isRefreshing = false }
 
         do {
-            isLoadingRelatedArticles = true
             async let djTask = djReadRepository.fetchDJ(id: djID)
-            async let setsTask = djLinkedContentRepository.fetchDJSets(djID: djID)
-            async let eventsTask = djLinkedContentRepository.fetchDJEvents(djID: djID)
-            async let ratingUnitsTask = djLinkedContentRepository.fetchDJRatingUnits(djID: djID)
             async let watchedCountTask = djLinkedContentRepository.fetchMyDJCheckinCount(djID: djID)
-            async let relatedArticlesTask = fetchRelatedNewsArticlesForDJ(djID: djID)
             let loadedDJ = try await djTask
-            let loadedSets = try await setsTask
-            let loadedEvents = (try? await eventsTask) ?? []
-            let loadedRatingUnits = (try? await ratingUnitsTask) ?? []
-            let loadedWatchedCount = (try? await watchedCountTask) ?? 0
-            let loadedRelatedArticles = (try? await relatedArticlesTask) ?? []
-            let loadedRankingHonors = await loadRankingHonors(for: loadedDJ)
+            let loadedWatchedCount = (try? await watchedCountTask) ?? loadedDJ.viewerWatchedCount ?? 0
 
             dj = loadedDJ
             prepareDJEditDraft(from: loadedDJ)
-            sets = loadedSets
-            djEvents = loadedEvents
-            ratingUnits = loadedRatingUnits
-            rankingHonors = loadedRankingHonors
+            rankingHonors = []
             watchedSetCount = loadedWatchedCount
-            relatedArticles = loadedRelatedArticles
             isHonorListExpanded = false
-            isLoadingRelatedArticles = false
             phase = .success
             bannerMessage = nil
 
             let snapshot = makeDJManualCacheSnapshot(
                 dj: loadedDJ,
-                sets: loadedSets,
-                djEvents: loadedEvents,
-                ratingUnits: loadedRatingUnits,
-                relatedArticles: loadedRelatedArticles
+                sets: sets,
+                djEvents: djEvents,
+                ratingUnits: ratingUnits,
+                relatedArticles: relatedArticles
             )
             await persistDJManualCacheSnapshot(snapshot, prefetchImages: false)
+            await loadContentIfNeeded(for: selectedTab)
         } catch {
             let canFallback = isOfflineRecoverableError(error) || dj == nil
             if canFallback, let snapshot = await DJManualCacheStore.shared.loadSnapshot(djID: djID) {
@@ -2929,7 +2911,6 @@ struct DJDetailView: View {
                     )
                 }
             } else if hadContent {
-                isLoadingRelatedArticles = false
                 showBannerMessage(
                     error.userFacingMessage ?? LT("DJ 详情更新失败，请稍后重试", "Failed to refresh DJ details. Please try again later.", "DJ詳細を更新できませんでした。時間をおいて再試行してください。"),
                     style: .error,
@@ -2937,10 +2918,67 @@ struct DJDetailView: View {
                 )
                 phase = .success
             } else {
-                isLoadingRelatedArticles = false
                 let message = error.userFacingMessage ?? LT("DJ 详情加载失败，请稍后重试", "Failed to load DJ details. Please try again later.", "DJ詳細を読み込めませんでした。時間をおいて再試行してください。")
                 phase = .failure(message: message)
             }
+        }
+    }
+
+    @MainActor
+    private func loadSetsIfNeeded(force: Bool) async {
+        if isLoadingSets || (!force && didLoadSets) { return }
+        isLoadingSets = true
+        defer { isLoadingSets = false }
+        let loaded = (try? await djLinkedContentRepository.fetchDJSets(djID: djID)) ?? []
+        sets = loaded
+        didLoadSets = true
+        await persistCurrentDJManualCacheSnapshotIfPossible()
+    }
+
+    @MainActor
+    private func loadEventsIfNeeded(force: Bool) async {
+        if isLoadingEvents || (!force && didLoadEvents) { return }
+        isLoadingEvents = true
+        defer { isLoadingEvents = false }
+        let loaded = (try? await djLinkedContentRepository.fetchDJEvents(djID: djID)) ?? []
+        djEvents = loaded
+        didLoadEvents = true
+        await persistCurrentDJManualCacheSnapshotIfPossible()
+    }
+
+    @MainActor
+    private func loadRatingsIfNeeded(force: Bool) async {
+        if isLoadingRatings || (!force && didLoadRatings) { return }
+        isLoadingRatings = true
+        defer { isLoadingRatings = false }
+        ratingUnits = (try? await djLinkedContentRepository.fetchDJRatingUnits(djID: djID)) ?? []
+        didLoadRatings = true
+        await persistCurrentDJManualCacheSnapshotIfPossible()
+    }
+
+    @MainActor
+    private func loadRelatedArticlesIfNeeded(force: Bool) async {
+        if isLoadingRelatedArticles || (!force && didLoadRelatedArticles) { return }
+        isLoadingRelatedArticles = true
+        defer { isLoadingRelatedArticles = false }
+        relatedArticles = (try? await fetchRelatedNewsArticlesForDJ(djID: djID)) ?? []
+        didLoadRelatedArticles = true
+        await persistCurrentDJManualCacheSnapshotIfPossible()
+    }
+
+    @MainActor
+    private func loadContentIfNeeded(for tab: DJDetailTab) async {
+        switch tab {
+        case .intro:
+            return
+        case .posts:
+            await loadRelatedArticlesIfNeeded(force: false)
+        case .sets:
+            await loadSetsIfNeeded(force: false)
+        case .events:
+            await loadEventsIfNeeded(force: false)
+        case .ratings:
+            await loadRatingsIfNeeded(force: false)
         }
     }
 
@@ -2976,6 +3014,11 @@ struct DJDetailView: View {
     private func reloadDJRatingUnits() async {
         ratingUnits = (try? await djLinkedContentRepository.fetchDJRatingUnits(djID: djID)) ?? []
         await persistCurrentDJManualCacheSnapshotIfPossible()
+    }
+
+    @MainActor
+    private func reloadWatchedSetCount() async {
+        watchedSetCount = (try? await djLinkedContentRepository.fetchMyDJCheckinCount(djID: djID)) ?? watchedSetCount
     }
 
     @MainActor
@@ -3022,9 +3065,13 @@ struct DJDetailView: View {
         djEvents = snapshot.djEvents
         ratingUnits = snapshot.ratingUnits
         Task {
-            rankingHonors = await loadRankingHonors(for: snapshot.dj)
+            rankingHonors = []
         }
         relatedArticles = snapshot.relatedNewsArticles
+        didLoadSets = !sets.isEmpty
+        didLoadEvents = !djEvents.isEmpty
+        didLoadRatings = !ratingUnits.isEmpty
+        didLoadRelatedArticles = !relatedArticles.isEmpty
         isLoadingRelatedArticles = false
         manualCachedAt = snapshot.cachedAt
     }
@@ -4261,10 +4308,43 @@ struct DJDetailView: View {
                 detail: honor.rank.map { LT("第 \($0) 名", "#\($0)", "\($0)位") },
                 year: honor.year,
                 rank: honor.rank,
-                rankingBoard: nil,
+                rankingBoard: rankingBoard(for: honor, kind: kind),
                 accentColor: honorAccentColor(for: kind)
             )
         }
+    }
+
+    private func rankingBoard(for honor: WebDJHonor, kind: DJHonorItem.Kind) -> RankingBoard? {
+        guard kind == .ranking,
+              let boardID = honor.source?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !boardID.isEmpty else {
+            return nil
+        }
+
+        return RankingBoard(
+            id: boardID,
+            title: honor.title,
+            subtitle: rankingBoardSubtitle(from: honor),
+            coverImageUrl: nil,
+            years: honor.year.map { [$0] } ?? []
+        )
+    }
+
+    private func rankingBoardSubtitle(from honor: WebDJHonor) -> String? {
+        guard let subtitle = honor.subtitle?.nilIfBlank else { return nil }
+        guard let year = honor.year else { return subtitle }
+
+        let prefixes = [
+            "\(year) · ",
+            "\(year) - ",
+            "\(year) Ranking"
+        ]
+        for prefix in prefixes where subtitle.hasPrefix(prefix) {
+            let stripped = String(subtitle.dropFirst(prefix.count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return stripped.nilIfBlank
+        }
+        return subtitle
     }
 
     private func curatedFallbackHonors(for dj: WebDJ) -> [DJHonorItem] {
@@ -4319,35 +4399,7 @@ struct DJDetailView: View {
     }
 
     private func loadRankingHonors(for dj: WebDJ) async -> [DJHonorItem] {
-        do {
-            let boards = try await djRankingRepository.fetchRankingBoards()
-            var honors: [DJHonorItem] = []
-            for board in boards where board.id.lowercased().contains("djmag") && !board.id.lowercased().contains("festival") {
-                for year in board.years.sorted(by: >) {
-                    let detail = try await djRankingRepository.fetchRankingBoardDetail(boardID: board.id, year: year)
-                    if let entry = detail.entries.first(where: { rankingEntry($0, matches: dj) }) {
-                        honors.append(
-                            DJHonorItem(
-                                id: "ranking-\(board.id)-\(year)-\(entry.rank)",
-                                kind: .ranking,
-                                title: board.title,
-                                subtitle: year == detail.year
-                                    ? LT("\(year) 年入榜", "Ranked in \(year)", "\(year)年ランクイン")
-                                    : LT("入榜", "Ranked", "ランクイン"),
-                                detail: LT("第 \(entry.rank) 名", "#\(entry.rank)", "\(entry.rank)位"),
-                                year: detail.year,
-                                rank: entry.rank,
-                                rankingBoard: board,
-                                accentColor: honorAccentColor(for: .ranking)
-                            )
-                        )
-                    }
-                }
-            }
-            return honors
-        } catch {
-            return []
-        }
+        []
     }
 
     private func rankingEntry(_ entry: RankingEntry, matches dj: WebDJ) -> Bool {

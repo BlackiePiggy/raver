@@ -1,4 +1,5 @@
 import { getApiUrl } from '@/lib/config';
+import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 
 export interface AccountDeletionUser {
   id: string;
@@ -43,11 +44,6 @@ const parseError = async (response: Response): Promise<string> => {
   }
 };
 
-const authHeaders = (token: string): HeadersInit => ({
-  'Content-Type': 'application/json',
-  Authorization: `Bearer ${token}`,
-});
-
 const buildQuery = (params?: Record<string, string | number | undefined>): string => {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params || {})) {
@@ -60,32 +56,32 @@ const buildQuery = (params?: Record<string, string | number | undefined>): strin
 
 export const accountDeletionsApi = {
   async list(
-    token: string,
+    _token: string,
     params?: { userId?: string; status?: string; limit?: number }
   ): Promise<{ success: true; items: AccountDeletionRequest[] }> {
-    const response = await fetch(getApiUrl(`/admin/v1/account-deletions${buildQuery(params)}`), {
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+    return authenticatedJsonFetch<{ success: true; items: AccountDeletionRequest[] }>(
+      getApiUrl(`/admin/v1/account-deletions${buildQuery(params)}`)
+    );
   },
 
-  async retry(token: string, requestId: string): Promise<{ success: true; request: AccountDeletionRequest }> {
-    const response = await fetch(getApiUrl(`/admin/v1/account-deletions/${encodeURIComponent(requestId)}/retry`), {
-      method: 'POST',
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+  async retry(_token: string, requestId: string, reauthProof?: string): Promise<{ success: true; request: AccountDeletionRequest }> {
+    return authenticatedJsonFetch<{ success: true; request: AccountDeletionRequest }>(
+      getApiUrl(`/admin/v1/account-deletions/${encodeURIComponent(requestId)}/retry`),
+      {
+        method: 'POST',
+        headers: reauthProof ? { 'x-raver-reauth-proof': reauthProof } : undefined,
+      }
+    );
   },
 
-  async processDue(token: string, limit = 20): Promise<{ success: true; results: Array<{ id: string; ok: boolean }> }> {
-    const response = await fetch(getApiUrl('/admin/v1/account-deletions/process-due'), {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify({ limit }),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+  async processDue(_token: string, limit = 20, reauthProof?: string): Promise<{ success: true; results: Array<{ id: string; ok: boolean }> }> {
+    return authenticatedJsonFetch<{ success: true; results: Array<{ id: string; ok: boolean }> }>(
+      getApiUrl('/admin/v1/account-deletions/process-due'),
+      {
+        method: 'POST',
+        headers: reauthProof ? { 'x-raver-reauth-proof': reauthProof } : undefined,
+        body: JSON.stringify({ limit }),
+      }
+    );
   },
 };

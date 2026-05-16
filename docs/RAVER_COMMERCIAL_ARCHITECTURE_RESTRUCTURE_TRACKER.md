@@ -56,6 +56,7 @@ Markdown checkbox 原生不支持 `[~]` 和 `[!]`，如果渲染不显示为 che
 | Phase 5 | Feed / Events / Music 大领域收束 | `[x]` | 2026-05-12 | 2026-05-13 | Feed / Events / Music 代码 closure 与真实运行 smoke 均已通过；未触发数据库动作 |
 | Phase 6 | Admin / Operations 商用化 | `[~]` | 2026-05-13 |  | P0 inventory / ownership 已启动；先做 facade 和权限边界，不做数据迁移 |
 | Phase 7 | Content CMS 统一后台入口 | `[~]` | 2026-05-13 |  | 集成 festival-viewer 到 Web Admin；第一批不做 RBAC 表和数据库迁移 |
+| Phase 8 | Auth Session 商用化 | `[~]` | 2026-05-16 |  | 已新增专项主控文档；先补后台管理登录态、iOS 会话管理、审计、二次验证和环境门禁 |
 
 ---
 
@@ -224,11 +225,51 @@ Markdown checkbox 原生不支持 `[~]` 和 `[!]`，如果渲染不显示为 che
 - [x] 普通用户可进入内容后台，定位为自己上传活动、DJ、Set、资讯等内容的管理。
 - [x] 本批未执行数据库 schema/data migration、backfill、projection rebuild、snapshot rebuild、IM sync apply 或批量修复，因此不需要新增数据库备份记录。
 
+### Phase 8：Auth Session 商用化
+
+目标：把后台管理端和 iOS 端的登录态、续期、会话撤销、审计、二次验证和环境门禁补齐到商用级。
+
+主控文档：
+
+```text
+docs/AUTH_SESSION_COMMERCIALIZATION_PLAN.md
+```
+
+- [x] 完成当前 Web Admin 与 iOS 登录态现状盘点。
+- [x] 确认 Web Admin 当前仍是旧 `/api/auth/*` 单 JWT + `localStorage`。
+- [x] 确认 iOS 当前已接入 `/v1/auth/*` 双 token + Keychain + refresh rotation。
+- [x] 新增 `docs/AUTH_SESSION_COMMERCIALIZATION_PLAN.md`。
+- [x] 在本 tracker 增加 Phase 8 入口。
+- [~] 确认 dev / staging / production 认证环境变量；local 已确认，dev/staging/prod 待部署环境核验。
+- [x] 执行 Phase 1 后端会话模型补齐前，先完成数据库备份门禁。
+- [x] Web Admin 迁移到 `/v1/auth/*` + HttpOnly refresh cookie。
+- [~] 后台补 idle timeout、absolute timeout、会话列表、踢下线和二次验证；idle/absolute/session list/revoke/管理员踢下线已完成，账号处罚和账号删除重试/到期处理二次验证已完成，其他高风险操作二次验证待补。
+- [x] iOS 补登录设备管理、logout-all 和 session revoked 差异化体验。
+- [ ] Auth 审计落库并接入后台检索。
+
+验收：
+
+- [x] Web Admin 不再把主 token 存入 `localStorage`。
+- [x] Web Admin 具备 access 内存态 + refresh HttpOnly cookie。
+- [x] Web Admin 具备 30 分钟 idle timeout 和 12 小时 absolute timeout。
+- [x] iOS 保持 15 分钟 access token + 30 天 refresh token，并支持设备会话管理。
+- [x] 管理员可查看和撤销会话。
+- [~] 高风险后台操作具备二次验证；账号处罚写操作、账号删除重试和账号删除到期处理已完成，其他高风险操作待扩展。
+- [ ] Auth 审计可后台检索和导出。
+- [ ] dev / staging / production 环境变量通过门禁。
+- [ ] 后端、Web、iOS、真机回归全部通过。
+
+Phase 8 数据库备份记录：
+
+| 时间 | 环境 | 操作范围 | 备份文件 | 验证方式 | 回滚方式 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-16 16:58 | local `raver_dev` | Auth Session Phase 1 前置备份，准备扩展 `auth_refresh_tokens` 会话字段 | `backups/raver_20260516_165823_before_auth_session_commercialization.dump` | `docker exec -i raver-postgres pg_restore --list < dump`，输出 752 行；dump 大小 16MB | 本地可停止服务后使用 `pg_restore --clean --if-exists` 恢复该 dump，或回滚对应 migration | 已验证 |
+
 ---
 
 ## 3. 当前执行路径
 
-当前阶段：Phase 7 Content CMS unified entry first cut
+当前阶段：Phase 8 Auth Session commercialization planning
 
 当前焦点：
 
@@ -238,15 +279,26 @@ Markdown checkbox 原生不支持 `[~]` 和 `[!]`，如果渲染不显示为 che
 4. Phase 5 已完成 Feed / Events / Rating / Music first cuts，并进一步完成 DJ import、DJ residual、Events residual、`EventRatingRepository` 兼容命名清理、Profile adapter physical split、Rating adapter physical split、Events adapter physical split、Music adapter physical split、Feed adapter physical split、repository compatibility cleanup、后端 content module facade、FeedEvent telemetry service、PostInteraction service 和 PostComment service；真实运行 smoke 已通过。
 5. iOS build 使用固定 `-derivedDataPath /tmp/raver-xcodebuild-derived` 复用增量编译缓存；默认不清理该目录。
 6. Phase 6 P0 inventory、P1 Admin route facade、P2 backend admin policy、Web admin client alignment、AdminAuditLog write/query、Admin status backend aggregation、Web status API client、`/admin` 运营总览入口和 OpenIM legacy / deferred cleanup 已完成；本轮不涉及数据库结构变更或数据动作，不需要数据库备份。
-7. Phase 7 开始：把 `festival-viewer` 内容管理能力从 Python 单独入口收束到 Web Admin 的 `/admin/content-cms`，第一批只做 Web shell、Next proxy 和角色策略，不做 DB / RBAC migration。
+7. Phase 7 第一批已完成：`festival-viewer` 内容管理能力已收束到 Web Admin `/admin/content-cms`，未做 DB / RBAC migration。
+8. Phase 8 已启动：登录态与后台管理商用化主控文档已建立，下一步进入环境变量核查和后端会话模型补齐 preflight。
 
 下一步建议：
 
-1. 本批先实现 `/admin/content-cms` 和 Next rewrites，让后台只保留 `/admin` 一个可见入口。
-2. 角色模型先落在 Web role policy 和页面权限说明上；后端仍依赖现有 token role、owner/contributor 判断。
-3. Admin status 继续保持只读聚合现有状态，不新增后台策略、不触发 worker、不执行 projection rebuild。
-4. 若只是 Web shell / proxy / 文档变更，不需要数据库备份；若新增索引、字段或 migration，必须先执行数据库备份并验证可读。
-5. 正式 RBAC / 入驻组织 / 艺人认领模型进入后续小批次，不能在本批顺手迁移。
+1. 按 `docs/AUTH_SESSION_COMMERCIALIZATION_PLAN.md` 先完成 Phase 0 未勾选项：环境变量核查、后台角色分级、二次验证方式确认。
+2. Phase 1 涉及 `auth_refresh_tokens` 字段扩展，执行前必须按 `docs/DATABASE_BACKUP_GATEKEEPER.md` 完成备份并记录。
+3. Web Admin 迁移登录态时优先做兼容迁移：清理旧 `localStorage.token`，新 session 走 `/v1/auth/*` + HttpOnly cookie。
+4. iOS 继续保持当前 Keychain + refresh rotation，不在后台迁移时破坏 App 端 30 天体验。
+5. 正式 RBAC / 入驻组织 / 艺人认领模型继续 deferred，不混入 Auth Session Phase 8。
+
+### Phase 8 Scope Check
+
+- [x] 当前任务属于哪个 Phase：Phase 8 Auth Session 商用化。
+- [x] 当前任务是否服务该 Phase 目标：是，建立登录态商用化主控计划和 tracker 入口。
+- [x] 是否新增产品功能：否，本批是计划、范围和验收口径。
+- [x] 是否改 App 核心用户链路：否。
+- [x] 是否迁移数据库：否。
+- [x] 是否涉及 schema migration、auth session 字段、审计表、reauth proof 表或批量修复：否，因此本批不需要新增数据库备份。
+- [x] 是否需要进入 Backlog / Deferred：正式 RBAC / Organization / ArtistClaim / ContentOwnership 继续 deferred。
 
 ### Phase 7 Scope Check
 
@@ -1344,6 +1396,50 @@ dropdb raver_restore_smoke
 | 2026-05-12 | Phase 2 | `cd server && pnpm checkins:projection:run` | 通过 | scanned=0，processed=0，failed=0 |
 | 2026-05-12 | Phase 2 | `SHARE_LINK_SMOKE_CODE=FfXVPa0U pnpm share-links:smoke` | 通过 | 使用已有 active share link，未创建临时测试数据 |
 | 2026-05-12 | Phase 2 | `rm -f /tmp/raver_restore_list_20260512_120657.txt` | 通过 | 清理本轮临时验证产物 |
+| 2026-05-16 | Phase 8 | `docker exec raver-postgres pg_dump -U raver -d raver_dev --format=custom` | 通过 | 备份到 `backups/raver_20260516_165823_before_auth_session_commercialization.dump`，大小 16MB |
+| 2026-05-16 | Phase 8 | `docker exec -i raver-postgres pg_restore --list < backups/raver_20260516_165823_before_auth_session_commercialization.dump` | 通过 | 输出 752 行目录，可读性验证通过 |
+| 2026-05-16 | Phase 8 | `cd server && npx prisma migrate deploy --schema prisma/schema.prisma && npx prisma generate --schema prisma/schema.prisma` | 通过 | 应用 `20260516170000_expand_auth_refresh_tokens_for_sessions` 并生成 Prisma client |
+| 2026-05-16 | Phase 8 | `cd server && pnpm build` | 通过 | Auth session 字段、refresh 校验、session list/revoke 编译通过 |
+| 2026-05-16 | Phase 8 | `cd server && AUTH_INTEGRATION_ENABLE_SMS=false pnpm auth:integration` | 通过 | 覆盖 register/login、refresh rotation、old refresh rejected、session list、revoke current session、web_admin session metadata、logout、rate limit；短信流本轮跳过 |
+| 2026-05-16 | Phase 8 | `cd web && pnpm build` | 通过 | Web Admin auth client 切到 `/v1/auth/*`、access token 内存态、旧 `localStorage.token` 清理；仅有既有 lint warning |
+| 2026-05-16 | Phase 8 | `cd web && pnpm build` | 通过 | Web Admin authenticated fetch wrapper 接入 account/content/pre-registration/status/audit/notification-center clients；401 refresh-retry 编译通过，仅有既有 lint warning |
+| 2026-05-16 | Phase 8 | `cd web && pnpm test:e2e` | 通过 | Playwright 覆盖 `/admin` 401 后 refresh 并重试成功、refresh 失败跳 `/login?reason=session-expired` |
+| 2026-05-16 | Phase 8 | `cd web && pnpm build` | 通过 | Web Admin idle warning/auto logout、后台过期重定向和 Playwright 配置编译通过；仅有既有 lint warning |
+| 2026-05-16 | Phase 8 | `cd web && pnpm test:e2e` | 通过 | Playwright 4 条覆盖：401 refresh retry、refresh 失败回登录、会话列表撤销其他设备、撤销当前会话回登录态 |
+| 2026-05-16 | Phase 8 | `cd web && pnpm build` | 通过 | 新增 `/admin/auth-sessions` 当前账号会话管理页面和后台入口；仅有既有 lint warning |
+| 2026-05-16 | Phase 8 | `cd server && pnpm build` | 通过 | 新增 Admin Auth Sessions API，支持 admin 按用户检索会话和踢下线，撤销写 AdminAuditLog |
+| 2026-05-16 | Phase 8 | `cd web && pnpm build` | 通过 | `/admin/auth-sessions` 增加 admin-only 用户会话检索与踢下线区块；仅有既有 lint warning |
+| 2026-05-16 | Phase 8 | `cd web && pnpm test:e2e` | 通过 | Playwright 5 条覆盖：新增管理员检索目标用户会话并踢下线 |
+| 2026-05-16 | Phase 8 | `cd server && pnpm build` | 通过 | 新增 `/v1/auth/reauth` 和 reauth proof 校验，账号处罚写操作要求二次验证 |
+| 2026-05-16 | Phase 8 | `cd web && pnpm build` | 通过 | 账号处罚后台新增密码复验弹窗和 reauth proof 透传；仅有既有 lint warning |
+| 2026-05-16 | Phase 8 | `cd web && pnpm test:e2e` | 通过 | Playwright 6 条覆盖：新增账号处罚创建前密码复验并携带 reauth proof |
+| 2026-05-16 | Phase 8 | `cd server && pnpm build` | 通过 | 账号删除 retry/process-due 接入 `account_deletion.write` reauth proof 校验 |
+| 2026-05-16 | Phase 8 | `cd web && pnpm build` | 通过 | 账号删除后台新增密码复验弹窗和 reauth proof 透传；仅有既有 lint warning |
+| 2026-05-16 | Phase 8 | `cd web && pnpm test:e2e` | 通过 | Playwright 7 条覆盖：新增账号删除重试前密码复验并携带 reauth proof |
+| 2026-05-16 | Phase 8 | `xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/raver-xcodebuild-derived build` | 通过 | iOS 登录设备管理、logout-all 和 session revoked 差异化提示编译通过；存在既有 warning |
+| 2026-05-16 | Phase 8 | `cd server && pnpm build` | 通过 | Auth integration 脚本补充 logout-all 和 iOS/Web Admin TTL 分流断言后编译通过 |
+| 2026-05-16 | Phase 8 | `cd server && AUTH_INTEGRATION_ENABLE_SMS=false pnpm auth:integration` | 通过 | 覆盖 logout-all 全会话撤销、iOS 30 天 refresh TTL 不受 Web Admin 12 小时策略影响 |
+| 2026-05-16 | Phase 8 | `cd server && pnpm build` | 通过 | 新增 `/v1/auth/password`，账号删除/停用和改密会话撤销逻辑编译通过 |
+| 2026-05-16 | Phase 8 | `cd server && AUTH_INTEGRATION_ENABLE_SMS=false pnpm auth:integration` | 通过 | 覆盖改密保留当前会话并撤销其他 refresh token、删号后当前/其他 refresh token 均被撤销 |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `cd server && pnpm build` | 通过 | 短信登录生产化第一批：provider 启动门禁、稳定错误码、短信指标和 Admin status 聚合编译通过 |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `cd web && pnpm build` | 通过 | Web Admin 工作台新增 Auth SMS provider/失败率/限流/验证失败状态；仅有既有 lint warning |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `cd server && AUTH_INTEGRATION_ENABLE_SMS=false pnpm auth:integration` | 通过 | 关闭真实短信 provider 的 auth/session 回归通过，短信外部通道待真机与阿里云模板审核后验证 |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `cd server && pnpm build` | 通过 | 新增 Firebase Phone ID token 换 Raver session 服务端入口和 Admin status 配置状态 |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `AUTH_INTEGRATION_BASE_URL=http://127.0.0.1:3911/v1 AUTH_INTEGRATION_ENABLE_SMS=false AUTH_FIREBASE_PHONE_MOCK=true pnpm auth:integration` | 通过 | 临时后端启用 Firebase phone mock，覆盖成功登录和无效 token 401 |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `cd web && pnpm build` | 通过 | Web Admin Auth SMS 状态展示 Firebase phone configured/mock 标记；仅有既有 lint warning |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/raver-xcodebuild-derived build` | 通过 | iOS 服务层新增 Firebase Phone ID token 换 Raver session 方法；尚未接 FirebaseAuth SDK |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `pod install` | 通过 | 使用代理 `127.0.0.1:7897` 安装 FirebaseAuth 12.6.0；`GoogleService-Info.plist` 已加入主 App target |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `cd server && pnpm build` | 通过 | Firebase Admin service account 通过被忽略的 `server/.env` 本地路径配置；service account JSON 不进入 git |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `cd web && pnpm build` | 通过 | Web Admin Auth SMS / Firebase phone 状态编译通过；仅有既有 React hook / `<img>` lint warning |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `AUTH_INTEGRATION_BASE_URL=http://127.0.0.1:3911/v1 AUTH_INTEGRATION_ENABLE_SMS=false AUTH_FIREBASE_PHONE_MOCK=true pnpm auth:integration` | 通过 | Firebase phone mock 覆盖成功登录、无效 token 401；临时 3911 后端已停止 |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/raver-xcodebuild-derived build` | 通过 | iOS FirebaseAuth SDK、FirebaseApp.configure、URL callback 和短信 ID token 换 Raver session 编译通过；APNs token 保持 Firebase 默认 swizzling 自动处理；存在既有 Pods script warning |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/raver-xcodebuild-derived build` | 通过 | 修复 FirebaseAuth phone verify 崩溃风险：补 encoded app id URL scheme 和 `canHandleNotification`；存在既有 Pods script warning |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `cd server && pnpm build` | 通过 | Firebase phone login 支持新手机号注册时写入昵称；昵称唯一冲突返回 `AUTH_DISPLAY_NAME_TAKEN` |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/raver-xcodebuild-derived build` | 通过 | iOS 登录/注册手机号支持国家区号选择；注册改为手机号验证码优先并采集出生年月日；邮箱验证码待后端 email verification provider |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `cd server && pnpm build` | 通过 | 新增 `GET /v1/auth/display-name/check`，注册前可只读检测昵称是否可用 |
+| 2026-05-16 | Phase 8 / SMS Phase 6 | `xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/raver-xcodebuild-derived build` | 通过 | iOS 注册页昵称输入防抖检测可用性，展示可用/占用/非法/失败状态并阻止占用昵称提交 |
+| 2026-05-16 | Phase 8 | `cd web && pnpm build` | 通过 | Playwright 增补旧 `localStorage.token` 清理和主 token 不落 localStorage 断言后编译通过；仅有既有 lint warning |
+| 2026-05-16 | Phase 8 | `cd web && pnpm test:e2e` | 通过 | Playwright 9 条覆盖：新增旧 localStorage token 清理、登录后 access token 不落 localStorage |
 | 2026-05-12 | Phase 3 | `xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/raver-xcodebuild-derived build` | 通过 | Notifications repository 切片编译通过；存在既有 warning |
 | 2026-05-12 | Phase 3 | `xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/raver-xcodebuild-derived build` | 通过 | Share repository 切片编译通过；存在既有 warning |
 | 2026-05-12 | Phase 3 | `rm -rf /tmp/raver-xcodebuild-derived` | 通过 | 清理本轮 iOS 编译临时产物 |

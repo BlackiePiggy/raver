@@ -1,6 +1,8 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+import FirebaseAuth
+import FirebaseCore
 
 @main
 struct RaverMVPApp: App {
@@ -9,6 +11,9 @@ struct RaverMVPApp: App {
     @StateObject private var appState: AppState
 
     init() {
+        if FirebaseApp.app() == nil {
+            FirebaseApp.configure()
+        }
         ImageCacheBootstrap.configureIfNeeded()
         Self.applyUITestSessionResetIfNeeded()
 
@@ -124,6 +129,48 @@ final class RaverAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         _ = application
         Self.pushRouteLog("didFailToRegisterForRemoteNotifications error=\(error.localizedDescription)")
+    }
+
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) {
+        _ = application
+        if Auth.auth().canHandleNotification(userInfo) {
+            return
+        }
+        Self.cachePendingSystemNotificationUserInfo(userInfo)
+        NotificationCenter.default.post(
+            name: .raverDidOpenSystemNotification,
+            object: nil,
+            userInfo: userInfo
+        )
+    }
+
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        _ = application
+        if Auth.auth().canHandleNotification(userInfo) {
+            completionHandler(.noData)
+            return
+        }
+        Self.cachePendingSystemNotificationUserInfo(userInfo)
+        NotificationCenter.default.post(
+            name: .raverDidOpenSystemNotification,
+            object: nil,
+            userInfo: userInfo
+        )
+        completionHandler(.newData)
+    }
+
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        _ = app
+        _ = options
+        return Auth.auth().canHandle(url)
     }
 
     func userNotificationCenter(

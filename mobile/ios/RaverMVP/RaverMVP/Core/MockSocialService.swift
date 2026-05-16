@@ -109,9 +109,28 @@ actor MockSocialService: SocialService {
         return try await login(username: generatedUsername, password: "mock")
     }
 
+    func loginWithFirebasePhoneIdToken(_ idToken: String, birthYear: Int?, regionCode: String?, displayName: String?) async throws -> Session {
+        _ = birthYear
+        _ = regionCode
+        let suffix = String((displayName ?? idToken).suffix(4)).filter(\.isLetter)
+        let generatedUsername = suffix.isEmpty ? "firebase_phone_user" : "firebase_phone_\(suffix.lowercased())"
+        return try await login(username: generatedUsername, password: "mock")
+    }
+
     func sendLoginSmsCode(phoneNumber: String) async throws -> Int {
         _ = phoneNumber
         return 300
+    }
+
+    func checkDisplayNameAvailability(_ displayName: String) async throws -> DisplayNameAvailability {
+        let normalized = displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let isTaken = profilesByID.values.contains {
+            $0.displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalized
+        }
+        return DisplayNameAvailability(
+            available: !isTaken && normalized.count >= 2 && normalized.count <= 24,
+            code: isTaken ? "AUTH_DISPLAY_NAME_TAKEN" : "AUTH_DISPLAY_NAME_AVAILABLE"
+        )
     }
 
     func register(
@@ -156,6 +175,53 @@ actor MockSocialService: SocialService {
 
     func logout() async {
         SessionTokenStore.shared.clear()
+    }
+
+    func logoutAll() async throws {
+        SessionTokenStore.shared.clear()
+    }
+
+    func fetchAuthSessions() async throws -> [AuthSessionItem] {
+        [
+            AuthSessionItem(
+                id: "mock-current-session",
+                clientType: "ios",
+                deviceId: "mock-ios-device",
+                deviceName: "iPhone",
+                platform: "ios",
+                appVersion: "1.0.0",
+                userAgent: "Raver iOS Mock",
+                ipAddressMasked: "127***0.1",
+                createdAt: Date().addingTimeInterval(-3600),
+                lastUsedAt: Date().addingTimeInterval(-60),
+                expiresAt: Date().addingTimeInterval(30 * 24 * 3600),
+                idleExpiresAt: nil,
+                absoluteExpiresAt: nil,
+                revokedAt: nil,
+                isCurrent: true
+            ),
+            AuthSessionItem(
+                id: "mock-web-session",
+                clientType: "web_admin",
+                deviceId: "mock-web",
+                deviceName: "Chrome",
+                platform: "web",
+                appVersion: nil,
+                userAgent: "Chrome Mock",
+                ipAddressMasked: "10***0.2",
+                createdAt: Date().addingTimeInterval(-7200),
+                lastUsedAt: Date().addingTimeInterval(-600),
+                expiresAt: Date().addingTimeInterval(6 * 3600),
+                idleExpiresAt: Date().addingTimeInterval(1800),
+                absoluteExpiresAt: Date().addingTimeInterval(6 * 3600),
+                revokedAt: nil,
+                isCurrent: false
+            ),
+        ]
+    }
+
+    func revokeAuthSession(sessionID: String) async throws -> AuthSessionRevokeResult {
+        AuthSessionRevokeResult(success: true, revokedCurrent: sessionID == "mock-current-session")
     }
 
     func deleteAccount() async throws {

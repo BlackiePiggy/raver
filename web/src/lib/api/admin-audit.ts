@@ -1,4 +1,5 @@
 import { getApiUrl } from '@/lib/config';
+import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 
 export interface AdminAuditLogItem {
   id: string;
@@ -26,23 +27,6 @@ export interface AdminAuditLogListParams {
   cursor?: string;
 }
 
-const getToken = (): string => {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    throw new Error('请先登录');
-  }
-  return token;
-};
-
-const parseError = async (response: Response): Promise<string> => {
-  try {
-    const data = await response.json();
-    return data.error || data.message || `Admin audit request failed (${response.status})`;
-  } catch {
-    return `Admin audit request failed (${response.status})`;
-  }
-};
-
 const buildQuery = (params?: AdminAuditLogListParams): string => {
   const query = new URLSearchParams();
   if (!params) return '';
@@ -55,17 +39,6 @@ const buildQuery = (params?: AdminAuditLogListParams): string => {
 
 export const adminAuditApi = {
   async listLogs(params?: AdminAuditLogListParams): Promise<AdminAuditLogListResponse> {
-    const response = await fetch(getApiUrl(`/admin/v1/audit-logs${buildQuery(params)}`), {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${getToken()}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(await parseError(response));
-    }
-
-    return response.json();
+    return authenticatedJsonFetch<AdminAuditLogListResponse>(getApiUrl(`/admin/v1/audit-logs${buildQuery(params)}`));
   },
 };

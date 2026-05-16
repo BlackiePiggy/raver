@@ -9,8 +9,6 @@ import UserNotifications
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
-    @State private var isShowingDeleteAccountConfirmation = false
-    @State private var isDeletingAccount = false
 
     private var realNameEnforcementBinding: Binding<Bool> {
         Binding(
@@ -45,14 +43,15 @@ struct SettingsView: View {
                     }
 
                     NavigationLink {
-                        AccountSecuritySettingsView(
-                            isDeletingAccount: isDeletingAccount,
-                            onRequestDeleteAccount: {
-                                isShowingDeleteAccountConfirmation = true
-                            }
-                        )
+                        AccountSecuritySettingsView()
                     } label: {
                         Label(LT("账号安全", "Account Security", "アカウントの安全"), systemImage: "lock.shield")
+                    }
+
+                    NavigationLink {
+                        LoginDevicesSettingsView()
+                    } label: {
+                        Label(LT("登录设备", "Login Devices", "ログイン端末"), systemImage: "desktopcomputer.and.iphone")
                     }
 
                     NavigationLink {
@@ -207,26 +206,225 @@ struct SettingsView: View {
             .scrollContentBackground(.hidden)
             .background(RaverTheme.background)
             .raverSystemNavigation(title: LT("设置", "Settings", "設定"))
-            .confirmationDialog(
-                LT("删除账号", "Delete Account", "アカウント削除"),
-                isPresented: $isShowingDeleteAccountConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button(LT("确认删除账号", "Delete Account", "アカウントを削除"), role: .destructive) {
-                    Task { await deleteAccount() }
+    }
+}
+
+private struct LoginDevicesSettingsView: View {
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
+    @State private var sessions: [AuthSessionItem] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var revokingSessionID: String?
+    @State private var isLoggingOutAll = false
+    @State private var isShowingLogoutAllConfirmation = false
+
+    var body: some View {
+        List {
+            Section {
+                if sessions.isEmpty && !isLoading {
+                    Text(LT("暂无登录设备。", "No login devices yet.", "ログイン端末はありません。"))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                } else {
+                    ForEach(sessions) { item in
+                        sessionRow(item)
+                    }
                 }
-                Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
-            } message: {
-                Text(LT("删除后你将退出登录，账号会被停用并清除个人资料。此操作不可撤销。", "You will be signed out. Your account will be deactivated and personal profile data will be cleared. This cannot be undone.", "削除後はログアウトされ、アカウントは無効化され個人情報が消去されます。この操作は元に戻せません。"))
+
+                if isLoading {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                }
+            } header: {
+                Text(LT("当前账号", "Current Account", "現在のアカウント"))
+            } footer: {
+                Text(LT("撤销设备后，该设备下次刷新登录状态时会退出。", "After revoking a device, it will be signed out the next time it refreshes its session.", "端末を取り消すと、次回セッション更新時にログアウトされます。"))
             }
+
+            Section {
+                Button(role: .destructive) {
+                    isShowingLogoutAllConfirmation = true
+                } label: {
+                    HStack {
+                        Label(LT("退出全部设备", "Log Out All Devices", "すべての端末からログアウト"), systemImage: "rectangle.stack.badge.minus")
+                        Spacer()
+                        if isLoggingOutAll {
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(isLoggingOutAll)
+            } footer: {
+                Text(LT("包括当前设备。完成后需要重新登录。", "This includes the current device. You will need to log in again.", "現在の端末も含まれます。完了後は再ログインが必要です。"))
+            }
+
+            if let errorMessage {
+                Section {
+                    Text(errorMessage)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: LT("登录设备", "Login Devices", "ログイン端末"))
+        .task {
+            await loadSessions()
+        }
+        .refreshable {
+            await loadSessions()
+        }
+        .confirmationDialog(
+            LT("退出全部设备", "Log Out All Devices", "すべての端末からログアウト"),
+            isPresented: $isShowingLogoutAllConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(LT("确认退出全部设备", "Log Out All Devices", "すべてログアウト"), role: .destructive) {
+                Task { await logoutAllDevices() }
+            }
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
+        } message: {
+            Text(LT("所有设备都会退出登录，包括当前设备。", "All devices will be signed out, including this one.", "現在の端末を含むすべての端末からログアウトします。"))
+        }
     }
 
-    private func deleteAccount() async {
-        guard !isDeletingAccount else { return }
-        isDeletingAccount = true
-        defer { isDeletingAccount = false }
-        _ = await appState.deleteAccount()
+    private func sessionRow(_ item: AuthSessionItem) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: iconName(for: item))
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(item.isActive ? RaverTheme.primaryText : RaverTheme.secondaryText)
+                    .frame(width: 30)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(displayName(for: item))
+                            .font(.subheadline.weight(.semibold))
+                        if item.isCurrent {
+                            Text(LT("当前设备", "Current", "現在"))
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(RaverTheme.accent.opacity(0.16)))
+                                .foregroundStyle(RaverTheme.accent)
+                        }
+                        if !item.isActive {
+                            Text(LT("已撤销", "Revoked", "取り消し済み"))
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.red.opacity(0.14)))
+                                .foregroundStyle(.red)
+                        }
+                    }
+
+                    Text(detailText(for: item))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+
+                    Text(LT("最近活跃", "Last Active", "最終利用") + ": " + formatDate(item.lastUsedAt ?? item.createdAt))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+
+            if item.isActive {
+                Button(role: item.isCurrent ? .destructive : nil) {
+                    Task { await revoke(item) }
+                } label: {
+                    HStack {
+                        Text(item.isCurrent ? LT("退出当前设备", "Log Out This Device", "この端末からログアウト") : LT("撤销此设备", "Revoke Device", "この端末を取り消す"))
+                        if revokingSessionID == item.id {
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(revokingSessionID != nil)
+            }
+        }
+        .padding(.vertical, 6)
     }
+
+    private func loadSessions() async {
+        guard appState.session != nil else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            sessions = try await appContainer.socialService.fetchAuthSessions()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.userFacingMessage ?? LT("加载登录设备失败。", "Failed to load login devices.", "ログイン端末の読み込みに失敗しました。")
+        }
+    }
+
+    private func revoke(_ item: AuthSessionItem) async {
+        guard revokingSessionID == nil else { return }
+        revokingSessionID = item.id
+        defer { revokingSessionID = nil }
+        do {
+            let result = try await appContainer.socialService.revokeAuthSession(sessionID: item.id)
+            errorMessage = nil
+            if result.revokedCurrent {
+                NotificationCenter.default.post(name: .raverSessionExpired, object: SessionExpirationReason.revoked)
+                return
+            }
+            await loadSessions()
+        } catch {
+            errorMessage = error.userFacingMessage ?? LT("撤销设备失败。", "Failed to revoke device.", "端末の取り消しに失敗しました。")
+        }
+    }
+
+    private func logoutAllDevices() async {
+        guard !isLoggingOutAll else { return }
+        isLoggingOutAll = true
+        defer { isLoggingOutAll = false }
+        let ok = await appState.logoutAllDevices()
+        if !ok {
+            errorMessage = appState.errorMessage
+        }
+    }
+
+    private func displayName(for item: AuthSessionItem) -> String {
+        let name = item.deviceName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !name.isEmpty { return name }
+        if item.clientType == "web_admin" { return LT("Web 后台", "Web Admin", "Web 管理") }
+        if item.platform == "ios" { return "iPhone" }
+        return item.clientType
+    }
+
+    private func detailText(for item: AuthSessionItem) -> String {
+        [
+            item.platform?.uppercased(),
+            item.appVersion.map { "v\($0)" },
+            item.ipAddressMasked,
+        ]
+        .compactMap { $0?.nilIfBlank }
+        .joined(separator: " · ")
+    }
+
+    private func iconName(for item: AuthSessionItem) -> String {
+        if item.platform == "ios" || item.clientType == "ios" {
+            return "iphone"
+        }
+        if item.platform == "web" || item.clientType == "web_admin" || item.clientType == "web_public" {
+            return "desktopcomputer"
+        }
+        return "questionmark.square"
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        Self.formatter.string(from: date)
+    }
+
+    private static let formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
 }
 
 private struct PrivacySettingsView: View {
@@ -905,9 +1103,9 @@ private struct PermissionStatusSettingsView: View {
 
 private struct AccountSecuritySettingsView: View {
     @EnvironmentObject private var appState: AppState
-    let isDeletingAccount: Bool
-    let onRequestDeleteAccount: () -> Void
     @State private var appealingEnforcement: AccountEnforcement?
+    @State private var isShowingDeleteAccountConfirmation = false
+    @State private var isDeletingAccount = false
 
     var body: some View {
         List {
@@ -986,7 +1184,7 @@ private struct AccountSecuritySettingsView: View {
 
             Section {
                 Button(role: .destructive) {
-                    onRequestDeleteAccount()
+                    isShowingDeleteAccountConfirmation = true
                 } label: {
                     HStack {
                         Label(LT("删除账号", "Delete Account", "アカウント削除"), systemImage: "person.crop.circle.badge.xmark")
@@ -1011,6 +1209,25 @@ private struct AccountSecuritySettingsView: View {
             AccountEnforcementAppealSheet(enforcement: enforcement)
                 .environmentObject(appState)
         }
+        .confirmationDialog(
+            LT("删除账号", "Delete Account", "アカウント削除"),
+            isPresented: $isShowingDeleteAccountConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(LT("确认删除账号", "Delete Account", "アカウントを削除"), role: .destructive) {
+                Task { await deleteAccount() }
+            }
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
+        } message: {
+            Text(LT("删除后你将退出登录，账号会被停用并清除个人资料。此操作不可撤销。", "You will be signed out. Your account will be deactivated and personal profile data will be cleared. This cannot be undone.", "削除後はログアウトされ、アカウントは無効化され個人情報が消去されます。この操作は元に戻せません。"))
+        }
+    }
+
+    private func deleteAccount() async {
+        guard !isDeletingAccount else { return }
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        _ = await appState.deleteAccount()
     }
 
     private var accountStatusSummary: String {

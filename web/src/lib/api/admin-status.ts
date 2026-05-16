@@ -1,5 +1,6 @@
 import { NotificationCenterAPNSStatus, NotificationCenterDeliveryStats, NotificationCenterGlobalConfig } from './notification-center-admin';
 import { getApiUrl } from '@/lib/config';
+import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 
 export type AdminHealthStatus = 'healthy' | 'degraded' | 'critical';
 
@@ -42,6 +43,49 @@ export interface AdminStatus {
     outboxWorker: NotificationOutboxWorkerStatus;
   };
   checkinProjection: CheckinProjectionStatus;
+  authSms: {
+    status: AdminHealthStatus;
+    provider: {
+      provider: string;
+      productionSafe: boolean;
+      aliyunConfigured: boolean;
+      missingAliyunConfig: string[];
+      debugReturnCodeEnabled: boolean;
+    };
+    firebasePhoneAuth: {
+      configured: boolean;
+      projectIdConfigured: boolean;
+      serviceAccountJsonConfigured: boolean;
+      serviceAccountPathConfigured: boolean;
+      googleApplicationCredentialsConfigured: boolean;
+      mockEnabled: boolean;
+    };
+    metrics: {
+      windowHours: number;
+      processStartedAt: string | null;
+      totals: {
+        attempted: number;
+        sent: number;
+        failed: number;
+        rateLimited: number;
+        verifyFailed: number;
+        verifyBlocked: number;
+      };
+      reasons: {
+        cooldown: number;
+        phoneHourlyLimit: number;
+        ipHourlyLimit: number;
+        providerError: number;
+        invalidOrExpiredCode: number;
+        tooManyVerifyFailures: number;
+      };
+      rates: {
+        sendFailureRate: number;
+        rateLimitRate: number;
+        verifyFailureRate: number;
+      };
+    };
+  };
 }
 
 export interface AdminStatusResponse {
@@ -49,38 +93,10 @@ export interface AdminStatusResponse {
   status: AdminStatus;
 }
 
-const getToken = (): string => {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    throw new Error('请先登录');
-  }
-  return token;
-};
-
-const parseError = async (response: Response): Promise<string> => {
-  try {
-    const data = await response.json();
-    return data.error || data.message || `Admin status request failed (${response.status})`;
-  } catch {
-    return `Admin status request failed (${response.status})`;
-  }
-};
-
 export const adminStatusApi = {
   async getStatus(windowHours = 24): Promise<AdminStatus> {
     const query = new URLSearchParams({ windowHours: String(windowHours) });
-    const response = await fetch(getApiUrl(`/admin/v1/status?${query.toString()}`), {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${getToken()}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(await parseError(response));
-    }
-
-    const data = (await response.json()) as AdminStatusResponse;
+    const data = await authenticatedJsonFetch<AdminStatusResponse>(getApiUrl(`/admin/v1/status?${query.toString()}`));
     return data.status;
   },
 };

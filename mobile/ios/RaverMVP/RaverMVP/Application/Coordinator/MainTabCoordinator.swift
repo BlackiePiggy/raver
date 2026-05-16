@@ -46,6 +46,41 @@ enum AppRoute: Hashable {
 }
 
 extension AppRoute {
+    var requiresLogin: Bool {
+        switch self {
+        case .discover,
+             .circle,
+             .messages,
+             .profile,
+             .conversation,
+             .followedEventsInbox,
+             .followedDJsInbox,
+             .followedBrandsInbox,
+             .contentReviewsInbox,
+             .postDetail,
+             .eventDetail,
+             .newsDetail,
+             .eventSchedule,
+             .eventLiveDiscussion,
+             .eventRoute,
+             .djDetail,
+             .labelDetail,
+             .festivalDetail,
+             .setDetail,
+             .rankingBoardDetail,
+             .userProfile,
+             .squadProfile,
+             .squadManage,
+             .squadOfflineActivity,
+             .squadOfflineActivityHistory,
+             .circleIDDetail,
+             .ratingEventDetail,
+             .ratingUnitDetail,
+             .globalSearchResults:
+            return true
+        }
+    }
+
     // Stage-6 metadata for tab bar behavior, analytics naming, and route->tab semantics.
     var hidesTabBar: Bool {
         switch self {
@@ -203,6 +238,10 @@ private struct AppNavigateKey: EnvironmentKey {
     static let defaultValue: (AppRoute) -> Void = { _ in }
 }
 
+private struct RequestLoginGateKey: EnvironmentKey {
+    static let defaultValue: () -> Void = {}
+}
+
 extension EnvironmentValues {
     var appNavigate: (AppRoute) -> Void {
         get { self[AppNavigateKey.self] }
@@ -213,6 +252,11 @@ extension EnvironmentValues {
     var appPush: (AppRoute) -> Void {
         get { appNavigate }
         set { appNavigate = newValue }
+    }
+
+    var requestLoginGate: () -> Void {
+        get { self[RequestLoginGateKey.self] }
+        set { self[RequestLoginGateKey.self] = newValue }
     }
 }
 
@@ -336,6 +380,13 @@ final class AppRouter: ObservableObject {
     func dismissFullScreen() {
         fullScreen = nil
     }
+
+    func resetToLoggedOutRoot() {
+        selectedTab = .discover
+        path.removeAll()
+        sheet = nil
+        fullScreen = nil
+    }
 }
 
 @MainActor
@@ -343,6 +394,7 @@ struct MainTabCoordinatorView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @EnvironmentObject private var appState: AppState
     @StateObject private var router = AppRouter()
+    @State private var isLoginPresented = false
     @State private var handledSystemDeepLinkEventID: UUID?
     @State private var didReplayPushRouteTrace = false
 
@@ -361,9 +413,19 @@ struct MainTabCoordinatorView: View {
         .fullScreenCover(item: $router.fullScreen) { route in
             fullScreenDestination(for: route)
         }
+        .fullScreenCover(isPresented: $isLoginPresented) {
+            LoginView {
+                isLoginPresented = false
+            }
+            .environmentObject(appState)
+            .accessibilityIdentifier("app.loginGate")
+        }
         .environmentObject(router)
         .environment(\.appNavigate) { route in
-            router.push(route)
+            pushAppRoute(route)
+        }
+        .environment(\.requestLoginGate) {
+            presentLoginGate()
         }
         .environment(\.discoverPush) { route in
             pushDiscoverRoute(route)
@@ -379,6 +441,16 @@ struct MainTabCoordinatorView: View {
         }
         .environment(\.profilePush) { route in
             pushProfileRoute(route)
+        }
+        .onChange(of: appState.isLoggedIn) { _, isLoggedIn in
+            if isLoggedIn {
+                isLoginPresented = false
+            }
+        }
+        .onChange(of: appState.session?.user.id) { _, userID in
+            guard userID == nil else { return }
+            router.resetToLoggedOutRoot()
+            isLoginPresented = false
         }
         .task {
             if !didReplayPushRouteTrace {
@@ -764,7 +836,7 @@ struct MainTabCoordinatorView: View {
                 pushDiscoverRoute(nextRoute)
             }
             .environment(\.circlePush) { circleRoute in
-                router.push(.circle(circleRoute))
+                pushCircleRoute(circleRoute)
             }
 
         case let .globalSearchResults(query, initialTab):
@@ -806,7 +878,7 @@ struct MainTabCoordinatorView: View {
     }
 
     private func pushDiscoverRoute(_ route: DiscoverRoute) {
-        router.push(.discover(route))
+        pushAppRoute(.discover(route))
     }
 
     private func pushCircleRoute(_ route: CircleRoute) {
@@ -823,20 +895,24 @@ struct MainTabCoordinatorView: View {
                 .ratingEventCreate,
                 .ratingEventImportFromEvent,
                 .ratingUnitCreate:
-            router.push(.circle(route))
+            pushAppRoute(.circle(route))
         }
     }
 
     private func pushMessagesRoute(_ route: MessagesRoute) {
         switch route {
         case .alertCategory, .chatSettings:
-            router.push(.messages(route))
+            pushAppRoute(.messages(route))
         }
     }
 
     private func presentMessagesRoute(_ route: MessagesModalRoute) {
         switch route {
         case .squadProfile(let squadID):
+            guard appState.isLoggedIn else {
+                presentLoginGate()
+                return
+            }
             router.presentSheet(.squadProfile(squadID: squadID))
         }
     }
@@ -863,8 +939,12 @@ struct MainTabCoordinatorView: View {
                 .editRatingUnit,
                 .shareQRCode,
                 .shareAsset:
-            router.push(.profile(route))
+            pushAppRoute(.profile(route))
         case .avatarFullscreen:
+            guard appState.isLoggedIn else {
+                presentLoginGate()
+                return
+            }
             router.presentFullScreen(.avatarFullscreen)
         }
     }
@@ -878,14 +958,50 @@ struct MainTabCoordinatorView: View {
         debugSystemRoute("handle deeplink mapped route=\(describeRoute(route))")
         if let tab = route.preferredTab {
             debugSystemRoute("switch tab to \(describeTab(tab)) for route=\(describeRoute(route))")
-            router.switchTab(tab)
+            switchTab(tab)
         }
         if router.path.last == route {
             debugSystemRoute("skip push because route already on top route=\(describeRoute(route))")
             return
         }
         debugSystemRoute("push route=\(describeRoute(route)) pathDepthBefore=\(router.path.count)")
+        pushAppRoute(route)
+    }
+
+    private func pushAppRoute(_ route: AppRoute) {
+        guard canEnter(route) else { return }
         router.push(route)
+    }
+
+    private func switchTab(_ tab: MainTab) {
+        guard canEnter(tab) else { return }
+        router.switchTab(tab)
+    }
+
+    private func canEnter(_ route: AppRoute) -> Bool {
+        guard !route.requiresLogin || appState.isLoggedIn else {
+            presentLoginGate()
+            return false
+        }
+        return true
+    }
+
+    private func canEnter(_ tab: MainTab) -> Bool {
+        switch tab {
+        case .discover:
+            return true
+        case .circle, .messages, .profile:
+            guard appState.isLoggedIn else {
+                presentLoginGate()
+                return false
+            }
+            return true
+        }
+    }
+
+    private func presentLoginGate() {
+        guard !isLoginPresented else { return }
+        isLoginPresented = true
     }
 
     private func mapAppRoute(from deeplink: String) -> AppRoute? {

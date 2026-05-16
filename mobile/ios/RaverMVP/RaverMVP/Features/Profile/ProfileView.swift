@@ -663,16 +663,11 @@ struct MySavesView: View {
            let resolved = AppConfig.resolvedURLString(avatar),
            URL(string: resolved) != nil {
             ImageLoaderView(urlString: resolved)
+                .background(DefaultDJAvatarPlaceholderView(size: 46, backgroundColor: RaverTheme.card))
                 .frame(width: 46, height: 46)
                 .clipShape(Circle())
         } else {
-            Circle()
-                .fill(RaverTheme.card)
-                .frame(width: 46, height: 46)
-                .overlay {
-                    Image(systemName: "headphones")
-                        .foregroundStyle(RaverTheme.secondaryText)
-                }
+            DefaultDJAvatarPlaceholderView(size: 46, backgroundColor: RaverTheme.card)
         }
     }
 }

@@ -345,18 +345,11 @@ struct DJSetGridCard: View {
                 if let avatar = AppConfig.resolvedDJAvatarURLString(set.dj?.avatarSmallUrl ?? set.dj?.avatarUrl, size: .small),
                    !avatar.isEmpty {
                     ImageLoaderView(urlString: avatar)
-                        .background(Circle().fill(RaverTheme.card))
+                        .background(DefaultDJAvatarPlaceholderView(size: 18, backgroundColor: RaverTheme.card))
                     .frame(width: 18, height: 18)
                     .clipShape(Circle())
                 } else {
-                    Circle()
-                        .fill(RaverTheme.card)
-                        .frame(width: 18, height: 18)
-                        .overlay(
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 9))
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        )
+                    DefaultDJAvatarPlaceholderView(size: 18, backgroundColor: RaverTheme.card)
                 }
 
                 Text(set.dj?.name ?? set.djId)

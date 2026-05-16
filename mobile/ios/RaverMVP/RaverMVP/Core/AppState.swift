@@ -910,12 +910,13 @@ final class AppState: ObservableObject {
         }
 
         NotificationCenter.default.publisher(for: .raverSessionExpired)
-            .sink { [weak self] _ in
+            .sink { [weak self] notification in
                 guard let self else { return }
+                let reason = (notification.object as? SessionExpirationReason) ?? .expired
                 self.session = nil
                 self.resetUnreadCounts()
                 SessionTokenStore.shared.clear()
-                self.errorMessage = LT("登录状态已失效，请重新登录", "Session expired. Please log in again.", "ログイン状態が無効です。再度ログインしてください。")
+                self.errorMessage = reason.userFacingMessage
                 self.tencentIMBootstrap = nil
                 self.tencentIMSession.reset()
                 self.tencentIMBootstrapRefreshTask?.cancel()
@@ -1063,6 +1064,79 @@ final class AppState: ObservableObject {
         }
     }
 
+    func loginWithFirebasePhoneIdToken(_ idToken: String, birthYear: Int? = nil, regionCode: String? = nil, displayName: String? = nil) async {
+        do {
+            try await loginWithFirebasePhoneIdTokenOrThrow(
+                idToken,
+                birthYear: birthYear,
+                regionCode: regionCode,
+                displayName: displayName
+            )
+            errorMessage = nil
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    func loginWithFirebasePhoneIdTokenOrThrow(_ idToken: String, birthYear: Int? = nil, regionCode: String? = nil, displayName: String? = nil) async throws {
+        session = try await service.loginWithFirebasePhoneIdToken(idToken, birthYear: birthYear, regionCode: regionCode, displayName: displayName)
+        await refreshTencentIMBootstrap(source: "login-firebase-phone")
+        await refreshAccountEnforcements()
+        await refreshUnreadMessages()
+        await uploadPushTokenIfPossible()
+        flushPendingSystemNotificationPayloadIfPossible(trigger: "login-firebase-phone")
+    }
+
+    func applyCurrentUserProfile(_ profile: UserProfile) {
+        guard let current = session, current.user.id == profile.id else { return }
+        let existing = current.user
+        let updatedUser = UserSummary(
+            id: profile.id,
+            username: profile.username,
+            displayName: profile.displayName,
+            avatarURL: profile.avatarURL,
+            isFollowing: existing.isFollowing,
+            isFriend: existing.isFriend,
+            conversationID: existing.conversationID,
+            friendMessage: existing.friendMessage,
+            regionCode: existing.regionCode,
+            birthYear: existing.birthYear,
+            ageBand: existing.ageBand,
+            guardianContactEmail: existing.guardianContactEmail
+        )
+        session = Session(
+            token: current.token,
+            refreshToken: current.refreshToken,
+            user: updatedUser,
+            accountStatus: current.accountStatus
+        )
+    }
+
+    func updateCurrentUserAvatarURL(_ avatarURL: String?) {
+        guard let current = session else { return }
+        let existing = current.user
+        let updatedUser = UserSummary(
+            id: existing.id,
+            username: existing.username,
+            displayName: existing.displayName,
+            avatarURL: avatarURL,
+            isFollowing: existing.isFollowing,
+            isFriend: existing.isFriend,
+            conversationID: existing.conversationID,
+            friendMessage: existing.friendMessage,
+            regionCode: existing.regionCode,
+            birthYear: existing.birthYear,
+            ageBand: existing.ageBand,
+            guardianContactEmail: existing.guardianContactEmail
+        )
+        session = Session(
+            token: current.token,
+            refreshToken: current.refreshToken,
+            user: updatedUser,
+            accountStatus: current.accountStatus
+        )
+    }
+
     func sendLoginSmsCode(phoneNumber: String) async -> Int? {
         do {
             let expiresInSeconds = try await service.sendLoginSmsCode(phoneNumber: phoneNumber)
@@ -1072,6 +1146,10 @@ final class AppState: ObservableObject {
             errorMessage = error.userFacingMessage
             return nil
         }
+    }
+
+    func checkDisplayNameAvailability(_ displayName: String) async throws -> DisplayNameAvailability {
+        try await service.checkDisplayNameAvailability(displayName)
     }
 
     func register(
@@ -1125,6 +1203,33 @@ final class AppState: ObservableObject {
         accountEnforcementStatus = .clear
         accountEnforcements = []
         accountEnforcementAppeals = []
+    }
+
+    func logoutAllDevices() async -> Bool {
+        guard session != nil else {
+            errorMessage = LT("请先登录", "Please log in first.", "先にログインしてください。")
+            return false
+        }
+
+        do {
+            try await service.logoutAll()
+            SessionTokenStore.shared.clear()
+            session = nil
+            realNameVerificationStatus = .unverified
+            resetUnreadCounts()
+            tencentIMBootstrap = nil
+            tencentIMSession.reset()
+            tencentIMBootstrapRefreshTask?.cancel()
+            tencentIMBootstrapRefreshTask = nil
+            accountEnforcementStatus = .clear
+            accountEnforcements = []
+            accountEnforcementAppeals = []
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.userFacingMessage
+            return false
+        }
     }
 
     func deleteAccount() async -> Bool {

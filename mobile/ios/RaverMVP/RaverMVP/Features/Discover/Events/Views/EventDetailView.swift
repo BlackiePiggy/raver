@@ -923,13 +923,11 @@ struct EventLiveDiscussionView: View {
     }
 
     private func djAvatarPlaceholder(size: CGFloat, emphasize: Bool = false) -> some View {
-        Circle()
-            .fill(RaverTheme.accent.opacity(colorScheme == .dark ? 0.22 : 0.12))
-            .overlay(
-                Image(systemName: "headphones")
-                    .font(.system(size: max(11, size * 0.42), weight: .semibold))
-                    .foregroundStyle(RaverTheme.accent)
-            )
+        DefaultDJAvatarPlaceholderView(
+            size: size,
+            backgroundColor: RaverTheme.accent.opacity(colorScheme == .dark ? 0.22 : 0.12),
+            imageScale: 0.9
+        )
             .overlay(
                 Circle()
                     .stroke(
@@ -1333,6 +1331,7 @@ struct EventDetailView: View {
     @State private var bannerMessage: String?
     @State private var errorMessage: String?
     @State private var pendingUnboundDJName: String?
+    @State private var pendingCollaborativeLineupEntry: EventLineupDJEntry?
     @State private var selectedTab: EventDetailTab = .info
     @State private var pageProgress: CGFloat = 0
     @State private var isTabSwitchingByTap = false
@@ -2038,6 +2037,27 @@ struct EventDetailView: View {
             Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+        .confirmationDialog(
+            pendingCollaborativeLineupEntry?.name ?? LT("选择 DJ", "Choose DJ", "DJを選択"),
+            isPresented: Binding(
+                get: { pendingCollaborativeLineupEntry != nil },
+                set: { if !$0 { pendingCollaborativeLineupEntry = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let entry = pendingCollaborativeLineupEntry {
+                ForEach(entry.act.performers.prefix(entry.act.type.performerCount)) { performer in
+                    Button(performer.name.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank ?? LT("待补充 DJ", "DJ info needed", "DJ情報未入力")) {
+                        selectLineupPerformer(performer)
+                    }
+                }
+            }
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {
+                pendingCollaborativeLineupEntry = nil
+            }
+        } message: {
+            Text(LT("选择要查看的 DJ 主页。", "Choose which DJ profile to open.", "表示するDJプロフィールを選択してください。"))
         }
         .alert(LT("DJ 信息待补充", "DJ Info Needed", "DJ情報が不足しています"), isPresented: Binding(
             get: { pendingUnboundDJName != nil },
@@ -3927,17 +3947,18 @@ struct EventDetailView: View {
         if dj.act.type == .solo,
            let primaryPerformer = dj.act.performers.first {
             Button {
-                if let djID = resolvedPerformerDJID(primaryPerformer) {
-                    appPush(.djDetail(djID: djID))
-                } else {
-                    presentUnboundDJPrompt(name: primaryPerformer.name)
-                }
+                selectLineupPerformer(primaryPerformer)
             } label: {
                 content
             }
             .buttonStyle(.plain)
         } else {
-            content
+            Button {
+                pendingCollaborativeLineupEntry = dj
+            } label: {
+                content
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -3949,31 +3970,22 @@ struct EventDetailView: View {
                 .frame(width: contentWidth, height: 44, alignment: .center)
         } else {
             let performers = Array(act.performers.prefix(act.type.performerCount))
-            let b2bColor = Color(red: 0.98, green: 0.52, blue: 0.20)
-            let b3bColor = Color(red: 0.18, green: 0.74, blue: 0.92)
             let avatarSize: CGFloat = 44
-            let avatarGap: CGFloat = 10
-            let connectorSize: CGFloat = 14
+            let overlapOffset = avatarSize * 0.5
+            let stackWidth = avatarSize + CGFloat(max(0, performers.count - 1)) * overlapOffset
 
             ZStack(alignment: .leading) {
-                HStack(spacing: avatarGap) {
-                    ForEach(Array(performers.enumerated()), id: \.offset) { _, performer in
-                        lineupPerformerAvatarLink(performer, size: avatarSize)
-                    }
-                }
-                ForEach(0..<max(0, performers.count - 1), id: \.self) { index in
-                    lineupActConnectorLabel(
-                        text: act.type == .b2b ? "B2B" : "B3B",
-                        color: act.type == .b2b ? b2bColor : b3bColor,
-                        vertical: true
-                    )
-                    .frame(width: connectorSize, height: connectorSize)
-                    .offset(
-                        x: avatarSize * CGFloat(index + 1) + avatarGap * CGFloat(index) + (avatarGap - connectorSize) / 2,
-                        y: (avatarSize - connectorSize) / 2
-                    )
+                ForEach(Array(performers.enumerated()), id: \.offset) { index, performer in
+                    lineupPerformerAvatar(performer, size: avatarSize)
+                        .overlay(
+                            Circle()
+                                .stroke(RaverTheme.background.opacity(0.86), lineWidth: 2)
+                        )
+                        .offset(x: CGFloat(index) * overlapOffset)
+                        .zIndex(Double(index))
                 }
             }
+            .frame(width: stackWidth, height: 44, alignment: .leading)
             .frame(width: contentWidth, height: 44, alignment: .center)
         }
     }
@@ -3982,28 +3994,9 @@ struct EventDetailView: View {
         guard act.type != .solo else { return 74 }
         let performerCount = CGFloat(max(1, min(act.performers.count, act.type.performerCount)))
         let avatarSize: CGFloat = 44
-        let spacing: CGFloat = 10
-        let width = performerCount * avatarSize + (performerCount - 1) * spacing
+        let overlapOffset = avatarSize * 0.5
+        let width = avatarSize + (performerCount - 1) * overlapOffset
         return max(74, width)
-    }
-
-    @ViewBuilder
-    private func lineupPerformerAvatarLink(_ performer: EventLineupPerformer, size: CGFloat) -> some View {
-        if let djID = resolvedPerformerDJID(performer) {
-            Button {
-                appPush(.djDetail(djID: djID))
-            } label: {
-                lineupPerformerAvatar(performer, size: size)
-            }
-            .buttonStyle(.plain)
-        } else {
-            Button {
-                presentUnboundDJPrompt(name: performer.name)
-            } label: {
-                lineupPerformerAvatar(performer, size: size)
-            }
-            .buttonStyle(.plain)
-        }
     }
 
     private func resolvedPerformerDJID(_ performer: EventLineupPerformer) -> String? {
@@ -4011,21 +4004,18 @@ struct EventDetailView: View {
         return inlineID.isEmpty ? nil : inlineID
     }
 
+    private func selectLineupPerformer(_ performer: EventLineupPerformer) {
+        pendingCollaborativeLineupEntry = nil
+        if let djID = resolvedPerformerDJID(performer) {
+            appPush(.djDetail(djID: djID))
+        } else {
+            presentUnboundDJPrompt(name: performer.name)
+        }
+    }
+
     private func presentUnboundDJPrompt(name: String) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         pendingUnboundDJName = trimmedName.isEmpty ? nil : trimmedName
-    }
-
-    private func lineupActConnectorLabel(text: String, color: Color, vertical: Bool) -> some View {
-        Circle()
-            .fill(color.opacity(0.24))
-            .overlay(
-                Text(text)
-                    .font(.system(size: 4.4, weight: .black, design: .rounded))
-                    .foregroundStyle(color)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-            )
     }
 
     private func lineupDJEntries(for event: WebEvent, sortMode: LineupSortMode) -> [EventLineupDJEntry] {
@@ -4168,22 +4158,20 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private func lineupPerformerAvatar(_ performer: EventLineupPerformer?, size: CGFloat) -> some View {
-        let performerName = performer?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        ImageLoaderView(
-            urlString: AppConfig.resolvedDJAvatarURLString(performer?.avatarUrl, size: .small),
-            resizingMode: .fill
-        )
-        .background(
-            Circle()
-                .fill(RaverTheme.card)
-                .overlay(
-                    Text(String((performerName.isEmpty ? "?" : performerName).prefix(1)).uppercased())
-                        .font(.system(size: max(10, size * 0.3), weight: .bold))
-                        .foregroundStyle(RaverTheme.secondaryText)
-                )
-        )
-        .frame(width: size, height: size)
-        .clipShape(Circle())
+        if let avatar = AppConfig.resolvedDJAvatarURLString(performer?.avatarUrl, size: .small),
+           !avatar.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            ImageLoaderView(
+                urlString: avatar,
+                resizingMode: .fill
+            )
+            .background(
+                DefaultDJAvatarPlaceholderView(size: size, backgroundColor: RaverTheme.card)
+            )
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+        } else {
+            DefaultDJAvatarPlaceholderView(size: size, backgroundColor: RaverTheme.card)
+        }
     }
 
     private func eventStatusPill(_ text: String, color: Color) -> some View {

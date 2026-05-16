@@ -579,13 +579,7 @@ struct DiscoverNewsDetailView: View {
     }
 
     private func avatarInitialFallback(_ name: String) -> some View {
-        Circle()
-            .fill(RaverTheme.card)
-            .overlay(
-                Text(String(name.prefix(1)).uppercased())
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(RaverTheme.secondaryText)
-            )
+        DefaultDJAvatarPlaceholderView(size: 32, backgroundColor: RaverTheme.card)
     }
 
     @ViewBuilder

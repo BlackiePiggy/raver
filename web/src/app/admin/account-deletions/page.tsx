@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { authAPI } from '@/lib/api/auth';
 import { AccountDeletionRequest, accountDeletionsApi } from '@/lib/api/account-deletions';
 import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
@@ -28,6 +29,8 @@ function ErrorText({ value }: { value?: string | null }) {
   return <span className="break-words text-red-300">{value}</span>;
 }
 
+const REAUTH_SCOPE = 'account_deletion.write';
+
 export default function AccountDeletionsAdminPage() {
   const { user, token, isLoading } = useAuth();
   const canOperate = user?.role === 'admin' || user?.role === 'operator';
@@ -39,12 +42,56 @@ export default function AccountDeletionsAdminPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [reauthProof, setReauthProof] = useState<string | null>(null);
+  const [reauthExpiresAt, setReauthExpiresAt] = useState(0);
+  const [reauthPassword, setReauthPassword] = useState('');
+  const [reauthError, setReauthError] = useState<string | null>(null);
+  const [reauthLoading, setReauthLoading] = useState(false);
+  const [pendingReauthAction, setPendingReauthAction] = useState<null | ((proof: string) => Promise<void>)>(null);
 
   const summary = useMemo(() => {
     const failed = items.filter((item) => item.status === 'partial_failed' || item.imStatus === 'failed' || item.mediaStatus === 'failed').length;
     const pending = items.filter((item) => item.status === 'queued' || item.imStatus === 'pending' || item.mediaStatus === 'pending').length;
     return { total: items.length, failed, pending };
   }, [items]);
+
+  const getFreshReauthProof = (): string | null => {
+    if (reauthProof && reauthExpiresAt > Date.now() + 15_000) {
+      return reauthProof;
+    }
+    return null;
+  };
+
+  const runWithReauth = (action: (proof: string) => Promise<void>) => {
+    const proof = getFreshReauthProof();
+    if (proof) {
+      void action(proof);
+      return;
+    }
+
+    setReauthPassword('');
+    setReauthError(null);
+    setPendingReauthAction(() => action);
+  };
+
+  const submitReauth = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      setReauthLoading(true);
+      setReauthError(null);
+      const result = await authAPI.reauth(reauthPassword, REAUTH_SCOPE);
+      setReauthProof(result.reauthProof);
+      setReauthExpiresAt(Date.now() + result.expiresInSeconds * 1000);
+      setReauthPassword('');
+      const action = pendingReauthAction;
+      setPendingReauthAction(null);
+      await action?.(result.reauthProof);
+    } catch (reauthSubmitError) {
+      setReauthError(reauthSubmitError instanceof Error ? reauthSubmitError.message : '复验失败');
+    } finally {
+      setReauthLoading(false);
+    }
+  };
 
   const loadAll = useCallback(async () => {
     if (!token || !canOperate) return;
@@ -73,9 +120,11 @@ export default function AccountDeletionsAdminPage() {
     try {
       setError(null);
       setNotice(null);
-      await accountDeletionsApi.retry(token, item.id);
-      setNotice('已触发重试');
-      await loadAll();
+      runWithReauth(async (proof) => {
+        await accountDeletionsApi.retry(token, item.id, proof);
+        setNotice('已触发重试');
+        await loadAll();
+      });
     } catch (retryError) {
       setError(retryError instanceof Error ? retryError.message : '重试失败');
     }
@@ -86,9 +135,11 @@ export default function AccountDeletionsAdminPage() {
     try {
       setError(null);
       setNotice(null);
-      const result = await accountDeletionsApi.processDue(token, 50);
-      setNotice(`已处理 ${result.results.length} 条到期删除任务`);
-      await loadAll();
+      runWithReauth(async (proof) => {
+        const result = await accountDeletionsApi.processDue(token, 50, proof);
+        setNotice(`已处理 ${result.results.length} 条到期删除任务`);
+        await loadAll();
+      });
     } catch (processError) {
       setError(processError instanceof Error ? processError.message : '处理到期任务失败');
     }
@@ -253,6 +304,42 @@ export default function AccountDeletionsAdminPage() {
           </div>
         </section>
       </section>
+      {pendingReauthAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <form onSubmit={submitReauth} className="w-full max-w-md rounded-lg border border-border-secondary bg-bg-secondary p-6 shadow-2xl">
+            <h2 className="text-xl font-semibold">安全复验</h2>
+            <p className="mt-3 text-sm leading-6 text-text-secondary">该操作会触发账号删除或媒体清理，请输入当前账号密码后继续。</p>
+            <label className="mt-5 block text-sm">
+              <span className="text-text-secondary">密码</span>
+              <input
+                type="password"
+                value={reauthPassword}
+                onChange={(event) => setReauthPassword(event.target.value)}
+                required
+                autoFocus
+                className="mt-2 w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm"
+              />
+            </label>
+            {reauthError && <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">{reauthError}</div>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingReauthAction(null)}
+                className="rounded-lg border border-border-secondary px-4 py-2 text-sm text-text-secondary hover:border-red-500 hover:text-red-300"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                disabled={reauthLoading}
+                className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {reauthLoading ? '验证中...' : '确认继续'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </main>
   );
 }

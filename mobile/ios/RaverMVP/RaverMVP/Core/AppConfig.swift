@@ -302,7 +302,7 @@ enum AppConfig {
             return mappedDefaultAvatarURL
         }
         if value.hasPrefix("http://") || value.hasPrefix("https://") {
-            return rewrittenShareAssetURLString(value) ?? value
+            return rewrittenShareAssetURLString(value) ?? httpsUpgradedOssURLString(value) ?? value
         }
         if value.hasPrefix("/") {
             let base = bffBaseURL.absoluteString.hasSuffix("/")
@@ -342,6 +342,17 @@ enum AppConfig {
         rewritten.percentEncodedQuery = remote.percentEncodedQuery
         rewritten.fragment = remote.fragment
         return rewritten.string
+    }
+
+    private static func httpsUpgradedOssURLString(_ raw: String) -> String? {
+        guard var components = URLComponents(string: raw),
+              components.scheme?.lowercased() == "http",
+              let host = components.host?.lowercased(),
+              isLikelyOssImageHost(host) else {
+            return nil
+        }
+        components.scheme = "https"
+        return components.string
     }
 
     private static func localShareOriginURL() -> URL? {

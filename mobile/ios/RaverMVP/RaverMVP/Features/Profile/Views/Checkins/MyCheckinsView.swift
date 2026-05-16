@@ -1970,30 +1970,17 @@ struct MyCheckinsView: View {
             if let avatar = AppConfig.resolvedDJAvatarURLString(performer?.avatarUrl, size: .small),
                let url = URL(string: avatar) {
                 ImageLoaderView(urlString: url.absoluteString)
-                    .background(timelinePerformerFallback(performer))
+                    .background(timelinePerformerFallback(performer, size: size))
             } else {
-                timelinePerformerFallback(performer)
+                timelinePerformerFallback(performer, size: size)
             }
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
     }
 
-    private func timelinePerformerFallback(_ performer: TimelineActPerformer?) -> some View {
-        let initial = String((performer?.name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1) ?? "?")).uppercased()
-        return Circle()
-            .fill(
-                LinearGradient(
-                    colors: [Color(red: 0.30, green: 0.67, blue: 0.97), Color(red: 0.42, green: 0.22, blue: 0.78)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(
-                Text(initial)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.white)
-            )
+    private func timelinePerformerFallback(_ performer: TimelineActPerformer?, size: CGFloat) -> some View {
+        DefaultDJAvatarPlaceholderView(size: size, backgroundColor: RaverTheme.card)
     }
 
     private func timelineActConnectorLabel(text: String, color: Color) -> some View {
@@ -2011,27 +1998,15 @@ struct MyCheckinsView: View {
         if let avatar = AppConfig.resolvedDJAvatarURLString(dj.avatarUrl, size: .small),
            let url = URL(string: avatar) {
             ImageLoaderView(urlString: url.absoluteString)
-                .background(djAvatarFallback(for: dj))
+                .background(djAvatarFallback(for: dj, size: 46))
             .clipShape(Circle())
         } else {
-            djAvatarFallback(for: dj)
+            djAvatarFallback(for: dj, size: 46)
         }
     }
 
-    private func djAvatarFallback(for dj: CheckinDJLite) -> some View {
-        Circle()
-            .fill(
-                LinearGradient(
-                    colors: [Color(red: 0.30, green: 0.67, blue: 0.97), Color(red: 0.42, green: 0.22, blue: 0.78)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(
-                Text(String(dj.name.prefix(1)).uppercased())
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(Color.white)
-            )
+    private func djAvatarFallback(for dj: CheckinDJLite, size: CGFloat) -> some View {
+        DefaultDJAvatarPlaceholderView(size: size, backgroundColor: RaverTheme.card)
     }
 
     private func eventNodeTitle(for node: TimelineNodeV2) -> String {

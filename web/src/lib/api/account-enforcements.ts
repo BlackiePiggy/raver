@@ -1,4 +1,5 @@
 import { getApiUrl } from '@/lib/config';
+import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 
 export interface AccountEnforcementUser {
   id: string;
@@ -56,11 +57,6 @@ const parseError = async (response: Response): Promise<string> => {
   }
 };
 
-const authHeaders = (token: string): HeadersInit => ({
-  'Content-Type': 'application/json',
-  Authorization: `Bearer ${token}`,
-});
-
 const buildQuery = (params?: Record<string, string | number | undefined>): string => {
   const search = new URLSearchParams();
   if (params) {
@@ -75,18 +71,16 @@ const buildQuery = (params?: Record<string, string | number | undefined>): strin
 
 export const accountEnforcementsApi = {
   async list(
-    token: string,
+    _token: string,
     params?: { userId?: string; status?: string; type?: string; limit?: number }
   ): Promise<{ success: true; items: AccountEnforcement[] }> {
-    const response = await fetch(getApiUrl(`/admin/v1/account-enforcements${buildQuery(params)}`), {
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+    return authenticatedJsonFetch<{ success: true; items: AccountEnforcement[] }>(
+      getApiUrl(`/admin/v1/account-enforcements${buildQuery(params)}`)
+    );
   },
 
   async create(
-    token: string,
+    _token: string,
     userId: string,
     input: {
       type: string;
@@ -99,62 +93,65 @@ export const accountEnforcementsApi = {
       evidence?: unknown;
       createdFromReportId?: string;
       createdFromCaseId?: string;
-    }
+    },
+    reauthProof?: string
   ): Promise<{ success: true; enforcement: AccountEnforcement }> {
-    const response = await fetch(getApiUrl(`/admin/v1/users/${encodeURIComponent(userId)}/enforcements`), {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify(input),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+    return authenticatedJsonFetch<{ success: true; enforcement: AccountEnforcement }>(
+      getApiUrl(`/admin/v1/users/${encodeURIComponent(userId)}/enforcements`),
+      {
+        method: 'POST',
+        headers: reauthProof ? { 'x-raver-reauth-proof': reauthProof } : undefined,
+        body: JSON.stringify(input),
+      }
+    );
   },
 
   async revoke(
-    token: string,
+    _token: string,
     enforcementId: string,
-    reason: string
+    reason: string,
+    reauthProof?: string
   ): Promise<{ success: true; enforcement: AccountEnforcement }> {
-    const response = await fetch(getApiUrl(`/admin/v1/account-enforcements/${encodeURIComponent(enforcementId)}/revoke`), {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify({ reason }),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+    return authenticatedJsonFetch<{ success: true; enforcement: AccountEnforcement }>(
+      getApiUrl(`/admin/v1/account-enforcements/${encodeURIComponent(enforcementId)}/revoke`),
+      {
+        method: 'POST',
+        headers: reauthProof ? { 'x-raver-reauth-proof': reauthProof } : undefined,
+        body: JSON.stringify({ reason }),
+      }
+    );
   },
 
-  async expireDue(token: string): Promise<{ success: true; activatedCount: number; expiredCount: number }> {
-    const response = await fetch(getApiUrl('/admin/v1/account-enforcements/expire-due'), {
-      method: 'POST',
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+  async expireDue(_token: string, reauthProof?: string): Promise<{ success: true; activatedCount: number; expiredCount: number }> {
+    return authenticatedJsonFetch<{ success: true; activatedCount: number; expiredCount: number }>(
+      getApiUrl('/admin/v1/account-enforcements/expire-due'),
+      {
+        method: 'POST',
+        headers: reauthProof ? { 'x-raver-reauth-proof': reauthProof } : undefined,
+      }
+    );
   },
 
   async listAppeals(
-    token: string,
+    _token: string,
     params?: { userId?: string; status?: string; limit?: number }
   ): Promise<{ success: true; items: EnforcementAppeal[] }> {
-    const response = await fetch(getApiUrl(`/admin/v1/enforcement-appeals${buildQuery(params)}`), {
-      headers: authHeaders(token),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+    return authenticatedJsonFetch<{ success: true; items: EnforcementAppeal[] }>(
+      getApiUrl(`/admin/v1/enforcement-appeals${buildQuery(params)}`)
+    );
   },
 
   async decideAppeal(
-    token: string,
+    _token: string,
     appealId: string,
     input: { status: string; decision: string; decisionNote?: string }
   ): Promise<{ success: true; appeal: EnforcementAppeal }> {
-    const response = await fetch(getApiUrl(`/admin/v1/enforcement-appeals/${encodeURIComponent(appealId)}/decision`), {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify(input),
-    });
-    if (!response.ok) throw new Error(await parseError(response));
-    return response.json();
+    return authenticatedJsonFetch<{ success: true; appeal: EnforcementAppeal }>(
+      getApiUrl(`/admin/v1/enforcement-appeals/${encodeURIComponent(appealId)}/decision`),
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
   },
 };

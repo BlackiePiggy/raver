@@ -7013,21 +7013,33 @@ struct RankingBoardDetailView: View {
             Text(board.subtitle ?? board.defaultSubtitle)
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(sortedYears, id: \.self) { year in
-                        Button {
-                            selectedYear = year
-                        } label: {
-                            Text(verbatim: String(year))
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(sortedYears, id: \.self) { year in
+                            Button {
+                                selectedYear = year
+                            } label: {
+                                Text(verbatim: String(year))
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(selectedYear == year ? RaverTheme.accent : RaverTheme.card)
+                            .foregroundStyle(selectedYear == year ? Color.white : RaverTheme.primaryText)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .id(year)
                         }
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(selectedYear == year ? RaverTheme.accent : RaverTheme.card)
-                        .foregroundStyle(selectedYear == year ? Color.white : RaverTheme.primaryText)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
+                }
+                .onAppear {
+                    scrollYearSelector(to: selectedYear, proxy: proxy, animated: false)
+                }
+                .onChange(of: selectedYear) { _, year in
+                    scrollYearSelector(to: year, proxy: proxy, animated: true)
+                }
+                .onChange(of: sortedYears) { _, _ in
+                    scrollYearSelector(to: selectedYear, proxy: proxy, animated: false)
                 }
             }
         }
@@ -7039,6 +7051,23 @@ struct RankingBoardDetailView: View {
     private var sortedYears: [Int] {
         let candidateYears = detail?.years ?? board.years
         return Array(Set(candidateYears)).sorted(by: >)
+    }
+
+    private func scrollYearSelector(
+        to year: Int,
+        proxy: ScrollViewProxy,
+        animated: Bool
+    ) {
+        guard sortedYears.contains(year) else { return }
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(year, anchor: .leading)
+                }
+            } else {
+                proxy.scrollTo(year, anchor: .leading)
+            }
+        }
     }
 
     private func rankingGrid(entries: [RankingEntry]) -> some View {

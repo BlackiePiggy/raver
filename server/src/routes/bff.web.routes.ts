@@ -49,6 +49,60 @@ const refreshUserCheckinProjectionBestEffort = async (userId: string): Promise<v
   }
 };
 
+const countUserWatchedDJ = async (userId: string, djId: string): Promise<number> => {
+  const [aggregate, directCheckinCount, selectionRows] = await Promise.all([
+    prisma.userCheckinGalleryDJAggregate.findFirst({
+      where: {
+        userId,
+        scope: 'all',
+        djId,
+      },
+      select: {
+        count: true,
+      },
+      orderBy: [
+        { count: 'desc' },
+        { latestAttendedAt: 'desc' },
+      ],
+    }),
+    prisma.checkin.count({
+      where: {
+        userId,
+        status: 'active',
+        type: 'dj',
+        djId,
+        OR: [{ note: null }, { note: { not: 'marked' } }],
+      },
+    }),
+    prisma.checkinSelectionDJ.findMany({
+      where: {
+        djId,
+        selection: {
+          checkin: {
+            userId,
+            status: 'active',
+            OR: [{ note: null }, { note: { not: 'marked' } }],
+          },
+        },
+      },
+      select: {
+        selection: {
+          select: {
+            checkinId: true,
+            dayId: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const selectedSlots = new Set(
+    selectionRows.map((row) => `${row.selection.checkinId}:${row.selection.dayId}`)
+  ).size;
+  const realtimeCount = directCheckinCount + selectedSlots;
+  return Math.max(0, Number(aggregate?.count ?? 0) || 0, realtimeCount);
+};
+
 interface BFFAuthRequest extends Request {
   user?: JWTPayload;
   authUserId?: string;
@@ -2990,6 +3044,8 @@ const mapDJ = (
     setCount,
     setsCount: setCount,
     djSetCount: setCount,
+    viewerWatchedCount: Math.max(0, Number(row.viewerWatchedCount ?? 0) || 0),
+    honors: Array.isArray(row.honors) ? row.honors : [],
     sourceDataSource: row.sourceDataSource ?? null,
     contributors,
     contributorUsernames,
@@ -3745,50 +3801,13 @@ type RankingEntryRecord = {
   entityId?: string | null;
 };
 
-type RankingYearFile = {
+type RankingYearRecord = {
   boardId: string;
   year: number;
   source?: string;
   updatedAt: string;
   entries: RankingEntryRecord[];
 };
-
-const LEGACY_RANKING_BOARDS: Record<
-  string,
-  {
-    title: string;
-    subtitle: string;
-    years: number[];
-    coverImageUrl?: string;
-    entityType: RankingEntityType;
-  }
-> = {
-  djmag: {
-    title: 'DJ MAG TOP 100',
-    subtitle: '全球电子音乐最有影响力榜单之一',
-    years: [2022, 2023, 2024, 2025],
-    entityType: 'dj',
-  },
-  dongye: {
-    title: '东野 DJ 榜',
-    subtitle: '中文圈 DJ 热度与影响力榜单',
-    years: [2024, 2025],
-    entityType: 'dj',
-  },
-  djmag_festival: {
-    title: 'DJ MAG TOP 100 Festivals',
-    subtitle: '全球电音节品牌百大榜单',
-    years: [2025],
-    entityType: 'festival',
-  },
-};
-
-const rankingRootCandidates = [
-  path.join(process.cwd(), '..', 'web', 'public', 'rankings'),
-  path.join(process.cwd(), 'web', 'public', 'rankings'),
-];
-
-const rankingBoardManifestFile = '_boards.json';
 
 const sanitizeRankingBoardId = (value: string): string => {
   const normalized = String(value || '')
@@ -3798,38 +3817,6 @@ const sanitizeRankingBoardId = (value: string): string => {
     .replace(/^-+|-+$/g, '')
     .replace(/^_+|_+$/g, '');
   return normalized || `ranking-${Date.now()}`;
-};
-
-const resolveRankingRootDir = (): string => {
-  for (const dir of rankingRootCandidates) {
-    if (fs.existsSync(dir)) return dir;
-  }
-  const fallback = rankingRootCandidates[0];
-  fs.mkdirSync(fallback, { recursive: true });
-  return fallback;
-};
-
-const rankingBoardManifestPath = (): string =>
-  path.join(resolveRankingRootDir(), rankingBoardManifestFile);
-
-const rankingBoardDirPath = (boardId: string): string =>
-  path.join(resolveRankingRootDir(), sanitizeRankingBoardId(boardId));
-
-const rankingYearJsonPath = (boardId: string, year: number): string =>
-  path.join(rankingBoardDirPath(boardId), `${year}.json`);
-
-const rankingYearTxtPath = (boardId: string, year: number): string =>
-  path.join(rankingBoardDirPath(boardId), `${year}.txt`);
-
-const rankingYearPathLegacy = (boardId: string, year: number): string | null => {
-  const candidates = [
-    rankingYearTxtPath(boardId, year),
-    ...rankingRootCandidates.map((root) => path.join(root, sanitizeRankingBoardId(boardId), `${year}.txt`)),
-  ];
-  for (const filePath of candidates) {
-    if (fs.existsSync(filePath)) return filePath;
-  }
-  return null;
 };
 
 const normalizeRankingYears = (value: unknown): number[] => {
@@ -3843,53 +3830,6 @@ const normalizeRankingYears = (value: unknown): number[] => {
     )
   ).sort((a, b) => a - b);
 };
-
-const normalizeRankingBoard = (input: unknown, fallbackId = ''): RankingBoardRecord | null => {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
-  const row = input as Record<string, unknown>;
-  const id = sanitizeRankingBoardId(String(row.id || fallbackId || ''));
-  const title = String(row.title || '').trim() || id;
-  const subtitle = String(row.subtitle || '').trim();
-  const description = String(row.description || '').trim();
-  const entityType: RankingEntityType = String(row.entityType || '').trim() === 'festival' ? 'festival' : 'dj';
-  const coverImageUrlRaw = String(row.coverImageUrl || '').trim();
-  const coverImageUrl = coverImageUrlRaw || null;
-  const years = normalizeRankingYears(row.years);
-  const nowIso = new Date().toISOString();
-  const createdAt = String(row.createdAt || '').trim() || nowIso;
-  const updatedAt = String(row.updatedAt || '').trim() || nowIso;
-  return {
-    id,
-    title,
-    subtitle,
-    description,
-    coverImageUrl,
-    entityType,
-    years,
-    createdAt,
-    updatedAt,
-  };
-};
-
-const collectRankingBoardYearsFromFiles = (boardId: string): number[] => {
-  const dirPath = rankingBoardDirPath(boardId);
-  if (!fs.existsSync(dirPath)) return [];
-  const yearSet = new Set<number>();
-  for (const file of fs.readdirSync(dirPath)) {
-    const match = file.match(/^(\d{4})\.(json|txt)$/i);
-    if (!match) continue;
-    const year = Number(match[1]);
-    if (Number.isFinite(year)) yearSet.add(year);
-  }
-  return Array.from(yearSet).sort((a, b) => a - b);
-};
-
-const rankingEntriesToText = (entries: RankingEntryRecord[]): string =>
-  entries
-    .slice()
-    .sort((a, b) => a.rank - b.rank)
-    .map((item) => `${item.rank}. ${item.name}`)
-    .join('\n');
 
 const parseRankingEntries = (value: unknown): RankingEntryRecord[] => {
   if (!Array.isArray(value)) return [];
@@ -3917,113 +3857,269 @@ const parseRankingEntries = (value: unknown): RankingEntryRecord[] => {
   return Array.from(deduped.values()).sort((a, b) => a.rank - b.rank);
 };
 
-const loadRankingBoards = (): RankingBoardRecord[] => {
-  const manifestPath = rankingBoardManifestPath();
-  let boards = Array.from(Object.entries(LEGACY_RANKING_BOARDS)).map(([id, board]) => ({
-    id,
-    title: board.title,
-    subtitle: board.subtitle,
-    description: '',
-    coverImageUrl: board.coverImageUrl || null,
-    entityType: board.entityType,
-    years: board.years.slice().sort((a, b) => a - b),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  })) as RankingBoardRecord[];
+const normalizeRankingBoardRow = (row: {
+  id: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  coverImageUrl: string | null;
+  entityType: string;
+  createdAt: Date;
+  updatedAt: Date;
+  years?: Array<{ year: number }> | null;
+}): RankingBoardRecord => ({
+  id: row.id,
+  title: row.title,
+  subtitle: row.subtitle || '',
+  description: row.description || '',
+  coverImageUrl: row.coverImageUrl || null,
+  entityType: row.entityType === 'festival' ? 'festival' : 'dj',
+  years: Array.isArray(row.years) ? row.years.map((item) => item.year).sort((a, b) => a - b) : [],
+  createdAt: row.createdAt.toISOString(),
+  updatedAt: row.updatedAt.toISOString(),
+});
 
-  if (fs.existsSync(manifestPath)) {
-    try {
-      const payload = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-      const rows = Array.isArray(payload?.boards) ? payload.boards : [];
-      const normalizedRows = rows
-        .map((item: unknown) => normalizeRankingBoard(item))
-        .filter((item: RankingBoardRecord | null): item is RankingBoardRecord => item !== null);
-      if (normalizedRows.length > 0) {
-        boards = normalizedRows;
-      }
-    } catch (_error) {
-      // Keep legacy fallback when manifest is corrupted.
-    }
-  }
-
-  const dedupedById = new Map<string, RankingBoardRecord>();
-  for (const board of boards) {
-    const fileYears = collectRankingBoardYearsFromFiles(board.id);
-    const years = Array.from(new Set([...board.years, ...fileYears])).sort((a, b) => a - b);
-    dedupedById.set(board.id, { ...board, years });
-  }
-  return Array.from(dedupedById.values()).sort((a, b) => a.title.localeCompare(b.title));
+const loadRankingBoardsFromDB = async (): Promise<RankingBoardRecord[]> => {
+  const boards = await prisma.rankingBoard.findMany({
+    include: {
+      years: {
+        select: { year: true },
+      },
+    },
+    orderBy: {
+      title: 'asc',
+    },
+  });
+  return boards.map(normalizeRankingBoardRow);
 };
 
-const saveRankingBoards = (boards: RankingBoardRecord[]): void => {
-  const payload = {
-    updatedAt: new Date().toISOString(),
-    boards: boards
-      .map((item) => ({
-        id: sanitizeRankingBoardId(item.id),
-        title: String(item.title || '').trim(),
-        subtitle: String(item.subtitle || '').trim(),
-        description: String(item.description || '').trim(),
-        coverImageUrl: String(item.coverImageUrl || '').trim() || null,
-        entityType: item.entityType === 'festival' ? 'festival' : 'dj',
-        years: normalizeRankingYears(item.years),
-        createdAt: item.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }))
-      .filter((item) => item.id && item.title),
-  };
-  fs.writeFileSync(rankingBoardManifestPath(), JSON.stringify(payload, null, 2), 'utf8');
+const loadRankingBoardById = async (boardId: string): Promise<RankingBoardRecord | null> => {
+  const row = await prisma.rankingBoard.findUnique({
+    where: { id: sanitizeRankingBoardId(boardId) },
+    include: {
+      years: {
+        select: { year: true },
+      },
+    },
+  });
+  return row ? normalizeRankingBoardRow(row) : null;
 };
 
-const loadRankingYearData = (boardId: string, year: number): RankingYearFile | null => {
-  const yearJsonPath = rankingYearJsonPath(boardId, year);
-  if (fs.existsSync(yearJsonPath)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(yearJsonPath, 'utf8'));
-      if (parsed && typeof parsed === 'object') {
-        const entries = parseRankingEntries((parsed as Record<string, unknown>).entries);
-        return {
-          boardId: sanitizeRankingBoardId(boardId),
-          year: Math.floor(year),
-          source: String((parsed as Record<string, unknown>).source || '').trim() || undefined,
-          updatedAt: String((parsed as Record<string, unknown>).updatedAt || '').trim() || new Date().toISOString(),
-          entries,
-        };
-      }
-    } catch (_error) {
-      // Fall through to legacy parser.
-    }
-  }
-
-  const legacyTxtPath = rankingYearPathLegacy(boardId, year);
-  if (!legacyTxtPath) return null;
-  const parsed = parseRankingText(fs.readFileSync(legacyTxtPath, 'utf8')).map((item) => ({
-    rank: item.rank,
-    name: item.name,
-  }));
+const loadRankingYearData = async (boardId: string, year: number): Promise<RankingYearRecord | null> => {
+  const row = await prisma.rankingYear.findUnique({
+    where: {
+      boardId_year: {
+        boardId: sanitizeRankingBoardId(boardId),
+        year: Math.floor(year),
+      },
+    },
+    include: {
+      entries: {
+        orderBy: { rank: 'asc' },
+      },
+    },
+  });
+  if (!row) return null;
   return {
     boardId: sanitizeRankingBoardId(boardId),
-    year: Math.floor(year),
-    source: 'legacy_txt',
-    updatedAt: new Date().toISOString(),
-    entries: parsed,
+    year: row.year,
+    source: row.source || undefined,
+    updatedAt: row.updatedAt.toISOString(),
+    entries: row.entries.map((entry) => ({
+      rank: entry.rank,
+      name: entry.name,
+      entityId: entry.entityId || null,
+    })),
   };
 };
 
-const saveRankingYearData = (boardId: string, year: number, entries: RankingEntryRecord[], source = 'manual'): RankingYearFile => {
-  const boardDir = rankingBoardDirPath(boardId);
-  fs.mkdirSync(boardDir, { recursive: true });
+const collectAffectedDJIdsFromEntries = async (entries: RankingEntryRecord[]): Promise<string[]> => {
+  const directIds = entries
+    .map((entry) => String(entry.entityId || '').trim())
+    .filter(Boolean);
+  const unmatchedNames = entries
+    .filter((entry) => !entry.entityId)
+    .map((entry) => entry.name)
+    .filter(Boolean);
+  if (unmatchedNames.length === 0) {
+    return Array.from(new Set(directIds));
+  }
+
+  const djs = await prisma.dJ.findMany({
+    where: {
+      OR: [
+        { name: { in: unmatchedNames } },
+        { aliases: { hasSome: unmatchedNames } },
+      ],
+    },
+    select: {
+      id: true,
+      name: true,
+      aliases: true,
+    },
+  });
+  const matchedIds = new Set<string>(directIds);
+  const normalizedLookup = new Map<string, string>();
+  for (const dj of djs) {
+    normalizedLookup.set(normalizeName(dj.name), dj.id);
+    for (const alias of Array.isArray(dj.aliases) ? dj.aliases : []) {
+      normalizedLookup.set(normalizeName(alias), dj.id);
+    }
+  }
+  for (const name of unmatchedNames) {
+    const matchedId = normalizedLookup.get(normalizeName(name));
+    if (matchedId) matchedIds.add(matchedId);
+  }
+  return Array.from(matchedIds);
+};
+
+const buildDJHonorsForDJ = async (djId: string): Promise<Record<string, unknown>[]> => {
+  const rows = await prisma.rankingEntry.findMany({
+    where: {
+      entityId: djId,
+      rankingYear: {
+        board: {
+          entityType: 'dj',
+        },
+      },
+    },
+    include: {
+      rankingYear: {
+        include: {
+          board: true,
+        },
+      },
+    },
+    orderBy: [
+      { rankingYear: { year: 'desc' } },
+      { rank: 'asc' },
+    ],
+  });
+
+  return rows.map((row) => {
+    const board = row.rankingYear.board;
+    const subtitle = board.subtitle?.trim()
+      ? `${row.rankingYear.year} · ${board.subtitle.trim()}`
+      : `${row.rankingYear.year} Ranking`;
+    return {
+      id: `ranking-${board.id}-${row.rankingYear.year}-${row.rank}`,
+      category: 'ranking',
+      title: board.title,
+      subtitle,
+      source: board.id,
+      year: row.rankingYear.year,
+      rank: row.rank,
+      url: null,
+    };
+  });
+};
+
+const syncDJHonorsForDJIds = async (djIds: string[]): Promise<void> => {
+  const ids = Array.from(new Set(djIds.map((item) => String(item || '').trim()).filter(Boolean)));
+  if (ids.length === 0) return;
+  const updates = await Promise.all(ids.map(async (djId) => ({
+    djId,
+    honors: await buildDJHonorsForDJ(djId),
+  })));
+  await prisma.$transaction(
+    updates.map((item) => prisma.dJ.update({
+      where: { id: item.djId },
+      data: { honors: item.honors as Prisma.InputJsonValue },
+    }))
+  );
+};
+
+const saveRankingBoard = async (board: RankingBoardRecord): Promise<RankingBoardRecord> => {
+  const saved = await prisma.rankingBoard.upsert({
+    where: { id: sanitizeRankingBoardId(board.id) },
+    update: {
+      title: board.title,
+      subtitle: board.subtitle,
+      description: board.description,
+      coverImageUrl: board.coverImageUrl,
+      entityType: board.entityType === 'festival' ? 'festival' : 'dj',
+      updatedAt: new Date(),
+    },
+    create: {
+      id: sanitizeRankingBoardId(board.id),
+      title: board.title,
+      subtitle: board.subtitle,
+      description: board.description,
+      coverImageUrl: board.coverImageUrl,
+      entityType: board.entityType === 'festival' ? 'festival' : 'dj',
+      createdAt: new Date(board.createdAt || new Date().toISOString()),
+      updatedAt: new Date(board.updatedAt || new Date().toISOString()),
+    },
+    include: {
+      years: {
+        select: { year: true },
+      },
+    },
+  });
+  return normalizeRankingBoardRow(saved);
+};
+
+const saveRankingYearData = async (
+  boardId: string,
+  year: number,
+  entries: RankingEntryRecord[],
+  source = 'manual'
+): Promise<RankingYearRecord> => {
   const normalizedEntries = parseRankingEntries(entries);
-  const payload: RankingYearFile = {
-    boardId: sanitizeRankingBoardId(boardId),
-    year: Math.floor(year),
-    source,
-    updatedAt: new Date().toISOString(),
-    entries: normalizedEntries,
+  const normalizedBoardId = sanitizeRankingBoardId(boardId);
+  const savedYear = await prisma.$transaction(async (tx) => {
+    const row = await tx.rankingYear.upsert({
+      where: {
+        boardId_year: {
+          boardId: normalizedBoardId,
+          year: Math.floor(year),
+        },
+      },
+      update: {
+        source,
+        updatedAt: new Date(),
+      },
+      create: {
+        boardId: normalizedBoardId,
+        year: Math.floor(year),
+        source,
+        updatedAt: new Date(),
+      },
+    });
+    await tx.rankingEntry.deleteMany({
+      where: { rankingYearId: row.id },
+    });
+    if (normalizedEntries.length > 0) {
+      await tx.rankingEntry.createMany({
+        data: normalizedEntries.map((entry) => ({
+          rankingYearId: row.id,
+          rank: entry.rank,
+          name: entry.name,
+          entityId: entry.entityId || null,
+        })),
+      });
+    }
+    return tx.rankingYear.findUniqueOrThrow({
+      where: { id: row.id },
+      include: {
+        entries: {
+          orderBy: { rank: 'asc' },
+        },
+      },
+    });
+  });
+
+  return {
+    boardId: normalizedBoardId,
+    year: savedYear.year,
+    source: savedYear.source || undefined,
+    updatedAt: savedYear.updatedAt.toISOString(),
+    entries: savedYear.entries.map((entry) => ({
+      rank: entry.rank,
+      name: entry.name,
+      entityId: entry.entityId || null,
+    })),
   };
-  fs.writeFileSync(rankingYearJsonPath(boardId, year), JSON.stringify(payload, null, 2), 'utf8');
-  fs.writeFileSync(rankingYearTxtPath(boardId, year), rankingEntriesToText(normalizedEntries), 'utf8');
-  return payload;
 };
 
 const normalizeEventWikiFestivalId = (value: unknown): string | null => {
@@ -7824,46 +7920,75 @@ router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response):
   try {
     const userId = (req as BFFAuthRequest).user?.userId;
     const djId = req.params.id as string;
-    const rows = await prisma.event.findMany({
-      where: {
-        OR: [
-          {
-            lineupSlots: {
-              some: {
-                djId,
-              },
-            },
-          },
-          {
-            lineupSlots: {
-              some: {
-                djIds: { has: djId },
-              },
-            },
-          },
-        ],
-      },
-      orderBy: [{ startDate: 'desc' }, { name: 'asc' }],
-      include: {
-        ticketTiers: {
-          orderBy: { sortOrder: 'asc' },
-        },
-        lineupSlots: {
-          orderBy: { startTime: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 50);
+    const skip = (page - 1) * limit;
+    const where = {
+      OR: [
+        {
+          lineupSlots: {
+            some: {
+              djId,
             },
           },
         },
-        organizer: {
-          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        {
+          lineupSlots: {
+            some: {
+              djIds: { has: djId },
+            },
+          },
         },
-      },
-    });
+      ],
+    } satisfies Prisma.EventWhereInput;
+    const [rows, total] = await Promise.all([
+      prisma.event.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: [{ startDate: 'desc' }, { name: 'asc' }],
+        select: {
+          id: true,
+          name: true,
+          nameI18n: true,
+          slug: true,
+          city: true,
+          cityI18n: true,
+          country: true,
+          countryI18n: true,
+          manualLocation: true,
+          locationPoint: true,
+          coverImageUrl: true,
+          eventType: true,
+          startDate: true,
+          endDate: true,
+          timeZone: true,
+          startTime: true,
+          endTime: true,
+          dayRolloverHour: true,
+          status: true,
+          isVerified: true,
+          createdAt: true,
+          updatedAt: true,
+          organizer: {
+            select: { id: true, username: true, displayName: true, avatarUrl: true },
+          },
+        },
+      }),
+      prisma.event.count({ where }),
+    ]);
 
     const complianceUser = await resolveRegionalComplianceUser(userId);
-    ok(res, { items: rows.map((row) => mapEvent(row, complianceUser)) });
+    ok(
+      res,
+      { items: rows.map((row) => mapEvent(row, complianceUser)) },
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      }
+    );
   } catch (error) {
     console.error('BFF web dj events error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -7984,21 +8109,40 @@ router.get('/djs/:id', optionalAuth, async (req: Request, res: Response): Promis
     }
 
     let isFollowing = false;
+    let viewerWatchedCount = 0;
     if (viewerId) {
-      const follow = await prisma.follow.findUnique({
-        where: {
-          followerId_djId: {
-            followerId: viewerId,
-            djId,
+      const [follow, watchedCount] = await Promise.all([
+        prisma.follow.findUnique({
+          where: {
+            followerId_djId: {
+              followerId: viewerId,
+              djId,
+            },
           },
-        },
-      });
+        }),
+        countUserWatchedDJ(viewerId, djId),
+      ]);
       isFollowing = Boolean(follow);
+      viewerWatchedCount = watchedCount;
     }
 
-    ok(res, mapDJ(row, isFollowing, viewerId, viewerRole));
+    ok(res, mapDJ({ ...row, viewerWatchedCount }, isFollowing, viewerId, viewerRole));
   } catch (error) {
     console.error('BFF web dj detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/djs/:id/watched-count', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const djId = req.params.id as string;
+    const count = await countUserWatchedDJ(userId, djId);
+    ok(res, { count });
+  } catch (error) {
+    console.error('BFF web dj watched count error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -10811,29 +10955,33 @@ router.post('/learn/labels', optionalAuth, async (req: Request, res: Response): 
   }
 });
 
-router.get('/learn/rankings', (_req: Request, res: Response): void => {
-  const boards = loadRankingBoards();
-  ok(
-    res,
-    boards.map((board) => ({
-      id: board.id,
-      title: board.title,
-      subtitle: board.subtitle,
-      description: board.description,
-      coverImageUrl: board.coverImageUrl || null,
-      years: board.years,
-      entityType: board.entityType,
-      createdAt: board.createdAt,
-      updatedAt: board.updatedAt,
-    }))
-  );
+router.get('/learn/rankings', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const boards = await loadRankingBoardsFromDB();
+    ok(
+      res,
+      boards.map((board) => ({
+        id: board.id,
+        title: board.title,
+        subtitle: board.subtitle,
+        description: board.description,
+        coverImageUrl: board.coverImageUrl || null,
+        years: board.years,
+        entityType: board.entityType,
+        createdAt: board.createdAt,
+        updatedAt: board.updatedAt,
+      }))
+    );
+  } catch (error) {
+    console.error('BFF web rankings list error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/learn/rankings/:boardId', async (req: Request, res: Response): Promise<void> => {
   try {
     const boardId = sanitizeRankingBoardId(req.params.boardId as string);
-    const boards = loadRankingBoards();
-    const board = boards.find((item) => item.id === boardId);
+    const board = await loadRankingBoardById(boardId);
     if (!board) {
       res.status(404).json({ error: 'Board not found' });
       return;
@@ -10861,13 +11009,13 @@ router.get('/learn/rankings/:boardId', async (req: Request, res: Response): Prom
       return;
     }
 
-    const currentYearData = loadRankingYearData(boardId, year);
+    const currentYearData = await loadRankingYearData(boardId, year);
     const current = currentYearData?.entries ?? [];
     const strictEntityBinding = Boolean(currentYearData && currentYearData.source !== 'legacy_txt');
 
     const prevYear = board.years[board.years.indexOf(year) - 1];
     const prev = prevYear
-      ? loadRankingYearData(boardId, prevYear)?.entries ?? []
+      ? (await loadRankingYearData(boardId, prevYear))?.entries ?? []
       : [];
 
     const previousRankMap: Record<string, number> = {};
@@ -11044,8 +11192,8 @@ router.post('/learn/rankings', optionalAuth, async (req: Request, res: Response)
     const entityType: RankingEntityType = String(body.entityType || '').trim() === 'festival' ? 'festival' : 'dj';
     const requestedId = String(body.id || '').trim();
     const boardId = sanitizeRankingBoardId(requestedId || title);
-    const boards = loadRankingBoards();
-    if (boards.some((item) => item.id === boardId)) {
+    const existing = await prisma.rankingBoard.findUnique({ where: { id: boardId }, select: { id: true } });
+    if (existing) {
       res.status(409).json({ error: 'board id already exists' });
       return;
     }
@@ -11071,14 +11219,20 @@ router.post('/learn/rankings', optionalAuth, async (req: Request, res: Response)
       : [];
     const finalEntries = explicitEntries.length > 0 ? explicitEntries : importedEntries;
 
+    const created = await saveRankingBoard(board);
     if (Number.isFinite(year) && year > 1900 && year < 2201 && finalEntries.length > 0) {
-      saveRankingYearData(boardId, Math.floor(year), finalEntries, importText ? 'import_text' : 'manual_create');
-      board.years = Array.from(new Set([...board.years, Math.floor(year)])).sort((a, b) => a - b);
+      await saveRankingYearData(boardId, Math.floor(year), finalEntries, importText ? 'import_text' : 'manual_create');
+      if (entityType === 'dj') {
+        await syncDJHonorsForDJIds(await collectAffectedDJIdsFromEntries(finalEntries));
+      }
     }
 
-    saveRankingBoards([...boards, board]);
-
-    ok(res, board);
+    ok(res, {
+      ...created,
+      years: Array.from(new Set([...created.years, ...board.years, ...(Number.isFinite(year) ? [Math.floor(year)] : [])]))
+        .filter((item) => item >= 1900 && item <= 2200)
+        .sort((a, b) => a - b),
+    });
   } catch (error) {
     console.error('BFF web create ranking board error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -11093,14 +11247,12 @@ router.patch('/learn/rankings/:boardId', optionalAuth, async (req: Request, res:
 
     const boardId = sanitizeRankingBoardId(String(req.params.boardId ?? ''));
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const boards = loadRankingBoards();
-    const index = boards.findIndex((item) => item.id === boardId);
-    if (index < 0) {
+    const current = await loadRankingBoardById(boardId);
+    if (!current) {
       res.status(404).json({ error: 'Board not found' });
       return;
     }
 
-    const current = boards[index];
     const next: RankingBoardRecord = {
       ...current,
       title: Object.prototype.hasOwnProperty.call(body, 'title')
@@ -11124,9 +11276,18 @@ router.patch('/learn/rankings/:boardId', optionalAuth, async (req: Request, res:
       updatedAt: new Date().toISOString(),
     };
 
-    boards[index] = next;
-    saveRankingBoards(boards);
-    ok(res, next);
+    const saved = await saveRankingBoard(next);
+    if (current.entityType === 'dj' || saved.entityType === 'dj') {
+      const yearRows = await prisma.rankingEntry.findMany({
+        where: {
+          rankingYear: { boardId },
+          entityId: { not: null },
+        },
+        select: { entityId: true },
+      });
+      await syncDJHonorsForDJIds(yearRows.map((row) => row.entityId).filter((item): item is string => Boolean(item)));
+    }
+    ok(res, saved);
   } catch (error) {
     console.error('BFF web update ranking board error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -11140,19 +11301,27 @@ router.delete('/learn/rankings/:boardId', optionalAuth, async (req: Request, res
     if (!userId) return;
 
     const boardId = sanitizeRankingBoardId(String(req.params.boardId ?? ''));
-    const boards = loadRankingBoards();
-    const target = boards.find((item) => item.id === boardId);
+    const target = await loadRankingBoardById(boardId);
     if (!target) {
       res.status(404).json({ error: 'Board not found' });
       return;
     }
+    const affectedDJIds = target.entityType === 'dj'
+      ? (await prisma.rankingEntry.findMany({
+          where: {
+            rankingYear: { boardId },
+            entityId: { not: null },
+          },
+          select: { entityId: true },
+        })).map((row) => row.entityId).filter((item): item is string => Boolean(item))
+      : [];
 
     if (target.coverImageUrl) {
       await deleteSingleWikiBrandOssObjectIfOwned(target.coverImageUrl, boardId);
     }
     await deleteWikiBrandOssFolder(boardId);
-    fs.rmSync(rankingBoardDirPath(boardId), { recursive: true, force: true });
-    saveRankingBoards(boards.filter((item) => item.id !== boardId));
+    await prisma.rankingBoard.delete({ where: { id: boardId } });
+    await syncDJHonorsForDJIds(affectedDJIds);
     ok(res, { success: true });
   } catch (error) {
     console.error('BFF web delete ranking board error:', error);
@@ -11173,12 +11342,12 @@ router.post('/learn/rankings/:boardId/years/:year/upsert', optionalAuth, async (
       return;
     }
 
-    const boards = loadRankingBoards();
-    const boardIndex = boards.findIndex((item) => item.id === boardId);
-    if (boardIndex < 0) {
+    const board = await loadRankingBoardById(boardId);
+    if (!board) {
       res.status(404).json({ error: 'Board not found' });
       return;
     }
+    const previousEntries = (await loadRankingYearData(boardId, Math.floor(year)))?.entries ?? [];
 
     const body = (req.body ?? {}) as Record<string, unknown>;
     const explicitEntries = parseRankingEntries(body.entries);
@@ -11188,19 +11357,18 @@ router.post('/learn/rankings/:boardId/years/:year/upsert', optionalAuth, async (
       : [];
     const entries = explicitEntries.length > 0 ? explicitEntries : importedEntries;
 
-    saveRankingYearData(boardId, Math.floor(year), entries, importText ? 'import_text' : 'manual_update');
-
-    const board = boards[boardIndex];
-    board.years = Array.from(new Set([...board.years, Math.floor(year)])).sort((a, b) => a - b);
-    board.updatedAt = new Date().toISOString();
-    boards[boardIndex] = board;
-    saveRankingBoards(boards);
+    await saveRankingYearData(boardId, Math.floor(year), entries, importText ? 'import_text' : 'manual_update');
+    const nextYears = Array.from(new Set([...board.years, Math.floor(year)])).sort((a, b) => a - b);
+    if (board.entityType === 'dj') {
+      const affectedIds = await collectAffectedDJIdsFromEntries([...previousEntries, ...entries]);
+      await syncDJHonorsForDJIds(affectedIds);
+    }
 
     ok(res, {
       boardId,
       year: Math.floor(year),
       count: entries.length,
-      years: board.years,
+      years: nextYears,
     });
   } catch (error) {
     console.error('BFF web upsert ranking year error:', error);

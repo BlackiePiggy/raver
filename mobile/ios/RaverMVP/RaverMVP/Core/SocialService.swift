@@ -212,7 +212,9 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func restoreSession() async -> Session?
     func login(username: String, password: String) async throws -> Session
     func loginWithSms(phoneNumber: String, code: String) async throws -> Session
+    func loginWithFirebasePhoneIdToken(_ idToken: String, birthYear: Int?, regionCode: String?, displayName: String?) async throws -> Session
     func sendLoginSmsCode(phoneNumber: String) async throws -> Int
+    func checkDisplayNameAvailability(_ displayName: String) async throws -> DisplayNameAvailability
     func register(
         email: String,
         password: String,
@@ -221,6 +223,9 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
         regionCode: String?
     ) async throws -> Session
     func logout() async
+    func logoutAll() async throws
+    func fetchAuthSessions() async throws -> [AuthSessionItem]
+    func revokeAuthSession(sessionID: String) async throws -> AuthSessionRevokeResult
     func deleteAccount() async throws
     func fetchAccountEnforcementStatus() async throws -> AccountEnforcementStatus
     func fetchAccountEnforcements() async throws -> [AccountEnforcement]
@@ -630,6 +635,7 @@ extension SocialService {
 enum ServiceError: LocalizedError {
     case invalidResponse
     case unauthorized
+    case sessionExpired(SessionExpirationReason)
     case accountInactive
     case accountEnforcementRestricted(AccountEnforcementRestriction)
     case message(String)
@@ -640,6 +646,8 @@ enum ServiceError: LocalizedError {
             return LT("服务响应无效", "Invalid service response", "サービスレスポンスが無効です")
         case .unauthorized:
             return LT("登录状态已失效，请重新登录", "Session expired. Please log in again.", "ログイン状態が無効です。再度ログインしてください。")
+        case .sessionExpired(let reason):
+            return reason.userFacingMessage
         case .accountInactive:
             return LT("账号已删除或停用，请重新登录其他账号。", "This account has been deleted or disabled. Please log in with another account.", "このアカウントは削除または停止されています。別のアカウントでログインしてください。")
         case .accountEnforcementRestricted(let restriction):

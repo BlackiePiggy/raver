@@ -9,6 +9,7 @@ import {
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_MS,
   comparePassword,
+  generateReauthProof,
   generateRefreshToken,
   generateToken,
   hashPassword,
@@ -19,6 +20,8 @@ import {
 } from '../utils/auth';
 import { tencentIMFriendService, tencentIMGroupService, tencentIMUserService } from '../modules/im';
 import { smsService } from '../services/sms/sms-provider';
+import { recordSmsMetric } from '../services/sms/sms-metrics';
+import { verifyFirebasePhoneIdToken } from '../services/firebase-phone-auth.service';
 import { notificationCenterService } from '../services/notification-center';
 import {
   FEED_RANKING_WEIGHTS_VERSION,
@@ -144,6 +147,15 @@ const publicOssUrlForObjectKey = (objectKey: string): string => {
   return `https://${bucketHost}/${objectKey}`;
 };
 
+const securePublicAssetUrl = (rawUrl: string | undefined | null, objectKey: string): string => {
+  const fallback = publicOssUrlForObjectKey(objectKey);
+  const trimmed = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  if (!trimmed) return fallback;
+  if (trimmed.startsWith('//')) return `https:${trimmed}`;
+  if (trimmed.startsWith('http://')) return `https://${trimmed.slice('http://'.length)}`;
+  return trimmed;
+};
+
 const extensionForMimeType = (mimeType: string): string => {
   const normalized = mimeType.toLowerCase();
   if (normalized.includes('png')) return '.png';
@@ -169,7 +181,7 @@ const uploadUserAvatarToOss = async (
     },
   });
   return {
-    url: result.url || publicOssUrlForObjectKey(objectKey),
+    url: securePublicAssetUrl(result.url, objectKey),
     objectKey,
   };
 };
@@ -607,6 +619,33 @@ const idTitleFromContent = (content: string): string => {
   return line?.replace(/^标题：/u, '').replace(/^title:/i, '').trim() || '未命名 ID';
 };
 
+const idPayloadFromContent = (content: string): Record<string, unknown> => {
+  const fields: Record<string, string> = {};
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const separatorIndex = line.indexOf('：') >= 0 ? line.indexOf('：') : line.indexOf(':');
+    if (separatorIndex < 0) continue;
+    const key = line.slice(0, separatorIndex).trim().toLowerCase();
+    const value = line.slice(separatorIndex + 1).trim();
+    if (!key || !value) continue;
+    fields[key] = value;
+  }
+
+  const songName = fields['标题'] || fields.title;
+  const artistNames = fields['艺人'] || fields.artist;
+  const eventName = fields['活动'] || fields.event;
+  const audioUrl = fields['音频'] || fields.audio;
+  const videoUrl = fields['视频'] || fields.video;
+
+  return {
+    ...(songName ? { songName } : {}),
+    ...(artistNames ? { djNames: artistNames.split(/[,\uFF0C\/\u3001]/g).map((item) => item.trim()).filter(Boolean) } : {}),
+    ...(eventName ? { eventName } : {}),
+    ...(audioUrl ? { audioUrl } : {}),
+    ...(videoUrl ? { videoUrl } : {}),
+  };
+};
+
 const syncTencentIMUserBestEffort = async (userId: string, reason: string): Promise<void> => {
   try {
     await tencentIMUserService.ensureUsersByIds([userId]);
@@ -695,6 +734,99 @@ const authRegisterRateLimitMaxAttempts = normalizePositiveInt(
   1,
   500
 );
+const authWebAdminRefreshTtlMs = normalizePositiveInt(
+  process.env.AUTH_WEB_ADMIN_REFRESH_TTL_MS,
+  12 * 60 * 60 * 1000,
+  5 * 60 * 1000,
+  7 * 24 * 60 * 60 * 1000
+);
+const authWebAdminIdleTtlMs = normalizePositiveInt(
+  process.env.AUTH_WEB_ADMIN_IDLE_TTL_MS,
+  30 * 60 * 1000,
+  60 * 1000,
+  24 * 60 * 60 * 1000
+);
+
+type AuthClientType = 'ios' | 'android' | 'web_admin' | 'web_public' | 'unknown';
+
+type AuthSessionMetadata = {
+  clientType: AuthClientType;
+  deviceId: string | null;
+  deviceName: string | null;
+  platform: string | null;
+  appVersion: string | null;
+};
+
+const AUTH_CLIENT_TYPES = new Set<AuthClientType>(['ios', 'android', 'web_admin', 'web_public', 'unknown']);
+
+const normalizeAuthClientType = (value: unknown): AuthClientType => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  if (AUTH_CLIENT_TYPES.has(normalized as AuthClientType)) {
+    return normalized as AuthClientType;
+  }
+  return 'ios';
+};
+
+const firstHeaderValue = (value: string | string[] | undefined): string | undefined => {
+  if (Array.isArray(value)) return value[0];
+  return value;
+};
+
+const normalizeMetadataText = (value: unknown, maxLength = 128): string | null => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, maxLength);
+};
+
+const resolveAuthSessionMetadata = (req: Request): AuthSessionMetadata => {
+  const body = req.body as Record<string, unknown> | undefined;
+  const clientType = normalizeAuthClientType(
+    firstHeaderValue(req.headers['x-raver-client-type']) ?? body?.clientType
+  );
+  return {
+    clientType,
+    deviceId: normalizeMetadataText(firstHeaderValue(req.headers['x-raver-device-id']) ?? body?.deviceId, 128),
+    deviceName: normalizeMetadataText(firstHeaderValue(req.headers['x-raver-device-name']) ?? body?.deviceName, 128),
+    platform: normalizeMetadataText(firstHeaderValue(req.headers['x-raver-platform']) ?? body?.platform, 64),
+    appVersion: normalizeMetadataText(firstHeaderValue(req.headers['x-raver-app-version']) ?? body?.appVersion, 64),
+  };
+};
+
+const isWebAdminSession = (clientType: string | null | undefined): boolean => clientType === 'web_admin';
+
+const buildRefreshSessionExpiry = (
+  clientType: string | null | undefined,
+  now = new Date(),
+  existingAbsoluteExpiresAt?: Date | null
+): {
+  expiresAt: Date;
+  idleExpiresAt: Date | null;
+  absoluteExpiresAt: Date | null;
+  cookieMaxAgeMs: number;
+} => {
+  if (isWebAdminSession(clientType)) {
+    const absoluteExpiresAt = existingAbsoluteExpiresAt && existingAbsoluteExpiresAt.getTime() > now.getTime()
+      ? existingAbsoluteExpiresAt
+      : new Date(now.getTime() + authWebAdminRefreshTtlMs);
+    const idleExpiresAt = new Date(
+      Math.min(now.getTime() + authWebAdminIdleTtlMs, absoluteExpiresAt.getTime())
+    );
+    return {
+      expiresAt: absoluteExpiresAt,
+      idleExpiresAt,
+      absoluteExpiresAt,
+      cookieMaxAgeMs: Math.max(1, absoluteExpiresAt.getTime() - now.getTime()),
+    };
+  }
+
+  const expiresAt = new Date(now.getTime() + REFRESH_TOKEN_TTL_MS);
+  return {
+    expiresAt,
+    idleExpiresAt: null,
+    absoluteExpiresAt: null,
+    cookieMaxAgeMs: REFRESH_TOKEN_TTL_MS,
+  };
+};
 
 type RateLimitBucket = {
   count: number;
@@ -826,6 +958,14 @@ const normalizePhoneNumber = (value: unknown): string | null => {
   return normalized.startsWith('+') ? normalized : `+${normalized}`;
 };
 
+const maskPhoneNumber = (phoneNumber: string): string => {
+  const normalized = normalizePhoneNumber(phoneNumber) || phoneNumber.trim();
+  if (normalized.length <= 4) return '****';
+  const prefix = normalized.slice(0, Math.min(4, Math.max(1, normalized.length - 4)));
+  const suffix = normalized.slice(-4);
+  return `${prefix}****${suffix}`;
+};
+
 const isSmsDebugCodeEnabledForPhone = (phoneNumber: string): boolean => {
   if (process.env.NODE_ENV === 'production') return false;
   if (authSmsProviderMode !== 'mock') return false;
@@ -873,7 +1013,7 @@ const extractRefreshToken = (req: Request): string | null => {
   return getCookieValue(req, authRefreshCookieName);
 };
 
-const refreshCookieOptions = (): CookieOptions => {
+const refreshCookieOptions = (maxAgeMs = REFRESH_TOKEN_TTL_MS): CookieOptions => {
   const secureFallback = process.env.NODE_ENV === 'production';
   const secure = parseBool(authCookieSecureOverride, secureFallback);
   const options: CookieOptions = {
@@ -881,7 +1021,7 @@ const refreshCookieOptions = (): CookieOptions => {
     sameSite: 'lax',
     secure,
     path: authRefreshCookiePath,
-    maxAge: REFRESH_TOKEN_TTL_MS,
+    maxAge: maxAgeMs,
   };
   if (authRefreshCookieDomain) {
     options.domain = authRefreshCookieDomain;
@@ -889,8 +1029,8 @@ const refreshCookieOptions = (): CookieOptions => {
   return options;
 };
 
-const setRefreshCookie = (res: Response, refreshToken: string): void => {
-  res.cookie(authRefreshCookieName, refreshToken, refreshCookieOptions());
+const setRefreshCookie = (res: Response, refreshToken: string, maxAgeMs = REFRESH_TOKEN_TTL_MS): void => {
+  res.cookie(authRefreshCookieName, refreshToken, refreshCookieOptions(maxAgeMs));
 };
 
 const clearRefreshCookie = (res: Response): void => {
@@ -924,18 +1064,28 @@ const createAccessTokenForUser = (user: Pick<AuthUserRecord, 'id' | 'email' | 'r
 
 const createRefreshSessionForUser = async (
   userId: string,
-  req: Request
-): Promise<{ refreshToken: string; refreshTokenId: string }> => {
+  req: Request,
+  options: { metadata?: AuthSessionMetadata; absoluteExpiresAt?: Date | null } = {}
+): Promise<{ refreshToken: string; refreshTokenId: string; cookieMaxAgeMs: number }> => {
+  const metadata = options.metadata ?? resolveAuthSessionMetadata(req);
+  const now = new Date();
   const refreshToken = generateRefreshToken();
   const tokenHashValue = hashToken(refreshToken);
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+  const expiry = buildRefreshSessionExpiry(metadata.clientType, now, options.absoluteExpiresAt);
   const created = await prisma.authRefreshToken.create({
     data: {
       userId,
       tokenHash: tokenHashValue,
       userAgent: req.headers['user-agent'] || null,
       ipAddress: getClientIp(req),
-      expiresAt,
+      clientType: metadata.clientType,
+      deviceId: metadata.deviceId,
+      deviceName: metadata.deviceName,
+      platform: metadata.platform,
+      appVersion: metadata.appVersion,
+      expiresAt: expiry.expiresAt,
+      idleExpiresAt: expiry.idleExpiresAt,
+      absoluteExpiresAt: expiry.absoluteExpiresAt,
     },
     select: { id: true },
   });
@@ -943,6 +1093,7 @@ const createRefreshSessionForUser = async (
   return {
     refreshToken,
     refreshTokenId: created.id,
+    cookieMaxAgeMs: expiry.cookieMaxAgeMs,
   };
 };
 
@@ -954,7 +1105,7 @@ const issueAuthSuccessResponse = async (
   const accountStatus = await accountEnforcementService.getAccountStatus(user.id);
   const accessToken = createAccessTokenForUser(user);
   const refreshSession = await createRefreshSessionForUser(user.id, req);
-  setRefreshCookie(res, refreshSession.refreshToken);
+  setRefreshCookie(res, refreshSession.refreshToken, refreshSession.cookieMaxAgeMs);
 
   res.json({
     token: accessToken,
@@ -985,6 +1136,26 @@ const revokeRefreshTokenByRawToken = async (rawToken: string, revokedAt: Date): 
     where: {
       tokenHash: tokenHashValue,
       revokedAt: null,
+    },
+    data: {
+      revokedAt,
+      lastUsedAt: revokedAt,
+    },
+  });
+  return result.count;
+};
+
+const revokeRefreshTokensForUser = async (
+  tx: PrismaClient | Prisma.TransactionClient,
+  userId: string,
+  revokedAt: Date,
+  options: { exceptTokenHash?: string | null } = {}
+): Promise<number> => {
+  const result = await tx.authRefreshToken.updateMany({
+    where: {
+      userId,
+      revokedAt: null,
+      ...(options.exceptTokenHash ? { tokenHash: { not: options.exceptTokenHash } } : {}),
     },
     data: {
       revokedAt,
@@ -1072,6 +1243,116 @@ const generatePhoneBootstrapIdentity = async (phoneNumber: string): Promise<{
     email: `${fallback}@phone.raver.local`,
     displayName: `Raver ${suffix}`,
   };
+};
+
+const resolveOrCreatePhoneAuthUser = async (input: {
+  phoneNumber: string;
+  birthYear?: number | string;
+  regionCode?: string;
+  guardianContactEmail?: string;
+  displayName?: string;
+}): Promise<AuthUserRecord | { errorStatus: number; errorBody: Record<string, unknown> }> => {
+  const { phoneNumber, birthYear, regionCode, guardianContactEmail, displayName } = input;
+  const existing = await prisma.user.findFirst({
+    where: { phoneNumber, isActive: true },
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      avatarUrl: true,
+      email: true,
+      role: true,
+      regionCode: true,
+      birthYear: true,
+      ageBand: true,
+      guardianContactEmail: true,
+    },
+  });
+  if (existing) return existing;
+
+  const complianceRegion = regionalCompliance.resolveRegion(regionCode);
+  const compliancePolicy = regionalCompliance.policyFor(complianceRegion);
+  const normalizedBirthYear =
+    typeof birthYear === 'number'
+      ? birthYear
+      : Number.parseInt(String(birthYear || ''), 10);
+  const hasBirthYear = Number.isInteger(normalizedBirthYear);
+
+  if (compliancePolicy.ageDeclarationRequired && !hasBirthYear) {
+    return {
+      errorStatus: 400,
+      errorBody: {
+        error: 'Birth year is required before creating a new account in this region',
+        code: 'AUTH_BIRTH_YEAR_REQUIRED',
+      },
+    };
+  }
+
+  if (hasBirthYear) {
+    const currentYear = new Date().getUTCFullYear();
+    if (normalizedBirthYear < 1900 || normalizedBirthYear > currentYear) {
+      return { errorStatus: 400, errorBody: { error: 'Birth year is invalid', code: 'AUTH_BIRTH_YEAR_INVALID' } };
+    }
+    if (regionalCompliance.ageBandForBirthYear(normalizedBirthYear) === 'under_13') {
+      return {
+        errorStatus: 403,
+        errorBody: {
+          error: 'You must meet the minimum age requirement to create an account',
+          code: 'AUTH_MINIMUM_AGE_NOT_MET',
+        },
+      };
+    }
+  }
+
+  const bootstrapIdentity = await generatePhoneBootstrapIdentity(phoneNumber);
+  const requestedDisplayName = normalizeDisplayName(displayName);
+  const requestedDisplayNameKey = normalizeDisplayNameForUniqueness(requestedDisplayName);
+  if (requestedDisplayName) {
+    const existingDisplayName = await prisma.user.findUnique({
+      where: { displayNameNormalized: requestedDisplayNameKey },
+      select: { id: true },
+    });
+    if (existingDisplayName) {
+      return {
+        errorStatus: 409,
+        errorBody: { error: '昵称已被使用', code: 'AUTH_DISPLAY_NAME_TAKEN' },
+      };
+    }
+  }
+  return prisma.user.create({
+    data: {
+      username: bootstrapIdentity.username,
+      email: bootstrapIdentity.email,
+      phoneNumber,
+      passwordHash: await hashPassword(generateRefreshToken()),
+      displayName: requestedDisplayName || bootstrapIdentity.displayName,
+      displayNameNormalized: requestedDisplayName ? requestedDisplayNameKey : normalizeDisplayNameForUniqueness(bootstrapIdentity.displayName),
+      isActive: true,
+      regionCode: complianceRegion,
+      birthYear: hasBirthYear ? normalizedBirthYear : null,
+      ageBand: hasBirthYear ? regionalCompliance.ageBandForBirthYear(normalizedBirthYear) : 'unknown',
+      guardianContactEmail: String(guardianContactEmail || '').trim() || null,
+      ageDeclaredAt: hasBirthYear ? new Date() : null,
+    },
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      avatarUrl: true,
+      email: true,
+      role: true,
+      regionCode: true,
+      birthYear: true,
+      ageBand: true,
+      guardianContactEmail: true,
+    },
+  });
+};
+
+const isPhoneAuthUserError = (
+  value: AuthUserRecord | { errorStatus: number; errorBody: Record<string, unknown> }
+): value is { errorStatus: number; errorBody: Record<string, unknown> } => {
+  return 'errorStatus' in value;
 };
 
 const normalizeLimit = (value: unknown, fallback = 20, max = 50): number => {
@@ -3095,6 +3376,33 @@ router.post('/auth/login', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
+router.get('/auth/display-name/check', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const displayName = normalizeDisplayName(String(req.query.displayName || ''));
+    const displayNameKey = normalizeDisplayNameForUniqueness(displayName);
+    if (!displayName || displayName.length < 2 || displayName.length > 24) {
+      res.status(400).json({
+        available: false,
+        code: 'AUTH_DISPLAY_NAME_INVALID',
+        error: '昵称需要 2-24 个字符',
+      });
+      return;
+    }
+
+    const exists = await prisma.user.findUnique({
+      where: { displayNameNormalized: displayNameKey },
+      select: { id: true },
+    });
+    res.json({
+      available: !exists,
+      code: exists ? 'AUTH_DISPLAY_NAME_TAKEN' : 'AUTH_DISPLAY_NAME_AVAILABLE',
+    });
+  } catch (error) {
+    console.error('BFF display name check error:', error);
+    res.status(500).json({ available: false, error: 'Internal server error', code: 'AUTH_INTERNAL_ERROR' });
+  }
+});
+
 router.post('/auth/register', async (req: Request, res: Response): Promise<void> => {
   try {
     const { username, email, password, displayName, birthYear, regionCode, guardianContactEmail } = req.body as {
@@ -3318,14 +3626,16 @@ router.post('/auth/sms/send', async (req: Request, res: Response): Promise<void>
     const clientIp = getClientIp(req);
 
     if (!phoneNumber) {
-      res.status(400).json({ error: 'Invalid phone number' });
+      res.status(400).json({ error: 'Invalid phone number', code: 'AUTH_SMS_PHONE_INVALID' });
       return;
     }
 
     if (sceneKey !== 'login') {
-      res.status(400).json({ error: 'Unsupported sms scene' });
+      res.status(400).json({ error: 'Unsupported sms scene', code: 'AUTH_SMS_SCENE_UNSUPPORTED' });
       return;
     }
+
+    recordSmsMetric('attempted');
 
     const [lastSent, sentByPhoneInLastHour, sentByIpInLastHour] = await Promise.all([
       prisma.authSmsCode.findFirst({
@@ -3350,24 +3660,30 @@ router.post('/auth/sms/send', async (req: Request, res: Response): Promise<void>
 
     if (lastSent && now.getTime() - lastSent.createdAt.getTime() < authSmsSendCooldownMs) {
       const retryAfterMs = authSmsSendCooldownMs - (now.getTime() - lastSent.createdAt.getTime());
+      recordSmsMetric('rate_limited', 'cooldown');
       res.status(429).json({
         error: 'SMS request too frequent',
+        code: 'AUTH_SMS_SEND_COOLDOWN',
         retryAfterSeconds: Math.ceil(retryAfterMs / 1000),
       });
       return;
     }
 
     if (sentByPhoneInLastHour >= authSmsPhoneHourlyLimit) {
+      recordSmsMetric('rate_limited', 'phone_hourly_limit');
       res.status(429).json({
         error: 'SMS phone hourly limit exceeded',
+        code: 'AUTH_SMS_PHONE_HOURLY_LIMIT',
         retryAfterSeconds: 60 * 60,
       });
       return;
     }
 
     if (sentByIpInLastHour >= authSmsIpHourlyLimit) {
+      recordSmsMetric('rate_limited', 'ip_hourly_limit');
       res.status(429).json({
         error: 'SMS ip hourly limit exceeded',
+        code: 'AUTH_SMS_IP_HOURLY_LIMIT',
         retryAfterSeconds: 60 * 60,
       });
       return;
@@ -3386,6 +3702,7 @@ router.post('/auth/sms/send', async (req: Request, res: Response): Promise<void>
       },
       select: { id: true },
     });
+    recordSmsMetric('sent');
 
     const responsePayload: {
       success: true;
@@ -3405,8 +3722,9 @@ router.post('/auth/sms/send', async (req: Request, res: Response): Promise<void>
     res.status(201).json(responsePayload);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    recordSmsMetric('failed', 'provider_error');
     console.error('BFF sms send error:', message);
-    res.status(502).json({ error: 'Failed to send sms code' });
+    res.status(502).json({ error: 'Failed to send sms code', code: 'AUTH_SMS_PROVIDER_FAILED' });
   }
 });
 
@@ -3424,7 +3742,7 @@ router.post('/auth/sms/login', async (req: Request, res: Response): Promise<void
     const now = new Date();
 
     if (!phoneNumber || !smsCode) {
-      res.status(400).json({ error: 'phone and code are required' });
+      res.status(400).json({ error: 'phone and code are required', code: 'AUTH_SMS_LOGIN_REQUIRED' });
       return;
     }
 
@@ -3434,8 +3752,10 @@ router.post('/auth/sms/login', async (req: Request, res: Response): Promise<void
     });
 
     if (phoneState?.blockedUntil && phoneState.blockedUntil.getTime() > now.getTime()) {
+      recordSmsMetric('verify_blocked', 'too_many_verify_failures');
       res.status(429).json({
         error: 'Phone temporarily blocked due to too many failed attempts',
+        code: 'AUTH_SMS_VERIFY_BLOCKED',
         retryAfterSeconds: Math.ceil((phoneState.blockedUntil.getTime() - now.getTime()) / 1000),
       });
       return;
@@ -3458,8 +3778,15 @@ router.post('/auth/sms/login', async (req: Request, res: Response): Promise<void
     if (!latestCode || latestCode.expiresAt.getTime() <= now.getTime()) {
       const state = await registerSmsVerifyFailure(phoneNumber, now);
       const blockedUntil = state.blockedUntil;
+      recordSmsMetric('verify_failed', blockedUntil ? 'too_many_verify_failures' : 'invalid_or_expired_code');
+      console.warn('[auth:sms] verify failed', {
+        phone: maskPhoneNumber(phoneNumber),
+        reason: 'invalid_or_expired_code',
+        blockedUntil: blockedUntil ? blockedUntil.toISOString() : null,
+      });
       res.status(401).json({
         error: 'Invalid or expired sms code',
+        code: 'AUTH_SMS_CODE_INVALID_OR_EXPIRED',
         blockedUntil: blockedUntil ? blockedUntil.toISOString() : null,
       });
       return;
@@ -3468,8 +3795,15 @@ router.post('/auth/sms/login', async (req: Request, res: Response): Promise<void
     if (!isTokenHashMatch(smsCode, latestCode.codeHash)) {
       const state = await registerSmsVerifyFailure(phoneNumber, now);
       const blockedUntil = state.blockedUntil;
+      recordSmsMetric('verify_failed', blockedUntil ? 'too_many_verify_failures' : 'invalid_or_expired_code');
+      console.warn('[auth:sms] verify failed', {
+        phone: maskPhoneNumber(phoneNumber),
+        reason: 'code_mismatch',
+        blockedUntil: blockedUntil ? blockedUntil.toISOString() : null,
+      });
       res.status(401).json({
         error: 'Invalid or expired sms code',
+        code: 'AUTH_SMS_CODE_INVALID_OR_EXPIRED',
         blockedUntil: blockedUntil ? blockedUntil.toISOString() : null,
       });
       return;
@@ -3482,83 +3816,17 @@ router.post('/auth/sms/login', async (req: Request, res: Response): Promise<void
     });
     await clearSmsVerifyFailures(phoneNumber);
 
-    let user = await prisma.user.findFirst({
-      where: { phoneNumber, isActive: true },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        avatarUrl: true,
-        email: true,
-        role: true,
-        regionCode: true,
-        birthYear: true,
-        ageBand: true,
-        guardianContactEmail: true,
-      },
+    const userResult = await resolveOrCreatePhoneAuthUser({
+      phoneNumber,
+      birthYear,
+      regionCode,
+      guardianContactEmail,
     });
-
-    if (!user) {
-      const complianceRegion = regionalCompliance.resolveRegion(regionCode);
-      const compliancePolicy = regionalCompliance.policyFor(complianceRegion);
-      const normalizedBirthYear =
-        typeof birthYear === 'number'
-          ? birthYear
-          : Number.parseInt(String(birthYear || ''), 10);
-      const hasBirthYear = Number.isInteger(normalizedBirthYear);
-
-      if (compliancePolicy.ageDeclarationRequired && !hasBirthYear) {
-        res.status(400).json({
-          error: 'Birth year is required before creating a new account in this region',
-          code: 'AUTH_BIRTH_YEAR_REQUIRED',
-        });
-        return;
-      }
-
-      if (hasBirthYear) {
-        const currentYear = new Date().getUTCFullYear();
-        if (normalizedBirthYear < 1900 || normalizedBirthYear > currentYear) {
-          res.status(400).json({ error: 'Birth year is invalid', code: 'AUTH_BIRTH_YEAR_INVALID' });
-          return;
-        }
-        if (regionalCompliance.ageBandForBirthYear(normalizedBirthYear) === 'under_13') {
-          res.status(403).json({
-            error: 'You must meet the minimum age requirement to create an account',
-            code: 'AUTH_MINIMUM_AGE_NOT_MET',
-          });
-          return;
-        }
-      }
-
-      const bootstrapIdentity = await generatePhoneBootstrapIdentity(phoneNumber);
-      user = await prisma.user.create({
-        data: {
-          username: bootstrapIdentity.username,
-          email: bootstrapIdentity.email,
-          phoneNumber,
-          passwordHash: await hashPassword(generateRefreshToken()),
-          displayName: bootstrapIdentity.displayName,
-          isActive: true,
-          regionCode: complianceRegion,
-          birthYear: hasBirthYear ? normalizedBirthYear : null,
-          ageBand: hasBirthYear ? regionalCompliance.ageBandForBirthYear(normalizedBirthYear) : 'unknown',
-          guardianContactEmail: String(guardianContactEmail || '').trim() || null,
-          ageDeclaredAt: hasBirthYear ? new Date() : null,
-        },
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          avatarUrl: true,
-          email: true,
-          role: true,
-          regionCode: true,
-          birthYear: true,
-          ageBand: true,
-          guardianContactEmail: true,
-        },
-      });
+    if (isPhoneAuthUserError(userResult)) {
+      res.status(userResult.errorStatus).json(userResult.errorBody);
+      return;
     }
+    const user = userResult;
 
     if (await denyForEnforcement(user.id, 'login', res)) {
       writeAuthAuditLog(req, {
@@ -3581,6 +3849,88 @@ router.post('/auth/sms/login', async (req: Request, res: Response): Promise<void
     await issueAuthSuccessResponse(req, res, user);
   } catch (error) {
     console.error('BFF sms login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/auth/firebase-phone/login', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { idToken, birthYear, regionCode, guardianContactEmail, displayName } = req.body as {
+      idToken?: string;
+      birthYear?: number | string;
+      regionCode?: string;
+      guardianContactEmail?: string;
+      displayName?: string;
+    };
+    const token = String(idToken || '').trim();
+    if (!token) {
+      res.status(400).json({ error: 'Firebase id token is required', code: 'AUTH_FIREBASE_ID_TOKEN_REQUIRED' });
+      return;
+    }
+
+    let verified: { uid: string; phoneNumber: string };
+    try {
+      verified = await verifyFirebasePhoneIdToken(token);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn('[auth:firebase-phone] verify failed', { reason: message });
+      res.status(401).json({ error: 'Firebase phone token is invalid', code: 'AUTH_FIREBASE_PHONE_TOKEN_INVALID' });
+      return;
+    }
+
+    const phoneNumber = normalizePhoneNumber(verified.phoneNumber);
+    if (!phoneNumber) {
+      res.status(401).json({ error: 'Firebase phone number is invalid', code: 'AUTH_FIREBASE_PHONE_INVALID' });
+      return;
+    }
+
+    const userResult = await resolveOrCreatePhoneAuthUser({
+      phoneNumber,
+      birthYear,
+      regionCode,
+      guardianContactEmail,
+      displayName,
+    });
+    if (isPhoneAuthUserError(userResult)) {
+      res.status(userResult.errorStatus).json(userResult.errorBody);
+      return;
+    }
+    const user = userResult;
+
+    if (await denyForEnforcement(user.id, 'login', res)) {
+      writeAuthAuditLog(req, {
+        action: 'auth.firebase-phone-login',
+        outcome: 'blocked',
+        userId: user.id,
+        identifier: maskPhoneNumber(phoneNumber),
+        errorCode: 'AUTH_ACCOUNT_ENFORCEMENT_BLOCKED',
+      });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+      select: { id: true },
+    });
+
+    await clearSmsVerifyFailures(phoneNumber);
+    await syncTencentIMUserBestEffort(user.id, 'bff-auth-firebase-phone-login');
+    writeAuthAuditLog(req, {
+      action: 'auth.firebase-phone-login',
+      outcome: 'success',
+      userId: user.id,
+      identifier: maskPhoneNumber(phoneNumber),
+      detail: { firebaseUid: verified.uid },
+    });
+    await issueAuthSuccessResponse(req, res, user);
+  } catch (error) {
+    console.error('BFF firebase phone login error:', error);
+    writeAuthAuditLog(req, {
+      action: 'auth.firebase-phone-login',
+      outcome: 'failed',
+      errorCode: 'AUTH_INTERNAL_ERROR',
+    });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -3617,7 +3967,22 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
       },
     });
 
-    if (!current || current.revokedAt || current.expiresAt.getTime() <= now.getTime() || !current.user.isActive) {
+    const sessionExpiryFailure =
+      !current
+        ? 'AUTH_REFRESH_TOKEN_INVALID_OR_EXPIRED'
+        : current.revokedAt
+          ? 'AUTH_SESSION_REVOKED'
+          : current.expiresAt.getTime() <= now.getTime()
+            ? 'AUTH_REFRESH_TOKEN_INVALID_OR_EXPIRED'
+            : current.absoluteExpiresAt && current.absoluteExpiresAt.getTime() <= now.getTime()
+              ? 'AUTH_SESSION_ABSOLUTE_EXPIRED'
+              : current.idleExpiresAt && current.idleExpiresAt.getTime() <= now.getTime()
+                ? 'AUTH_SESSION_IDLE_EXPIRED'
+                : !current.user.isActive
+                  ? 'AUTH_ACCOUNT_INACTIVE'
+                  : null;
+
+    if (sessionExpiryFailure) {
       clearRefreshCookie(res);
       if (current && !current.revokedAt) {
         await prisma.authRefreshToken.update({
@@ -3633,16 +3998,29 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
         action: 'auth.refresh',
         outcome: 'failed',
         userId: current?.userId || null,
-        errorCode: 'AUTH_REFRESH_TOKEN_INVALID_OR_EXPIRED',
+        errorCode: sessionExpiryFailure,
       });
-      res.status(401).json({ error: 'Refresh token invalid or expired' });
+      res.status(401).json({
+        error: sessionExpiryFailure === 'AUTH_ACCOUNT_INACTIVE'
+          ? 'Account is no longer active'
+          : 'Refresh token invalid or expired',
+        code: sessionExpiryFailure,
+      });
       return;
     }
 
-    if (await denyForEnforcement(current.userId, 'login', res)) {
+    if (!current) {
+      clearRefreshCookie(res);
+      res.status(401).json({ error: 'Refresh token invalid or expired', code: 'AUTH_REFRESH_TOKEN_INVALID_OR_EXPIRED' });
+      return;
+    }
+
+    const activeRefreshSession = current;
+
+    if (await denyForEnforcement(activeRefreshSession.userId, 'login', res)) {
       clearRefreshCookie(res);
       await prisma.authRefreshToken.update({
-        where: { id: current.id },
+        where: { id: activeRefreshSession.id },
         data: {
           revokedAt: now,
           lastUsedAt: now,
@@ -3652,7 +4030,7 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
       writeAuthAuditLog(req, {
         action: 'auth.refresh',
         outcome: 'blocked',
-        userId: current.userId,
+        userId: activeRefreshSession.userId,
         errorCode: 'AUTH_ACCOUNT_ENFORCEMENT_BLOCKED',
       });
       return;
@@ -3660,24 +4038,36 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
 
     const nextRefreshToken = generateRefreshToken();
     const nextRefreshHash = hashToken(nextRefreshToken);
-    const nextExpiresAt = new Date(now.getTime() + REFRESH_TOKEN_TTL_MS);
+    const nextExpiry = buildRefreshSessionExpiry(
+      activeRefreshSession.clientType,
+      now,
+      activeRefreshSession.absoluteExpiresAt
+    );
     const clientIp = getClientIp(req);
     const userAgent = req.headers['user-agent'] || null;
 
     const createdNextToken = await prisma.$transaction(async (tx) => {
       const next = await tx.authRefreshToken.create({
         data: {
-          userId: current.userId,
+          userId: activeRefreshSession.userId,
           tokenHash: nextRefreshHash,
           userAgent,
           ipAddress: clientIp,
-          expiresAt: nextExpiresAt,
+          clientType: activeRefreshSession.clientType,
+          deviceId: activeRefreshSession.deviceId,
+          deviceName: activeRefreshSession.deviceName,
+          platform: activeRefreshSession.platform,
+          appVersion: activeRefreshSession.appVersion,
+          expiresAt: nextExpiry.expiresAt,
+          idleExpiresAt: nextExpiry.idleExpiresAt,
+          absoluteExpiresAt: nextExpiry.absoluteExpiresAt,
+          riskLevel: activeRefreshSession.riskLevel,
         },
         select: { id: true },
       });
 
       await tx.authRefreshToken.update({
-        where: { id: current.id },
+        where: { id: activeRefreshSession.id },
         data: {
           revokedAt: now,
           lastUsedAt: now,
@@ -3689,13 +4079,13 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
       return next;
     });
 
-    setRefreshCookie(res, nextRefreshToken);
-    const accessToken = createAccessTokenForUser(current.user);
-    const accountStatus = await accountEnforcementService.getAccountStatus(current.userId);
+    setRefreshCookie(res, nextRefreshToken, nextExpiry.cookieMaxAgeMs);
+    const accessToken = createAccessTokenForUser(activeRefreshSession.user);
+    const accountStatus = await accountEnforcementService.getAccountStatus(activeRefreshSession.userId);
     writeAuthAuditLog(req, {
       action: 'auth.refresh',
       outcome: 'success',
-      userId: current.userId,
+      userId: activeRefreshSession.userId,
     });
     res.json({
       token: accessToken,
@@ -3706,10 +4096,10 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
       accountStatus,
       user: toUserSummary(
         {
-          id: current.user.id,
-          username: current.user.username,
-          displayName: current.user.displayName,
-          avatarUrl: current.user.avatarUrl,
+          id: activeRefreshSession.user.id,
+          username: activeRefreshSession.user.username,
+          displayName: activeRefreshSession.user.displayName,
+          avatarUrl: activeRefreshSession.user.avatarUrl,
         },
         false
       ),
@@ -3719,6 +4109,64 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
     clearRefreshCookie(res);
     writeAuthAuditLog(req, {
       action: 'auth.refresh',
+      outcome: 'failed',
+      errorCode: 'AUTH_INTERNAL_ERROR',
+    });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/auth/reauth', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const { password, scope } = req.body as { password?: string; scope?: string };
+    const normalizedScope = String(scope || 'admin.high_risk').trim().slice(0, 80) || 'admin.high_risk';
+    if (!password) {
+      res.status(400).json({ error: 'Password is required', code: 'AUTH_REAUTH_PASSWORD_REQUIRED' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, passwordHash: true },
+    });
+    if (!user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const valid = await comparePassword(password, user.passwordHash);
+    if (!valid) {
+      writeAuthAuditLog(req, {
+        action: 'auth.reauth',
+        outcome: 'failed',
+        userId,
+        errorCode: 'AUTH_REAUTH_INVALID_CREDENTIALS',
+        detail: { scope: normalizedScope },
+      });
+      res.status(401).json({ error: 'Invalid credentials', code: 'AUTH_REAUTH_INVALID_CREDENTIALS' });
+      return;
+    }
+
+    const reauthProof = generateReauthProof({
+      userId,
+      role: user.role,
+      scope: normalizedScope,
+    });
+    writeAuthAuditLog(req, {
+      action: 'auth.reauth',
+      outcome: 'success',
+      userId,
+      detail: { scope: normalizedScope },
+    });
+    res.json({ success: true, reauthProof, expiresInSeconds: 10 * 60, scope: normalizedScope });
+  } catch (error) {
+    console.error('BFF reauth error:', error);
+    writeAuthAuditLog(req, {
+      action: 'auth.reauth',
       outcome: 'failed',
       errorCode: 'AUTH_INTERNAL_ERROR',
     });
@@ -3765,22 +4213,14 @@ router.post('/auth/logout-all', optionalAuth, async (req: Request, res: Response
       return;
     }
 
-    const result = await prisma.authRefreshToken.updateMany({
-      where: {
-        userId,
-        revokedAt: null,
-      },
-      data: {
-        revokedAt: new Date(),
-      },
-    });
+    const revokedCount = await revokeRefreshTokensForUser(prisma, userId, new Date());
 
     clearRefreshCookie(res);
     writeAuthAuditLog(req, {
       action: 'auth.logout-all',
       outcome: 'success',
       userId,
-      detail: { revokedCount: result.count },
+      detail: { revokedCount },
     });
     res.json({ success: true });
   } catch (error) {
@@ -3788,6 +4228,221 @@ router.post('/auth/logout-all', optionalAuth, async (req: Request, res: Response
     clearRefreshCookie(res);
     writeAuthAuditLog(req, {
       action: 'auth.logout-all',
+      outcome: 'failed',
+      errorCode: 'AUTH_INTERNAL_ERROR',
+    });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/auth/password', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) {
+      writeAuthAuditLog(req, {
+        action: 'auth.password-change',
+        outcome: 'failed',
+        errorCode: 'AUTH_UNAUTHORIZED',
+      });
+      return;
+    }
+
+    const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({ error: 'Current password and new password are required', code: 'AUTH_PASSWORD_CHANGE_REQUIRED' });
+      return;
+    }
+    if (newPassword.length < 6) {
+      res.status(400).json({ error: 'Password must be at least 6 characters', code: 'AUTH_PASSWORD_TOO_SHORT' });
+      return;
+    }
+
+    const rawRefreshToken = extractRefreshToken(req);
+    if (!rawRefreshToken) {
+      res.status(401).json({ error: 'Current session is required', code: 'AUTH_REFRESH_TOKEN_MISSING' });
+      return;
+    }
+    const currentTokenHash = hashToken(rawRefreshToken);
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true, isActive: true },
+    });
+    if (!user || !user.isActive) {
+      res.status(401).json({ error: 'Account is no longer active', code: 'AUTH_ACCOUNT_INACTIVE' });
+      return;
+    }
+
+    const currentSession = await prisma.authRefreshToken.findFirst({
+      where: {
+        userId,
+        tokenHash: currentTokenHash,
+        revokedAt: null,
+      },
+      select: { id: true },
+    });
+    if (!currentSession) {
+      res.status(401).json({ error: 'Current session is invalid or expired', code: 'AUTH_SESSION_REVOKED' });
+      return;
+    }
+
+    const valid = await comparePassword(currentPassword, user.passwordHash);
+    if (!valid) {
+      writeAuthAuditLog(req, {
+        action: 'auth.password-change',
+        outcome: 'failed',
+        userId,
+        errorCode: 'AUTH_PASSWORD_INVALID_CURRENT',
+      });
+      res.status(401).json({ error: 'Current password is invalid', code: 'AUTH_PASSWORD_INVALID_CURRENT' });
+      return;
+    }
+
+    const now = new Date();
+    const nextPasswordHash = await hashPassword(newPassword);
+    const revokedCount = await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash: nextPasswordHash },
+        select: { id: true },
+      });
+      return revokeRefreshTokensForUser(tx, userId, now, { exceptTokenHash: currentTokenHash });
+    });
+
+    writeAuthAuditLog(req, {
+      action: 'auth.password-change',
+      outcome: 'success',
+      userId,
+      detail: { revokedOtherSessions: revokedCount },
+    });
+    res.json({ success: true, revokedOtherSessions: revokedCount });
+  } catch (error) {
+    console.error('BFF password change error:', error);
+    writeAuthAuditLog(req, {
+      action: 'auth.password-change',
+      outcome: 'failed',
+      errorCode: 'AUTH_INTERNAL_ERROR',
+    });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/auth/sessions', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const rawRefreshToken = extractRefreshToken(req);
+    const currentTokenHash = rawRefreshToken ? hashToken(rawRefreshToken) : null;
+    const sessions = await prisma.authRefreshToken.findMany({
+      where: { userId },
+      orderBy: [{ revokedAt: 'asc' }, { lastUsedAt: 'desc' }, { createdAt: 'desc' }],
+      take: 100,
+      select: {
+        id: true,
+        tokenHash: true,
+        clientType: true,
+        deviceId: true,
+        deviceName: true,
+        platform: true,
+        appVersion: true,
+        userAgent: true,
+        ipAddress: true,
+        expiresAt: true,
+        idleExpiresAt: true,
+        absoluteExpiresAt: true,
+        lastUsedAt: true,
+        revokedAt: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({
+      items: sessions.map((session) => ({
+        id: session.id,
+        clientType: session.clientType || 'unknown',
+        deviceId: session.deviceId,
+        deviceName: session.deviceName,
+        platform: session.platform,
+        appVersion: session.appVersion,
+        userAgent: session.userAgent,
+        ipAddressMasked: session.ipAddress ? maskIdentifier(session.ipAddress) : null,
+        createdAt: session.createdAt.toISOString(),
+        lastUsedAt: session.lastUsedAt ? session.lastUsedAt.toISOString() : null,
+        expiresAt: session.expiresAt.toISOString(),
+        idleExpiresAt: session.idleExpiresAt ? session.idleExpiresAt.toISOString() : null,
+        absoluteExpiresAt: session.absoluteExpiresAt ? session.absoluteExpiresAt.toISOString() : null,
+        revokedAt: session.revokedAt ? session.revokedAt.toISOString() : null,
+        isCurrent: Boolean(currentTokenHash && session.tokenHash === currentTokenHash),
+      })),
+    });
+  } catch (error) {
+    console.error('BFF auth sessions list error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/auth/sessions/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const sessionId = String(req.params.id || '').trim();
+    if (!sessionId) {
+      res.status(400).json({ error: 'Session id is required', code: 'AUTH_SESSION_ID_REQUIRED' });
+      return;
+    }
+
+    const now = new Date();
+    const rawRefreshToken = extractRefreshToken(req);
+    const currentTokenHash = rawRefreshToken ? hashToken(rawRefreshToken) : null;
+    const session = await prisma.authRefreshToken.findFirst({
+      where: {
+        id: sessionId,
+        userId,
+      },
+      select: {
+        id: true,
+        tokenHash: true,
+        revokedAt: true,
+      },
+    });
+
+    if (!session) {
+      res.status(404).json({ error: 'Session not found', code: 'AUTH_SESSION_NOT_FOUND' });
+      return;
+    }
+
+    if (!session.revokedAt) {
+      await prisma.authRefreshToken.update({
+        where: { id: session.id },
+        data: {
+          revokedAt: now,
+          lastUsedAt: now,
+        },
+        select: { id: true },
+      });
+    }
+
+    const revokedCurrent = Boolean(currentTokenHash && session.tokenHash === currentTokenHash);
+    if (revokedCurrent) {
+      clearRefreshCookie(res);
+    }
+
+    writeAuthAuditLog(req, {
+      action: 'auth.session.revoke',
+      outcome: 'success',
+      userId,
+      detail: {
+        sessionId: session.id,
+        revokedCurrent,
+      },
+    });
+    res.json({ success: true, revokedCurrent });
+  } catch (error) {
+    console.error('BFF auth session revoke error:', error);
+    writeAuthAuditLog(req, {
+      action: 'auth.session.revoke',
       outcome: 'failed',
       errorCode: 'AUTH_INTERNAL_ERROR',
     });
@@ -3911,10 +4566,7 @@ router.delete('/auth/account', optionalAuth, async (req: Request, res: Response)
       });
       deletionRequestId = deletionRequest.id;
 
-      await tx.authRefreshToken.updateMany({
-        where: { userId, revokedAt: null },
-        data: { revokedAt: now, lastUsedAt: now },
-      });
+      await revokeRefreshTokensForUser(tx, userId, now);
 
       await tx.devicePushToken.updateMany({
         where: { userId, isActive: true },
@@ -7896,8 +8548,11 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
     if (!canBypassContentReview(viewerRole) && (isNewsSubmission || isIDSubmission)) {
       const entityType = isNewsSubmission ? 'news' : 'id';
       const title = isNewsSubmission ? newsTitleFromContent(trimmed) : idTitleFromContent(trimmed);
+      const idPayload = isIDSubmission ? idPayloadFromContent(trimmed) : {};
       const submissionPayload = {
         ...body,
+        ...idPayload,
+        title,
         content: trimmed,
         images: normalizedImages,
         location: normalizedLocation || null,

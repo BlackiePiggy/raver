@@ -193,6 +193,11 @@ export default function AdminOverviewPage() {
               <div className="mt-2 text-sm leading-6 text-text-secondary">查看 IM 删除、OSS 媒体清理与失败重试状态</div>
             </Link>
           )}
+          <Link href="/admin/auth-sessions" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
+            <div className="text-sm text-text-secondary">Auth Sessions</div>
+            <div className="mt-2 text-lg font-semibold">登录设备与会话</div>
+            <div className="mt-2 text-sm leading-6 text-text-secondary">查看当前账号的会话、设备和过期时间，撤销不再使用的登录。</div>
+          </Link>
           {rolePolicy.canAccessOperations && (
             <Link href="/admin/content-reports" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
               <div className="text-sm text-text-secondary">Moderation Queue</div>
@@ -251,11 +256,13 @@ export default function AdminOverviewPage() {
             <section className="grid gap-4 md:grid-cols-4">
               <Metric label="通知投递总量" value={status.notification.delivery.totals.total} />
               <Metric label="通知失败率" value={formatPercent(status.notification.delivery.rates.deliveryFailureRate)} />
+              <Metric label="短信发送失败率" value={formatPercent(status.authSms.metrics.rates.sendFailureRate)} />
+              <Metric label="短信限流次数" value={status.authSms.metrics.totals.rateLimited} />
               <Metric label="待处理投递" value={status.notification.delivery.totals.queued} />
               <Metric label="Check-in 待投影" value={status.checkinProjection.pendingOutbox} />
             </section>
 
-            <section className="grid gap-5 lg:grid-cols-2">
+            <section className="grid gap-5 lg:grid-cols-3">
               <div className="rounded-lg border border-border-secondary bg-bg-secondary p-5">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <h2 className="text-xl font-semibold">Notification</h2>
@@ -286,6 +293,52 @@ export default function AdminOverviewPage() {
                         {alert.message}
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-border-secondary bg-bg-secondary p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h2 className="text-xl font-semibold">Auth SMS</h2>
+                  <StatusBadge status={status.authSms.status} />
+                </div>
+                <div className="grid gap-3 text-sm md:grid-cols-2">
+                  <div className="rounded-lg border border-border-secondary bg-bg-tertiary p-3">
+                    <div className="text-text-secondary">Provider</div>
+                    <div className="mt-1 font-semibold">{status.authSms.provider.provider}</div>
+                  </div>
+                  <div className="rounded-lg border border-border-secondary bg-bg-tertiary p-3">
+                    <div className="text-text-secondary">Production safe</div>
+                    <div className="mt-1 font-semibold">{formatBoolean(status.authSms.provider.productionSafe)}</div>
+                  </div>
+                  <div className="rounded-lg border border-border-secondary bg-bg-tertiary p-3">
+                    <div className="text-text-secondary">Firebase phone</div>
+                    <div className="mt-1 font-semibold">{formatBoolean(status.authSms.firebasePhoneAuth.configured)}</div>
+                  </div>
+                  <div className="rounded-lg border border-border-secondary bg-bg-tertiary p-3">
+                    <div className="text-text-secondary">Firebase mock</div>
+                    <div className="mt-1 font-semibold">{formatBoolean(status.authSms.firebasePhoneAuth.mockEnabled)}</div>
+                  </div>
+                  <div className="rounded-lg border border-border-secondary bg-bg-tertiary p-3">
+                    <div className="text-text-secondary">Sent</div>
+                    <div className="mt-1 font-semibold">{status.authSms.metrics.totals.sent}</div>
+                  </div>
+                  <div className="rounded-lg border border-border-secondary bg-bg-tertiary p-3">
+                    <div className="text-text-secondary">Provider failures</div>
+                    <div className="mt-1 font-semibold">{status.authSms.metrics.reasons.providerError}</div>
+                  </div>
+                  <div className="rounded-lg border border-border-secondary bg-bg-tertiary p-3">
+                    <div className="text-text-secondary">Verify failures</div>
+                    <div className="mt-1 font-semibold">{status.authSms.metrics.totals.verifyFailed}</div>
+                  </div>
+                  <div className="rounded-lg border border-border-secondary bg-bg-tertiary p-3">
+                    <div className="text-text-secondary">Blocked verifies</div>
+                    <div className="mt-1 font-semibold">{status.authSms.metrics.totals.verifyBlocked}</div>
+                  </div>
+                </div>
+                {status.authSms.provider.missingAliyunConfig.length > 0 && (
+                  <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                    Missing: {status.authSms.provider.missingAliyunConfig.join(', ')}
                   </div>
                 )}
               </div>

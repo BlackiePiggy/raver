@@ -1,4 +1,5 @@
 import { getApiUrl } from '@/lib/config';
+import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 
 type NotificationChannel = 'in_app' | 'apns' | 'email' | 'sms';
 type NotificationCategory =
@@ -153,30 +154,8 @@ export interface NotificationCenterTemplateItem {
   updatedAt: string;
 }
 
-const getToken = (): string => {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    throw new Error('请先登录');
-  }
-  return token;
-};
-
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const token = getToken();
-  const response = await fetch(getApiUrl(`/admin/v1${path}`), {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(init?.headers || {}),
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || `Notification center admin request failed (${response.status})`);
-  }
-  return response.json();
+  return authenticatedJsonFetch<T>(getApiUrl(`/admin/v1${path}`), init);
 };
 
 export const notificationCenterAdminApi = {

@@ -10,6 +10,28 @@ interface SmsProvider {
   sendLoginCode(input: SendLoginCodeInput): Promise<void>;
 }
 
+export const getSmsProviderType = (): string => smsProviderType;
+
+export const getSmsProviderStatus = () => {
+  const missingAliyunConfig: string[] = [];
+  if (!aliyunAccessKeyId) missingAliyunConfig.push('ALIYUN_SMS_ACCESS_KEY_ID');
+  if (!aliyunAccessKeySecret) missingAliyunConfig.push('ALIYUN_SMS_ACCESS_KEY_SECRET');
+  if (!aliyunSignName) missingAliyunConfig.push('ALIYUN_SMS_SIGN_NAME');
+  if (!aliyunTemplateCodeLogin) missingAliyunConfig.push('ALIYUN_SMS_TEMPLATE_CODE_LOGIN');
+  const debugReturnCodeEnabled =
+    process.env.NODE_ENV !== 'production'
+    && smsProviderType === 'mock'
+    && ['1', 'true', 'yes', 'on'].includes(String(process.env.AUTH_SMS_DEBUG_RETURN_CODE || '').trim().toLowerCase());
+
+  return {
+    provider: smsProviderType,
+    productionSafe: process.env.NODE_ENV !== 'production' || smsProviderType === 'aliyun',
+    aliyunConfigured: missingAliyunConfig.length === 0,
+    missingAliyunConfig,
+    debugReturnCodeEnabled,
+  };
+};
+
 const cleanEnv = (value: string | undefined): string | null => {
   if (!value) return null;
   const trimmed = value.trim();
@@ -130,9 +152,15 @@ const buildProvider = (): SmsProvider => {
       return new AliyunSmsProvider();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(`[sms] aliyun provider unavailable in production: ${message}`);
+      }
       console.error(`[sms] aliyun provider unavailable, fallback to mock: ${message}`);
       return new MockSmsProvider();
     }
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('AUTH_SMS_PROVIDER=aliyun is required in production');
   }
   return new MockSmsProvider();
 };

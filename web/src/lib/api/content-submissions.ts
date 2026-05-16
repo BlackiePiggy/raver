@@ -1,4 +1,5 @@
 import { getApiUrl } from '@/lib/config';
+import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 
 export type ContentSubmissionEntityType = 'event' | 'dj' | 'news' | 'set' | 'brand' | 'label' | 'id' | 'rating';
 export type ContentSubmissionStatus = 'pending' | 'approved' | 'rejected';
@@ -27,20 +28,6 @@ export interface ContentSubmission {
   submitter?: ContentSubmissionUser;
 }
 
-const parseError = async (response: Response): Promise<string> => {
-  try {
-    const data = await response.json();
-    return data.error || data.message || `Content submission request failed (${response.status})`;
-  } catch {
-    return `Content submission request failed (${response.status})`;
-  }
-};
-
-const authHeaders = (token: string): HeadersInit => ({
-  'Content-Type': 'application/json',
-  Authorization: `Bearer ${token}`,
-});
-
 const buildQuery = (params?: Record<string, string | number | undefined>): string => {
   const search = new URLSearchParams();
   if (params) {
@@ -55,7 +42,7 @@ const buildQuery = (params?: Record<string, string | number | undefined>): strin
 
 export const contentSubmissionsApi = {
   async listAdmin(
-    token: string,
+    _token: string,
     params?: {
       status?: string;
       entityType?: string;
@@ -65,28 +52,22 @@ export const contentSubmissionsApi = {
       translationStatus?: 'needs_manual_confirmation' | string;
     }
   ): Promise<{ items: ContentSubmission[] }> {
-    const response = await fetch(getApiUrl(`/admin/v1/content-submissions${buildQuery(params)}`), {
-      headers: authHeaders(token),
-    });
-    if (!response.ok) {
-      throw new Error(await parseError(response));
-    }
-    return response.json();
+    return authenticatedJsonFetch<{ items: ContentSubmission[] }>(
+      getApiUrl(`/admin/v1/content-submissions${buildQuery(params)}`)
+    );
   },
 
   async review(
-    token: string,
+    _token: string,
     submissionId: string,
     input: { decision: 'approved' | 'rejected'; reason?: string }
   ): Promise<{ message: string; submission: ContentSubmission }> {
-    const response = await fetch(getApiUrl(`/admin/v1/content-submissions/${submissionId}/review`), {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify(input),
-    });
-    if (!response.ok) {
-      throw new Error(await parseError(response));
-    }
-    return response.json();
+    return authenticatedJsonFetch<{ message: string; submission: ContentSubmission }>(
+      getApiUrl(`/admin/v1/content-submissions/${submissionId}/review`),
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
   },
 };

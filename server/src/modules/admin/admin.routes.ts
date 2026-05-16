@@ -13,6 +13,7 @@ import { accountEnforcementService } from '../../services/account-enforcement.se
 import { accountDeletionService } from '../../services/account-deletion.service';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { notificationCenterService } from '../../modules/notifications';
+import { verifyReauthProof } from '../../utils/auth';
 import { normalizeTriTextPayload, resolveLocalizedText } from '../../utils/i18n';
 
 const router: Router = Router();
@@ -50,6 +51,26 @@ const parseDateCursor = (value: unknown): Date | undefined => {
 const firstQueryValue = (value: unknown): string | undefined => {
   if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : undefined;
   return typeof value === 'string' ? value : undefined;
+};
+
+const requireReauthProof = (scope: string) => (req: AuthRequest, res: Response, next: NextFunction): void => {
+  const rawProof = req.headers['x-raver-reauth-proof'];
+  const proof = Array.isArray(rawProof) ? rawProof[0] : rawProof;
+  if (!proof) {
+    res.status(403).json({ error: 'Reauthentication required', code: 'AUTH_REAUTH_REQUIRED' });
+    return;
+  }
+
+  try {
+    const payload = verifyReauthProof(proof);
+    if (payload.userId !== req.user?.userId || payload.scope !== scope) {
+      res.status(403).json({ error: 'Reauthentication proof is invalid for this operation', code: 'AUTH_REAUTH_INVALID' });
+      return;
+    }
+    next();
+  } catch (_error) {
+    res.status(403).json({ error: 'Reauthentication proof expired or invalid', code: 'AUTH_REAUTH_EXPIRED' });
+  }
 };
 
 const REPORT_HIGH_PRIORITY_REASONS = new Set([
@@ -137,6 +158,62 @@ const normalizeStringArray = (value: unknown, maxItems: number): string[] => {
   }
   return Array.from(seen);
 };
+
+const maskIdentifier = (value: string): string => {
+  if (value.length <= 6) return `${value.slice(0, 1)}***`;
+  return `${value.slice(0, 3)}***${value.slice(-3)}`;
+};
+
+const mapAuthSessionForAdmin = (session: {
+  id: string;
+  userId: string;
+  tokenHash?: string;
+  clientType: string | null;
+  deviceId: string | null;
+  deviceName: string | null;
+  platform: string | null;
+  appVersion: string | null;
+  userAgent: string | null;
+  ipAddress: string | null;
+  expiresAt: Date;
+  idleExpiresAt: Date | null;
+  absoluteExpiresAt: Date | null;
+  lastUsedAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+  user?: {
+    id: string;
+    username: string;
+    displayName: string | null;
+    email: string;
+    role: string;
+  };
+}) => ({
+  id: session.id,
+  userId: session.userId,
+  clientType: session.clientType || 'unknown',
+  deviceId: session.deviceId,
+  deviceName: session.deviceName,
+  platform: session.platform,
+  appVersion: session.appVersion,
+  userAgent: session.userAgent,
+  ipAddressMasked: session.ipAddress ? maskIdentifier(session.ipAddress) : null,
+  createdAt: session.createdAt.toISOString(),
+  lastUsedAt: session.lastUsedAt ? session.lastUsedAt.toISOString() : null,
+  expiresAt: session.expiresAt.toISOString(),
+  idleExpiresAt: session.idleExpiresAt ? session.idleExpiresAt.toISOString() : null,
+  absoluteExpiresAt: session.absoluteExpiresAt ? session.absoluteExpiresAt.toISOString() : null,
+  revokedAt: session.revokedAt ? session.revokedAt.toISOString() : null,
+  user: session.user
+    ? {
+        id: session.user.id,
+        username: session.user.username,
+        displayName: session.user.displayName,
+        email: session.user.email,
+        role: session.user.role,
+      }
+    : undefined,
+});
 
 const asRecord = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -741,6 +818,124 @@ router.get('/audit-logs', authenticate, requireAdmin, async (req: AuthRequest, r
   }
 });
 
+router.get('/auth-sessions', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const query = req.query as Request['query'];
+    const userId = firstQueryValue(query.userId)?.trim();
+    const q = firstQueryValue(query.q)?.trim();
+    const includeRevoked = firstQueryValue(query.includeRevoked) === 'true';
+    const limit = parseLimit(query.limit, 100, 200);
+
+    const where: Prisma.AuthRefreshTokenWhereInput = {};
+    if (userId) {
+      where.userId = userId;
+    } else if (q) {
+      where.user = {
+        OR: [
+          { email: { contains: q, mode: 'insensitive' } },
+          { username: { contains: q, mode: 'insensitive' } },
+          { displayName: { contains: q, mode: 'insensitive' } },
+        ],
+      };
+    }
+    if (!includeRevoked) {
+      where.revokedAt = null;
+    }
+
+    const sessions = await prisma.authRefreshToken.findMany({
+      where,
+      orderBy: [{ revokedAt: 'asc' }, { lastUsedAt: 'desc' }, { createdAt: 'desc' }],
+      take: limit,
+      select: {
+        id: true,
+        userId: true,
+        clientType: true,
+        deviceId: true,
+        deviceName: true,
+        platform: true,
+        appVersion: true,
+        userAgent: true,
+        ipAddress: true,
+        expiresAt: true,
+        idleExpiresAt: true,
+        absoluteExpiresAt: true,
+        lastUsedAt: true,
+        revokedAt: true,
+        createdAt: true,
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    res.json({ success: true, items: sessions.map(mapAuthSessionForAdmin) });
+  } catch (error) {
+    console.error('Fetch admin auth sessions error:', error);
+    res.status(500).json({ error: 'Failed to fetch auth sessions' });
+  }
+});
+
+router.post('/auth-sessions/:id/revoke', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const sessionId = String(req.params.id || '').trim();
+    if (!sessionId) {
+      res.status(400).json({ error: 'Session id is required', code: 'AUTH_SESSION_ID_REQUIRED' });
+      return;
+    }
+
+    const session = await prisma.authRefreshToken.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        userId: true,
+        revokedAt: true,
+        clientType: true,
+        deviceName: true,
+      },
+    });
+    if (!session) {
+      res.status(404).json({ error: 'Session not found', code: 'AUTH_SESSION_NOT_FOUND' });
+      return;
+    }
+
+    const now = new Date();
+    if (!session.revokedAt) {
+      await prisma.authRefreshToken.update({
+        where: { id: session.id },
+        data: {
+          revokedAt: now,
+          lastUsedAt: now,
+        },
+        select: { id: true },
+      });
+    }
+
+    await adminAuditService.createAction({
+      actorId: req.user?.userId || 'unknown',
+      action: 'auth_session.revoke',
+      targetType: 'auth_refresh_token',
+      targetId: session.id,
+      detail: {
+        targetUserId: session.userId,
+        alreadyRevoked: Boolean(session.revokedAt),
+        clientType: session.clientType,
+        deviceName: session.deviceName,
+      },
+    });
+
+    res.json({ success: true, sessionId: session.id, targetUserId: session.userId });
+  } catch (error) {
+    console.error('Revoke admin auth session error:', error);
+    res.status(500).json({ error: 'Failed to revoke auth session' });
+  }
+});
+
 router.get('/account-deletions', authenticate, requireAdminOrOperator, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const query = req.query as Request['query'];
@@ -756,7 +951,7 @@ router.get('/account-deletions', authenticate, requireAdminOrOperator, async (re
   }
 });
 
-router.post('/account-deletions/process-due', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/account-deletions/process-due', authenticate, requireAdmin, requireReauthProof('account_deletion.write'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const results = await accountDeletionService.processDueRequests(parseLimit(req.body?.limit, 20, 100));
     await adminAuditService.createAction({
@@ -773,7 +968,7 @@ router.post('/account-deletions/process-due', authenticate, requireAdmin, async 
   }
 });
 
-router.post('/account-deletions/:id/retry', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/account-deletions/:id/retry', authenticate, requireAdmin, requireReauthProof('account_deletion.write'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const requestId = String(req.params.id || '').trim();
     const request = await accountDeletionService.processRequest(requestId, { force: true });

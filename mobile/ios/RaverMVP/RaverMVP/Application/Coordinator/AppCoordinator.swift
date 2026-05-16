@@ -1,11 +1,6 @@
 import SwiftUI
 import Foundation
 
-private enum AppFlow {
-    case authenticated
-    case unauthenticated
-}
-
 struct AppCoordinatorView: View {
     @EnvironmentObject private var appState: AppState
 
@@ -13,21 +8,9 @@ struct AppCoordinatorView: View {
         ZStack {
             RaverTheme.background.ignoresSafeArea()
 
-            if appState.isAuthBootstrapping {
-                ProgressView()
-                    .tint(.white.opacity(0.9))
-                    .accessibilityIdentifier("app.loading")
-            } else {
-                switch currentFlow {
-                case .authenticated:
-                    MainTabCoordinatorView()
-                        .id("main-tabs-\(appState.preferredLanguage.rawValue)")
-                        .accessibilityIdentifier("app.authenticatedRoot")
-                case .unauthenticated:
-                    LoginView()
-                        .accessibilityIdentifier("app.loginRoot")
-                }
-            }
+            MainTabCoordinatorView()
+                .id("main-tabs-\(appState.preferredLanguage.rawValue)")
+                .accessibilityIdentifier("app.mainRoot")
         }
         .environment(\.locale, Locale(identifier: appState.preferredLanguage.localeIdentifier))
         .onOpenURL { url in
@@ -43,10 +26,6 @@ struct AppCoordinatorView: View {
         } message: {
             Text(appState.errorMessage ?? "")
         }
-    }
-
-    private var currentFlow: AppFlow {
-        appState.isLoggedIn ? .authenticated : .unauthenticated
     }
 
     private func handleIncomingURL(_ url: URL) {

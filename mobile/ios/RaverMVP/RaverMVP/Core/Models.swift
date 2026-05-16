@@ -57,6 +57,57 @@ struct Session: Codable {
     }
 }
 
+enum SessionExpirationReason: String, Codable, Hashable {
+    case expired
+    case revoked
+    case idleTimeout
+    case absoluteTimeout
+    case accountInactive
+    case unknown
+
+    var userFacingMessage: String {
+        switch self {
+        case .expired:
+            return LT("登录已过期，请重新登录。", "Your session expired. Please log in again.", "ログインの有効期限が切れました。再度ログインしてください。")
+        case .revoked:
+            return LT("当前设备已被退出登录。", "This device has been signed out.", "この端末はログアウトされました。")
+        case .idleTimeout:
+            return LT("长时间未操作，已自动退出登录。", "You were signed out after being inactive.", "長時間操作がなかったため、自動的にログアウトしました。")
+        case .absoluteTimeout:
+            return LT("为了账号安全，请重新登录。", "For your account security, please log in again.", "アカウント保護のため、再度ログインしてください。")
+        case .accountInactive:
+            return LT("账号已删除或停用，请重新登录其他账号。", "This account has been deleted or disabled. Please log in with another account.", "このアカウントは削除または停止されています。別のアカウントでログインしてください。")
+        case .unknown:
+            return LT("登录状态已失效，请重新登录。", "Session expired. Please log in again.", "ログイン状態が無効です。再度ログインしてください。")
+        }
+    }
+}
+
+struct AuthSessionItem: Codable, Identifiable, Hashable {
+    let id: String
+    let clientType: String
+    let deviceId: String?
+    let deviceName: String?
+    let platform: String?
+    let appVersion: String?
+    let userAgent: String?
+    let ipAddressMasked: String?
+    let createdAt: Date
+    let lastUsedAt: Date?
+    let expiresAt: Date
+    let idleExpiresAt: Date?
+    let absoluteExpiresAt: Date?
+    let revokedAt: Date?
+    let isCurrent: Bool
+
+    var isActive: Bool { revokedAt == nil }
+}
+
+struct AuthSessionRevokeResult: Codable, Hashable {
+    let success: Bool
+    let revokedCurrent: Bool
+}
+
 struct IMBootstrap: Codable {
     let enabled: Bool
     let userID: String
