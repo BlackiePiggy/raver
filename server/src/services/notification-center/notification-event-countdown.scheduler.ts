@@ -188,7 +188,7 @@ export const runEventCountdownJob = async (): Promise<EventCountdownJobReport> =
       enabled: true,
       daysBeforeStart: 3,
       reminderHours: [10],
-      timezone: 'UTC',
+      timezone: 'Asia/Shanghai',
       channels: ['in_app', 'apns'],
     };
     if (!preference.enabled) {

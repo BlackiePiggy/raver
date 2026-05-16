@@ -1,0 +1,86 @@
+[
+  {
+    "id": "funk-and-soul-fusion/acid-jazz/lounge-jazz",
+    "name": "Lounge Jazz",
+    "path": "Funk and Soul Fusion > Acid Jazz > Lounge Jazz",
+    "description": "In the realm of electronic music, lounge jazz is reinterpreted with the use of chillout beats, ambient textures, and electronic soundscapes. The genre blends the relaxing, easy-listening qualities of traditional lounge jazz with subtle, atmospheric synths, soft drum loops, and smooth, melodic instrumentation. It creates a laid-back, refined vibe, often with jazzy piano, muted trumpet, or saxophone samples, and the addition of soft electronic pads and reverb effects. The result is a relaxed, ambient sound that still carries the essence of jazz’s smooth melodies and improvisation, but with an electronic twist, ideal for cafes, lounges, and casual listening. Artists like Bonobo, Thievery Corporation, and Nicola Cruz have incorporated electronic lounge jazz influences into their music.",
+    "example": "Thievery Corporation - The Richest Man in Babylon"
+  },
+  {
+    "id": "funk-and-soul-fusion/funktronica/future-funk",
+    "name": "Future Funk",
+    "path": "Funk and Soul Fusion > Funktronica > Future Funk",
+    "description": "Future Funk is a subgenre of funktronica that blends infectious, old-school funky rhythms with modern electronic production and a heavy dose of nostalgic elements. Often inspired by 1980s disco, city pop, and synthwave, future funk is known for its upbeat, danceable beats, funky basslines, and the prominent use of synthesizers and vocoder effects. Artists like Yung Bae exemplify the genre's vibrant energy, with tracks such as 'Bae City Rollaz' combining funky bass, infectious loops, and retro vibes, all while incorporating futuristic production techniques. Future funk bridges the past and the future, providing a lively, upbeat soundtrack that appeals to fans of both classic and contemporary electronic music.",
+    "example": "Yung Bae - Bae City Rollaz"
+  },
+  {
+    "id": "funk-and-soul-fusion/funktronica/nu-funk",
+    "name": "Nu-Funk",
+    "path": "Funk and Soul Fusion > Funktronica > Nu-Funk",
+    "description": "Nu-funk is a modern interpretation of traditional funk music, taking its groovy, syncopated rhythms and basslines and recontextualizing them with modern electronic production techniques. This genre blends live instrumentation—such as funky guitars, bass, and horns—with digital effects and synthetic elements, creating a hybrid sound that feels both organic and futuristic. With artists like The Allergies leading the charge, nu-funk offers high-energy tracks perfect for the dance floor, as seen in 'Dance Now', where the fusion of analog and digital sounds creates an infectious, funky groove that never lets up. Nu-funk appeals to a new generation of listeners by keeping funk’s core elements intact while embracing modern production styles.",
+    "example": "The Allergies - Dance Now"
+  },
+  {
+    "id": "global-club/latin-club",
+    "name": "Latin Club",
+    "path": "Global Club > Latin Club",
+    "description": "Latin Club (or Global Latin Bass) is a rapidly expanding movement that fuses traditional Latin American rhythms—such as cumbia, dembow, reggaeton, and funk carioca—with the avant-garde aesthetics of global club music. It is characterized by production that prioritizes aggressive sound design, syncopated percussion, and a frenetic energy designed for the dance floor. It is a genre that celebrates cultural hybridization, utilizing technology to transform regional folklore into futuristic and distorted soundscapes.",
+    "example": "Bitter Babe - Tranki"
+  },
+  {
+    "id": "global-club/funk-carioca",
+    "name": "Funk Carioca",
+    "path": "Global Club > Funk Carioca",
+    "description": "Funk Carioca, also known as Brazilian Funk or Baile Funk, is a rhythmic powerhouse born in the favelas of Rio de Janeiro. Originating in the 1980s as a localized evolution of Miami Bass and Electro-funk, it transitioned from using imported loops to creating the 'Tamborzão'—a signature syncopated beat that blends African percussion with heavy electronic sub-bass. The genre serves as a vital tool for social identity and urban expression, characterized by its DIY aesthetic, raw vocals, and high-energy loops. It has evolved from 90s social chronicles to modern high-speed and experimental forms that dominate global underground club circuits.",
+    "example": "Cidinho & Doca - Rap da Felicidade"
+  },
+  {
+    "id": "global-club/reggaeton",
+    "name": "Reggaeton",
+    "path": "Global Club > Reggaeton",
+    "description": "Reggaeton is a global phenomenon originating in Puerto Rico (with roots in Panama) that blends Jamaican dancehall rhythms—specifically the 'dembow' beat—with Latin American elements like bomba and plena, hip hop, and electronic production. It emerged in the early 1990s as an underground movement before exploding into the mainstream in the early 2000s. Characterized by its hypnotic 3+3+2 rhythmic pattern and Spanish-language vocals, reggaeton has evolved from its raw street beginnings into a dominant force in global pop music, constantly absorbing new electronic trends while maintaining its core dance-focused identity.",
+    "example": "Daddy Yankee - Gasolina"
+  },
+  {
+    "id": "global-club/gqom",
+    "name": "Gqom",
+    "path": "Global Club > Gqom",
+    "description": "Originating from the townships of Durban, South Africa, Gqom is a raw, minimalist, and atmospheric subgenre of electronic dance music. Characterized by its dark, moody aesthetic and heavy, syncopated drum patterns, it eschews the traditional four-on-the-floor house beat in favor of broken, hypnotic rhythms. Often set at a steady 127 BPM, the genre focuses on deep sub-bass, industrial-sounding percussive loops, and a repetitive, trance-inducing energy. The term 'Gqom' derives from a Zulu onomatopoeic word representing a hitting drum, reflecting its hard-hitting and percussive nature.",
+    "example": "DJ Lag - Trip To New York"
+  },
+  {
+    "id": "global-club/kuduro",
+    "name": "Kuduro",
+    "path": "Global Club > Kuduro",
+    "description": "Originating in Luanda, Angola, in the late 1980s, Kuduro is a high-energy genre that fuses Western house and techno with traditional African percussion and rhythms like semba and soca. Characterized by its fast tempo (around 140 BPM), aggressive 4/4 beats, and raw, minimalist production, it was born in the streets as a form of urban expression. While the original Angolan sound is gritty and percussive, it gained massive international influence through the 'Progressive Kuduro' movement in Lisbon, which blended it with heavy bass and European club aesthetics.",
+    "example": "Buraka Som Sistema - Sound of Kuduro"
+  },
+  {
+    "id": "global-club/singeli",
+    "name": "Singeli",
+    "path": "Global Club > Singeli",
+    "description": "Singeli is a high-velocity electronic dance music genre from Dar es Salaam, Tanzania. It is characterized by its breakneck speed, typically ranging from 180 to 300 BPM, featuring frantic, repetitive loops and rapid-fire MCing in Swahili. Emerging from working-class neighborhoods, it blends traditional Tanzanian sounds like taarab and mchiriku with a raw, DIY electronic aesthetic. Known for its intense energy and frenetic rhythms, Singeli has moved from Tanzanian street parties to global experimental club stages, championed by labels like Nyege Nyege Tapes.",
+    "example": "Bamba Pana - Agaba Kibati"
+  },
+  {
+    "id": "global-club/nortec",
+    "name": "Nortec",
+    "path": "Global Club > Nortec",
+    "description": "Nortec is an electronic dance music genre that emerged from Tijuana, Mexico, in the late 1990s. Its name is a portmanteau of 'norteño' and 'techno,' reflecting its unique fusion of traditional northern Mexican sounds (accordion, tuba, banda brass) with club-focused electronic production. It represents a trans-cultural aesthetic that bridges regional border traditions with global underground electronic music.",
+    "example": "Nortec: Bostich + Fussible - Tijuana Makes Me Happy"
+  },
+  {
+    "id": "global-club/funk-carioca/classic-funk-funk-de-raiz",
+    "name": "Classic Funk / Funk de Raiz",
+    "path": "Global Club > Funk Carioca > Classic Funk / Funk de Raiz",
+    "description": "The foundational era of the 1990s, characterized by the 'Volt Mix' beat and social consciousness. These tracks, often called 'conscious funk,' focused on narratives of peace, pride, and daily life in the favelas, featuring melodic structures and a slower tempo (around 125 BPM) influenced by freestyle and soul.",
+    "example": "MC Marcinho - Glamurosa"
+  },
+  {
+    "id": "global-club/funk-carioca/funk-proibido",
+    "name": "Funk Proibidão",
+    "path": "Global Club > Funk Carioca > Funk Proibidão",
+    "description": "A raw and confrontational subgenre that describes the harsh realities of organized crime and gang culture in the peripheries. Characterized by aggressive lyrics and a gritty, lo-fi production style, it represents the most underground and unfiltered side of the genre.",
+    "example": "MC Orelha - Na Faixa de Gaza"
+  }
+]

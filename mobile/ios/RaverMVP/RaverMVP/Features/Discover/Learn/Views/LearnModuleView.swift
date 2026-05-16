@@ -8,6 +8,7 @@ import CoreImage.CIFilterBuiltins
 import MapKit
 import CoreLocation
 import CoreText
+import Foundation
 
 struct LearnModuleView: View {
     @Environment(\.discoverPush) private var discoverPush
@@ -441,27 +442,10 @@ struct LearnModuleView: View {
         } else if genres.isEmpty {
             ContentUnavailableView(LT("暂无学习内容", "暂无学习内容", "学習コンテンツはまだありません"), systemImage: "book")
         } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    if !genres.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(LT("流派树", "流派树", "ジャンルツリー"))
-                                .font(.title3.weight(.bold))
-                                .foregroundStyle(RaverTheme.primaryText)
-                            ForEach(genres) { node in
-                                GenreNodeView(node: node)
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(RaverTheme.card)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, max(0, tabBarReservedHeight) + 14)
-            }
+            LearnGenreSunburstSection(
+                genres: genres,
+                bottomInset: max(0, tabBarReservedHeight) + 14
+            )
             .refreshable {
                 await refreshAll()
             }
@@ -1090,32 +1074,1772 @@ struct LearnModuleView: View {
     }
 }
 
-private struct GenreNodeView: View {
-    let node: LearnGenreNode
+private struct LearnGenreSunburstSection: View {
+    let genres: [LearnGenreNode]
+    let bottomInset: CGFloat
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appPush) private var appPush
+    @State private var focusedId: String?
+    @State private var selectedNode: GenreSunburstNode?
+    @State private var rootNode: GenreSunburstNode
+    @State private var searchIndex: [GenreSunburstSearchItem]
+
+    init(genres: [LearnGenreNode], bottomInset: CGFloat) {
+        self.genres = genres
+        self.bottomInset = bottomInset
+
+        let root = Self.makeRootNode(from: genres)
+        _rootNode = State(initialValue: root)
+        _searchIndex = State(initialValue: Self.makeSearchIndex(root: root))
+    }
+
+    private static func makeRootNode(from genres: [LearnGenreNode]) -> GenreSunburstNode {
+        GenreSunburstNode(
+            id: "learn-genres-root",
+            name: LT("流派树", "Genre Tree", "ジャンルツリー"),
+            path: "learn-genres-root",
+            description: LT("点击外圈进入分支，点击中心返回上一级。", "Tap outer rings to dive in, tap the center to go back.", "外周リングで深掘りし、中央タップで戻ります。"),
+            example: "",
+            spotifyTrackURL: "",
+            wikipediaURL: "",
+            keyArtists: [],
+            keyArtistBindings: [],
+            children: genres.map { GenreSunburstNode(learnNode: $0, parentPath: "learn-genres-root") }
+        )
+    }
+
+    private static func makeSearchIndex(root: GenreSunburstNode) -> [GenreSunburstSearchItem] {
+        root.allDescendants()
+            .filter { $0.id != root.id }
+            .map { node in
+                GenreSunburstSearchItem(
+                    node: node,
+                    parentId: node.parentNode(root: root)?.id,
+                    pathText: node.pathDisplayText(root: root)
+                )
+            }
+    }
 
     var body: some View {
-        DisclosureGroup {
-            if let children = node.children, !children.isEmpty {
-                ForEach(children) { child in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(child.name)
-                            .font(.subheadline.weight(.medium))
-                        Text(child.description)
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
+        GeometryReader { geometry in
+            let horizontalPadding = geometry.size.width >= 768 ? CGFloat(18) : CGFloat(10)
+            let chartWidth = max(260, geometry.size.width - horizontalPadding * 2)
+            let maxChartHeight = max(320, geometry.size.height - bottomInset - 112)
+            let chartSize = min(chartWidth, maxChartHeight, geometry.size.width >= 768 ? 680 : 520)
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 14) {
+                    GenreSunburstSearchPanel(
+                        items: searchIndex
+                    ) { item in
+                        focusedId = item.id
+                        selectedNode = item.node
                     }
-                    .padding(.vertical, 2)
+
+                    GenreSunburstCanvasContainer(
+                        rootNode: rootNode,
+                        focusedId: $focusedId,
+                        selectedNode: $selectedNode
+                    )
+                    .frame(maxWidth: .infinity)
+                    .frame(height: chartSize)
+
+                    GenreSunburstSelectionCard(
+                        node: selectedNode ?? rootNode.firstNode(withId: focusedId ?? "") ?? rootNode,
+                        pathText: pathText(for: selectedNode ?? rootNode.firstNode(withId: focusedId ?? "") ?? rootNode),
+                        onArtistTap: openArtistDetail
+                    )
                 }
+                .padding(.horizontal, horizontalPadding)
+                .padding(.top, 10)
+                .padding(.bottom, bottomInset)
             }
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(node.name)
-                    .foregroundStyle(RaverTheme.primaryText)
+            .background(
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        hideKeyboard()
+                    }
+            )
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .onChange(of: genres) { _, newGenres in
+            let updatedRoot = Self.makeRootNode(from: newGenres)
+            rootNode = updatedRoot
+            searchIndex = Self.makeSearchIndex(root: updatedRoot)
+            focusedId = nil
+            selectedNode = nil
+        }
+    }
+
+    private func pathText(for node: GenreSunburstNode) -> String {
+        node.pathDisplayText(root: rootNode)
+    }
+
+    private func openArtistDetail(_ artist: LearnGenreKeyArtistBinding) {
+        guard let djID = (artist.dj?.id.nilIfBlank ?? artist.djId?.nilIfBlank) else { return }
+        appPush(.djDetail(djID: djID))
+    }
+
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
+private struct GenreSunburstCanvasContainer: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let rootNode: GenreSunburstNode
+    @Binding var focusedId: String?
+    @Binding var selectedNode: GenreSunburstNode?
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            GenreSunburstCanvasView(
+                root: rootNode,
+                focusedId: $focusedId,
+                selectedNode: $selectedNode
+            )
+
+            Button {
+                focusedId = nil
+                selectedNode = nil
+            } label: {
+                Image(systemName: "arrow.counterclockwise")
+                    .font(.system(size: 19, weight: .bold))
+                    .foregroundStyle(resetForeground)
+                    .frame(width: 52, height: 52)
+                    .background(resetBackground, in: Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(resetStroke, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 6)
+            .padding(.trailing, 6)
+            .opacity((focusedId == nil && selectedNode == nil) ? 0.65 : 1)
+        }
+    }
+
+    private var resetForeground: Color {
+        colorScheme == .dark ? .white.opacity(0.92) : Color.black.opacity(0.78)
+    }
+
+    private var resetBackground: Color {
+        colorScheme == .dark ? .black.opacity(0.34) : .white.opacity(0.78)
+    }
+
+    private var resetStroke: Color {
+        colorScheme == .dark ? .white.opacity(0.12) : .black.opacity(0.08)
+    }
+}
+
+private struct GenreSunburstSelectionCard: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let node: GenreSunburstNode
+    let pathText: String
+    let onArtistTap: (LearnGenreKeyArtistBinding) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(node.name)
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(primaryText)
+                .lineLimit(2)
+                .minimumScaleFactor(0.86)
+
+            if !pathText.isEmpty {
+                Text(pathText)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(accentText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+
+            if !node.description.isEmpty {
                 Text(node.description)
-                    .font(.caption)
-                    .foregroundStyle(RaverTheme.secondaryText)
+                    .font(.system(size: 14.5, weight: .regular))
+                    .foregroundStyle(secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineSpacing(2)
+            }
+
+            if !infoItems.isEmpty {
+                VStack(spacing: 10) {
+                    ForEach(infoItems) { item in
+                        GenreSunburstInfoTile(item: item, onArtistTap: onArtistTap)
+                    }
+                }
+                .padding(.top, 2)
             }
         }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(
+                colors: cardGradientColors,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: cardStrokeColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(
+            color: colorScheme == .dark ? .clear : Color.black.opacity(0.10),
+            radius: colorScheme == .dark ? 0 : 18,
+            x: 0,
+            y: colorScheme == .dark ? 0 : 10
+        )
+    }
+
+    private var primaryText: Color {
+        colorScheme == .dark ? .white : Color.black.opacity(0.86)
+    }
+
+    private var secondaryText: Color {
+        colorScheme == .dark ? .white.opacity(0.76) : Color.black.opacity(0.68)
+    }
+
+    private var accentText: Color {
+        colorScheme == .dark
+            ? Color(red: 0.46, green: 0.88, blue: 1.0).opacity(0.92)
+            : Color.black.opacity(0.82)
+    }
+
+    private var cardGradientColors: [Color] {
+        colorScheme == .dark
+            ? [
+                Color(red: 0.08, green: 0.10, blue: 0.16).opacity(0.94),
+                Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.98)
+            ]
+            : [
+                Color.white.opacity(0.96),
+                Color(red: 0.92, green: 0.96, blue: 1.0).opacity(0.92)
+            ]
+    }
+
+    private var cardStrokeColors: [Color] {
+        colorScheme == .dark
+            ? [
+                Color(red: 0.42, green: 0.84, blue: 1.0).opacity(0.34),
+                Color(red: 1.0, green: 0.26, blue: 0.67).opacity(0.16)
+            ]
+            : [
+                Color(red: 0.10, green: 0.48, blue: 0.78).opacity(0.18),
+                Color(red: 0.86, green: 0.20, blue: 0.52).opacity(0.10)
+            ]
+    }
+
+    private var infoItems: [GenreSunburstInfoItem] {
+        var items: [GenreSunburstInfoItem] = []
+
+        let artistBindings = normalizedArtistBindings()
+        if !artistBindings.isEmpty {
+            items.append(GenreSunburstInfoItem(
+                id: "artists",
+                icon: "person.2.fill",
+                title: LT("代表艺人", "Key artists", "代表アーティスト"),
+                value: "",
+                artists: artistBindings
+            ))
+        }
+
+        if !node.example.isEmpty {
+            items.append(GenreSunburstInfoItem(
+                id: "example",
+                icon: "music.note",
+                title: LT("声音线索", "Sound cue", "サウンド"),
+                value: node.example,
+                artists: []
+            ))
+        }
+
+        return items
+    }
+
+    private func normalizedArtistBindings() -> [LearnGenreKeyArtistBinding] {
+        if !node.keyArtistBindings.isEmpty {
+            return node.keyArtistBindings
+        }
+
+        return node.keyArtists.map { LearnGenreKeyArtistBinding(name: $0, djId: nil, dj: nil) }
+    }
+}
+
+private struct GenreSunburstInfoItem: Identifiable {
+    let id: String
+    let icon: String
+    let title: String
+    let value: String
+    let artists: [LearnGenreKeyArtistBinding]
+}
+
+private struct GenreSunburstInfoTile: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let item: GenreSunburstInfoItem
+    let onArtistTap: (LearnGenreKeyArtistBinding) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Image(systemName: item.icon)
+                    .font(.system(size: 11, weight: .bold))
+                Text(item.title)
+                    .font(.system(size: 11, weight: .bold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(labelText)
+
+            if !item.artists.isEmpty {
+                GenreSunburstArtistCapsuleCloud(artists: item.artists, onArtistTap: onArtistTap)
+            } else {
+                Text(item.value)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(valueText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 74, alignment: .topLeading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(colorScheme == .dark ? Color.white.opacity(0.055) : Color.black.opacity(0.04))
+        )
+    }
+
+    private var labelText: Color {
+        colorScheme == .dark
+            ? Color(red: 0.62, green: 0.90, blue: 1.0).opacity(0.95)
+            : Color.black.opacity(0.74)
+    }
+
+    private var valueText: Color {
+        colorScheme == .dark ? .white.opacity(0.78) : Color.black.opacity(0.86)
+    }
+}
+
+private struct GenreSunburstArtistCapsuleCloud: View {
+    let artists: [LearnGenreKeyArtistBinding]
+    let onArtistTap: (LearnGenreKeyArtistBinding) -> Void
+
+    var body: some View {
+        GenreSunburstFlowLayout(spacing: 8, lineSpacing: 8) {
+            ForEach(artists) { artist in
+                GenreSunburstArtistCapsule(artist: artist, onTap: onArtistTap)
+            }
+        }
+    }
+}
+
+private struct GenreSunburstFlowLayout: Layout {
+    var spacing: CGFloat
+    var lineSpacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? 0
+        guard maxWidth > 0 else {
+            let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+            return CGSize(
+                width: sizes.map(\.width).max() ?? 0,
+                height: sizes.reduce(CGFloat(0)) { $0 + $1.height } + lineSpacing * CGFloat(max(0, sizes.count - 1))
+            )
+        }
+
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > maxWidth {
+                x = 0
+                y += rowHeight + lineSpacing
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: maxWidth, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX && x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + lineSpacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+private struct GenreSunburstArtistCapsule: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let artist: LearnGenreKeyArtistBinding
+    let onTap: (LearnGenreKeyArtistBinding) -> Void
+
+    var body: some View {
+        Group {
+            if canOpenDetail {
+                Button {
+                    onTap(artist)
+                } label: {
+                    capsuleContent
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(LT("打开 DJ 详情", "Open DJ detail", "DJ詳細を開く"))
+            } else {
+                capsuleContent
+            }
+        }
+    }
+
+    private var capsuleContent: some View {
+        HStack(spacing: 7) {
+            AsyncImage(url: avatarURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    ZStack {
+                        Circle().fill(avatarFallbackBackground)
+                        Text(String(displayName.prefix(1)).uppercased())
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(avatarFallbackText)
+                    }
+                }
+            }
+            .frame(width: 22, height: 22)
+            .clipShape(Circle())
+
+            Text(displayName)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(textColor)
+                .lineLimit(1)
+        }
+        .padding(.leading, 5)
+        .padding(.trailing, 10)
+        .frame(height: 32)
+        .background(capsuleBackground, in: Capsule())
+        .overlay(Capsule().stroke(capsuleStroke, lineWidth: 1))
+    }
+
+    private var canOpenDetail: Bool {
+        (artist.dj?.id.nilIfBlank ?? artist.djId?.nilIfBlank) != nil
+    }
+
+    private var displayName: String {
+        artist.dj?.name.nilIfBlank ?? artist.name
+    }
+
+    private var avatarURL: URL? {
+        let resolved = AppConfig.resolvedDJAvatarURLString(
+            artist.dj?.avatarMediumUrl ?? artist.dj?.avatarUrl,
+            size: .medium
+        )
+        guard let resolved else { return nil }
+        return URL(string: resolved)
+    }
+
+    private var textColor: Color {
+        colorScheme == .dark ? .white.opacity(0.88) : Color.black.opacity(0.84)
+    }
+
+    private var capsuleBackground: Color {
+        colorScheme == .dark ? .white.opacity(0.075) : .white.opacity(0.92)
+    }
+
+    private var capsuleStroke: Color {
+        colorScheme == .dark ? .white.opacity(0.10) : .black.opacity(0.08)
+    }
+
+    private var avatarFallbackBackground: Color {
+        colorScheme == .dark ? .white.opacity(0.16) : .black.opacity(0.08)
+    }
+
+    private var avatarFallbackText: Color {
+        colorScheme == .dark ? .white.opacity(0.82) : .black.opacity(0.62)
+    }
+}
+
+private struct GenreSunburstSearchItem: Identifiable, Sendable {
+    let id: String
+    let node: GenreSunburstNode
+    let parentId: String?
+    let pathText: String
+    let nameLower: String
+    let pathLower: String
+    let descriptionLower: String
+    let exampleLower: String
+    let artistLower: String
+
+    init(node: GenreSunburstNode, parentId: String?, pathText: String) {
+        self.id = node.id
+        self.node = node
+        self.parentId = parentId
+        self.pathText = pathText
+        self.nameLower = node.name.lowercased()
+        self.pathLower = node.path.lowercased()
+        self.descriptionLower = node.description.lowercased()
+        self.exampleLower = node.example.lowercased()
+        self.artistLower = node.keyArtists.joined(separator: " ").lowercased()
+    }
+
+    func score(for query: String) -> Int {
+        var score = 0
+        if nameLower == query { score += 1200 }
+        if pathLower == query { score += 900 }
+        if nameLower.hasPrefix(query) { score += 700 }
+        if pathLower.hasPrefix(query) { score += 450 }
+        if nameLower.contains(query) { score += 300 }
+        if pathLower.contains(query) { score += 220 }
+        if descriptionLower.contains(query) { score += 120 }
+        if exampleLower.contains(query) { score += 100 }
+        if artistLower.contains(query) { score += 100 }
+        return score
+    }
+}
+
+private struct GenreSunburstSearchPanel: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let items: [GenreSunburstSearchItem]
+    let onSelect: (GenreSunburstSearchItem) -> Void
+
+    @State private var text = ""
+    @State private var candidates: [GenreSunburstSearchItem] = []
+    @State private var searchTask: Task<Void, Never>?
+    @FocusState private var searchFieldFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(secondaryText)
+
+                TextField(LT("搜索风格", "Search genres", "ジャンルを検索"), text: $text)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .foregroundStyle(primaryText)
+                    .submitLabel(.done)
+                    .focused($searchFieldFocused)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button(LT("收起", "Done", "閉じる")) {
+                                searchFieldFocused = false
+                            }
+                        }
+                    }
+
+                if !text.isEmpty {
+                    Button {
+                        text = ""
+                        searchFieldFocused = true
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(secondaryText)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(maxWidth: 560)
+            .frame(height: 40)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(searchFieldBackground)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .opacity(colorScheme == .dark ? 0.32 : 0.58)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(searchStroke, lineWidth: 1)
+            )
+            .shadow(
+                color: colorScheme == .dark ? .clear : Color.black.opacity(0.07),
+                radius: colorScheme == .dark ? 0 : 12,
+                x: 0,
+                y: colorScheme == .dark ? 0 : 6
+            )
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            if !candidates.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(candidates) { item in
+                        Button {
+                            onSelect(item)
+                            text = ""
+                            candidates = []
+                            searchFieldFocused = false
+                        } label: {
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(item.node.name)
+                                        .font(.system(size: 14.5, weight: .semibold))
+                                        .foregroundStyle(primaryText)
+                                        .lineLimit(1)
+
+                                    Text(item.pathText)
+                                        .font(.system(size: 11.5, weight: .medium))
+                                        .foregroundStyle(secondaryText)
+                                        .lineLimit(1)
+                                }
+
+                                Spacer(minLength: 8)
+
+                                Image(systemName: "arrow.right.circle.fill")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(accentText)
+                            }
+                            .padding(.horizontal, 14)
+                            .frame(height: 46)
+                            .frame(maxWidth: 560)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(candidateBackground)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 6)
+        .onChange(of: text) { _, value in
+            scheduleSearch(for: value)
+        }
+        .onDisappear {
+            searchTask?.cancel()
+        }
+    }
+
+    private var primaryText: Color {
+        colorScheme == .dark ? .white : Color.black.opacity(0.86)
+    }
+
+    private var secondaryText: Color {
+        colorScheme == .dark ? .white.opacity(0.58) : Color.black.opacity(0.50)
+    }
+
+    private var accentText: Color {
+        colorScheme == .dark
+            ? Color(red: 0.48, green: 0.88, blue: 1.0)
+            : Color(red: 0.10, green: 0.48, blue: 0.78)
+    }
+
+    private var searchFieldBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.035) : Color.white.opacity(0.28)
+    }
+
+    private var searchStroke: Color {
+        colorScheme == .dark ? Color.white.opacity(0.10) : Color.white.opacity(0.54)
+    }
+
+    private var candidateBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.05) : Color.white.opacity(0.78)
+    }
+
+    private func scheduleSearch(for value: String) {
+        searchTask?.cancel()
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            candidates = []
+            return
+        }
+
+        let items = items
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled else { return }
+
+            let query = trimmed.lowercased()
+            let result = await Task.detached(priority: .userInitiated) {
+                GenreSunburstSearchPanel.search(items: items, query: query)
+            }.value
+
+            guard !Task.isCancelled else { return }
+            candidates = result
+        }
+    }
+
+    nonisolated private static func search(items: [GenreSunburstSearchItem], query: String) -> [GenreSunburstSearchItem] {
+        items
+            .map { item in (item, item.score(for: query)) }
+            .sorted { lhs, rhs in
+                if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
+                return lhs.0.node.leafCount > rhs.0.node.leafCount
+            }
+            .prefix(8)
+            .map(\.0)
+    }
+}
+
+private extension GenreSunburstNode {
+    func allDescendants(includeSelf: Bool = true) -> [GenreSunburstNode] {
+        var output: [GenreSunburstNode] = []
+        if includeSelf { output.append(self) }
+        for child in children {
+            output.append(contentsOf: child.allDescendants(includeSelf: true))
+        }
+        return output
+    }
+
+    func parentNode(root: GenreSunburstNode) -> GenreSunburstNode? {
+        guard let path = root.pathToNode(withId: id), path.count > 1 else { return nil }
+        return path[path.count - 2]
+    }
+
+    func pathDisplayText(root: GenreSunburstNode) -> String {
+        guard let path = root.pathToNode(withId: id) else { return "" }
+        let names = path.dropFirst().map(\.name)
+        return names.joined(separator: " / ")
+    }
+
+    var searchIndex: String {
+        [
+            name,
+            description,
+            example,
+            wikipediaURL,
+            keyArtists.joined(separator: " "),
+            path
+        ]
+        .joined(separator: " ")
+        .lowercased()
+    }
+
+    func searchScore(for query: String) -> Int {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedQuery.isEmpty else { return 0 }
+
+        let nameLower = name.lowercased()
+        let pathLower = path.lowercased()
+        let descriptionLower = description.lowercased()
+        let exampleLower = example.lowercased()
+        let artistLower = keyArtists.joined(separator: " ").lowercased()
+
+        var score = 0
+        if nameLower == normalizedQuery { score += 1200 }
+        if pathLower == normalizedQuery { score += 900 }
+        if nameLower.hasPrefix(normalizedQuery) { score += 700 }
+        if pathLower.hasPrefix(normalizedQuery) { score += 450 }
+        if nameLower.contains(normalizedQuery) { score += 300 }
+        if pathLower.contains(normalizedQuery) { score += 220 }
+        if descriptionLower.contains(normalizedQuery) { score += 120 }
+        if exampleLower.contains(normalizedQuery) { score += 100 }
+        if artistLower.contains(normalizedQuery) { score += 100 }
+        return score
+    }
+}
+
+private struct GenreSunburstNode: Identifiable, Hashable, Sendable {
+    let id: String
+    let name: String
+    let path: String
+    let description: String
+    let example: String
+    let spotifyTrackURL: String
+    let wikipediaURL: String
+    let keyArtists: [String]
+    let keyArtistBindings: [LearnGenreKeyArtistBinding]
+    let children: [GenreSunburstNode]
+
+    init(
+        id: String,
+        name: String,
+        path: String,
+        description: String,
+        example: String,
+        spotifyTrackURL: String,
+        wikipediaURL: String,
+        keyArtists: [String],
+        keyArtistBindings: [LearnGenreKeyArtistBinding] = [],
+        children: [GenreSunburstNode]
+    ) {
+        self.id = id
+        self.name = name
+        self.path = path
+        self.description = description
+        self.example = example
+        self.spotifyTrackURL = spotifyTrackURL
+        self.wikipediaURL = wikipediaURL
+        self.keyArtists = keyArtists
+        self.keyArtistBindings = keyArtistBindings
+        self.children = children
+    }
+
+    init(learnNode: LearnGenreNode, parentPath: String) {
+        self.id = learnNode.id
+        self.name = learnNode.name
+        self.path = learnNode.path ?? "\(parentPath)/\(learnNode.id)"
+        self.description = learnNode.description
+        self.example = learnNode.example ?? ""
+        self.spotifyTrackURL = learnNode.spotifyTrackURL ?? ""
+        self.wikipediaURL = learnNode.wikipediaURL ?? ""
+        self.keyArtists = learnNode.keyArtists ?? []
+        self.keyArtistBindings = learnNode.keyArtistBindings ?? []
+        self.children = (learnNode.children ?? []).map { GenreSunburstNode(learnNode: $0, parentPath: "\(parentPath)/\(learnNode.id)") }
+    }
+
+    var isLeaf: Bool {
+        children.isEmpty
+    }
+
+    var leafCount: Int {
+        if children.isEmpty { return 1 }
+        return children.reduce(0) { $0 + $1.leafCount }
+    }
+
+    func firstNode(withId targetId: String) -> GenreSunburstNode? {
+        if id == targetId { return self }
+
+        for child in children {
+            if let match = child.firstNode(withId: targetId) {
+                return match
+            }
+        }
+
+        return nil
+    }
+
+    func pathToNode(withId targetId: String) -> [GenreSunburstNode]? {
+        if id == targetId { return [self] }
+
+        for child in children {
+            if let childPath = child.pathToNode(withId: targetId) {
+                return [self] + childPath
+            }
+        }
+
+        return nil
+    }
+}
+
+private struct GenreSunburstSegment: Identifiable, Hashable {
+    let id: String
+    let node: GenreSunburstNode
+    let parentId: String?
+    let depth: Int
+    let x0: Double
+    let x1: Double
+    let y0: Double
+    let y1: Double
+    let startAngle: Double
+    let endAngle: Double
+    let innerRadius: CGFloat
+    let outerRadius: CGFloat
+    let color: Color
+
+    var midAngle: Double {
+        (startAngle + endAngle) / 2
+    }
+
+    var angleSpan: Double {
+        endAngle - startAngle
+    }
+}
+
+private struct GenreSunburstFocus: Equatable, Sendable {
+    let angleStart: Double
+    let angleEnd: Double
+    let depthStart: Double
+    let depthEnd: Double
+
+    static let root = GenreSunburstFocus(
+        angleStart: 0,
+        angleEnd: 1,
+        depthStart: 0,
+        depthEnd: 1
+    )
+}
+
+private enum GenreSunburstLayout {
+    static func partitionSegments(
+        root: GenreSunburstNode,
+        canvasSize: CGSize,
+        focus: GenreSunburstFocus
+    ) -> [GenreSunburstSegment] {
+        let maxDepth = max(1, maxDepth(from: root))
+        let chartRadius = max(10, min(canvasSize.width, canvasSize.height) * 0.485)
+        let topLevelPalette = paletteMap(root: root)
+        let baseSegments = partition(root: root, maxDepth: maxDepth, topLevelPalette: topLevelPalette)
+
+        return baseSegments.compactMap { segment in
+            project(segment, radius: chartRadius, focus: focus)
+        }
+    }
+
+    static func focus(for nodeId: String?, root: GenreSunburstNode) -> GenreSunburstFocus {
+        guard
+            let nodeId,
+            let segment = partition(
+                root: root,
+                maxDepth: max(1, maxDepth(from: root)),
+                topLevelPalette: paletteMap(root: root)
+            ).first(where: { $0.id == nodeId })
+        else {
+            return .root
+        }
+
+        return GenreSunburstFocus(
+            angleStart: segment.x0,
+            angleEnd: segment.x1,
+            depthStart: segment.y0,
+            depthEnd: 1
+        )
+    }
+
+    private static func partition(
+        root: GenreSunburstNode,
+        maxDepth: Int,
+        topLevelPalette: [String: Color]
+    ) -> [GenreSunburstSegment] {
+        var output: [GenreSunburstSegment] = []
+        let totalWeight = Double(root.children.reduce(0) { $0 + $1.leafCount })
+        var cursor = 0.0
+
+        for child in root.children {
+            let span = totalWeight == 0 ? 0 : Double(child.leafCount) / totalWeight
+            appendPartition(
+                node: child,
+                parentId: root.id,
+                root: root,
+                depth: 1,
+                maxDepth: maxDepth,
+                x0: cursor,
+                x1: cursor + span,
+                topLevelPalette: topLevelPalette,
+                output: &output
+            )
+            cursor += span
+        }
+
+        return output
+    }
+
+    private static func appendPartition(
+        node: GenreSunburstNode,
+        parentId: String?,
+        root: GenreSunburstNode,
+        depth: Int,
+        maxDepth: Int,
+        x0: Double,
+        x1: Double,
+        topLevelPalette: [String: Color],
+        output: inout [GenreSunburstSegment]
+    ) {
+        let y0 = Double(depth - 1) / Double(maxDepth)
+        let y1 = Double(depth) / Double(maxDepth)
+        let topLevelId = root.pathToNode(withId: node.id)?.dropFirst().first?.id ?? node.id
+
+        output.append(
+            GenreSunburstSegment(
+                id: node.id,
+                node: node,
+                parentId: parentId,
+                depth: depth,
+                x0: x0,
+                x1: x1,
+                y0: y0,
+                y1: y1,
+                startAngle: 0,
+                endAngle: 0,
+                innerRadius: 0,
+                outerRadius: 0,
+                color: topLevelPalette[topLevelId] ?? .gray
+            )
+        )
+
+        guard !node.children.isEmpty else { return }
+
+        let totalWeight = Double(node.children.reduce(0) { $0 + $1.leafCount })
+        var cursor = x0
+
+        for child in node.children {
+            let span = totalWeight == 0 ? 0 : (Double(child.leafCount) / totalWeight) * (x1 - x0)
+            appendPartition(
+                node: child,
+                parentId: node.id,
+                root: root,
+                depth: depth + 1,
+                maxDepth: maxDepth,
+                x0: cursor,
+                x1: cursor + span,
+                topLevelPalette: topLevelPalette,
+                output: &output
+            )
+            cursor += span
+        }
+    }
+
+    private static func project(
+        _ segment: GenreSunburstSegment,
+        radius: CGFloat,
+        focus: GenreSunburstFocus
+    ) -> GenreSunburstSegment? {
+        let angleSpan = focus.angleEnd - focus.angleStart
+        let depthSpan = focus.depthEnd - focus.depthStart
+        guard angleSpan > 0, depthSpan > 0 else { return nil }
+
+        let x0 = (segment.x0 - focus.angleStart) / angleSpan
+        let x1 = (segment.x1 - focus.angleStart) / angleSpan
+        let y0 = (segment.y0 - focus.depthStart) / depthSpan
+        let y1 = (segment.y1 - focus.depthStart) / depthSpan
+
+        if x1 <= 0 || x0 >= 1 || y1 <= 0 || y0 >= 1 {
+            return nil
+        }
+
+        let clampedX0 = max(0, min(1, x0))
+        let clampedX1 = max(0, min(1, x1))
+        let clampedY0 = max(0, min(1, y0))
+        let clampedY1 = max(0, min(1, y1))
+
+        guard clampedX1 > clampedX0, clampedY1 > clampedY0 else { return nil }
+
+        let startAngle = clampedX0 * Double.pi * 2 - Double.pi / 2
+        let endAngle = clampedX1 * Double.pi * 2 - Double.pi / 2
+        let centerRadius = radius * 0.16
+        let drawableRadius = radius - centerRadius
+        let innerRadius = centerRadius + CGFloat(sqrt(clampedY0)) * drawableRadius
+        let outerRadius = centerRadius + CGFloat(sqrt(clampedY1)) * drawableRadius
+
+        return GenreSunburstSegment(
+            id: segment.id,
+            node: segment.node,
+            parentId: segment.parentId,
+            depth: segment.depth,
+            x0: segment.x0,
+            x1: segment.x1,
+            y0: segment.y0,
+            y1: segment.y1,
+            startAngle: startAngle,
+            endAngle: endAngle,
+            innerRadius: innerRadius,
+            outerRadius: outerRadius,
+            color: segment.color
+        )
+    }
+
+    private static func maxDepth(from node: GenreSunburstNode) -> Int {
+        if node.children.isEmpty { return 0 }
+        return 1 + (node.children.map(maxDepth).max() ?? 0)
+    }
+
+    private static func paletteMap(root: GenreSunburstNode) -> [String: Color] {
+        let colors: [Color] = [
+            Color(red: 0.18, green: 0.72, blue: 0.96),
+            Color(red: 0.94, green: 0.30, blue: 0.74),
+            Color(red: 0.46, green: 0.86, blue: 0.40),
+            Color(red: 0.96, green: 0.54, blue: 0.18),
+            Color(red: 0.48, green: 0.42, blue: 0.92),
+            Color(red: 0.08, green: 0.82, blue: 0.70),
+            Color(red: 0.90, green: 0.25, blue: 0.35),
+            Color(red: 0.72, green: 0.62, blue: 0.96),
+            Color(red: 0.86, green: 0.78, blue: 0.28),
+            Color(red: 0.30, green: 0.48, blue: 0.92)
+        ]
+
+        return Dictionary(uniqueKeysWithValues: root.children.enumerated().map { index, node in
+            (node.id, colors[index % colors.count])
+        })
+    }
+}
+
+private enum GenreSunburstHitTesting {
+    static func hitSegment(
+        at point: CGPoint,
+        in size: CGSize,
+        segments: [GenreSunburstSegment]
+    ) -> GenreSunburstSegment? {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let dx = point.x - center.x
+        let dy = point.y - center.y
+        let radius = sqrt(dx * dx + dy * dy)
+        let angle = projectedAngle(atan2(dy, dx))
+
+        return segments
+            .sorted { $0.depth > $1.depth }
+            .first { segment in
+                radius >= segment.innerRadius &&
+                radius <= segment.outerRadius &&
+                angle >= segment.startAngle &&
+                angle <= segment.endAngle
+            }
+    }
+
+    static func isCenterTap(
+        at point: CGPoint,
+        in size: CGSize,
+        segments: [GenreSunburstSegment]
+    ) -> Bool {
+        guard let innerRadius = segments.map(\.innerRadius).min() else { return false }
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let dx = point.x - center.x
+        let dy = point.y - center.y
+        return sqrt(dx * dx + dy * dy) < innerRadius
+    }
+
+    private static func projectedAngle(_ angle: Double) -> Double {
+        var value = angle
+        while value < -Double.pi / 2 { value += Double.pi * 2 }
+        while value > Double.pi * 1.5 { value -= Double.pi * 2 }
+        return value
+    }
+}
+
+private struct GenreSunburstStaticRecordBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Canvas { context, size in
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let outerRadius = max(10, min(size.width, size.height) * 0.485)
+            let centerRadius = outerRadius * 0.16
+            let discRect = CGRect(
+                x: center.x - outerRadius,
+                y: center.y - outerRadius,
+                width: outerRadius * 2,
+                height: outerRadius * 2
+            )
+            let disc = Path(ellipseIn: discRect)
+
+            context.fill(disc, with: .color(discFill))
+            context.stroke(disc, with: .color(discStroke), lineWidth: 1)
+
+            var radius = centerRadius + 7
+            while radius < outerRadius - 4 {
+                let rect = CGRect(
+                    x: center.x - radius,
+                    y: center.y - radius,
+                    width: radius * 2,
+                    height: radius * 2
+                )
+                let groove = Path(ellipseIn: rect)
+                let alternatingOpacity = Int(radius / 8).isMultiple(of: 2) ? 0.11 : 0.055
+                context.stroke(
+                    groove,
+                    with: .color(grooveColor.opacity(alternatingOpacity)),
+                    lineWidth: 0.4
+                )
+                radius += 8
+            }
+        }
+    }
+
+    private var discFill: Color {
+        colorScheme == .dark
+            ? Color(red: 0.018, green: 0.02, blue: 0.03)
+            : Color(red: 0.77, green: 0.79, blue: 0.82)
+    }
+
+    private var discStroke: Color {
+        colorScheme == .dark ? .white.opacity(0.16) : Color(red: 0.24, green: 0.26, blue: 0.30).opacity(0.22)
+    }
+
+    private var grooveColor: Color {
+        colorScheme == .dark
+            ? Color(red: 0.88, green: 0.96, blue: 1.0)
+            : Color(red: 0.16, green: 0.18, blue: 0.22)
+    }
+}
+
+private struct GenreSunburstCanvasView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let root: GenreSunburstNode
+    @Binding var focusedId: String?
+    @Binding var selectedNode: GenreSunburstNode?
+
+    @State private var currentFocus: GenreSunburstFocus = .root
+    @State private var fromFocus: GenreSunburstFocus = .root
+    @State private var toFocus: GenreSunburstFocus = .root
+    @State private var animationStart: Date?
+    @State private var lastCanvasSize: CGSize = .zero
+
+    private let animationDuration: TimeInterval = 0.4
+    private let labelStrokeWidth: CGFloat = 5
+
+    private struct LabelPlacement {
+        let segment: GenreSunburstSegment
+        let lines: [String]
+        let point: CGPoint
+        let fontSize: CGFloat
+        let rotation: Double
+        let calloutStart: CGPoint?
+        let calloutBend: CGPoint?
+        let calloutEnd: CGPoint?
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                GenreSunburstStaticRecordBackground()
+
+                if animationStart != nil {
+                    TimelineView(.animation) { timeline in
+                        Canvas { context, size in
+                            let focus = focusForFrame(at: timeline.date)
+                            renderSunburst(in: size, focus: focus, context: &context)
+                        }
+                    }
+                } else {
+                    Canvas { context, size in
+                        renderSunburst(in: size, focus: currentFocus, context: &context)
+                    }
+                }
+            }
+            .contentShape(Rectangle())
+            .onAppear {
+                lastCanvasSize = geometry.size
+                currentFocus = GenreSunburstLayout.focus(for: focusedId, root: root)
+                fromFocus = currentFocus
+                toFocus = currentFocus
+            }
+            .onChange(of: geometry.size) { _, newSize in
+                lastCanvasSize = newSize
+            }
+            .onChange(of: focusedId) { _, newFocusId in
+                guard GenreSunburstLayout.focus(for: newFocusId, root: root) != toFocus else { return }
+                let selected = newFocusId.flatMap { root.firstNode(withId: $0) }
+                transition(to: newFocusId, selected: selected, updateBinding: false)
+            }
+            .simultaneousGesture(
+                SpatialTapGesture()
+                    .onEnded { value in
+                        handleTap(value.location, size: geometry.size)
+                    }
+            )
+        }
+    }
+
+    private func renderSunburst(
+        in size: CGSize,
+        focus: GenreSunburstFocus,
+        context: inout GraphicsContext
+    ) {
+        let segments = GenreSunburstLayout.partitionSegments(
+            root: root,
+            canvasSize: size,
+            focus: focus
+        )
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+
+        for segment in segments {
+            drawSegment(segment, center: center, context: &context)
+        }
+
+        drawCenterLabel(context: &context, center: center, size: size, segments: segments)
+        if animationStart == nil {
+            drawLabels(context: &context, center: center, size: size, segments: segments)
+        }
+    }
+
+    private func handleTap(_ point: CGPoint, size: CGSize) {
+        let focus = animationStart == nil ? currentFocus : interpolatedFocus(now: Date())
+        let segments = GenreSunburstLayout.partitionSegments(root: root, canvasSize: size, focus: focus)
+
+        if GenreSunburstHitTesting.isCenterTap(at: point, in: size, segments: segments) {
+            goToParent()
+            return
+        }
+
+        guard let segment = GenreSunburstHitTesting.hitSegment(at: point, in: size, segments: segments) else {
+            return
+        }
+
+        let targetId = nextFocusId(forTapped: segment.node.id)
+        let targetNode = targetId.flatMap { root.firstNode(withId: $0) }
+        transition(to: targetId, selected: targetNode)
+    }
+
+    private func goToParent() {
+        guard let currentFocusId = focusedId else {
+            selectedNode = nil
+            return
+        }
+
+        let path = root.pathToNode(withId: currentFocusId) ?? []
+        if path.count > 2 {
+            transition(to: path[path.count - 2].id, selected: path[path.count - 2])
+        } else {
+            transition(to: nil, selected: nil)
+        }
+    }
+
+    private func transition(
+        to newFocusId: String?,
+        selected newSelectedNode: GenreSunburstNode?,
+        updateBinding: Bool = true
+    ) {
+        fromFocus = animationStart == nil ? currentFocus : interpolatedFocus(now: Date())
+        toFocus = GenreSunburstLayout.focus(for: newFocusId, root: root)
+        if updateBinding {
+            focusedId = newFocusId
+        }
+        selectedNode = newSelectedNode
+        animationStart = Date()
+    }
+
+    private func focusForFrame(at date: Date) -> GenreSunburstFocus {
+        guard let animationStart else {
+            return currentFocus
+        }
+
+        let elapsed = date.timeIntervalSince(animationStart)
+        let rawProgress = min(1, elapsed / animationDuration)
+        let eased = easeInOutCubic(CGFloat(rawProgress))
+        let focus = interpolate(from: fromFocus, to: toFocus, progress: eased)
+
+        if rawProgress >= 1 {
+            DispatchQueue.main.async {
+                currentFocus = toFocus
+                self.animationStart = nil
+            }
+        }
+
+        return focus
+    }
+
+    private func interpolatedFocus(now: Date) -> GenreSunburstFocus {
+        guard let animationStart else { return currentFocus }
+        let elapsed = now.timeIntervalSince(animationStart)
+        let rawProgress = min(1, elapsed / animationDuration)
+        let eased = easeInOutCubic(CGFloat(rawProgress))
+        return interpolate(from: fromFocus, to: toFocus, progress: eased)
+    }
+
+    private func interpolate(from: GenreSunburstFocus, to: GenreSunburstFocus, progress: CGFloat) -> GenreSunburstFocus {
+        GenreSunburstFocus(
+            angleStart: lerp(from.angleStart, to.angleStart, progress),
+            angleEnd: lerp(from.angleEnd, to.angleEnd, progress),
+            depthStart: lerp(from.depthStart, to.depthStart, progress),
+            depthEnd: lerp(from.depthEnd, to.depthEnd, progress)
+        )
+    }
+
+    private func lerp(_ from: Double, _ to: Double, _ progress: CGFloat) -> Double {
+        from + (to - from) * Double(progress)
+    }
+
+    private func easeInOutCubic(_ value: CGFloat) -> CGFloat {
+        value < 0.5
+            ? 4 * value * value * value
+            : 1 - pow(-2 * value + 2, 3) / 2
+    }
+
+    private func labelFontSize(for size: CGSize) -> CGFloat {
+        min(13, max(9.5, min(size.width, size.height) * 0.024))
+    }
+
+    private func calloutFontSize(for size: CGSize) -> CGFloat {
+        min(11.5, max(9, min(size.width, size.height) * 0.0205))
+    }
+
+    private func opacity(for segment: GenreSunburstSegment) -> Double {
+        guard let selectedNode else { return 0.82 }
+        return segment.node.id == selectedNode.id ? 0.96 : 0.66
+    }
+
+    private func strokeColor(for segment: GenreSunburstSegment) -> Color {
+        if segment.node.id == selectedNode?.id {
+            return colorScheme == .dark
+                ? Color(red: 0.84, green: 0.98, blue: 1.0).opacity(0.88)
+                : Color.black.opacity(0.46)
+        }
+
+        return colorScheme == .dark
+            ? Color(red: 0.82, green: 0.95, blue: 1.0).opacity(0.18)
+            : Color.black.opacity(0.16)
+    }
+
+    private func strokeWidth(for segment: GenreSunburstSegment) -> CGFloat {
+        segment.node.id == selectedNode?.id ? 1.4 : 0.65
+    }
+
+    private func drawSegment(_ segment: GenreSunburstSegment, center: CGPoint, context: inout GraphicsContext) {
+        let path = segmentPath(segment, center: center)
+        let selected = segment.node.id == selectedNode?.id
+
+        context.fill(path, with: .color(segment.color.opacity(selected ? 0.92 : opacity(for: segment))))
+        context.stroke(
+            path,
+            with: .color(strokeColor(for: segment)),
+            lineWidth: strokeWidth(for: segment)
+        )
+    }
+
+    private func maxSegmentOuterRadius(in segments: [GenreSunburstSegment], fallbackSize size: CGSize) -> CGFloat {
+        segments.map(\.outerRadius).max() ?? min(size.width, size.height) * 0.44
+    }
+
+    private func segmentPath(_ segment: GenreSunburstSegment, center: CGPoint) -> Path {
+        var path = Path()
+        path.addArc(
+            center: center,
+            radius: segment.outerRadius,
+            startAngle: .radians(segment.startAngle),
+            endAngle: .radians(segment.endAngle),
+            clockwise: false
+        )
+        path.addArc(
+            center: center,
+            radius: segment.innerRadius,
+            startAngle: .radians(segment.endAngle),
+            endAngle: .radians(segment.startAngle),
+            clockwise: true
+        )
+        path.closeSubpath()
+        return path
+    }
+
+    private func drawLabels(
+        context: inout GraphicsContext,
+        center: CGPoint,
+        size: CGSize,
+        segments: [GenreSunburstSegment]
+    ) {
+        for placement in labelPlacements(center: center, size: size, segments: segments) {
+            if let start = placement.calloutStart, let bend = placement.calloutBend, let end = placement.calloutEnd {
+                var line = Path()
+                line.move(to: start)
+                line.addLine(to: bend)
+                line.addLine(to: end)
+                context.stroke(line, with: .color(labelGuideColor), lineWidth: 0.8)
+            }
+
+            let lineHeight = placement.fontSize * 1.08
+            let startY = -lineHeight * CGFloat(placement.lines.count - 1) / 2
+            context.drawLayer { layer in
+                layer.translateBy(x: placement.point.x, y: placement.point.y)
+                layer.rotate(by: .radians(placement.rotation))
+                for (index, line) in placement.lines.enumerated() {
+                    let calloutOffset = placement.calloutEnd == nil ? CGFloat(0) : -placement.fontSize * 0.58
+                    let y = startY + CGFloat(index) * lineHeight + calloutOffset
+                    let shadowText = labelText(line, size: placement.fontSize, isShadow: true)
+                    let text = labelText(line, size: placement.fontSize, isShadow: false)
+                    layer.draw(shadowText, at: CGPoint(x: 0, y: y + 1), anchor: .center)
+                    layer.draw(text, at: CGPoint(x: 0, y: y), anchor: .center)
+                }
+            }
+        }
+    }
+
+    private func drawCenterLabel(
+        context: inout GraphicsContext,
+        center: CGPoint,
+        size: CGSize,
+        segments: [GenreSunburstSegment]
+    ) {
+        let lines = centerLabelLines()
+        let fontSize = centerLabelFontSize(for: size, lineCount: lines.count)
+        let lineHeight = fontSize * 1.12
+        let startY = center.y - lineHeight * CGFloat(lines.count - 1) / 2
+        let centerRadius = centerLabelRadius(for: size, segments: segments)
+        let labelRect = CGRect(
+            x: center.x - centerRadius,
+            y: center.y - centerRadius,
+            width: centerRadius * 2,
+            height: centerRadius * 2
+        )
+        let labelDisc = Path(ellipseIn: labelRect)
+        let spindleRadius = max(6, centerRadius * 0.18)
+        let spindleRect = CGRect(
+            x: center.x - spindleRadius,
+            y: center.y - spindleRadius,
+            width: spindleRadius * 2,
+            height: spindleRadius * 2
+        )
+
+        context.fill(labelDisc, with: .color(Color(red: 0.08, green: 0.11, blue: 0.18).opacity(0.96)))
+
+        context.stroke(labelDisc, with: .color(.white.opacity(0.34)), lineWidth: 0.85)
+        context.stroke(
+            Path(ellipseIn: labelRect.insetBy(dx: centerRadius * 0.18, dy: centerRadius * 0.18)),
+            with: .color(.white.opacity(0.18)),
+            lineWidth: 0.65
+        )
+        context.fill(Path(ellipseIn: spindleRect), with: .color(Color(red: 0.018, green: 0.02, blue: 0.028)))
+        context.stroke(Path(ellipseIn: spindleRect), with: .color(.white.opacity(0.24)), lineWidth: 0.55)
+
+        for (index, line) in lines.enumerated() {
+            let y = startY + CGFloat(index) * lineHeight
+            let title = Text(line)
+                .font(.system(size: fontSize, weight: .bold))
+                .foregroundStyle(Color(red: 0.92, green: 0.98, blue: 1.0))
+            context.draw(title, at: CGPoint(x: center.x, y: y), anchor: .center)
+        }
+    }
+
+    private func centerLabelRadius(for size: CGSize, segments: [GenreSunburstSegment]) -> CGFloat {
+        let projectedInnerRadius = segments.map(\.innerRadius).min()
+        let fallback = min(size.width, size.height) * 0.075
+        return max(34, (projectedInnerRadius ?? fallback) * 0.86)
+    }
+
+    private func labelPlacements(
+        center: CGPoint,
+        size: CGSize,
+        segments: [GenreSunburstSegment]
+    ) -> [LabelPlacement] {
+        let inlineLabelFontSize = labelFontSize(for: size)
+        let calloutLabelFontSize = calloutFontSize(for: size)
+        var calloutPlacements: [LabelPlacement] = []
+        let inlinePlacements = segments.compactMap { segment -> LabelPlacement? in
+            guard labeledRelativeDepth(for: segment.node.id) != nil else { return nil }
+
+            let lines = [segment.node.name]
+            let radius = inlineLabelRadius(for: segment)
+            let inlinePoint = CGPoint(
+                x: center.x + cos(segment.midAngle) * radius,
+                y: center.y + sin(segment.midAngle) * radius
+            )
+
+            if angularLabelFitsInside(segment, fontSize: inlineLabelFontSize) {
+                return LabelPlacement(
+                    segment: segment,
+                    lines: lines,
+                    point: inlinePoint,
+                    fontSize: inlineLabelFontSize,
+                    rotation: angularLabelRotation(for: segment),
+                    calloutStart: nil,
+                    calloutBend: nil,
+                    calloutEnd: nil
+                )
+            }
+
+            if radialLabelFitsInside(segment, fontSize: inlineLabelFontSize) {
+                return LabelPlacement(
+                    segment: segment,
+                    lines: lines,
+                    point: inlinePoint,
+                    fontSize: inlineLabelFontSize,
+                    rotation: radialLabelRotation(for: segment),
+                    calloutStart: nil,
+                    calloutBend: nil,
+                    calloutEnd: nil
+                )
+            }
+
+            let side: CGFloat = cos(segment.midAngle) >= 0 ? 1 : -1
+            let radialMid = (segment.innerRadius + segment.outerRadius) / 2
+            let start = CGPoint(
+                x: center.x + cos(segment.midAngle) * radialMid,
+                y: center.y + sin(segment.midAngle) * radialMid
+            )
+            let bendRadius = min(max(size.width, size.height) * 0.48, segment.outerRadius + 20)
+            let bend = CGPoint(
+                x: center.x + cos(segment.midAngle) * bendRadius,
+                y: center.y + sin(segment.midAngle) * bendRadius
+            )
+            let lineLength = max(44, min(96, size.width * 0.08))
+            let endX = min(max(bend.x + side * lineLength, 48), size.width - 48)
+            let lineY = min(max(bend.y, 24), size.height - 24)
+            let end = CGPoint(x: endX, y: lineY)
+
+            calloutPlacements.append(LabelPlacement(
+                segment: segment,
+                lines: labelLines(for: segment.node.name),
+                point: CGPoint(x: (bend.x + endX) / 2, y: lineY),
+                fontSize: calloutLabelFontSize,
+                rotation: 0,
+                calloutStart: start,
+                calloutBend: CGPoint(x: bend.x, y: lineY),
+                calloutEnd: end
+            ))
+            return nil
+        }
+
+        return inlinePlacements + resolvedCalloutCollisions(calloutPlacements, canvasHeight: size.height)
+    }
+
+    private func angularLabelFitsInside(_ segment: GenreSunburstSegment, fontSize: CGFloat) -> Bool {
+        let midRadius = (segment.innerRadius + segment.outerRadius) / 2
+        let availableAngularSpace = CGFloat(segment.angleSpan) * midRadius
+        let textWidth = estimatedLabelWidth(segment.node.name, fontSize: fontSize) + labelStrokeWidth
+        return textWidth < availableAngularSpace
+    }
+
+    private func radialLabelFitsInside(_ segment: GenreSunburstSegment, fontSize: CGFloat) -> Bool {
+        let midRadius = inlineLabelRadius(for: segment)
+        let availableAngularHeight = CGFloat(segment.angleSpan) * midRadius
+        guard availableAngularHeight >= fontSize + labelStrokeWidth + 4 else { return false }
+
+        let availableRadialSpace = segment.outerRadius - segment.innerRadius
+        let textWidth = estimatedLabelWidth(segment.node.name, fontSize: fontSize) + labelStrokeWidth
+        return textWidth + 8 < availableRadialSpace
+    }
+
+    private func inlineLabelRadius(for segment: GenreSunburstSegment) -> CGFloat {
+        (segment.innerRadius + segment.outerRadius) / 2
+    }
+
+    private func labelLines(for name: String) -> [String] {
+        let words = name.split(separator: " ").map(String.init)
+        guard words.count > 2 else { return [name] }
+
+        let totalCharacters = words.reduce(0) { $0 + $1.count }
+        var firstLine: [String] = []
+        var secondLine = words
+        var firstCount = 0
+
+        while secondLine.count > 1 && firstCount < totalCharacters / 2 {
+            let word = secondLine.removeFirst()
+            firstLine.append(word)
+            firstCount += word.count
+        }
+
+        return [firstLine.joined(separator: " "), secondLine.joined(separator: " ")]
+    }
+
+    private func estimatedLabelWidth(_ text: String, fontSize: CGFloat) -> CGFloat {
+        CGFloat(text.count) * fontSize * 0.56
+    }
+
+    private func resolvedCalloutCollisions(
+        _ placements: [LabelPlacement],
+        canvasHeight: CGFloat
+    ) -> [LabelPlacement] {
+        let left = resolveCalloutSide(
+            placements.filter { $0.point.x < lastCanvasSize.width / 2 },
+            canvasHeight: canvasHeight
+        )
+        let right = resolveCalloutSide(
+            placements.filter { $0.point.x >= lastCanvasSize.width / 2 },
+            canvasHeight: canvasHeight
+        )
+        return left + right
+    }
+
+    private func resolveCalloutSide(_ placements: [LabelPlacement], canvasHeight: CGFloat) -> [LabelPlacement] {
+        var nextY: CGFloat = 22
+        return placements
+            .sorted { $0.point.y < $1.point.y }
+            .map { placement in
+                let minGap = placement.fontSize * CGFloat(placement.lines.count) * 1.12 + 6
+                let y = min(max(placement.point.y, nextY), canvasHeight - 22)
+                nextY = y + minGap
+                return LabelPlacement(
+                    segment: placement.segment,
+                    lines: placement.lines,
+                    point: CGPoint(x: placement.point.x, y: y),
+                    fontSize: placement.fontSize,
+                    rotation: placement.rotation,
+                    calloutStart: placement.calloutStart,
+                    calloutBend: placement.calloutBend.map { CGPoint(x: $0.x, y: y) },
+                    calloutEnd: placement.calloutEnd.map { CGPoint(x: $0.x, y: y) }
+                )
+            }
+    }
+
+    private func centerLabelFontSize(for size: CGSize, lineCount: Int) -> CGFloat {
+        let baseSize = min(18, max(12, min(size.width, size.height) * 0.026))
+        return lineCount > 1 ? baseSize * 0.92 : baseSize
+    }
+
+    private func centerLabelLines() -> [String] {
+        guard let focusedId, let node = root.firstNode(withId: focusedId) else {
+            return ["EDM"]
+        }
+
+        let name = node.name
+        let words = name.split(separator: " ").map(String.init)
+        guard words.count == 2 else { return [name] }
+        return words
+    }
+
+    private func labelText(_ value: String, size: CGFloat, isShadow: Bool) -> Text {
+        Text(value)
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(labelForeground(isShadow: isShadow))
+    }
+
+    private var labelGuideColor: Color {
+        colorScheme == .dark ? .white.opacity(0.52) : .black.opacity(0.42)
+    }
+
+    private func labelForeground(isShadow: Bool) -> Color {
+        if colorScheme == .dark {
+            return isShadow ? .black.opacity(0.72) : Color(red: 0.95, green: 0.98, blue: 1.0)
+        }
+
+        return isShadow ? .white.opacity(0.35) : .black.opacity(0.82)
+    }
+
+    private func angularLabelRotation(for segment: GenreSunburstSegment) -> Double {
+        let middleAngle = segment.midAngle
+        let invertDirection = middleAngle > 0 && middleAngle < Double.pi
+        let tangentAngle = invertDirection ? middleAngle - Double.pi / 2 : middleAngle + Double.pi / 2
+        return normalizedReadableAngle(tangentAngle)
+    }
+
+    private func radialLabelRotation(for segment: GenreSunburstSegment) -> Double {
+        normalizedReadableAngle(segment.midAngle)
+    }
+
+    private func normalizedReadableAngle(_ angle: Double) -> Double {
+        var value = angle.truncatingRemainder(dividingBy: Double.pi * 2)
+        if value > Double.pi { value -= Double.pi * 2 }
+        if value < -Double.pi { value += Double.pi * 2 }
+        if value > Double.pi / 2 { value -= Double.pi }
+        if value < -Double.pi / 2 { value += Double.pi }
+        return value
+    }
+
+    private func labeledRelativeDepth(for nodeId: String) -> Int? {
+        let focusPath = focusPath()
+        guard let nodePath = root.pathToNode(withId: nodeId), nodePath.count > focusPath.count else {
+            return nil
+        }
+
+        for index in focusPath.indices where focusPath[index].id != nodePath[index].id {
+            return nil
+        }
+
+        let relativeDepth = nodePath.count - focusPath.count
+        return relativeDepth == 1 ? relativeDepth : nil
+    }
+
+    private func focusPath() -> [GenreSunburstNode] {
+        guard let focusedId, let path = root.pathToNode(withId: focusedId) else {
+            return [root]
+        }
+
+        return path
+    }
+
+    private func nextFocusId(forTapped nodeId: String) -> String? {
+        let focusPath = focusPath()
+        guard let nodePath = root.pathToNode(withId: nodeId), nodePath.count > focusPath.count else {
+            return focusedId
+        }
+
+        for index in focusPath.indices where focusPath[index].id != nodePath[index].id {
+            return focusedId
+        }
+
+        return nodePath[focusPath.count].id
     }
 }
 
@@ -3754,12 +5478,7 @@ struct LearnFestivalDetailView: View {
         if AppLanguagePreference.current.effectiveLanguage != .en {
             return event.startDate.appLocalizedDateRangeText(to: event.endDate)
         }
-        let range = DateInterval(start: event.startDate, end: event.endDate)
-        let formatter = DateIntervalFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
-        return formatter.string(from: range) ?? event.startDate.appLocalizedYMDText()
+        return event.startDate.appLocalizedDateRangeText(to: event.endDate)
     }
 
     @ViewBuilder

@@ -1,0 +1,86 @@
+[
+  {
+    "id": "house/garage-house/speed-garage",
+    "name": "Speed Garage",
+    "path": "House > Garage House > Speed Garage",
+    "description": "Speed Garage emerged in the late 1990s in the UK as a faster and heavier variant of UK Garage. It is characterized by accelerated tempos, shuffled rhythms, chopped vocals, and heavily filtered sub-basslines. Drawing influence from house, breakbeat, and dub, speed garage emphasized bass pressure and dancefloor energy, becoming a key foundation for later UK bass genres such as grime and dubstep.",
+    "example": "Double 99 - RipGroove"
+  },
+  {
+    "id": "house/garage-house/2-step-garage",
+    "name": "2-step Garage",
+    "path": "House > Garage House > 2-step Garage",
+    "description": "2-step garage is a subgenre of UK garage characterized by its unique, syncopated rhythm where the traditional four-on-the-floor beat is replaced with a more complex, staggered pattern. Emerging in the late 1990s, 2-step garage typically features a prominent bassline, chopped-up vocal samples, and influences from R&B and jungle. The genre is defined by its'skipping' feel, as the beat often omits the kick on certain downbeats, creating a distinctive shuffle that feels both smooth and energetic. This style laid the groundwork for future genres like grime and dubstep, shaping the UK’s dance music scene with its innovative rhythms and soulful vibes.",
+    "example": "Wookie - Scrappy"
+  },
+  {
+    "id": "house/garage-house/bassline",
+    "name": "Bassline",
+    "path": "House > Garage House > Bassline",
+    "description": "Bassline originated in Sheffield in the early 2000s and is characterized by its heavy, rolling basslines and 4/4 beats, which create a dancefloor-friendly sound. Drawing influences from UK Garage, grime, and house, Bassline takes the signature bass-driven elements of these genres and makes them the focal point of its tracks. The genre is known for its fast-paced rhythms, often featuring catchy vocal samples and a driving, bass-heavy groove that makes it distinct from other forms of garage music. Bassline quickly gained popularity in the northern UK club scene and remains influential in the broader UK bass music landscape.",
+    "example": "T2 - Heartbroken"
+  },
+  {
+    "id": "house/garage-house/future-garage",
+    "name": "Future Garage",
+    "path": "House > Garage House > Future Garage",
+    "description": "Future Garage is a subgenre that evolved from the UK Garage scene, blending its distinctive rhythmic structures with influences from dubstep, future bass, and ambient music. Known for its atmospheric, sometimes melancholic tone, Future Garage combines the syncopated beats and vocal manipulations of UK Garage with deeper basslines and ambient textures. The genre often incorporates glitchy percussion, reverberating synths, and atmospheric soundscapes that create a more introspective, ethereal mood compared to traditional garage. Artists like Burial brought Future Garage to the forefront, creating a space for darker, more atmospheric interpretations of the genre while retaining its rhythmic foundations.",
+    "example": "Burial - Archangel"
+  },
+  {
+    "id": "house/garage-house/grime",
+    "name": "Grime",
+    "path": "House > Garage House > Grime",
+    "description": "Grime is a genre of electronic music and rap that originated in London in the early 2000s, emerging from UK garage, jungle, and dancehall influences. Known for its aggressive, fast-paced beats (typically around 140 BPM) and raw, street-inspired lyrics, grime often features dark, minimalist production with heavy basslines, sharp synths, and syncopated rhythms. MCs play a central role in grime, delivering rapid-fire verses that touch on themes of urban life, resilience, and social issues. Artists like Dizzee Rascal, Wiley, and Skepta helped bring grime to prominence, making it a defining genre in UK music culture and a major influence on modern hip-hop and electronic music.",
+    "example": "Dizzee Rascal - I Luv U"
+  },
+  {
+    "id": "house/garage-house/dubstep-garage",
+    "name": "Dubstep Garage",
+    "path": "House > Garage House > Dubstep Garage",
+    "description": "A fusion of 2-step garage and dubstep, with a focus on sub-bass frequencies and half-time rhythms.",
+    "example": "Skream - Midnight Request Line"
+  },
+  {
+    "id": "house/kwaito/afro-house",
+    "name": "Afro House",
+    "path": "House > Kwaito > Afro House",
+    "description": "Afro House is a subgenre of House music rooted in South Africa (and Angola) that blends traditional African percussion, rhythms, and vocals with modern Deep House production. Characterized by a warm, soulful sound, it features polyrhythmic drums (congas, shakers, djembes) and often includes chants or vocals in African languages. Unlike generic 'Tribal House', Afro House focuses heavily on melody, emotion, and cultural identity. It has become a global phenomenon, championed by artists like Black Coffee, bridging the gap between spiritual roots and the international club scene.",
+    "example": "Black Coffee - Drive"
+  },
+  {
+    "id": "house/kwaito/amapiano",
+    "name": "Amapiano",
+    "path": "House > Kwaito > Amapiano",
+    "description": "Amapiano is a subgenre of house music that emerged in South Africa, fusing deep house, jazz, and lounge music. Its most distinctive characteristic is the use of the 'Log Drum', a raw, percussive bassline sound inspired by traditional wooden drums, which drives the rhythm alongside airy pads, syncopated piano melodies, and shaker-heavy beats. It balances a laid-back, soulful atmosphere with intense, throbbing bass sections.",
+    "example": "MFR Souls – Love You Tonight"
+  },
+  {
+    "id": "house/lo-fi-house/outsider-house",
+    "name": "Outsider House",
+    "path": "House > Lo-fi House > Outsider House",
+    "description": "A more experimental and sometimes abrasive variant of lo-fi house that blends house rhythms with elements of noise, techno, and industrial music. It often features eccentric sampling and a detached, avant-garde aesthetic.",
+    "example": "Anthony Naples - Mad Disrespect"
+  },
+  {
+    "id": "house/tech-house/minimal-tech-house",
+    "name": "Minimal Tech House",
+    "path": "House > Tech House > Minimal Tech House",
+    "description": "Tech house with a minimalist approach, focusing on stripped-back grooves and subtle details.",
+    "example": "Maceo Plex - Conjure Balearia"
+  },
+  {
+    "id": "house/tech-house/funky-tech-house",
+    "name": "Funky Tech House",
+    "path": "House > Tech House > Funky Tech House",
+    "description": "Tech house with funky basslines and grooves, often incorporating elements of disco and funk.",
+    "example": "DJ Sneak - Untouchable Funk"
+  },
+  {
+    "id": "house/tech-house/progressive-tech-house",
+    "name": "Progressive Tech House",
+    "path": "House > Tech House > Progressive Tech House",
+    "description": "Tech house with a progressive structure, building up tension and releasing it with melodic elements.",
+    "example": "Roger Sanchez- Another Chance"
+  }
+]

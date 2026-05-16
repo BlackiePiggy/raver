@@ -315,7 +315,7 @@ export const runEventDailyDigestJob = async (): Promise<EventDailyDigestJobRepor
     const preference = preferenceMap.get(userId) ?? {
       enabled: true,
       reminderHours: [20],
-      timezone: 'UTC',
+      timezone: 'Asia/Shanghai',
       channels: ['in_app', 'apns'],
       includeNews: true,
       includeRatings: true,

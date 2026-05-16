@@ -359,6 +359,8 @@ const buildSourceSameAs = (normalized: DjEnrichmentNormalized, existing: string[
     normalized.links.twitter?.url,
     normalized.links.youtube?.url,
     normalized.links.spotify?.url,
+    normalized.links.netease?.url,
+    normalized.links.qqMusic?.url,
     normalized.links.wikipedia?.url,
     ...normalized.provenance.sourcesUsed.map((item) => item.url || ''),
   ].map((item) => cleanText(item)).filter(Boolean);
@@ -454,12 +456,16 @@ const buildDjApplyPatch = (
     normalized.resolution.isElectronicDjConfident &&
     normalized.resolution.shouldApplyGenres
   ) {
-    const genreSource = cleanText(normalized.provenance.genrePrimarySource).toLowerCase();
-    if (genreSource === 'wikipedia' || genreSource === 'official' || genreSource === 'spotify') {
-      const nextGenres = cleanStringArray(normalized.texts.styles.map((item) => item.canonical));
-      if (nextGenres.length > 0) {
-        patch.genres = mergeUniqueCaseInsensitive(dj.genres ?? [], nextGenres);
-      }
+    const styles = Array.isArray(normalized.texts.styles) ? normalized.texts.styles : [];
+    const wikipediaStyles = styles.filter((item) => cleanText(item.source).toLowerCase().includes('wikipedia'));
+    const candidateStyles = wikipediaStyles.length > 0 ? wikipediaStyles : styles;
+    const nextGenres = cleanStringArray(
+      candidateStyles
+        .filter((item) => (toNumberOrNull(item.confidence) ?? 0) >= 0.75)
+        .map((item) => item.canonical)
+    );
+    if (nextGenres.length > 0) {
+      patch.genres = mergeUniqueCaseInsensitive(dj.genres ?? [], nextGenres);
     }
   }
 
@@ -546,7 +552,8 @@ export const createDjEnrichmentJob = async (
       queuedCount: djs.length,
       results: {
         create: djs.map((dj) => {
-          const spotifyUrl = dj.spotifyId ? `https://open.spotify.com/artist/${dj.spotifyId}` : null;
+          const spotifyUrl = cleanNullableText(dj.spotifyUrl)
+            || (dj.spotifyId ? `https://open.spotify.com/artist/${dj.spotifyId}` : null);
           const source = cleanNullableText(dj.sourceWikipedia || dj.sourceWebsite || dj.website || dj.sourceSameAs?.[0]);
           const inputPayload: DjEnrichmentInputItem = {
             djId: dj.id,
@@ -675,57 +682,112 @@ export const stopDjEnrichmentWorker = (): void => {
   workerStarted = false;
 };
 
+export const listDjEnrichmentJobs = async (input: {
+  status?: string;
+  requestedById?: string;
+  limit?: number;
+}) => {
+  const where: Prisma.DJEnrichmentJobWhereInput = {};
+  if (input.status) where.status = input.status;
+  if (input.requestedById) where.requestedById = input.requestedById;
+  return prisma.dJEnrichmentJob.findMany({
+    where,
+    include: {
+      requestedBy: {
+        select: { id: true, username: true, displayName: true, avatarUrl: true },
+      },
+      _count: {
+        select: { results: true },
+      },
+    },
+    orderBy: [{ createdAt: 'desc' }],
+    take: input.limit ?? 20,
+  });
+};
+
+export const getDjEnrichmentJobDetail = async (id: string) => {
+  return prisma.dJEnrichmentJob.findUnique({
+    where: { id },
+    include: {
+      requestedBy: {
+        select: { id: true, username: true, displayName: true, avatarUrl: true },
+      },
+      results: {
+        select: {
+          id: true,
+          djId: true,
+          inputName: true,
+          status: true,
+          applyStatus: true,
+          reviewedAt: true,
+          createdAt: true,
+          updatedAt: true,
+          errorMessage: true,
+        },
+        orderBy: [{ createdAt: 'asc' }],
+      },
+    },
+  });
+};
+
 export const listDjEnrichmentResults = async (input: {
   applyStatus?: string;
   reviewStatus?: string;
   limit?: number;
+  offset?: number;
 }) => {
   const where: Prisma.DJEnrichmentResultWhereInput = {};
   if (input.applyStatus) where.applyStatus = input.applyStatus;
   if (input.reviewStatus) where.status = input.reviewStatus;
-  const items = await prisma.dJEnrichmentResult.findMany({
-    where,
-    include: {
-      job: {
-        select: {
-          id: true,
-          status: true,
-          createdAt: true,
-          requestedById: true,
+  const limit = input.limit ?? 200;
+  const offset = input.offset ?? 0;
+  const [items, total] = await Promise.all([
+    prisma.dJEnrichmentResult.findMany({
+      where,
+      include: {
+        job: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            requestedById: true,
+          },
+        },
+        dj: {
+          select: {
+            id: true,
+            name: true,
+            aliases: true,
+            genres: true,
+            bio: true,
+            bioI18n: true,
+            country: true,
+            countryI18n: true,
+            spotifyUrl: true,
+            website: true,
+            soundcloudUrl: true,
+            instagramUrl: true,
+            facebookUrl: true,
+            twitterUrl: true,
+            youtubeUrl: true,
+            neteaseUrl: true,
+            qqMusicUrl: true,
+            sourceWikipedia: true,
+            sourceWebsite: true,
+            sourceSameAs: true,
+          },
+        },
+        reviewedBy: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
         },
       },
-      dj: {
-        select: {
-          id: true,
-          name: true,
-          aliases: true,
-          genres: true,
-          bio: true,
-          bioI18n: true,
-          country: true,
-          countryI18n: true,
-          spotifyUrl: true,
-          website: true,
-          soundcloudUrl: true,
-          instagramUrl: true,
-          facebookUrl: true,
-          twitterUrl: true,
-          youtubeUrl: true,
-          neteaseUrl: true,
-          qqMusicUrl: true,
-          sourceWikipedia: true,
-          sourceWebsite: true,
-          sourceSameAs: true,
-        },
-      },
-      reviewedBy: {
-        select: { id: true, username: true, displayName: true, avatarUrl: true },
-      },
-    },
-    orderBy: [{ createdAt: 'desc' }],
-    take: input.limit ?? 200,
-  });
-  return items;
+      orderBy: [{ createdAt: 'desc' }],
+      skip: offset,
+      take: limit,
+    }),
+    prisma.dJEnrichmentResult.count({ where }),
+  ]);
+  return { items, total, limit, offset };
 };
 
 export const getDjEnrichmentResultDetail = async (id: string) => {
@@ -788,19 +850,19 @@ export const reviewDjEnrichmentResult = async (input: {
   if (current.applyStatus !== 'pending_review') {
     throw new Error('DJ enrichment result has already been reviewed');
   }
-  if (current.status !== 'completed') {
+  if (input.decision === 'approved' && current.status !== 'completed') {
     throw new Error('DJ enrichment result is not ready for review');
   }
 
   const normalized = current.normalizedResult as unknown as DjEnrichmentNormalized | null;
-  if (!normalized) {
+  if (input.decision === 'approved' && !normalized) {
     throw new Error('DJ enrichment normalized result is missing');
   }
 
   let applySummary: Prisma.InputJsonValue | undefined;
   let appliedAt: Date | null = null;
 
-  if (input.decision === 'approved' && current.dj) {
+  if (input.decision === 'approved' && current.dj && normalized) {
     const patch = buildDjApplyPatch(current.dj, normalized);
     const updated = await prisma.dJ.update({
       where: { id: current.dj.id },
@@ -853,4 +915,50 @@ export const reviewDjEnrichmentResult = async (input: {
   });
   await updateJobCounters(current.jobId);
   return updatedResult;
+};
+
+export const reviewDjEnrichmentResultsBulk = async (input: {
+  resultIds: string[];
+  actorId: string;
+  decision: 'approved' | 'rejected';
+  reason?: string | null;
+  reviewNotes?: Prisma.InputJsonObject | null;
+  batchSize?: number;
+}) => {
+  const uniqueIds = mergeUniqueCaseInsensitive([], input.resultIds).map((item) => cleanText(item)).filter(Boolean);
+  if (uniqueIds.length === 0) {
+    return { requested: 0, succeeded: 0, failed: 0, failures: [] as Array<{ id: string; message: string }> };
+  }
+
+  const batchSize = Math.max(1, Math.min(Number(input.batchSize) || 100, 200));
+  let succeeded = 0;
+  const failures: Array<{ id: string; message: string }> = [];
+
+  for (let index = 0; index < uniqueIds.length; index += batchSize) {
+    const batch = uniqueIds.slice(index, index + batchSize);
+    for (const resultId of batch) {
+      try {
+        await reviewDjEnrichmentResult({
+          resultId,
+          actorId: input.actorId,
+          decision: input.decision,
+          reason: input.reason,
+          reviewNotes: input.reviewNotes,
+        });
+        succeeded += 1;
+      } catch (error) {
+        failures.push({
+          id: resultId,
+          message: error instanceof Error ? error.message : 'Failed to review DJ enrichment result',
+        });
+      }
+    }
+  }
+
+  return {
+    requested: uniqueIds.length,
+    succeeded,
+    failed: failures.length,
+    failures,
+  };
 };

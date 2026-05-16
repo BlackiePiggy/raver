@@ -9,6 +9,7 @@ import {
   EnforcementAppeal,
   accountEnforcementsApi,
 } from '@/lib/api/account-enforcements';
+import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 const ENFORCEMENT_TYPES = [
   { value: 'warning', label: '警告' },
@@ -47,7 +48,7 @@ const REASONS = [
 
 const formatTime = (value?: string | null): string => {
   if (!value) return '-';
-  return new Date(value).toLocaleString('zh-CN', { hour12: false });
+  return formatDateTimeWithSystemTimeZoneLabel(value);
 };
 
 const statusClassName = (status: string): string => {

@@ -1,0 +1,86 @@
+[
+  {
+    "id": "global-club/funk-carioca/funk-ostentao",
+    "name": "Funk Ostentação",
+    "path": "Global Club > Funk Carioca > Funk Ostentação",
+    "description": "Emerging from São Paulo in the late 2000s, this style shifted the focus from social struggle to themes of wealth, luxury, and consumption. It features more polished production, often incorporating pop elements and music videos centered around cars, fashion, and jewelry.",
+    "example": "MC Guimê - País do Futebol"
+  },
+  {
+    "id": "global-club/funk-carioca/funk-150-bpm",
+    "name": "Funk 150 BPM",
+    "path": "Global Club > Funk Carioca > Funk 150 BPM",
+    "description": "A high-speed revolution that started in Rio's Baile da Gaiola in the late 2010s. By accelerating the tempo to 150 BPM, it introduced a frenetic, erratic rhythm that changed the dance dynamic, making it more intense and suitable for modern hyper-active dancefloors.",
+    "example": "Kevin o Chris - Vamos pra Gaiola"
+  },
+  {
+    "id": "global-club/funk-carioca/funk-bruxaria-automotivo",
+    "name": "Funk Bruxaria / Automotivo",
+    "path": "Global Club > Funk Carioca > Funk Bruxaria / Automotivo",
+    "description": "The current avant-garde of the genre, primarily from the São Paulo 'fluxos.' It is a dark, experimental subgenre that embraces extreme distortion, industrial noise, and high-pitched 'screeching' sounds (tuin). It is designed for massive car sound systems, pushing the limits of sound design and deconstructed club music.",
+    "example": "DJ K - Beat Distorce Mente"
+  },
+  {
+    "id": "global-club/latin-club/latincore",
+    "name": "Latincore",
+    "path": "Global Club > Latin Club > Latincore",
+    "description": "Latincore is an experimental and abrasive branch that takes Latin rhythms and subjects them to an overload of industrial distortion and noise textures. Similar to the 'Deconstructed Club' concept, Latincore fragments reggaeton and dembow rhythms, accelerating or slowing them down to extreme levels. It is confrontational music, often associated with the underground subculture of cities like Mexico City and Bogotá, where the organic nature of tradition meets the coldness of digital sound design.",
+    "example": "CRRDR - Riddim"
+  },
+  {
+    "id": "global-club/latin-club/latin-bass",
+    "name": "Latin Bass",
+    "path": "Global Club > Latin Club > Latin Bass",
+    "description": "Latin Bass is the bridge between South American folklore and global sound systems. Unlike commercial reggaeton, Latin Bass focuses on the design of deep sub-bass frequencies, incorporating rhythms of cumbia, bullerengue, or samba processed through contemporary synthesizers. It is a sound centered on the groove, with a polished production but technologically innovative that seeks to maintain the essence of the popular party while exploring new rhythmic frontiers.",
+    "example": "Pablitop - TU CUERPO LLAMA"
+  },
+  {
+    "id": "global-club/reggaeton/reggaeton-old-school-clsico",
+    "name": "Reggaeton Old School / Clásico",
+    "path": "Global Club > Reggaeton > Reggaeton Old School / Clásico",
+    "description": "The foundational era of reggaeton, also known as 'underground,' originating in the 1990s Puerto Rican club scene. Characterized by raw, stripped-back production, heavy dancehall and hip hop crossover, and extensive use of loops from pioneers like DJ Playero and DJ Nelson. It features a rawer, street-centric energy and focuses on the 'maratón' style of continuous mixing.",
+    "example": "Tego Calderón - Pa' Que Retozen"
+  },
+  {
+    "id": "global-club/reggaeton/reggaeton-romntico",
+    "name": "Reggaeton Romántico",
+    "path": "Global Club > Reggaeton > Reggaeton Romántico",
+    "description": "A melodic and radio-friendly subgenre that emerged in the mid-2000s, emphasizing romantic themes and pop-influenced structures over a slower, smoother reggaeton beat. It pioneered the crossover of reggaeton into the global pop market by softening the genre's harder edges and focusing on vocal hooks and sentimental lyrics.",
+    "example": "Flex - Te Quiero"
+  },
+  {
+    "id": "global-club/reggaeton/dembow",
+    "name": "Dembow",
+    "path": "Global Club > Reggaeton > Dembow",
+    "description": "Dominican Dembow is a high-velocity evolution of the original dembow rhythm, originating from the streets of Santo Domingo. Characterized by a significantly faster tempo (115-130 BPM), minimalist and aggressive production, and repetitive, percussive loops, it strips reggaeton down to its most dance-oriented essence. It has developed into a distinct global club phenomenon with a raw, DIY aesthetic.",
+    "example": "El Alfa - La Mamá de la Mamá"
+  },
+  {
+    "id": "global-club/reggaeton/neoperreo",
+    "name": "Neoperreo",
+    "path": "Global Club > Reggaeton > Neoperreo",
+    "description": "Neoperreo is a subversive, digital-first underground movement that deconstructs and reimagines Reggaeton through a futuristic, industrial, and often DIY lens. It reflects an electronic evolution of 'perreo' culture, centering inclusive, feminist, and LGBTQ+ voices. Sonically, it maintains the iconic 'dembow' rhythm but hybridizes it with elements of hyperpop, glitch, trap, and deconstructed club production.",
+    "example": "Tomasa del Real - Barre con el Pelo"
+  },
+  {
+    "id": "house/deep-house",
+    "name": "Deep House",
+    "path": "House > Deep House",
+    "description": "Deep house is a subgenre of house music that emerged in the late 1980s, blending the soulful, disco-infused sound of early Chicago house with the complexities of jazz-funk and a more subdued, atmospheric mood. It is characterized by a slightly slower tempo than classic house, complex chord progressions, lush pads, and a focus on smooth, soulful vocals or instrumental melodies. The sound is often described as sophisticated, hypnotic, and introspective, with deep, rolling basslines that create a warm, immersive experience. Pioneered by artists like Larry Heard (Mr. Fingers), deep house prioritizes mood and musicality, making it suitable for both intimate dancefloors and contemplative listening.",
+    "example": "Larry Heard - Can You Feel It"
+  },
+  {
+    "id": "house/tech-house",
+    "name": "Tech House",
+    "path": "House > Tech House",
+    "description": "Tech-house is a subgenre of electronic dance music that combines elements of techno and house. Known for its deep, driving basslines, steady four-on-the-floor beats, and minimalistic, repetitive melodies, tech-house often features crisp percussion and subtle, atmospheric sounds. It maintains the hypnotic groove of house music while incorporating the more refined, mechanical textures of techno. Emerging in the late 1990s, tech-house has become popular in underground and mainstream clubs alike for its ability to create an immersive, rhythmic experience that keeps dance floors moving for extended sets.",
+    "example": "Armand Van Helden - Give Me Your Loving"
+  },
+  {
+    "id": "house/garage-house",
+    "name": "Garage House",
+    "path": "House > Garage House",
+    "description": "Garage house is a subgenre of house music that originated in the early 1980s in New York City, influenced by the soulful and gospel-inspired sound of disco. Known for its rich, soulful vocals, swing-influenced rhythms, and melodic basslines, garage house emphasizes emotional expression and groove. Its name comes from the legendary New York club Paradise Garage, where DJ Larry Levan helped shape the genre's sound. Garage house has a warm, uplifting vibe, combining deep, resonant bass with smooth, layered instrumentals and vocal harmonies, making it popular both in clubs and among dance music enthusiasts for its soulful, danceable style.",
+    "example": "Masters At Work - I Can't Get No Sleep"
+  }
+]

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiUrl } from '@/lib/config';
+import { formatDateWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 interface Comment {
   id: string;
@@ -183,7 +184,7 @@ export default function CommentSection({ setId, setTitle }: CommentSectionProps)
     if (diffMins < 60) return `${diffMins}分钟前`;
     if (diffHours < 24) return `${diffHours}小时前`;
     if (diffDays < 7) return `${diffDays}天前`;
-    return date.toLocaleDateString('zh-CN');
+    return formatDateWithSystemTimeZoneLabel(date);
   };
 
   const renderComment = (comment: Comment, isReply = false) => {

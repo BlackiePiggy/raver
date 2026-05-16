@@ -1,0 +1,114 @@
+client:
+  name: basic
+  file-system: device-agnostic
+tools: {}
+targets:
+  "PackageStructure": ["<PackageStructure>"]
+  "SunburstCore-arm64-apple-macosx26.0-debug.module": ["<SunburstCore-arm64-apple-macosx26.0-debug.module>"]
+  "SunburstPreview-arm64-apple-macosx26.0-debug.exe": ["<SunburstPreview-arm64-apple-macosx26.0-debug.exe>"]
+  "SunburstPreview-arm64-apple-macosx26.0-debug.module": ["<SunburstPreview-arm64-apple-macosx26.0-debug.module>"]
+  "main": ["<SunburstCore-arm64-apple-macosx26.0-debug.module>","<SunburstPreview-arm64-apple-macosx26.0-debug.exe>","<SunburstPreview-arm64-apple-macosx26.0-debug.module>"]
+  "test": ["<SunburstCore-arm64-apple-macosx26.0-debug.module>","<SunburstPreview-arm64-apple-macosx26.0-debug.exe>","<SunburstPreview-arm64-apple-macosx26.0-debug.module>"]
+default: "main"
+nodes:
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstPreview/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview":
+    is-mutated: true
+commands:
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/GenreNode.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/SunburstCanvasView.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/SunburstHitTesting.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/SunburstLayout.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/SunburstSegment.swift"]
+    outputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/sources"]
+    description: "Write auxiliary file /Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/sources"
+
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview-entitlement.plist":
+    tool: write-auxiliary-file
+    inputs: ["<entitlement-plist>","<com.apple.security.get-task-allow>"]
+    outputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview-entitlement.plist"]
+    description: "Write auxiliary file /Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview-entitlement.plist"
+
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstPreview/SunburstPreviewApp.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/DerivedSources/resource_bundle_accessor.swift"]
+    outputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/sources"]
+    description: "Write auxiliary file /Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/sources"
+
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/GenreNode.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstCanvasView.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstHitTesting.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstLayout.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstSegment.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/SunburstPreviewApp.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/resource_bundle_accessor.swift.o"]
+    outputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.product/Objects.LinkFileList"
+
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SwiftSunburstPrototype_SunburstPreview.bundle/genres_tree.json":
+    tool: copy-tool
+    inputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstPreview/Resources/genres_tree.json"]
+    outputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SwiftSunburstPrototype_SunburstPreview.bundle/genres_tree.json"]
+    description: "Copying /Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstPreview/Resources/genres_tree.json"
+
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt":
+    tool: write-auxiliary-file
+    inputs: ["<swift-get-version>","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"]
+    outputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"]
+    always-out-of-date: "true"
+    description: "Write auxiliary file /Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+
+  "<SunburstCore-arm64-apple-macosx26.0-debug.module>":
+    tool: phony
+    inputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/GenreNode.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstCanvasView.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstHitTesting.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstLayout.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstSegment.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/Modules/SunburstCore.swiftmodule"]
+    outputs: ["<SunburstCore-arm64-apple-macosx26.0-debug.module>"]
+
+  "<SunburstPreview-arm64-apple-macosx26.0-debug.exe>":
+    tool: phony
+    inputs: ["<SunburstPreview-arm64-apple-macosx26.0-debug.exe-CodeSigning>"]
+    outputs: ["<SunburstPreview-arm64-apple-macosx26.0-debug.exe>"]
+
+  "<SunburstPreview-arm64-apple-macosx26.0-debug.module>":
+    tool: phony
+    inputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/SunburstPreviewApp.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/resource_bundle_accessor.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/Modules/SunburstPreview.swiftmodule"]
+    outputs: ["<SunburstPreview-arm64-apple-macosx26.0-debug.module>"]
+
+  "C.SunburstCore-arm64-apple-macosx26.0-debug.module":
+    tool: shell
+    inputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/GenreNode.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/SunburstCanvasView.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/SunburstHitTesting.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/SunburstLayout.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/SunburstSegment.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/sources"]
+    outputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/GenreNode.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstCanvasView.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstHitTesting.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstLayout.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstSegment.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/Modules/SunburstCore.swiftmodule"]
+    description: "Compiling Swift Module 'SunburstCore' (5 sources)"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-module-name","SunburstCore","-emit-dependencies","-emit-module","-emit-module-path","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/Modules/SunburstCore.swiftmodule","-output-file-map","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/output-file-map.json","-parse-as-library","-incremental","-c","@/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/sources","-I","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx14.0","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-j10","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/include/SunburstCore-Swift.h","-color-diagnostics","-swift-version","6","-plugin-path","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g","-Xcc","-isysroot","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-Xcc","-fPIC","-Xcc","-g","-package-name","swiftsunburstprototype"]
+
+  "C.SunburstPreview-arm64-apple-macosx26.0-debug.exe":
+    tool: shell
+    inputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/GenreNode.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstCanvasView.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstHitTesting.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstLayout.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstSegment.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/SunburstPreviewApp.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/resource_bundle_accessor.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.product/Objects.LinkFileList"]
+    outputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview"]
+    description: "Linking ./.build/arm64-apple-macosx/debug/SunburstPreview"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-L","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug","-o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview","-module-name","SunburstPreview","-Xlinker","-no_warn_duplicate_libraries","-emit-executable","-Xlinker","-alias","-Xlinker","_SunburstPreview_main","-Xlinker","_main","-Xlinker","-rpath","-Xlinker","@loader_path","@/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.product/Objects.LinkFileList","-Xlinker","-rpath","-Xlinker","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-6.2/macosx","-target","arm64-apple-macosx14.0","-Xlinker","-add_ast_path","-Xlinker","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/Modules/SunburstCore.swiftmodule","-Xlinker","-add_ast_path","-Xlinker","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/Modules/SunburstPreview.swiftmodule","-plugin-path","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g"]
+
+  "C.SunburstPreview-arm64-apple-macosx26.0-debug.exe-entitlements":
+    tool: shell
+    inputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview-entitlement.plist"]
+    outputs: ["<SunburstPreview-arm64-apple-macosx26.0-debug.exe-CodeSigning>"]
+    description: "Applying debug entitlements to ./.build/arm64-apple-macosx/debug/SunburstPreview"
+    args: ["codesign","--force","--sign","-","--entitlements","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview-entitlement.plist","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview"]
+
+  "C.SunburstPreview-arm64-apple-macosx26.0-debug.module":
+    tool: shell
+    inputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstPreview/SunburstPreviewApp.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/DerivedSources/resource_bundle_accessor.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt","<SunburstPreview-arm64-apple-macosx26.0-debug.module-resources>","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/Modules/SunburstCore.swiftmodule","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/sources"]
+    outputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/SunburstPreviewApp.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/resource_bundle_accessor.swift.o","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/Modules/SunburstPreview.swiftmodule"]
+    description: "Compiling Swift Module 'SunburstPreview' (2 sources)"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-module-name","SunburstPreview","-emit-dependencies","-emit-module","-emit-module-path","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/Modules/SunburstPreview.swiftmodule","-output-file-map","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/output-file-map.json","-incremental","-c","@/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstPreview.build/sources","-I","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx14.0","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-j10","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE","-module-cache-path","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-Xfrontend","-entry-point-function-name","-Xfrontend","SunburstPreview_main","-color-diagnostics","-swift-version","6","-plugin-path","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g","-Xcc","-isysroot","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-Xcc","-fPIC","-Xcc","-g","-package-name","swiftsunburstprototype"]
+
+  "PackageStructure":
+    tool: package-structure-tool
+    inputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstPreview/","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Package.swift","/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Package.resolved"]
+    outputs: ["<PackageStructure>"]
+    description: "Planning build"
+    allow-missing-inputs: true
+
+  "SunburstPreview-arm64-apple-macosx26.0-debug.module-resources":
+    tool: phony
+    inputs: ["/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SwiftSunburstPrototype_SunburstPreview.bundle/genres_tree.json"]
+    outputs: ["<SunburstPreview-arm64-apple-macosx26.0-debug.module-resources>"]
+

@@ -1,0 +1,40 @@
+{
+  "": {
+    "swift-dependencies": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/master.swiftdeps"
+  },
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/GenreNode.swift": {
+    "dependencies": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/GenreNode.d",
+    "object": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/GenreNode.swift.o",
+    "swiftmodule": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/GenreNode~partial.swiftmodule",
+    "swift-dependencies": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/GenreNode.swiftdeps",
+    "diagnostics": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/GenreNode.dia"
+  },
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/SunburstCanvasView.swift": {
+    "dependencies": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstCanvasView.d",
+    "object": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstCanvasView.swift.o",
+    "swiftmodule": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstCanvasView~partial.swiftmodule",
+    "swift-dependencies": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstCanvasView.swiftdeps",
+    "diagnostics": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstCanvasView.dia"
+  },
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/SunburstHitTesting.swift": {
+    "dependencies": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstHitTesting.d",
+    "object": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstHitTesting.swift.o",
+    "swiftmodule": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstHitTesting~partial.swiftmodule",
+    "swift-dependencies": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstHitTesting.swiftdeps",
+    "diagnostics": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstHitTesting.dia"
+  },
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/SunburstLayout.swift": {
+    "dependencies": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstLayout.d",
+    "object": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstLayout.swift.o",
+    "swiftmodule": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstLayout~partial.swiftmodule",
+    "swift-dependencies": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstLayout.swiftdeps",
+    "diagnostics": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstLayout.dia"
+  },
+  "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/Sources/SunburstCore/SunburstSegment.swift": {
+    "dependencies": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstSegment.d",
+    "object": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstSegment.swift.o",
+    "swiftmodule": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstSegment~partial.swiftmodule",
+    "swift-dependencies": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstSegment.swiftdeps",
+    "diagnostics": "/Users/blackie/Documents/New project/pulse.roots/SwiftSunburstPrototype/.build/arm64-apple-macosx/debug/SunburstCore.build/SunburstSegment.dia"
+  }
+}

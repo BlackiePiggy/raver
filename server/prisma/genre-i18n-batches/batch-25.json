@@ -1,0 +1,86 @@
+[
+  {
+    "id": "trance/uplifting-trance",
+    "name": "Uplifting Trance",
+    "path": "Trance > Uplifting Trance",
+    "description": "Uplifting Trance is a style of Trance music characterized by its euphoric, feel-good sounds, often designed to invoke emotional highs and create a sense of bliss on the dancefloor. This subgenre typically features melodic and uplifting progressions, building layers of sound that escalate towards an intense and positive climax. It draws from the more euphoric elements of Trance, often emphasizing melodies that are both harmonious and emotionally charged. Uplifting Trance is a popular subgenre in large-scale festivals and club scenes, appealing to listeners who seek an emotionally charged, ecstatic atmosphere. The genre emphasizes melody, harmony, and emotional release, often leading to moments of collective euphoria during live performances.",
+    "example": "Rank 1 - Airwave"
+  },
+  {
+    "id": "trance/hard-trance",
+    "name": "Hard Trance",
+    "path": "Trance > Hard Trance",
+    "description": "Hard Trance is a subgenre of Trance known for its high energy, harder beats, and faster tempos. While it retains the melodic and atmospheric qualities of traditional Trance, it incorporates more aggressive basslines, distorted synths, and driving rhythms. Hard Trance tracks often feature relentless percussion and intensified buildups that lead to explosive drops. This subgenre is popular in rave and festival environments, appealing to listeners who enjoy a more intense and dynamic experience, blending the euphoric qualities of Trance with the raw energy and power of harder dance music styles.",
+    "example": "Scot Project - F (Future Is Now)"
+  },
+  {
+    "id": "trance/acid-trance",
+    "name": "Acid Trance",
+    "path": "Trance > Acid Trance",
+    "description": "Acid Trance merges the hypnotic basslines and synths of acid techno with the uplifting, melodic aspects of trance music. The result is a style that combines acid’s psychedelic, swirling sound with trance’s euphoric build-ups and atmospheric elements, often leading to long, immersive tracks designed for dancefloor journeys. Acid trance maintains the signature acid synth lines but layers them with sweeping pads, uplifting melodies, and driving rhythms that create a seamless blend of both genres’ iconic features.",
+    "example": "Astrix - Poison"
+  },
+  {
+    "id": "trance/goa-trance/psytrance",
+    "name": "Psytrance",
+    "path": "Trance > Goa Trance > Psytrance",
+    "description": "Psytrance (short for psychedelic trance) is a subgenre of trance music that emerged in the early 1990s, heavily influenced by Goa trance and psychedelic rock. Known for its fast tempos (usually 140-150 BPM), intricate, layered rhythms, and deep basslines, psytrance creates a hypnotic, otherworldly atmosphere.",
+    "example": "Infected Mushroom - Becoming Insane"
+  },
+  {
+    "id": "trance/goa-trance/psytrance/psychedelic-goa",
+    "name": "Psychedelic Goa",
+    "path": "Trance > Goa Trance > Psytrance > Psychedelic Goa",
+    "description": "Psychedelic Goa evolved from the original Goa trance sound in the mid-1990s, becoming more intense, experimental, and psychedelic. It features faster tempos, complex evolving melodies, and heavily distorted synths.",
+    "example": "Astral Projection - Mahadeva"
+  },
+  {
+    "id": "trance/goa-trance/psytrance/full-on-psytrance",
+    "name": "Full-on Psytrance",
+    "path": "Trance > Goa Trance > Psytrance > Full-on Psytrance",
+    "description": "Full-on Psytrance is a high-energy subgenre characterized by uplifting melodies, fast-paced beats, and euphoric energy on the dancefloor.",
+    "example": "1200 Micrograms - Mescaline"
+  },
+  {
+    "id": "trance/goa-trance/psytrance/dark-psytrance",
+    "name": "Dark Psytrance",
+    "path": "Trance > Goa Trance > Psytrance > Dark Psytrance",
+    "description": "Dark Psytrance explores darker, more atmospheric and experimental soundscapes with twisted basslines and eerie textures.",
+    "example": "Blisargon Demogorgon - Knights Of Light"
+  },
+  {
+    "id": "trance/goa-trance/psytrance/suomisaundi",
+    "name": "Suomisaundi",
+    "path": "Trance > Goa Trance > Psytrance > Suomisaundi",
+    "description": "Suomisaundi is an experimental and quirky Finnish style of psytrance known for its playful, raw, and unpredictable sound.",
+    "example": "Shiva Chandra - Return To Atlantis"
+  },
+  {
+    "id": "trance/goa-trance/psytrance/forest-psytrance",
+    "name": "Forest Psytrance",
+    "path": "Trance > Goa Trance > Psytrance > Forest Psytrance",
+    "description": "Forest Psytrance creates deep, organic, and hypnotic atmospheres inspired by natural and psychedelic soundscapes.",
+    "example": "Atriohm - Hybrid Synthesis"
+  },
+  {
+    "id": "trance/goa-trance/psytrance/twilight-psytrance",
+    "name": "Twilight Psytrance",
+    "path": "Trance > Goa Trance > Psytrance > Twilight Psytrance",
+    "description": "Twilight Psytrance bridges Full-on and Dark Psytrance, featuring driving basslines and twisted, metallic sound design.",
+    "example": "Scorb - Epoxymoron"
+  },
+  {
+    "id": "trance/hard-trance/hard-uplifting-trance",
+    "name": "Hard Uplifting Trance",
+    "path": "Trance > Hard Trance > Hard Uplifting Trance",
+    "description": "Hard Uplifting Trance combines the high-energy elements of Hard Trance with the melodic and euphoric aspects of Uplifting Trance. This fusion creates a powerful contrast between uplifting melodies and intense, fast-paced rhythms. The result is a more aggressive version of Uplifting Trance, with the typical euphoric build-ups and soaring synths, but set against a backdrop of driving basslines and harder, punchier percussion. This subgenre aims to evoke both emotional highs and an adrenaline rush, making it ideal for those who enjoy a more intense and uplifting Trance experience.",
+    "example": "Cosmic Gate - Fire Wire"
+  },
+  {
+    "id": "trance/hard-trance/hard-dance-trance",
+    "name": "Hard Dance Trance",
+    "path": "Trance > Hard Trance > Hard Dance Trance",
+    "description": "Hard Dance Trance blends Hard Trance with elements of Hard Dance music, bringing together the pounding rhythms and energetic tempo of Hard Dance with the melodic and atmospheric qualities of Trance. The tracks typically feature fast, hard-hitting beats, layered with melodic progressions that maintain the uplifting elements of traditional Trance while introducing a tougher edge. Hard Dance Trance emphasizes high BPMs and aggressive percussion, often incorporating elements of house and techno to further energize the music, making it ideal for those who enjoy a dancefloor-focused, high-energy sound.",
+    "example": "DJ Isaac - Go Insane"
+  }
+]

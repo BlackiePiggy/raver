@@ -223,6 +223,7 @@ export const getDJs = async (req: Request, res: Response): Promise<void> => {
       limit = '20',
       search,
       country,
+      letter,
       sortBy = 'followerCount',
       live = 'true',
       refresh = 'false',
@@ -240,11 +241,16 @@ export const getDJs = async (req: Request, res: Response): Promise<void> => {
       where.OR = [
         { name: { contains: search as string, mode: 'insensitive' } },
         { bio: { contains: search as string, mode: 'insensitive' } },
+        { aliases: { hasSome: [String(search), String(search).toLowerCase(), String(search).toUpperCase()] } },
       ];
     }
 
     if (country) {
       where.country = country as string;
+    }
+
+    if (typeof letter === 'string' && /^[A-Z]$/i.test(letter)) {
+      where.name = { startsWith: letter.toUpperCase(), mode: 'insensitive' };
     }
 
     const orderBy: any = {};

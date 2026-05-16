@@ -313,11 +313,7 @@ struct AccountEnforcementStatus: Codable, Hashable {
     }
 
     private static func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        date.appLocalizedYMDHMText()
     }
 }
 

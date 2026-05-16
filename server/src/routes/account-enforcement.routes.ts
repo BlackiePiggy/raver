@@ -4,6 +4,7 @@ import { adminAuditService } from '../modules/admin/admin-audit.service';
 import { requireAdmin, requireAdminOrOperator } from '../modules/admin/admin-auth.policy';
 import { notificationCenterService } from '../modules/notifications';
 import { accountEnforcementService } from '../services/account-enforcement.service';
+import { DEFAULT_EVENT_TIME_ZONE } from '../utils/event-timezone';
 import { normalizeTriTextPayload, resolveLocalizedText, type TriTextPayload } from '../utils/i18n';
 
 const router: Router = Router();
@@ -77,9 +78,9 @@ const formatEndsAtI18n = (value: Date | string | null | undefined): TriTextPaylo
     };
   }
   return {
-    zh: date.toLocaleString('zh-CN', { hour12: false }),
-    en: date.toLocaleString('en-US', { hour12: false }),
-    ja: date.toLocaleString('ja-JP', { hour12: false }),
+    zh: `${date.toLocaleString('zh-CN', { hour12: false, timeZone: DEFAULT_EVENT_TIME_ZONE })} 北京时间`,
+    en: `${date.toLocaleString('en-US', { hour12: false, timeZone: DEFAULT_EVENT_TIME_ZONE })} Asia/Shanghai`,
+    ja: `${date.toLocaleString('ja-JP', { hour12: false, timeZone: DEFAULT_EVENT_TIME_ZONE })} 北京時間`,
   };
 };
 

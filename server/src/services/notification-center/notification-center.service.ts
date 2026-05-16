@@ -266,7 +266,7 @@ const DEFAULT_GLOBAL_CONFIG: NotificationAdminGlobalConfig = {
       enabled: false,
       startHour: 23,
       endHour: 8,
-      timezone: 'UTC',
+      timezone: 'Asia/Shanghai',
       muteChannels: ['apns'],
       exemptCategories: ['chat_message', 'route_dj_reminder'],
     },
@@ -277,14 +277,14 @@ const DEFAULT_EVENT_COUNTDOWN_PREFERENCE: EventCountdownPreference = {
   enabled: true,
   daysBeforeStart: 3,
   reminderHours: [10],
-  timezone: 'UTC',
+  timezone: 'Asia/Shanghai',
   channels: ['in_app', 'apns'],
 };
 
 const DEFAULT_EVENT_DAILY_DIGEST_PREFERENCE: EventDailyDigestPreference = {
   enabled: true,
   reminderHours: [20],
-  timezone: 'UTC',
+  timezone: 'Asia/Shanghai',
   channels: ['in_app', 'apns'],
   includeNews: true,
   includeRatings: true,
@@ -293,7 +293,7 @@ const DEFAULT_EVENT_DAILY_DIGEST_PREFERENCE: EventDailyDigestPreference = {
 
 const DEFAULT_ROUTE_DJ_REMINDER_PREFERENCE: RouteDJReminderPreference = {
   enabled: true,
-  timezone: 'UTC',
+  timezone: 'Asia/Shanghai',
   channels: ['in_app', 'apns'],
   defaultReminderMinutesBefore: 30,
   watchedSlots: [],
@@ -302,7 +302,7 @@ const DEFAULT_ROUTE_DJ_REMINDER_PREFERENCE: RouteDJReminderPreference = {
 const DEFAULT_FOLLOWED_DJ_UPDATE_PREFERENCE: FollowedDJUpdatePreference = {
   enabled: true,
   reminderHours: [21],
-  timezone: 'UTC',
+  timezone: 'Asia/Shanghai',
   channels: ['in_app', 'apns'],
   includeInfos: true,
   includeSets: true,
@@ -312,7 +312,7 @@ const DEFAULT_FOLLOWED_DJ_UPDATE_PREFERENCE: FollowedDJUpdatePreference = {
 const DEFAULT_FOLLOWED_BRAND_UPDATE_PREFERENCE: FollowedBrandUpdatePreference = {
   enabled: true,
   reminderHours: [21],
-  timezone: 'UTC',
+  timezone: 'Asia/Shanghai',
   channels: ['in_app', 'apns'],
   watchedBrandIds: [],
   includeInfos: true,

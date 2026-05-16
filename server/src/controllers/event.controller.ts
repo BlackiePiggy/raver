@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth';
 import {
+  DEFAULT_EVENT_TIME_ZONE,
   diffEventDays,
   getEventHour,
   normalizeEventTimeZone,
@@ -73,9 +74,9 @@ const normalizeEventClockTime = (value: unknown, fallback: string): string => {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
 };
 
-const normalizeEventStartDate = (date: Date, timeZone = 'UTC'): Date => startOfEventDay(date, timeZone);
+const normalizeEventStartDate = (date: Date, timeZone = DEFAULT_EVENT_TIME_ZONE): Date => startOfEventDay(date, timeZone);
 
-const normalizeEventEndDate = (date: Date, timeZone = 'UTC'): Date =>
+const normalizeEventEndDate = (date: Date, timeZone = DEFAULT_EVENT_TIME_ZONE): Date =>
   new Date(startOfEventDay(date, timeZone).getTime() + 86_400_000 - 1000);
 
 const resolveEventStatus = (
@@ -123,7 +124,7 @@ const inferFestivalDayIndex = (
   startTime: Date,
   eventStartDate: Date,
   dayRolloverHour: number,
-  timeZone = 'UTC'
+  timeZone = DEFAULT_EVENT_TIME_ZONE
 ): number | null => {
   if (Number.isNaN(startTime.getTime()) || Number.isNaN(eventStartDate.getTime())) {
     return null;
@@ -139,7 +140,7 @@ const applyFestivalDayIndexToDate = (
   timeSource: Date,
   eventStartDate: Date,
   festivalDayIndex: number,
-  timeZone = 'UTC'
+  timeZone = DEFAULT_EVENT_TIME_ZONE
 ): Date => setEventDayAndKeepTime(timeSource, eventStartDate, festivalDayIndex, timeZone);
 
 type ExistingLineupSlotForRebase = {
@@ -154,7 +155,7 @@ const rebaseExistingLineupSlotsToEventStart = (
   previousEventStartDate: Date,
   nextEventStartDate: Date,
   dayRolloverHour: number,
-  timeZone = 'UTC'
+  timeZone = DEFAULT_EVENT_TIME_ZONE
 ): Array<{ id: string; festivalDayIndex: number; startTime: Date; endTime: Date }> =>
   slots.map((slot) => {
     const festivalDayIndex =
@@ -181,7 +182,7 @@ const normalizeLineupSlots = (
   slots: unknown,
   eventStartDate: Date,
   dayRolloverHourRaw: unknown = 6,
-  timeZoneRaw: unknown = 'UTC'
+  timeZoneRaw: unknown = DEFAULT_EVENT_TIME_ZONE
 ): LineupSlotInput[] => {
   if (!Array.isArray(slots)) {
     return [];
@@ -272,6 +273,7 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
       city,
       country,
       eventType,
+      year,
       status = 'upcoming'
     } = req.query;
     const normalizedStatus = String(status || 'upcoming').trim().toLowerCase() === 'canceled'
@@ -315,6 +317,14 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
 
     if (country) {
       where.country = country as string;
+    }
+    const yearNum = Number(year);
+    if (Number.isInteger(yearNum) && yearNum > 1900 && yearNum < 3000) {
+      where.startDate = {
+        ...(where.startDate && typeof where.startDate === 'object' ? where.startDate : {}),
+        gte: new Date(Date.UTC(yearNum, 0, 1)),
+        lt: new Date(Date.UTC(yearNum + 1, 0, 1)),
+      };
     }
     if (eventType) {
       where.eventType = eventType as string;
@@ -362,6 +372,21 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error) {
     console.error('Get events error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getEventYears = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ year: number; count: number }>>`
+      SELECT EXTRACT(YEAR FROM "startDate")::int AS "year", COUNT(*)::int AS "count"
+      FROM "events"
+      GROUP BY 1
+      ORDER BY 1 DESC
+    `;
+    res.json({ years: rows });
+  } catch (error) {
+    console.error('Get event years error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -698,8 +723,8 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const nextTimeZone = timeZone !== undefined
-      ? normalizeEventTimeZone(timeZone, existing.timeZone ?? 'UTC')
-      : normalizeEventTimeZone(existing.timeZone ?? 'UTC');
+      ? normalizeEventTimeZone(timeZone, existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE)
+      : normalizeEventTimeZone(existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE);
     const nextStartTime = startTime !== undefined
       ? normalizeEventClockTime(startTime, EVENT_DEFAULT_START_TIME)
       : normalizeEventClockTime(existing.startTime, EVENT_DEFAULT_START_TIME);

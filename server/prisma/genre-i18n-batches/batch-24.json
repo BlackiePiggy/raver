@@ -1,0 +1,86 @@
+[
+  {
+    "id": "techno/hard-techno/hardcore/industrial-hardcore",
+    "name": "Industrial Hardcore",
+    "path": "Techno > Hard Techno > Hardcore > Industrial Hardcore",
+    "description": "A fusion of hardcore techno and industrial music, characterized by its use of distorted sounds, mechanical rhythms, and a darker atmosphere. Industrial hardcore often incorporates elements of noise music and is known for its raw, gritty sound.",
+    "example": "Miss K8 & Noize Suppressor - Slam"
+  },
+  {
+    "id": "techno/hard-techno/hardcore/frenchcore",
+    "name": "Frenchcore",
+    "path": "Techno > Hard Techno > Hardcore > Frenchcore",
+    "description": "A subgenre of hardcore techno that originated in France, characterized by its fast tempos, bouncy rhythms, and use of melodic elements. Frenchcore often blends hardcore's intensity with a more playful, upbeat vibe.",
+    "example": "Dr. Peacock - Trip to Ireland"
+  },
+  {
+    "id": "techno/hard-techno/hardcore/hardstyle",
+    "name": "Hardstyle",
+    "path": "Techno > Hard Techno > Hardcore > Hardstyle",
+    "description": "Hardstyle is a powerful subgenre of electronic dance music that emerged in the Netherlands in the late 1990s and early 2000s. It is characterized by its aggressive, distorted kick drum sound, intense 'screech' sounds, and a steady tempo typically between 145 and 155 BPM. The genre often blends the melodic sensibilities of trance with the rhythmic intensity of hardcore techno. A signature element is the 'reverse bass'—a distorted, syncopated bassline that follows the kick—alongside euphoric, anthemic melodies in its more melodic variations. Hardstyle is central to large-scale 'hard dance' festivals and is known for its high-energy atmosphere and dedicated global community.",
+    "example": "Showtek - FTS"
+  },
+  {
+    "id": "techno/hard-techno/hardcore/makina",
+    "name": "Makina",
+    "path": "Techno > Hard Techno > Hardcore > Makina",
+    "description": "Makina is a Spanish subgenre of hardcore techno, primarily originating from the rave scenes of Valencia and Barcelona in the 1990s. It is known for its fast BPM, energetic beats, and an uplifting, melodic tone, often incorporating elements from trance and eurodance. Makina is popular in Spain and is characterized by its fast, upbeat rhythms and anthemic melodies.",
+    "example": "Pont Aeri - Flying Free"
+  },
+  {
+    "id": "techno/hard-techno/hardcore/bakalao",
+    "name": "Bakalao",
+    "path": "Techno > Hard Techno > Hardcore > Bakalao",
+    "description": "Bakalao is a Spanish electronic music style that emerged in the 1980s in Valencia, known for its underground, rebellious vibe. It incorporates elements of electronic body music (EBM), industrial, and techno, and is characterized by its dark, hypnotic sound, driving basslines, and raw energy. Bakalao is associated with the underground club scene in Spain, especially the iconic Ruta del Bakalao.",
+    "example": "Megabeat - Es Imposible, No Puede Ser"
+  },
+  {
+    "id": "techno/minimal-techno/microhouse",
+    "name": "Microhouse",
+    "path": "Techno > Minimal Techno > Microhouse",
+    "description": "Microhouse is a minimalist subgenre of techno and house music, characterized by its subtle, intricate rhythms and sparse, refined soundscapes. It focuses on fine details and delicate textures, often incorporating faint clicks, glitches, and micro-samples that give it a distinctive, almost understated groove. With a focus on minimalism, microhouse strips down the composition to essential elements, creating a hypnotic effect through repetition and subtle changes. This style thrives on the nuances within each beat and sound, offering an intimate, refined listening experience that is as immersive as it is understated.",
+    "example": "Akufen - T'es Con, T'es Content (Original Mix)"
+  },
+  {
+    "id": "techno/minimal-techno/deep-techno",
+    "name": "Deep Techno",
+    "path": "Techno > Minimal Techno > Deep Techno",
+    "description": "Deep Techno is a subgenre of techno that emphasizes a more atmospheric and introspective approach to the traditional techno sound. It blends the repetitive, hypnotic rhythms of techno with deep basslines, spacious, ambient soundscapes, and subtle, evolving textures. The genre is typically slower and more minimal, with a focus on creating a smooth, immersive atmosphere rather than high-energy beats. Deep techno often uses reverb, delay, and atmospheric effects to evoke a sense of space and mood, making it suitable for both the dancefloor and reflective listening. It prioritizes mood and depth, offering a more meditative or groovy experience compared to other more intense or aggressive techno subgenres.",
+    "example": "Deepbass - Les Planes"
+  },
+  {
+    "id": "techno/minimal-techno/click-techno",
+    "name": "Click Techno",
+    "path": "Techno > Minimal Techno > Click Techno",
+    "description": "Click Techno is a minimal subgenre of techno that focuses on highly detailed, percussive rhythms, often featuring sharp, 'clicking' sounds, subtle glitches, and mechanical noises as the primary elements of the music. The beats are typically sparse, emphasizing texture and intricacy over melody or harmony. This style of techno relies on precision and experimentation with small sonic details, creating a hypnotic, almost tactile listening experience. It is known for its clean, mechanical aesthetic, where the emphasis is placed on the micro-level manipulation of sound, rather than big, sweeping arrangements. The result is a minimal, but rhythmically engaging sound that can be both challenging and immersive.",
+    "example": "Thomas Brinkmann - Walk With Me"
+  },
+  {
+    "id": "techno/minimal-techno/dub-techno",
+    "name": "Dub Techno",
+    "path": "Techno > Minimal Techno > Dub Techno",
+    "description": "A subgenre of techno music that blends the rhythmic and atmospheric elements of dub music with the minimalistic and repetitive structures of techno. It is characterized by deep, spacious soundscapes, heavy use of reverb and echo, and a focus on bass and rhythm. Dub techno often creates an immersive, hypnotic experience, making it popular in both dance clubs and ambient listening environments.",
+    "example": "Basic Channel - Quadrant Dub"
+  },
+  {
+    "id": "techno/peak-time-driving-techno/hardgroove",
+    "name": "Hardgroove",
+    "path": "Techno > Peak Time / Driving Techno > Hardgroove",
+    "description": "Hardgroove is a high-energy, percussive subgenre of techno that emphasizes continuous, 'rolling' rhythms over melodic progression. Emerging in the late 90s and experiencing a massive resurgence in the 2020s, it is characterized by dense layers of tribal percussion (congas, bongos, shakers) intertwined with funky, driving basslines and repetitive, chopped vocal loops. Unlike the darker, industrial atmosphere of standard techno, Hardgroove focuses on kinetic energy and 'swing,' creating a relentless, fast-paced (typically 135-145 BPM) wall of sound designed for intricate layering and maintaining peak-time dancefloor intensity.",
+    "example": "Ben Sims - Carnival Part 1"
+  },
+  {
+    "id": "trance/goa-trance",
+    "name": "Goa Trance",
+    "path": "Trance > Goa Trance",
+    "description": "Goa trance is a subgenre of trance music that originated in the late 1980s and early 1990s in the Goa region of India, where it was initially played at outdoor parties and raves. Known for its psychedelic and spiritual influences, Goa trance features intricate, layered synth melodies, fast-paced tempos (typically around 130-150 BPM), and deep, rolling basslines. The genre is marked by its use of evolving, hypnotic sequences and trippy, atmospheric sounds, often including samples from Indian and Eastern music, along with psychedelic and cosmic themes. Goa trance played a pivotal role in the development of the global psychedelic trance scene and remains a classic in the trance community for its vibrant, energetic, and otherworldly vibe.",
+    "example": "LSD - Hallucinogen"
+  },
+  {
+    "id": "trance/progressive-trance",
+    "name": "Progressive Trance",
+    "path": "Trance > Progressive Trance",
+    "description": "Progressive Trance is a subgenre of trance music that emphasizes a more melodic and progressive sound, often characterized by gradual buildups, evolving soundscapes, and an emphasis on atmospheric textures. Unlike more upbeat and fast-paced styles of trance, Progressive Trance tends to maintain a steady tempo while focusing on layered melodies, hypnotic rhythms, and emotional depth. It is known for its smooth transitions and immersive quality, creating a captivating journey for listeners on the dancefloor or in more introspective listening settings.",
+    "example": "Sasha - Xpander"
+  }
+]

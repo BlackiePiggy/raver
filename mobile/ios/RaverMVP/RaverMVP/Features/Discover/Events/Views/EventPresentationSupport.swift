@@ -321,68 +321,8 @@ struct EventRow: View {
     }
 
     private var eventDateRangeText: String {
-        let calendar = Calendar.current
-        let start = event.startDate
-        let end = event.endDate
-
-        if AppLanguagePreference.current.effectiveLanguage != .en {
-            return start.appLocalizedDateRangeText(to: end)
-        }
-
-        guard end >= start else {
-            return Self.eventFullDateFormatter.string(from: start)
-        }
-
-        if calendar.isDate(start, inSameDayAs: end) {
-            return Self.eventFullDateFormatter.string(from: start)
-        }
-
-        let startYear = calendar.component(.year, from: start)
-        let endYear = calendar.component(.year, from: end)
-        let startMonth = calendar.component(.month, from: start)
-        let endMonth = calendar.component(.month, from: end)
-
-        if startYear == endYear, startMonth == endMonth {
-            let monthText = Self.eventMonthFormatter.string(from: start)
-            let startDay = calendar.component(.day, from: start)
-            let endDay = calendar.component(.day, from: end)
-            return "\(monthText) \(startDay)-\(endDay), \(startYear)"
-        }
-
-        if startYear == endYear {
-            let startText = Self.eventMonthDayFormatter.string(from: start)
-            let endText = Self.eventMonthDayFormatter.string(from: end)
-            return "\(startText)-\(endText), \(startYear)"
-        }
-
-        let startText = Self.eventFullDateFormatter.string(from: start)
-        let endText = Self.eventFullDateFormatter.string(from: end)
-        return "\(startText)-\(endText)"
+        event.startDate.appLocalizedDateRangeText(to: event.endDate)
     }
-
-    private static let eventMonthFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "MMM"
-        return formatter
-    }()
-
-    private static let eventMonthDayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
-
-    private static let eventFullDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "MMM d, yyyy"
-        return formatter
-    }()
 
     @ViewBuilder
     private func eventStatusBadge(_ status: EventVisualStatus) -> some View {

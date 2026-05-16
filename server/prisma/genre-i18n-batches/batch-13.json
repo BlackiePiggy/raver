@@ -1,0 +1,86 @@
+[
+  {
+    "id": "experimental/idm-intelligent-dance-music/breakcore",
+    "name": "Breakcore",
+    "path": "Experimental > IDM (Intelligent Dance Music) > Breakcore",
+    "description": "Breakcore is an intense, chaotic subgenre that pushes the 'Amen Break' and other drum samples to their limits. Unlike Drum and Bass, which maintains a danceable groove, Breakcore focuses on unpredictable, complex rhythm manipulation, often chopping breaks into intricate, high-speed patterns that change bar-to-bar. It creates a sense of rhythmic disorientation, frequently blending these aggressive drums with contrasting samples from pop, anime, or classical music for ironic or jarring effect.",
+    "example": "Venetian Snares - Hajnal"
+  },
+  {
+    "id": "experimental/idm-intelligent-dance-music/ambient-idm",
+    "name": "Ambient IDM",
+    "path": "Experimental > IDM (Intelligent Dance Music) > Ambient IDM",
+    "description": "Ambient IDM (Intelligent Dance Music) is a subgenre that blends the cerebral aspects of IDM with the serene, atmospheric qualities of ambient music. It emphasizes textural soundscapes, intricate rhythms, and subtle melodies, creating immersive listening experiences that invite contemplation and introspection while remaining suitable for dance settings.",
+    "example": "Boards of Canada - Roygbiv"
+  },
+  {
+    "id": "experimental/idm-intelligent-dance-music/acid-idm",
+    "name": "Acid IDM",
+    "path": "Experimental > IDM (Intelligent Dance Music) > Acid IDM",
+    "description": "Acid IDM combines the sound of acid techno, characterized by the Roland TB-303 synthesizer, with IDM's intricate rhythms and experimental approach.",
+    "example": "Autechre - 444"
+  },
+  {
+    "id": "experimental/idm-intelligent-dance-music/leftfield",
+    "name": "Leftfield",
+    "path": "Experimental > IDM (Intelligent Dance Music) > Leftfield",
+    "description": "Leftfield is a substyle of IDM that incorporates unexpected influences and genre crossovers, such as jazz, rock, or world music. This experimental and unconventional approach allows for unique and surprising compositions, pushing the boundaries of IDM while exploring innovative textures and structures. Leftfield emphasizes the blending of non-traditional rhythms and sounds, offering an unpredictable and original listening experience.",
+    "example": "The Future Sound of London - Papua New Guinea"
+  },
+  {
+    "id": "experimental/idm-intelligent-dance-music/skweee",
+    "name": "Skweee",
+    "path": "Experimental > IDM (Intelligent Dance Music) > Skweee",
+    "description": "Skweee is an electronic music genre that originated in Scandinavia, characterized by its quirky, lo-fi sound that combines synth-driven melodies with funky, minimalist beats. Often described as a blend of hip-hop, funk, and electro, skweee features off-kilter rhythms, squelchy basslines, and playful, high-pitched synths that give it a distinctive, chiptune-like feel. The name “skweee” refers to “squeezing” out quirky sounds from synthesizers, creating a raw, stripped-back style. The music often has a laid-back, experimental vibe, balancing between groove and glitch, and is designed more for casual listening than the dancefloor. Skweee’s unique style emerged in the mid-2000s, with labels like Flogsta Danshall and Harmönia leading the genre, giving it a niche following among fans of experimental and underground electronic music.",
+    "example": "Randy Barracuda - Skweee Like a Pig"
+  },
+  {
+    "id": "experimental/neoclassical/contemporary-classical",
+    "name": "Contemporary Classical",
+    "path": "Experimental > Neoclassical > Contemporary Classical",
+    "description": "Contemporary classical music focuses on modern compositions that often incorporate new musical ideas and techniques, blending traditional classical elements with innovative sounds.",
+    "example": "Max Richter - On the Nature of Daylight"
+  },
+  {
+    "id": "experimental/neoclassical/cinematic",
+    "name": "Cinematic",
+    "path": "Experimental > Neoclassical > Cinematic",
+    "description": "Cinematic neoclassical music is characterized by its grand and emotive compositions, often used in film scores to evoke strong emotions and enhance storytelling.",
+    "example": "Ludovico Einaudi - Nuvole Bianche"
+  },
+  {
+    "id": "experimental/neoclassical/ambient-classical",
+    "name": "Ambient Classical",
+    "path": "Experimental > Neoclassical > Ambient Classical",
+    "description": "Ambient classical blends the serene qualities of ambient music with classical instrumentation, creating atmospheric soundscapes that invite relaxation and contemplation.",
+    "example": "Hammock - Turn Away and Return"
+  },
+  {
+    "id": "experimental/noise-distortion/lowercase",
+    "name": "Lowercase",
+    "path": "Experimental > Noise & Distortion > Lowercase",
+    "description": "Lowercase is an experimental genre that centers on extremely quiet, subtle sounds, often amplifying barely perceptible noises like paper rustling, ambient environmental sounds, or soft mechanical hums. It explores the micro-details within these sounds, inviting listeners to engage deeply and attentively with what is usually overlooked. Lowercase compositions are typically minimalistic, highlighting texture over melody or rhythm, and emphasizing the raw, intimate quality of sound at its most delicate. This genre requires close listening, as it transforms the act of hearing into an immersive, almost meditative experience, uncovering the hidden complexity in the quietest layers of sound.",
+    "example": "Steve Roden - Forms of Paper"
+  },
+  {
+    "id": "experimental/noise-distortion/circuit-bending",
+    "name": "Circuit Bending",
+    "path": "Experimental > Noise & Distortion > Circuit Bending",
+    "description": "Circuit bending is an experimental music genre that involves the creative short-circuiting of electronic devices, such as toys and synthesizers, to create unique sounds and musical compositions. It often leads to unpredictable results, showcasing the potential of everyday electronics as instruments.",
+    "example": "C. Spencer Yeh - Mission: Lazy"
+  },
+  {
+    "id": "experimental/noise-distortion/power-electronics",
+    "name": "Power Electronics",
+    "path": "Experimental > Noise & Distortion > Power Electronics",
+    "description": "Power Electronics is an intense, confrontational subgenre blending harsh industrial sounds with noise and often provocative or transgressive themes. It utilizes heavy distortion, feedback, and aggressive, repetitive structures, sometimes incorporating disturbing or confrontational vocals. Power electronics often confronts societal taboos, with a raw, unfiltered aesthetic aimed at provoking strong emotional responses from listeners.",
+    "example": "Throbbing Gristle - Discipline"
+  },
+  {
+    "id": "experimental/noise-distortion/harsh-noise-wall",
+    "name": "Harsh Noise Wall",
+    "path": "Experimental > Noise & Distortion > Harsh Noise Wall",
+    "description": "Harsh Noise Wall is a subgenre of noise characterized by extremely dense, unchanging walls of sound that are relentless and overwhelming. These 'walls' are formed by thick, static layers of abrasive noise that lack melody or rhythm, creating an immersive, continuous sonic experience. The genre focuses on intensity and endurance, allowing listeners to experience pure, unmodulated noise as a powerful and absorbing auditory sensation.",
+    "example": "Vomir - _33T.Part1"
+  }
+]

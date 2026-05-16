@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { eventAPI, Event } from '@/lib/api/event';
+import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 export default function MyPublishedEventsPage() {
   const router = useRouter();
@@ -87,8 +88,8 @@ export default function MyPublishedEventsPage() {
 
                 <div className="p-4">
                   <h3 className="text-lg font-semibold text-text-primary line-clamp-2">{event.name}</h3>
-                  <p className="text-xs text-text-tertiary mt-2">发布时间：{new Date(event.createdAt).toLocaleString('zh-CN')}</p>
-                  <p className="text-xs text-text-tertiary mt-1">活动时间：{new Date(event.startDate).toLocaleString('zh-CN')}</p>
+                  <p className="text-xs text-text-tertiary mt-2">发布时间：{formatDateTimeWithSystemTimeZoneLabel(event.createdAt)}</p>
+                  <p className="text-xs text-text-tertiary mt-1">活动时间：{formatDateTimeWithSystemTimeZoneLabel(event.startDate)}</p>
 
                   <div className="mt-4 flex items-center gap-2">
                     <Link href={`/events/${event.id}`} className="px-3 py-2 rounded-lg border border-bg-primary text-text-secondary hover:text-text-primary text-sm">

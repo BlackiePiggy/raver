@@ -1006,6 +1006,8 @@ struct EventEditorView: View {
         }
     }
 
+    private static let defaultEventTimeZoneID = "Asia/Shanghai"
+
     private static let eventTypeOptionKeys = EventTypeOption.allCases.map(\.rawValue)
     private static let commonEventTimeZoneIDs = [
         "Asia/Shanghai",
@@ -1025,11 +1027,11 @@ struct EventEditorView: View {
         return calendar
     }
 
-    private static func normalizedStartOfDay(_ date: Date, timeZoneID: String = TimeZone.current.identifier) -> Date {
+    private static func normalizedStartOfDay(_ date: Date, timeZoneID: String = defaultEventTimeZoneID) -> Date {
         eventCalendar(timeZoneID: timeZoneID).startOfDay(for: date)
     }
 
-    private static func normalizedEndOfDay(_ date: Date, timeZoneID: String = TimeZone.current.identifier) -> Date {
+    private static func normalizedEndOfDay(_ date: Date, timeZoneID: String = defaultEventTimeZoneID) -> Date {
         let calendar = eventCalendar(timeZoneID: timeZoneID)
         let start = calendar.startOfDay(for: date)
         return calendar.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? start
@@ -1166,7 +1168,7 @@ struct EventEditorView: View {
     @State private var showLocationPicker = false
     @State private var startDate = EventEditorView.normalizedStartOfDay(Date())
     @State private var endDate = EventEditorView.normalizedStartOfDay(Date())
-    @State private var eventTimeZoneIdentifier = TimeZone.current.identifier
+    @State private var eventTimeZoneIdentifier = EventEditorView.defaultEventTimeZoneID
     @State private var isWeekScheduleEnabled = false
     @State private var coverImageUrl = ""
     @State private var lineupImageUrl = ""
@@ -2728,7 +2730,7 @@ struct EventEditorView: View {
         pickedPlaceName = event.locationPoint?.nameI18n?.text(for: language)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty ?? ""
-        eventTimeZoneIdentifier = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? TimeZone.current.identifier
+        eventTimeZoneIdentifier = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? Self.defaultEventTimeZoneID
         startDate = Self.normalizedStartOfDay(event.startDate, timeZoneID: eventTimeZoneIdentifier)
         endDate = Self.normalizedStartOfDay(event.endDate, timeZoneID: eventTimeZoneIdentifier)
         coverImageUrl = event.coverImageUrl ?? ""

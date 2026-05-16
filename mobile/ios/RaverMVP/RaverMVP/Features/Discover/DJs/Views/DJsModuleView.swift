@@ -2478,6 +2478,10 @@ struct DJDetailView: View {
         appContainer.djLinkedContentRepository
     }
 
+    private var djRankingRepository: DJRankingRepository {
+        appContainer.djRankingRepository
+    }
+
     private var djRelationRepository: DJRelationRepository {
         appContainer.djRelationRepository
     }
@@ -2504,6 +2508,7 @@ struct DJDetailView: View {
     @State private var sets: [WebDJSet] = []
     @State private var djEvents: [WebEvent] = []
     @State private var ratingUnits: [WebRatingUnit] = []
+    @State private var rankingHonors: [DJHonorItem] = []
     @State private var watchedSetCount = 0
     @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
@@ -2555,6 +2560,7 @@ struct DJDetailView: View {
     @State private var historyEventEndDate: Date?
     @State private var isCachingManualSnapshot = false
     @State private var manualCachedAt: Date?
+    @State private var isHonorListExpanded = false
     @State private var djCardSharePresentation: DJCardSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: DJCardSharePresentation?
@@ -2617,6 +2623,26 @@ struct DJDetailView: View {
         let timeText: String
 
         var id: String { event.id }
+    }
+
+    private struct DJHonorItem: Identifiable, Hashable {
+        enum Kind: String {
+            case ranking
+            case award
+            case title
+        }
+
+        let id: String
+        let kind: Kind
+        let title: String
+        let subtitle: String?
+        let detail: String?
+        let year: Int?
+        let rank: Int?
+        let rankingBoard: RankingBoard?
+        let accentColor: Color
+
+        var sortYear: Int { year ?? Int.min }
     }
 
     private static let heroLiveTimeFormatter: DateFormatter = {
@@ -2863,14 +2889,17 @@ struct DJDetailView: View {
             let loadedRatingUnits = (try? await ratingUnitsTask) ?? []
             let loadedWatchedCount = (try? await watchedCountTask) ?? 0
             let loadedRelatedArticles = (try? await relatedArticlesTask) ?? []
+            let loadedRankingHonors = await loadRankingHonors(for: loadedDJ)
 
             dj = loadedDJ
             prepareDJEditDraft(from: loadedDJ)
             sets = loadedSets
             djEvents = loadedEvents
             ratingUnits = loadedRatingUnits
+            rankingHonors = loadedRankingHonors
             watchedSetCount = loadedWatchedCount
             relatedArticles = loadedRelatedArticles
+            isHonorListExpanded = false
             isLoadingRelatedArticles = false
             phase = .success
             bannerMessage = nil
@@ -2992,6 +3021,9 @@ struct DJDetailView: View {
         sets = snapshot.sets
         djEvents = snapshot.djEvents
         ratingUnits = snapshot.ratingUnits
+        Task {
+            rankingHonors = await loadRankingHonors(for: snapshot.dj)
+        }
         relatedArticles = snapshot.relatedNewsArticles
         isLoadingRelatedArticles = false
         manualCachedAt = snapshot.cachedAt
@@ -3606,9 +3638,9 @@ struct DJDetailView: View {
     private func heroLiveEventTimeText(for event: WebEvent) -> String {
         let calendar = Calendar.current
         if calendar.isDate(event.startDate, inSameDayAs: event.endDate) {
-            return "\(Self.heroLiveTimeFormatter.string(from: event.startDate)) - \(Self.heroLiveTimeFormatter.string(from: event.endDate))"
+            return "\(Self.heroLiveTimeFormatter.string(from: event.startDate)) - \(Self.heroLiveTimeFormatter.string(from: event.endDate)) · \(Date.appLocalizedTimeZoneLabel())"
         }
-        return "\(Self.heroLiveDateFormatter.string(from: event.startDate))-\(Self.heroLiveDateFormatter.string(from: event.endDate))"
+        return "\(Self.heroLiveDateFormatter.string(from: event.startDate))-\(Self.heroLiveDateFormatter.string(from: event.endDate)) · \(Date.appLocalizedTimeZoneLabel())"
     }
 
     private func slotIncludesDJ(_ slot: WebEventLineupSlot, dj: WebDJ) -> Bool {
@@ -4199,6 +4231,141 @@ struct DJDetailView: View {
         return result
     }
 
+    private func allHonorItems(for dj: WebDJ) -> [DJHonorItem] {
+        var items = rankingHonors + explicitHonorItems(for: dj) + curatedFallbackHonors(for: dj)
+        var seen = Set<String>()
+        items = items.filter { seen.insert($0.id).inserted }
+        return items.sorted {
+            if $0.kind != $1.kind {
+                return $0.kind == .ranking
+            }
+            if $0.sortYear != $1.sortYear {
+                return $0.sortYear > $1.sortYear
+            }
+            if ($0.rank ?? Int.max) != ($1.rank ?? Int.max) {
+                return ($0.rank ?? Int.max) < ($1.rank ?? Int.max)
+            }
+            return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+        }
+    }
+
+    private func explicitHonorItems(for dj: WebDJ) -> [DJHonorItem] {
+        (dj.honors ?? []).map { honor in
+            let category = honor.category?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let kind: DJHonorItem.Kind = category == "ranking" ? .ranking : (category == "title" ? .title : .award)
+            return DJHonorItem(
+                id: honor.stableID,
+                kind: kind,
+                title: honor.title,
+                subtitle: honor.subtitle ?? honor.source,
+                detail: honor.rank.map { LT("第 \($0) 名", "#\($0)", "\($0)位") },
+                year: honor.year,
+                rank: honor.rank,
+                rankingBoard: nil,
+                accentColor: honorAccentColor(for: kind)
+            )
+        }
+    }
+
+    private func curatedFallbackHonors(for dj: WebDJ) -> [DJHonorItem] {
+        let names = ([dj.name] + (dj.aliases ?? [])).map(normalizedDJLookupKey)
+        guard names.contains("skrillex") else { return [] }
+        return [
+            DJHonorItem(
+                id: "curated-skrillex-grammy-awards",
+                kind: .award,
+                title: "Grammy Awards",
+                subtitle: LT("多次获奖", "Multiple wins", "複数回受賞"),
+                detail: LT("制作与电子音乐代表性奖项", "Major production and electronic music honors", "制作と電子音楽における主要受賞"),
+                year: nil,
+                rank: nil,
+                rankingBoard: nil,
+                accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
+            ),
+            DJHonorItem(
+                id: "curated-skrillex-best-dance-electronic-album",
+                kind: .award,
+                title: "Best Dance/Electronic Album",
+                subtitle: "Grammy Awards",
+                detail: nil,
+                year: nil,
+                rank: nil,
+                rankingBoard: nil,
+                accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
+            ),
+            DJHonorItem(
+                id: "curated-skrillex-best-dance-recording",
+                kind: .award,
+                title: "Best Dance Recording",
+                subtitle: "Grammy Awards",
+                detail: nil,
+                year: nil,
+                rank: nil,
+                rankingBoard: nil,
+                accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
+            )
+        ]
+    }
+
+    private func honorAccentColor(for kind: DJHonorItem.Kind) -> Color {
+        switch kind {
+        case .ranking:
+            return Color(red: 0.27, green: 0.85, blue: 0.82)
+        case .award:
+            return Color(red: 0.98, green: 0.71, blue: 0.22)
+        case .title:
+            return Color(red: 0.58, green: 0.43, blue: 0.95)
+        }
+    }
+
+    private func loadRankingHonors(for dj: WebDJ) async -> [DJHonorItem] {
+        do {
+            let boards = try await djRankingRepository.fetchRankingBoards()
+            var honors: [DJHonorItem] = []
+            for board in boards where board.id.lowercased().contains("djmag") && !board.id.lowercased().contains("festival") {
+                for year in board.years.sorted(by: >) {
+                    let detail = try await djRankingRepository.fetchRankingBoardDetail(boardID: board.id, year: year)
+                    if let entry = detail.entries.first(where: { rankingEntry($0, matches: dj) }) {
+                        honors.append(
+                            DJHonorItem(
+                                id: "ranking-\(board.id)-\(year)-\(entry.rank)",
+                                kind: .ranking,
+                                title: board.title,
+                                subtitle: year == detail.year
+                                    ? LT("\(year) 年入榜", "Ranked in \(year)", "\(year)年ランクイン")
+                                    : LT("入榜", "Ranked", "ランクイン"),
+                                detail: LT("第 \(entry.rank) 名", "#\(entry.rank)", "\(entry.rank)位"),
+                                year: detail.year,
+                                rank: entry.rank,
+                                rankingBoard: board,
+                                accentColor: honorAccentColor(for: .ranking)
+                            )
+                        )
+                    }
+                }
+            }
+            return honors
+        } catch {
+            return []
+        }
+    }
+
+    private func rankingEntry(_ entry: RankingEntry, matches dj: WebDJ) -> Bool {
+        let djKeys = Set(
+            ([dj.id, dj.name] + (dj.aliases ?? []))
+                .map(normalizedDJLookupKey)
+                .filter { !$0.isEmpty }
+        )
+        guard !djKeys.isEmpty else { return false }
+
+        let entryKeys = Set(
+            ([entry.dj?.id, entry.dj?.name, entry.name].compactMap { $0 } + (entry.dj?.aliases ?? []))
+                .map(normalizedDJLookupKey)
+                .filter { !$0.isEmpty }
+        )
+        return !djKeys.isDisjoint(with: entryKeys)
+    }
+
     @ViewBuilder
     private func socialLinks(_ dj: WebDJ) -> some View {
         HStack(spacing: 8) {
@@ -4408,6 +4575,8 @@ struct DJDetailView: View {
 
         socialLinks(dj)
 
+        honorSection(for: dj)
+
         let contributorUsers = (dj.contributors ?? []).filter { !$0.username.isEmpty }
         if !contributorUsers.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
@@ -4443,6 +4612,119 @@ struct DJDetailView: View {
                         .foregroundStyle(RaverTheme.primaryText)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func honorSection(for dj: WebDJ) -> some View {
+        let honors = allHonorItems(for: dj)
+        if !honors.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 8) {
+                    Image(systemName: "trophy.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color(red: 0.98, green: 0.71, blue: 0.22))
+                    Text(LT("荣誉", "Honors", "受賞・実績"))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Spacer(minLength: 0)
+                    if honors.count > 4 {
+                        Button(isHonorListExpanded ? LT("收起", "Collapse", "閉じる") : LT("查看全部", "View all", "すべて見る")) {
+                            withAnimation(.snappy(duration: 0.24, extraBounce: 0.02)) {
+                                isHonorListExpanded.toggle()
+                            }
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                let visibleHonors = Array(honors.prefix(isHonorListExpanded ? honors.count : 4))
+                DJHonorFlowLayout(spacing: 8, rowSpacing: 8) {
+                    ForEach(visibleHonors) { honor in
+                        if let board = honor.rankingBoard {
+                            Button {
+                                appPush(.rankingBoardDetail(board: board, year: honor.year))
+                            } label: {
+                                honorLabel(honor)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            honorLabel(honor)
+                        }
+                    }
+                }
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(RaverTheme.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(RaverTheme.cardBorder, lineWidth: 0.8)
+            )
+        }
+    }
+
+    private func honorLabel(_ honor: DJHonorItem) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(honor.accentColor)
+                .frame(width: 5, height: 5)
+            honorLabelText(honor)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            Capsule()
+                .fill(honor.accentColor.opacity(0.10))
+        )
+    }
+
+    @ViewBuilder
+    private func honorLabelText(_ honor: DJHonorItem) -> some View {
+        switch honor.kind {
+        case .ranking:
+            if let year = honor.year, let rank = honor.rank {
+                HStack(spacing: 3) {
+                    Text("DJ MAG \(year)")
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Text("#\(rank)")
+                        .foregroundStyle(honorRankColor(rank))
+                }
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+            } else {
+                Text(honor.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+            }
+        case .award, .title:
+            Text(nonRankingHonorText(honor))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+                .lineLimit(1)
+        }
+    }
+
+    private func nonRankingHonorText(_ honor: DJHonorItem) -> String {
+        if let subtitle = honor.subtitle?.nilIfBlank, subtitle != honor.title {
+            return "\(honor.title) · \(subtitle)"
+        }
+        return honor.title
+    }
+
+    private func honorRankColor(_ rank: Int) -> Color {
+        switch rank {
+        case 1:
+            return Color(red: 0.98, green: 0.71, blue: 0.22)
+        case 2...10:
+            return Color(red: 0.27, green: 0.85, blue: 0.82)
+        default:
+            return Color(red: 0.58, green: 0.43, blue: 0.95)
         }
     }
 
@@ -5091,4 +5373,87 @@ struct DJDetailView: View {
             )
         }
     }
+}
+
+private struct DJHonorFlowLayout: Layout {
+    var spacing: CGFloat = 8
+    var rowSpacing: CGFloat = 8
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout Void
+    ) -> CGSize {
+        let rows = arrangeRows(
+            proposal: proposal,
+            subviews: subviews
+        )
+        let width = proposal.width ?? rows.map(\.width).max() ?? 0
+        let height = rows.reduce(CGFloat.zero) { partial, row in
+            partial + row.height
+        } + CGFloat(max(0, rows.count - 1)) * rowSpacing
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout Void
+    ) {
+        let rows = arrangeRows(
+            proposal: ProposedViewSize(width: bounds.width, height: proposal.height),
+            subviews: subviews
+        )
+        var y = bounds.minY
+        for row in rows {
+            var x = bounds.minX
+            for item in row.items {
+                let size = item.size
+                subviews[item.index].place(
+                    at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
+                    proposal: ProposedViewSize(size)
+                )
+                x += size.width + spacing
+            }
+            y += row.height + rowSpacing
+        }
+    }
+
+    private func arrangeRows(
+        proposal: ProposedViewSize,
+        subviews: Subviews
+    ) -> [DJHonorFlowLayoutRow] {
+        let maxWidth = proposal.width ?? .infinity
+        var rows: [DJHonorFlowLayoutRow] = []
+        var current = DJHonorFlowLayoutRow()
+
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let nextWidth = current.items.isEmpty ? size.width : current.width + spacing + size.width
+            if !current.items.isEmpty && nextWidth > maxWidth {
+                rows.append(current)
+                current = DJHonorFlowLayoutRow()
+            }
+            current.items.append(DJHonorFlowLayoutItem(index: index, size: size))
+            current.width = current.items.count == 1 ? size.width : current.width + spacing + size.width
+            current.height = max(current.height, size.height)
+        }
+
+        if !current.items.isEmpty {
+            rows.append(current)
+        }
+        return rows
+    }
+}
+
+private struct DJHonorFlowLayoutRow {
+    var items: [DJHonorFlowLayoutItem] = []
+    var width: CGFloat = 0
+    var height: CGFloat = 0
+}
+
+private struct DJHonorFlowLayoutItem {
+    let index: Int
+    let size: CGSize
 }

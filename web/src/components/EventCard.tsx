@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Event } from '@/lib/api/event';
+import { formatDateWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 interface EventCardProps {
   event: Event;
@@ -24,12 +25,7 @@ export const EventCard: React.FC<EventCardProps> = ({ event }) => {
   const visualStatus = resolveEventStatus();
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('zh-CN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    return formatDateWithSystemTimeZoneLabel(dateString);
   };
 
   return (

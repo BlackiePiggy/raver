@@ -292,7 +292,7 @@ export const runFollowedDJUpdateJob = async (): Promise<FollowedDJUpdateJobRepor
     const preference = preferenceMap.get(userId) ?? {
       enabled: true,
       reminderHours: [21],
-      timezone: 'UTC',
+      timezone: 'Asia/Shanghai',
       channels: ['in_app', 'apns'],
       includeInfos: true,
       includeSets: true,
@@ -376,7 +376,7 @@ export const runFollowedDJUpdateJob = async (): Promise<FollowedDJUpdateJobRepor
     const preference = preferenceMap.get(userId) ?? {
       enabled: true,
       reminderHours: [21],
-      timezone: 'UTC',
+      timezone: 'Asia/Shanghai',
       channels: ['in_app', 'apns'],
       includeInfos: true,
       includeSets: true,

@@ -1,0 +1,86 @@
+[
+  {
+    "id": "chill-out",
+    "name": "Chill-out",
+    "path": "Chill-out",
+    "description": "Chill-out is an umbrella term for a variety of mellow, downtempo electronic music styles that emerged from the post-acid house culture of the early 1990s. Originally born in the 'chill-out rooms' of raves—dedicated spaces for clubbers to decompress from high-energy beats—it places emphasis on atmosphere, mood, and relaxation rather than danceability. The sound typically blends the textural depth of Ambient music with slow, groovy rhythms drawn from Dub, Hip-Hop, Jazz, and Balearic beat. Over time, it evolved beyond the club scene to become synonymous with lounge culture and sunset sessions (notably associated with Ibiza's Café del Mar), offering a sophisticated fusion of organic instrumentation and electronic production.",
+    "example": "Zero 7 - Destiny"
+  },
+  {
+    "id": "global-club",
+    "name": "Global Club",
+    "path": "Global Club",
+    "description": "Global Club (also known as Global Bass or World Club) refers to a diverse movement of electronic dance music that emerges from local scenes outside the Western mainstream. It is characterized by the fusion of traditional regional rhythms with modern electronic production, often born in urban peripheries. This genre bridges the gap between local folk identities and global underground club culture, emphasizing syncopation, polyrhythms, and high-energy social expression.",
+    "example": "M.I.A. - Bucky Done Gun"
+  },
+  {
+    "id": "disco",
+    "name": "Disco",
+    "path": "Disco",
+    "description": "Disco is a genre of dance music that emerged in the 1970s, characterized by its upbeat, rhythmic sound and focus on creating a vibrant, energetic atmosphere for the dance floor. Disco features a steady four-on-the-floor beat, syncopated basslines, and lush orchestration, often incorporating strings, horns, and electric pianos. The genre emphasizes groove, with catchy melodies and vocals often layered over driving rhythms. Disco was a cultural phenomenon, influencing fashion, dance styles, and nightlife, and is known for its lavish, glamorous vibe. Iconic disco artists like Donna Summer, Chic, and the Bee Gees helped define the sound, which paved the way for later dance and electronic music genres.",
+    "example": "Donna Summer - Last Dance"
+  },
+  {
+    "id": "funk-and-soul-fusion",
+    "name": "Funk and Soul Fusion",
+    "path": "Funk and Soul Fusion",
+    "description": "Funk and Soul Fusion represents the evolution of traditional African American rhythm and blues into the digital age. It is defined by the intersection of organic musicianship (complex harmonies, syncopated grooves, 'swing') with electronic production tools. Unlike other electronic genres that aim for mechanical precision, this style uses technology—such as analog synthesizers, drum machines, Vocoders, and Talkboxes—to emulate and enhance the warmth and human feel of classic Funk and Soul. It spans from the synth-heavy 'Minneapolis Sound' of the 80s to the sample-based Acid Jazz of the 90s and the modern, glitchy textures of Future Funk, proving that electronic music can retain a deep, soulful emotional core.",
+    "example": "Jamiroquai - Cosmic Girl"
+  },
+  {
+    "id": "industrial-and-post-industrial",
+    "name": "Industrial and Post-Industrial",
+    "path": "Industrial and Post-Industrial",
+    "description": "A genre rooted in harsh, mechanical sounds and dystopian themes, often blending elements of electronic, noise, and experimental music. Post-industrial extends these concepts, exploring darker, atmospheric territories.",
+    "example": "Nine Inch Nails - Closer"
+  },
+  {
+    "id": "pop-and-rock-fusion",
+    "name": "Pop and Rock Fusion",
+    "path": "Pop and Rock Fusion",
+    "description": "Pop and Rock Fusion within the electronic realm represents the bridge between traditional songwriting and digital production. Emerging largely from the post-punk and new wave movements of the late 70s, this category defines music that retains the verse-chorus structure, lyrical focus, and melodic hooks of Pop and Rock but replaces or augments traditional instrumentation with synthesizers, sequencers, and drum machines. It captures the tension between the 'human' element of rock bands (guitars, live vocals) and the 'robotic' precision of electronic gear. This broad category encompasses the synth-driven revolution of the 80s, the alternative dance crossover of the 90s, and the modern indie-electronic scene, offering soundscapes that are experimentally synthetic yet accessible and radio-friendly.",
+    "example": "Depeche Mode - Enjoy the Silence"
+  },
+  {
+    "id": "experimental/idm-intelligent-dance-music",
+    "name": "IDM (Intelligent Dance Music)",
+    "path": "Experimental > IDM (Intelligent Dance Music)",
+    "description": "IDM (Intelligent Dance Music) is a genre of electronic music that emerged in the early 1990s, characterized by its complex, experimental approach to rhythm, structure, and sound design. IDM blends elements of ambient, techno, and drum and bass with intricate, often unconventional beats and intricate melodies, creating a sound that is both cerebral and emotionally expressive. Unlike mainstream dance music, which focuses on maintaining a consistent groove for the dancefloor, IDM is more about pushing the boundaries of sound and rhythm, using glitchy effects, irregular time signatures, and abstract compositions. The genre often features atmospheric soundscapes, intricate layers of synths, and sampled sounds. IDM is intended to be listened to and appreciated as much for its innovative production as for its potential to be danced to. Pioneering artists of IDM include Autechre, Aphex Twin, Squarepusher, and Boards of Canada.",
+    "example": "Aphex Twin - Windowlicker"
+  },
+  {
+    "id": "experimental/sound-manipulation",
+    "name": "Sound Manipulation",
+    "path": "Experimental > Sound Manipulation",
+    "description": "Sound Manipulation is a broad category of experimental electronic music where the primary focus is the sculpting and processing of audio timbre rather than traditional melody, harmony, or rhythm. It treats sound as a malleable physical material to be stretched, broken, granulated, and reassembled using digital tools or studio techniques. This style encompasses a wide range of approaches, from the 'aesthetics of failure' and digital artifacts found in Glitch and Post-Digital, to the microscopic precision of Microsound and the algorithmic complexity of Generative music. By exploring the boundaries between noise, silence, and signal, artists in this genre create complex, textured sonic environments that challenge the listener's perception of what constitutes music.",
+    "example": "Oval - Track 5"
+  },
+  {
+    "id": "experimental/noise-distortion",
+    "name": "Noise & Distortion",
+    "path": "Experimental > Noise & Distortion",
+    "description": "Noise & Distortion is a radical genre of experimental music that abandons traditional musical structures like melody, harmony, and rhythm in favor of dissonance, texture, and sonic intensity. Rooted in the avant-garde movements of the early 20th century, it explores the aesthetic potential of 'unwanted' sounds—such as feedback, static, hiss, machine hum, and extreme distortion. This genre spans a vast dynamic range, from the ear-splitting, monolithic walls of sound found in Harsh Noise and Power Electronics to the barely audible, microscopic textures of Lowercase. It is often confrontational and visceral, treating sound as a physical force designed to challenge the listener's endurance and redefine the boundaries of what constitutes music.",
+    "example": "Merzbow - Ultra Marine Blues"
+  },
+  {
+    "id": "experimental/8-bit-chiptune",
+    "name": "8-bit (Chiptune)",
+    "path": "Experimental > 8-bit (Chiptune)",
+    "description": "8-bit music, or Chiptune, is a genre that synthesizes electronic music using the programmable sound generators (PSG) of vintage computers, consoles, and arcade machines, such as the NES, Game Boy, and Commodore 64. Instead of modern sampling, it relies on the real-time generation of basic waveforms—square, triangle, pulse, and noise. The genre is defined by creativity within strict hardware limitations; for instance, artists often use rapid arpeggios to simulate chords because the chips offer limited polyphony (voices). Rooted in the underground 'demoscene' culture, Chiptune has evolved from early video game soundtracks into a distinct artistic style that celebrates the raw, quantized, and digital aesthetic of early computing technology.",
+    "example": "Nullsleep - Her Lazer Light Eyes"
+  },
+  {
+    "id": "experimental/experimental-club-avant-club",
+    "name": "Experimental Club / Avant-Club",
+    "path": "Experimental > Experimental Club / Avant-Club",
+    "description": "A subgenre that reconfigures and deconstructs traditional club music elements from genres like grime, jersey club, and reggaetón, resulting in innovative and unpredictable soundscapes. It often emphasizes breaking away from conventional club structures, incorporating fragmented beats, unexpected textures, and new sonic territories.",
+    "example": "SOPHIE - Faceshopping"
+  },
+  {
+    "id": "experimental/neoclassical",
+    "name": "Neoclassical",
+    "path": "Experimental > Neoclassical",
+    "description": "Neoclassical music is a genre that merges classical music elements with contemporary techniques and sounds, often utilizing electronic instruments and production methods. It emphasizes emotional depth and intricate compositions, appealing to both classical music enthusiasts and electronic music listeners.",
+    "example": "Ólafur Arnalds - Near Light"
+  }
+]

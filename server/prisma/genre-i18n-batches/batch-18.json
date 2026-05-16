@@ -1,0 +1,86 @@
+[
+  {
+    "id": "house/chicago-house/ghetto-house",
+    "name": "Ghetto House",
+    "path": "House > Chicago House > Ghetto House",
+    "description": "Ghetto House emerged in Chicago in the 1990s as a raw, faster, and more stripped-down version of house music. Known for its minimal production and often explicit, provocative lyrics, Ghetto House emphasizes bass-heavy beats and repetitive, dancefloor-oriented grooves. The genre blends house with elements of hip-hop and electro, incorporating raw, unpolished sounds and creating an underground, energetic vibe. It's marked by a rebellious spirit and a focus on club culture, making it a staple in Chicago's late-night dance scene.",
+    "example": "DJ Deeon - Freak Like Me"
+  },
+  {
+    "id": "house/chicago-house/jackin-house",
+    "name": "Jackin' House",
+    "path": "House > Chicago House > Jackin' House",
+    "description": "Jackin' House is a high-energy subgenre of Chicago House that places a strong emphasis on funky, infectious rhythms often referred to as 'jacking.' This style is characterized by its upbeat tempo, syncopated basslines, and bouncy, swing-like percussion, creating a groove that's irresistibly danceable. The genre is heavily influenced by funk, disco, and classic house, combining soulful elements with a rhythmically complex drive. Jackin' House often features looping vocal samples, with the 'jack' rhythm evoking a sense of physical movement, making it a favorite in energetic club settings.",
+    "example": "Cajmere - Percolator"
+  },
+  {
+    "id": "house/chicago-house/piano-house",
+    "name": "Piano House",
+    "path": "House > Chicago House > Piano House",
+    "description": "Piano house is a subgenre of house music that emerged in the late 1980s and early 1990s, characterized by its uplifting and melodic sound, with the piano as a central instrument. The genre features catchy, bright piano riffs and chord progressions, often accompanied by a steady four-on-the-floor beat, soulful vocals, and energetic basslines. Piano house draws influence from disco and Chicago house, with its emphasis on melody and harmony giving it a more feel-good, euphoric vibe. It became especially popular in the early 90s dance scene and continues to be a beloved subgenre for its uplifting and hands-in-the-air energy.",
+    "example": "Fingers Inc. - Can You Feel It"
+  },
+  {
+    "id": "house/deep-house/soulful-house",
+    "name": "Soulful House",
+    "path": "House > Deep House > Soulful House",
+    "description": "Soulful House blends deep house with soulful vocals and melodies, creating an emotionally charged atmosphere. This substyle emphasizes warmth and human expression, with uplifting or introspective vocal performances layered over deep, rhythmic beats.",
+    "example": "Frankie Knuckles - Your Love"
+  },
+  {
+    "id": "house/deep-house/dub-house",
+    "name": "Dub House",
+    "path": "House > Deep House > Dub House",
+    "description": "Dub House brings in influences from dub music, characterized by spacious echoes, reverb, and prominent basslines. The rhythm is often more laid-back, with a focus on creating an immersive, atmospheric experience through delay effects and deep, rolling bass.",
+    "example": "Luomo - Tessio"
+  },
+  {
+    "id": "house/deep-house/atmospheric-house",
+    "name": "Atmospheric House",
+    "path": "House > Deep House > Atmospheric House",
+    "description": "Atmospheric House uses lush, ambient pads and ethereal soundscapes to create a dreamy, spacious vibe. The tracks often feature subtle rhythms and are designed to evoke a sense of tranquility and serenity, making them perfect for creating a relaxed, atmospheric setting.",
+    "example": "Lane 8 - Fingerprint"
+  },
+  {
+    "id": "house/deep-house/chill-house",
+    "name": "Chill House",
+    "path": "House > Deep House > Chill House",
+    "description": "Chill House is a laid-back, melodic version of deep house that emphasizes soothing, relaxed rhythms and gentle melodies. It’s designed for casual listening or relaxation, with a smooth, mellow groove that’s easy to listen to in a variety of settings.",
+    "example": "Kygo - Firestone (feat. Conrad Sewell)"
+  },
+  {
+    "id": "house/deep-house/tropical-house",
+    "name": "Tropical House",
+    "path": "House > Deep House > Tropical House",
+    "description": "Tropical House is a more upbeat and summery form of deep house, incorporating tropical instruments like marimbas, steel drums, and melodies that evoke a beach or island atmosphere. The sound is bright and catchy, often infused with a light, carefree vibe perfect for warm weather or vacation-like settings.",
+    "example": "Thomas Jack - Rivers (ft. Nico & Vinz)"
+  },
+  {
+    "id": "house/electro-house/complextro",
+    "name": "Complextro",
+    "path": "House > Electro House > Complextro",
+    "description": "Complextro is a subgenre of Electro House characterized by intricate, glitchy basslines where multiple different synth sounds are chopped and arranged in rapid succession within a bar. Popularized by artists like Porter Robinson in the early 2010s, it draws heavily from chiptune and video game aesthetics.",
+    "example": "Porter Robinson - Spitfire"
+  },
+  {
+    "id": "house/electro-house/big-room-house",
+    "name": "Big Room House",
+    "path": "House > Electro House > Big Room House",
+    "description": "The quintessential 'festival' sound that dominated the 2010s. Big Room simplifies Electro House into massive, reverberating kick drums and simple, anthemic melodies designed for large crowds. It focuses on the 'drop'—a minimal, high-energy section following a long buildup.",
+    "example": "Martin Garrix - Animals"
+  },
+  {
+    "id": "house/french-house/filter-house",
+    "name": "Filter House",
+    "path": "House > French House > Filter House",
+    "description": "A technical variant of French House that focuses almost exclusively on frequency manipulation through filters, creating the signature 'muffled' and 'sweeping' sound that builds intense tension and euphoria on the dancefloor.",
+    "example": "Alan Braxe & Fred Falke - Intro"
+  },
+  {
+    "id": "house/garage-house/uk-garage",
+    "name": "UK Garage",
+    "path": "House > Garage House > UK Garage",
+    "description": "UK garage is a genre of electronic dance music that originated in the UK in the early 1990s, evolving from house, garage house, and jungle. Known for its shuffling, syncopated beats, vocal samples, and prominent basslines, UK garage often features chopped-up, pitch-shifted vocal snippets and a 'two-step' rhythm, where the kick drum pattern skips certain beats for a more off-kilter feel. The genre has a distinctively upbeat, bouncy sound and incorporates elements from R&B, hip-hop, and reggae. UK garage gave rise to various subgenres like grime, dubstep, and bassline, influencing the UK dance music scene deeply.",
+    "example": "Artful Dodger - Re-Rewind (feat. Craig David)"
+  }
+]

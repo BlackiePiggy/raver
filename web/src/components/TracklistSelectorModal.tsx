@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { getApiUrl } from '@/lib/config';
+import { formatDateWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 interface Tracklist {
   id: string;
@@ -90,12 +91,7 @@ export default function TracklistSelectorModal({
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('zh-CN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    return formatDateWithSystemTimeZoneLabel(dateString, { month: 'short' });
   };
 
   const copyToClipboard = async (text: string, type: 'id' | 'share', id: string) => {

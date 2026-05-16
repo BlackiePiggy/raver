@@ -1,0 +1,112 @@
+{
+  "items": [
+    {
+      "id": "ambient/dark-ambient",
+      "descriptionI18n": {
+        "en": "Dark Ambient is a subgenre of Ambient music that explores darker, more atmospheric soundscapes. It is characterized by its unsettling, eerie tones, often evoking a sense of dread, tension, or unease. Dark Ambient music typically features slow tempos and minimalist structures, creating an atmosphere that can be both haunting and introspective. It is often used to enhance feelings of isolation or contemplation, making it popular in horror-themed media or as a companion to abstract, experimental art.",
+        "zh": "Dark Ambient 是 Ambient 音乐的一个子流派，探索更阴暗、更具氛围感的声音景观。它以令人不安、诡异的音色为特征，常常唤起恐惧、紧张或不适感。Dark Ambient 通常采用缓慢的速度和极简结构，营造出既幽魂般萦绕又内省的氛围。它经常被用来强化孤立感或沉思感，因此常见于恐怖题材媒体，也适合作为抽象、实验艺术的声音伴侣。",
+        "ja": "Dark Ambient は Ambient 音楽のサブジャンルで、より暗く、より大気的なサウンドスケープを探求する。落ち着かない不気味な音色を特徴とし、恐怖、緊張、不安の感覚を呼び起こすことが多い。Dark Ambient は一般に遅いテンポとミニマルな構造を用い、幽玄で内省的な雰囲気を作り出す。孤立感や瞑想的な感覚を強めるために使われることも多く、ホラー系メディアや抽象的・実験的アートの伴奏としても人気がある。"
+      },
+      "exampleI18n": { "en": "Lustmord - Heresy", "zh": "Lustmord - Heresy", "ja": "Lustmord - Heresy" }
+    },
+    {
+      "id": "ambient/psybient",
+      "descriptionI18n": {
+        "en": "Psybient blends ambient music with elements of psychedelic trance, creating a unique, ethereal sound characterized by hypnotic rhythms, evolving textures, and psychedelic melodies. It often invokes deep mental and emotional journeys, with tracks that promote relaxation while maintaining a sense of cosmic exploration. Emerging in the late 1990s, it fuses the ambient desire for atmosphere with the pulsating energy of psychedelia.",
+        "zh": "Psybient 将 ambient 音乐与 psychedelic trance 元素融合，形成一种独特而空灵的声音：催眠性的节奏、不断演化的纹理和迷幻旋律是它的核心特征。它常常引发深层的心理与情绪旅程，作品在促进放松的同时，也保留着宇宙探索般的感受。它在 1990 年代末兴起，把 ambient 对氛围的追求与 psychedelia 的脉冲能量结合在一起。",
+        "ja": "Psybient は ambient 音楽に psychedelic trance の要素を混ぜ合わせ、催眠的なリズム、変化し続けるテクスチャ、サイケデリックなメロディを特徴とする、独特で空気感のあるサウンドを生み出す。深い精神的・感情的な旅を喚起することが多く、楽曲はリラックスを促しながらも宇宙的な探索感を保っている。1990年代後半に登場し、ambient が求める雰囲気性と psychedelia の脈打つエネルギーを融合させた。"
+      },
+      "exampleI18n": { "en": "Shpongle - Divine Moments of Truth", "zh": "Shpongle - Divine Moments of Truth", "ja": "Shpongle - Divine Moments of Truth" }
+    },
+    {
+      "id": "ambient/new-age-ambient",
+      "descriptionI18n": {
+        "en": "New Age Ambient is focused on creating serene, uplifting sound environments that promote relaxation, healing, and introspection. This style often incorporates elements of world music, nature sounds, and soothing melodies, inviting listeners into peaceful, contemplative spaces. Popularized in the 1980s, it has become synonymous with ambient music used for relaxation, spiritual practices, and personal well-being.",
+        "zh": "New Age Ambient 专注于创造宁静、振奋而柔和的声音环境，以促进放松、疗愈和内省。这种风格常融入世界音乐、自然声响和舒缓旋律，引导听众进入平和、沉思的空间。它在 1980 年代得到普及，逐渐成为用于放松、灵性练习和个人身心健康场景的 ambient 音乐代名词。",
+        "ja": "New Age Ambient は、リラックス、癒やし、内省を促す、穏やかで高揚感のある音環境を作ることに焦点を置く。このスタイルはワールドミュージック、自然音、心地よいメロディを取り入れることが多く、聴き手を静かで瞑想的な空間へ誘う。1980年代に広まり、リラクゼーション、スピリチュアルな実践、個人のウェルビーイングに用いられる ambient 音楽の代名詞となった。"
+      },
+      "exampleI18n": { "en": "Enya - Orinoco Flow", "zh": "Enya - Orinoco Flow", "ja": "Enya - Orinoco Flow" }
+    },
+    {
+      "id": "ambient/drone-ambient",
+      "descriptionI18n": {
+        "en": "Drone ambient is a subgenre of ambient music characterized by long, sustained sounds or 'drones' that evolve slowly over time, creating a deep, immersive atmosphere. The music often features minimalistic structures, with little or no rhythmic elements, focusing instead on texture, tone, and the subtle movement of sound. Drone ambient can include natural field recordings, electronic sounds, or manipulated acoustic instruments, creating a vast, spacey environment. The genre emphasizes mood and emotion over melody or harmony, often inducing a meditative, trance-like state. It is typically used to evoke a sense of stillness, introspection, or vast, open spaces. Drone ambient can range from serene and soothing to intense and enveloping, making it ideal for background listening, relaxation, or deep focus.",
+        "zh": "Drone ambient 是 ambient 音乐的一个子流派，以长时间持续的声音或“drone”为特征，这些声音会随时间缓慢演化，创造深沉而沉浸的氛围。它通常采用极简结构，节奏元素很少甚至没有，转而聚焦于纹理、音色和声音的细微运动。Drone ambient 可以包含自然现场录音、电子声响或经过处理的原声乐器，形成辽阔、具有空间感的环境。这个流派更强调情绪和氛围，而非旋律或和声，常常引发冥想般、恍惚般的状态。它通常用于唤起静止、内省或开阔空间的感受。Drone ambient 可以从宁静舒缓延伸到强烈包围，适合背景聆听、放松或深度专注。",
+        "ja": "Drone ambient は ambient 音楽のサブジャンルで、長く持続する音、いわゆる「drone」が時間をかけてゆっくり変化し、深く没入的な雰囲気を作ることを特徴とする。音楽はしばしばミニマルな構造を持ち、リズム要素は少ないか、ほとんど存在せず、代わりにテクスチャ、音色、音の微細な動きに焦点を当てる。Drone ambient には自然のフィールド録音、電子音、加工されたアコースティック楽器が含まれることがあり、広大で宇宙的な環境を作り出す。このジャンルはメロディやハーモニーよりもムードと感情を重視し、瞑想的でトランスに近い状態を誘うことが多い。静けさ、内省、広大な開放空間の感覚を呼び起こすために用いられる。穏やかで soothing なものから強烈で包み込むものまで幅広く、背景聴取、リラクゼーション、深い集中に適している。"
+      },
+      "exampleI18n": { "en": "Stars of the Lid - Requiem for Dyning Mothers Pt. 2", "zh": "Stars of the Lid - Requiem for Dyning Mothers Pt. 2", "ja": "Stars of the Lid - Requiem for Dyning Mothers Pt. 2" }
+    },
+    {
+      "id": "ambient/space-ambient",
+      "descriptionI18n": {
+        "en": "Ambient music that evokes the vastness and mystery of outer space, often using synthesizers to create cosmic soundscapes.",
+        "zh": "Space Ambient 是一种唤起外太空浩瀚与神秘感的 ambient 音乐，常使用合成器创造宇宙般的声音景观。",
+        "ja": "Space Ambient は、宇宙空間の広大さと神秘を想起させる ambient 音楽で、シンセサイザーを用いてコズミックなサウンドスケープを作ることが多い。"
+      },
+      "exampleI18n": { "en": "Steve Roach - Structures from Silence", "zh": "Steve Roach - Structures from Silence", "ja": "Steve Roach - Structures from Silence" }
+    },
+    {
+      "id": "ambient/berlin-school-ambient",
+      "descriptionI18n": {
+        "en": "Berlin School Ambient is a style of ambient and electronic music rooted in the Berlin School movement of the 1970s. It is characterized by long-form compositions built around slowly evolving sequencer patterns, analog synthesizer arpeggios, and expansive, cosmic soundscapes. Rather than focusing on rhythm in a dancefloor sense, the genre emphasizes hypnotic repetition, gradual transformation, and a sense of temporal suspension. Berlin School Ambient often evokes themes of space, inner exploration, and futurism, blending minimalist structures with rich analog textures. Its sound is immersive and meditative, designed for deep listening rather than immediate impact.",
+        "zh": "Berlin School Ambient 是一种植根于 1970 年代 Berlin School 运动的 ambient 与电子音乐风格。它以长篇幅作品为特征，围绕缓慢演化的音序器型态、模拟合成器琶音和开阔的宇宙声音景观展开。它并不强调舞池意义上的节奏，而是重视催眠式重复、渐进变化和时间悬停般的感受。Berlin School Ambient 常唤起太空、内在探索和未来主义主题，将极简结构与丰富的模拟纹理结合起来。它的声音沉浸而冥想，面向深度聆听，而不是追求即时冲击。",
+        "ja": "Berlin School Ambient は、1970年代の Berlin School ムーブメントに根ざした ambient および電子音楽のスタイルである。ゆっくり変化するシーケンサー・パターン、アナログシンセサイザーのアルペジオ、広がりのある宇宙的サウンドスケープを中心に構成される長尺の作品が特徴となる。ダンスフロア的な意味でのリズムに焦点を当てるのではなく、催眠的な反復、緩やかな変容、時間が宙づりになるような感覚を重視する。Berlin School Ambient は宇宙、内的探求、未来主義のテーマを喚起することが多く、ミニマルな構造と豊かなアナログ・テクスチャを融合させる。そのサウンドは没入的で瞑想的であり、即時的なインパクトよりも深いリスニングのために作られている。"
+      },
+      "exampleI18n": { "en": "Tangerine Dream - Phaedra", "zh": "Tangerine Dream - Phaedra", "ja": "Tangerine Dream - Phaedra" }
+    },
+    {
+      "id": "ambient/dark-ambient/industrial-ambient",
+      "descriptionI18n": {
+        "en": "Industrial Ambient is a fusion of Dark Ambient and Industrial music, combining the eerie, atmospheric elements of Dark Ambient with the harsh, mechanical sounds of Industrial music. It often features metallic clanks, rumbling basslines, and industrial drones that evoke feelings of desolation or dystopia. Industrial Ambient music can create a sense of oppressive environment or tension, with a focus on creating immersive, environmental soundscapes. The genre may blend organic sounds with mechanical textures, generating an auditory experience that feels both industrial and atmospheric.",
+        "zh": "Industrial Ambient 是 Dark Ambient 与 Industrial 音乐的融合，把 Dark Ambient 的诡异氛围元素与 Industrial 音乐粗粝、机械化的声音结合在一起。它常包含金属撞击声、隆隆作响的低频线条和工业感 drone，唤起荒凉或反乌托邦的感受。Industrial Ambient 可以制造压迫性的环境感或紧张感，重点在于构建沉浸式、环境化的声音景观。这个流派也可能把有机声音与机械纹理混合，形成既工业化又具有氛围感的听觉体验。",
+        "ja": "Industrial Ambient は Dark Ambient と Industrial 音楽の融合であり、Dark Ambient の不気味で大気的な要素と、Industrial 音楽の荒々しく機械的な音を組み合わせる。金属的な衝突音、うなりを上げるベースライン、工業的な drone を特徴とし、荒廃感やディストピア的な感覚を呼び起こすことが多い。Industrial Ambient は圧迫的な環境や緊張感を作り出すことができ、没入的で環境的なサウンドスケープの構築に焦点を置く。このジャンルは有機的な音と機械的なテクスチャを混ぜ合わせ、工業的でありながら大気的でもある聴覚体験を生み出す。"
+      },
+      "exampleI18n": { "en": "Raison d'être - Mouldering The Forlorn I", "zh": "Raison d'être - Mouldering The Forlorn I", "ja": "Raison d'être - Mouldering The Forlorn I" }
+    },
+    {
+      "id": "ambient/dark-ambient/lovecraftian-ambient",
+      "descriptionI18n": {
+        "en": "Lovecraftian Ambient is a niche subgenre of Dark Ambient inspired by the cosmic horror of H.P. Lovecraft's works. This style often incorporates otherworldly, unsettling soundscapes designed to evoke feelings of the unknown and the incomprehensible. The sound design tends to emphasize eerie drones, distant voices, and eldritch sounds that convey a sense of cosmic dread. Lovecraftian Ambient music draws on the themes of fear, isolation, and the insignificance of humanity in the vastness of the universe, making it ideal for those seeking a deeper, more existential listening experience.",
+        "zh": "Lovecraftian Ambient 是 Dark Ambient 中一个小众子流派，灵感来自 H.P. Lovecraft 作品中的宇宙恐怖。它常使用异世界般、令人不安的声音景观，旨在唤起未知与不可理解之物带来的感受。其声音设计往往强调诡异的 drone、遥远的人声和怪诞神秘的声响，以传达宇宙级恐惧。Lovecraftian Ambient 借用恐惧、孤立以及人类在宇宙浩瀚中微不足道等主题，非常适合追求更深层、更存在主义聆听体验的人。",
+        "ja": "Lovecraftian Ambient は、H.P. Lovecraft の作品における宇宙的恐怖に触発された、Dark Ambient のニッチなサブジャンルである。このスタイルは、未知のものや理解不能なものへの感覚を呼び起こすために、異世界的で不穏なサウンドスケープを取り入れることが多い。サウンドデザインでは、不気味な drone、遠くの声、名状しがたい怪異的な音が強調され、宇宙的な恐怖感を伝える。Lovecraftian Ambient は恐怖、孤立、そして宇宙の広大さの中での人類の取るに足らなさというテーマを扱い、より深く実存的なリスニング体験を求める人に適している。"
+      },
+      "exampleI18n": { "en": "Cryo Chamber Collaboration - Nyarlathotep", "zh": "Cryo Chamber Collaboration - Nyarlathotep", "ja": "Cryo Chamber Collaboration - Nyarlathotep" }
+    },
+    {
+      "id": "ambient/dark-ambient/dungeon-synth",
+      "descriptionI18n": {
+        "en": "Dungeon Synth is a genre of electronic music that originated in the early 1990s, closely related to dark ambient and black metal. The style is characterized by a sound that is dark, lo-fi, and melancholic, often drawing on influences from folk, classical, medieval music, and fantasy video game soundtracks. It aims to evoke atmospheres of fantasy worlds, ancient castles, and mythical landscapes through synthesized melodies and atmospheric textures.",
+        "zh": "Dungeon Synth 是一种起源于 1990 年代初的电子音乐流派，与 dark ambient 和 black metal 关系密切。它的声音通常阴暗、低保真且忧郁，经常受到民谣、古典、中世纪音乐以及幻想题材游戏配乐的影响。它通过合成器旋律和氛围纹理，旨在唤起幻想世界、古老城堡和神话景观的气氛。",
+        "ja": "Dungeon Synth は1990年代初頭に生まれた電子音楽のジャンルで、dark ambient や black metal と密接に関係している。暗く、ローファイで、メランコリックなサウンドを特徴とし、フォーク、クラシック、中世音楽、ファンタジー系ビデオゲームのサウンドトラックから影響を受けることが多い。シンセサイザーのメロディと大気的なテクスチャによって、幻想世界、古代の城、神話的な風景の雰囲気を喚起することを目指す。"
+      },
+      "exampleI18n": { "en": "Burzum - Tomhet", "zh": "Burzum - Tomhet", "ja": "Burzum - Tomhet" }
+    },
+    {
+      "id": "ambient/dark-ambient/isolationism",
+      "descriptionI18n": {
+        "en": "Isolationism, a subgenre of dark ambient that emerged in the early 1990s, is defined by its desolate, eerie, and often unsettling soundscapes. It emphasizes silence, space, and a profound sense of solitude, using minimalist textures and subtle drones to create a feeling of being cut off from the outside world. The genre explores themes of emptiness and vast, cold environments.",
+        "zh": "Isolationism 是 dark ambient 的一个子流派，出现于 1990 年代初，以荒凉、诡异且常令人不安的声音景观为定义。它强调沉默、空间和深刻的孤独感，通过极简纹理和微妙的 drone 营造与外界隔绝的感觉。这个流派探索空无以及巨大、寒冷环境等主题。",
+        "ja": "Isolationism は1990年代初頭に登場した dark ambient のサブジャンルで、荒涼とした、不気味で、しばしば不穏なサウンドスケープによって定義される。沈黙、空間、深い孤独感を強調し、ミニマルなテクスチャと繊細な drone を使って外界から切り離された感覚を作り出す。このジャンルは空虚さや、広大で冷たい環境といったテーマを探求する。"
+      },
+      "exampleI18n": { "en": "Thomas Köner - Teimo", "zh": "Thomas Köner - Teimo", "ja": "Thomas Köner - Teimo" }
+    },
+    {
+      "id": "ambient/drone-ambient/drone-metal",
+      "descriptionI18n": {
+        "en": "A fusion of Drone Ambient and Metal, Drone Metal combines the sustained, minimalist sounds of drone music with the heavy, distorted guitars of metal. The genre features slow, crushingly heavy tones that evolve over time, creating an intense, enveloping atmosphere. It blends the hypnotic qualities of drone with the raw power of metal, resulting in an emotionally potent listening experience.",
+        "zh": "Drone Metal 是 Drone Ambient 与 Metal 的融合，将 drone 音乐持续、极简的声音与 metal 中厚重、失真的吉他结合起来。这个流派以缓慢、极端沉重并随时间演化的音色为特征，创造出强烈而包围性的氛围。它把 drone 的催眠特质与 metal 的原始力量融合在一起，形成情绪冲击力很强的聆听体验。",
+        "ja": "Drone Metal は Drone Ambient と Metal の融合であり、drone 音楽の持続的でミニマルな音と、metal の重く歪んだギターを組み合わせる。このジャンルは、時間とともに変化する遅く圧倒的に重い音色を特徴とし、強烈で包み込むような雰囲気を作り出す。drone の催眠的な性質と metal の生々しい力を融合させ、感情的な強度の高いリスニング体験を生む。"
+      },
+      "exampleI18n": { "en": "Sunn O))) - It Took the Night to Believe", "zh": "Sunn O))) - It Took the Night to Believe", "ja": "Sunn O))) - It Took the Night to Believe" }
+    },
+    {
+      "id": "ambient/drone-ambient/microtonal-drone",
+      "descriptionI18n": {
+        "en": "Microtonal Drone explores the use of microtonal tunings and unconventional harmonic structures within the drone ambient framework. By incorporating intervals smaller than the standard semitone, this subgenre creates an otherworldly soundscape that pushes the boundaries of traditional tuning. The result is a deep, resonant experience that feels both alien and meditative, with shifting tonal relationships that evolve throughout the piece.",
+        "zh": "Microtonal Drone 在 drone ambient 的框架中探索微分音调律和非常规和声结构。通过引入小于标准半音的音程，这个子流派创造出异世界般的声音景观，推动传统调律的边界。其结果是一种深沉、共鸣丰富的体验，既显得陌生又具有冥想感，音高关系会在作品中不断转移和演化。",
+        "ja": "Microtonal Drone は、drone ambient の枠組みの中で微分音調律と非伝統的な和声構造の使用を探求する。標準的な半音よりも小さい音程を取り入れることで、このサブジャンルは伝統的な調律の境界を押し広げる異世界的なサウンドスケープを作り出す。その結果、異質でありながら瞑想的でもある、深く共鳴する体験が生まれ、作品全体を通して音程関係が変化し続ける。"
+      },
+      "exampleI18n": { "en": "Eliane Radigue - Trilogie de la Mort", "zh": "Eliane Radigue - Trilogie de la Mort", "ja": "Eliane Radigue - Trilogie de la Mort" }
+    }
+  ]
+}

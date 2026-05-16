@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiUrl } from '@/lib/config';
+import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 interface MySet {
   id: string;
@@ -32,9 +33,7 @@ type PublishType = 'djset' | 'event';
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return '未知';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '未知';
-  return d.toLocaleString('zh-CN');
+  return formatDateTimeWithSystemTimeZoneLabel(value);
 };
 
 export default function MyPublishesPage() {

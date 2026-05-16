@@ -1,0 +1,86 @@
+[
+  {
+    "id": "pop-and-rock-fusion/synth-pop/electropop",
+    "name": "Electropop",
+    "path": "Pop and Rock Fusion > Synth-pop > Electropop",
+    "description": "Electropop is a genre of pop music that blends traditional pop melodies and structures with electronic production, often featuring synthesizers, drum machines, and digital effects. Emerging in the late 1990s and early 2000s, electropop is characterized by its polished, catchy hooks, energetic rhythms, and a clean, futuristic sound that emphasizes electronic elements without losing the accessibility of pop music. It often incorporates influences from genres like synthpop, dance music, and new wave, creating a hybrid of traditional pop sensibilities with the innovative textures of electronic music. Vocals in electropop are typically clear and melodic, sometimes treated with electronic effects or pitch manipulation. Artists like Robyn, La Roux, Grimes, and CHVRCHES are well-known for defining and popularizing electropop, merging catchy tunes with electronic experimentation for a sound that's both mainstream and forward-thinking.",
+    "example": "Grimes - Oblivion"
+  },
+  {
+    "id": "pop-and-rock-fusion/synth-pop/futurepop",
+    "name": "Futurepop",
+    "path": "Pop and Rock Fusion > Synth-pop > Futurepop",
+    "description": "Futurepop is a subgenre of electronic music that blends elements of EBM (Electronic Body Music), synthpop, and trance, characterized by its melodic, uplifting, and accessible sound while retaining a strong electronic foundation. Emerging in the late 1990s and early 2000s, futurepop combines the rhythmic, bass-heavy beats of EBM with catchy, emotional melodies, and often features atmospheric synths and trance-like elements. The vocals are typically melodic, clear, and sometimes emotionally charged, often addressing themes of love, loss, and human connection, in contrast to the darker themes of traditional EBM. Futurepop has a polished, radio-friendly appeal, while still maintaining the rhythmic intensity and futuristic atmosphere that fans of EBM appreciate. Key artists in the futurepop scene include VNV Nation, Covenant, and Apoptygma Berzerk.",
+    "example": "VNV Nation - Illusion"
+  },
+  {
+    "id": "techno/detroit-techno",
+    "name": "Detroit Techno",
+    "path": "Techno > Detroit Techno",
+    "description": "Detroit techno is a subgenre of techno music that originated in Detroit in the 1980s, characterized by its soulful melodies, driving 4/4 beats, and futuristic sounds. It often incorporates elements of funk, jazz, and electronic music, reflecting the city's cultural heritage and industrial landscape. Detroit techno is known for its emotional depth and innovative production techniques, influencing the global techno scene.",
+    "example": "Derrick May -  Strings of Life"
+  },
+  {
+    "id": "techno/schaffel-techno",
+    "name": "Schaffel Techno",
+    "path": "Techno > Schaffel Techno",
+    "description": "Schaffel Techno (derived from the German word for 'shuffle') is a distinctive subgenre associated with the Cologne electronic scene and the Kompakt label around the turn of the millennium. Unlike the rigid, straight 4/4 beat of traditional techno, Schaffel is defined by a heavy 'swing' or triplet feel (a bouncing 'dum-da-dum-da' rhythm). This creates a loping, galloping groove reminiscent of 1970s Glam Rock beats (like T. Rex) or Polka, but processed through the crisp, digital lens of Minimal Techno. It introduces a playful, quirky, and rock-influenced aesthetic to the dancefloor, intentionally breaking the monotony of the standard marching beat.",
+    "example": "Superpitcher - To Turn You On"
+  },
+  {
+    "id": "techno/acid-techno",
+    "name": "Acid Techno",
+    "path": "Techno > Acid Techno",
+    "description": "Acid techno is a subgenre of techno music that emerged in the late 1980s, characterized by its use of the Roland TB-303 synthesizer, which creates distinctive squelchy basslines and psychedelic melodies. The genre features repetitive beats and hypnotic rhythms, often incorporating elements of acid house and trance, resulting in a sound that is both energetic and immersive, popular in underground dance scenes.",
+    "example": "Phuture - Acid Trax"
+  },
+  {
+    "id": "techno/minimal-techno",
+    "name": "Minimal Techno",
+    "path": "Techno > Minimal Techno",
+    "description": "Minimal techno is a subgenre of techno music that focuses on simplicity and subtlety, characterized by repetitive beats, minimalistic arrangements, and a reduced palette of sounds. It emphasizes space and texture, often incorporating sparse melodies and rhythmic variations to create an immersive listening experience, making it popular in both club settings and for home listening.",
+    "example": "Plastikman - Spastik"
+  },
+  {
+    "id": "techno/melodic-techno",
+    "name": "Melodic Techno",
+    "path": "Techno > Melodic Techno",
+    "description": "Melodic techno bridges the gap between the hypnotic repetition of techno and the emotional breakdowns of trance. It is characterized by arpeggiated minor-key melodies, cavernous production, and dramatic, cinematic build-ups. Unlike trance, it usually maintains a slower tempo (120-128 BPM) and focuses on a rolling, darker bass groove rather than high-energy peaks. Heavily popularized by labels like Afterlife, it creates a solemn, stadium-sized emotional experience.",
+    "example": "ARTBAT - Horizon"
+  },
+  {
+    "id": "techno/hard-techno",
+    "name": "Hard Techno",
+    "path": "Techno > Hard Techno",
+    "description": "Hard techno is a subgenre of techno music that emphasizes aggressive beats, fast tempos, and heavy basslines, often featuring a driving 4/4 rhythm. It is characterized by its intensity and energy, incorporating elements of industrial and hardcore music, and often includes distorted kicks and synthesized sounds. Hard techno is designed for high-energy dance floors, making it a staple in underground club scenes and raves.",
+    "example": "D.A.V.E. The Drummer - Hydraulix"
+  },
+  {
+    "id": "techno/peak-time-driving-techno",
+    "name": "Peak Time / Driving Techno",
+    "path": "Techno > Peak Time / Driving Techno",
+    "description": "Peak Time / Driving Techno is a high-impact, festival-ready subgenre of techno tailored for the most energetic hours of a club night or festival. Characterized by powerful, punchy 4/4 kick drums and hypnotic rolling basslines, it typically operates between 128 and 135 BPM. The genre emphasizes 'driving' momentum, utilizing long buildups, industrial percussion hits, and atmospheric risers to create intense tension-and-release structures. While functionally designed for the dancefloor, it often incorporates melodic or acidic stabs, making it the dominant 'big room' sound of modern techno. Influential figures include Adam Beyer, Charlotte de Witte, and Enrico Sangiuliano.",
+    "example": "Age Of Love - The Age Of Love (Charlotte de Witte & Enrico Sangiuliano Remix)"
+  },
+  {
+    "id": "techno/ambient-techno",
+    "name": "Ambient Techno",
+    "path": "Techno > Ambient Techno",
+    "description": "Ambient Techno is a subgenre of techno that emerged in the early 1990s, blending the rhythmic structures of techno with the atmospheric textures of ambient music. It emphasizes mood, space, and subtle progression over dancefloor intensity, often featuring softer beats, dub-influenced sound design, and immersive soundscapes. Originally associated with artists on labels like Warp Records, Ambient Techno was designed as electronic music for home listening rather than club environments.",
+    "example": "B12 - Hall of Mirrors"
+  },
+  {
+    "id": "techno/acid-techno/acid-house",
+    "name": "Acid House",
+    "path": "Techno > Acid Techno > Acid House",
+    "description": "Acid house is a subgenre of house music that emerged in the mid-1980s, characterized by its use of the Roland TB-303 synthesizer to create distinctive squelchy basslines and repetitive, hypnotic rhythms. Acid house often features minimalistic beats and psychedelic elements, creating an immersive sound that became synonymous with the rave culture and underground dance scenes of the time.",
+    "example": "Mr. Fingers - Can You Feel It"
+  },
+  {
+    "id": "techno/acid-techno/acid-breaks",
+    "name": "Acid Breaks",
+    "path": "Techno > Acid Techno > Acid Breaks",
+    "description": "Acid Breaks combines the squelchy, psychedelic basslines of acid techno with the syncopated rhythms of breakbeat, resulting in a dynamic, groove-heavy sound. This subgenre is characterized by the signature 303 acid lines layered over broken beats, creating an energetic, fast-paced feel that blends acid’s hypnotic quality with the punch and drive of breakbeat. The fusion of these styles offers a danceable, intense listening experience that captures the raw energy of both genres.",
+    "example": "Josh Wink - Higher State of Consciousness"
+  }
+]

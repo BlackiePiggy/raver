@@ -1,0 +1,86 @@
+[
+  {
+    "id": "techno/detroit-techno/classic-detroit-techno",
+    "name": "Classic Detroit Techno",
+    "path": "Techno > Detroit Techno > Classic Detroit Techno",
+    "description": "Classic Detroit Techno represents the pioneering sound of techno that emerged in Detroit in the 1980s. It combines soulful melodies, funky basslines, and hypnotic grooves, drawing on influences from funk, electro, and Motown. This sound is known for its emotional depth and futuristic vision, featuring synthesized melodies and steady rhythms that create an immersive, uplifting experience.",
+    "example": "Juan Atkins - No UFO's"
+  },
+  {
+    "id": "techno/detroit-techno/detroit-techno-20",
+    "name": "Detroit Techno 2.0",
+    "path": "Techno > Detroit Techno > Detroit Techno 2.0",
+    "description": "Detroit Techno 2.0 is a modern evolution of the classic Detroit sound, incorporating elements from minimal and dub techno while staying true to its roots. This style blends the soulful, atmospheric qualities of original Detroit techno with contemporary production techniques, often emphasizing clean, spacious arrangements and subtle rhythmic shifts.",
+    "example": "Octave One Feat. Ann Saunderson - Blackwater"
+  },
+  {
+    "id": "techno/detroit-techno/techno-soul",
+    "name": "Techno Soul",
+    "path": "Techno > Detroit Techno > Techno Soul",
+    "description": "Techno Soul is a fusion genre that marries Detroit techno with the expressive elements of soul music. It features warm, melodic tones and soulful vocal samples or performances, creating an emotionally resonant style that maintains techno’s hypnotic pulse while adding a human, lyrical quality.",
+    "example": "Kerri Chandler - Bar A Thym"
+  },
+  {
+    "id": "techno/detroit-techno/ghettotech",
+    "name": "Ghettotech",
+    "path": "Techno > Detroit Techno > Ghettotech",
+    "description": "Ghettotech is a raw, high-energy genre of electronic dance music that originated in Detroit during the mid-to-late 1990s. It fuses the rapid-fire beats of Chicago Ghetto House with the heavy basslines and mechanical rhythms of Miami Bass, Electro, and Techno. Characterized by fast tempos (typically ranging from 145 to 160 BPM) and unpolished, gritty production, Ghettotech is distinct for its heavy use of repetitive, often sexually explicit or pornographic vocal samples looped over Roland TR-808 and 909 beats. It represents a bridge between Detroit’s sophisticated techno heritage and the raw, street-level energy of bass music, placing a strong emphasis on turntable skills and fast-paced DJ mixing.",
+    "example": "DJ Assault - Sex on the Beach"
+  },
+  {
+    "id": "techno/detroit-techno/hard-detroit-techno",
+    "name": "Hard Detroit Techno",
+    "path": "Techno > Detroit Techno > Hard Detroit Techno",
+    "description": "Hard Detroit Techno takes the Detroit sound in a more aggressive, intense direction. This style is faster and heavier, with pounding kick drums, relentless rhythms, and darker, industrial elements. Hard Detroit techno is raw and uncompromising, focusing on high-energy, dancefloor-driven tracks that retain Detroit’s innovative spirit.",
+    "example": "Jeff Mills - The Bells"
+  },
+  {
+    "id": "techno/hard-techno/industrial-techno",
+    "name": "Industrial Techno",
+    "path": "Techno > Hard Techno > Industrial Techno",
+    "description": "Industrial Techno blends the mechanical, harsh sounds of industrial music with the repetitive rhythms of techno. It is characterized by abrasive, distorted kicks, metallic percussion, and dark, atmospheric elements that create a sense of tension and power. Industrial techno often incorporates noisy, experimental textures, broken beats, and dystopian soundscapes, creating an intense and unsettling atmosphere. The genre emphasizes a raw, underground aesthetic, and while it shares techno’s focus on rhythm and movement, industrial techno adds an abrasive, industrial quality that sets it apart, often making it suited for darker, more intense dancefloor environments.",
+    "example": "Karl O Connor & Peter Sutton - Join Us In Paradise"
+  },
+  {
+    "id": "techno/hard-techno/schranz",
+    "name": "Schranz",
+    "path": "Techno > Hard Techno > Schranz",
+    "description": "Schranz is a hard, industrial-influenced subgenre of techno that emerged in the late 1990s. It is characterized by its fast tempo, aggressive, pounding basslines, and a raw, unpolished sound. Schranz often features distorted, repetitive kick drums and abrasive, metallic textures, creating an intense, driving rhythm that’s designed to dominate the dancefloor. The genre focuses on power and energy, with a focus on minimal but powerful elements like distorted percussion and industrial-style sound design. It tends to be more abrasive and less melodic than other forms of techno, with an emphasis on heavy, relentless beats and harsh soundscapes.",
+    "example": "Chris Liebing & Andre Walter - Random Process"
+  },
+  {
+    "id": "techno/hard-techno/hardcore",
+    "name": "Hardcore",
+    "path": "Techno > Hard Techno > Hardcore",
+    "description": "Hardcore techno is an extremely fast and aggressive genre of electronic music that evolved from techno in the early 1990s. It is characterized by its high tempos (often exceeding 160 BPM), heavily distorted kicks, and chaotic sound. The genre often incorporates industrial and punk influences, resulting in a raw and rebellious aesthetic. Hardcore techno is popular in underground rave scenes and is known for its intense energy.",
+    "example": "Angerfist - Creed of Chaos"
+  },
+  {
+    "id": "techno/hard-techno/hardcore/gabber",
+    "name": "Gabber",
+    "path": "Techno > Hard Techno > Hardcore > Gabber",
+    "description": "Gabber is a subgenre of hardcore techno that originated in the Netherlands in the early 1990s, known for its extremely fast tempos, aggressive distorted kicks, and harsh, brutal sound. It is one of the most extreme forms of dance music, often associated with rave culture and underground parties. The style's name comes from a Dutch slang word meaning 'mate' or 'buddy.'",
+    "example": "Neophyte - Army Of Hardcore"
+  },
+  {
+    "id": "techno/hard-techno/hardcore/happy-hardcore",
+    "name": "Happy Hardcore",
+    "path": "Techno > Hard Techno > Hardcore > Happy Hardcore",
+    "description": "Happy Hardcore is a high-tempo, euphoric subgenre of hardcore techno that emerged in the early-to-mid 1990s. It is characterized by very fast BPMs (typically 160–180), driving 4/4 beats or breakbeats, and a focus on uplifting piano riffs, catchy melodies, and high-pitched 'chipmunk' vocal samples. Unlike its darker counterparts like Gabber or Industrial Hardcore, Happy Hardcore emphasizes a festive, positive atmosphere, often associated with the colorful 'kandi' rave culture. It bridges the gap between early breakbeat rave and modern hard dance music.",
+    "example": "DJ Paul Elstak - Luv U More"
+  },
+  {
+    "id": "techno/hard-techno/hardcore/speedcore",
+    "name": "Speedcore",
+    "path": "Techno > Hard Techno > Hardcore > Speedcore",
+    "description": "Speedcore is an ultra-fast and extreme subgenre of hardcore techno, characterized by its high BPMs (often exceeding 250 BPM), distorted kicks, and frenetic, chaotic sound. It often incorporates elements of industrial music and noise, making it one of the most aggressive forms of electronic music. Speedcore is popular in niche underground scenes and is known for pushing the limits of intensity.",
+    "example": "Delta 9 - No More Regrets"
+  },
+  {
+    "id": "techno/hard-techno/hardcore/terrorcore",
+    "name": "Terrorcore",
+    "path": "Techno > Hard Techno > Hardcore > Terrorcore",
+    "description": "A darker and more extreme form of hardcore techno, often featuring gruesome or horror-themed samples. Terrorcore emphasizes speed and aggression, with a focus on chaotic, distorted beats.",
+    "example": "Noisekick - Big Bad Wolf"
+  }
+]

@@ -1,0 +1,86 @@
+[
+  {
+    "id": "bass-music/phonk/drift-phonk",
+    "name": "Drift Phonk",
+    "path": "Bass Music > Phonk > Drift Phonk",
+    "description": "The viral, high-energy evolution of Phonk characterized by the heavy use of the Roland TR-808 cowbell as a melodic instrument, extreme bass distortion, and high tempos. It moved away from the jazzy/lo-fi roots to create an aggressive sound associated with JDM car culture and gym/fitness content.",
+    "example": "MoonDeity - Neon Blade"
+  },
+  {
+    "id": "bass-music/phonk/brazilian-phonk",
+    "name": "Brazilian Phonk",
+    "path": "Bass Music > Phonk > Brazilian Phonk",
+    "description": "A fusion genre that blends the distorted aesthetic and cowbells of Drift Phonk with the syncopated, percussive rhythms of Brazilian Funk Carioca (specifically the 'Mandelão' style). It features aggressive, repetitive vocal chants in Portuguese and a chaotic, high-energy atmosphere.",
+    "example": "S3BZS - Montagem - PR Funk"
+  },
+  {
+    "id": "bass-music/wave/hardwave",
+    "name": "Hardwave",
+    "path": "Bass Music > Wave > Hardwave",
+    "description": "Hardwave is a more aggressive subgenre of wave that intensifies the genre’s emotional depth with faster tempos and heavier, more energetic beats. It retains wave’s signature melancholic melodies but amplifies them with bass-driven production, making the genre more club-friendly and intense. Hardwave reflects the growing trend of blending aggression with emotional expression, appealing to listeners who seek a cathartic release through music. The genre’s evolution mirrors broader cultural shifts in bass music, where artists are pushing sonic boundaries to capture both vulnerability and strength. Hardwave is a product of digital music communities that embrace both introspection and high-energy, visceral experiences, becoming a space where emotional tension meets powerful, confrontational sound.",
+    "example": "Skeler - Tel Aviv"
+  },
+  {
+    "id": "breakbeat/acid-breaks",
+    "name": "Acid breaks",
+    "path": "Breakbeat > Acid breaks",
+    "description": "Acid breaks is a subgenre of electronic dance music that fuses the squelchy, acid-inspired sounds of the Roland TB-303 synthesizer with breakbeat rhythms. Emerging in the 1990s, acid breaks combines the funky, syncopated beats of breakbeat with the hypnotic, looping basslines and trippy effects characteristic of acid house. Tracks often have a gritty, raw energy, featuring complex drum patterns, distorted synths, and psychedelic elements that create an intense, danceable groove. Acid breaks is popular in underground scenes, known for its high-energy feel and the fusion of acid’s otherworldly sounds with breakbeat’s rhythmic complexity.",
+    "example": "Plump DJs - The Push"
+  },
+  {
+    "id": "breakbeat/baltimore-club",
+    "name": "Baltimore club",
+    "path": "Breakbeat > Baltimore club",
+    "description": "Baltimore club is a high-energy genre of electronic dance music that originated in Baltimore, Maryland, in the late 1980s. Known for its distinctive 'boom-boom-clap' beat pattern, Baltimore club combines elements of hip-hop, house, and breakbeat, typically at a tempo of around 130 BPM. The genre often features chopped-up vocal samples, repetitive, catchy hooks, and bass-heavy production, creating a raw, infectious groove designed for dance floors. Baltimore club tracks are frequently simple and short, focusing on rhythm and movement, and the genre has become influential in regional dance scenes and beyond for its fun, fast-paced style and gritty, DIY aesthetic.",
+    "example": "Rod Lee - Dance My Pain Away"
+  },
+  {
+    "id": "breakbeat/big-beat",
+    "name": "Big beat",
+    "path": "Breakbeat > Big beat",
+    "description": "Big beat is a genre of electronic music that emerged in the mid-1990s, characterized by its blend of heavy, breakbeat rhythms, distorted basslines, and rock-influenced elements. Big beat tracks often feature upbeat, looped drum samples, funky basslines, and the incorporation of elements from genres like hip-hop, industrial, and acid house. The genre is known for its energetic, aggressive sound and its ability to cross over into mainstream music, often featuring catchy, sampled vocal snippets and driving, rhythmic intensity. Artists like The Chemical Brothers, Fatboy Slim, and The Prodigy helped popularize big beat in the 90s, making it a defining sound in the era of rave and alternative dance music.",
+    "example": "The Chemical Brothers - Hey Boy Hey Girl"
+  },
+  {
+    "id": "breakbeat/breakbeat-hardcore",
+    "name": "Breakbeat hardcore",
+    "path": "Breakbeat > Breakbeat hardcore",
+    "description": "Breakbeat hardcore is a genre of electronic dance music that originated in the early 1990s in the UK, blending elements of hardcore techno and breakbeat. Known for its fast, energetic rhythms (typically around 150-170 BPM), breakbeat hardcore features breakbeat drum patterns combined with rave-style synths, heavy basslines, and often samples from hip-hop, jungle, and early acid house. The genre is characterized by its intense, high-energy sound, with uplifting melodies and euphoria-driven vibes, often accompanied by fast-paced, chopped-up vocal samples. Breakbeat hardcore played a significant role in the development of the rave scene and laid the groundwork for later subgenres like jungle and drum and bass.",
+    "example": "The Prodigy - Charly"
+  },
+  {
+    "id": "breakbeat/broken-beat",
+    "name": "Broken beat",
+    "path": "Breakbeat > Broken beat",
+    "description": "Broken beat is a genre of electronic music that emerged in the late 1990s, primarily in the UK, blending elements of jazz, funk, and electronic dance music. It is characterized by its complex, syncopated rhythms and 'broken' drum patterns, where the beats are often fragmented or off-beat, giving the music a laid-back yet intricate feel. Broken beat features deep basslines, smooth melodies, and a fusion of live instruments (such as bass, keys, and horns) with electronic production. The genre has a soulful, groovy vibe and often includes elements of jazz improvisation, creating a smooth yet experimental sound. Artists like Bugz in the Attic and Mark de Clive-Lowe helped shape the genre, which has influenced genres like future jazz and nu-jazz.",
+    "example": "4hero - Hold It Down"
+  },
+  {
+    "id": "breakbeat/nu-skool-breaks",
+    "name": "Nu skool breaks",
+    "path": "Breakbeat > Nu skool breaks",
+    "description": "Nu skool breaks is a subgenre of breakbeat that emerged in the late 1990s and early 2000s, characterized by a more modern, polished sound compared to traditional breakbeat. It blends elements of electro, big beat, and progressive house with the signature breakbeat rhythms, featuring funky basslines, distorted synths, and intricate drum patterns. Nu skool breaks often incorporates more melodic elements and futuristic sound design, with a focus on creating a driving, energetic groove suitable for the dance floor. The genre is known for its high-energy, bass-heavy tracks, and artists like Stanton Warriors and Plump DJs were instrumental in its development, bridging the gap between breakbeat and more mainstream electronic dance music.",
+    "example": "Stanton Warriors - Da Antidote"
+  },
+  {
+    "id": "breakbeat/psychedelic-breakbeat",
+    "name": "Psychedelic breakbeat",
+    "path": "Breakbeat > Psychedelic breakbeat",
+    "description": "Psychedelic Breakbeat is a fusion genre that blends the intricate rhythms of breakbeat with the hypnotic, mind-altering elements of psychedelic trance. This subgenre is characterized by its use of complex, syncopated drum patterns alongside trippy soundscapes and psychedelic effects that create an immersive, otherworldly listening experience. Tracks often incorporate distorted basslines, shimmering synths, and deep, atmospheric elements that evoke the feeling of a trance-like journey. The fusion of breakbeat’s groove-heavy, energetic rhythms with the psychedelic influence of trance makes it ideal for both introspective listening and energetic dance floors. Artists like Eat Static helped define this subgenre, bringing a more experimental and surreal edge to breakbeat by incorporating influences from both the rave and psychedelic scenes.",
+    "example": "Eat Static - Bony Incus"
+  },
+  {
+    "id": "breakbeat/baltimore-club/jersey-club",
+    "name": "Jersey club",
+    "path": "Breakbeat > Baltimore club > Jersey club",
+    "description": "Jersey club is an energetic, bass-heavy genre of dance music that originated in New Jersey in the early 2000s. Known for its fast, bouncy rhythms (typically around 130-140 BPM), Jersey club features a 'kick pattern' where heavy bass kicks are arranged in a syncopated, stuttering style. The genre often includes chopped-up vocal samples, rapid loops, and call-and-response elements, creating a playful, high-energy feel. Jersey club draws from Baltimore club music but incorporates its own unique dance-focused elements, such as signature 'bed squeak' samples. It’s popular in dance scenes and social media for its infectious, rhythmic grooves and has a strong DIY and party-oriented culture.",
+    "example": "DJ Sliink - Vibrate"
+  },
+  {
+    "id": "breakbeat/baltimore-club/philly-club",
+    "name": "Philly club",
+    "path": "Breakbeat > Baltimore club > Philly club",
+    "description": "Philly club is a genre of electronic dance music that originated in Philadelphia in the late 1990s and early 2000s. Similar to Baltimore and Jersey club, Philly club features fast-paced, bass-heavy beats, but it’s distinguished by its use of syncopated rhythms, heavy drum kicks, and a signature “stuttering” vocal style. The genre often incorporates chopped-up and pitch-shifted vocal samples, creating a playful, energetic vibe that drives the dance floor. Philly club music tends to have a more soulful, deeper groove compared to its counterparts, with influences from house and hip-hop. The genre is known for its emphasis on rhythm and danceability, making it a staple in Philly’s club scene.",
+    "example": "DJ Sega - Colours"
+  }
+]

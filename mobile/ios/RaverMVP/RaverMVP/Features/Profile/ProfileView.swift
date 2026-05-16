@@ -1294,7 +1294,7 @@ struct MyRoutesView: View {
                         .foregroundStyle(RaverTheme.secondaryText)
 
                     Label(
-                        LT("缓存于 \(Self.dateTimeFormatter.string(from: snapshot.cachedAt))", "Cached at \(Self.dateTimeFormatter.string(from: snapshot.cachedAt))", "キャッシュ日時 \(Self.dateTimeFormatter.string(from: snapshot.cachedAt))"),
+                        LT("缓存于 \(Self.dateTimeText(snapshot.cachedAt))", "Cached at \(Self.dateTimeText(snapshot.cachedAt))", "キャッシュ日時 \(Self.dateTimeText(snapshot.cachedAt))"),
                         systemImage: "externaldrive.fill.badge.checkmark"
                     )
                     .font(.caption.weight(.semibold))
@@ -1326,14 +1326,14 @@ struct MyRoutesView: View {
     }
 
     private func eventDateText(_ route: SavedEventRoute) -> String {
-        let start = Self.dateFormatter.string(from: route.startDate)
-        let end = Self.dateFormatter.string(from: route.endDate)
+        let start = route.startDate.appLocalizedYMDText()
+        let end = route.endDate.appLocalizedYMDText()
         return start == end ? start : "\(start) - \(end)"
     }
 
     private func eventDateText(_ event: WebEvent) -> String {
-        let start = Self.dateFormatter.string(from: event.startDate)
-        let end = Self.dateFormatter.string(from: event.endDate)
+        let start = event.startDate.appLocalizedYMDText()
+        let end = event.endDate.appLocalizedYMDText()
         return start == end ? start : "\(start) - \(end)"
     }
 
@@ -1344,23 +1344,9 @@ struct MyRoutesView: View {
         cachedSnapshots = await EventManualCacheStore.shared.allSnapshots()
     }
 
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
-        formatter.timeZone = .current
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter
-    }()
-
-    private static let dateTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
-        formatter.timeZone = .current
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
+    private static func dateTimeText(_ date: Date) -> String {
+        date.appLocalizedYMDHMText()
+    }
 }
 
 struct ProfileToolsHubView: View {

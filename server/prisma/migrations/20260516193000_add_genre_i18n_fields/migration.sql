@@ -1,0 +1,3 @@
+ALTER TABLE "genres"
+  ADD COLUMN IF NOT EXISTS "description_i18n" JSONB,
+  ADD COLUMN IF NOT EXISTS "example_i18n" JSONB;

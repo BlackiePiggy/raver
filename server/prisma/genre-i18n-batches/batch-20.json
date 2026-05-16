@@ -1,0 +1,86 @@
+[
+  {
+    "id": "house/tech-house/tribal-tech-house",
+    "name": "Tribal Tech House",
+    "path": "House > Tech House > Tribal Tech House",
+    "description": "Tech house with tribal percussion and rhythms, creating a primal and energetic vibe.",
+    "example": "Chus & Ceballos - The Strong Rhythm"
+  },
+  {
+    "id": "house/tech-house/tech-funk",
+    "name": "Tech Funk",
+    "path": "House > Tech House > Tech Funk",
+    "description": "A fusion of tech house and funk, featuring funky basslines, groovy rhythms, and soulful vocals.",
+    "example": "Adam Freeland - We Want Your Soul"
+  },
+  {
+    "id": "industrial-and-post-industrial/ebm",
+    "name": "EBM",
+    "path": "Industrial and Post-Industrial > EBM",
+    "description": "EBM (Electronic Body Music) is a genre of electronic music that emerged in the early 1980s, blending industrial, electronic, and post-punk elements with heavy, driving beats and aggressive rhythms. EBM is characterized by its use of synthesizers, sequencers, and drum machines to create mechanical, rhythmic patterns, often accompanied by shouted or distorted vocals. The genre’s sound is harsh and minimalistic, with a focus on repetitive, danceable beats and dark, futuristic atmospheres. EBM often deals with themes of rebellion, technology, and dystopia, making it a staple in underground and industrial club scenes. Artists like Front 242, Nitzer Ebb, and DAF helped pioneer the EBM sound, influencing later genres like industrial techno and futurepop.",
+    "example": "Front 242 - Headhunter"
+  },
+  {
+    "id": "industrial-and-post-industrial/new-beat",
+    "name": "New Beat",
+    "path": "Industrial and Post-Industrial > New Beat",
+    "description": "New Beat is a Belgian electronic dance music genre that flourished in the late 1980s (1987-1989). It is characterized by a heavy, slow-to-mid tempo (typically 90-110 BPM), hypnotic basslines, and dark, industrial-influenced soundscapes. The genre originated accidentally when DJs at clubs like Boccaccio began playing 45 RPM EBM and New Wave records at 33 RPM with the pitch increased, creating a moody, 'chugging' sound. It served as a critical precursor to European Hardcore, Techno, and Trance, bridging the gap between underground industrial music and the early rave movement.",
+    "example": "Lords of Acid - I Sit on Acid"
+  },
+  {
+    "id": "industrial-and-post-industrial/post-industrial",
+    "name": "Post-Industrial",
+    "path": "Industrial and Post-Industrial > Post-Industrial",
+    "description": "Post-industrial music emerged as a development from industrial music, but with a shift toward more atmospheric and ambient elements. It often involves soundscapes that convey a sense of isolation, decay, and dystopia, creating a haunting and intense auditory experience. Post-industrial tracks frequently feature dark, brooding atmospheres, industrial sounds, and electronic textures, giving them a sense of unease or desolation. Themes of technological failure, societal collapse, and personal alienation are common, making it a deeply introspective and often confrontational genre. Artists like Coil pushed the boundaries of this sound, transforming it into something experimental and avant-garde.",
+    "example": "Coil - The First Five Minutes After Death"
+  },
+  {
+    "id": "industrial-and-post-industrial/ebm/futurepop",
+    "name": "Futurepop",
+    "path": "Industrial and Post-Industrial > EBM > Futurepop",
+    "description": "Futurepop is a subgenre of electronic music that blends elements of EBM (Electronic Body Music) with more melodic, accessible, and often uplifting sounds. It emerged in the late 1990s and early 2000s, incorporating catchy synth melodies, danceable rhythms, and emotionally-driven, often melancholic vocals. Futurepop tends to have a more polished and mainstream appeal compared to the darker, more aggressive styles of traditional EBM. The genre often blends elements of synthpop, industrial, and trance, creating a sound that is both atmospheric and club-friendly. Artists like VNV Nation, Apoptygma Berzerk, and Covenant are key contributors to the futurepop movement.",
+    "example": "VNV Nation - Beloved"
+  },
+  {
+    "id": "industrial-and-post-industrial/ebm/aggrotech",
+    "name": "Aggrotech",
+    "path": "Industrial and Post-Industrial > EBM > Aggrotech",
+    "description": "Aggrotech (also known as Harsh EBM) is a subgenre of industrial music that focuses on aggressive, dark, and harsh electronic sounds. It takes influence from EBM but emphasizes more distorted, abrasive elements, with heavily processed vocals, intense beats, and harsh synth textures. The sound is typically fast-paced and brutal, often featuring aggressive themes, such as anger, rebellion, and dystopia. Aggrotech incorporates distorted, shouted vocals and extreme electronic effects, resulting in a harder, more confrontational style. Artists like Suicide Commando, Combichrist, and Grendel are prominent figures in the aggrotech scene, often pushing the limits of intensity and sonic harshness.",
+    "example": "Suicide Commando - Hellraiser"
+  },
+  {
+    "id": "industrial-and-post-industrial/new-beat/hard-beat",
+    "name": "Hard Beat",
+    "path": "Industrial and Post-Industrial > New Beat > Hard Beat",
+    "description": "A faster and more aggressive evolution of New Beat that emerged around 1989. It incorporated harder kicks and more abrasive synthesizers, acting as the direct transition point into the early Belgian Techno and Hardcore scenes.",
+    "example": "The Maxx - Cocaine"
+  },
+  {
+    "id": "industrial-and-post-industrial/post-industrial/witch-house",
+    "name": "Witch House",
+    "path": "Industrial and Post-Industrial > Post-Industrial > Witch House",
+    "description": "Witch House is a genre known for its dark, occult-inspired aesthetic, blending elements of electronic music, industrial, and hip-hop. Often characterized by heavily processed, chopped-up vocals, eerie synths, and haunting melodies, Witch House brings together the sounds of horror and mystery with a sense of mysticism and ritual. It emerged in the late 2000s, with a focus on the occult and gothic imagery, drawing influence from the aesthetics of horror films, black magic, and subcultures like goth and industrial. The genre's sparse and atmospheric beats, coupled with heavy reverb, create a haunting, almost dreamlike quality, making it distinct in its approach to darkness.",
+    "example": "Salem - King Night"
+  },
+  {
+    "id": "pop-and-rock-fusion/new-wave",
+    "name": "New Wave",
+    "path": "Pop and Rock Fusion > New Wave",
+    "description": "New wave is a genre of music that emerged in the late 1970s and early 1980s, combining elements of punk rock with more experimental, electronic, and pop influences. It is characterized by its use of synthesizers, quirky melodies, and often a more polished, commercial sound compared to punk’s raw energy. New wave bands typically embraced the emerging electronic technologies of the time, incorporating synthetic sounds, catchy pop hooks, and a wide variety of stylistic influences, including disco, funk, and post-punk. The genre often has an art-pop sensibility, with an emphasis on visual style, fashion, and innovation. Notable new wave bands include Depeche Mode, Talking Heads, Blondie, and Duran Duran.",
+    "example": "The Cars - Just What I Needed"
+  },
+  {
+    "id": "pop-and-rock-fusion/synth-pop",
+    "name": "Synth-pop",
+    "path": "Pop and Rock Fusion > Synth-pop",
+    "description": "Synthpop is a genre of electronic music that emerged in the late 1970s and early 1980s, characterized by its use of synthesizers, drum machines, and electronic production to create catchy, melodic pop music. Synthpop combines the accessibility and structure of pop music with the futuristic and synthetic sounds of electronic instruments. The genre often features clean, bright synthesizer melodies, simple but effective drum patterns, and vocals that are either smooth or slightly robotic. Synthpop’s sound is often polished and radio-friendly, blending the upbeat, danceable qualities of pop with the experimental, electronic elements of early electronic music. Artists like Depeche Mode, Kraftwerk, Gary Numan, and Pet Shop Boys are key figures in the synthpop movement, which influenced a wide range of pop, dance, and electronic music that followed.",
+    "example": "Pet Shop Boys - West End Girls"
+  },
+  {
+    "id": "pop-and-rock-fusion/hyperpop",
+    "name": "Hyperpop",
+    "path": "Pop and Rock Fusion > Hyperpop",
+    "description": "Hyperpop is a genre that emerged in the 2010s, characterized by its maximalist approach to pop music, blending hyperactive, high-energy beats with experimental, exaggerated production. It often features distorted vocals, rapid tempo changes, and an eclectic mix of influences from pop, electronic, and avant-garde music. Hyperpop is known for pushing the boundaries of pop music, using glitchy, pitch-shifted vocals, high-pitched synths, and surreal soundscapes, creating a sound that is intentionally exaggerated and sometimes chaotic. The genre embraces a sense of fun, freedom, and futurism, often incorporating themes of internet culture, digital identity, and subverting traditional pop structures. Key artists in hyperpop include 100 gecs, SOPHIE, and A.G. Cook.",
+    "example": "100 gecs - Money Machine"
+  }
+]

@@ -9,6 +9,7 @@ import TracklistUploadModal from './TracklistUploadModal';
 import TracklistSelectorModal from './TracklistSelectorModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiUrl } from '@/lib/config';
+import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 interface Track {
   id: string;
@@ -498,11 +499,7 @@ export default function DJSetPlayer({ djSet }: DJSetPlayerProps) {
     if (!value) {
       return '未知';
     }
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return '未知';
-    }
-    return date.toLocaleString('zh-CN');
+    return formatDateTimeWithSystemTimeZoneLabel(value);
   };
 
   return (

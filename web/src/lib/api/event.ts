@@ -18,6 +18,7 @@ export interface Event {
   longitude: number | null;
   startDate: string;
   endDate: string;
+  timeZone?: string | null;
   dayRolloverHour?: number | null;
   ticketUrl: string | null;
   ticketPriceMin: number | null;

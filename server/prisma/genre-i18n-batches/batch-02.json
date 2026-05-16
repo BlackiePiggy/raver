@@ -1,0 +1,86 @@
+[
+  {
+    "id": "ambient/new-age-ambient/celtic-ambient",
+    "name": "Celtic Ambient",
+    "path": "Ambient > New Age Ambient > Celtic Ambient",
+    "description": "A substyle of New Age Ambient, Celtic Ambient integrates the ethereal sounds of Celtic music with ambient textures. It often features traditional instruments like the harp or flute, combined with atmospheric backdrops, creating a connection to nature and ancient cultural traditions. This genre is often used to evoke a sense of mystical serenity, rooted in Celtic spiritualism.",
+    "example": "Loreena McKennitt - The Mummers' Dance"
+  },
+  {
+    "id": "ambient/new-age-ambient/meditation-ambient",
+    "name": "Meditation Ambient",
+    "path": "Ambient > New Age Ambient > Meditation Ambient",
+    "description": "Specifically designed for mindfulness, Meditation Ambient is crafted to support deep relaxation, meditation, and introspective practices. This subgenre emphasizes soothing, non-intrusive sounds that help calm the mind and aid in stress reduction, creating a peaceful sonic environment conducive to mental and emotional healing.",
+    "example": "Deuter - Koyasan"
+  },
+  {
+    "id": "ambient/psybient/psydub",
+    "name": "Psydub",
+    "path": "Ambient > Psybient > Psydub",
+    "description": "A hybrid of psychedelic music and dub, Psydub focuses on deep basslines, reverberating effects, and spacey textures. This substyle is known for its laid-back, dub-influenced rhythm patterns, combined with the mind-expanding qualities of psychedelia, creating an immersive soundscape that's both relaxing and enveloping.",
+    "example": "Ott - The Queen of All Everything"
+  },
+  {
+    "id": "ambient/psybient/forest-psybient",
+    "name": "Forest Psybient",
+    "path": "Ambient > Psybient > Forest Psybient",
+    "description": "A subgenre that evokes the natural world, Forest Psybient blends ambient and psychedelic trance to create sounds that resemble the atmosphere of mystical forests. With an emphasis on organic and environmental textures, it transports listeners to lush, tranquil woodland spaces, often with nature-inspired samples like birdsong or wind, for a truly otherworldly experience.",
+    "example": "Astropilot - Forest of Memories"
+  },
+  {
+    "id": "bass-music/drum-and-bass",
+    "name": "Drum and Bass",
+    "path": "Bass Music > Drum and Bass",
+    "description": "Drum and Bass (often abbreviated as D&B or DnB) is a high-energy genre of electronic music that evolved from the UK's jungle and breakbeat hardcore scenes in the early 1990s. It is defined by its fast, complex breakbeats, typically ranging from 160 to 180 BPM, paired with heavy, prominent sub-bass lines that form the music's core. While jungle often retained a strong reggae and dancehall influence, drum and bass streamlined the sound, focusing on intricate, meticulously programmed drum patterns and a wider range of sonic textures, from dark and industrial (techstep) to smooth and melodic (liquid funk). The genre is a showcase of rhythmic complexity and sound design, creating a sound that is both physically intense and sonically diverse.",
+    "example": "Ed Rush & Optical - Wormhole"
+  },
+  {
+    "id": "bass-music/jungle",
+    "name": "Jungle",
+    "path": "Bass Music > Jungle",
+    "description": "Jungle is a high-energy subgenre of electronic dance music that emerged in the UK in the early 1990s, blending elements of reggae, dancehall, and hip-hop with fast, breakbeat rhythms. Known for its rapid tempos (usually 160-180 BPM), jungle is characterized by heavily syncopated, chopped-up drum patterns, often using the iconic “Amen break” sample, along with deep, rolling basslines and reggae-inspired vocal samples. Jungle’s gritty, raw sound and complex rhythms make it intense and immersive, laying the groundwork for drum and bass and influencing much of the UK’s rave and bass music scenes.",
+    "example": "Shy FX - Original Nuttah 25"
+  },
+  {
+    "id": "bass-music/juke",
+    "name": "Juke",
+    "path": "Bass Music > Juke",
+    "description": "Juke is a fast-paced electronic dance genre from Chicago, typically around 160 BPM. It features syncopated rhythms, deep basslines, and chopped-up vocal samples. Known for its energetic, raw sound, juke focuses on rhythm and movement, often accompanying fast, intricate footwork dance styles. It is a precursor to footwork and has influenced bass-heavy electronic music.",
+    "example": "DJ Funk - Run"
+  },
+  {
+    "id": "bass-music/dubstep",
+    "name": "Dubstep",
+    "path": "Bass Music > Dubstep",
+    "description": "Dubstep is a genre of electronic dance music that originated in South London in the early 2000s, emerging as a dark, mutated evolution of UK Garage and 2-step. It is structurally defined by a tempo of roughly 140 BPM, but with a distinctive 'half-time' rhythm (kick on beat one, snare on beat three) that creates a spacious, lurching groove. The genre's sonic signature is its heavy emphasis on sub-bass frequencies—often felt physically rather than heard—and the use of Low Frequency Oscillation (LFO) to manipulate bass timbres, creating the iconic 'wobble' sound. Early dubstep emphasized atmosphere, silence, and dub-reggae influenced reverberation, creating a brooding, urban tension that contrasts with the more aggressive mid-range distortion found in its later commercial variations.",
+    "example": "Benga & Coki - Night"
+  },
+  {
+    "id": "bass-music/future-bass",
+    "name": "Future bass",
+    "path": "Bass Music > Future bass",
+    "description": "Future bass is a subgenre of electronic dance music known for its bright, uplifting sound and emotional, melodic focus. Originating in the early 2010s, future bass typically features lush, modulated synths, side-chained chords, and smooth, pitch-shifting basslines. The genre often incorporates catchy, pop-influenced melodies and vibrant, high-energy drops, creating an atmospheric yet energetic feel. Future bass tracks are usually set around 140 BPM but can vary, and they emphasize a “wavy” or “bouncy” sound that feels dynamic and uplifting. Artists like Flume and Marshmello helped popularize future bass, which has since become a favorite in both pop and electronic dance music for its feel-good, euphoric vibes.",
+    "example": "Flume - Never Be Like You feat. Kai"
+  },
+  {
+    "id": "bass-music/wave",
+    "name": "Wave",
+    "path": "Bass Music > Wave",
+    "description": "Wave is a genre that emerged in the mid-2010s from the underground internet scene, blending elements of trap, grime, and emo. Known for its emotional melodies and heavy bass, it reflects the emotional depth and personal struggles of its creators. Wave’s connection to internet subcultures, particularly on platforms like SoundCloud and Bandcamp, helped the genre gain traction among young, digitally native listeners. The genre speaks to themes of isolation, loss, and longing, and has become a vehicle for introspective and vulnerable expression. Its sound is often dark and atmospheric, capturing the tension between melancholy and empowerment, resonating with a generation confronting emotional and societal challenges in a hyper-connected, often isolating digital world.",
+    "example": "Klimeks - Eternally Yours"
+  },
+  {
+    "id": "bass-music/midtempo-bass",
+    "name": "Midtempo bass",
+    "path": "Bass Music > Midtempo bass",
+    "description": "Midtempo Bass is a genre that combines elements of dubstep, electro house, and techno, typically sitting at a tempo range of 100-125 BPM. Known for its deep, punchy basslines and atmospheric sound design, this genre creates a dark, moody vibe that remains energetic without the faster tempos of other electronic styles. Midtempo Bass often features complex synth patterns, spacey melodies, and heavy drops, balancing between the heaviness of bass music and the groove of slower tempo rhythms. It’s perfect for those looking for something that hits hard without overwhelming the listener.",
+    "example": "REZZ - Edge"
+  },
+  {
+    "id": "bass-music/trap-edm",
+    "name": "Trap (EDM)",
+    "path": "Bass Music > Trap (EDM)",
+    "description": "Trap (EDM) is an electronic music style inspired by hip-hop trap, featuring hard-hitting basslines, rapid hi-hats, and layered synthesizers. With a tempo typically around 140 BPM, this genre emphasizes aggressive drops, high-energy beats, and catchy melodies. Trap (EDM) brings the rhythmic elements of hip-hop into the world of electronic dance music, creating a sound that is both punchy and melodic. It’s known for its festival appeal, with a focus on massive drops and anthemic buildups, making it a favorite in high-energy environments like clubs and large festivals.",
+    "example": "RL Grime - Core"
+  }
+]

@@ -873,6 +873,7 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var setCount: Int? = nil
     var setsCount: Int? = nil
     var djSetCount: Int? = nil
+    var honors: [WebDJHonor]? = nil
     var sourceDataSource: String? = nil
     var contributors: [WebUserLite]? = nil
     var contributorUsernames: [String]? = nil
@@ -882,6 +883,23 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var createdAt: Date?
     var updatedAt: Date?
     var isFollowing: Bool?
+}
+
+struct WebDJHonor: Codable, Identifiable, Hashable {
+    var id: String?
+    var title: String
+    var subtitle: String?
+    var category: String?
+    var source: String?
+    var year: Int?
+    var rank: Int?
+    var url: String?
+
+    var stableID: String {
+        id ?? [source, category, title, year.map(String.init), rank.map(String.init)]
+            .compactMap { $0?.nilIfBlank }
+            .joined(separator: "-")
+    }
 }
 
 struct WebDJSetTrack: Codable, Identifiable, Hashable {
@@ -1288,8 +1306,28 @@ struct CreateRatingCommentInput: Codable {
 struct LearnGenreNode: Codable, Identifiable, Hashable {
     let id: String
     var name: String
+    var path: String?
     var description: String
+    var example: String?
+    var spotifyTrackURL: String?
+    var wikipediaURL: String?
+    var keyArtists: [String]?
+    var keyArtistBindings: [LearnGenreKeyArtistBinding]?
     var children: [LearnGenreNode]?
+}
+
+struct LearnGenreKeyArtistBinding: Codable, Identifiable, Hashable {
+    var id: String { name }
+    var name: String
+    var djId: String?
+    var dj: LearnGenreKeyArtistDJ?
+}
+
+struct LearnGenreKeyArtistDJ: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var avatarUrl: String?
+    var avatarMediumUrl: String?
 }
 
 struct RankingBoard: Codable, Identifiable, Hashable {

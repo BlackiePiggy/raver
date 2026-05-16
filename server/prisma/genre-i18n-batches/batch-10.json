@@ -1,0 +1,86 @@
+[
+  {
+    "id": "electro/industrial-electro",
+    "name": "Industrial Electro",
+    "path": "Electro > Industrial Electro",
+    "description": "A blend of electro and industrial music, characterized by harsh, distorted sounds, repetitive rhythms, and a sense of mechanical, often dystopian atmosphere. Industrial Electro incorporates elements of noise music and industrial techno, creating a dark, intense, and experimental sound.",
+    "example": "Front 242 - Headhunter"
+  },
+  {
+    "id": "electro/dark-electro",
+    "name": "Dark Electro",
+    "path": "Electro > Dark Electro",
+    "description": "A darker and more atmospheric subgenre of Electro, often characterized by sinister melodies, complex synth work, and a sense of brooding intensity. Dark Electro has a focus on creating unsettling and hypnotic soundscapes, drawing influences from industrial music and gothic themes.",
+    "example": "Hocico - Poltergeist"
+  },
+  {
+    "id": "electro/electrofunk/boogie",
+    "name": "Boogie",
+    "path": "Electro > Electrofunk > Boogie",
+    "description": "A genre that fuses funk, R&B, and disco with electronic elements, characterized by smooth melodies, syncopated rhythms, and a danceable groove.",
+    "example": "D-Train - You're the One for Me"
+  },
+  {
+    "id": "electro/miami-bass/electro-bass",
+    "name": "Electro Bass",
+    "path": "Electro > Miami Bass > Electro Bass",
+    "description": "Electro Bass is a subgenre of electronic music that combines elements of electro, bass music, and funk. It is characterized by heavy, syncopated basslines, electronic beats, and a strong emphasis on rhythm and groove. The bass often has a deep, vibrating quality, with the use of analog or synthesized sounds that give it a punchy, energetic feel. Electro bass incorporates futuristic, robotic soundscapes and glitchy effects, while often maintaining a danceable, club-ready rhythm. It draws influences from early electro, Miami bass, and other bass-heavy genres, creating an intense, high-energy sound that is both rhythmic and experimental.",
+    "example": "Aux 88 - Aux Mind 2005"
+  },
+  {
+    "id": "experimental",
+    "name": "Experimental",
+    "path": "Experimental",
+    "description": "Experimental electronic music is a genre that explores unconventional sounds, structures, and techniques, often pushing the boundaries of traditional music. It incorporates a wide range of electronic instruments, effects, and innovative production methods to create unique auditory experiences, emphasizing creativity and exploration over conventional musical forms.",
+    "example": "John Cage - 4'33\""
+  },
+  {
+    "id": "techno",
+    "name": "Techno",
+    "path": "Techno",
+    "description": "Techno is a genre of electronic dance music that originated in Detroit, Michigan, during the mid-to-late 1980s. Pioneered by 'The Belleville Three'—Juan Atkins, Derrick May, and Kevin Saunderson—techno was born from a fusion of funk, electro, and a fascination with futuristic themes, heavily influenced by writers like Alvin Toffler. It is characterized by a repetitive 4/4 time signature, a tempo typically between 120 and 150 BPM, and a focus on rhythm and texture over melodic complexity. Unlike the soulful, vocal-driven sound of its contemporary, Chicago house, techno often features a more mechanical, stripped-down, and hypnotic sound palette, using synthesizers and drum machines to create a sonic landscape that feels both industrial and otherworldly. It's a genre built for continuous mixing in clubs, creating immersive, long-form journeys on the dancefloor.",
+    "example": "Joey Beltram - Energy Flash"
+  },
+  {
+    "id": "electro",
+    "name": "Electro",
+    "path": "Electro",
+    "description": "Electro, short for electro-funk, is a genre of electronic music that emerged in the early 1980s, directly influencing the development of techno, house, and Miami bass. Its signature sound is defined by the use of the Roland TR-808 drum machine, which provides its distinct, syncopated, and often sparse drum patterns, breaking away from the steady four-on-the-floor beat of disco. Fusing the rhythmic sensibilities of funk with futuristic, synthesized sounds and often vocoded or robotic vocals, electro creates a sound that is both groovy and mechanical. Pioneered by artists like Afrika Bambaataa & The Soulsonic Force with 'Planet Rock,' it established a blueprint for rhythm-focused electronic music built on technology and a sci-fi aesthetic.",
+    "example": "Kraftwerk - The Model"
+  },
+  {
+    "id": "house",
+    "name": "House",
+    "path": "House",
+    "description": "House music is a genre of electronic dance music that emerged from the underground club scene of Chicago in the early 1980s. Its name is derived from The Warehouse, a club where resident DJ Frankie Knuckles, the 'Godfather of House,' pioneered the sound by mixing disco classics with drum machines and synthesizers. House is defined by its steady 4/4 time signature, a tempo typically between 118-135 BPM, and a prominent bass drum on every beat. It builds upon the soulful, uplifting spirit of disco, often incorporating gospel-inspired vocals, piano riffs, and deep, groovy basslines to create an atmosphere of unity, celebration, and release on the dancefloor. It is the foundational genre for countless styles of electronic music that followed.",
+    "example": "Lil' Louis - French Kiss"
+  },
+  {
+    "id": "trance",
+    "name": "Trance",
+    "path": "Trance",
+    "description": "Trance is a genre of electronic dance music that emerged in the early 1990s, characterized by its hypnotic rhythms, uplifting melodies, and a focus on creating a deep emotional connection with the listener. It blends elements of house music, techno, and ambient, typically featuring long, evolving tracks with intricate layers of synthesizers, rolling basslines, and ethereal pads. The genre is known for its ability to induce a sense of euphoria or transcendence, often achieved through repetitive, uplifting progressions and breakdowns that gradually build into intense climaxes. With its focus on melody and mood, trance music seeks to transport the listener into a different mental state, making it a popular choice in both underground and mainstream electronic dance scenes. Over time, trance has evolved into various subgenres like progressive trance, hard trance, and vocal trance, each bringing its own twist to the core elements of the genre. Key artists such as Paul van Dyk, Armin van Buuren, and Tiësto have played significant roles in defining and popularizing trance on the global stage.",
+    "example": "Paul Van Dyk - For An Angel"
+  },
+  {
+    "id": "ambient",
+    "name": "Ambient",
+    "path": "Ambient",
+    "description": "Ambient music is an electronic genre that focuses on creating immersive, atmospheric soundscapes, often with minimal structures, slow tempos, and a focus on tone and mood rather than melody or rhythm. Pioneered by artists like Brian Eno, it emerged in the 1970s and is known for its ability to evoke emotions through expansive, ethereal sound environments. The genre has many subgenres, such as dark ambient and space ambient, each offering unique listening experiences. While often associated with relaxation, ambient music can also be experimental, transforming spaces and enhancing moods.",
+    "example": "Brian Eno - Ambient 1: Music for Airports"
+  },
+  {
+    "id": "bass-music",
+    "name": "Bass Music",
+    "path": "Bass Music",
+    "description": "Bass music is a broad genre of electronic music that emphasizes heavy, prominent basslines and sub-bass frequencies, often incorporating elements from various styles such as dubstep, trap, drum and bass, and UK garage, with a focus on low-end sound design and rhythmic intensity.",
+    "example": "Baauer - Harlem Shake"
+  },
+  {
+    "id": "breakbeat",
+    "name": "Breakbeat",
+    "path": "Breakbeat",
+    "description": "Breakbeat is a genre of electronic music that features syncopated drum patterns, typically derived from sampled drum breaks in funk, hip-hop, or soul music. It emphasizes irregular rhythms and offbeat grooves, often used as a foundation for genres like drum and bass, jungle, and breakbeat hardcore.",
+    "example": "The Future Sound Of London - Papua New Guinea"
+  }
+]

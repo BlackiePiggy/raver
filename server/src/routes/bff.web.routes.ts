@@ -27,6 +27,7 @@ import {
   type TriTextPayload,
 } from '../utils/i18n';
 import {
+  DEFAULT_EVENT_TIME_ZONE,
   diffEventDays,
   getEventHour,
   normalizeEventTimeZone,
@@ -646,9 +647,9 @@ const normalizeEventClockTime = (value: unknown, fallback: string): string => {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
 };
 
-const normalizeEventStartDate = (date: Date, timeZone = 'UTC'): Date => startOfEventDay(date, timeZone);
+const normalizeEventStartDate = (date: Date, timeZone = DEFAULT_EVENT_TIME_ZONE): Date => startOfEventDay(date, timeZone);
 
-const normalizeEventEndDate = (date: Date, timeZone = 'UTC'): Date => {
+const normalizeEventEndDate = (date: Date, timeZone = DEFAULT_EVENT_TIME_ZONE): Date => {
   const start = startOfEventDay(date, timeZone);
   return new Date(start.getTime() + 86_400_000 - 1000);
 };
@@ -737,7 +738,7 @@ const inferFestivalDayIndex = (
   startTime: Date,
   eventStartDate: Date,
   dayRolloverHour: number,
-  timeZone = 'UTC'
+  timeZone = DEFAULT_EVENT_TIME_ZONE
 ): number | null => {
   if (Number.isNaN(startTime.getTime()) || Number.isNaN(eventStartDate.getTime())) {
     return null;
@@ -753,7 +754,7 @@ const applyFestivalDayIndexToDate = (
   timeSource: Date,
   eventStartDate: Date,
   festivalDayIndex: number,
-  timeZone = 'UTC'
+  timeZone = DEFAULT_EVENT_TIME_ZONE
 ): Date => setEventDayAndKeepTime(timeSource, eventStartDate, festivalDayIndex, timeZone);
 
 type ExistingLineupSlotForRebase = {
@@ -768,7 +769,7 @@ const rebaseExistingLineupSlotsToEventStart = (
   previousEventStartDate: Date,
   nextEventStartDate: Date,
   dayRolloverHour: number,
-  timeZone = 'UTC'
+  timeZone = DEFAULT_EVENT_TIME_ZONE
 ): Array<{ id: string; festivalDayIndex: number; startTime: Date; endTime: Date }> =>
   slots.map((slot) => {
     const festivalDayIndex =
@@ -795,7 +796,7 @@ const normalizeLineupSlots = (
   slots: unknown,
   eventStartDate: Date,
   dayRolloverHourRaw: unknown = 6,
-  timeZoneRaw: unknown = 'UTC'
+  timeZoneRaw: unknown = DEFAULT_EVENT_TIME_ZONE
 ): NormalizedLineupSlot[] => {
   if (!Array.isArray(slots)) {
     return [];
@@ -2970,6 +2971,9 @@ const mapDJ = (
     neteaseUrl: row.neteaseUrl ?? null,
     qqMusicUrl: row.qqMusicUrl ?? null,
     website: row.website ?? null,
+    sourceWikipedia: row.sourceWikipedia ?? null,
+    sourceWebsite: row.sourceWebsite ?? null,
+    sourceSameAs: Array.isArray(row.sourceSameAs) ? row.sourceSameAs : [],
     trackCount: row.trackCount ?? null,
     playlistCount: row.playlistCount ?? null,
     soundCloudFollowers: row.soundCloudFollowers ?? null,
@@ -3241,7 +3245,7 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
     longitude,
     startDate: row.startDate,
     endDate: row.endDate,
-    timeZone: normalizeEventTimeZone(row.timeZone ?? row.timezone ?? 'UTC'),
+    timeZone: normalizeEventTimeZone(row.timeZone ?? row.timezone ?? DEFAULT_EVENT_TIME_ZONE),
     startTime: normalizeEventClockTime(row.startTime, EVENT_DEFAULT_START_TIME),
     endTime: normalizeEventClockTime(row.endTime, EVENT_DEFAULT_END_TIME),
     dayRolloverHour: row.dayRolloverHour ?? 6,
@@ -4985,7 +4989,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       return;
     }
 
-    const timeZone = normalizeEventTimeZone(body.timeZone ?? body.timezone ?? body.eventTimeZone ?? 'UTC');
+    const timeZone = normalizeEventTimeZone(body.timeZone ?? body.timezone ?? body.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE);
     const startTime = normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME);
     const endTime = normalizeEventClockTime(body.endTime, EVENT_DEFAULT_END_TIME);
     const parsedStartDateInput = parseEventDateInput(startDate, timeZone, 'start', startTime);
@@ -5351,8 +5355,8 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       : null;
 
     const nextTimeZone = hasTimeZoneField
-      ? normalizeEventTimeZone(body.timeZone ?? body.timezone ?? body.eventTimeZone, existing.timeZone ?? 'UTC')
-      : normalizeEventTimeZone(existing.timeZone ?? 'UTC');
+      ? normalizeEventTimeZone(body.timeZone ?? body.timezone ?? body.eventTimeZone, existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE)
+      : normalizeEventTimeZone(existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE);
     const nextStartTime = hasStartTimeField
       ? normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME)
       : normalizeEventClockTime(existing.startTime, EVENT_DEFAULT_START_TIME);
@@ -5867,6 +5871,8 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
 
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
     const country = typeof req.query.country === 'string' ? req.query.country.trim() : '';
+    const letterRaw = typeof req.query.letter === 'string' ? req.query.letter.trim().toUpperCase() : '';
+    const letter = /^[A-Z]$/.test(letterRaw) ? letterRaw : '';
     const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : 'followerCount';
 
     const where: Prisma.DJWhereInput = {};
@@ -5881,6 +5887,7 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
       ];
     }
     if (country) where.country = country;
+    if (letter) where.name = { startsWith: letter, mode: 'insensitive' };
 
     let rows: any[] = [];
     let total = 0;
@@ -5911,6 +5918,9 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
 
       if (country) {
         whereSqlParts.push(Prisma.sql`"d"."country" = ${country}`);
+      }
+      if (letter) {
+        whereSqlParts.push(Prisma.sql`"d"."name" ILIKE ${`${letter}%`}`);
       }
 
       const whereSql = Prisma.sql`WHERE ${Prisma.join(whereSqlParts, ' AND ')}`;
@@ -6004,6 +6014,9 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
 
       if (country) {
         whereSqlParts.push(Prisma.sql`"djs"."country" = ${country}`);
+      }
+      if (letter) {
+        whereSqlParts.push(Prisma.sql`"djs"."name" ILIKE ${`${letter}%`}`);
       }
 
       const whereSql =
@@ -7575,6 +7588,42 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
         updateData.qqMusicUrl = value.trim() || null;
       } else {
         res.status(400).json({ error: 'qqMusicUrl must be a string or null' });
+        return;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'sourceWikipedia')) {
+      const value = payload.sourceWikipedia;
+      if (value === null) {
+        updateData.sourceWikipedia = null;
+      } else if (typeof value === 'string') {
+        updateData.sourceWikipedia = value.trim() || null;
+      } else {
+        res.status(400).json({ error: 'sourceWikipedia must be a string or null' });
+        return;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'sourceWebsite')) {
+      const value = payload.sourceWebsite;
+      if (value === null) {
+        updateData.sourceWebsite = null;
+      } else if (typeof value === 'string') {
+        updateData.sourceWebsite = value.trim() || null;
+      } else {
+        res.status(400).json({ error: 'sourceWebsite must be a string or null' });
+        return;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'sourceSameAs')) {
+      const value = payload.sourceSameAs;
+      if (value === null) {
+        updateData.sourceSameAs = [];
+      } else if (Array.isArray(value) || typeof value === 'string') {
+        updateData.sourceSameAs = normalizeGenres(value);
+      } else {
+        res.status(400).json({ error: 'sourceSameAs must be an array, string, or null' });
         return;
       }
     }
@@ -9704,49 +9753,375 @@ router.post('/rating-units/:id/comments', optionalAuth, async (req: Request, res
   }
 });
 
-router.get('/learn/genres', (_req: Request, res: Response): void => {
-  const genreTree = [
-    {
-      id: 'house',
-      name: 'House',
-      description: '以四拍地板鼓点为核心，强调律动和舞池氛围。',
-      children: [
-        { id: 'deep-house', name: 'Deep House', description: '更柔和、更氛围化，低频和和声更细腻。' },
-        { id: 'tech-house', name: 'Tech House', description: '融合 Techno 的极简与 House 的律动感。' },
-        { id: 'progressive-house', name: 'Progressive House', description: '注重层层推进和情绪堆叠，适合大舞台。' },
-      ],
-    },
-    {
-      id: 'techno',
-      name: 'Techno',
-      description: '强调工业感、重复性和催眠式推进。',
-      children: [
-        { id: 'melodic-techno', name: 'Melodic Techno', description: '在 Techno 框架中加入旋律与情绪线。' },
-        { id: 'hard-techno', name: 'Hard Techno', description: '速度更快、冲击更强、能量密度更高。' },
-      ],
-    },
-    {
-      id: 'bass-music',
-      name: 'Bass Music',
-      description: '强调低频冲击和节奏变化，现场表现力强。',
-      children: [
-        { id: 'dubstep', name: 'Dubstep', description: '以重低音和 Drop 变化为标志。' },
-        { id: 'future-bass', name: 'Future Bass', description: '旋律化和弦与爆发式低频结合。' },
-        { id: 'drum-and-bass', name: 'Drum & Bass', description: '高速 breakbeat 与深厚低频的经典组合。' },
-      ],
-    },
-    {
-      id: 'trance',
-      name: 'Trance',
-      description: '强调旋律推进、铺垫和情绪释放。',
-      children: [
-        { id: 'uplifting-trance', name: 'Uplifting Trance', description: '旋律明亮、情感强烈，高潮感突出。' },
-        { id: 'psytrance', name: 'Psytrance', description: '高能重复节奏与迷幻音色。' },
-      ],
-    },
-  ];
+type LearnGenreTreeNode = {
+  id: string;
+  name: string;
+  path: string;
+  description: string;
+  descriptionI18n: TriTextPayload | null;
+  example: string;
+  exampleI18n: TriTextPayload | null;
+  spotifyTrackURL: string;
+  wikipediaURL: string;
+  keyArtists: string[];
+  keyArtistBindings: LearnGenreKeyArtistBinding[];
+  children: LearnGenreTreeNode[];
+};
 
-  ok(res, genreTree);
+type LearnGenreKeyArtistBinding = {
+  name: string;
+  djId: string | null;
+  dj: {
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+    avatarMediumUrl: string | null;
+  } | null;
+};
+
+const normalizeGenreKeyArtistBindings = (
+  keyArtists: string[],
+  rawBindings: unknown,
+  djById: Map<string, any> = new Map()
+): LearnGenreKeyArtistBinding[] => {
+  const bindingByName = new Map<string, string | null>();
+  if (Array.isArray(rawBindings)) {
+    for (const item of rawBindings) {
+      if (!item || typeof item !== 'object') continue;
+      const record = item as Record<string, unknown>;
+      const name = typeof record.name === 'string' ? record.name.trim() : '';
+      if (!name) continue;
+      const djId = typeof record.djId === 'string' && record.djId.trim() ? record.djId.trim() : null;
+      bindingByName.set(name.toLowerCase(), djId);
+    }
+  }
+
+  return keyArtists.map((name) => {
+    const djId = bindingByName.get(name.toLowerCase()) ?? null;
+    const dj = djId ? djById.get(djId) : null;
+    const avatarUrl = dj && typeof dj.avatarUrl === 'string' && dj.avatarUrl.trim() ? dj.avatarUrl.trim() : null;
+    return {
+      name,
+      djId,
+      dj: dj
+        ? {
+            id: dj.id,
+            name: dj.name,
+            avatarUrl,
+            avatarMediumUrl: buildOssAvatarVariantUrl(avatarUrl, 'medium'),
+          }
+        : null,
+    };
+  });
+};
+
+const normalizeGenreEditableText = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  return text ? text : null;
+};
+
+const normalizeGenreKeyArtistsInput = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of value) {
+    const name = typeof item === 'string' ? item.trim() : '';
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+};
+
+const selectGenreDJLite = {
+  id: true,
+  name: true,
+  aliases: true,
+  avatarUrl: true,
+} satisfies Prisma.DJSelect;
+
+router.get('/learn/genres', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const rows = await prisma.genre.findMany({
+      orderBy: [{ parentId: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        path: true,
+        description: true,
+        descriptionI18n: true,
+        example: true,
+        exampleI18n: true,
+        spotifyTrackUrl: true,
+        wikipediaUrl: true,
+        keyArtists: true,
+        keyArtistBindings: true,
+        parentId: true,
+        sortOrder: true,
+      },
+    });
+
+    const boundDjIds = Array.from(new Set(rows.flatMap((row) => {
+      if (!Array.isArray(row.keyArtistBindings)) return [];
+      return row.keyArtistBindings
+        .map((item) => (item && typeof item === 'object' && typeof (item as any).djId === 'string' ? (item as any).djId.trim() : ''))
+        .filter(Boolean);
+    })));
+    const boundDJs = boundDjIds.length
+      ? await prisma.dJ.findMany({
+          where: { id: { in: boundDjIds } },
+          select: selectGenreDJLite,
+        })
+      : [];
+    const djById = new Map(boundDJs.map((dj) => [dj.id, dj]));
+
+    const byParentId = new Map<string | null, typeof rows>();
+    for (const row of rows) {
+      const siblings = byParentId.get(row.parentId) ?? [];
+      siblings.push(row);
+      byParentId.set(row.parentId, siblings);
+    }
+
+    const buildNode = (row: (typeof rows)[number]): LearnGenreTreeNode => ({
+      id: row.id,
+      name: row.name,
+      path: row.path,
+      description: row.description ?? '',
+      descriptionI18n: resolveTriTextWithFallback(row.descriptionI18n ?? null, row.description ?? ''),
+      example: row.example ?? '',
+      exampleI18n: resolveTriTextWithFallback(row.exampleI18n ?? null, row.example ?? ''),
+      spotifyTrackURL: row.spotifyTrackUrl ?? '',
+      wikipediaURL: row.wikipediaUrl ?? '',
+      keyArtists: row.keyArtists,
+      keyArtistBindings: normalizeGenreKeyArtistBindings(row.keyArtists, row.keyArtistBindings, djById),
+      children: (byParentId.get(row.id) ?? []).map(buildNode),
+    });
+
+    const roots = (byParentId.get(null) ?? []).map(buildNode);
+    const electronicRoot = roots.find((node) => node.id === 'electronic-music');
+    ok(res, electronicRoot?.children ?? roots);
+  } catch (error) {
+    console.error('BFF web learn genres error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/learn/genres/admin/tree', optionalAuth, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const rows = await prisma.genre.findMany({
+      orderBy: [{ parentId: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        path: true,
+        description: true,
+        descriptionI18n: true,
+        example: true,
+        exampleI18n: true,
+        spotifyTrackUrl: true,
+        wikipediaUrl: true,
+        keyArtists: true,
+        keyArtistBindings: true,
+        parentId: true,
+        sortOrder: true,
+      },
+    });
+    const boundDjIds = Array.from(new Set(rows.flatMap((row) => {
+      if (!Array.isArray(row.keyArtistBindings)) return [];
+      return row.keyArtistBindings
+        .map((item) => (item && typeof item === 'object' && typeof (item as any).djId === 'string' ? (item as any).djId.trim() : ''))
+        .filter(Boolean);
+    })));
+    const boundDJs = boundDjIds.length
+      ? await prisma.dJ.findMany({ where: { id: { in: boundDjIds } }, select: selectGenreDJLite })
+      : [];
+    const djById = new Map(boundDJs.map((dj) => [dj.id, dj]));
+    ok(res, {
+      items: rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        path: row.path,
+        description: row.description ?? '',
+        descriptionI18n: resolveTriTextWithFallback(row.descriptionI18n ?? null, row.description ?? ''),
+        example: row.example ?? '',
+        exampleI18n: resolveTriTextWithFallback(row.exampleI18n ?? null, row.example ?? ''),
+        spotifyTrackURL: row.spotifyTrackUrl ?? '',
+        wikipediaURL: row.wikipediaUrl ?? '',
+        keyArtists: row.keyArtists,
+        keyArtistBindings: normalizeGenreKeyArtistBindings(row.keyArtists, row.keyArtistBindings, djById),
+        parentId: row.parentId,
+        sortOrder: row.sortOrder,
+      })),
+    });
+  } catch (error) {
+    console.error('BFF web learn genres admin tree error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/learn/genres/:id/key-artist-bindings', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const genreId = req.params.id as string;
+    const body = req.body as Record<string, unknown>;
+    const bindingsInput = Array.isArray(body.bindings) ? body.bindings : [];
+    const keyArtistsInput = normalizeGenreKeyArtistsInput(body.keyArtists);
+    const genre = await prisma.genre.findUnique({
+      where: { id: genreId },
+      select: { id: true, keyArtists: true },
+    });
+    if (!genre) {
+      res.status(404).json({ error: 'Genre not found' });
+      return;
+    }
+
+    const bindingNames = normalizeGenreKeyArtistsInput(bindingsInput.map((item) => {
+      if (!item || typeof item !== 'object') return '';
+      const record = item as Record<string, unknown>;
+      return typeof record.name === 'string' ? record.name : '';
+    }));
+    const keyArtists = keyArtistsInput.length
+      ? keyArtistsInput
+      : normalizeGenreKeyArtistsInput([...genre.keyArtists, ...bindingNames]);
+    const requestedDjIds = Array.from(new Set(bindingsInput.map((item) => {
+      if (!item || typeof item !== 'object') return '';
+      const record = item as Record<string, unknown>;
+      return typeof record.djId === 'string' ? record.djId.trim() : '';
+    }).filter(Boolean)));
+    const knownDJs = requestedDjIds.length
+      ? await prisma.dJ.findMany({ where: { id: { in: requestedDjIds } }, select: selectGenreDJLite })
+      : [];
+    const knownDjIds = new Set(knownDJs.map((dj) => dj.id));
+
+    const bindings = bindingsInput.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const record = item as Record<string, unknown>;
+      const name = typeof record.name === 'string' ? record.name.trim() : '';
+      if (!name) return [];
+      const djId = typeof record.djId === 'string' && knownDjIds.has(record.djId.trim())
+        ? record.djId.trim()
+        : null;
+      return [{ name, djId }];
+    });
+
+    const bindingByName = new Map(bindings.map((item) => [item.name.toLowerCase(), item]));
+    const normalized = keyArtists.map((name) => bindingByName.get(name.toLowerCase()) ?? { name, djId: null });
+    const updated = await prisma.genre.update({
+      where: { id: genreId },
+      data: { keyArtists, keyArtistBindings: normalized },
+      select: { id: true, keyArtists: true, keyArtistBindings: true },
+    });
+    const djById = new Map(knownDJs.map((dj) => [dj.id, dj]));
+    ok(res, {
+      id: updated.id,
+      keyArtists: updated.keyArtists,
+      keyArtistBindings: normalizeGenreKeyArtistBindings(updated.keyArtists, updated.keyArtistBindings, djById),
+    });
+  } catch (error) {
+    console.error('BFF web update genre key artist bindings error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const genreId = req.params.id as string;
+    const body = req.body as Record<string, unknown>;
+    const genre = await prisma.genre.findUnique({
+      where: { id: genreId },
+      select: { id: true, description: true, example: true },
+    });
+    if (!genre) {
+      res.status(404).json({ error: 'Genre not found' });
+      return;
+    }
+
+    const description = normalizeGenreEditableText(body.description);
+    const example = normalizeGenreEditableText(body.example);
+    const descriptionI18n = normalizeTriTextPayload(body.descriptionI18n, description ?? genre.description ?? '');
+    const exampleI18n = normalizeTriTextPayload(body.exampleI18n, example ?? genre.example ?? '');
+
+    const updated = await prisma.genre.update({
+      where: { id: genreId },
+      data: {
+        description,
+        example,
+        descriptionI18n: descriptionI18n ? (descriptionI18n as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+        exampleI18n: exampleI18n ? (exampleI18n as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+      },
+      select: {
+        id: true,
+        description: true,
+        descriptionI18n: true,
+        example: true,
+        exampleI18n: true,
+      },
+    });
+
+    ok(res, {
+      id: updated.id,
+      description: updated.description ?? '',
+      descriptionI18n: resolveTriTextWithFallback(updated.descriptionI18n ?? null, updated.description ?? ''),
+      example: updated.example ?? '',
+      exampleI18n: resolveTriTextWithFallback(updated.exampleI18n ?? null, updated.example ?? ''),
+    });
+  } catch (error) {
+    console.error('BFF web update genre content error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/learn/genres/key-artists/auto-match', optionalAuth, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const [genres, djs] = await Promise.all([
+      prisma.genre.findMany({ select: { id: true, keyArtists: true, keyArtistBindings: true } }),
+      prisma.dJ.findMany({ select: selectGenreDJLite }),
+    ]);
+    const byName = new Map<string, (typeof djs)[number]>();
+    const addKey = (value: string | null | undefined, dj: (typeof djs)[number]) => {
+      const key = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      if (key && !byName.has(key)) byName.set(key, dj);
+    };
+    for (const dj of djs) {
+      addKey(dj.name, dj);
+      for (const alias of Array.isArray(dj.aliases) ? dj.aliases : []) addKey(alias, dj);
+    }
+
+    let matched = 0;
+    let totalArtists = 0;
+    let updatedGenres = 0;
+
+    await prisma.$transaction(async (tx) => {
+      for (const genre of genres) {
+        const keyArtists = genre.keyArtists.map((item) => item.trim()).filter(Boolean);
+        if (!keyArtists.length) continue;
+        totalArtists += keyArtists.length;
+        const existing = normalizeGenreKeyArtistBindings(keyArtists, genre.keyArtistBindings);
+        const existingByName = new Map(existing.map((item) => [item.name.toLowerCase(), item.djId]));
+        const next = keyArtists.map((name) => {
+          const current = existingByName.get(name.toLowerCase()) ?? null;
+          if (current) return { name, djId: current };
+          const dj = byName.get(name.toLowerCase()) ?? null;
+          if (dj) matched += 1;
+          return { name, djId: dj?.id ?? null };
+        });
+        const changed = JSON.stringify(next) !== JSON.stringify(existing.map((item) => ({ name: item.name, djId: item.djId })));
+        if (changed) {
+          updatedGenres += 1;
+          await tx.genre.update({
+            where: { id: genre.id },
+            data: { keyArtistBindings: next },
+          });
+        }
+      }
+    });
+
+    ok(res, { matched, totalArtists, updatedGenres });
+  } catch (error) {
+    console.error('BFF web auto match genre key artists error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response): Promise<void> => {

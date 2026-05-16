@@ -1,0 +1,112 @@
+{
+  "items": [
+    {
+      "id": "ambient/new-age-ambient/celtic-ambient",
+      "descriptionI18n": {
+        "en": "A substyle of New Age Ambient, Celtic Ambient integrates the ethereal sounds of Celtic music with ambient textures. It often features traditional instruments like the harp or flute, combined with atmospheric backdrops, creating a connection to nature and ancient cultural traditions. This genre is often used to evoke a sense of mystical serenity, rooted in Celtic spiritualism.",
+        "zh": "Celtic Ambient 是 New Age Ambient 的一个子风格，将凯尔特音乐空灵的声音与 ambient 纹理融合在一起。它常使用竖琴、长笛等传统乐器，并与氛围化背景结合，建立起与自然和古老文化传统之间的联系。这个流派常被用来唤起一种带有神秘感的宁静，其根基与凯尔特精神传统有关。",
+        "ja": "Celtic Ambient は New Age Ambient のサブスタイルで、ケルト音楽の空気のように ethereal な響きを ambient のテクスチャと統合する。ハープやフルートのような伝統楽器を用い、それを大気的な背景と組み合わせることで、自然や古代の文化的伝統とのつながりを作り出すことが多い。このジャンルは、ケルト的な精神性に根ざした神秘的な静けさを呼び起こすためによく使われる。"
+      },
+      "exampleI18n": { "en": "Loreena McKennitt - The Mummers' Dance", "zh": "Loreena McKennitt - The Mummers' Dance", "ja": "Loreena McKennitt - The Mummers' Dance" }
+    },
+    {
+      "id": "ambient/new-age-ambient/meditation-ambient",
+      "descriptionI18n": {
+        "en": "Specifically designed for mindfulness, Meditation Ambient is crafted to support deep relaxation, meditation, and introspective practices. This subgenre emphasizes soothing, non-intrusive sounds that help calm the mind and aid in stress reduction, creating a peaceful sonic environment conducive to mental and emotional healing.",
+        "zh": "Meditation Ambient 专为正念而设计，用来支持深度放松、冥想和内省练习。这个子流派强调舒缓、不具侵入性的声音，帮助安定心绪并减轻压力，创造出有利于心理与情绪疗愈的平和声音环境。",
+        "ja": "Meditation Ambient はマインドフルネスのために特別に設計され、深いリラクゼーション、瞑想、内省的な実践を支えるよう作られている。このサブジャンルは、心を落ち着かせストレス軽減を助ける、穏やかで邪魔にならない音を重視し、精神的・感情的な癒やしに適した平和な音環境を作り出す。"
+      },
+      "exampleI18n": { "en": "Deuter - Koyasan", "zh": "Deuter - Koyasan", "ja": "Deuter - Koyasan" }
+    },
+    {
+      "id": "ambient/psybient/psydub",
+      "descriptionI18n": {
+        "en": "A hybrid of psychedelic music and dub, Psydub focuses on deep basslines, reverberating effects, and spacey textures. This substyle is known for its laid-back, dub-influenced rhythm patterns, combined with the mind-expanding qualities of psychedelia, creating an immersive soundscape that's both relaxing and enveloping.",
+        "zh": "Psydub 是 psychedelic music 与 dub 的混合体，重点放在深沉低频线条、回响效果和太空感纹理上。这个子风格以放松、受 dub 影响的节奏型而闻名，并结合 psychedelia 扩展意识般的特质，创造出既松弛又具有包围感的沉浸式声音景观。",
+        "ja": "Psydub は psychedelic music と dub のハイブリッドで、深いベースライン、反響するエフェクト、宇宙的なテクスチャに焦点を当てる。このサブスタイルは、dub の影響を受けたゆったりしたリズム・パターンで知られ、psychedelia の意識を拡張するような性質と組み合わさることで、リラックスでき、同時に包み込むような没入的サウンドスケープを生み出す。"
+      },
+      "exampleI18n": { "en": "Ott - The Queen of All Everything", "zh": "Ott - The Queen of All Everything", "ja": "Ott - The Queen of All Everything" }
+    },
+    {
+      "id": "ambient/psybient/forest-psybient",
+      "descriptionI18n": {
+        "en": "A subgenre that evokes the natural world, Forest Psybient blends ambient and psychedelic trance to create sounds that resemble the atmosphere of mystical forests. With an emphasis on organic and environmental textures, it transports listeners to lush, tranquil woodland spaces, often with nature-inspired samples like birdsong or wind, for a truly otherworldly experience.",
+        "zh": "Forest Psybient 是一个唤起自然世界的子流派，将 ambient 与 psychedelic trance 融合，创造出近似神秘森林氛围的声音。它强调有机和环境化的纹理，常使用鸟鸣、风声等受自然启发的采样，把听众带入茂密、宁静的林地空间，形成真正异世界般的体验。",
+        "ja": "Forest Psybient は自然界を想起させるサブジャンルで、ambient と psychedelic trance を融合させ、神秘的な森の雰囲気に似た音を作り出す。有機的で環境的なテクスチャを重視し、鳥のさえずりや風の音など自然に着想を得たサンプルを用いることが多い。聴き手を緑豊かで静かな森林空間へ運び、真に異世界的な体験をもたらす。"
+      },
+      "exampleI18n": { "en": "Astropilot - Forest of Memories", "zh": "Astropilot - Forest of Memories", "ja": "Astropilot - Forest of Memories" }
+    },
+    {
+      "id": "bass-music/drum-and-bass",
+      "descriptionI18n": {
+        "en": "Drum and Bass (often abbreviated as D&B or DnB) is a high-energy genre of electronic music that evolved from the UK's jungle and breakbeat hardcore scenes in the early 1990s. It is defined by its fast, complex breakbeats, typically ranging from 160 to 180 BPM, paired with heavy, prominent sub-bass lines that form the music's core. While jungle often retained a strong reggae and dancehall influence, drum and bass streamlined the sound, focusing on intricate, meticulously programmed drum patterns and a wider range of sonic textures, from dark and industrial (techstep) to smooth and melodic (liquid funk). The genre is a showcase of rhythmic complexity and sound design, creating a sound that is both physically intense and sonically diverse.",
+        "zh": "Drum and Bass（常缩写为 D&B 或 DnB）是一种高能量电子音乐流派，源自 1990 年代初英国的 jungle 与 breakbeat hardcore 场景。它以快速、复杂的 breakbeat 为定义，速度通常在 160 到 180 BPM 之间，并搭配厚重、突出的 sub-bass 线条，构成音乐核心。相比常保留强烈 reggae 和 dancehall 影响的 jungle，drum and bass 将声音进一步精炼，专注于复杂而精密编排的鼓组模式，以及更广泛的声音纹理，从阴暗工业化的 techstep 到顺滑旋律化的 liquid funk 都可包含其中。这个流派展现了节奏复杂性和声音设计能力，创造出既具有强烈身体冲击又在音色上高度多样的声音。",
+        "ja": "Drum and Bass（D&B または DnB と略されることが多い）は、1990年代初頭の英国の jungle と breakbeat hardcore シーンから発展した、高エネルギーの電子音楽ジャンルである。160〜180 BPM 程度の速く複雑な breakbeat と、音楽の核となる重く際立った sub-bass ラインによって定義される。jungle が reggae や dancehall の強い影響を残すことが多かったのに対し、drum and bass はサウンドを洗練させ、緻密にプログラムされた複雑なドラムパターンと、暗く工業的な techstep から滑らかでメロディックな liquid funk まで幅広い音響テクスチャに焦点を当てた。このジャンルはリズムの複雑さとサウンドデザインの見本であり、身体的に強烈でありながら音響的に多様なサウンドを作り出す。"
+      },
+      "exampleI18n": { "en": "Ed Rush & Optical - Wormhole", "zh": "Ed Rush & Optical - Wormhole", "ja": "Ed Rush & Optical - Wormhole" }
+    },
+    {
+      "id": "bass-music/jungle",
+      "descriptionI18n": {
+        "en": "Jungle is a high-energy subgenre of electronic dance music that emerged in the UK in the early 1990s, blending elements of reggae, dancehall, and hip-hop with fast, breakbeat rhythms. Known for its rapid tempos (usually 160-180 BPM), jungle is characterized by heavily syncopated, chopped-up drum patterns, often using the iconic “Amen break” sample, along with deep, rolling basslines and reggae-inspired vocal samples. Jungle’s gritty, raw sound and complex rhythms make it intense and immersive, laying the groundwork for drum and bass and influencing much of the UK’s rave and bass music scenes.",
+        "zh": "Jungle 是一种高能量电子舞曲子流派，1990 年代初在英国兴起，将 reggae、dancehall 和 hip-hop 元素与快速的 breakbeat 节奏融合在一起。它以高速节奏闻名（通常为 160-180 BPM），特点是高度切分、切碎重组的鼓组模式，常使用标志性的 “Amen break” 采样，并配以深沉滚动的低频线条和受 reggae 启发的人声采样。Jungle 粗粝、原始的声音和复杂节奏使其强烈而沉浸，为 drum and bass 奠定基础，也影响了英国大量 rave 与 bass music 场景。",
+        "ja": "Jungle は1990年代初頭に英国で登場した、高エネルギーの電子ダンスミュージックのサブジャンルで、reggae、dancehall、hip-hop の要素を速い breakbeat リズムと融合させた。高速テンポ（通常 160〜180 BPM）で知られ、強くシンコペートされ細かく切り刻まれたドラムパターン、象徴的な “Amen break” サンプル、深く転がるベースライン、reggae に着想を得たボーカルサンプルを特徴とする。Jungle の粗く生々しいサウンドと複雑なリズムは強烈で没入的であり、drum and bass の土台を築き、英国の rave や bass music シーンの多くに影響を与えた。"
+      },
+      "exampleI18n": { "en": "Shy FX - Original Nuttah 25", "zh": "Shy FX - Original Nuttah 25", "ja": "Shy FX - Original Nuttah 25" }
+    },
+    {
+      "id": "bass-music/juke",
+      "descriptionI18n": {
+        "en": "Juke is a fast-paced electronic dance genre from Chicago, typically around 160 BPM. It features syncopated rhythms, deep basslines, and chopped-up vocal samples. Known for its energetic, raw sound, juke focuses on rhythm and movement, often accompanying fast, intricate footwork dance styles. It is a precursor to footwork and has influenced bass-heavy electronic music.",
+        "zh": "Juke 是一种来自芝加哥的快速电子舞曲流派，速度通常约为 160 BPM。它具有切分节奏、深沉低频线条和切碎的人声采样。Juke 以充满能量、原始直接的声音著称，重点放在节奏与身体运动上，常伴随快速而复杂的 footwork 舞蹈风格。它是 footwork 的前身，并影响了许多重低音电子音乐。",
+        "ja": "Juke はシカゴ発の高速な電子ダンスミュージックのジャンルで、テンポは通常 160 BPM 前後である。シンコペートされたリズム、深いベースライン、切り刻まれたボーカルサンプルを特徴とする。エネルギッシュで生々しいサウンドで知られ、リズムと動きに焦点を当て、速く複雑な footwork ダンススタイルに伴うことが多い。footwork の前身であり、重低音を重視する電子音楽にも影響を与えた。"
+      },
+      "exampleI18n": { "en": "DJ Funk - Run", "zh": "DJ Funk - Run", "ja": "DJ Funk - Run" }
+    },
+    {
+      "id": "bass-music/dubstep",
+      "descriptionI18n": {
+        "en": "Dubstep is a genre of electronic dance music that originated in South London in the early 2000s, emerging as a dark, mutated evolution of UK Garage and 2-step. It is structurally defined by a tempo of roughly 140 BPM, but with a distinctive 'half-time' rhythm (kick on beat one, snare on beat three) that creates a spacious, lurching groove. The genre's sonic signature is its heavy emphasis on sub-bass frequencies—often felt physically rather than heard—and the use of Low Frequency Oscillation (LFO) to manipulate bass timbres, creating the iconic 'wobble' sound. Early dubstep emphasized atmosphere, silence, and dub-reggae influenced reverberation, creating a brooding, urban tension that contrasts with the more aggressive mid-range distortion found in its later commercial variations.",
+        "zh": "Dubstep 是一种电子舞曲流派，2000 年代初起源于伦敦南部，是 UK Garage 和 2-step 阴暗、变异式演化的结果。它在结构上通常以约 140 BPM 为基础，但采用独特的 “half-time” 节奏（第一拍踢鼓，第三拍军鼓），形成宽阔、摇晃前倾的 groove。这个流派的声音标志是对 sub-bass 频率的强烈强调，这些低频往往更多被身体感受到而不是被耳朵听到；同时它使用 Low Frequency Oscillation（LFO）操控低音音色，创造出标志性的 “wobble” 声音。早期 dubstep 强调氛围、留白和受 dub-reggae 影响的混响，制造出阴郁的都市张力；这与后来商业化变体中更具攻击性的中频失真形成对比。",
+        "ja": "Dubstep は2000年代初頭に南ロンドンで生まれた電子ダンスミュージックのジャンルで、UK Garage と 2-step の暗く変異した発展形として登場した。構造的にはおよそ 140 BPM のテンポで定義されるが、1拍目にキック、3拍目にスネアを置く独特の “half-time” リズムによって、広がりがあり前のめりに揺れる groove を生み出す。このジャンルの音響的な特徴は、聴くというより身体で感じることの多い sub-bass 周波数への強い重点と、Low Frequency Oscillation（LFO）でベース音色を操作し象徴的な “wobble” サウンドを作る点にある。初期 dubstep は雰囲気、沈黙、dub-reggae の影響を受けたリバーブを重視し、陰鬱な都市的緊張感を作り出した。これは後の商業的変種に見られる、より攻撃的な中域の歪みとは対照的である。"
+      },
+      "exampleI18n": { "en": "Benga & Coki - Night", "zh": "Benga & Coki - Night", "ja": "Benga & Coki - Night" }
+    },
+    {
+      "id": "bass-music/future-bass",
+      "descriptionI18n": {
+        "en": "Future bass is a subgenre of electronic dance music known for its bright, uplifting sound and emotional, melodic focus. Originating in the early 2010s, future bass typically features lush, modulated synths, side-chained chords, and smooth, pitch-shifting basslines. The genre often incorporates catchy, pop-influenced melodies and vibrant, high-energy drops, creating an atmospheric yet energetic feel. Future bass tracks are usually set around 140 BPM but can vary, and they emphasize a “wavy” or “bouncy” sound that feels dynamic and uplifting. Artists like Flume and Marshmello helped popularize future bass, which has since become a favorite in both pop and electronic dance music for its feel-good, euphoric vibes.",
+        "zh": "Future bass 是电子舞曲的一个子流派，以明亮、振奋的声音以及情绪化、旋律化的重点而闻名。它起源于 2010 年代初，通常包含丰厚并经过调制的合成器、side-chain 和弦，以及顺滑、带有 pitch-shifting 的低频线条。这个流派常融入抓耳、受流行音乐影响的旋律和鲜活高能的 drop，形成既有氛围感又充满能量的听感。Future bass 作品通常在 140 BPM 左右，但也会变化，并强调一种 “wavy” 或 “bouncy” 的动态上扬声音。Flume 和 Marshmello 等艺术家帮助 future bass 流行起来，使它凭借愉悦、亢奋的氛围成为流行音乐和电子舞曲中的热门风格。",
+        "ja": "Future bass は電子ダンスミュージックのサブジャンルで、明るく高揚感のあるサウンドと、感情的でメロディックな焦点によって知られる。2010年代初頭に生まれ、豊かに変調されたシンセ、side-chain されたコード、滑らかで pitch-shifting を伴うベースラインを特徴とすることが多い。このジャンルは、ポップの影響を受けたキャッチーなメロディと、鮮やかで高エネルギーな drop を取り入れ、雰囲気がありながらエネルギッシュな感覚を作り出す。Future bass の楽曲は通常 140 BPM 前後だが幅があり、“wavy” または “bouncy” と表現される、ダイナミックで uplifting な音を重視する。Flume や Marshmello などのアーティストが future bass の普及に貢献し、その気分を良くする多幸感のある vibe によって、ポップと電子ダンスミュージックの両方で人気のスタイルとなった。"
+      },
+      "exampleI18n": { "en": "Flume - Never Be Like You feat. Kai", "zh": "Flume - Never Be Like You feat. Kai", "ja": "Flume - Never Be Like You feat. Kai" }
+    },
+    {
+      "id": "bass-music/wave",
+      "descriptionI18n": {
+        "en": "Wave is a genre that emerged in the mid-2010s from the underground internet scene, blending elements of trap, grime, and emo. Known for its emotional melodies and heavy bass, it reflects the emotional depth and personal struggles of its creators. Wave’s connection to internet subcultures, particularly on platforms like SoundCloud and Bandcamp, helped the genre gain traction among young, digitally native listeners. The genre speaks to themes of isolation, loss, and longing, and has become a vehicle for introspective and vulnerable expression. Its sound is often dark and atmospheric, capturing the tension between melancholy and empowerment, resonating with a generation confronting emotional and societal challenges in a hyper-connected, often isolating digital world.",
+        "zh": "Wave 是一个在 2010 年代中期从地下互联网场景中兴起的流派，融合了 trap、grime 和 emo 元素。它以情绪化旋律和厚重低频著称，反映出创作者的情感深度与个人挣扎。Wave 与互联网亚文化的联系，尤其是在 SoundCloud 和 Bandcamp 等平台上的传播，帮助它在年轻的数字原生听众中获得关注。这个流派触及孤立、失去和渴望等主题，并成为内省与脆弱表达的载体。它的声音通常阴暗而具有氛围感，捕捉忧郁与自我赋权之间的张力，与在高度连接却常令人孤立的数字世界中面对情绪和社会挑战的一代人产生共鸣。",
+        "ja": "Wave は2010年代半ばに地下インターネット・シーンから登場したジャンルで、trap、grime、emo の要素を融合している。感情的なメロディと重いベースで知られ、制作者の感情の深さや個人的な葛藤を反映する。SoundCloud や Bandcamp などのプラットフォームを中心としたインターネット・サブカルチャーとの結びつきが、若いデジタルネイティブのリスナーの間でこのジャンルを広める助けとなった。Wave は孤立、喪失、渇望といったテーマを語り、内省的で傷つきやすい表現の媒体となっている。そのサウンドは暗く大気的であることが多く、憂鬱とエンパワーメントのあいだの緊張を捉え、高度につながりながらも孤立しがちなデジタル世界で感情的・社会的課題に直面する世代に響いている。"
+      },
+      "exampleI18n": { "en": "Klimeks - Eternally Yours", "zh": "Klimeks - Eternally Yours", "ja": "Klimeks - Eternally Yours" }
+    },
+    {
+      "id": "bass-music/midtempo-bass",
+      "descriptionI18n": {
+        "en": "Midtempo Bass is a genre that combines elements of dubstep, electro house, and techno, typically sitting at a tempo range of 100-125 BPM. Known for its deep, punchy basslines and atmospheric sound design, this genre creates a dark, moody vibe that remains energetic without the faster tempos of other electronic styles. Midtempo Bass often features complex synth patterns, spacey melodies, and heavy drops, balancing between the heaviness of bass music and the groove of slower tempo rhythms. It’s perfect for those looking for something that hits hard without overwhelming the listener.",
+        "zh": "Midtempo Bass 是一种结合 dubstep、electro house 和 techno 元素的流派，速度通常位于 100-125 BPM 之间。它以深沉、有冲击力的低频线条和氛围化声音设计著称，营造出阴暗、情绪浓重但仍保持能量的 vibe，而不依赖其他电子风格中更快的速度。Midtempo Bass 常包含复杂的合成器型态、太空感旋律和厚重 drop，在 bass music 的重量与较慢速度节奏的 groove 之间取得平衡。它很适合想要强烈冲击、但又不希望被过度压迫的听众。",
+        "ja": "Midtempo Bass は dubstep、electro house、techno の要素を組み合わせたジャンルで、通常 100〜125 BPM のテンポ帯に位置する。深くパンチのあるベースラインと大気的なサウンドデザインで知られ、他の電子音楽スタイルのような速いテンポに頼らず、暗くムーディーでありながらエネルギーを保つ vibe を作り出す。Midtempo Bass は複雑なシンセ・パターン、宇宙的なメロディ、重い drop を特徴とすることが多く、bass music の重さと遅めのテンポの groove のあいだでバランスを取る。聴き手を圧倒しすぎず、それでも強く響くものを求める人に最適である。"
+      },
+      "exampleI18n": { "en": "REZZ - Edge", "zh": "REZZ - Edge", "ja": "REZZ - Edge" }
+    },
+    {
+      "id": "bass-music/trap-edm",
+      "descriptionI18n": {
+        "en": "Trap (EDM) is an electronic music style inspired by hip-hop trap, featuring hard-hitting basslines, rapid hi-hats, and layered synthesizers. With a tempo typically around 140 BPM, this genre emphasizes aggressive drops, high-energy beats, and catchy melodies. Trap (EDM) brings the rhythmic elements of hip-hop into the world of electronic dance music, creating a sound that is both punchy and melodic. It’s known for its festival appeal, with a focus on massive drops and anthemic buildups, making it a favorite in high-energy environments like clubs and large festivals.",
+        "zh": "Trap (EDM) 是一种受 hip-hop trap 启发的电子音乐风格，特点是强力低频线条、快速 hi-hat 和层叠合成器。它的速度通常约为 140 BPM，强调攻击性的 drop、高能节拍和抓耳旋律。Trap (EDM) 将 hip-hop 的节奏元素带入电子舞曲世界，创造出既有冲击力又有旋律性的声音。它以适合音乐节现场而闻名，重点放在巨大 drop 和具有赞歌感的 build-up 上，因此在俱乐部和大型音乐节等高能量环境中很受欢迎。",
+        "ja": "Trap (EDM) は hip-hop trap に着想を得た電子音楽スタイルで、強く打ち出されるベースライン、高速の hi-hat、重ねられたシンセサイザーを特徴とする。テンポは通常 140 BPM 前後で、攻撃的な drop、高エネルギーのビート、キャッチーなメロディを重視する。Trap (EDM) は hip-hop のリズム要素を電子ダンスミュージックの世界へ持ち込み、パンチがありながらメロディックなサウンドを作り出す。巨大な drop とアンセム的な build-up に焦点を当てるため、フェスティバル向きの魅力で知られ、クラブや大型フェスのような高エネルギー環境で人気が高い。"
+      },
+      "exampleI18n": { "en": "RL Grime - Core", "zh": "RL Grime - Core", "ja": "RL Grime - Core" }
+    }
+  ]
+}

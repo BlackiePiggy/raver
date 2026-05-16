@@ -6,6 +6,7 @@ import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
 import { AdminHealthStatus, AdminStatus, adminStatusApi } from '@/lib/api/admin-status';
+import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 const STATUS_LABELS: Record<AdminHealthStatus, string> = {
   healthy: '健康',
@@ -21,7 +22,7 @@ const STATUS_CLASS_NAMES: Record<AdminHealthStatus, string> = {
 
 const formatTime = (value?: string | null): string => {
   if (!value) return '-';
-  return new Date(value).toLocaleString('zh-CN', { hour12: false });
+  return formatDateTimeWithSystemTimeZoneLabel(value);
 };
 
 const formatPercent = (value?: number): string => `${((value ?? 0) * 100).toFixed(1)}%`;

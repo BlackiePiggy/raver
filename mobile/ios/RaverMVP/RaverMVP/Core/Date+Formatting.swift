@@ -26,14 +26,36 @@ extension Date {
         return formatter
     }
 
-    func appLocalizedYMDText() -> String {
-        Self.appDateFormatter(zhFormat: "yyyy年M月d日", enFormat: "MMM d, yyyy")
+    private static func appTimeZoneLabel(_ timeZone: TimeZone = .current) -> String {
+        switch timeZone.identifier {
+        case "Asia/Shanghai":
+            return LT("北京时间", "Asia/Shanghai", "北京時間")
+        case "Asia/Tokyo":
+            return LT("东京时间", "Tokyo time", "東京時間")
+        case "America/Los_Angeles":
+            return LT("洛杉矶时间", "Los Angeles time", "ロサンゼルス時間")
+        case "America/New_York":
+            return LT("纽约时间", "New York time", "ニューヨーク時間")
+        default:
+            return timeZone.identifier
+        }
+    }
+
+    static func appLocalizedTimeZoneLabel(_ timeZone: TimeZone = .current) -> String {
+        appTimeZoneLabel(timeZone)
+    }
+
+    private func appLocalizedYMDTextRaw(in timeZone: TimeZone = .current) -> String {
+        Self.appDateFormatter(zhFormat: "yyyy年M月d日", enFormat: "MMM d, yyyy", timeZone: timeZone)
             .string(from: self)
     }
 
+    func appLocalizedYMDText() -> String {
+        "\(appLocalizedYMDTextRaw()) · \(Self.appTimeZoneLabel())"
+    }
+
     func appLocalizedYMDText(in timeZone: TimeZone) -> String {
-        Self.appDateFormatter(zhFormat: "yyyy年M月d日", enFormat: "MMM d, yyyy", timeZone: timeZone)
-            .string(from: self)
+        "\(appLocalizedYMDTextRaw(in: timeZone)) · \(Self.appTimeZoneLabel(timeZone))"
     }
 
     func appLocalizedDateRangeText(to endDate: Date) -> String {
@@ -50,11 +72,13 @@ extension Date {
             return self.appLocalizedYMDText(in: timeZone)
         }
 
+        let suffix = " · \(Self.appTimeZoneLabel(timeZone))"
+
         if Self.appDateLanguage == .en {
             if calendar.isDate(startDay, inSameDayAs: endDay) {
                 return self.appLocalizedYMDText(in: timeZone)
             }
-            return "\(self.appLocalizedYMDText(in: timeZone)) - \(endDate.appLocalizedYMDText(in: timeZone))"
+            return "\(self.appLocalizedYMDTextRaw(in: timeZone)) - \(endDate.appLocalizedYMDTextRaw(in: timeZone))\(suffix)"
         }
 
         let startYear = calendar.component(.year, from: startDay)
@@ -66,21 +90,20 @@ extension Date {
 
         if startYear == endYear, startMonth == endMonth {
             if startDayOfMonth == endDayOfMonth {
-                return "\(startYear)年\(startMonth)月\(startDayOfMonth)日"
+                return "\(startYear)年\(startMonth)月\(startDayOfMonth)日\(suffix)"
             }
-            return "\(startYear)年\(startMonth)月\(startDayOfMonth)日-\(endDayOfMonth)日"
+            return "\(startYear)年\(startMonth)月\(startDayOfMonth)日-\(endDayOfMonth)日\(suffix)"
         }
 
         if startYear == endYear {
-            return "\(startYear)年\(startMonth)月\(startDayOfMonth)日-\(endMonth)月\(endDayOfMonth)日"
+            return "\(startYear)年\(startMonth)月\(startDayOfMonth)日-\(endMonth)月\(endDayOfMonth)日\(suffix)"
         }
 
-        return "\(startYear)年\(startMonth)月\(startDayOfMonth)日-\(endYear)年\(endMonth)月\(endDayOfMonth)日"
+        return "\(startYear)年\(startMonth)月\(startDayOfMonth)日-\(endYear)年\(endMonth)月\(endDayOfMonth)日\(suffix)"
     }
 
     func appLocalizedYMDHMText() -> String {
-        Self.appDateFormatter(zhFormat: "yyyy年M月d日 HH:mm", enFormat: "MMM d, yyyy HH:mm", jaFormat: "yyyy年M月d日 HH:mm")
-            .string(from: self)
+        "\(Self.appDateFormatter(zhFormat: "yyyy年M月d日 HH:mm", enFormat: "MMM d, yyyy HH:mm", jaFormat: "yyyy年M月d日 HH:mm").string(from: self)) · \(Self.appTimeZoneLabel())"
     }
 
     func appLocalizedMDText() -> String {

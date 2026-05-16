@@ -41,11 +41,11 @@ private enum EventTimeZoneDisplay {
         let deviceText = "\(formatter.string(from: slot.startTime)) - \(formatter.string(from: slot.endTime))"
         guard let zone = eventTimeZone(for: event),
               zone.identifier != TimeZone.current.identifier else {
-            return deviceText
+            return "\(deviceText) · \(Date.appLocalizedTimeZoneLabel())"
         }
         formatter.timeZone = zone
         let eventText = "\(formatter.string(from: slot.startTime)) - \(formatter.string(from: slot.endTime))"
-        return "\(deviceText) · \(TimeZone.current.identifier) / \(eventText) · \(zone.identifier)"
+        return "\(deviceText) · \(Date.appLocalizedTimeZoneLabel()) / \(eventText) · \(Date.appLocalizedTimeZoneLabel(zone))"
     }
 }
 
@@ -112,13 +112,6 @@ struct EventLiveDiscussionView: View {
     private var canSend: Bool {
         (!trimmedDraft.isEmpty || !imageURLs.isEmpty) && !isSending && !isUploadingImage
     }
-
-    private static let liveStageTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
 
     private var liveDiscussionHeaderHeight: CGFloat {
          44
@@ -3352,13 +3345,6 @@ struct EventDetailView: View {
         return URL(string: "https://\(trimmed)")
     }
 
-    private static let eventSlotTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
-
     private var immersiveTrailingAction: AnyView? {
         guard event != nil else { return nil }
         return AnyView(
@@ -4291,20 +4277,12 @@ struct EventDetailView: View {
     }
 
     private func eventInfoDateText(_ date: Date, event: WebEvent) -> String {
-        let deviceText: String
-        switch AppLanguagePreference.current.effectiveLanguage {
-        case .zh:
-            deviceText = date.appLocalizedYMDText()
-        case .ja:
-            deviceText = date.appLocalizedYMDText()
-        case .en, .system:
-            deviceText = date.formatted(date: .complete, time: .omitted)
-        }
+        let deviceText = date.appLocalizedYMDText()
         guard let zone = EventTimeZoneDisplay.eventTimeZone(for: event),
               zone.identifier != TimeZone.current.identifier else {
-            return "\(deviceText) · \(TimeZone.current.identifier)"
+            return deviceText
         }
-        return "\(deviceText) · \(TimeZone.current.identifier)\n\(date.appLocalizedYMDText(in: zone)) · \(zone.identifier)"
+        return "\(deviceText)\n\(date.appLocalizedYMDText(in: zone))"
     }
 
     private func eventSlotTimeRangeText(_ slot: WebEventLineupSlot, event: WebEvent) -> String {

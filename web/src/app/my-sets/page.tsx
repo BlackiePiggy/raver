@@ -7,6 +7,7 @@ import Image from 'next/image';
 import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiUrl } from '@/lib/config';
+import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 interface MyTrack {
   id: string;
@@ -26,11 +27,7 @@ const formatDateTime = (value?: string | null) => {
   if (!value) {
     return '未知';
   }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return '未知';
-  }
-  return date.toLocaleString('zh-CN');
+  return formatDateTimeWithSystemTimeZoneLabel(value);
 };
 
 export default function MySetsPage() {

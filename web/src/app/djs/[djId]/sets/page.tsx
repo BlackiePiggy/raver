@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { DJSetAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import Navigation from '@/components/Navigation';
+import { formatDateWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 export default function DJSetsPage() {
   const params = useParams();
@@ -122,7 +123,7 @@ export default function DJSetsPage() {
                   <div className="flex items-center gap-4 text-sm text-text-secondary pt-3 border-t border-bg-tertiary">
                     <span className="flex items-center gap-1">
                       <span>🕒</span>
-                      <span>{new Date(set.createdAt).toLocaleDateString('zh-CN')}</span>
+                      <span>{formatDateWithSystemTimeZoneLabel(set.createdAt)}</span>
                     </span>
                     <span className="flex items-center gap-1">
                       <span>🎵</span>

@@ -5,10 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { AccountDeletionRequest, accountDeletionsApi } from '@/lib/api/account-deletions';
+import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 const formatTime = (value?: string | null): string => {
   if (!value) return '-';
-  return new Date(value).toLocaleString('zh-CN', { hour12: false });
+  return formatDateTimeWithSystemTimeZoneLabel(value);
 };
 
 const statusClassName = (status: string): string => {

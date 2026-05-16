@@ -12,12 +12,13 @@ import {
   OpenIMSyncJob,
   OpenIMWebhookEvent,
 } from '@/lib/api/openim-admin';
+import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 const formatTime = (value?: string | null): string => {
   if (!value) {
     return '-';
   }
-  return new Date(value).toLocaleString('zh-CN', { hour12: false });
+  return formatDateTimeWithSystemTimeZoneLabel(value);
 };
 
 const shortText = (value: string | null | undefined, max = 80): string => {

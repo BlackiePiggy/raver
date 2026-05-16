@@ -1,0 +1,112 @@
+{
+  "items": [
+    {
+      "id": "bass-music/cloud-rap",
+      "descriptionI18n": {
+        "en": "Cloud Rap is a genre merging hip-hop with electronic and ambient music, emerging in the late 2000s through internet blog culture. It is defined by its hazy, dreamlike production, utilizing heavy reverb, delay, and ethereal synthesizer pads to create a 'cloudy' atmosphere. Musically, it relies on slow-tempo trap beats and unconventional samples (often from indie or choral music), while vocally it features relaxed, sometimes mumbled or melodic delivery. It serves as the direct stylistic ancestor to genres like Wave and modern Emo Rap, blurring the lines between atmospheric electronic soundscapes and rap.",
+        "zh": "Cloud Rap 是一种将 hip-hop 与电子音乐、ambient 音乐融合的流派，2000 年代末通过互联网博客文化兴起。它以朦胧、梦境般的制作方式为定义，使用大量混响、delay 和空灵的合成器 pad 来营造“云雾感”氛围。在音乐上，它依赖慢速 trap beat 和非常规采样（常来自 indie 或合唱音乐）；在人声上，则采用放松的、有时近似含混低语或旋律化的演绎。它是 Wave 和现代 Emo Rap 等流派的直接风格祖先，模糊了氛围化电子声音景观与 rap 之间的界线。",
+        "ja": "Cloud Rap は hip-hop と電子音楽、ambient 音楽を融合するジャンルで、2000年代後半にインターネットのブログ文化を通じて登場した。霞がかった夢のようなプロダクションによって定義され、強いリバーブ、delay、空気感のあるシンセサイザー・パッドを用いて「cloudy」な雰囲気を作り出す。音楽的には遅いテンポの trap ビートと、indie や合唱音楽に由来することも多い非伝統的なサンプルに依存し、ボーカル面ではリラックスした、ときに mumble 的またはメロディックなデリバリーを特徴とする。Wave や現代の Emo Rap の直接的なスタイル上の祖先であり、雰囲気的な電子サウンドスケープと rap の境界を曖昧にする。"
+      },
+      "exampleI18n": { "en": "Yung Lean - Ginseng Strip 2002", "zh": "Yung Lean - Ginseng Strip 2002", "ja": "Yung Lean - Ginseng Strip 2002" }
+    },
+    {
+      "id": "bass-music/phonk",
+      "descriptionI18n": {
+        "en": "Phonk is a genre that fuses 90s Memphis rap with modern electronic production techniques. It is characterized by the use of distorted and repetitive vocals (often samples from old cassette tapes), saturated 808 basslines, and dark or jazzy melodies. In its recent evolution, it has branched into high-energy styles driven by cowbells and fast rhythms, becoming a viral phenomenon associated with drifting culture and fitness.",
+        "zh": "Phonk 是一种将 90 年代 Memphis rap 与现代电子制作技术融合的流派。它的特征包括失真且重复的人声（常采样自旧磁带）、饱和的 808 低频线条，以及阴暗或带 jazz 色彩的旋律。在近年的演化中，它分化出由 cowbell 和快速节奏驱动的高能量风格，并成为与漂移文化和健身场景相关的病毒式现象。",
+        "ja": "Phonk は90年代の Memphis rap と現代的な電子音楽制作技術を融合させたジャンルである。歪んで反復されるボーカル（古いカセットテープからのサンプルであることも多い）、飽和した 808 ベースライン、暗いまたはジャジーなメロディを特徴とする。近年の進化では、cowbell と速いリズムに駆動される高エネルギーなスタイルへ枝分かれし、ドリフト文化やフィットネスと結びついたバイラル現象となった。"
+      },
+      "exampleI18n": { "en": "Kordhell - Murder In My Mind", "zh": "Kordhell - Murder In My Mind", "ja": "Kordhell - Murder In My Mind" }
+    },
+    {
+      "id": "bass-music/uk-bass",
+      "descriptionI18n": {
+        "en": "UK bass is an umbrella term for a variety of bass-heavy electronic music styles that emerged from the UK in the late 2000s, drawing influences from genres like dubstep, garage, grime, and drum and bass. Known for its deep, powerful basslines and diverse tempos, UK bass often incorporates syncopated rhythms, heavy sub-bass, and elements from house and techno. It’s less about a specific tempo or structure and more about the emphasis on bass and groove, blending elements from various UK underground scenes. UK bass has become a staple in club music, appealing to listeners with its innovative, genre-blurring sound and versatility.",
+        "zh": "UK bass 是一个总称，指 2000 年代末从英国兴起的一系列重低音电子音乐风格，受到 dubstep、garage、grime 和 drum and bass 等流派影响。它以深沉、有力的低频线条和多样化速度著称，常融入切分节奏、厚重 sub-bass，以及 house 和 techno 的元素。它并不以某个固定速度或结构为核心，而更强调 bass 与 groove，并融合英国不同地下场景的元素。UK bass 已成为俱乐部音乐中的重要风格，凭借创新、跨流派的声音和灵活性吸引听众。",
+        "ja": "UK bass は、2000年代後半に英国から登場した、ベースの重いさまざまな電子音楽スタイルを指す包括的な用語で、dubstep、garage、grime、drum and bass などから影響を受けている。深く力強いベースラインと多様なテンポで知られ、シンコペートされたリズム、重い sub-bass、house や techno の要素を取り入れることが多い。特定のテンポや構造よりも、bass と groove の強調が重要であり、英国のさまざまな地下シーンの要素を混ぜ合わせる。UK bass はクラブミュージックの定番となり、革新的でジャンルの境界を曖昧にするサウンドと汎用性でリスナーを惹きつけている。"
+      },
+      "exampleI18n": { "en": "Burial - Archangel", "zh": "Burial - Archangel", "ja": "Burial - Archangel" }
+    },
+    {
+      "id": "bass-music/moombahton",
+      "descriptionI18n": {
+        "en": "Moombahton is a fusion genre created by Dave Nada in 2009 that slows down Dutch House vibes to the tempo of Reggaeton (usually 108-112 BPM). It combines the thick, elastic basslines and dramatic build-ups of Electro House with the 'dembow' rhythm of Reggaeton. It became a global phenomenon, heavily influencing modern pop production and leading to subgenres like Moombahcore.",
+        "zh": "Moombahton 是 Dave Nada 于 2009 年创造的融合流派，把 Dutch House 的 vibe 放慢到 Reggaeton 的速度（通常为 108-112 BPM）。它将 Electro House 厚实、有弹性的低频线条和戏剧化 build-up，与 Reggaeton 的 “dembow” 节奏结合起来。它后来成为全球现象，深刻影响现代流行音乐制作，并衍生出 Moombahcore 等子流派。",
+        "ja": "Moombahton は Dave Nada が2009年に作り出した融合ジャンルで、Dutch House の vibe を Reggaeton のテンポ（通常 108〜112 BPM）まで落としたものだ。Electro House の太く弾力のあるベースラインとドラマチックな build-up を、Reggaeton の “dembow” リズムと組み合わせる。世界的な現象となり、現代のポップ・プロダクションに大きな影響を与え、Moombahcore のようなサブジャンルにもつながった。"
+      },
+      "exampleI18n": { "en": "Major Lazer - Lean On", "zh": "Major Lazer - Lean On", "ja": "Major Lazer - Lean On" }
+    },
+    {
+      "id": "bass-music/drum-and-bass/neurofunk",
+      "descriptionI18n": {
+        "en": "A subgenre of Drum and Bass that leans into a darker, more aggressive sound. Neurofunk is defined by its intricate basslines and futuristic, almost mechanical rhythms, often featuring experimental sound design and heavy use of distortion. The style is intense and complex, designed to push the boundaries of drum programming and bass manipulation.",
+        "zh": "Neurofunk 是 Drum and Bass 的一个子流派，倾向于更阴暗、更具攻击性的声音。它以复杂的低频线条和未来主义、近乎机械化的节奏为定义，常包含实验性声音设计并大量使用失真。这个风格强烈而复杂，旨在推动鼓组编程和低频操控的边界。",
+        "ja": "Neurofunk は Drum and Bass のサブジャンルで、より暗く攻撃的なサウンドへ傾斜している。緻密なベースラインと未来的でほとんど機械的なリズムによって定義され、実験的なサウンドデザインと大量のディストーションを特徴とすることが多い。このスタイルは強烈で複雑であり、ドラムプログラミングとベース操作の限界を押し広げるよう設計されている。"
+      },
+      "exampleI18n": { "en": "Noisia - Diplodocus", "zh": "Noisia - Diplodocus", "ja": "Noisia - Diplodocus" }
+    },
+    {
+      "id": "bass-music/drum-and-bass/darkstep",
+      "descriptionI18n": {
+        "en": "Darkstep is a heavier, darker variant of Drum and Bass that emphasizes foreboding atmospheres and ominous basslines. It is known for its hard, pounding rhythms and a sense of tension, creating an unsettling listening experience. Darkstep often incorporates darker soundscapes, deep bass, and minimal melodies, creating an aggressive and immersive feel.",
+        "zh": "Darkstep 是 Drum and Bass 中更厚重、更阴暗的变体，强调不祥的氛围和 ominous 的低频线条。它以坚硬、猛烈敲击的节奏和紧张感著称，带来令人不安的聆听体验。Darkstep 常融入更黑暗的声音景观、深沉低频和极简旋律，创造出具有攻击性且沉浸的感受。",
+        "ja": "Darkstep は Drum and Bass のより重く暗い変種で、不吉な雰囲気と ominous なベースラインを強調する。硬く打ちつけるようなリズムと緊張感で知られ、不穏なリスニング体験を作り出す。Darkstep は暗いサウンドスケープ、深いベース、ミニマルなメロディを取り入れることが多く、攻撃的で没入的な感覚を生み出す。"
+      },
+      "exampleI18n": { "en": "Dillinja - The Angels Fell", "zh": "Dillinja - The Angels Fell", "ja": "Dillinja - The Angels Fell" }
+    },
+    {
+      "id": "bass-music/drum-and-bass/techstep",
+      "descriptionI18n": {
+        "en": "A subgenre of Drum and Bass that incorporates elements of techno and industrial music. Techstep features deep, mechanical basslines, hard-hitting beats, and a more structured, almost minimalist approach. The genre is often dark, cold, and mechanical, with an emphasis on technological soundscapes and futuristic themes.",
+        "zh": "Techstep 是 Drum and Bass 的一个子流派，融入 techno 和 industrial music 的元素。它具有深沉、机械化的低频线条、强力节拍，以及更结构化、近乎极简的处理方式。这个流派通常阴暗、冰冷且机械感强，强调技术化声音景观和未来主义主题。",
+        "ja": "Techstep は Drum and Bass のサブジャンルで、techno と industrial music の要素を取り入れている。深く機械的なベースライン、強く打ち込まれるビート、そしてより構造化された、ほとんどミニマルなアプローチを特徴とする。このジャンルはしばしば暗く冷たく機械的であり、技術的なサウンドスケープと未来的なテーマを重視する。"
+      },
+      "exampleI18n": { "en": "Ed Rush - Funktion", "zh": "Ed Rush - Funktion", "ja": "Ed Rush - Funktion" }
+    },
+    {
+      "id": "bass-music/drum-and-bass/liquid-drum-and-bass",
+      "descriptionI18n": {
+        "en": "Characterized by its smoother, more melodic sound, Liquid Drum and Bass offers a more laid-back vibe compared to the genre’s typical intensity. Known for its flowing, liquid-like beats, atmospheric pads, and softer basslines, this style creates a more ambient and soulful listening experience while still maintaining the core drum and bass rhythms.",
+        "zh": "Liquid Drum and Bass 以更顺滑、更旋律化的声音为特征，相比 Drum and Bass 通常的强烈能量，它提供了更放松的 vibe。它以流动、液态般的节拍、氛围化 pad 和更柔和的低频线条著称，在保留 drum and bass 核心节奏的同时，创造出更具 ambient 气质和 soul 感的聆听体验。",
+        "ja": "Liquid Drum and Bass は、より滑らかでメロディックなサウンドを特徴とし、ジャンルに典型的な強烈さに比べて、よりリラックスした vibe を提供する。流れるような液体的ビート、大気的なパッド、柔らかなベースラインで知られ、drum and bass の中核となるリズムを保ちながら、より ambient でソウルフルなリスニング体験を作り出す。"
+      },
+      "exampleI18n": { "en": "Calibre - Even If", "zh": "Calibre - Even If", "ja": "Calibre - Even If" }
+    },
+    {
+      "id": "bass-music/drum-and-bass/jump-up",
+      "descriptionI18n": {
+        "en": "Jump Up is a more upbeat, energetic style of Drum and Bass, known for its bouncy, fast rhythms and party-friendly vibe. The style incorporates catchy basslines and high-energy beats designed to get crowds moving. Its cheerful, bass-driven sound is perfect for the dancefloor, and its infectious grooves make it a staple of Drum and Bass events.",
+        "zh": "Jump Up 是 Drum and Bass 中更明快、更有能量的风格，以弹跳感强、快速的节奏和适合派对的 vibe 著称。它融入抓耳的低频线条和高能节拍，目的就是带动人群身体运动。它欢快、由 bass 驱动的声音非常适合舞池，而富有感染力的 groove 也让它成为 Drum and Bass 活动中的常见核心风格。",
+        "ja": "Jump Up は Drum and Bass の中でもより明るくエネルギッシュなスタイルで、弾むような速いリズムとパーティー向きの vibe で知られる。人々を動かすために設計されたキャッチーなベースラインと高エネルギーなビートを取り入れる。陽気でベース主導のサウンドはダンスフロアに最適で、感染力のある groove によって Drum and Bass イベントの定番となっている。"
+      },
+      "exampleI18n": { "en": "Loadstar - Bomber", "zh": "Loadstar - Bomber", "ja": "Loadstar - Bomber" }
+    },
+    {
+      "id": "bass-music/drum-and-bass/jump-up/party-drum-and-bass",
+      "descriptionI18n": {
+        "en": "A festive variation of Jump Up, Party Drum and Bass takes the energy of the genre and adds even more lively and celebratory elements. It’s characterized by an upbeat tempo, playful basslines, and a fun, party atmosphere, making it ideal for vibrant events and festivals.",
+        "zh": "Party Drum and Bass 是 Jump Up 的节庆化变体，在这一风格本身的能量之上加入更活泼、更具庆祝感的元素。它以明快速度、俏皮低频线条和欢乐派对氛围为特征，非常适合充满活力的活动和音乐节。",
+        "ja": "Party Drum and Bass は Jump Up の祝祭的な変種で、ジャンルのエネルギーにさらに生き生きとした祝祭感のある要素を加える。明るいテンポ、遊び心のあるベースライン、楽しいパーティーの雰囲気を特徴とし、活気あるイベントやフェスティバルに理想的である。"
+      },
+      "exampleI18n": { "en": "Mampi Swift - The One", "zh": "Mampi Swift - The One", "ja": "Mampi Swift - The One" }
+    },
+    {
+      "id": "bass-music/drum-and-bass/jump-up/happy-jump-up",
+      "descriptionI18n": {
+        "en": "Happy Jump Up brings a more cheerful and optimistic tone to the high-energy rhythms of Jump Up. This subgenre infuses the fast-paced beats with melodies and tones that evoke a sense of joy and positivity, making it a perfect soundtrack for happy and carefree moments.",
+        "zh": "Happy Jump Up 为 Jump Up 的高能节奏带来更欢快、更乐观的色彩。这个子流派把能够唤起快乐与积极感的旋律和音色注入快速节拍之中，非常适合作为开心、无忧时刻的配乐。",
+        "ja": "Happy Jump Up は Jump Up の高エネルギーなリズムに、より陽気で楽観的なトーンをもたらす。このサブジャンルは速いビートに喜びや前向きさを喚起するメロディと音色を注入し、楽しく気楽な瞬間のサウンドトラックに最適である。"
+      },
+      "exampleI18n": { "en": "DJ Hazard - Mr. Happy", "zh": "DJ Hazard - Mr. Happy", "ja": "DJ Hazard - Mr. Happy" }
+    },
+    {
+      "id": "bass-music/drum-and-bass/liquid-drum-and-bass/liquid-funk",
+      "descriptionI18n": {
+        "en": "A subgenre that infuses Liquid Drum and Bass with funky rhythms, resulting in a groovy yet smooth sound. Liquid Funk blends catchy basslines and rhythmic patterns with atmospheric textures, creating a more upbeat and danceable sound while maintaining a relaxed flow.",
+        "zh": "Liquid Funk 是一个把 funky 节奏注入 Liquid Drum and Bass 的子流派，形成既有 groove 又顺滑的声音。它将抓耳的低频线条和节奏型与氛围纹理结合，在保持放松流动感的同时，创造出更明快、更适合跳舞的声音。",
+        "ja": "Liquid Funk は Liquid Drum and Bass に funky なリズムを注入するサブジャンルで、groovy でありながら滑らかなサウンドを生み出す。キャッチーなベースラインとリズムパターンを大気的なテクスチャと組み合わせ、リラックスした流れを保ちながら、より明るく踊りやすい音を作り出す。"
+      },
+      "exampleI18n": { "en": "Calibre - Even If", "zh": "Calibre - Even If", "ja": "Calibre - Even If" }
+    }
+  ]
+}

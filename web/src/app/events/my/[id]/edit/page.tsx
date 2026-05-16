@@ -7,6 +7,7 @@ import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { eventAPI, Event } from '@/lib/api/event';
 import { djAPI, DJ } from '@/lib/api/dj';
+import { DEFAULT_BUSINESS_TIME_ZONE, getSystemTimeZone, getTimeZoneLabel } from '@/lib/timezone';
 
 interface LineupSlotForm {
   id?: string;
@@ -36,7 +37,8 @@ const MAX_FESTIVAL_DAY_OPTIONS = 14;
 
 const parseLocalDate = (value: string): Date | null => {
   if (!value.trim()) return null;
-  const parsed = new Date(value);
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(year, month - 1, day);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
@@ -49,9 +51,16 @@ const startOfDay = (date: Date): Date => {
 const formatLocalDateInput = (value: string | Date): string => {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: getSystemTimeZone(),
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const year = values.year;
+  const month = values.month;
+  const day = values.day;
   return `${year}-${month}-${day}`;
 };
 
@@ -200,6 +209,7 @@ export default function EditMyEventPage() {
   const [country, setCountry] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [eventTimeZone, setEventTimeZone] = useState(DEFAULT_BUSINESS_TIME_ZONE);
   const [ticketUrl, setTicketUrl] = useState('');
   const [ticketCurrency, setTicketCurrency] = useState('CNY');
   const [ticketNotes, setTicketNotes] = useState('');
@@ -287,6 +297,7 @@ export default function EditMyEventPage() {
         setCountry(data.country || '');
         setStartDate(data.startDate ? formatLocalDateInput(data.startDate) : '');
         setEndDate(data.endDate ? formatLocalDateInput(data.endDate) : '');
+        setEventTimeZone(data.timeZone || DEFAULT_BUSINESS_TIME_ZONE);
         setTicketUrl(data.ticketUrl || '');
         setTicketCurrency(data.ticketCurrency || 'CNY');
         setTicketNotes(data.ticketNotes || '');
@@ -403,6 +414,7 @@ export default function EditMyEventPage() {
           country,
           startDate,
           endDate,
+          timeZone: eventTimeZone || DEFAULT_BUSINESS_TIME_ZONE,
           ticketUrl,
           ticketPriceMin: null,
           ticketPriceMax: null,
@@ -495,6 +507,13 @@ export default function EditMyEventPage() {
               <div>
                 <label className="block text-sm text-text-secondary mb-1">结束时间</label>
                 <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" required />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm text-text-secondary mb-1">活动时区</label>
+                <input value={eventTimeZone} onChange={(e) => setEventTimeZone(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" placeholder={DEFAULT_BUSINESS_TIME_ZONE} />
+                <p className="mt-1 text-xs text-text-tertiary">
+                  未填写时默认 {getTimeZoneLabel(DEFAULT_BUSINESS_TIME_ZONE)}；展示给用户时仍按用户系统时区显示。
+                </p>
               </div>
               <div>
                 <label className="block text-sm text-text-secondary mb-1">国家</label>

@@ -1,0 +1,86 @@
+[
+  {
+    "id": "bass-music/cloud-rap",
+    "name": "Cloud Rap",
+    "path": "Bass Music > Cloud Rap",
+    "description": "Cloud Rap is a genre merging hip-hop with electronic and ambient music, emerging in the late 2000s through internet blog culture. It is defined by its hazy, dreamlike production, utilizing heavy reverb, delay, and ethereal synthesizer pads to create a 'cloudy' atmosphere. Musically, it relies on slow-tempo trap beats and unconventional samples (often from indie or choral music), while vocally it features relaxed, sometimes mumbled or melodic delivery. It serves as the direct stylistic ancestor to genres like Wave and modern Emo Rap, blurring the lines between atmospheric electronic soundscapes and rap.",
+    "example": "Yung Lean - Ginseng Strip 2002"
+  },
+  {
+    "id": "bass-music/phonk",
+    "name": "Phonk",
+    "path": "Bass Music > Phonk",
+    "description": "Phonk is a genre that fuses 90s Memphis rap with modern electronic production techniques. It is characterized by the use of distorted and repetitive vocals (often samples from old cassette tapes), saturated 808 basslines, and dark or jazzy melodies. In its recent evolution, it has branched into high-energy styles driven by cowbells and fast rhythms, becoming a viral phenomenon associated with drifting culture and fitness.",
+    "example": "Kordhell - Murder In My Mind"
+  },
+  {
+    "id": "bass-music/uk-bass",
+    "name": "UK bass",
+    "path": "Bass Music > UK bass",
+    "description": "UK bass is an umbrella term for a variety of bass-heavy electronic music styles that emerged from the UK in the late 2000s, drawing influences from genres like dubstep, garage, grime, and drum and bass. Known for its deep, powerful basslines and diverse tempos, UK bass often incorporates syncopated rhythms, heavy sub-bass, and elements from house and techno. It’s less about a specific tempo or structure and more about the emphasis on bass and groove, blending elements from various UK underground scenes. UK bass has become a staple in club music, appealing to listeners with its innovative, genre-blurring sound and versatility.",
+    "example": "Burial - Archangel"
+  },
+  {
+    "id": "bass-music/moombahton",
+    "name": "Moombahton",
+    "path": "Bass Music > Moombahton",
+    "description": "Moombahton is a fusion genre created by Dave Nada in 2009 that slows down Dutch House vibes to the tempo of Reggaeton (usually 108-112 BPM). It combines the thick, elastic basslines and dramatic build-ups of Electro House with the 'dembow' rhythm of Reggaeton. It became a global phenomenon, heavily influencing modern pop production and leading to subgenres like Moombahcore.",
+    "example": "Major Lazer - Lean On"
+  },
+  {
+    "id": "bass-music/drum-and-bass/neurofunk",
+    "name": "Neurofunk",
+    "path": "Bass Music > Drum and Bass > Neurofunk",
+    "description": "A subgenre of Drum and Bass that leans into a darker, more aggressive sound. Neurofunk is defined by its intricate basslines and futuristic, almost mechanical rhythms, often featuring experimental sound design and heavy use of distortion. The style is intense and complex, designed to push the boundaries of drum programming and bass manipulation.",
+    "example": "Noisia - Diplodocus"
+  },
+  {
+    "id": "bass-music/drum-and-bass/darkstep",
+    "name": "Darkstep",
+    "path": "Bass Music > Drum and Bass > Darkstep",
+    "description": "Darkstep is a heavier, darker variant of Drum and Bass that emphasizes foreboding atmospheres and ominous basslines. It is known for its hard, pounding rhythms and a sense of tension, creating an unsettling listening experience. Darkstep often incorporates darker soundscapes, deep bass, and minimal melodies, creating an aggressive and immersive feel.",
+    "example": "Dillinja - The Angels Fell"
+  },
+  {
+    "id": "bass-music/drum-and-bass/techstep",
+    "name": "Techstep",
+    "path": "Bass Music > Drum and Bass > Techstep",
+    "description": "A subgenre of Drum and Bass that incorporates elements of techno and industrial music. Techstep features deep, mechanical basslines, hard-hitting beats, and a more structured, almost minimalist approach. The genre is often dark, cold, and mechanical, with an emphasis on technological soundscapes and futuristic themes.",
+    "example": "Ed Rush - Funktion"
+  },
+  {
+    "id": "bass-music/drum-and-bass/liquid-drum-and-bass",
+    "name": "Liquid Drum and Bass",
+    "path": "Bass Music > Drum and Bass > Liquid Drum and Bass",
+    "description": "Characterized by its smoother, more melodic sound, Liquid Drum and Bass offers a more laid-back vibe compared to the genre’s typical intensity. Known for its flowing, liquid-like beats, atmospheric pads, and softer basslines, this style creates a more ambient and soulful listening experience while still maintaining the core drum and bass rhythms.",
+    "example": "Calibre - Even If"
+  },
+  {
+    "id": "bass-music/drum-and-bass/jump-up",
+    "name": "Jump Up",
+    "path": "Bass Music > Drum and Bass > Jump Up",
+    "description": "Jump Up is a more upbeat, energetic style of Drum and Bass, known for its bouncy, fast rhythms and party-friendly vibe. The style incorporates catchy basslines and high-energy beats designed to get crowds moving. Its cheerful, bass-driven sound is perfect for the dancefloor, and its infectious grooves make it a staple of Drum and Bass events.",
+    "example": "Loadstar - Bomber"
+  },
+  {
+    "id": "bass-music/drum-and-bass/jump-up/party-drum-and-bass",
+    "name": "Party Drum and Bass",
+    "path": "Bass Music > Drum and Bass > Jump Up > Party Drum and Bass",
+    "description": "A festive variation of Jump Up, Party Drum and Bass takes the energy of the genre and adds even more lively and celebratory elements. It’s characterized by an upbeat tempo, playful basslines, and a fun, party atmosphere, making it ideal for vibrant events and festivals.",
+    "example": "Mampi Swift - The One"
+  },
+  {
+    "id": "bass-music/drum-and-bass/jump-up/happy-jump-up",
+    "name": "Happy Jump Up",
+    "path": "Bass Music > Drum and Bass > Jump Up > Happy Jump Up",
+    "description": "Happy Jump Up brings a more cheerful and optimistic tone to the high-energy rhythms of Jump Up. This subgenre infuses the fast-paced beats with melodies and tones that evoke a sense of joy and positivity, making it a perfect soundtrack for happy and carefree moments.",
+    "example": "DJ Hazard - Mr. Happy"
+  },
+  {
+    "id": "bass-music/drum-and-bass/liquid-drum-and-bass/liquid-funk",
+    "name": "Liquid Funk",
+    "path": "Bass Music > Drum and Bass > Liquid Drum and Bass > Liquid Funk",
+    "description": "A subgenre that infuses Liquid Drum and Bass with funky rhythms, resulting in a groovy yet smooth sound. Liquid Funk blends catchy basslines and rhythmic patterns with atmospheric textures, creating a more upbeat and danceable sound while maintaining a relaxed flow.",
+    "example": "Calibre - Even If"
+  }
+]

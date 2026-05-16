@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
+import { getSystemTimeZone, getSystemTimeZoneLabel } from '@/lib/timezone';
 
 type EventVisualStatus = 'upcoming' | 'ongoing' | 'ended';
 
@@ -49,15 +50,17 @@ export default function EventsPage() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
+    const timeZone = getSystemTimeZone();
     return {
-      month: date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
-      day: date.getDate(),
-      year: date.getFullYear(),
+      month: date.toLocaleDateString('en-US', { timeZone, month: 'short' }).toUpperCase(),
+      day: Number(date.toLocaleDateString('en-US', { timeZone, day: 'numeric' })),
+      year: Number(date.toLocaleDateString('en-US', { timeZone, year: 'numeric' })),
       fullDate: date.toLocaleDateString('zh-CN', {
+        timeZone,
         year: 'numeric',
         month: 'long',
         day: 'numeric',
-      }),
+      }) + ` (${getSystemTimeZoneLabel()})`,
     };
   };
 

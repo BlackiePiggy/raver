@@ -1,0 +1,86 @@
+[
+  {
+    "id": "bass-music/drum-and-bass/liquid-drum-and-bass/jazzstep",
+    "name": "Jazzstep",
+    "path": "Bass Music > Drum and Bass > Liquid Drum and Bass > Jazzstep",
+    "description": "As the name suggests, Jazzstep incorporates elements of jazz into the Liquid Drum and Bass framework, often blending smooth melodies, jazz harmonies, and syncopated rhythms with the genre's trademark breakbeats. This subgenre is more relaxed but maintains an energetic vibe through its intricate, rolling rhythms.",
+    "example": "Roni Size & Reprazent - Brown Paper Bag"
+  },
+  {
+    "id": "bass-music/drum-and-bass/liquid-drum-and-bass/atmospheric-drum-and-bass",
+    "name": "Atmospheric Drum and Bass",
+    "path": "Bass Music > Drum and Bass > Liquid Drum and Bass > Atmospheric Drum and Bass",
+    "description": "A more ambient and ethereal take on Liquid Drum and Bass, Atmospheric Drum and Bass focuses on creating immersive soundscapes that blend lush pads, deep bass, and atmospheric effects. It has a dreamy, spacey quality, often evoking a sense of serenity and calm while still keeping the rhythm-driven foundation of the genre.",
+    "example": "LTJ Bukem - Atlantis"
+  },
+  {
+    "id": "bass-music/dubstep/brostep",
+    "name": "Brostep",
+    "path": "Bass Music > Dubstep > Brostep",
+    "description": "Brostep is a subgenre of dubstep that emerged in the late 2000s, primarily in the U.S., and is known for its aggressive, high-energy sound. Characterized by heavy, wobbling basslines, sharp synths, and intense drops, brostep often features distorted, 'growling' bass sounds and complex, rapid-fire rhythms. Unlike traditional dubstep, which is darker and more atmospheric, brostep emphasizes loud, punchy production and dramatic builds and drops, making it popular in festival and club settings. Artists like Skrillex helped bring brostep into the mainstream, giving it a prominent place in modern electronic music.",
+    "example": "Skrillex - Scary Monsters and Nice Sprites"
+  },
+  {
+    "id": "bass-music/dubstep/melodic-dubstep",
+    "name": "Melodic Dubstep",
+    "path": "Bass Music > Dubstep > Melodic Dubstep",
+    "description": "Melodic Dubstep is a subgenre that incorporates more emotional and melodic elements into the traditional dubstep framework. It emphasizes smoother transitions, harmonious melodies, and atmospheric soundscapes while retaining the signature deep bass and half-time rhythms of dubstep. Often more melodic and less aggressive than Brostep, Melodic Dubstep appeals to listeners looking for a more emotional or introspective experience, blending electronic music with cinematic or orchestral textures.",
+    "example": "Illenium - Fractures"
+  },
+  {
+    "id": "bass-music/dubstep/uk-dubstep",
+    "name": "UK Dubstep",
+    "path": "Bass Music > Dubstep > UK Dubstep",
+    "description": "UK dubstep is a subgenre of electronic dance music that originated in South London in the early 2000s. Known for its dark, bass-heavy sound, UK dubstep typically features syncopated rhythms, deep sub-bass frequencies, and minimal, spacious production. Tracks are usually around 140 BPM and often include elements like wobbling basslines, skittering hi-hats, and haunting, atmospheric sounds. UK dubstep focuses on creating a deep, immersive vibe, often with a restrained, almost meditative feel. Early pioneers like Skream, Benga, and Digital Mystikz helped establish dubstep as a defining sound in UK electronic music, influencing genres like grime and later styles like brostep.",
+    "example": "Skream - Midnight Request Line"
+  },
+  {
+    "id": "bass-music/dubstep/riddim",
+    "name": "Riddim",
+    "path": "Bass Music > Dubstep > Riddim",
+    "description": "Riddim is a subgenre of dubstep that focuses on repetitive, rhythmic bass patterns and minimalistic, syncopated beats. Emerging in the mid-2010s, riddim is characterized by its slower tempos (usually around 140 BPM) and 'wobbly' basslines that create a hypnotic, groove-driven sound. It often features stripped-back production, with fewer melodic elements, letting the bass and rhythm take center stage. Known for its heavy, deep drops and head-nodding flow, riddim has a darker, more underground vibe than mainstream dubstep, resonating in the bass music scene and frequently played in dubstep and EDM festivals.",
+    "example": "Subtronics - Wook Laser"
+  },
+  {
+    "id": "bass-music/dubstep/deep-dubstep",
+    "name": "Deep Dubstep",
+    "path": "Bass Music > Dubstep > Deep Dubstep",
+    "description": "Deep Dubstep is a subgenre known for its focus on deep, sub-bass frequencies and a slower tempo. While it retains the essential characteristics of dubstep, such as its syncopated rhythms, it places a greater emphasis on the low-end frequencies, creating a heavy, immersive sound. Tracks in this style often have a laid-back, atmospheric vibe, with minimalistic arrangements that allow the bass to resonate more profoundly. It’s a genre that invites listeners to lose themselves in the depths of the sound, often playing with the space between beats.",
+    "example": "Mala - Changes"
+  },
+  {
+    "id": "bass-music/dubstep/color-bass",
+    "name": "Color Bass",
+    "path": "Bass Music > Dubstep > Color Bass",
+    "description": "Color Bass (or advanced Melodic Riddim) is a subgenre of dubstep that focuses on vibrant, harmonic, and extremely melodic sound design. It utilizes complex techniques like spectral convolution and vocoders to turn atonal bass sounds into bright, colorful chords. It maintains the heavy rhythm of dubstep but replaces the darkness and industrial aggression with harmonic euphoria and neon textures.",
+    "example": "Chime - Wait For Me"
+  },
+  {
+    "id": "bass-music/dubstep/brostep/aggressive-dubstep",
+    "name": "Aggressive Dubstep",
+    "path": "Bass Music > Dubstep > Brostep > Aggressive Dubstep",
+    "description": "A subgenre of Brostep that intensifies the already heavy sound with even more aggressive basslines and harsh, distorted elements. It's designed to hit hard and energize listeners with high-impact, in-your-face rhythms.",
+    "example": "Knife Party - Centipede"
+  },
+  {
+    "id": "bass-music/dubstep/brostep/melodic-brostep",
+    "name": "Melodic Brostep",
+    "path": "Bass Music > Dubstep > Brostep > Melodic Brostep",
+    "description": "A more melodic variant of Brostep, incorporating harmonic and emotional elements while maintaining the aggressive energy. This substyle blends catchy melodies with the intense drops and distorted bass synonymous with Brostep.",
+    "example": "Peter Robinson & Madeon - Shelter"
+  },
+  {
+    "id": "bass-music/dubstep/deep-dubstep/dub-techno-dubstep",
+    "name": "Dub Techno Dubstep",
+    "path": "Bass Music > Dubstep > Deep Dubstep > Dub Techno Dubstep",
+    "description": "This substyle blends the spaciousness and deep bass of dub techno with the rhythmic elements of dubstep. Dub Techno Dubstep tracks often feature a slower pace and smooth, dubby textures, creating an atmospheric sound that focuses on mood and immersion.",
+    "example": "Joy Orbison - Hyph Mngo"
+  },
+  {
+    "id": "bass-music/dubstep/deep-dubstep/halftime-dubstep",
+    "name": "Halftime Dubstep",
+    "path": "Bass Music > Dubstep > Deep Dubstep > Halftime Dubstep",
+    "description": "Halftime Dubstep slows down the tempo and often employs a half-time drum pattern, giving the tracks a more relaxed, hypnotic feel. This substyle focuses on deep rhythms, with space for the bass to really breathe, creating a more chilled but still impactful listening experience.",
+    "example": "Ivy Lab - Magikess"
+  }
+]

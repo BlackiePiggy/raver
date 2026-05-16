@@ -1,0 +1,86 @@
+[
+  {
+    "id": "chill-out/synthwave",
+    "name": "Synthwave",
+    "path": "Chill-out > Synthwave",
+    "description": "Synthwave is a genre of electronic music that draws heavily from 1980s pop culture, blending retro synth sounds with modern electronic production. It incorporates elements of electronic dance music, movie soundtracks, and early video game music, often featuring upbeat, melodic synths, catchy basslines, and nostalgic, cinematic vibes. Synthwave aims to capture the essence of the 80s, evoking a sense of nostalgia for the decade’s aesthetic and sound, while incorporating contemporary production techniques. The genre often features uplifting, energetic melodies, with a focus on creating a neon-lit, futuristic atmosphere. Artists like Kavinsky, Perturbator, and Carpenter Brut are prominent figures in the synthwave scene.",
+    "example": "Kavinsky - Nightcall"
+  },
+  {
+    "id": "chill-out/horror-synth",
+    "name": "Horror Synth",
+    "path": "Chill-out > Horror Synth",
+    "description": "Horror Synth (also known as Darksynth or Slasherwave) is a darker, more aggressive subgenre of Synthwave inspired by 1970s and 80s horror movie soundtracks. Influenced by composers like John Carpenter and Goblin, it utilizes vintage analog synthesizers to create eerie, tension-filled atmospheres mingled with driving, heavy beats. Unlike the nostalgic, sun-soaked vibes of traditional Synthwave, Horror Synth embraces the macabre, featuring distorted basslines, minor-key arpeggios, and an aesthetic rooted in slasher films and the occult. It often crosses over into metal territory due to its intensity and Satanic imagery.",
+    "example": "Carpenter Brut - Roller Mobster"
+  },
+  {
+    "id": "chill-out/downtempo/lounge",
+    "name": "Lounge",
+    "path": "Chill-out > Downtempo > Lounge",
+    "description": "Lounge music is a genre that combines smooth, relaxed melodies with a laid-back, atmospheric vibe, often incorporating elements of jazz, bossa nova, and electronic music. It emerged in the mid-20th century as a form of background music in upscale bars, restaurants, and lounges, designed to create a comfortable, sophisticated ambiance without overpowering conversation. Lounge music typically features mellow tempos, soft instrumentation (such as piano, guitar, and light percussion), and soothing vocal or instrumental melodies. Over time, it has evolved to include more modern electronic influences, often blending chillout, downtempo, and ambient sounds. It remains popular for creating a calming, elegant atmosphere in social settings.",
+    "example": "Thievery Corporation - Lebanese Blonde"
+  },
+  {
+    "id": "chill-out/downtempo/bossa-nova-chill",
+    "name": "Bossa nova chill",
+    "path": "Chill-out > Downtempo > Bossa nova chill",
+    "description": "Bossa Nova Chill is a genre that blends the smooth, syncopated rhythms of Brazilian bossa nova with modern electronic textures, creating a laid-back, relaxing atmosphere. It combines the intimate, jazzy guitar strumming and soothing vocal melodies typical of bossa nova with ambient sounds, soft synths, and subtle beats often found in chill-out and downtempo music. This fusion results in a mellow and atmospheric style that is perfect for unwinding or creating a peaceful background ambiance. The genre often retains the gentle, swaying rhythms of bossa nova while incorporating electronic elements that add depth and modernity, making it popular in lounge settings or as music for relaxation. Artists like Bebel Gilberto are known for contributing to this genre, creating a sound that feels both timeless and contemporary.",
+    "example": "Bebel Gilberto - So Nice"
+  },
+  {
+    "id": "chill-out/downtempo/nu-jazz",
+    "name": "Nu-jazz",
+    "path": "Chill-out > Downtempo > Nu-jazz",
+    "description": "Nu jazz is a genre that blends elements of jazz with modern electronic music, creating a fusion of live instruments and digital production. Emerging in the late 1990s and early 2000s, nu jazz incorporates influences from genres like funk, soul, house, and ambient, while maintaining the improvisational and melodic qualities of traditional jazz. It often features smooth, groovy basslines, complex rhythms, and jazz-inspired melodies, combined with electronic effects, sampling, and synthesized sounds. The genre can range from relaxed, atmospheric tracks to more energetic, upbeat rhythms, offering a fresh take on jazz for contemporary audiences. Artists like St. Germain, The Cinematic Orchestra, and Jazzanova helped define the nu jazz sound.",
+    "example": "St Germain - Rose Rouge"
+  },
+  {
+    "id": "chill-out/downtempo/lo-fi-hip-hop",
+    "name": "Lo-fi Hip Hop",
+    "path": "Chill-out > Downtempo > Lo-fi Hip Hop",
+    "description": "Lo-fi Hip Hop is a genre that blends the laid-back vibes of chill-out electronica with the rhythmic elements of hip-hop, often characterized by its mellow, imperfect sound. The term 'lo-fi' refers to the deliberately rough, 'low fidelity' production, where background noise, crackling vinyl, and other analog imperfections are embraced to create a warm, nostalgic atmosphere. The music typically features relaxed, jazzy beats, smooth basslines, and soft, soulful samples, making it popular as background music for studying, relaxing, or simply unwinding. Lo-fi Hip Hop has gained immense popularity on streaming platforms, particularly in study or relaxation playlists, due to its calm, non-intrusive nature. Artists like Nujabes were pivotal in shaping the genre, creating a unique blend of hip-hop beats with soothing melodies that have become synonymous with the genre's serene, introspective mood.",
+    "example": "Nujabes - Feather"
+  },
+  {
+    "id": "chill-out/trip-hop/illbient",
+    "name": "Illbient",
+    "path": "Chill-out > Trip hop > Illbient",
+    "description": "Illbient is a genre of electronic music that originated in New York City in the early 1990s. It is a form of ambient music that incorporates elements of dub, hip hop, and world music, creating a gritty, urban soundscape. The term, a portmanteau of 'ill' and 'ambient,' reflects its blend of hip-hop sensibilities with atmospheric textures and dub-inflected basslines. Often described as cinematic, Illbient is closely related to trip hop, with which it is sometimes used interchangeably.",
+    "example": "DJ Spooky - Galactic Funk"
+  },
+  {
+    "id": "chill-out/trip-hop/trip-rock",
+    "name": "Trip rock",
+    "path": "Chill-out > Trip hop > Trip rock",
+    "description": "Trip rock is a subgenre of electronic music that blends elements of trip hop with rock, creating a fusion of atmospheric beats, slow tempos, and live instrumentation. It typically features deep basslines, haunting melodies, and a mix of electronic samples alongside guitars, drums, and other traditional rock instruments. The genre maintains the introspective, melancholic vibe of trip hop, while incorporating the energy and structure of rock, often with experimental or psychedelic elements. Trip rock tracks may have a dreamy, hypnotic feel, with a focus on mood and atmosphere, making it ideal for both relaxed listening and more dynamic, emotionally charged experiences. Artists like UNKLE and The Beta Band helped define the trip rock sound, merging electronic production with rock's organic qualities.",
+    "example": "Portishead - Glory Box"
+  },
+  {
+    "id": "chill-out/vaporwave/dreampunk",
+    "name": "Dreampunk",
+    "path": "Chill-out > Vaporwave > Dreampunk",
+    "description": "Dreampunk is a subgenre of experimental electronic music that emerged from Vaporwave, characterized by dreamy, dark, and often unsettling atmospheres. It uses manipulated samples from ambient, easy listening, and other genres, slowing them down and adding distortion and reverb effects to create surreal and melancholic soundscapes. Dreampunk aims to evoke feelings of nostalgia, dissociation, and subconscious exploration.",
+    "example": "2814 - 新しい日の誕生 (Birth of a New Day)"
+  },
+  {
+    "id": "chill-out/vaporwave/mallsoft",
+    "name": "Mallsoft",
+    "path": "Chill-out > Vaporwave > Mallsoft",
+    "description": "Mallsoft (also known as plaza vapor) is a subgenre of Vaporwave that evokes the atmosphere of shopping malls and retail spaces, often from the 1980s or 1990s. It emphasizes the acoustics of the space, incorporating heavy reverb and ambient field recordings to create a sense of nostalgia and liminality.",
+    "example": "猫 シ Corp. (Cat System Corp.) - Palm Mall Mars: Sports Centre"
+  },
+  {
+    "id": "disco/afro-cosmic-music",
+    "name": "Afro/cosmic music",
+    "path": "Disco > Afro/cosmic music",
+    "description": "Afro-cosmic music is a genre that blends African rhythms and traditional sounds with cosmic, psychedelic, and electronic elements, creating a unique fusion of cultural influences. Emerging in the late 1970s and 1980s, this genre often incorporates jazz, funk, disco, and experimental music, with an emphasis on rhythm, groove, and a transcendent, otherworldly atmosphere. Afro-cosmic music is known for its use of polyrhythms, deep basslines, and synthetic textures, creating a fusion of earthy, tribal sounds with futuristic, spacey vibes. This genre was particularly influential in Italy during the late 70s and early 80s, where DJs and producers began incorporating African-inspired rhythms into their experimental electronic music. It has since become a significant influence on contemporary world music and electronic genres.",
+    "example": "Tony Esposito - Kalimba de Luna"
+  },
+  {
+    "id": "disco/electro-disco",
+    "name": "Electro-disco",
+    "path": "Disco > Electro-disco",
+    "description": "Electro-disco is a fusion of disco music and electronic elements that emerged in the late 1970s and early 1980s. It combines the upbeat, danceable rhythms of disco with the futuristic sounds of synthesizers, drum machines, and electronic production techniques. Electro-disco tracks often feature funky basslines, melodic synths, and robotic or processed vocals, creating a more synthetic and space-age feel compared to traditional disco. The genre helped bridge the gap between disco’s golden age and the rise of electronic dance music, influencing later genres like house and synthpop. Artists like Giorgio Moroder and Kraftwerk were pioneers of the electro-disco sound.",
+    "example": "Giorgio Moroder feat. Donna Summer - I Feel Love"
+  }
+]

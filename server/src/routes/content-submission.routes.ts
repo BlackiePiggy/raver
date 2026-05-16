@@ -4,7 +4,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { adminAuditService } from '../modules/admin/admin-audit.service';
 import { requireAdminOrOperator } from '../modules/admin/admin-auth.policy';
 import { notificationCenterService } from '../modules/notifications';
-import { normalizeEventTimeZone, parseEventDateInput, startOfEventDay } from '../utils/event-timezone';
+import { DEFAULT_EVENT_TIME_ZONE, normalizeEventTimeZone, parseEventDateInput, startOfEventDay } from '../utils/event-timezone';
 import { analyzeI18nCompleteness, normalizeTriTextPayload, resolveLocalizedText, triTextToJson } from '../utils/i18n';
 import { contentCompliance } from '../utils/content-compliance';
 
@@ -260,7 +260,7 @@ const dateOrUndefined = (value: unknown): Date | undefined => dateFromPayload(va
 
 const createEventFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) => {
   const name = cleanText(payload.name);
-  const timeZone = normalizeEventTimeZone(payload.timeZone ?? payload.timezone ?? payload.eventTimeZone ?? 'UTC');
+  const timeZone = normalizeEventTimeZone(payload.timeZone ?? payload.timezone ?? payload.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE);
   const startDateRaw = parseEventDateInput(payload.startDate, timeZone, 'start', payload.startTime);
   const endDateRaw = parseEventDateInput(payload.endDate, timeZone, 'end', payload.endTime);
   const startDate = startDateRaw ? startOfEventDay(startDateRaw, timeZone) : null;

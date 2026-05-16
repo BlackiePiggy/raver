@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import {
   getEvents,
+  getEventYears,
   getMyEvents,
   getEvent,
   createEvent,
@@ -56,6 +57,7 @@ const upload = multer({
 });
 
 router.get('/', getEvents);
+router.get('/years', getEventYears);
 router.get('/mine', authenticate, getMyEvents);
 router.post('/upload-image', authenticate, upload.single('image'), uploadEventImage);
 router.get('/:eventId/lineup', getLineup);

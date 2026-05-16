@@ -9,8 +9,8 @@ import { checkinAPI } from '@/lib/api/checkin';
 import { useAuth } from '@/contexts/AuthContext';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
+import { getSystemTimeZone, getSystemTimeZoneLabel } from '@/lib/timezone';
 
-const SCHEDULE_TZ = 'Asia/Shanghai';
 const TIME_COL_WIDTH = 68;
 const PX_PER_MIN = 1.08;
 
@@ -83,14 +83,17 @@ export default function EventDetailPage() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
+    const systemTimeZone = getSystemTimeZone();
     return {
-      weekday: date.toLocaleDateString('zh-CN', { weekday: 'long' }),
+      weekday: date.toLocaleDateString('zh-CN', { timeZone: systemTimeZone, weekday: 'long' }),
       date: date.toLocaleDateString('zh-CN', {
+        timeZone: systemTimeZone,
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       }),
       time: date.toLocaleTimeString('zh-CN', {
+        timeZone: systemTimeZone,
         hour: '2-digit',
         minute: '2-digit',
       }),
@@ -100,7 +103,7 @@ export default function EventDetailPage() {
   // Festival day rule: 00:00-11:59 归属前一日，避免跨午夜场次被拆成“第三天”
   const getFestivalDayKey = (dateString: string) => {
     const localText = new Date(dateString).toLocaleString('sv-SE', {
-      timeZone: SCHEDULE_TZ,
+      timeZone: getSystemTimeZone(),
       hour12: false,
     });
     const [datePart, timePart] = localText.split(' ');
@@ -123,7 +126,7 @@ export default function EventDetailPage() {
 
   const formatSlotTime = (dateString: string) =>
     new Date(dateString).toLocaleTimeString('zh-CN', {
-      timeZone: SCHEDULE_TZ,
+      timeZone: getSystemTimeZone(),
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
@@ -146,7 +149,7 @@ export default function EventDetailPage() {
 
   const formatDayLabel = (dateString: string) =>
     new Date(dateString).toLocaleDateString('zh-CN', {
-      timeZone: SCHEDULE_TZ,
+      timeZone: getSystemTimeZone(),
       month: 'long',
       day: 'numeric',
       weekday: 'long',
@@ -404,7 +407,7 @@ export default function EventDetailPage() {
                                           style={{ top: Math.max(top - 8, 0) }}
                                         >
                                           {new Date(hourMs).toLocaleTimeString('zh-CN', {
-                                            timeZone: SCHEDULE_TZ,
+                                            timeZone: getSystemTimeZone(),
                                             hour: '2-digit',
                                             minute: '2-digit',
                                             hour12: false,
@@ -543,6 +546,7 @@ export default function EventDetailPage() {
               {/* Date & Time */}
               <div className="bg-bg-elevated rounded-3xl p-8 border border-border-secondary sticky top-[60px] animate-fade-in">
                 <h3 className="text-xl font-semibold text-text-primary mb-4">活动信息</h3>
+                <p className="mb-4 text-xs text-text-tertiary">以下时间按你的系统时区显示：{getSystemTimeZoneLabel()}</p>
 
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">

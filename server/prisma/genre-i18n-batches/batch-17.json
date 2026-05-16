@@ -1,0 +1,86 @@
+[
+  {
+    "id": "house/chicago-house",
+    "name": "Chicago House",
+    "path": "House > Chicago House",
+    "description": "Chicago house is a foundational genre of house music that emerged in the early 1980s in Chicago’s underground club scene, especially at venues like The Warehouse, where DJ Frankie Knuckles was a key figure. Characterized by its four-on-the-floor drum machine beats, soulful vocals, and repetitive, hypnotic basslines, Chicago house often incorporates synthesizers and samples from disco and funk. The genre is known for its raw, minimal production style and uplifting energy, which helped establish house music as a global phenomenon. Chicago house laid the groundwork for numerous house subgenres and continues to influence dance music worldwide.",
+    "example": "Marshall Jefferson - Move Your Body"
+  },
+  {
+    "id": "house/french-house",
+    "name": "French House",
+    "path": "House > French House",
+    "description": "French House, also known as French Touch or Filter House, is a subgenre that emerged in France in the mid-1990s. It is characterized by the heavy use of 'filter' effects (low-pass and high-pass filters) and phasers applied to disco and funk samples from the 1970s and 80s. It combines traditional house rhythms with glamorous production, funky basslines, and a strong focus on melody and danceability. Popularized globally by artists such as Daft Punk, Cassius, and Etienne de Crécy, it defined the sound of late 20th-century club music.",
+    "example": "Stardust - Music Sounds Better With You"
+  },
+  {
+    "id": "house/lo-fi-house",
+    "name": "Lo-fi House",
+    "path": "House > Lo-fi House",
+    "description": "Lo-fi House, also known as Outsider House, is a subgenre that emerged in the early-to-mid 2010s. It is defined by its intentionally raw and unpolished production, utilizing tape saturation, hiss, and distorted drums to create a warm, nostalgic, and melancholic atmosphere. Drawing heavily from deep house and acid, it emphasizes texture and mood over clean, high-fidelity sound. The genre often features muffled kick drums, hazy synths, and soulful, pitch-shifted vocal samples, evoking a sense of DIY intimacy and digital-age yearning. Key figures include DJ Boring, Mall Grab, and Ross From Friends.",
+    "example": "DJ Boring - Winona"
+  },
+  {
+    "id": "house/brazilian-bass",
+    "name": "Brazilian Bass",
+    "path": "House > Brazilian Bass",
+    "description": "Brazilian Bass is a subgenre of House music that originated in Brazil around the mid-2010s. Pioneered by artists like Alok and Vintage Culture, it is characterized by deep, punchy basslines that often act as the main melodic element, typically sitting between 120 and 126 BPM. It blends the moody atmosphere of Deep House with the aggressive low-end of Techno and G-House, focusing on a heavy, driving low-end rather than complex top-end melodies.",
+    "example": "Alok, Bruno Martini feat. Zeeba - Hear Me Now"
+  },
+  {
+    "id": "house/electro-house",
+    "name": "Electro House",
+    "path": "House > Electro House",
+    "description": "Electro House rose to prominence in the mid-2000s, fusing the steady 4/4 beats of house music with the gritty, distorted basslines and analog synthesizer sounds of 80s electro. Unlike traditional house, which is often soulful or smooth, Electro House is aggressive, buzz-heavy, and energetic. It served as the precursor to the modern EDM explosion, introducing 'dirty' basslines and heavy drops to the mainstage.",
+    "example": "Benny Benassi - Satisfaction"
+  },
+  {
+    "id": "house/progressive-house",
+    "name": "Progressive House",
+    "path": "House > Progressive House",
+    "description": "Progressive House is a style that emerged in the United Kingdom in the early 1990s as a reaction to the speed of breakbeat and the simplicity of early house. It is characterized by long, evolving tracks that build tension gradually (progressively) rather than relying on instant hooks. The genre focuses on melody and emotion, often incorporating atmospheric textures from trance and the rhythmic groove of house. It defined the 'Super DJ' era of the late 90s and 2000s, bridging the gap between deep house and trance.",
+    "example": "Sasha - Xpander"
+  },
+  {
+    "id": "house/hard-house",
+    "name": "Hard House",
+    "path": "House > Hard House",
+    "description": "Hard House is a style known for its fast tempo (typically 145–150 BPM), off-beat bass stabs (often called 'donks'), and energetic, uplifting vibe. Emerging in the 90s (notably in the UK club 'Trade'), it sits between House and Hard Trance. Unlike Techno, it retains a funky, swinging groove and often features diva vocal samples, but delivered with aggressive speed and intensity.",
+    "example": "Tony De Vit - The Dawn"
+  },
+  {
+    "id": "house/hip-house",
+    "name": "Hip House",
+    "path": "House > Hip House",
+    "description": "Hip House is a genre that fused the rhythms of house music with the vocal delivery of hip-hop. Emerging from Chicago and New York in the late 1980s, it capitalized on the energy of the acid house movement but added a lyrical, MC-led structure. It was instrumental in bringing house music to the pop charts, producing massive global hits. The style is characterized by fast-paced rapping (often with a distinctive rhythmic flow) over a steady 4/4 house beat, bridging the gap between urban rap culture and the dancefloor.",
+    "example": "Technotronic - Pump Up The Jam"
+  },
+  {
+    "id": "house/kwaito",
+    "name": "Kwaito",
+    "path": "House > Kwaito",
+    "description": "Kwaito is a genre that emerged in Soweto, South Africa, during the 1990s post-apartheid era. It originated from slowing down American House music tracks to a much slower tempo (typically 100–110 BPM) and infusing them with local African sounds, hip-hop attitudes, and rhythmic speech (not quite rapping, not quite singing). Known for its catchy melodic hooks, deep basslines, and 'pot-banging' percussion, Kwaito is the cultural ancestor of modern South African electronic genres like Afro House and Amapiano.",
+    "example": "Mandoza - Nkalakatha"
+  },
+  {
+    "id": "house/brazilian-bass/slap-house",
+    "name": "Slap House",
+    "path": "House > Brazilian Bass > Slap House",
+    "description": "Slap House is a modern evolution of Brazilian Bass that gained massive global popularity around 2018-2020. It takes the signature punchy bass of its parent genre but processes it to sound more metallic, elastic, and bouncing (the 'slap' sound). It creates a highly commercial aesthetic by combining these driving basslines with catchy pop vocals and simple, radio-friendly structures, dominating streaming charts and remixes.",
+    "example": "Dynoro & Gigi D'Agostino - In My Mind"
+  },
+  {
+    "id": "house/chicago-house/classic-chicago-house",
+    "name": "Classic Chicago House",
+    "path": "House > Chicago House > Classic Chicago House",
+    "description": "Classic Chicago House is the foundational sound of house music, originating in Chicago during the early 1980s. Known for its soulful melodies, driving basslines, and uplifting vibes, it combines the rhythmic grooves of disco with a more electronic, minimal approach. Classic Chicago House features deep, steady drum patterns, warm synthesizer pads, and repetitive basslines that create an irresistible dancefloor energy. The genre’s emphasis on soul and emotion, often through sampled vocals or instrumental motifs, set it apart from other electronic dance music styles. Frankie Knuckles, one of the pioneers of Chicago House, helped define the sound, which continues to influence dance music worldwide.",
+    "example": "Frankie Knuckles - Your Love"
+  },
+  {
+    "id": "house/chicago-house/acid-house",
+    "name": "Acid House",
+    "path": "House > Chicago House > Acid House",
+    "description": "Acid house is a subgenre of house music that emerged in the mid-1980s, known for its distinctive 'squelching' sound created by the Roland TB-303 bass synthesizer. Originating in Chicago but gaining massive popularity in the UK rave scene, acid house is characterized by its repetitive, hypnotic beats, minimalistic structure, and the signature, warbling 303 bassline, which gives it a trippy, psychedelic feel. Tracks typically feature stripped-back production and may include samples and vocal snippets, contributing to its entrancing and euphoric vibe. Acid house played a key role in shaping the late-1980s rave culture and remains a staple in electronic dance music.",
+    "example": "Phuture - Acid Trax"
+  }
+]

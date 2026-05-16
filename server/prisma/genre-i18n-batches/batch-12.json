@@ -1,0 +1,86 @@
+[
+  {
+    "id": "experimental/musique-concrte",
+    "name": "Musique Concrète",
+    "path": "Experimental > Musique Concrète",
+    "description": "Musique concrète is an experimental music genre that emerged in the 1940s, using recorded sounds—such as environmental noises, spoken word, and mechanical sounds—as raw material for composition. Unlike traditional music that relies on instruments, it focuses on manipulating these recordings through techniques like splicing, looping, and distortion to create new sound textures. Pioneered by French composer Pierre Schaeffer, musique concrète emphasizes the creative arrangement of sound itself rather than melody or harmony, and is considered a precursor to modern electronic music and sound art. Its innovative use of everyday noises transformed the landscape of music composition and studio production.",
+    "example": "Pierre Schaeffer - Étude aux chemins de fer"
+  },
+  {
+    "id": "experimental/tape-music",
+    "name": "Tape Music",
+    "path": "Experimental > Tape Music",
+    "description": "Tape Music is a pioneering form of experimental composition where magnetic tape is used not merely as a recording medium, but as the instrument itself. Emerging in the mid-20th century, it involves the physical manipulation of recorded sound through techniques such as splicing (cutting and rearranging tape with razor blades), varispeed (altering pitch and tempo), reversing, and creating mechanical tape loops. This genre shifted the focus from musical notation and live performance to the tactile sculpting of sound in a studio environment. It allowed composers to create impossible rhythms, dense textures, and 'phase shifting' effects (as seen in Steve Reich's work), effectively laying the technical and conceptual groundwork for modern sampling and the Digital Audio Workstation (DAW).",
+    "example": "Karlheinz Stockhausen - Gesang der Jünglinge"
+  },
+  {
+    "id": "experimental/plunderphonics",
+    "name": "Plunderphonics",
+    "path": "Experimental > Plunderphonics",
+    "description": "Plunderphonics is a genre and compositional philosophy, named by composer John Oswald in 1985, that constructs new musical works entirely out of existing audio recordings. Unlike hip-hop or electronic music that may use samples to build a beat, Plunderphonics treats the history of recorded audio as a raw palette for collage, often explicitly using recognizable sources from pop culture, news broadcasts, or commercials. The genre is characterized by radical recontextualization, where familiar sounds are chopped, layered, pitched, and distorted to create something entirely new, often serving as a satire or critique of mass media and copyright laws. It creates an uncanny listening experience where the focus is on the transformation of 'stolen' cultural artifacts.",
+    "example": "John Oswald - Plexure"
+  },
+  {
+    "id": "experimental/hauntology",
+    "name": "Hauntology",
+    "path": "Experimental > Hauntology",
+    "description": "Hauntology is a musical and aesthetic movement that emerged in the mid-2000s, exploring themes of cultural memory, nostalgia for lost futures, and the decay of analog media. Musically, it relies heavily on the crackle of vinyl, tape hiss, and samples from public information films, library music, and educational soundtracks from the 1960s and 70s. It creates a ghostly, uneasy atmosphere that feels familiar yet wrong, as if remembering a past that never actually happened.",
+    "example": "The Caretaker - It's Just a Burning Memory"
+  },
+  {
+    "id": "experimental/8-bit-chiptune/bitpop",
+    "name": "Bitpop",
+    "path": "Experimental > 8-bit (Chiptune) > Bitpop",
+    "description": "Bitpop is a subgenre of chiptune that combines 8-bit sounds with pop music sensibilities, featuring catchy melodies, upbeat rhythms, and often vocals. It blends the nostalgic, lo-fi aesthetic of chiptune with the accessible structures of pop, creating a sound that is both retro and modern.",
+    "example": "Slagsmålsklubben - Sponsored By Destiny"
+  },
+  {
+    "id": "experimental/8-bit-chiptune/nintendocore",
+    "name": "Nintendocore",
+    "path": "Experimental > 8-bit (Chiptune) > Nintendocore",
+    "description": "Nintendocore blends chiptune elements with hardcore punk or metal, creating a unique fusion of aggressive guitar riffs and nostalgic 8-bit sounds.",
+    "example": "Horse the Band - Birdo"
+  },
+  {
+    "id": "experimental/experimental-club-avant-club/deconstructed-club",
+    "name": "Deconstructed Club",
+    "path": "Experimental > Experimental Club / Avant-Club > Deconstructed Club",
+    "description": "Deconstructed Club (often referred to as Post-Club) is an avant-garde movement that aggressively dismantles and reassembles the functional structures of traditional dance music. It rejects the steady, hypnotic loops of house and techno in favor of chaotic, non-linear rhythms and abrupt structural changes. The sound design is typically 'hyper-real' and high-definition, utilizing metallic textures, glass-shattering samples, and silence as heavy compositional tools. Drawing heavily from the raw energy of Ballroom, Grime, Jersey Club, and Dembow, it distorts these influences into jagged, abrasive, and often dystopian soundscapes. It is inextricably linked to queer underground culture and digital accelerationism, creating a sonic experience that is as much about physical tension as it is about dancing.",
+    "example": "Arca - Nonbinary"
+  },
+  {
+    "id": "experimental/experimental-club-avant-club/textural-club",
+    "name": "Textural Club",
+    "path": "Experimental > Experimental Club / Avant-Club > Textural Club",
+    "description": "Textural Club is a subgenre of electronic dance music that emphasizes intricate, atmospheric sound design and immersive textures while maintaining a club-friendly rhythm. It blends elements of ambient, experimental, and minimal electronic music with the steady, danceable beats typically found in club tracks. The genre prioritizes creating rich, evolving soundscapes, often using effects like reverb, delay, and distortion to shape the texture of the music. The rhythms are typically more subdued or hypnotic compared to more mainstream club genres like house or techno, creating a balance between rhythm and mood. Textural club music is designed for both the dancefloor and deep listening, focusing on the emotional and sonic qualities of the music, rather than catchy melodies or anthemic hooks. Artists in this genre often experiment with unconventional production techniques, pushing the boundaries of sound while maintaining a groove suitable for club environments.",
+    "example": "Amnesia Scanner - AS Acá"
+  },
+  {
+    "id": "experimental/hauntology/hypnagogic-pop",
+    "name": "Hypnagogic Pop",
+    "path": "Experimental > Hauntology > Hypnagogic Pop",
+    "description": "A lo-fi, psychedelic offshoot of hauntology that emerged in the late 2000s (pre-vaporwave). It mimics the sounds of 1980s commercial pop, new age, and synth-funk, but processed through heavy reverb, tape saturation, and distortion to evoke the state between wakefulness and sleep (hypnagogia).",
+    "example": "Ariel Pink - Round and Round"
+  },
+  {
+    "id": "experimental/idm-intelligent-dance-music/braindance",
+    "name": "Braindance",
+    "path": "Experimental > IDM (Intelligent Dance Music) > Braindance",
+    "description": "Braindance is a genre of electronic music that combines elements of IDM, acid house, and ambient, characterized by intricate rhythms, complex melodies, and a playful yet cerebral aesthetic. It often features a fusion of synthetic sounds and organic samples, creating a sound that is both danceable and intellectually stimulating.",
+    "example": "µ-Ziq - Brace Yourself Jason"
+  },
+  {
+    "id": "experimental/idm-intelligent-dance-music/drill-n-bass",
+    "name": "Drill 'n' Bass",
+    "path": "Experimental > IDM (Intelligent Dance Music) > Drill 'n' Bass",
+    "description": "Drill 'n' Bass is a subgenre of electronic music that blends elements of drill music and breakcore, known for its fast, complex breakbeats and heavy basslines. It often incorporates aggressive and fragmented samples, creating a chaotic yet rhythmically intricate sound that challenges conventional dance music structures.",
+    "example": "Squarepusher - Come On My Selector"
+  },
+  {
+    "id": "experimental/idm-intelligent-dance-music/glitch-hop",
+    "name": "Glitch Hop",
+    "path": "Experimental > IDM (Intelligent Dance Music) > Glitch Hop",
+    "description": "Glitch Hop is a genre that fuses elements of hip-hop and glitch music, characterized by its use of glitchy sounds, chopped samples, and heavy basslines. It combines the rhythmic structures of hip-hop with experimental sound manipulation, resulting in a dynamic and textured listening experience that often emphasizes both groove and innovation.",
+    "example": "Prefuse 73 - One Word Extinguisher"
+  }
+]

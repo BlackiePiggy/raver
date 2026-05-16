@@ -1,0 +1,86 @@
+[
+  {
+    "id": "disco/euro-disco",
+    "name": "Euro disco",
+    "path": "Disco > Euro disco",
+    "description": "Euro-disco is a style of disco music that originated in Europe during the late 1970s and 1980s. Known for its catchy melodies, upbeat rhythms, and the heavy use of synthesizers and drum machines, Euro-disco is often characterized by its polished, commercial sound and catchy, anthemic choruses. Unlike American disco, which tended to have a more soulful or funk-based sound, Euro-disco embraced a more electronic and synthetic approach, making it highly popular in European clubs. The genre gained worldwide popularity with hits like “Baila” by Ritchie Family and “Disco Band” by Scotch. Artists like Donna Summer (in her later works), Silver Pozzoli, and Sabrina helped define the Euro-disco sound.",
+    "example": "Boney M. - Rasputin"
+  },
+  {
+    "id": "disco/hi-nrg",
+    "name": "Hi-NRG",
+    "path": "Disco > Hi-NRG",
+    "description": "Hi-NRG (High Energy) is a high-tempo subgenre of electronic dance music that emerged in the late 1970s and early 1980s. It evolved from disco, specifically the 'electronic' disco sound, by replacing organic orchestration with a purely synthetic, staccato sound. Characterized by a fast tempo (typically above 125 BPM), driving 4/4 beats, and 'galloping' 16th-note basslines, it became a foundational influence for House, Eurodance, and Trance. It was particularly iconic within the LGBTQ+ club scene of the era, with pioneers like Patrick Cowley and Bobby Orlando leading the sound.",
+    "example": "Evelyn Thomas - High Energy"
+  },
+  {
+    "id": "disco/nu-disco",
+    "name": "Nu-disco",
+    "path": "Disco > Nu-disco",
+    "description": "Nu disco is a modern evolution of disco music that emerged in the mid-2000s, blending classic disco sounds with contemporary electronic production techniques. It combines the funky, danceable rhythms and melodic elements of 70s and 80s disco with modern synthesizers, deep basslines, and house music influences. Nu disco often features smooth, groovy beats, catchy vocal hooks, and a polished, retro-futuristic aesthetic, creating a fresh take on the disco sound while maintaining its nostalgic vibe. The genre is often more laid-back and atmospheric compared to its predecessor, but still retains a strong emphasis on rhythm and groove. Artists like Daft Punk, Todd Terje, and Justice are key figures in the nu disco movement.",
+    "example": "Daft Punk - Get Lucky"
+  },
+  {
+    "id": "disco/space-disco",
+    "name": "Space disco",
+    "path": "Disco > Space disco",
+    "description": "A subgenre of disco with futuristic and space-themed elements.",
+    "example": "Meco - Star Wars Theme/Cantina Band"
+  },
+  {
+    "id": "disco/euro-disco/italo-disco",
+    "name": "Italo disco",
+    "path": "Disco > Euro disco > Italo disco",
+    "description": "Italo disco is an Italian variant of Euro disco that emerged in the late 1970s and early 1980s. Known for its upbeat, synthesized melodies, catchy hooks, and danceable rhythms, it combines elements of disco with futuristic electronic sounds. Italo disco is characterized by its smooth, often romantic, melodies and the heavy use of synthesizers, drum machines, and basslines that were typical of early electronic dance music. The genre is also marked by its distinctive vocal style, often featuring Italian-language lyrics or heavily accented English. The sound of Italo disco is both nostalgic and forward-thinking, blending the energy of disco with the electronic experimentation of the time. Artists like Ryan Paris and Sandy Marton became iconic within the genre, producing tracks that remain beloved dancefloor anthems.",
+    "example": "Ryan Paris - Dolce Vita"
+  },
+  {
+    "id": "disco/hi-nrg/eurobeat",
+    "name": "Eurobeat",
+    "path": "Disco > Hi-NRG > Eurobeat",
+    "description": "A direct evolution of Hi-NRG and Italo Disco, Eurobeat features even faster tempos and a more commercial, pop-oriented structure. It gained massive popularity in Japan, becoming synonymous with the Para Para dance culture and racing-themed media.",
+    "example": "Dave Rodgers - Space Boy"
+  },
+  {
+    "id": "electro/electroclash",
+    "name": "Electroclash",
+    "path": "Electro > Electroclash",
+    "description": "A fusion of electro, punk, and synthpop, often with a retro, underground aesthetic, characterized by aggressive, danceable beats, distorted vocals, and a rebellious attitude. Electroclash emerged in the late 1990s and early 2000s, creating a unique blend of electronic and alternative music styles.",
+    "example": "Fischerspooner - Emerge"
+  },
+  {
+    "id": "electro/space-electro",
+    "name": "Space Electro",
+    "path": "Electro > Space Electro",
+    "description": "A futuristic subgenre of Electro that emphasizes atmospheric, space-like soundscapes, often inspired by science fiction and cosmic themes. It blends the classic electro sound with spacey synthesizers and ambient textures, creating a unique, futuristic sonic experience.",
+    "example": "Drexciya - Wavejumper"
+  },
+  {
+    "id": "electro/electrofunk",
+    "name": "Electrofunk",
+    "path": "Electro > Electrofunk",
+    "description": "A blend of electro and funk music, characterized by the use of drum machines, synthesizers, and funky basslines, often featuring a high-energy and danceable feel. Electrofunk draws inspiration from both classic funk and electronic music, creating a groove-driven and futuristic sound.",
+    "example": "Zapp - More Bounce to the Ounce"
+  },
+  {
+    "id": "electro/miami-bass",
+    "name": "Miami Bass",
+    "path": "Electro > Miami Bass",
+    "description": "Emerging from Miami in the 1980s, it blends hip-hop’s rhythmic vocal delivery with electro’s synthesized beats and electronic bass lines. The genre is marked by its deep, booming 808 bass, fast-paced rhythms, and party-centric themes, making it a staple in dance clubs and car audio culture. It has been especially influential in the evolution of Southern hip-hop and bass music.",
+    "example": "2 Live Crew - Me So Horny"
+  },
+  {
+    "id": "electro/french-electro",
+    "name": "French Electro",
+    "path": "Electro > French Electro",
+    "description": "A subgenre of electro that emerged in France in the late 1980s and early 1990s, characterized by its minimalist approach, repetitive rhythms, and use of synthesizers to create a hypnotic and atmospheric sound. French electro often features a darker, more industrial feel than traditional electro, exploring a minimalist and experimental approach to electronic music.",
+    "example": "Arnaud Rebotini - 1314"
+  },
+  {
+    "id": "electro/detroit-electro",
+    "name": "Detroit Electro",
+    "path": "Electro > Detroit Electro",
+    "description": "A subgenre of electro that originated in Detroit, known for its raw, energetic sound, often incorporating elements of funk, soul, and techno. Detroit Electro is characterized by its driving rhythms, prominent basslines, and a sense of gritty urban energy.",
+    "example": "Juan Atkins - No UFO's"
+  }
+]

@@ -7,8 +7,8 @@ import { toPng } from 'html-to-image';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import { Event, EventLineupSlot, eventAPI } from '@/lib/api/event';
+import { formatDateTimeWithSystemTimeZoneLabel, getSystemTimeZone } from '@/lib/timezone';
 
-const SCHEDULE_TZ = 'Asia/Shanghai';
 const STORAGE_KEY_PREFIX = 'ravehub:routine:';
 const TIME_COL_WIDTH = 68;
 const PX_PER_MIN = 1.15;
@@ -50,7 +50,7 @@ const slotKey = (slot: EventLineupSlot) =>
 
 const getFestivalDayKey = (dateString: string) => {
   const localText = new Date(dateString).toLocaleString('sv-SE', {
-    timeZone: SCHEDULE_TZ,
+    timeZone: getSystemTimeZone(),
     hour12: false,
   });
   const [datePart, timePart] = localText.split(' ');
@@ -71,7 +71,7 @@ const getFestivalDayKey = (dateString: string) => {
 
 const formatDayLabel = (dateString: string) =>
   new Date(dateString).toLocaleDateString('zh-CN', {
-    timeZone: SCHEDULE_TZ,
+    timeZone: getSystemTimeZone(),
     month: 'long',
     day: 'numeric',
     weekday: 'long',
@@ -79,7 +79,7 @@ const formatDayLabel = (dateString: string) =>
 
 const formatSlotTime = (dateString: string) =>
   new Date(dateString).toLocaleTimeString('zh-CN', {
-    timeZone: SCHEDULE_TZ,
+    timeZone: getSystemTimeZone(),
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -107,7 +107,7 @@ const ceilToHour = (ms: number) => {
 
 const formatSwitchValue = (ms: number) =>
   new Date(ms).toLocaleString('sv-SE', {
-    timeZone: SCHEDULE_TZ,
+    timeZone: getSystemTimeZone(),
     hour12: false,
   }).replace(' ', 'T').slice(0, 16);
 
@@ -117,7 +117,7 @@ const parseSwitchValueToMs = (value: string) => {
   const [y, m, d] = datePart.split('-').map(Number);
   const [hh, mm] = timePart.split(':').map(Number);
   if ([y, m, d, hh, mm].some((n) => Number.isNaN(n))) return NaN;
-  return Date.UTC(y, m - 1, d, hh - 8, mm, 0);
+  return new Date(y, m - 1, d, hh, mm, 0).getTime();
 };
 
 const getDjVisualImage = (slot: EventLineupSlot) => slot.dj?.bannerUrl || slot.dj?.avatarUrl || null;
@@ -670,7 +670,7 @@ export default function EventRoutinePage() {
                                   style={{ top: Math.max(top - 8, 0) }}
                                 >
                                   {new Date(hourMs).toLocaleTimeString('zh-CN', {
-                                    timeZone: SCHEDULE_TZ,
+                                    timeZone: getSystemTimeZone(),
                                     hour: '2-digit',
                                     minute: '2-digit',
                                     hour12: false,
@@ -817,7 +817,7 @@ export default function EventRoutinePage() {
             </div>
             <div className="text-right">
               <p className="text-sm text-white/80">Generated at</p>
-              <p className="text-sm">{new Date().toLocaleString('zh-CN')}</p>
+              <p className="text-sm">{formatDateTimeWithSystemTimeZoneLabel(new Date())}</p>
             </div>
           </div>
 

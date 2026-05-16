@@ -1,0 +1,86 @@
+[
+  {
+    "id": "ambient/dark-ambient",
+    "name": "Dark Ambient",
+    "path": "Ambient > Dark Ambient",
+    "description": "Dark Ambient is a subgenre of Ambient music that explores darker, more atmospheric soundscapes. It is characterized by its unsettling, eerie tones, often evoking a sense of dread, tension, or unease. Dark Ambient music typically features slow tempos and minimalist structures, creating an atmosphere that can be both haunting and introspective. It is often used to enhance feelings of isolation or contemplation, making it popular in horror-themed media or as a companion to abstract, experimental art.",
+    "example": "Lustmord - Heresy"
+  },
+  {
+    "id": "ambient/psybient",
+    "name": "Psybient",
+    "path": "Ambient > Psybient",
+    "description": "Psybient blends ambient music with elements of psychedelic trance, creating a unique, ethereal sound characterized by hypnotic rhythms, evolving textures, and psychedelic melodies. It often invokes deep mental and emotional journeys, with tracks that promote relaxation while maintaining a sense of cosmic exploration. Emerging in the late 1990s, it fuses the ambient desire for atmosphere with the pulsating energy of psychedelia.",
+    "example": "Shpongle - Divine Moments of Truth"
+  },
+  {
+    "id": "ambient/new-age-ambient",
+    "name": "New Age Ambient",
+    "path": "Ambient > New Age Ambient",
+    "description": "New Age Ambient is focused on creating serene, uplifting sound environments that promote relaxation, healing, and introspection. This style often incorporates elements of world music, nature sounds, and soothing melodies, inviting listeners into peaceful, contemplative spaces. Popularized in the 1980s, it has become synonymous with ambient music used for relaxation, spiritual practices, and personal well-being.",
+    "example": "Enya - Orinoco Flow"
+  },
+  {
+    "id": "ambient/drone-ambient",
+    "name": "Drone Ambient",
+    "path": "Ambient > Drone Ambient",
+    "description": "Drone ambient is a subgenre of ambient music characterized by long, sustained sounds or 'drones' that evolve slowly over time, creating a deep, immersive atmosphere. The music often features minimalistic structures, with little or no rhythmic elements, focusing instead on texture, tone, and the subtle movement of sound. Drone ambient can include natural field recordings, electronic sounds, or manipulated acoustic instruments, creating a vast, spacey environment. The genre emphasizes mood and emotion over melody or harmony, often inducing a meditative, trance-like state. It is typically used to evoke a sense of stillness, introspection, or vast, open spaces. Drone ambient can range from serene and soothing to intense and enveloping, making it ideal for background listening, relaxation, or deep focus.",
+    "example": "Stars of the Lid - Requiem for Dyning Mothers Pt. 2"
+  },
+  {
+    "id": "ambient/space-ambient",
+    "name": "Space Ambient",
+    "path": "Ambient > Space Ambient",
+    "description": "Ambient music that evokes the vastness and mystery of outer space, often using synthesizers to create cosmic soundscapes.",
+    "example": "Steve Roach - Structures from Silence"
+  },
+  {
+    "id": "ambient/berlin-school-ambient",
+    "name": "Berlin School Ambient",
+    "path": "Ambient > Berlin School Ambient",
+    "description": "Berlin School Ambient is a style of ambient and electronic music rooted in the Berlin School movement of the 1970s. It is characterized by long-form compositions built around slowly evolving sequencer patterns, analog synthesizer arpeggios, and expansive, cosmic soundscapes. Rather than focusing on rhythm in a dancefloor sense, the genre emphasizes hypnotic repetition, gradual transformation, and a sense of temporal suspension. Berlin School Ambient often evokes themes of space, inner exploration, and futurism, blending minimalist structures with rich analog textures. Its sound is immersive and meditative, designed for deep listening rather than immediate impact.",
+    "example": "Tangerine Dream - Phaedra"
+  },
+  {
+    "id": "ambient/dark-ambient/industrial-ambient",
+    "name": "Industrial Ambient",
+    "path": "Ambient > Dark Ambient > Industrial Ambient",
+    "description": "Industrial Ambient is a fusion of Dark Ambient and Industrial music, combining the eerie, atmospheric elements of Dark Ambient with the harsh, mechanical sounds of Industrial music. It often features metallic clanks, rumbling basslines, and industrial drones that evoke feelings of desolation or dystopia. Industrial Ambient music can create a sense of oppressive environment or tension, with a focus on creating immersive, environmental soundscapes. The genre may blend organic sounds with mechanical textures, generating an auditory experience that feels both industrial and atmospheric.",
+    "example": "Raison d'être - Mouldering The Forlorn I"
+  },
+  {
+    "id": "ambient/dark-ambient/lovecraftian-ambient",
+    "name": "Lovecraftian Ambient",
+    "path": "Ambient > Dark Ambient > Lovecraftian Ambient",
+    "description": "Lovecraftian Ambient is a niche subgenre of Dark Ambient inspired by the cosmic horror of H.P. Lovecraft's works. This style often incorporates otherworldly, unsettling soundscapes designed to evoke feelings of the unknown and the incomprehensible. The sound design tends to emphasize eerie drones, distant voices, and eldritch sounds that convey a sense of cosmic dread. Lovecraftian Ambient music draws on the themes of fear, isolation, and the insignificance of humanity in the vastness of the universe, making it ideal for those seeking a deeper, more existential listening experience.",
+    "example": "Cryo Chamber Collaboration - Nyarlathotep"
+  },
+  {
+    "id": "ambient/dark-ambient/dungeon-synth",
+    "name": "Dungeon Synth",
+    "path": "Ambient > Dark Ambient > Dungeon Synth",
+    "description": "Dungeon Synth is a genre of electronic music that originated in the early 1990s, closely related to dark ambient and black metal. The style is characterized by a sound that is dark, lo-fi, and melancholic, often drawing on influences from folk, classical, medieval music, and fantasy video game soundtracks. It aims to evoke atmospheres of fantasy worlds, ancient castles, and mythical landscapes through synthesized melodies and atmospheric textures.",
+    "example": "Burzum - Tomhet"
+  },
+  {
+    "id": "ambient/dark-ambient/isolationism",
+    "name": "Isolationism",
+    "path": "Ambient > Dark Ambient > Isolationism",
+    "description": "Isolationism, a subgenre of dark ambient that emerged in the early 1990s, is defined by its desolate, eerie, and often unsettling soundscapes. It emphasizes silence, space, and a profound sense of solitude, using minimalist textures and subtle drones to create a feeling of being cut off from the outside world. The genre explores themes of emptiness and vast, cold environments.",
+    "example": "Thomas Köner - Teimo"
+  },
+  {
+    "id": "ambient/drone-ambient/drone-metal",
+    "name": "Drone Metal",
+    "path": "Ambient > Drone Ambient > Drone Metal",
+    "description": "A fusion of Drone Ambient and Metal, Drone Metal combines the sustained, minimalist sounds of drone music with the heavy, distorted guitars of metal. The genre features slow, crushingly heavy tones that evolve over time, creating an intense, enveloping atmosphere. It blends the hypnotic qualities of drone with the raw power of metal, resulting in an emotionally potent listening experience.",
+    "example": "Sunn O))) - It Took the Night to Believe"
+  },
+  {
+    "id": "ambient/drone-ambient/microtonal-drone",
+    "name": "Microtonal Drone",
+    "path": "Ambient > Drone Ambient > Microtonal Drone",
+    "description": "Microtonal Drone explores the use of microtonal tunings and unconventional harmonic structures within the drone ambient framework. By incorporating intervals smaller than the standard semitone, this subgenre creates an otherworldly soundscape that pushes the boundaries of traditional tuning. The result is a deep, resonant experience that feels both alien and meditative, with shifting tonal relationships that evolve throughout the piece.",
+    "example": "Eliane Radigue - Trilogie de la Mort"
+  }
+]

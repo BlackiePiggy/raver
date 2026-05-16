@@ -1,4 +1,4 @@
-const DEFAULT_EVENT_TIME_ZONE = 'UTC';
+export const DEFAULT_EVENT_TIME_ZONE = 'Asia/Shanghai';
 
 type DateBoundary = 'start' | 'end';
 

@@ -11,10 +11,11 @@ import {
   NotificationCenterStatusResponse,
   NotificationCenterTemplateItem,
 } from '@/lib/api/notification-center-admin';
+import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 const formatTime = (value?: string | null): string => {
   if (!value) return '-';
-  return new Date(value).toLocaleString('zh-CN', { hour12: false });
+  return formatDateTimeWithSystemTimeZoneLabel(value);
 };
 const formatPercent = (value?: number): string => `${((value ?? 0) * 100).toFixed(1)}%`;
 
@@ -69,7 +70,7 @@ const DEFAULT_GOVERNANCE: NotificationCenterGlobalConfig['governance'] = {
     enabled: false,
     startHour: 23,
     endHour: 8,
-    timezone: 'UTC',
+    timezone: 'Asia/Shanghai',
     muteChannels: ['apns'],
     exemptCategories: ['chat_message', 'route_dj_reminder'],
   },
@@ -233,7 +234,7 @@ export default function NotificationCenterAdminPage() {
             ...normalizedDraft.governance.quietHours,
             startHour: clampInt(Number(normalizedDraft.governance.quietHours.startHour), 23, 0, 23),
             endHour: clampInt(Number(normalizedDraft.governance.quietHours.endHour), 8, 0, 23),
-            timezone: trimValue(normalizedDraft.governance.quietHours.timezone) || 'UTC',
+            timezone: trimValue(normalizedDraft.governance.quietHours.timezone) || 'Asia/Shanghai',
             muteChannels: quietHoursMuteChannels.length > 0 ? quietHoursMuteChannels : ['apns'],
             exemptCategories:
               quietHoursExemptCategories.length > 0 ? quietHoursExemptCategories : ['chat_message', 'route_dj_reminder'],
@@ -748,7 +749,7 @@ export default function NotificationCenterAdminPage() {
                         )
                       }
                       className="mt-2 w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm text-text-primary"
-                      placeholder="UTC"
+                      placeholder="Asia/Shanghai"
                     />
                   </label>
                   <label className="text-sm text-text-secondary">

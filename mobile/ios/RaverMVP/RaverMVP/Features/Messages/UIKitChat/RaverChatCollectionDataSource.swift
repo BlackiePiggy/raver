@@ -137,7 +137,7 @@ final class RaverChatCollectionDataSource: NSObject, UICollectionViewDataSource 
 
     private func timeSeparatorText(for date: Date) -> String {
         let calendar = Calendar.current
-        let timeText = Self.timeFormatter.string(from: date)
+        let timeText = "\(date.chatTimeText) · \(Date.appLocalizedTimeZoneLabel())"
         if calendar.isDateInToday(date) {
             return LT("今天 \(timeText)", "Today \(timeText)", "今日 \(timeText)")
         }
@@ -145,31 +145,10 @@ final class RaverChatCollectionDataSource: NSObject, UICollectionViewDataSource 
             return LT("昨天 \(timeText)", "Yesterday \(timeText)", "昨日 \(timeText)")
         }
         if calendar.isDate(date, equalTo: Date(), toGranularity: .year) {
-            return Self.sameYearFormatter.string(from: date)
+            return date.appLocalizedYMDHMText()
         }
-        return Self.fullFormatter.string(from: date)
+        return date.appLocalizedYMDHMText()
     }
-
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
-
-    private static let sameYearFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.setLocalizedDateFormatFromTemplate("MMMdHHmm")
-        return formatter
-    }()
-
-    private static let fullFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.setLocalizedDateFormatFromTemplate("yMMMdHHmm")
-        return formatter
-    }()
 
     private func isSameCluster(previous: ChatMessage?, current: ChatMessage?) -> Bool {
         guard let previous, let current else { return false }

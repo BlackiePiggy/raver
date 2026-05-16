@@ -64,7 +64,7 @@ final class DemoAlignedChatSearchResultsViewController: UITableViewController {
     }
 
     private func secondaryLine(for result: ChatMessageSearchResult) -> String {
-        let timeText = Self.timeFormatter.string(from: result.message.createdAt)
+        let timeText = result.message.createdAt.appLocalizedYMDHMText()
         let sender = result.message.isMine ? LT("我", "Me", "自分") : result.message.sender.displayName
         let source = LT("本地索引", "Local", "ローカル")
         return "\(sender) · \(timeText) · \(source)"
@@ -148,10 +148,4 @@ final class DemoAlignedChatSearchResultsViewController: UITableViewController {
     }
 
     private static let cellReuseID = "search-result-cell"
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.setLocalizedDateFormatFromTemplate("MMMdHHmm")
-        return formatter
-    }()
 }

@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 export default function MyCheckinsPage() {
   const router = useRouter();
@@ -55,14 +56,7 @@ export default function MyCheckinsPage() {
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('zh-CN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return formatDateTimeWithSystemTimeZoneLabel(dateString);
   };
 
   if (!user) {

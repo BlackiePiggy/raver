@@ -6,6 +6,7 @@ import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { notificationApi } from '@/lib/api/notification';
 import { squadApi } from '@/lib/api/squad';
+import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 export default function NotificationsPage() {
   const router = useRouter();
@@ -119,7 +120,7 @@ export default function NotificationsPage() {
                             <span className="font-semibold">{invite.squad.name}</span>
                           </p>
                           <p className="text-xs text-text-secondary mt-1">
-                            {new Date(invite.createdAt).toLocaleString('zh-CN')}
+                            {formatDateTimeWithSystemTimeZoneLabel(invite.createdAt)}
                           </p>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">

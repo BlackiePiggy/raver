@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import Navigation from '@/components/Navigation';
 import { getApiUrl } from '@/lib/config';
+import { formatDateWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 const getInitials = (name: string) =>
   name
@@ -284,7 +285,7 @@ export default function DJsPage() {
           .map((set: any) => {
             const whenSource = set?.recordedAt || set?.createdAt;
             const when = whenSource
-              ? new Date(whenSource).toLocaleDateString('zh-CN')
+              ? formatDateWithSystemTimeZoneLabel(whenSource)
               : '日期未知';
             const where = set?.eventName || set?.venue || '';
             const title = typeof set?.title === 'string' && set.title.trim() ? set.title.trim() : 'Untitled Set';

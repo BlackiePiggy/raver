@@ -1,0 +1,58 @@
+[
+  {
+    "id": "trance/hard-trance/hard-progressive-trance",
+    "name": "Hard Progressive Trance",
+    "path": "Trance > Hard Trance > Hard Progressive Trance",
+    "description": "Hard Progressive Trance is a combination of Hard Trance and Progressive Trance, where the harder and more driving rhythms of Hard Trance meet the subtle and evolving progressions typical of Progressive Trance. This fusion creates a more intense version of Progressive Trance, featuring complex, evolving soundscapes alongside harder basslines and faster tempos. Hard Progressive Trance maintains the deep, atmospheric elements of Progressive Trance but intensifies them with the raw energy and powerful buildups of Hard Trance, making it suitable for listeners who appreciate both the cerebral nature of Progressive Trance and the high-energy punch of Hard Trance.",
+    "example": "Mauro Picotto - Komodo"
+  },
+  {
+    "id": "trance/progressive-trance/melodic-progressive-trance",
+    "name": "Melodic Progressive Trance",
+    "path": "Trance > Progressive Trance > Melodic Progressive Trance",
+    "description": "Melodic Progressive Trance emphasizes a strong focus on melodic elements, often incorporating uplifting and emotional melodies alongside the genre's signature progressive build-ups. The use of lush synthesizers, harmonic progressions, and dynamic breaks create a euphoric yet smooth sound. Artists in this style often aim to create tracks that evoke deep emotional responses, with a balanced, atmospheric flow.",
+    "example": "Above & Beyond - Sun & Moon"
+  },
+  {
+    "id": "trance/progressive-trance/dark-progressive-trance",
+    "name": "Dark Progressive Trance",
+    "path": "Trance > Progressive Trance > Dark Progressive Trance",
+    "description": "Dark Progressive Trance introduces darker and more atmospheric tones into the progressive trance framework. With a focus on deep, moody basslines and haunting melodies, this subgenre has a more intense, introspective feel. It combines the steady progression of traditional Progressive Trance with elements that can feel more eerie or ethereal, often creating a sense of tension and release.",
+    "example": "Airwave - When Things Go Wrong"
+  },
+  {
+    "id": "trance/progressive-trance/progressive-psytrance",
+    "name": "Progressive Psytrance",
+    "path": "Trance > Progressive Trance > Progressive Psytrance",
+    "description": "Progressive Psytrance is a fusion of Progressive Trance and Psytrance elements. It blends the driving rhythms and atmospheric buildup of Progressive Trance with the intricate, psychedelic soundscapes typical of Psytrance. This style often features complex arrangements, evolving textures, and deep basslines, combining the trance’s melodic and progressive elements with the mind-bending, trippy qualities of Psytrance, offering a unique experience for the listener.",
+    "example": "Ace Ventura - Stomping Ground"
+  },
+  {
+    "id": "trance/uplifting-trance/anthem-trance",
+    "name": "Anthem Trance",
+    "path": "Trance > Uplifting Trance > Anthem Trance",
+    "description": "Anthem Trance is a subset of Uplifting Trance that focuses on creating 'anthemic' tracks—those with memorable melodies, powerful buildups, and euphoric drops. Anthem Trance tracks are known for their accessibility and universal appeal, often becoming favorites at large events and festivals. These tracks are designed to evoke a sense of unity and collective experience, with soaring synths and progressive melodies that rise toward an uplifting climax. The emphasis is on crafting emotionally resonant, impactful moments, making the genre perfect for both individual listening and crowd-pleasing live performances.",
+    "example": "Armin van Buuren - Communication"
+  },
+  {
+    "id": "trance/uplifting-trance/orchestral-trance",
+    "name": "Orchestral Trance",
+    "path": "Trance > Uplifting Trance > Orchestral Trance",
+    "description": "Orchestral Trance is a subgenre of Uplifting Trance that blends orchestral, symphonic elements with the electronic foundation of Trance music. Incorporating strings, brass, and orchestral arrangements, this subgenre aims to elevate the Trance experience to a more cinematic and grandiose level. The sweeping melodies and harmonic richness of orchestral arrangements enhance the uplifting nature of Trance, creating a dramatic and emotionally powerful atmosphere. This subgenre can evoke a sense of grandeur, often pairing with larger-than-life buildups and drops to provide a truly immersive listening experience.",
+    "example": "Andy Blueman - Time to Rest"
+  },
+  {
+    "id": "trance/uplifting-trance/vocal-trance",
+    "name": "Vocal Trance",
+    "path": "Trance > Uplifting Trance > Vocal Trance",
+    "description": "Vocal Trance combines the uplifting melodies of Trance with prominent, often emotive vocals. The inclusion of a singer or vocal samples adds an additional layer of emotional depth to the tracks, enhancing the euphoric experience. The vocals typically serve as a central part of the track, weaving through the melody and harmonizing with the uplifting instrumental parts. This subgenre is known for its ability to create emotional connections with listeners, as the combination of powerful lyrics and soaring melodies creates an atmospheric soundscape that resonates deeply, making it a favorite for those who enjoy the blend of trance music and vocal-driven compositions.",
+    "example": "Oceanlab - Satellite"
+  },
+  {
+    "id": "electronic-music",
+    "name": "Electronic Music",
+    "path": "Electronic Music",
+    "description": "",
+    "example": ""
+  }
+]

@@ -7,6 +7,7 @@ import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { eventAPI } from '@/lib/api/event';
 import { djAPI, DJ } from '@/lib/api/dj';
+import { DEFAULT_BUSINESS_TIME_ZONE, getTimeZoneLabel } from '@/lib/timezone';
 
 interface LineupSlotForm {
   djId?: string;
@@ -36,7 +37,8 @@ const MAX_FESTIVAL_DAY_OPTIONS = 14;
 
 const parseLocalDate = (value: string): Date | null => {
   if (!value.trim()) return null;
-  const parsed = new Date(value);
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(year, month - 1, day);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
@@ -182,6 +184,7 @@ export default function PublishEventPage() {
   const [country, setCountry] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [eventTimeZone, setEventTimeZone] = useState(DEFAULT_BUSINESS_TIME_ZONE);
   const [ticketUrl, setTicketUrl] = useState('');
   const [ticketCurrency, setTicketCurrency] = useState('CNY');
   const [ticketNotes, setTicketNotes] = useState('');
@@ -328,6 +331,7 @@ export default function PublishEventPage() {
         country,
         startDate,
         endDate,
+        timeZone: eventTimeZone || DEFAULT_BUSINESS_TIME_ZONE,
         ticketUrl: ticketUrl || null,
         ticketPriceMin: null,
         ticketPriceMax: null,
@@ -427,6 +431,14 @@ export default function PublishEventPage() {
             <div>
               <label className="block text-sm text-text-secondary mb-1">结束时间</label>
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" required />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm text-text-secondary mb-1">活动时区</label>
+              <input value={eventTimeZone} onChange={(e) => setEventTimeZone(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" placeholder={DEFAULT_BUSINESS_TIME_ZONE} />
+              <p className="mt-1 text-xs text-text-tertiary">
+                未填写时默认 {getTimeZoneLabel(DEFAULT_BUSINESS_TIME_ZONE)}；展示给用户时仍按用户系统时区显示。
+              </p>
             </div>
 
             <div>

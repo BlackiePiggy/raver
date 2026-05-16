@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminContentReport, ContentReportSummary, ModerationDecisionTemplate, contentReportsApi } from '@/lib/api/content-reports';
+import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 const STATUS_OPTIONS = ['', 'pending', 'reviewing', 'resolved', 'rejected', 'closed'];
 const PRIORITY_OPTIONS = ['', 'high', 'medium', 'normal'];
@@ -22,7 +23,7 @@ const ACTIONS = [
 
 const formatTime = (value?: string | null): string => {
   if (!value) return '-';
-  return new Date(value).toLocaleString('zh-CN', { hour12: false });
+  return formatDateTimeWithSystemTimeZoneLabel(value);
 };
 
 const priorityClass = (priority?: string): string => {

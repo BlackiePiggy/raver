@@ -438,11 +438,7 @@ private struct PrivacySettingsView: View {
     }
 
     private static func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        date.appLocalizedYMDHMText()
     }
 }
 
@@ -1051,11 +1047,7 @@ private struct AccountSecuritySettingsView: View {
     }
 
     fileprivate static func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        date.appLocalizedYMDHMText()
     }
 }
 
