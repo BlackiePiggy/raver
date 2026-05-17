@@ -442,8 +442,8 @@ struct MainTabCoordinatorView: View {
         .environment(\.profilePush) { route in
             pushProfileRoute(route)
         }
-        .onChange(of: appState.isLoggedIn) { _, isLoggedIn in
-            if isLoggedIn {
+        .onChange(of: appState.shouldKeepLoginGatePresented) { _, shouldKeepPresented in
+            if !shouldKeepPresented {
                 isLoginPresented = false
             }
         }

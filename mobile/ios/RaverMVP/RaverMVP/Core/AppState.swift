@@ -869,6 +869,7 @@ final class AppState: ObservableObject {
     }
     @Published var errorMessage: String?
     @Published var isAuthBootstrapping: Bool = true
+    @Published var isRegistrationOnboardingActive: Bool = false
     @Published var unreadMessagesCount: Int = 0
     @Published var tencentIMBootstrap: TencentIMBootstrap?
     @Published var tencentIMConnectionState: TencentIMConnectionState = .idle
@@ -1001,6 +1002,10 @@ final class AppState: ObservableObject {
 
     var isLoggedIn: Bool {
         session != nil
+    }
+
+    var shouldKeepLoginGatePresented: Bool {
+        session == nil || isRegistrationOnboardingActive
     }
 
     private func bootstrapSessionIfPossible() async {
@@ -1198,6 +1203,14 @@ final class AppState: ObservableObject {
         flushPendingSystemNotificationPayloadIfPossible(trigger: "register-email")
     }
 
+    func beginRegistrationOnboarding() {
+        isRegistrationOnboardingActive = true
+    }
+
+    func finishRegistrationOnboarding() {
+        isRegistrationOnboardingActive = false
+    }
+
     func register(
         email: String,
         password: String,
@@ -1241,6 +1254,7 @@ final class AppState: ObservableObject {
             SessionTokenStore.shared.clear()
         }
         session = nil
+        isRegistrationOnboardingActive = false
         resetUnreadCounts()
         tencentIMBootstrap = nil
         tencentIMSession.reset()

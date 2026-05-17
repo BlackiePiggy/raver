@@ -1726,6 +1726,7 @@ private struct RegisterProfileView: View {
         defer { isSubmitting = false }
 
         do {
+            appState.beginRegistrationOnboarding()
             try await appState.registerWithEmailCode(
                 email: normalizedEmail,
                 code: code,
@@ -1735,6 +1736,7 @@ private struct RegisterProfileView: View {
             )
             registrationErrorMessage = nil
         } catch {
+            appState.finishRegistrationOnboarding()
             registrationErrorMessage = error.userFacingMessage
             return
         }
@@ -1874,6 +1876,7 @@ private struct RegisterProfileView: View {
         withAnimation(.easeInOut(duration: 0.26)) {
             showWelcomeCard = false
         }
+        appState.finishRegistrationOnboarding()
         dismiss()
     }
 
