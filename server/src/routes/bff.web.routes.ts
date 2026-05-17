@@ -4491,6 +4491,10 @@ const DAILY_EVENT_RECOMMENDATION_ALGORITHM_VERSION = 'daily-event-recommendation
 const DAILY_EVENT_RECOMMENDATION_SIZE = 10;
 const DAILY_EVENT_RECOMMENDATION_TIME_ZONE = 'Asia/Shanghai';
 const DAILY_EVENT_RECOMMENDATION_MEMORY_TTL_MS = 5 * 60 * 1000;
+const DAILY_DJ_RECOMMENDATION_ALGORITHM_VERSION = 'daily-dj-recommendations-soundcloud-top500-v1';
+const DAILY_DJ_RECOMMENDATION_SIZE = 10;
+const DAILY_DJ_RECOMMENDATION_CANDIDATE_LIMIT = 500;
+const DAILY_DJ_RECOMMENDATION_CANDIDATE_SOURCE = 'soundcloud_followers_top_500';
 
 type DailyEventRecommendationSnapshot = {
   userId: string;
@@ -4502,9 +4506,24 @@ type DailyEventRecommendationSnapshot = {
   generatedAt: Date;
 };
 
+type DailyDJRecommendationSnapshot = {
+  userId: string;
+  dateKey: string;
+  recommendationDate: Date;
+  djIds: string[];
+  algorithmVersion: string;
+  candidateSource: string;
+  candidateLimit: number;
+  generatedAt: Date;
+};
+
 const dailyEventRecommendationMemoryCache = new Map<
   string,
   { expiresAt: number; snapshot: DailyEventRecommendationSnapshot }
+>();
+const dailyDJRecommendationMemoryCache = new Map<
+  string,
+  { expiresAt: number; snapshot: DailyDJRecommendationSnapshot }
 >();
 
 const eventRecommendationStatusOrder: EventRecommendationStatus[] = [
@@ -4727,6 +4746,122 @@ const getOrCreateDailyEventRecommendationSnapshot = async (
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       const raced = await readDailyEventRecommendationSnapshot(userId, dateKey);
+      if (raced) return raced;
+    }
+    throw error;
+  }
+};
+
+const mapDailyDJRecommendationSnapshot = (row: {
+  userId: string;
+  recommendationDate: Date;
+  djIds: string[];
+  algorithmVersion: string;
+  candidateSource: string;
+  candidateLimit: number;
+  generatedAt: Date;
+}): DailyDJRecommendationSnapshot => {
+  const dateKey = row.recommendationDate.toISOString().slice(0, 10);
+  return {
+    userId: row.userId,
+    dateKey,
+    recommendationDate: row.recommendationDate,
+    djIds: row.djIds,
+    algorithmVersion: row.algorithmVersion,
+    candidateSource: row.candidateSource,
+    candidateLimit: row.candidateLimit,
+    generatedAt: row.generatedAt,
+  };
+};
+
+const readDailyDJRecommendationSnapshot = async (
+  userId: string,
+  dateKey: string
+): Promise<DailyDJRecommendationSnapshot | null> => {
+  const cacheKey = `${userId}:${dateKey}`;
+  const cached = dailyDJRecommendationMemoryCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.snapshot;
+  }
+  dailyDJRecommendationMemoryCache.delete(cacheKey);
+
+  const recommendationDate = new Date(`${dateKey}T00:00:00.000Z`);
+  const row = await prisma.userDailyDJRecommendation.findUnique({
+    where: {
+      userId_recommendationDate: {
+        userId,
+        recommendationDate,
+      },
+    },
+  });
+  if (!row) return null;
+
+  const snapshot = mapDailyDJRecommendationSnapshot(row);
+  dailyDJRecommendationMemoryCache.set(cacheKey, {
+    expiresAt: Date.now() + DAILY_EVENT_RECOMMENDATION_MEMORY_TTL_MS,
+    snapshot,
+  });
+  return snapshot;
+};
+
+const selectDailyDJRecommendationIds = async (): Promise<string[]> => {
+  const candidates = await prisma.dJ.findMany({
+    where: {
+      soundCloudFollowers: { not: null },
+    },
+    select: { id: true },
+    orderBy: [
+      { soundCloudFollowers: 'desc' },
+      { name: 'asc' },
+    ],
+    take: DAILY_DJ_RECOMMENDATION_CANDIDATE_LIMIT,
+  });
+  const pool = candidates.map((row) => row.id);
+  const selectedIds: string[] = [];
+  const selectedSet = new Set<string>();
+
+  while (selectedIds.length < DAILY_DJ_RECOMMENDATION_SIZE) {
+    const picked = popRandomItem(pool);
+    if (!picked) break;
+    if (selectedSet.has(picked)) continue;
+    selectedSet.add(picked);
+    selectedIds.push(picked);
+  }
+
+  return selectedIds;
+};
+
+const getOrCreateDailyDJRecommendationSnapshot = async (
+  userId: string,
+  now: Date
+): Promise<DailyDJRecommendationSnapshot> => {
+  const dateKey = getDailyEventRecommendationDateKey(now);
+  const existing = await readDailyDJRecommendationSnapshot(userId, dateKey);
+  if (existing) return existing;
+
+  const recommendationDate = new Date(`${dateKey}T00:00:00.000Z`);
+  const selectedIds = await selectDailyDJRecommendationIds();
+
+  try {
+    const row = await prisma.userDailyDJRecommendation.create({
+      data: {
+        userId,
+        recommendationDate,
+        djIds: selectedIds,
+        algorithmVersion: DAILY_DJ_RECOMMENDATION_ALGORITHM_VERSION,
+        candidateSource: DAILY_DJ_RECOMMENDATION_CANDIDATE_SOURCE,
+        candidateLimit: DAILY_DJ_RECOMMENDATION_CANDIDATE_LIMIT,
+      },
+    });
+    const snapshot = mapDailyDJRecommendationSnapshot(row);
+    dailyDJRecommendationMemoryCache.set(`${userId}:${dateKey}`, {
+      expiresAt: Date.now() + DAILY_EVENT_RECOMMENDATION_MEMORY_TTL_MS,
+      snapshot,
+    });
+    return snapshot;
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const raced = await readDailyDJRecommendationSnapshot(userId, dateKey);
       if (raced) return raced;
     }
     throw error;
@@ -6738,6 +6873,101 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
     );
   } catch (error) {
     console.error('BFF web djs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/djs/recommendations', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const viewerId = authReq.user?.userId;
+    const viewerRole = authReq.user?.role ?? null;
+    const limit = normalizeLimit(req.query.limit, DAILY_DJ_RECOMMENDATION_SIZE, 20);
+    const now = new Date();
+
+    let orderedIds: string[] = [];
+    let snapshot: DailyDJRecommendationSnapshot | null = null;
+
+    if (viewerId) {
+      snapshot = await getOrCreateDailyDJRecommendationSnapshot(viewerId, now);
+      orderedIds = snapshot.djIds.slice(0, limit);
+    } else {
+      orderedIds = (await selectDailyDJRecommendationIds()).slice(0, limit);
+    }
+
+    if (orderedIds.length === 0) {
+      ok(res, {
+        items: [],
+        meta: {
+          limit,
+          selected: 0,
+          cache: snapshot
+            ? {
+                scope: 'daily-user',
+                hit: true,
+                date: snapshot.dateKey,
+                algorithmVersion: snapshot.algorithmVersion,
+                candidateSource: snapshot.candidateSource,
+                candidateLimit: snapshot.candidateLimit,
+                generatedAt: snapshot.generatedAt.toISOString(),
+                timeZone: DAILY_EVENT_RECOMMENDATION_TIME_ZONE,
+              }
+            : {
+                scope: 'request',
+                hit: false,
+                candidateSource: DAILY_DJ_RECOMMENDATION_CANDIDATE_SOURCE,
+                candidateLimit: DAILY_DJ_RECOMMENDATION_CANDIDATE_LIMIT,
+              },
+        },
+      });
+      return;
+    }
+
+    let rows = await prisma.dJ.findMany({
+      where: { id: { in: orderedIds } },
+    });
+    const idOrder = new Map(orderedIds.map((id, index) => [id, index]));
+    rows.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
+    rows = await attachDJContributorInfoList(rows);
+
+    const followRows = viewerId
+      ? await prisma.follow.findMany({
+          where: {
+            followerId: viewerId,
+            type: 'dj',
+            djId: { in: orderedIds },
+          },
+          select: { djId: true },
+        })
+      : [];
+    const followSet = new Set(followRows.map((row) => row.djId).filter((id): id is string => Boolean(id)));
+
+    ok(res, {
+      items: rows.map((row) => mapDJ(row, followSet.has(row.id), viewerId, viewerRole)),
+      meta: {
+        limit,
+        selected: rows.length,
+        cache: snapshot
+          ? {
+              scope: 'daily-user',
+              hit: true,
+              date: snapshot.dateKey,
+              algorithmVersion: snapshot.algorithmVersion,
+              candidateSource: snapshot.candidateSource,
+              candidateLimit: snapshot.candidateLimit,
+              generatedAt: snapshot.generatedAt.toISOString(),
+              timeZone: DAILY_EVENT_RECOMMENDATION_TIME_ZONE,
+            }
+          : {
+              scope: 'request',
+              hit: false,
+              candidateSource: DAILY_DJ_RECOMMENDATION_CANDIDATE_SOURCE,
+              candidateLimit: DAILY_DJ_RECOMMENDATION_CANDIDATE_LIMIT,
+            },
+      },
+    });
+  } catch (error) {
+    console.error('BFF web DJ recommendations error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

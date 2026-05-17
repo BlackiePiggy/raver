@@ -11,10 +11,18 @@ final class RecommendEventsViewModel: ObservableObject {
     @Published var bannerMessage: String?
     @Published var errorMessage: String?
 
+    private struct CachedDailyRecommendations {
+        let dateKey: String
+        let userKey: String
+        let events: [WebEvent]
+    }
+
+    private static var cachedDailyRecommendations: CachedDailyRecommendations?
     private let fetchRecommendedEventsUseCase: FetchRecommendedDiscoverEventsUseCase
     private let fetchEventsPageUseCase: FetchDiscoverEventsPageUseCase
     private let fetchMarkedEventCheckinsUseCase: FetchMarkedEventCheckinsUseCase
     private let toggleMarkedEventUseCase: ToggleMarkedEventUseCase
+    private var hasLoadedRecommendations = false
 
     init(
         recommendationRepository: EventRecommendationRepository,
@@ -27,9 +35,18 @@ final class RecommendEventsViewModel: ObservableObject {
         self.toggleMarkedEventUseCase = ToggleMarkedEventUseCase(repository: checkinRepository)
     }
 
-    func reload(isLoggedIn: Bool) async {
-        await reloadMarkedState(isLoggedIn: isLoggedIn)
-        await loadRecommendations()
+    func loadIfNeeded(sessionUserID: String?) async {
+        applyCachedRecommendationsIfAvailable(sessionUserID: sessionUserID)
+        if hasLoadedRecommendations {
+            await reloadMarkedState(isLoggedIn: sessionUserID != nil)
+            return
+        }
+        await reload(sessionUserID: sessionUserID, force: false)
+    }
+
+    func reload(sessionUserID: String?, force: Bool = true) async {
+        await reloadMarkedState(isLoggedIn: sessionUserID != nil)
+        await loadRecommendations(sessionUserID: sessionUserID, force: force)
     }
 
     func reloadMarkedState(isLoggedIn: Bool) async {
@@ -61,13 +78,16 @@ final class RecommendEventsViewModel: ObservableObject {
         }
     }
 
-    private func loadRecommendations() async {
+    private func loadRecommendations(sessionUserID: String?, force: Bool) async {
         guard !isLoading else { return }
+        if !force, hasLoadedRecommendations, !events.isEmpty {
+            return
+        }
+
+        applyCachedRecommendationsIfAvailable(sessionUserID: sessionUserID)
         let hadContent = !events.isEmpty
         isLoading = true
-        if hadContent {
-            isRefreshing = true
-        } else {
+        if !hadContent {
             phase = .initialLoading
         }
         defer { isLoading = false }
@@ -80,18 +100,24 @@ final class RecommendEventsViewModel: ObservableObject {
             )
             if !recommended.isEmpty {
                 events = recommended
+                cacheRecommendations(recommended, sessionUserID: sessionUserID)
+                hasLoadedRecommendations = true
                 phase = .success
                 bannerMessage = nil
                 return
             }
 
             events = try await loadRecommendationsLegacy()
+            cacheRecommendations(events, sessionUserID: sessionUserID)
+            hasLoadedRecommendations = true
             phase = events.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
             // Backward-compatible fallback for servers that have not deployed /v1/events/recommendations yet.
             do {
                 events = try await loadRecommendationsLegacy()
+                cacheRecommendations(events, sessionUserID: sessionUserID)
+                hasLoadedRecommendations = true
                 phase = events.isEmpty ? .empty : .success
                 bannerMessage = nil
             } catch {
@@ -104,6 +130,42 @@ final class RecommendEventsViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    private func applyCachedRecommendationsIfAvailable(sessionUserID: String?) {
+        guard events.isEmpty,
+              let cached = Self.cachedDailyRecommendations,
+              cached.dateKey == Self.todayKey(),
+              cached.userKey == Self.userCacheKey(sessionUserID),
+              !cached.events.isEmpty else {
+            return
+        }
+        events = cached.events
+        phase = .success
+        hasLoadedRecommendations = true
+    }
+
+    private func cacheRecommendations(_ events: [WebEvent], sessionUserID: String?) {
+        guard !events.isEmpty else { return }
+        Self.cachedDailyRecommendations = CachedDailyRecommendations(
+            dateKey: Self.todayKey(),
+            userKey: Self.userCacheKey(sessionUserID),
+            events: events
+        )
+    }
+
+    private static func userCacheKey(_ sessionUserID: String?) -> String {
+        let trimmed = sessionUserID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? "anonymous" : trimmed
+    }
+
+    private static func todayKey(now: Date = Date()) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: now)
     }
 
     private func loadRecommendationsLegacy() async throws -> [WebEvent] {

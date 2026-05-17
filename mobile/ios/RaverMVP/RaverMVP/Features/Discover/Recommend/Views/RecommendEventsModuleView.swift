@@ -52,7 +52,7 @@ struct RecommendEventsModuleView: View {
                         title: LT("推荐活动加载失败", "Recommended Events Failed to Load", "おすすめイベントの読み込みに失敗しました"),
                         message: message
                     ) {
-                        Task { await viewModel.reload(isLoggedIn: appState.session != nil) }
+                        Task { await viewModel.reload(sessionUserID: appState.session?.user.id) }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if case .offline(let message) = viewModel.phase {
@@ -60,7 +60,7 @@ struct RecommendEventsModuleView: View {
                         title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
                         message: message
                     ) {
-                        Task { await viewModel.reload(isLoggedIn: appState.session != nil) }
+                        Task { await viewModel.reload(sessionUserID: appState.session?.user.id) }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.events.isEmpty {
@@ -84,7 +84,7 @@ struct RecommendEventsModuleView: View {
                             style: .error,
                             actionTitle: LT("重试", "Retry", "再試行")
                         ) {
-                            Task { await viewModel.reload(isLoggedIn: appState.session != nil) }
+                            Task { await viewModel.reload(sessionUserID: appState.session?.user.id) }
                         }
                     }
                 }
@@ -97,9 +97,9 @@ struct RecommendEventsModuleView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await viewModel.reload(isLoggedIn: appState.session != nil)
+            await viewModel.loadIfNeeded(sessionUserID: appState.session?.user.id)
         }
-        .task(id: appState.session != nil) {
+        .task(id: appState.session?.user.id) {
             await viewModel.reloadMarkedState(isLoggedIn: appState.session != nil)
         }
         .onDisappear {

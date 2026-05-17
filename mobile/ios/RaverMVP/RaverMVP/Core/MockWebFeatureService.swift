@@ -868,6 +868,17 @@ actor MockWebFeatureService: WebFeatureService {
         )
     }
 
+    func fetchRecommendedDJs(limit: Int) async throws -> [WebDJ] {
+        var filtered = djs
+        filtered.sort {
+            let lhs = $0.soundCloudFollowers ?? $0.followerCount ?? 0
+            let rhs = $1.soundCloudFollowers ?? $1.followerCount ?? 0
+            if lhs != rhs { return lhs > rhs }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        return Array(filtered.prefix(max(1, min(20, limit))))
+    }
+
     func fetchDJ(id: String) async throws -> WebDJ {
         guard let dj = djs.first(where: { $0.id == id }) else {
             throw ServiceError.message("DJ 不存在")

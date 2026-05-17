@@ -252,6 +252,17 @@ final class LiveWebFeatureService: WebFeatureService {
         return DJListPage(items: response.data.items.map(localizedDJ), pagination: response.pagination)
     }
 
+    func fetchRecommendedDJs(limit: Int) async throws -> [WebDJ] {
+        let response: BFFEnvelope<BFFItems<WebDJ>> = try await request(
+            path: "/v1/djs/recommendations",
+            method: "GET",
+            queryItems: [
+                URLQueryItem(name: "limit", value: "\(max(1, min(20, limit)))")
+            ]
+        )
+        return response.data.items.map(localizedDJ)
+    }
+
     func fetchDJ(id: String) async throws -> WebDJ {
         let response: BFFEnvelope<WebDJ> = try await request(path: "/v1/djs/\(id)", method: "GET")
         return localizedDJ(response.data)

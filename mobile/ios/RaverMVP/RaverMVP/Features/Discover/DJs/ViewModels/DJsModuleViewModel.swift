@@ -53,12 +53,12 @@ final class DJsModuleViewModel: ObservableObject {
         do {
             errorMessage = nil
             async let hotPageTask = repository.fetchDJs(page: 1, limit: hotDJBatchSize, search: nil, sortBy: "random")
-            async let spotlightPageTask = repository.fetchDJs(page: 1, limit: 10, search: nil, sortBy: "followerCount")
+            async let spotlightTask = repository.fetchRecommendedDJs(limit: 10)
 
             let hotPage = try await hotPageTask
-            let spotlightPage = try? await spotlightPageTask
+            let recommendedSpotlightDJs = try? await spotlightTask
             djs = hotPage.items
-            spotlightDJs = sanitizeSpotlightDJs(spotlightPage?.items ?? [])
+            spotlightDJs = sanitizeSpotlightDJs(recommendedSpotlightDJs ?? [])
 
             if djs.isEmpty {
                 await refreshRandomHotBatch()
