@@ -11224,6 +11224,8 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
         select: {
           id: true,
           username: true,
+          email: true,
+          role: true,
           displayName: true,
           bio: true,
           avatarUrl: true,
@@ -11268,6 +11270,8 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
     res.json({
       id: user.id,
       username: user.username,
+      email: user.email,
+      role: user.role,
       displayName: user.displayName || user.username,
       bio: user.bio || '',
       avatarURL: user.avatarUrl,

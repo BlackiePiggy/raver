@@ -68,6 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser({
       ...session.user,
       ...userData,
+      role: userData.role && userData.role !== 'user' ? userData.role : session.user.role,
       avatarUrl: userData.avatarUrl ?? session.user.avatarUrl ?? session.user.avatarURL ?? null,
     });
     lastActivityAtRef.current = Date.now();
@@ -183,7 +184,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentToken = token || authSessionToken.get();
     if (!currentToken) return;
     const profile = await authAPI.getProfile(currentToken);
-    setUser(profile);
+    setUser((current) => ({
+      ...(current || profile),
+      ...profile,
+      role: profile.role && profile.role !== 'user' ? profile.role : current?.role || profile.role,
+    }));
     if (!token) {
       setToken(currentToken);
     }
