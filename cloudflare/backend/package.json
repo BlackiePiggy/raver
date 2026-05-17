@@ -1,0 +1,18 @@
+{
+  "name": "raver-cloudflare-backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260516.1",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.92.0"
+  }
+}

@@ -8,6 +8,7 @@ Raver 是一个围绕电子音乐活动、DJ、Set、社区、小队与线下协
 
 - **主客户端**：iOS Native App，位于 `mobile/ios/RaverMVP/`
 - **后端**：Node.js + Express + TypeScript + Prisma，位于 `server/`
+- **Cloudflare 部署层**：Worker + Container 入口，位于 `cloudflare/backend/`
 - **数据库**：PostgreSQL，开发环境通过 Docker Compose 启动
 - **缓存**：Redis
 - **Web**：Next.js，用于 Admin Console、CMS、预报名、公开 fallback 和历史 Web 页面
@@ -126,6 +127,7 @@ raver/
 - [Platform Architecture](./docs/RAVER_PLATFORM_ARCHITECTURE.md)
 - [Commercial Architecture Restructure Plan](./docs/RAVER_COMMERCIAL_ARCHITECTURE_RESTRUCTURE_PLAN.md)
 - [Restructure Tracker](./docs/RAVER_COMMERCIAL_ARCHITECTURE_RESTRUCTURE_TRACKER.md)
+- [Cloudflare Backend Deployment](./docs/CLOUDFLARE_BACKEND_DEPLOYMENT.md)
 
 关键 ADR：
 

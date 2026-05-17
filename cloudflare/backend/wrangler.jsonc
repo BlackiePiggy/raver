@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "raver-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "containers": [
+    {
+      "class_name": "RaverBackendContainer",
+      "image": "../../server/Dockerfile",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RAVER_BACKEND",
+        "class_name": "RaverBackendContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RaverBackendContainer"]
+    }
+  ]
+}

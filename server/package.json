@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Raver API Server",
   "main": "dist/index.js",
+  "packageManager": "pnpm@10.30.3",
   "scripts": {
     "dev": "NODE_OPTIONS='--use-env-proxy' nodemon src/index.ts",
     "build": "tsc",
@@ -98,5 +99,14 @@
     "prisma": "^5.22.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@firebase/util",
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "protobufjs"
+    ]
   }
 }
