@@ -211,10 +211,19 @@ enum FeedMode: String, Codable, CaseIterable, Identifiable {
 protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService {
     func restoreSession() async -> Session?
     func login(username: String, password: String) async throws -> Session
+    func loginWithEmailCode(email: String, code: String) async throws -> Session
     func loginWithSms(phoneNumber: String, code: String) async throws -> Session
     func loginWithFirebasePhoneIdToken(_ idToken: String, birthYear: Int?, regionCode: String?, displayName: String?) async throws -> Session
+    func sendEmailAuthCode(email: String, scene: String) async throws -> Int
     func sendLoginSmsCode(phoneNumber: String) async throws -> Int
     func checkDisplayNameAvailability(_ displayName: String) async throws -> DisplayNameAvailability
+    func registerWithEmailCode(
+        email: String,
+        code: String,
+        displayName: String,
+        birthYear: Int?,
+        regionCode: String?
+    ) async throws -> Session
     func register(
         email: String,
         password: String,
@@ -240,6 +249,13 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func unblockUser(userID: String) async throws -> UserBlockStatus
 
     func fetchFeed(cursor: String?, mode: FeedMode?, eventID: String?) async throws -> FeedPage
+    func fetchNewsPage(cursor: String?) async throws -> DiscoverNewsPage
+    func searchNews(query: String) async throws -> [DiscoverNewsArticle]
+    func fetchNewsArticle(articleID: String) async throws -> DiscoverNewsArticle
+    func publishNews(draft: DiscoverNewsDraft) async throws -> CreateContentResult<DiscoverNewsArticle>
+    func fetchBoundNewsArticles(eventID: String?, djID: String?, festivalID: String?, cursor: String?) async throws -> DiscoverNewsPage
+    func fetchNewsComments(articleID: String) async throws -> [Comment]
+    func addNewsComment(articleID: String, content: String, parentCommentID: String?) async throws -> Comment
     func searchFeed(query: String) async throws -> FeedPage
     func fetchPost(postID: String) async throws -> Post
     func createPost(input: CreatePostInput) async throws -> CreatePostResult

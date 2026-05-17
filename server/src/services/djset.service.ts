@@ -29,6 +29,7 @@ interface DJSetListOptions {
   limit?: number;
   sortBy?: DJSetSortBy;
   djId?: string;
+  eventId?: string;
   eventName?: string;
 }
 
@@ -44,6 +45,7 @@ interface CreateDJSetInput {
   description?: string;
   recordedAt?: Date;
   venue?: string;
+  eventId?: string | null;
   eventName?: string;
 }
 
@@ -72,6 +74,7 @@ interface UpdateDJSetInput {
   videoAuthorName?: string;
   thumbnailUrl?: string;
   venue?: string;
+  eventId?: string | null;
   eventName?: string;
   recordedAt?: Date | null;
 }
@@ -107,6 +110,13 @@ export class DJSetService {
     if (takedowns.length === 0) return sets;
     const hiddenIds = new Set(takedowns.map((row) => row.targetId));
     return sets.filter((set) => !hiddenIds.has(set.id));
+  }
+
+  private normalizeNullableId(value?: string | null): string | null | undefined {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const normalized = String(value || '').trim();
+    return normalized || null;
   }
 
   private async mapContributorProfile(
@@ -376,6 +386,7 @@ export class DJSetService {
     const normalizedDjIds = this.normalizeDjIds(normalizedPrimaryDjId, input.djIds);
     const coDjIds = normalizedDjIds.filter((id) => id !== normalizedPrimaryDjId);
     const customDjNames = this.normalizeCustomDjNames(input.customDjNames);
+    const eventId = this.normalizeNullableId(input.eventId);
 
     const slug = await this.generateUniqueSlug(input.title);
 
@@ -395,6 +406,7 @@ export class DJSetService {
         videoId: videoInfo.videoId,
         recordedAt: input.recordedAt,
         venue: input.venue,
+        eventId,
         eventName: input.eventName,
       },
       include: {
@@ -544,10 +556,20 @@ export class DJSetService {
     const limit = Math.min(Math.max(1, Math.floor(options.limit || 20)), 100);
     const sortBy = options.sortBy || 'latest';
     const djId = String(options.djId || '').trim();
+    const eventId = String(options.eventId || '').trim();
     const eventName = String(options.eventName || '').trim();
     const where = {
       ...(djId ? { djId } : {}),
-      ...(eventName ? { eventName: { equals: eventName, mode: 'insensitive' as const } } : {}),
+      ...(eventId
+        ? {
+            OR: [
+              { eventId },
+              ...(eventName ? [{ eventName: { equals: eventName, mode: 'insensitive' as const } }] : []),
+            ],
+          }
+        : eventName
+          ? { eventName: { equals: eventName, mode: 'insensitive' as const } }
+          : {}),
     };
     const orderBy =
       sortBy === 'popular'
@@ -723,6 +745,7 @@ export class DJSetService {
     }
 
     const nextDjId = input.djId !== undefined ? (String(input.djId || '').trim() || null) : current.djId;
+    const nextEventId = this.normalizeNullableId(input.eventId);
     const normalizedDjIds = this.normalizeDjIds(
       nextDjId,
       input.djIds && input.djIds.length > 0 ? input.djIds : current.coDjIds
@@ -745,6 +768,7 @@ export class DJSetService {
         videoAuthorName: input.videoAuthorName?.trim() || undefined,
         thumbnailUrl,
         venue: input.venue ?? undefined,
+        eventId: nextEventId,
         eventName: input.eventName ?? undefined,
         recordedAt: input.recordedAt ?? undefined,
         platform,

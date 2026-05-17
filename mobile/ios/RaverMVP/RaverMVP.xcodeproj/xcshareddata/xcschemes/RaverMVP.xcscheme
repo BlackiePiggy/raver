@@ -73,7 +73,7 @@
          <EnvironmentVariable
             key = "RAVER_BFF_BASE_URL"
             value = "http://localhost:3901"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "RAVER_USE_MOCK"
@@ -83,12 +83,17 @@
          <EnvironmentVariable
             key = "RAVER_BFF_BASE_URL"
             value = "192.168.0.9:3901"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "RAVER_DEV_PHONE_AUTH_BYPASS"
             value = "1"
             isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "RAVER_BFF_BASE_URL"
+            value = "https://api.ravehub.top"
+            isEnabled = "NO">
          </EnvironmentVariable>
       </EnvironmentVariables>
    </LaunchAction>

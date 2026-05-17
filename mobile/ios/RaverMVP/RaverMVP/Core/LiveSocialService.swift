@@ -24,6 +24,24 @@ private struct RegisterRequest: Encodable {
     let regionCode: String?
 }
 
+private struct EmailAuthCodeRequest: Encodable {
+    let email: String
+    let scene: String
+}
+
+private struct EmailCodeLoginRequest: Encodable {
+    let email: String
+    let code: String
+}
+
+private struct EmailCodeRegisterRequest: Encodable {
+    let email: String
+    let code: String
+    let displayName: String
+    let birthYear: Int?
+    let regionCode: String?
+}
+
 struct DisplayNameAvailability: Decodable {
     let available: Bool
     let code: String?
@@ -82,6 +100,21 @@ final class LiveSocialService: SocialService {
         return sessionResponse
     }
 
+    func loginWithEmailCode(email: String, code: String) async throws -> Session {
+        let body = EmailCodeLoginRequest(email: email, code: code)
+        let sessionResponse: Session = try await request(
+            path: "/v1/auth/email/login",
+            method: "POST",
+            body: body,
+            allowAuthRetry: false,
+            includeAccessToken: false,
+            postSessionExpiredOnUnauthorized: false
+        )
+        token = sessionResponse.token
+        refreshToken = sessionResponse.refreshToken
+        return sessionResponse
+    }
+
     func loginWithSms(phoneNumber: String, code: String) async throws -> Session {
         let body = ["phone": phoneNumber, "code": code]
         let sessionResponse: Session = try await request(
@@ -117,6 +150,19 @@ final class LiveSocialService: SocialService {
         token = sessionResponse.token
         refreshToken = sessionResponse.refreshToken
         return sessionResponse
+    }
+
+    func sendEmailAuthCode(email: String, scene: String) async throws -> Int {
+        let body = EmailAuthCodeRequest(email: email, scene: scene)
+        let response: SmsCodeSendResponse = try await request(
+            path: "/v1/auth/email/send",
+            method: "POST",
+            body: body,
+            allowAuthRetry: false,
+            includeAccessToken: false,
+            postSessionExpiredOnUnauthorized: false
+        )
+        return max(0, response.expiresInSeconds)
     }
 
     func sendLoginSmsCode(phoneNumber: String) async throws -> Int {
@@ -159,6 +205,33 @@ final class LiveSocialService: SocialService {
         )
         let sessionResponse: Session = try await request(
             path: "/v1/auth/register",
+            method: "POST",
+            body: body,
+            allowAuthRetry: false,
+            includeAccessToken: false,
+            postSessionExpiredOnUnauthorized: false
+        )
+        token = sessionResponse.token
+        refreshToken = sessionResponse.refreshToken
+        return sessionResponse
+    }
+
+    func registerWithEmailCode(
+        email: String,
+        code: String,
+        displayName: String,
+        birthYear: Int?,
+        regionCode: String?
+    ) async throws -> Session {
+        let body = EmailCodeRegisterRequest(
+            email: email,
+            code: code,
+            displayName: displayName,
+            birthYear: birthYear,
+            regionCode: regionCode
+        )
+        let sessionResponse: Session = try await request(
+            path: "/v1/auth/email/register",
             method: "POST",
             body: body,
             allowAuthRetry: false,
@@ -302,6 +375,63 @@ final class LiveSocialService: SocialService {
         }
         let path = "/v1/feed?\(queryItems.joined(separator: "&"))"
         return try await request(path: path, method: "GET")
+    }
+
+    func fetchNewsPage(cursor: String? = nil) async throws -> DiscoverNewsPage {
+        var queryItems = ["limit=20"]
+        if let cursor {
+            let encoded = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor
+            queryItems.append("cursor=\(encoded)")
+        }
+        return try await request(path: "/v1/news?\(queryItems.joined(separator: "&"))", method: "GET")
+    }
+
+    func searchNews(query: String) async throws -> [DiscoverNewsArticle] {
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        let page: DiscoverNewsPage = try await request(path: "/v1/news/search?q=\(encoded)&limit=20", method: "GET")
+        return page.items
+    }
+
+    func fetchNewsArticle(articleID: String) async throws -> DiscoverNewsArticle {
+        try await request(path: "/v1/news/\(articleID)", method: "GET")
+    }
+
+    func publishNews(draft: DiscoverNewsDraft) async throws -> CreateContentResult<DiscoverNewsArticle> {
+        try await request(path: "/v1/news", method: "POST", body: draft)
+    }
+
+    func fetchBoundNewsArticles(eventID: String?, djID: String?, festivalID: String?, cursor: String? = nil) async throws -> DiscoverNewsPage {
+        var queryItems = ["limit=20"]
+        if let cursor {
+            let encoded = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor
+            queryItems.append("cursor=\(encoded)")
+        }
+        if let eventID, !eventID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let encoded = eventID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? eventID
+            queryItems.append("eventID=\(encoded)")
+        }
+        if let djID, !djID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let encoded = djID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? djID
+            queryItems.append("djID=\(encoded)")
+        }
+        if let festivalID, !festivalID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let encoded = festivalID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? festivalID
+            queryItems.append("festivalID=\(encoded)")
+        }
+        let path = "/v1/news/bound?\(queryItems.joined(separator: "&"))"
+        return try await request(path: path, method: "GET")
+    }
+
+    func fetchNewsComments(articleID: String) async throws -> [Comment] {
+        try await request(path: "/v1/news/\(articleID)/comments", method: "GET")
+    }
+
+    func addNewsComment(articleID: String, content: String, parentCommentID: String? = nil) async throws -> Comment {
+        var body: [String: String] = ["content": content]
+        if let parentCommentID, !parentCommentID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            body["parentCommentID"] = parentCommentID
+        }
+        return try await request(path: "/v1/news/\(articleID)/comments", method: "POST", body: body)
     }
 
     func searchFeed(query: String) async throws -> FeedPage {

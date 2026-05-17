@@ -9,9 +9,11 @@ struct LoginView: View {
     @Environment(\.scenePhase) private var scenePhase
     private let onContinueBrowsing: (() -> Void)?
 
-    @State private var loginMethod: LoginMethod = .account
+    @State private var loginMethod: LoginMethod = .email
     @State private var username = "uploadtester"
     @State private var password = ""
+    @State private var email = ""
+    @State private var emailCode = ""
     @State private var selectedPhoneCountry = PhoneCountryOption.defaultOption
     @State private var phoneNumber = ""
     @State private var smsCode = ""
@@ -32,6 +34,8 @@ struct LoginView: View {
 
     private enum ManualAuthField {
         case username
+        case email
+        case emailCode
         case phoneNumber
         case smsCode
         case password
@@ -85,7 +89,7 @@ struct LoginView: View {
                     VStack(spacing: 14) {
                         centerBrandBadge(screenWidth: proxy.size.width)
 
-                        Text("181****8835")
+                        Text(LT("邮箱验证码登录", "Email OTP Sign In", "メール認証でログイン"))
                             .font(.system(size: 32, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.98))
                             .lineLimit(1)
@@ -138,7 +142,7 @@ struct LoginView: View {
                             }
                             videoController.resumeIfNeeded()
                         } label: {
-                            Text(LT("其他手机号登录", "Use Another Phone Number", "別の電話番号でログイン"))
+                            Text(LT("邮箱或账号登录", "Email or Account Sign In", "メールまたはアカウントでログイン"))
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.92))
                         }
@@ -245,7 +249,54 @@ struct LoginView: View {
                     .fill(Color.white.opacity(0.14))
             )
 
-            if loginMethod == .sms {
+            if loginMethod == .email {
+                TextField(LT("邮箱", "Email", "メール"), text: $email)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: .email)
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .emailCode }
+                    .padding(14)
+                    .background(inputFieldBackground)
+                    .accessibilityIdentifier("login.emailField")
+
+                HStack(spacing: 10) {
+                    TextField(LT("验证码", "Verification Code", "認証コード"), text: $emailCode)
+                        .keyboardType(.numberPad)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .emailCode)
+                        .submitLabel(.done)
+                        .onSubmit {
+                            focusedField = nil
+                            dismissKeyboard()
+                        }
+                        .padding(14)
+                        .background(inputFieldBackground)
+
+                    Button {
+                        Task { await sendEmailCode(scene: "login") }
+                    } label: {
+                        Text(
+                            smsCooldownSeconds > 0
+                            ? "\(smsCooldownSeconds)s"
+                            : LT("发送验证码", "Send Code", "コードを送信")
+                        )
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.95))
+                        .padding(.horizontal, 14)
+                        .frame(height: 46)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.white.opacity(0.22))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isLoading || smsCooldownSeconds > 0 || !isValidEmail(email))
+                    .accessibilityIdentifier("login.sendEmailCodeButton")
+                }
+            } else if loginMethod == .sms {
                 manualPhoneNumberInput(
                     country: $selectedPhoneCountry,
                     phoneNumber: $phoneNumber,
@@ -369,6 +420,9 @@ struct LoginView: View {
 
     private var canSubmitManual: Bool {
         switch loginMethod {
+        case .email:
+            return isValidEmail(email)
+                && !emailCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .account:
             return !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty
         case .sms:
@@ -379,6 +433,8 @@ struct LoginView: View {
 
     private var submitTitle: String {
         switch loginMethod {
+        case .email:
+            return LT("邮箱验证码登录", "Email Code Sign In", "メール認証でログイン")
         case .account:
             return LT("账号登录", "Sign In", "アカウントでログイン")
         case .sms:
@@ -593,6 +649,28 @@ struct LoginView: View {
         startSmsCooldown(seconds: countdown)
     }
 
+    private func sendEmailCode(scene: String) async {
+        guard !isLoading else { return }
+        if !hasAgreedTerms {
+            appState.errorMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
+            return
+        }
+
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidEmail(normalizedEmail) else {
+            appState.errorMessage = LT("请输入有效邮箱", "Please enter a valid email address.", "有効なメールアドレスを入力してください。")
+            return
+        }
+
+        isLoading = true
+        defer { isLoading = false }
+
+        guard let expiresInSeconds = await appState.sendEmailAuthCode(email: normalizedEmail, scene: scene) else {
+            return
+        }
+        startSmsCooldown(seconds: min(120, max(1, expiresInSeconds)))
+    }
+
     private func submitAuth(oneTap: Bool) async {
         guard !isLoading else { return }
         if !hasAgreedTerms {
@@ -602,6 +680,14 @@ struct LoginView: View {
 
         isLoading = true
         defer { isLoading = false }
+
+        if loginMethod == .email {
+            await appState.loginWithEmailCode(
+                email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                code: emailCode.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+            return
+        }
 
         if loginMethod == .sms {
             await submitFirebasePhoneAuth()
@@ -663,12 +749,9 @@ private struct RegisterProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var hasAgreedTerms: Bool
 
-    @State private var currentPage: RegisterPage = .phoneVerification
-    @State private var selectedPhoneCountry = PhoneCountryOption.defaultOption
-    @State private var phoneNumber = ""
-    @State private var smsCode = ""
-    @State private var firebaseVerificationID = ""
-    @State private var verifiedFirebasePhoneIDToken = ""
+    @State private var currentPage: RegisterPage = .emailVerification
+    @State private var registerEmail = ""
+    @State private var registerEmailCode = ""
     @State private var smsCooldownSeconds = 0
     @State private var smsCooldownTask: Task<Void, Never>?
     @State private var displayName = ""
@@ -686,13 +769,13 @@ private struct RegisterProfileView: View {
     @FocusState private var focusedField: RegisterField?
 
     private enum RegisterField {
-        case phoneNumber
-        case smsCode
+        case email
+        case emailCode
         case displayName
     }
 
     private enum RegisterPage {
-        case phoneVerification
+        case emailVerification
         case profile
     }
 
@@ -715,13 +798,13 @@ private struct RegisterProfileView: View {
 
             GeometryReader { proxy in
                 HStack(spacing: 0) {
-                    phoneVerificationPage
+                    emailVerificationPage
                         .frame(width: proxy.size.width, height: proxy.size.height)
 
                     profilePage
                         .frame(width: proxy.size.width, height: proxy.size.height)
                 }
-                .offset(x: currentPage == .phoneVerification ? 0 : -proxy.size.width)
+                .offset(x: currentPage == .emailVerification ? 0 : -proxy.size.width)
                 .animation(.interactiveSpring(response: 0.36, dampingFraction: 0.88), value: currentPage)
                 .clipped()
             }
@@ -749,13 +832,13 @@ private struct RegisterProfileView: View {
         }
     }
 
-    private var phoneVerificationPage: some View {
+    private var emailVerificationPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                phoneVerificationHeader
-                phoneVerificationFields
+                emailVerificationHeader
+                emailVerificationFields
                 termsToggle
-                phoneVerificationButton
+                emailVerificationButton
                 errorText
             }
             .padding(.horizontal, 24)
@@ -783,7 +866,7 @@ private struct RegisterProfileView: View {
         .scrollDismissesKeyboard(.interactively)
     }
 
-    private var phoneVerificationHeader: some View {
+    private var emailVerificationHeader: some View {
         VStack(alignment: .leading, spacing: 18) {
             Button {
                 dismiss()
@@ -798,10 +881,10 @@ private struct RegisterProfileView: View {
             .accessibilityIdentifier("register.backButton")
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(LT("验证手机号", "Verify Phone", "電話番号を確認"))
+                Text(LT("验证邮箱", "Verify Email", "メールを確認"))
                     .font(.system(size: 32, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.98))
-                Text(LT("先完成手机号验证，下一步再补充头像和昵称。", "Verify your phone first, then add your avatar and nickname.", "先に電話番号を確認し、次にアイコンとニックネームを入力します。"))
+                Text(LT("先完成邮箱验证，下一步再补充头像和昵称。", "Verify your email first, then add your avatar and nickname.", "先にメールを確認し、次にアイコンとニックネームを入力します。"))
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.white.opacity(0.66))
                     .fixedSize(horizontal: false, vertical: true)
@@ -832,7 +915,7 @@ private struct RegisterProfileView: View {
                 Text(LT("完善资料", "Complete Profile", "プロフィールを完成"))
                     .font(.system(size: 32, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.98))
-                Text(LT("手机号已验证，请补充头像、昵称和年龄信息。", "Phone verified. Add your avatar, nickname, and age details.", "電話番号を確認しました。アイコン、ニックネーム、年齢情報を入力してください。"))
+                Text(LT("邮箱已验证，请补充头像、昵称和年龄信息。", "Email verified. Add your avatar, nickname, and age details.", "メールを確認しました。アイコン、ニックネーム、年齢情報を入力してください。"))
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.white.opacity(0.66))
                     .fixedSize(horizontal: false, vertical: true)
@@ -891,22 +974,29 @@ private struct RegisterProfileView: View {
         )
     }
 
-    private var phoneVerificationFields: some View {
+    private var emailVerificationFields: some View {
         VStack(spacing: 12) {
-            registerPhoneNumberInput(
-                country: $selectedPhoneCountry,
-                phoneNumber: $phoneNumber,
-                accessibilityPrefix: "register"
-            )
+            TextField(text: $registerEmail, prompt: registerPlaceholder(LT("邮箱", "Email", "メール"))) {
+                Text(LT("邮箱", "Email", "メール"))
+            }
+            .keyboardType(.emailAddress)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .focused($focusedField, equals: .email)
+            .submitLabel(.next)
+            .onSubmit { focusedField = .emailCode }
+            .padding(15)
+            .background(fieldBackground)
+            .accessibilityIdentifier("register.emailField")
 
             HStack(spacing: 10) {
-                TextField(text: $smsCode, prompt: registerPlaceholder(LT("验证码", "Verification Code", "認証コード"))) {
+                TextField(text: $registerEmailCode, prompt: registerPlaceholder(LT("验证码", "Verification Code", "認証コード"))) {
                     Text(LT("验证码", "Verification Code", "認証コード"))
                 }
                 .keyboardType(.numberPad)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .focused($focusedField, equals: .smsCode)
+                .focused($focusedField, equals: .emailCode)
                 .submitLabel(.done)
                 .onSubmit {
                     focusedField = nil
@@ -914,10 +1004,10 @@ private struct RegisterProfileView: View {
                 }
                 .padding(15)
                 .background(fieldBackground)
-                .accessibilityIdentifier("register.smsCodeField")
+                .accessibilityIdentifier("register.emailCodeField")
 
                 Button {
-                    Task { await sendRegisterSmsCode() }
+                    Task { await sendRegisterEmailCode() }
                 } label: {
                     Text(
                         smsCooldownSeconds > 0
@@ -931,8 +1021,8 @@ private struct RegisterProfileView: View {
                     .background(fieldBackground)
                 }
                 .buttonStyle(.plain)
-                .disabled(isSubmitting || smsCooldownSeconds > 0 || normalizedRegisterPhoneNumber.isEmpty)
-                .accessibilityIdentifier("register.sendSmsCodeButton")
+                .disabled(isSubmitting || smsCooldownSeconds > 0 || !isValidEmail(registerEmail))
+                .accessibilityIdentifier("register.sendEmailCodeButton")
             }
         }
     }
@@ -1071,26 +1161,26 @@ private struct RegisterProfileView: View {
         .accessibilityIdentifier("register.submitButton")
     }
 
-    private var phoneVerificationButton: some View {
+    private var emailVerificationButton: some View {
         Button {
-            Task { await verifyRegisterPhoneAndContinue() }
+            Task { await verifyRegisterEmailAndContinue() }
         } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(canVerifyPhone ? Color.white.opacity(0.92) : Color.white.opacity(0.22))
+                    .fill(canVerifyEmail ? Color.white.opacity(0.92) : Color.white.opacity(0.22))
                 if isSubmitting {
                     ProgressView().tint(.black)
                 } else {
                     Text(LT("验证并继续", "Verify and Continue", "確認して続行"))
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(canVerifyPhone ? Color.black.opacity(0.88) : Color.white.opacity(0.56))
+                        .foregroundStyle(canVerifyEmail ? Color.black.opacity(0.88) : Color.white.opacity(0.56))
                 }
             }
             .frame(height: 54)
         }
         .buttonStyle(.plain)
-        .disabled(!canVerifyPhone || isSubmitting)
-        .accessibilityIdentifier("register.verifyPhoneButton")
+        .disabled(!canVerifyEmail || isSubmitting)
+        .accessibilityIdentifier("register.verifyEmailButton")
     }
 
     @ViewBuilder
@@ -1106,18 +1196,17 @@ private struct RegisterProfileView: View {
 
     private var canSubmit: Bool {
         currentPage == .profile
-            && !verifiedFirebasePhoneIDToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !smsCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && isValidEmail(registerEmail)
+            && !registerEmailCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && displayNameAvailability.allowsSubmit
             && hasAgreedTerms
             && isAgeDeclarationAcceptable
     }
 
-    private var canVerifyPhone: Bool {
-        !normalizedRegisterPhoneNumber.isEmpty
-            && !firebaseVerificationID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !smsCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var canVerifyEmail: Bool {
+        isValidEmail(registerEmail)
+            && !registerEmailCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && hasAgreedTerms
     }
 
@@ -1132,14 +1221,6 @@ private struct RegisterProfileView: View {
         Calendar(identifier: .gregorian).component(.year, from: selectedBirthDate)
     }
 
-    private var normalizedRegisterPhoneNumber: String {
-        normalizedPhoneNumber(country: selectedPhoneCountry, phoneNumber: phoneNumber)
-    }
-
-    private var registerPhoneValidationError: String? {
-        validatePhoneNumber(country: selectedPhoneCountry, phoneNumber: phoneNumber)
-    }
-
     private var isAgeDeclarationAcceptable: Bool {
         guard compliancePolicy.requiresAgeDeclaration else { return true }
         return ageBand(for: selectedBirthDate) != .under13
@@ -1152,29 +1233,6 @@ private struct RegisterProfileView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(Color.white.opacity(0.28), lineWidth: 1)
             )
-    }
-
-    private func registerPhoneNumberInput(
-        country: Binding<PhoneCountryOption>,
-        phoneNumber: Binding<String>,
-        accessibilityPrefix: String
-    ) -> some View {
-        HStack(spacing: 10) {
-            phoneCountryMenu(country: country, background: fieldBackground, accessibilityPrefix: accessibilityPrefix)
-
-            TextField(text: phoneNumber, prompt: registerPlaceholder(LT("手机号", "Phone Number", "電話番号"))) {
-                Text(LT("手机号", "Phone Number", "電話番号"))
-            }
-            .keyboardType(.phonePad)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .focused($focusedField, equals: .phoneNumber)
-            .submitLabel(.next)
-            .onSubmit { focusedField = .smsCode }
-            .padding(15)
-            .background(fieldBackground)
-            .accessibilityIdentifier("\(accessibilityPrefix).phoneNumberField")
-        }
     }
 
     private func registerPlaceholder(_ title: String) -> Text {
@@ -1207,60 +1265,65 @@ private struct RegisterProfileView: View {
         }
     }
 
-    private func sendRegisterSmsCode() async {
+    private func sendRegisterEmailCode() async {
         guard !isSubmitting else { return }
         guard hasAgreedTerms else {
             registrationErrorMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
             return
         }
-        if let validationError = registerPhoneValidationError {
-            registrationErrorMessage = validationError
-            return
-        }
-        guard !normalizedRegisterPhoneNumber.isEmpty else {
-            registrationErrorMessage = LT("请先输入手机号", "Please enter phone number first.", "電話番号を入力してください。")
+        let normalizedEmail = registerEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidEmail(normalizedEmail) else {
+            registrationErrorMessage = LT("请输入有效邮箱", "Please enter a valid email address.", "有効なメールアドレスを入力してください。")
             return
         }
 
         isSubmitting = true
         defer { isSubmitting = false }
 
-        if DevPhoneAuthBypass.isEnabled {
-            firebaseVerificationID = DevPhoneAuthBypass.verificationID(for: normalizedRegisterPhoneNumber)
-            smsCode = DevPhoneAuthBypass.code
-            registrationErrorMessage = nil
-            startSmsCooldown(seconds: 10)
+        guard let expiresInSeconds = await appState.sendEmailAuthCode(email: normalizedEmail, scene: "register") else {
+            registrationErrorMessage = appState.errorMessage
             return
         }
 
-        do {
-            firebaseVerificationID = try await requestFirebasePhoneVerificationID(phoneNumber: normalizedRegisterPhoneNumber)
-            registrationErrorMessage = nil
-            startSmsCooldown(seconds: 60)
-        } catch {
-            registrationErrorMessage = error.userFacingMessage
-        }
+        registrationErrorMessage = nil
+        startSmsCooldown(seconds: min(120, max(1, expiresInSeconds)))
     }
 
-    private func verifyRegisterPhoneAndContinue() async {
+    private func verifyRegisterEmailAndContinue() async {
         guard !isSubmitting else { return }
         guard hasAgreedTerms else {
             registrationErrorMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
             return
         }
-        if let validationError = registerPhoneValidationError {
-            registrationErrorMessage = validationError
-            return
-        }
-        guard !normalizedRegisterPhoneNumber.isEmpty else {
-            registrationErrorMessage = LT("请先输入手机号", "Please enter phone number first.", "電話番号を入力してください。")
+
+        let normalizedEmail = registerEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidEmail(normalizedEmail) else {
+            registrationErrorMessage = LT("请输入有效邮箱", "Please enter a valid email address.", "有効なメールアドレスを入力してください。")
             return
         }
 
-        let verificationID = firebaseVerificationID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let code = smsCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !verificationID.isEmpty else {
-            registrationErrorMessage = LT("请先发送验证码", "Please send a verification code first.", "先に認証コードを送信してください。")
+        let code = registerEmailCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty else {
+            registrationErrorMessage = LT("请输入验证码", "Please enter the verification code.", "認証コードを入力してください。")
+            return
+        }
+
+        registrationErrorMessage = nil
+        focusedField = nil
+        dismissKeyboard()
+        withAnimation(.interactiveSpring(response: 0.36, dampingFraction: 0.88)) {
+            currentPage = .profile
+        }
+    }
+
+    private func submitRegistration() async {
+        guard !isSubmitting else { return }
+
+        let resolvedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEmail = registerEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let code = registerEmailCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidEmail(normalizedEmail) else {
+            registrationErrorMessage = LT("请先完成邮箱验证", "Please verify your email first.", "先にメール認証を完了してください。")
             return
         }
         guard !code.isEmpty else {
@@ -1268,35 +1331,59 @@ private struct RegisterProfileView: View {
             return
         }
 
-        isSubmitting = true
-        defer { isSubmitting = false }
-
-        if DevPhoneAuthBypass.matches(verificationID: verificationID, code: code) {
-            verifiedFirebasePhoneIDToken = DevPhoneAuthBypass.idToken(for: normalizedRegisterPhoneNumber)
-            registrationErrorMessage = nil
-            focusedField = nil
-            dismissKeyboard()
-            withAnimation(.interactiveSpring(response: 0.36, dampingFraction: 0.88)) {
-                currentPage = .profile
-            }
+        guard !resolvedDisplayName.isEmpty else {
+            registrationErrorMessage = LT("请输入昵称", "Please enter nickname", "ニックネームを入力してください。")
             return
         }
 
+        guard hasAgreedTerms else {
+            registrationErrorMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
+            return
+        }
+
+        let birthYear = compliancePolicy.requiresAgeDeclaration ? selectedBirthYear : nil
+        let regionCode = compliancePolicy.requiresAgeDeclaration ? compliancePolicy.region.rawValue : nil
+
+        if compliancePolicy.requiresAgeDeclaration,
+           ageBand(for: selectedBirthDate) == .under13 {
+            registrationErrorMessage = LT("未达到本地区最低年龄要求，暂不能注册。", "You do not meet the minimum age requirement for this region.", "この地域の最低年齢要件を満たしていないため登録できません。")
+            return
+        }
+
+        isSubmitting = true
+        defer { isSubmitting = false }
+
         do {
-            let credential = PhoneAuthProvider.provider().credential(
-                withVerificationID: verificationID,
-                verificationCode: code
+            try await appState.registerWithEmailCode(
+                email: normalizedEmail,
+                code: code,
+                displayName: resolvedDisplayName,
+                birthYear: birthYear,
+                regionCode: regionCode
             )
-            let result = try await Auth.auth().signIn(with: credential)
-            verifiedFirebasePhoneIDToken = try await result.user.getIDToken()
             registrationErrorMessage = nil
-            focusedField = nil
-            dismissKeyboard()
-            withAnimation(.interactiveSpring(response: 0.36, dampingFraction: 0.88)) {
-                currentPage = .profile
-            }
         } catch {
             registrationErrorMessage = error.userFacingMessage
+            return
+        }
+
+        registrationErrorMessage = nil
+
+        if let selectedAvatarData {
+            do {
+                let uploaded = try await appContainer.profileUserRepository.uploadMyAvatar(
+                    imageData: selectedAvatarData,
+                    fileName: "avatar-\(Int(Date().timeIntervalSince1970)).jpg",
+                    mimeType: "image/jpeg"
+                )
+                appState.updateCurrentUserAvatarURL(uploaded.avatarURL)
+                if let updatedProfile = try? await appContainer.profileUserRepository.fetchMyProfile() {
+                    appState.applyCurrentUserProfile(updatedProfile)
+                    NotificationCenter.default.post(name: .profileDidUpdate, object: updatedProfile)
+                }
+            } catch {
+                registrationErrorMessage = LT("注册成功，但头像上传失败，请稍后在个人主页重试", "Registered, but avatar upload failed. Please retry from your profile later.", "登録は完了しましたが、アイコンのアップロードに失敗しました。後ほどプロフィールから再試行してください。")
+            }
         }
     }
 
@@ -1363,71 +1450,6 @@ private struct RegisterProfileView: View {
         return jpegData
     }
 
-    private func submitRegistration() async {
-        guard !isSubmitting else { return }
-
-        let resolvedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let idToken = verifiedFirebasePhoneIDToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !idToken.isEmpty else {
-            registrationErrorMessage = LT("请先完成手机号验证", "Please verify your phone number first.", "先に電話番号認証を完了してください。")
-            return
-        }
-
-        guard !resolvedDisplayName.isEmpty else {
-            registrationErrorMessage = LT("请输入昵称", "Please enter nickname", "ニックネームを入力してください。")
-            return
-        }
-
-        guard hasAgreedTerms else {
-            registrationErrorMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
-            return
-        }
-
-        let birthYear = compliancePolicy.requiresAgeDeclaration ? selectedBirthYear : nil
-        let regionCode = compliancePolicy.requiresAgeDeclaration ? compliancePolicy.region.rawValue : nil
-
-        if compliancePolicy.requiresAgeDeclaration,
-           ageBand(for: selectedBirthDate) == .under13 {
-            registrationErrorMessage = LT("未达到本地区最低年龄要求，暂不能注册。", "You do not meet the minimum age requirement for this region.", "この地域の最低年齢要件を満たしていないため登録できません。")
-            return
-        }
-
-        isSubmitting = true
-        defer { isSubmitting = false }
-
-        do {
-            try await appState.loginWithFirebasePhoneIdTokenOrThrow(
-                idToken,
-                birthYear: birthYear,
-                regionCode: regionCode,
-                displayName: resolvedDisplayName
-            )
-        } catch {
-            registrationErrorMessage = error.userFacingMessage
-            return
-        }
-
-        registrationErrorMessage = nil
-
-        if let selectedAvatarData {
-            do {
-                let uploaded = try await appContainer.profileUserRepository.uploadMyAvatar(
-                    imageData: selectedAvatarData,
-                    fileName: "avatar-\(Int(Date().timeIntervalSince1970)).jpg",
-                    mimeType: "image/jpeg"
-                )
-                appState.updateCurrentUserAvatarURL(uploaded.avatarURL)
-                if let updatedProfile = try? await appContainer.profileUserRepository.fetchMyProfile() {
-                    appState.applyCurrentUserProfile(updatedProfile)
-                    NotificationCenter.default.post(name: .profileDidUpdate, object: updatedProfile)
-                }
-            } catch {
-                registrationErrorMessage = LT("注册成功，但头像上传失败，请稍后在个人主页重试", "Registered, but avatar upload failed. Please retry from your profile later.", "登録は完了しましたが、アイコンのアップロードに失敗しました。後ほどプロフィールから再試行してください。")
-            }
-        }
-    }
-
     private func dismissKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
@@ -1440,11 +1462,14 @@ private enum ThirdPartyButtonStyle {
 }
 
 private enum LoginMethod: String, CaseIterable {
+    case email
     case account
     case sms
 
     var title: String {
         switch self {
+        case .email:
+            return LT("邮箱", "Email", "メール")
         case .account:
             return LT("账号", "Account", "アカウント")
         case .sms:
@@ -1584,6 +1609,13 @@ private func validatePhoneNumber(country: PhoneCountryOption, phoneNumber: Strin
     }
 
     return nil
+}
+
+private func isValidEmail(_ value: String) -> Bool {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    let pattern = #"^[^\s@]+@[^\s@]+\.[^\s@]+$"#
+    return trimmed.range(of: pattern, options: .regularExpression) != nil
 }
 
 private enum DevPhoneAuthBypass {

@@ -960,6 +960,7 @@ struct WebDJSet: Codable, Identifiable, Hashable {
     var duration: Int?
     var recordedAt: Date?
     var venue: String?
+    var eventId: String?
     var eventName: String?
     var viewCount: Int
     var likeCount: Int
@@ -1002,6 +1003,7 @@ struct CreateDJSetInput: Codable {
     var thumbnailUrl: String?
     var description: String?
     var venue: String?
+    var eventId: String?
     var eventName: String?
     var recordedAt: Date?
     var rightsConfirmed: Bool = false
@@ -1015,6 +1017,7 @@ struct UpdateDJSetInput: Codable {
     var thumbnailUrl: String?
     var description: String?
     var venue: String?
+    var eventId: String?
     var eventName: String?
     var recordedAt: Date?
     var rightsConfirmed: Bool? = nil

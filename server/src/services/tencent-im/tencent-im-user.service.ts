@@ -20,6 +20,35 @@ const toTencentIMUserProfile = (user: RaverUserForTencentIM): TencentIMUserProfi
   };
 };
 
+const timeTencentIMCall = async <T>(
+  step: string,
+  userID: string,
+  task: () => Promise<T>
+): Promise<T> => {
+  const startedAt = Date.now();
+  try {
+    const result = await task();
+    console.info('[perf]', {
+      scope: 'tencent-im.user-sync',
+      step,
+      outcome: 'success',
+      durationMs: Date.now() - startedAt,
+      userID,
+    });
+    return result;
+  } catch (error) {
+    console.warn('[perf]', {
+      scope: 'tencent-im.user-sync',
+      step,
+      outcome: 'failed',
+      durationMs: Date.now() - startedAt,
+      userID,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+};
+
 export const tencentIMUserService = {
   buildProfile(user: RaverUserForTencentIM): TencentIMUserProfile {
     return toTencentIMUserProfile(user);
@@ -28,9 +57,9 @@ export const tencentIMUserService = {
   async ensureUser(user: RaverUserForTencentIM): Promise<TencentIMUserProfile> {
     const profile = toTencentIMUserProfile(user);
 
-    await tencentIMClient.post('v4/im_open_login_svc/account_import', {
+    await timeTencentIMCall('account_import', profile.userID, () => tencentIMClient.post('v4/im_open_login_svc/account_import', {
       Identifier: profile.userID,
-    });
+    }));
 
     const profileItems = [
       {
@@ -43,10 +72,10 @@ export const tencentIMUserService = {
       },
     ];
 
-    await tencentIMClient.post('v4/profile/portrait_set', {
+    await timeTencentIMCall('portrait_set', profile.userID, () => tencentIMClient.post('v4/profile/portrait_set', {
       From_Account: profile.userID,
       ProfileItem: profileItems,
-    });
+    }));
 
     return profile;
   },

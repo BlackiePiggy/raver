@@ -67,7 +67,7 @@ protocol WebFeatureService {
     func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage
 
     func fetchDJSets(page: Int, limit: Int, sortBy: String, djID: String?) async throws -> DJSetListPage
-    func fetchEventDJSets(eventName: String) async throws -> [WebDJSet]
+    func fetchEventDJSets(eventID: String, eventName: String) async throws -> [WebDJSet]
     func fetchDJSet(id: String) async throws -> WebDJSet
     func fetchMyDJSets() async throws -> [WebDJSet]
     func createDJSet(input: CreateDJSetInput) async throws -> CreateContentResult<WebDJSet>

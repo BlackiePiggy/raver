@@ -4568,6 +4568,7 @@ struct DJSetEditorView: View {
     @State private var videoUrl = ""
     @State private var description = ""
     @State private var venue = ""
+    @State private var eventId = ""
     @State private var eventName = ""
     @State private var thumbnailUrl = ""
     @State private var selectedPhoto: PhotosPickerItem?
@@ -4652,6 +4653,7 @@ struct DJSetEditorView: View {
 
                             if !eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 Button(role: .destructive) {
+                                    eventId = ""
                                     eventName = ""
                                 } label: {
                                     Text(LT("清除", "清除", "クリア"))
@@ -4733,8 +4735,10 @@ struct DJSetEditorView: View {
             }
             .sheet(isPresented: $showEventBindingSheet) {
                 SetEventBindingSheet(
+                    initialEventID: eventId,
                     initialEventName: eventName
-                ) { selectedEventName in
+                ) { selectedEventID, selectedEventName in
+                    eventId = selectedEventID ?? ""
                     eventName = selectedEventName
                 }
                 .environmentObject(appContainer)
@@ -4808,6 +4812,7 @@ struct DJSetEditorView: View {
         videoUrl = set.videoUrl
         description = set.description ?? ""
         venue = set.venue ?? ""
+        eventId = set.eventId ?? ""
         eventName = set.eventName ?? ""
         thumbnailUrl = set.thumbnailUrl ?? ""
         previewAuthorName = set.videoAuthorName ?? ""
@@ -4902,6 +4907,7 @@ struct DJSetEditorView: View {
                         thumbnailUrl: finalThumb.nilIfEmpty,
                         description: description.nilIfEmpty,
                         venue: venue.nilIfEmpty,
+                        eventId: eventId.nilIfEmpty,
                         eventName: eventName.nilIfEmpty,
                         recordedAt: nil,
                         rightsConfirmed: rightsConfirmed
@@ -4921,6 +4927,7 @@ struct DJSetEditorView: View {
                         thumbnailUrl: finalThumb.nilIfEmpty,
                         description: description.nilIfEmpty,
                         venue: venue.nilIfEmpty,
+                        eventId: eventId.nilIfEmpty,
                         eventName: eventName.nilIfEmpty,
                         recordedAt: set.recordedAt,
                         rightsConfirmed: rightsConfirmed
@@ -5077,8 +5084,9 @@ private struct SetEventBindingSheet: View {
         appContainer.setEventLookupRepository
     }
 
+    let initialEventID: String
     let initialEventName: String
-    let onSelected: (String) -> Void
+    let onSelected: (String?, String) -> Void
 
     @State private var searchText = ""
     @State private var manualEventName = ""
@@ -5118,7 +5126,7 @@ private struct SetEventBindingSheet: View {
                     } else {
                         ForEach(events) { event in
                             Button {
-                                onSelected(event.name)
+                                onSelected(event.id, event.name)
                                 dismiss()
                             } label: {
                                 VStack(alignment: .leading, spacing: 3) {
@@ -5143,7 +5151,7 @@ private struct SetEventBindingSheet: View {
                     Button(LT("使用手动名称", "使用手动名称", "手動名を使用")) {
                         let trimmed = manualEventName.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !trimmed.isEmpty else { return }
-                        onSelected(trimmed)
+                        onSelected(nil, trimmed)
                         dismiss()
                     }
                     .disabled(manualEventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

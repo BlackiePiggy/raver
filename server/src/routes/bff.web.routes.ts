@@ -3869,6 +3869,7 @@ const mapDJSet = (row: any) => ({
   duration: row.duration,
   recordedAt: row.recordedAt,
   venue: row.venue,
+  eventId: row.eventId,
   eventName: row.eventName,
   viewCount: row.viewCount,
   likeCount: row.likeCount,
@@ -8671,12 +8672,19 @@ router.get('/dj-sets', optionalAuth, async (req: Request, res: Response): Promis
     const limit = normalizeLimit(req.query.limit, 20, 100);
     const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : 'latest';
     const djIdFilter = typeof req.query.djId === 'string' ? req.query.djId.trim() : '';
+    const eventIdFilter =
+      typeof req.query.eventID === 'string'
+        ? req.query.eventID.trim()
+        : typeof req.query.eventId === 'string'
+          ? req.query.eventId.trim()
+          : '';
     const eventNameFilter = typeof req.query.eventName === 'string' ? req.query.eventName.trim() : '';
     const { items, total } = await djSetService.listDJSets({
       page,
       limit,
       sortBy: sortBy === 'popular' || sortBy === 'tracks' ? sortBy : 'latest',
       djId: djIdFilter || undefined,
+      eventId: eventIdFilter || undefined,
       eventName: eventNameFilter || undefined,
     });
 
@@ -8935,6 +8943,12 @@ router.post('/dj-sets', optionalAuth, async (req: Request, res: Response): Promi
       description: typeof body.description === 'string' ? body.description : undefined,
       recordedAt: typeof body.recordedAt === 'string' ? new Date(body.recordedAt) : undefined,
       venue: typeof body.venue === 'string' ? body.venue : undefined,
+      eventId:
+        typeof body.eventID === 'string'
+          ? body.eventID
+          : typeof body.eventId === 'string'
+            ? body.eventId
+            : null,
       eventName: typeof body.eventName === 'string' ? body.eventName : undefined,
     });
 
@@ -8967,6 +8981,14 @@ router.patch('/dj-sets/:id', optionalAuth, async (req: Request, res: Response): 
       videoAuthorName: typeof body.videoAuthorName === 'string' ? body.videoAuthorName : undefined,
       thumbnailUrl: typeof body.thumbnailUrl === 'string' ? body.thumbnailUrl : undefined,
       venue: typeof body.venue === 'string' ? body.venue : undefined,
+      eventId:
+        typeof body.eventID === 'string'
+          ? body.eventID
+          : typeof body.eventId === 'string'
+            ? body.eventId
+            : body.eventID === null || body.eventId === null
+              ? null
+              : undefined,
       eventName: typeof body.eventName === 'string' ? body.eventName : undefined,
       recordedAt: typeof body.recordedAt === 'string' ? new Date(body.recordedAt) : undefined,
     });

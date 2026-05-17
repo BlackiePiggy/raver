@@ -116,7 +116,7 @@ schemes:
       executable: RaverMVP
       environmentVariables:
         RAVER_USE_MOCK: "0"
-        RAVER_BFF_BASE_URL: "http://localhost:3901"
+        RAVER_BFF_BASE_URL: "https://api.ravehub.top"
     test:
       config: Debug
       gatherCoverageData: false

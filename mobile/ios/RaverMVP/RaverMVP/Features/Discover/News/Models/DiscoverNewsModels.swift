@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum DiscoverNewsCategory: String, CaseIterable, Identifiable {
+enum DiscoverNewsCategory: String, CaseIterable, Identifiable, Codable {
     case all = "all"
     case festival = "festival"
     case scene = "scene"
@@ -56,7 +56,7 @@ enum DiscoverNewsCategory: String, CaseIterable, Identifiable {
     }
 }
 
-struct DiscoverNewsDraft {
+struct DiscoverNewsDraft: Codable {
     var category: DiscoverNewsCategory
     var source: String
     var title: String
@@ -69,7 +69,7 @@ struct DiscoverNewsDraft {
     var boundEventIDs: [String] = []
 }
 
-struct DiscoverNewsArticle: Identifiable, Hashable {
+struct DiscoverNewsArticle: Identifiable, Hashable, Codable {
     let id: String
     let category: DiscoverNewsCategory
     let source: String
@@ -90,7 +90,7 @@ struct DiscoverNewsArticle: Identifiable, Hashable {
     let boundEventIDs: [String]
 }
 
-struct DiscoverNewsPage {
+struct DiscoverNewsPage: Codable {
     let items: [DiscoverNewsArticle]
     let nextCursor: String?
 }
@@ -128,52 +128,33 @@ struct DiscoverNewsRepositoryAdapter: DiscoverNewsRepository {
     }
 
     func searchArticles(query: String) async throws -> [DiscoverNewsArticle] {
-        let page = try await socialService.searchFeed(query: query)
-        return page.posts
-            .compactMap { DiscoverNewsCodec.decode(post: $0) }
-            .sorted(by: { $0.publishedAt > $1.publishedAt })
+        try await socialService.searchNews(query: query)
     }
 
     func fetchFeedPage(cursor: String?) async throws -> DiscoverNewsPage {
-        let page = try await socialService.fetchFeed(cursor: cursor, mode: .latest, eventID: nil)
-        let items = page.posts.compactMap { DiscoverNewsCodec.decode(post: $0) }
-        return DiscoverNewsPage(items: items, nextCursor: page.nextCursor)
+        try await socialService.fetchNewsPage(cursor: cursor)
     }
 
     func fetchArticle(id: String) async throws -> DiscoverNewsArticle {
-        let post = try await socialService.fetchPost(postID: id)
-        guard let article = DiscoverNewsCodec.decode(post: post) else {
-            throw ServiceError.invalidResponse
-        }
-        return article
+        try await socialService.fetchNewsArticle(articleID: id)
     }
 
     func publish(draft: DiscoverNewsDraft) async throws -> DiscoverNewsArticle? {
-        let content = DiscoverNewsCodec.encode(draft)
-        let imageURLs = draft.coverImageURL.flatMap { $0.isEmpty ? nil : [$0] } ?? []
-        let result = try await socialService.createPost(
-            input: CreatePostInput(
-                content: content,
-                images: imageURLs,
-                boundDjIDs: draft.boundDjIDs,
-                boundBrandIDs: draft.boundBrandIDs,
-                boundEventIDs: draft.boundEventIDs
-            )
-        )
+        let result = try await socialService.publishNews(draft: draft)
         switch result {
         case .created(let created):
-            return DiscoverNewsCodec.decode(post: created)
+            return created
         case .submittedForReview:
             return nil
         }
     }
 
     func fetchComments(postID: String) async throws -> [Comment] {
-        try await socialService.fetchComments(postID: postID)
+        try await socialService.fetchNewsComments(articleID: postID)
     }
 
     func addComment(postID: String, content: String) async throws -> Comment {
-        try await socialService.addComment(postID: postID, content: content, parentCommentID: nil)
+        try await socialService.addNewsComment(articleID: postID, content: content, parentCommentID: nil)
     }
 
     func fetchDJ(id: String) async throws -> WebDJ {
@@ -221,40 +202,37 @@ struct DiscoverNewsRepositoryAdapter: DiscoverNewsRepository {
     func fetchArticlesBoundToEvent(eventID: String, maxPages: Int = 8) async throws -> [DiscoverNewsArticle] {
         let trimmedEventID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedEventID.isEmpty else { return [] }
-
-        let allArticles = try await fetchDiscoverNewsArticles(
+        return try await fetchBoundDiscoverNewsArticles(
             socialService: socialService,
+            eventID: trimmedEventID,
+            djID: nil,
+            festivalID: nil,
             maxPages: maxPages
         )
-        return allArticles.filter { article in
-            article.boundEventIDs.contains(trimmedEventID)
-        }
     }
 
     func fetchArticlesBoundToDJ(djID: String, maxPages: Int = 8) async throws -> [DiscoverNewsArticle] {
         let trimmedDJID = djID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedDJID.isEmpty else { return [] }
-
-        let allArticles = try await fetchDiscoverNewsArticles(
+        return try await fetchBoundDiscoverNewsArticles(
             socialService: socialService,
+            eventID: nil,
+            djID: trimmedDJID,
+            festivalID: nil,
             maxPages: maxPages
         )
-        return allArticles.filter { article in
-            article.boundDjIDs.contains(trimmedDJID)
-        }
     }
 
     func fetchArticlesBoundToFestival(festivalID: String, maxPages: Int = 8) async throws -> [DiscoverNewsArticle] {
         let trimmedFestivalID = festivalID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedFestivalID.isEmpty else { return [] }
-
-        let allArticles = try await fetchDiscoverNewsArticles(
+        return try await fetchBoundDiscoverNewsArticles(
             socialService: socialService,
+            eventID: nil,
+            djID: nil,
+            festivalID: trimmedFestivalID,
             maxPages: maxPages
         )
-        return allArticles.filter { article in
-            article.boundBrandIDs.contains(trimmedFestivalID)
-        }
     }
 
     func searchUsers(query: String) async throws -> [UserSummary] {
@@ -264,6 +242,32 @@ struct DiscoverNewsRepositoryAdapter: DiscoverNewsRepository {
     func fetchUserProfile(userID: String) async throws -> UserProfile {
         try await socialService.fetchUserProfile(userID: userID)
     }
+}
+
+private func fetchBoundDiscoverNewsArticles(
+    socialService: SocialService,
+    eventID: String?,
+    djID: String?,
+    festivalID: String?,
+    maxPages: Int
+) async throws -> [DiscoverNewsArticle] {
+    var cursor: String?
+    var pageCount = 0
+    var articles: [DiscoverNewsArticle] = []
+
+    repeat {
+        let page = try await socialService.fetchBoundNewsArticles(
+            eventID: eventID,
+            djID: djID,
+            festivalID: festivalID,
+            cursor: cursor
+        )
+        articles.append(contentsOf: page.items)
+        cursor = page.nextCursor
+        pageCount += 1
+    } while cursor != nil && pageCount < maxPages
+
+    return articles
 }
 
 struct SearchDiscoverNewsUseCase {

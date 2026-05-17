@@ -416,15 +416,21 @@ final class LiveWebFeatureService: WebFeatureService {
         return DJSetListPage(items: response.data.items.map(localizedDJSet), pagination: response.pagination)
     }
 
-    func fetchEventDJSets(eventName: String) async throws -> [WebDJSet] {
+    func fetchEventDJSets(eventID: String, eventName: String) async throws -> [WebDJSet] {
+        let normalizedEventID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = eventName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return [] }
-        let queryItems = [
+        guard !normalizedEventID.isEmpty || !normalized.isEmpty else { return [] }
+        var queryItems = [
             URLQueryItem(name: "page", value: "1"),
             URLQueryItem(name: "limit", value: "200"),
             URLQueryItem(name: "sortBy", value: "latest"),
-            URLQueryItem(name: "eventName", value: normalized),
         ]
+        if !normalizedEventID.isEmpty {
+            queryItems.append(URLQueryItem(name: "eventID", value: normalizedEventID))
+        }
+        if !normalized.isEmpty {
+            queryItems.append(URLQueryItem(name: "eventName", value: normalized))
+        }
         let response: BFFEnvelope<BFFItems<WebDJSet>> = try await request(path: "/v1/dj-sets", method: "GET", queryItems: queryItems)
         return response.data.items.map(localizedDJSet)
     }

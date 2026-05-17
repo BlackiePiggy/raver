@@ -1050,6 +1050,20 @@ final class AppState: ObservableObject {
         }
     }
 
+    func loginWithEmailCode(email: String, code: String) async {
+        do {
+            session = try await service.loginWithEmailCode(email: email, code: code)
+            await refreshTencentIMBootstrap(source: "login-email")
+            await refreshAccountEnforcements()
+            await refreshUnreadMessages()
+            await uploadPushTokenIfPossible()
+            flushPendingSystemNotificationPayloadIfPossible(trigger: "login-email")
+            errorMessage = nil
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
     func loginWithSms(phoneNumber: String, code: String) async {
         do {
             session = try await service.loginWithSms(phoneNumber: phoneNumber, code: code)
@@ -1148,8 +1162,40 @@ final class AppState: ObservableObject {
         }
     }
 
+    func sendEmailAuthCode(email: String, scene: String) async -> Int? {
+        do {
+            let expiresInSeconds = try await service.sendEmailAuthCode(email: email, scene: scene)
+            errorMessage = nil
+            return expiresInSeconds
+        } catch {
+            errorMessage = error.userFacingMessage
+            return nil
+        }
+    }
+
     func checkDisplayNameAvailability(_ displayName: String) async throws -> DisplayNameAvailability {
         try await service.checkDisplayNameAvailability(displayName)
+    }
+
+    func registerWithEmailCode(
+        email: String,
+        code: String,
+        displayName: String,
+        birthYear: Int?,
+        regionCode: String?
+    ) async throws {
+        session = try await service.registerWithEmailCode(
+            email: email,
+            code: code,
+            displayName: displayName,
+            birthYear: birthYear,
+            regionCode: regionCode
+        )
+        await refreshTencentIMBootstrap(source: "register-email")
+        await refreshAccountEnforcements()
+        await refreshUnreadMessages()
+        await uploadPushTokenIfPossible()
+        flushPendingSystemNotificationPayloadIfPossible(trigger: "register-email")
     }
 
     func register(

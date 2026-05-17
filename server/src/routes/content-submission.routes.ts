@@ -343,26 +343,28 @@ const createDJFromSubmission = async (payload: Prisma.JsonObject) => {
 };
 
 const createNewsFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) => {
-  const titleI18n = normalizeTriTextPayload(payload.titleI18n, cleanText(payload.title) || '');
-  const summaryI18n = normalizeTriTextPayload(payload.summaryI18n, cleanText(payload.summary) || '');
-  const bodyI18n = normalizeTriTextPayload(payload.bodyI18n ?? payload.contentI18n, cleanText(payload.content) || cleanText(payload.body) || '');
-  const content = cleanText(payload.content) || cleanText(payload.body) || titleFromPayload('news', payload);
-  const images = stringArray(payload.images);
-  return prisma.post.create({
+  const title = cleanText(payload.title) || titleFromPayload('news', payload);
+  const body = cleanText(payload.body) || cleanText(payload.content) || title;
+  const coverImageUrl =
+    cleanText(payload.coverImageURL) ||
+    cleanText(payload.coverImageUrl) ||
+    stringArray(payload.images)[0] ||
+    null;
+  return prisma.newsArticle.create({
     data: {
-      userId: submitterId,
-      content,
-      titleI18n: triTextToJson(titleI18n),
-      summaryI18n: triTextToJson(summaryI18n),
-      bodyI18n: triTextToJson(bodyI18n),
-      images,
-      location: cleanText(payload.location) || null,
-      type: 'general',
+      authorId: submitterId,
+      category: cleanText(payload.category) || 'community',
+      source: cleanText(payload.source) || 'Raver',
+      title,
+      summary: cleanText(payload.summary) || '',
+      body,
+      link: cleanText(payload.link) || null,
+      coverImageUrl,
       visibility: 'public',
       boundDjIds: stringArray(payload.boundDjIDs ?? payload.boundDjIds),
       boundBrandIds: stringArray(payload.boundBrandIDs ?? payload.boundBrandIds),
       boundEventIds: stringArray(payload.boundEventIDs ?? payload.boundEventIds),
-      displayPublishedAt: dateFromPayload(payload.displayPublishedAt) || new Date(),
+      publishedAt: dateFromPayload(payload.publishedAt ?? payload.displayPublishedAt) || new Date(),
     } as any,
   });
 };
@@ -395,6 +397,7 @@ const createSetFromSubmission = async (payload: Prisma.JsonObject, submitterId: 
       duration: integerOrNull(payload.duration),
       recordedAt: dateOrUndefined(payload.recordedAt),
       venue: cleanText(payload.venue) || null,
+      eventId: cleanText(payload.eventId ?? payload.eventID) || null,
       eventName: cleanText(payload.eventName) || null,
       isVerified: true,
     } as any,

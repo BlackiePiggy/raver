@@ -88,6 +88,7 @@
     "multer": "^2.1.1",
     "pngjs": "^7.0.0",
     "qrcode": "^1.5.4",
+    "resend": "^6.12.3",
     "tls-sig-api-v2": "^1.0.2"
   },
   "devDependencies": {

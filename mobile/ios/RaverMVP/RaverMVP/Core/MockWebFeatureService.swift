@@ -201,6 +201,7 @@ actor MockWebFeatureService: WebFeatureService {
             duration: 5400,
             recordedAt: now.addingTimeInterval(-86400 * 20),
             venue: "Mannheim",
+            eventId: nil,
             eventName: "Time Warp",
             viewCount: 10234,
             likeCount: 1200,
@@ -1310,13 +1311,17 @@ actor MockWebFeatureService: WebFeatureService {
         )
     }
 
-    func fetchEventDJSets(eventName: String) async throws -> [WebDJSet] {
+    func fetchEventDJSets(eventID: String, eventName: String) async throws -> [WebDJSet] {
+        let normalizedEventID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = eventName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return [] }
+        guard !normalizedEventID.isEmpty || !normalized.isEmpty else { return [] }
         return sets
             .filter { set in
+                if !normalizedEventID.isEmpty, set.eventId == normalizedEventID {
+                    return true
+                }
                 let value = (set.eventName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                return !value.isEmpty && value == normalized
+                return !normalized.isEmpty && !value.isEmpty && value == normalized
             }
             .sorted(by: { $0.createdAt > $1.createdAt })
     }
@@ -1352,6 +1357,7 @@ actor MockWebFeatureService: WebFeatureService {
             duration: 0,
             recordedAt: input.recordedAt,
             venue: input.venue,
+            eventId: input.eventId,
             eventName: input.eventName,
             viewCount: 0,
             likeCount: 0,
@@ -1402,6 +1408,7 @@ actor MockWebFeatureService: WebFeatureService {
         if let videoAuthorName = input.videoAuthorName { sets[idx].videoAuthorName = videoAuthorName }
         if let thumbnail = input.thumbnailUrl { sets[idx].thumbnailUrl = thumbnail }
         if let venue = input.venue { sets[idx].venue = venue }
+        if let eventId = input.eventId { sets[idx].eventId = eventId }
         if let eventName = input.eventName { sets[idx].eventName = eventName }
         if let recordedAt = input.recordedAt { sets[idx].recordedAt = recordedAt }
         sets[idx].updatedAt = Date()

@@ -47,6 +47,8 @@ actor MockSocialService: SocialService {
     private var repostActionAtByPostID: [String: Date] = [:]
     private var saveActionAtByPostID: [String: Date] = [:]
     private var hiddenPostIDs: Set<String> = []
+    private var newsArticles: [DiscoverNewsArticle] = []
+    private var commentsByNewsArticle: [String: [Comment]] = [:]
 
     init() {
         let seed = Self.makeSeed()
@@ -54,6 +56,7 @@ actor MockSocialService: SocialService {
         usersByID = seed.usersByID
         profilesByID = seed.profilesByID
         posts = seed.posts
+        newsArticles = seed.posts.compactMap { DiscoverNewsCodec.decode(post: $0) }
         commentsByPost = seed.commentsByPost
         conversations = seed.conversations
         messagesByConversation = seed.messagesByConversation
@@ -109,12 +112,25 @@ actor MockSocialService: SocialService {
         return try await login(username: generatedUsername, password: "mock")
     }
 
+    func loginWithEmailCode(email: String, code: String) async throws -> Session {
+        _ = code
+        let localPart = email.split(separator: "@").first.map(String.init) ?? "email_user"
+        let generatedUsername = localPart.isEmpty ? "email_user" : localPart
+        return try await login(username: generatedUsername, password: "mock")
+    }
+
     func loginWithFirebasePhoneIdToken(_ idToken: String, birthYear: Int?, regionCode: String?, displayName: String?) async throws -> Session {
         _ = birthYear
         _ = regionCode
         let suffix = String((displayName ?? idToken).suffix(4)).filter(\.isLetter)
         let generatedUsername = suffix.isEmpty ? "firebase_phone_user" : "firebase_phone_\(suffix.lowercased())"
         return try await login(username: generatedUsername, password: "mock")
+    }
+
+    func sendEmailAuthCode(email: String, scene: String) async throws -> Int {
+        _ = email
+        _ = scene
+        return 300
     }
 
     func sendLoginSmsCode(phoneNumber: String) async throws -> Int {
@@ -130,6 +146,22 @@ actor MockSocialService: SocialService {
         return DisplayNameAvailability(
             available: !isTaken && normalized.count >= 2 && normalized.count <= 24,
             code: isTaken ? "AUTH_DISPLAY_NAME_TAKEN" : "AUTH_DISPLAY_NAME_AVAILABLE"
+        )
+    }
+
+    func registerWithEmailCode(
+        email: String,
+        code: String,
+        displayName: String,
+        birthYear: Int?,
+        regionCode: String?
+    ) async throws -> Session {
+        try await register(
+            email: email,
+            password: code,
+            displayName: displayName,
+            birthYear: birthYear,
+            regionCode: regionCode
         )
     }
 
@@ -387,6 +419,7 @@ actor MockSocialService: SocialService {
         let normalizedEventID = eventID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let visible = posts.filter { post in
             !hiddenPostIDs.contains(post.id) &&
+            (normalizedEventID.isEmpty || !post.isRaverNews) &&
             (normalizedEventID.isEmpty ||
                 post.eventID == normalizedEventID ||
                 post.boundEventIDs.contains(normalizedEventID))
@@ -418,6 +451,108 @@ actor MockSocialService: SocialService {
                 .sorted(by: { $0.createdAt > $1.createdAt })
         }
         return FeedPage(posts: sorted, nextCursor: nil)
+    }
+
+    func fetchNewsPage(cursor: String? = nil) async throws -> DiscoverNewsPage {
+        _ = cursor
+        return DiscoverNewsPage(items: newsArticles.sorted(by: { $0.publishedAt > $1.publishedAt }), nextCursor: nil)
+    }
+
+    func searchNews(query: String) async throws -> [DiscoverNewsArticle] {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return [] }
+        return newsArticles
+            .filter { article in
+                article.title.lowercased().contains(normalized) ||
+                article.summary.lowercased().contains(normalized) ||
+                article.body.lowercased().contains(normalized) ||
+                article.source.lowercased().contains(normalized)
+            }
+            .sorted(by: { $0.publishedAt > $1.publishedAt })
+    }
+
+    func fetchNewsArticle(articleID: String) async throws -> DiscoverNewsArticle {
+        guard let article = newsArticles.first(where: { $0.id == articleID }) else {
+            throw ServiceError.message("资讯不存在")
+        }
+        return article
+    }
+
+    func publishNews(draft: DiscoverNewsDraft) async throws -> CreateContentResult<DiscoverNewsArticle> {
+        let article = DiscoverNewsArticle(
+            id: UUID().uuidString,
+            category: draft.category,
+            source: draft.source,
+            title: draft.title,
+            summary: draft.summary,
+            body: draft.body,
+            link: draft.link,
+            coverImageURL: draft.coverImageURL,
+            publishedAt: Date(),
+            replyCount: 0,
+            authorID: currentUser.id,
+            authorUsername: currentUser.username,
+            authorName: currentUser.displayName,
+            authorAvatarURL: currentUser.avatarURL,
+            legacyEventID: nil,
+            boundDjIDs: draft.boundDjIDs,
+            boundBrandIDs: draft.boundBrandIDs,
+            boundEventIDs: draft.boundEventIDs
+        )
+        newsArticles.insert(article, at: 0)
+        return .created(article)
+    }
+
+    func fetchBoundNewsArticles(eventID: String?, djID: String?, festivalID: String?, cursor: String? = nil) async throws -> DiscoverNewsPage {
+        _ = cursor
+        let normalizedEventID = eventID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let normalizedDJID = djID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let normalizedFestivalID = festivalID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let visible = newsArticles.filter { article in
+            (normalizedEventID.isEmpty || article.boundEventIDs.contains(normalizedEventID)) &&
+            (normalizedDJID.isEmpty || article.boundDjIDs.contains(normalizedDJID)) &&
+            (normalizedFestivalID.isEmpty || article.boundBrandIDs.contains(normalizedFestivalID))
+        }
+        return DiscoverNewsPage(items: visible.sorted(by: { $0.publishedAt > $1.publishedAt }), nextCursor: nil)
+    }
+
+    func fetchNewsComments(articleID: String) async throws -> [Comment] {
+        commentsByNewsArticle[articleID, default: []].sorted(by: { $0.createdAt < $1.createdAt })
+    }
+
+    func addNewsComment(articleID: String, content: String, parentCommentID: String? = nil) async throws -> Comment {
+        guard newsArticles.contains(where: { $0.id == articleID }) else {
+            throw ServiceError.message("资讯不存在")
+        }
+
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            throw ServiceError.message("评论不能为空")
+        }
+
+        let existingComments = commentsByNewsArticle[articleID, default: []]
+        let normalizedParentCommentID = parentCommentID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parentComment = normalizedParentCommentID.flatMap { parentID in
+            existingComments.first(where: { $0.id == parentID })
+        }
+        if normalizedParentCommentID != nil && parentComment == nil {
+            throw ServiceError.message("回复目标不存在")
+        }
+
+        let newComment = Comment(
+            id: UUID().uuidString,
+            postID: articleID,
+            parentCommentID: parentComment?.id,
+            rootCommentID: parentComment.map { $0.rootCommentID ?? $0.id },
+            depth: parentComment.map { min(max($0.depth, 0) + 1, 2) } ?? 0,
+            author: currentUser,
+            replyToAuthor: parentComment?.author,
+            content: trimmed,
+            createdAt: Date()
+        )
+
+        commentsByNewsArticle[articleID, default: []].append(newComment)
+        return newComment
     }
 
     func searchFeed(query: String) async throws -> FeedPage {

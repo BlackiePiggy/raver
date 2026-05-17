@@ -91,7 +91,7 @@ protocol EventCheckinRepository {
 }
 
 protocol EventRelatedContentRepository {
-    func fetchEventDJSets(eventName: String) async throws -> [WebDJSet]
+    func fetchEventDJSets(eventID: String, eventName: String) async throws -> [WebDJSet]
 }
 
 struct EventListRepositoryAdapter: EventListRepository {
@@ -321,8 +321,8 @@ struct EventRelatedContentRepositoryAdapter: EventRelatedContentRepository {
         self.service = service
     }
 
-    func fetchEventDJSets(eventName: String) async throws -> [WebDJSet] {
-        try await service.fetchEventDJSets(eventName: eventName)
+    func fetchEventDJSets(eventID: String, eventName: String) async throws -> [WebDJSet] {
+        try await service.fetchEventDJSets(eventID: eventID, eventName: eventName)
     }
 }
 

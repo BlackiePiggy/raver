@@ -53,7 +53,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    const { djId, djIds, customDjNames, title, videoUrl, videoAuthorName, thumbnailUrl, description, recordedAt, venue, eventName } = req.body;
+    const { djId, djIds, customDjNames, title, videoUrl, videoAuthorName, thumbnailUrl, description, recordedAt, venue, eventId, eventID, eventName } = req.body;
 
     if (!title || !videoUrl) {
       res.status(400).json({ error: 'Missing required fields' });
@@ -72,6 +72,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       description,
       recordedAt: recordedAt ? new Date(recordedAt) : undefined,
       venue,
+      eventId: typeof eventID === 'string' ? eventID : typeof eventId === 'string' ? eventId : null,
       eventName,
     });
 
@@ -253,6 +254,8 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response): Promis
       videoAuthorName,
       thumbnailUrl,
       venue,
+      eventId,
+      eventID,
       eventName,
       recordedAt,
     } = req.body;
@@ -267,6 +270,14 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response): Promis
       videoAuthorName: typeof videoAuthorName === 'string' ? videoAuthorName : undefined,
       thumbnailUrl,
       venue,
+      eventId:
+        typeof eventID === 'string'
+          ? eventID
+          : typeof eventId === 'string'
+            ? eventId
+            : eventID === null || eventId === null
+              ? null
+              : undefined,
       eventName,
       recordedAt: recordedAt ? new Date(recordedAt) : undefined,
     });

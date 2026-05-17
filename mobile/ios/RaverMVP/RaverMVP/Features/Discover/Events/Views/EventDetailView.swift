@@ -1343,6 +1343,11 @@ struct EventDetailView: View {
     @State private var relatedEventSets: [WebDJSet] = []
     @State private var relatedArticles: [DiscoverNewsArticle] = []
     @State private var isLoadingRelatedArticles = false
+    @State private var didLoadRelatedArticles = false
+    @State private var isLoadingRelatedRatingEvents = false
+    @State private var didLoadRelatedRatingEvents = false
+    @State private var isLoadingRelatedEventSets = false
+    @State private var didLoadRelatedEventSets = false
     @State private var selectedRatingEventID: String?
     @State private var showExpandedLineupList = false
     @State private var lineupSortMode: LineupSortMode = .alphabetical
@@ -2019,6 +2024,10 @@ struct EventDetailView: View {
             if event == nil {
                 await load()
             }
+            await loadSelectedTabDataIfNeeded()
+        }
+        .onChange(of: selectedTab) { _, _ in
+            Task { await loadSelectedTabDataIfNeeded() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { notification in
             let savedEventID = notification.object as? String
@@ -2292,11 +2301,6 @@ struct EventDetailView: View {
                 .onTapGesture {
                     appPush(.postDetail(postID: post.id))
                 }
-                .onAppear {
-                    if index == eventDiscussionPosts.count - 1 {
-                        Task { await loadMoreEventDiscussionPostsIfNeeded() }
-                    }
-                }
             }
 
             if isLoadingEventDiscussion {
@@ -2305,6 +2309,17 @@ struct EventDetailView: View {
                     ProgressView(LT("加载更多...", "Loading more...", "さらに読み込み中..."))
                     Spacer()
                 }
+                .padding(.vertical, 8)
+            } else if eventDiscussionNextCursor != nil {
+                Button {
+                    Task { await loadMoreEventDiscussionPostsIfNeeded() }
+                } label: {
+                    Text(LT("加载更多动态", "Load More Posts", "投稿をさらに読み込む"))
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.bordered)
                 .padding(.vertical, 8)
             }
         }
@@ -2315,11 +2330,15 @@ struct EventDetailView: View {
         if isLoadingRelatedArticles && relatedArticles.isEmpty {
             ProgressView(LT("正在加载相关资讯...", "正在加载相关资讯...", "関連ニュースを読み込み中..."))
                 .padding(.vertical, 8)
-        } else if relatedArticles.isEmpty {
+        } else if relatedArticles.isEmpty && didLoadRelatedArticles {
             Text(LT("暂无相关资讯", "暂无相关资讯", "関連ニュースはありません"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
+        } else if relatedArticles.isEmpty {
+            ProgressView(LT("正在加载相关资讯...", "正在加载相关资讯...", "関連ニュースを読み込み中..."))
+                .padding(.vertical, 8)
+                .task { await loadRelatedArticlesIfNeeded() }
         } else {
             ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
                 Button {
@@ -2544,6 +2563,7 @@ struct EventDetailView: View {
 
     @MainActor
     private func loadEventDiscussionPosts(force: Bool) async {
+        guard selectedTab == .posts else { return }
         guard !isLoadingEventDiscussion else { return }
         if !force, eventDiscussionPhase == .success || eventDiscussionPhase == .empty {
             return
@@ -2557,9 +2577,10 @@ struct EventDetailView: View {
 
         do {
             let page = try await feedStreamRepository.fetchFeed(cursor: nil, mode: .latest, eventID: eventID)
-            eventDiscussionPosts = page.posts
+            let discussionPosts = page.posts.filter { !$0.isRaverNews }
+            eventDiscussionPosts = discussionPosts
             eventDiscussionNextCursor = page.nextCursor
-            eventDiscussionPhase = page.posts.isEmpty ? .empty : .success
+            eventDiscussionPhase = discussionPosts.isEmpty ? .empty : .success
         } catch {
             eventDiscussionPhase = .failure(message: error.userFacingMessage ?? LT("讨论区加载失败，请稍后重试", "Failed to load discussion. Please try again later.", "ディスカッションを読み込めませんでした。時間をおいて再試行してください。"))
         }
@@ -2567,6 +2588,7 @@ struct EventDetailView: View {
 
     @MainActor
     private func loadMoreEventDiscussionPostsIfNeeded() async {
+        guard selectedTab == .posts else { return }
         guard let cursor = eventDiscussionNextCursor, !isLoadingEventDiscussion else { return }
         isLoadingEventDiscussion = true
         defer { isLoadingEventDiscussion = false }
@@ -2574,7 +2596,7 @@ struct EventDetailView: View {
         do {
             let page = try await feedStreamRepository.fetchFeed(cursor: cursor, mode: .latest, eventID: eventID)
             let existing = Set(eventDiscussionPosts.map(\.id))
-            eventDiscussionPosts.append(contentsOf: page.posts.filter { !existing.contains($0.id) })
+            eventDiscussionPosts.append(contentsOf: page.posts.filter { !existing.contains($0.id) && !$0.isRaverNews })
             eventDiscussionNextCursor = page.nextCursor
             eventDiscussionPhase = eventDiscussionPosts.isEmpty ? .empty : .success
         } catch {
@@ -2872,11 +2894,19 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private func eventRatingsTabContent() -> some View {
-        if relatedRatingEvents.isEmpty {
+        if isLoadingRelatedRatingEvents && relatedRatingEvents.isEmpty {
+            ProgressView(LT("正在加载打分事件...", "Loading ratings...", "評価を読み込み中..."))
+                .padding(.vertical, 8)
+                .task { await loadRelatedRatingsIfNeeded() }
+        } else if relatedRatingEvents.isEmpty && didLoadRelatedRatingEvents {
             Text(LT("暂无对应打分事件", "暂无对应打分事件", "対応する評価イベントはありません"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
+        } else if relatedRatingEvents.isEmpty {
+            ProgressView(LT("正在加载打分事件...", "Loading ratings...", "評価を読み込み中..."))
+                .padding(.vertical, 8)
+                .task { await loadRelatedRatingsIfNeeded() }
         } else {
             ForEach(relatedRatingEvents) { ratingEvent in
                 Button {
@@ -2914,11 +2944,19 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private func eventSetsTabContent() -> some View {
-        if relatedEventSets.isEmpty {
+        if isLoadingRelatedEventSets && relatedEventSets.isEmpty {
+            ProgressView(LT("正在加载 Sets...", "Loading sets...", "Setを読み込み中..."))
+                .padding(.vertical, 8)
+                .task { await loadRelatedSetsIfNeeded() }
+        } else if relatedEventSets.isEmpty && didLoadRelatedEventSets {
             Text(LT("暂无对应 Sets", "暂无对应 Sets", "対応するSetはありません"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
+        } else if relatedEventSets.isEmpty {
+            ProgressView(LT("正在加载 Sets...", "Loading sets...", "Setを読み込み中..."))
+                .padding(.vertical, 8)
+                .task { await loadRelatedSetsIfNeeded() }
         } else {
             ForEach(relatedEventSets) { set in
                 Button {
@@ -4335,9 +4373,6 @@ struct EventDetailView: View {
 
         do {
             let hasSession = await MainActor.run { appState.session != nil }
-            await MainActor.run {
-                isLoadingRelatedArticles = true
-            }
             async let eventTask = eventReadRepository.fetchEvent(id: eventID)
             async let favoriteStatusTask: EventFavoriteStatus? = {
                 guard hasSession else { return nil }
@@ -4354,49 +4389,40 @@ struct EventDetailView: View {
                 )
                 return page?.items ?? []
             }()
-            async let ratingEventsTask = ratingRepository.fetchEventRatingEvents(eventID: eventID)
-            async let relatedArticlesTask = fetchRelatedNewsArticlesForEvent(eventID: eventID)
 
             let loadedEvent = try await eventTask
             let loadedFavoriteStatus = await favoriteStatusTask
             let loadedCheckins = await checkinsTask
-            let loadedRatingEvents = (try? await ratingEventsTask) ?? []
-            let loadedEventSets = (try? await eventRelatedContentRepository.fetchEventDJSets(eventName: loadedEvent.name)) ?? []
-            let loadedArticles = (try? await relatedArticlesTask) ?? []
 
             event = loadedEvent
             relatedEventCheckins = loadedCheckins
             eventFavoriteID = loadedFavoriteStatus?.id ?? loadedEvent.favoriteId
-            relatedRatingEvents = loadedRatingEvents
-            relatedEventSets = loadedEventSets
-            relatedArticles = loadedArticles
-            isLoadingRelatedArticles = false
             phase = .success
             bannerMessage = nil
 
             let snapshot = makeManualCacheSnapshot(
                 event: loadedEvent,
-                relatedRatingEvents: loadedRatingEvents,
-                relatedEventSets: loadedEventSets,
-                relatedArticles: loadedArticles
+                relatedRatingEvents: relatedRatingEvents,
+                relatedEventSets: relatedEventSets,
+                relatedArticles: relatedArticles
             )
             await persistManualCacheSnapshot(snapshot, prefetchImages: false)
+            await loadSelectedTabDataIfNeeded()
         } catch {
             let canFallback = isOfflineRecoverableError(error) || event == nil
             if canFallback, let snapshot = await EventManualCacheStore.shared.loadSnapshot(eventID: eventID) {
                 applyManualCacheSnapshot(snapshot)
                 phase = .success
+                await loadSelectedTabDataIfNeeded()
                 if isRequestTimeoutError(error) {
                     showBannerMessageAutoDismiss(LT("请求超时，已展示最新离线缓存版本。", "Request timed out. Showing latest offline cache version.", "リクエストがタイムアウトしました。最新のオフラインキャッシュを表示しています。"))
                 } else {
                     showBannerMessageAutoDismiss(LT("网络较弱，已展示活动缓存数据。", "Network is weak. Showing cached event data.", "ネットワークが弱いため、イベントのキャッシュデータを表示しています。"))
                 }
             } else if hadContent {
-                isLoadingRelatedArticles = false
                 showBannerMessageAutoDismiss(error.userFacingMessage ?? LT("活动详情更新失败，请稍后重试", "Failed to refresh event details. Please try again later.", "イベント詳細を更新できませんでした。時間をおいて再試行してください。"))
                 phase = .success
             } else {
-                isLoadingRelatedArticles = false
                 let message = error.userFacingMessage ?? LT("活动详情加载失败，请稍后重试", "Failed to load event details. Please try again later.", "イベント詳細を読み込めませんでした。時間をおいて再試行してください。")
                 phase = isOfflineRecoverableError(error)
                     ? .offline(message: message)
@@ -4409,17 +4435,72 @@ struct EventDetailView: View {
         try await newsRepository.fetchArticlesBoundToEvent(eventID: eventID, maxPages: 8)
     }
 
+    @MainActor
+    private func loadSelectedTabDataIfNeeded() async {
+        guard event != nil else { return }
+        switch selectedTab {
+        case .posts:
+            await loadEventDiscussionPosts(force: false)
+        case .news:
+            await loadRelatedArticlesIfNeeded()
+        case .ratings:
+            await loadRelatedRatingsIfNeeded()
+        case .sets:
+            await loadRelatedSetsIfNeeded()
+        case .info, .lineup, .schedule:
+            return
+        }
+    }
+
+    @MainActor
+    private func loadRelatedArticlesIfNeeded() async {
+        guard !didLoadRelatedArticles, !isLoadingRelatedArticles else { return }
+        isLoadingRelatedArticles = true
+        defer { isLoadingRelatedArticles = false }
+        relatedArticles = (try? await fetchRelatedNewsArticlesForEvent(eventID: eventID)) ?? []
+        didLoadRelatedArticles = true
+        await persistCurrentManualCacheSnapshotIfPossible()
+    }
+
+    @MainActor
+    private func loadRelatedRatingsIfNeeded() async {
+        guard !didLoadRelatedRatingEvents, !isLoadingRelatedRatingEvents else { return }
+        isLoadingRelatedRatingEvents = true
+        defer { isLoadingRelatedRatingEvents = false }
+        relatedRatingEvents = (try? await ratingRepository.fetchEventRatingEvents(eventID: eventID)) ?? []
+        didLoadRelatedRatingEvents = true
+        await persistCurrentManualCacheSnapshotIfPossible()
+    }
+
+    @MainActor
+    private func loadRelatedSetsIfNeeded() async {
+        guard !didLoadRelatedEventSets, !isLoadingRelatedEventSets else { return }
+        guard let event else {
+            relatedEventSets = []
+            didLoadRelatedEventSets = true
+            return
+        }
+        isLoadingRelatedEventSets = true
+        defer { isLoadingRelatedEventSets = false }
+        relatedEventSets = (try? await eventRelatedContentRepository.fetchEventDJSets(eventID: event.id, eventName: event.name)) ?? []
+        didLoadRelatedEventSets = true
+        await persistCurrentManualCacheSnapshotIfPossible()
+    }
+
     private func reloadEventRatings() async {
         relatedRatingEvents = (try? await ratingRepository.fetchEventRatingEvents(eventID: eventID)) ?? []
+        didLoadRelatedRatingEvents = true
         await persistCurrentManualCacheSnapshotIfPossible()
     }
 
     private func reloadEventSets() async {
         guard let event else {
             relatedEventSets = []
+            didLoadRelatedEventSets = true
             return
         }
-        relatedEventSets = (try? await eventRelatedContentRepository.fetchEventDJSets(eventName: event.name)) ?? []
+        relatedEventSets = (try? await eventRelatedContentRepository.fetchEventDJSets(eventID: event.id, eventName: event.name)) ?? []
+        didLoadRelatedEventSets = true
         await persistCurrentManualCacheSnapshotIfPossible()
     }
 
@@ -4439,7 +4520,7 @@ struct EventDetailView: View {
         do {
             let eventForCache = try await resolveEventForManualCache()
             async let ratingsTask = ratingRepository.fetchEventRatingEvents(eventID: eventID)
-            async let setsTask = eventRelatedContentRepository.fetchEventDJSets(eventName: eventForCache.name)
+            async let setsTask = eventRelatedContentRepository.fetchEventDJSets(eventID: eventForCache.id, eventName: eventForCache.name)
             async let articlesTask = fetchRelatedNewsArticlesForEvent(eventID: eventID)
 
             let snapshot = EventManualCacheSnapshot(
@@ -4465,7 +4546,12 @@ struct EventDetailView: View {
         relatedRatingEvents = snapshot.relatedRatingEvents
         relatedEventSets = snapshot.relatedEventSets
         relatedArticles = snapshot.relatedNewsArticles
+        didLoadRelatedRatingEvents = !snapshot.relatedRatingEvents.isEmpty
+        didLoadRelatedEventSets = !snapshot.relatedEventSets.isEmpty
+        didLoadRelatedArticles = !snapshot.relatedNewsArticles.isEmpty
         isLoadingRelatedArticles = false
+        isLoadingRelatedRatingEvents = false
+        isLoadingRelatedEventSets = false
         manualCachedAt = snapshot.cachedAt
     }
 

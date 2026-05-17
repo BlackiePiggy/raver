@@ -452,54 +452,6 @@ const loadRankingYearEntries = (boardId: string, year: number): RankingEntryReco
   return parseRankingText(fs.readFileSync(txtPath, 'utf8'));
 };
 
-const decodeBase64Utf8 = (encoded: string): string => {
-  const source = encoded.trim();
-  if (!source) return '';
-  try {
-    return Buffer.from(source, 'base64').toString('utf8').trim();
-  } catch {
-    return '';
-  }
-};
-
-const readValueAfterPrefix = (line: string, key: string): string => {
-  const prefixes = [`${key}：`, `${key}:`, `${key.toUpperCase()}：`, `${key.toUpperCase()}:`];
-  for (const prefix of prefixes) {
-    if (!line.startsWith(prefix)) continue;
-    const value = line.slice(prefix.length).trim();
-    if (value) return value;
-  }
-  return '';
-};
-
-const decodeRaverNews = (content: string): { title: string; summary: string; body: string } | null => {
-  const lines = String(content || '')
-    .split(/\r?\n/g)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (!lines.includes(NEWS_MARKER)) return null;
-
-  const read = (keys: string[]): string => {
-    for (const line of lines) {
-      for (const key of keys) {
-        const value = readValueAfterPrefix(line, key);
-        if (value) return value;
-      }
-    }
-    return '';
-  };
-
-  const title = read(['标题', 'title']) || '未命名资讯';
-  const summary = read(['摘要', 'summary']) || '';
-  const bodyEncoded = read(['正文MD64', 'content_md64', 'body_md64']);
-  const body = decodeBase64Utf8(bodyEncoded) || read(['正文', 'content', 'body']) || '';
-  return {
-    title: title.replace(/\s+/g, ' ').trim() || '未命名资讯',
-    summary: summary.replace(/\s+/g, ' ').trim(),
-    body,
-  };
-};
-
 const searchEvents = async (query: string, limit: number): Promise<GlobalSearchItem[]> => {
   const brandAliasIDs = await fetchFestivalIDsByAliasContains(query);
 
@@ -590,49 +542,55 @@ const searchEvents = async (query: string, limit: number): Promise<GlobalSearchI
 };
 
 const searchNews = async (query: string, limit: number, _userId: string, blockedRelationUserIds: Set<string>): Promise<GlobalSearchItem[]> => {
-  const rows = await prisma.post.findMany({
+  const rows = await prisma.newsArticle.findMany({
     where: {
       visibility: 'public',
-      content: { contains: NEWS_MARKER },
-      userId: blockedRelationUserIds.size > 0 ? { notIn: Array.from(blockedRelationUserIds) } : undefined,
+      authorId: blockedRelationUserIds.size > 0 ? { notIn: Array.from(blockedRelationUserIds) } : undefined,
+      OR: [
+        { title: containsInsensitive(query) },
+        { summary: containsInsensitive(query) },
+        { body: containsInsensitive(query) },
+        { source: containsInsensitive(query) },
+      ],
     },
     select: {
       id: true,
-      content: true,
-      images: true,
-      displayPublishedAt: true,
-      createdAt: true,
+      source: true,
+      title: true,
+      summary: true,
+      body: true,
+      coverImageUrl: true,
+      publishedAt: true,
       updatedAt: true,
-      user: {
+      author: {
         select: { id: true, username: true, displayName: true },
       },
     },
-    orderBy: [{ displayPublishedAt: 'desc' }, { createdAt: 'desc' }],
-    take: Math.max(limit * 12, 120),
+    orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+    take: Math.max(limit * 3, 20),
   });
 
   const items: GlobalSearchItem[] = rows
     .map((row): GlobalSearchItem | null => {
-      const decoded = decodeRaverNews(row.content);
-      if (!decoded) return null;
       const score = Math.max(
-        scoreText(query, decoded.title),
-        scoreText(query, decoded.summary, { exact: 82, prefix: 70, contains: 54 }),
-        scoreText(query, decoded.body, { exact: 58, prefix: 46, contains: 34 })
-      ) + recencyBoost(row.displayPublishedAt || row.createdAt, 5);
+        scoreText(query, row.title),
+        scoreText(query, row.summary, { exact: 82, prefix: 70, contains: 54 }),
+        scoreText(query, row.body, { exact: 58, prefix: 46, contains: 34 }),
+        scoreText(query, row.source, { exact: 48, prefix: 36, contains: 24 })
+      ) + recencyBoost(row.publishedAt, 5);
       if (score <= 0) return null;
       return {
         id: `news:${row.id}`,
         type: 'news',
         entityID: row.id,
-        title: decoded.title,
-        subtitle: compact(['Raver News', row.user.displayName || row.user.username]),
-        summary: truncate(decoded.summary || decoded.body),
-        imageUrl: row.images[0] || null,
+        title: row.title,
+        subtitle: compact([row.source || 'Raver News', row.author?.displayName || row.author?.username]),
+        summary: truncate(row.summary || row.body),
+        imageUrl: row.coverImageUrl,
         badgeText: 'News',
         deeplink: `raver://news/${row.id}`,
         relevanceScore: finalizeScore(score),
-        publishedAt: row.displayPublishedAt || row.createdAt,
+        publishedAt: row.publishedAt,
         updatedAt: row.updatedAt,
         rankingYear: null,
       };

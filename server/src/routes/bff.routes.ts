@@ -19,6 +19,7 @@ import {
 } from '../utils/auth';
 import { tencentIMFriendService, tencentIMGroupService, tencentIMUserService } from '../modules/im';
 import { smsService } from '../services/sms/sms-provider';
+import { emailService } from '../services/email/email-provider';
 import { recordSmsMetric } from '../services/sms/sms-metrics';
 import { verifyFirebasePhoneIdToken } from '../services/firebase-phone-auth.service';
 import { notificationCenterService } from '../services/notification-center';
@@ -70,6 +71,37 @@ import { mediaAssetService } from '../services/media-asset.service';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
+
+const timeAsync = async <T>(
+  scope: string,
+  step: string,
+  task: () => Promise<T>,
+  detail: Record<string, unknown> = {}
+): Promise<T> => {
+  const startedAt = Date.now();
+  try {
+    const result = await task();
+    console.info('[perf]', {
+      scope,
+      step,
+      outcome: 'success',
+      durationMs: Date.now() - startedAt,
+      ...detail,
+    });
+    return result;
+  } catch (error) {
+    console.warn('[perf]', {
+      scope,
+      step,
+      outcome: 'failed',
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+      ...detail,
+    });
+    throw error;
+  }
+};
+
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -701,6 +733,12 @@ const syncTencentIMUserBestEffort = async (userId: string, reason: string): Prom
   }
 };
 
+const scheduleTencentIMUserSyncBestEffort = (userId: string, reason: string): void => {
+  setImmediate(() => {
+    void syncTencentIMUserBestEffort(userId, reason);
+  });
+};
+
 const syncTencentIMFriendshipBestEffort = async (
   userOneId: string,
   userTwoId: string,
@@ -756,6 +794,16 @@ const authSmsVerifyBlockMs = normalizePositiveInt(process.env.AUTH_SMS_VERIFY_BL
 const authSmsProviderMode = (cleanEnv(process.env.AUTH_SMS_PROVIDER) || 'mock').toLowerCase();
 const authSmsDebugReturnCodeRaw = cleanEnv(process.env.AUTH_SMS_DEBUG_RETURN_CODE);
 const authSmsDebugPhoneAllowlistRaw = cleanEnv(process.env.AUTH_SMS_DEBUG_PHONE_ALLOWLIST);
+const authEmailCodeLength = normalizePositiveInt(process.env.AUTH_EMAIL_CODE_LENGTH, 6, 4, 8);
+const authEmailCodeTtlMs = normalizePositiveInt(process.env.AUTH_EMAIL_CODE_TTL_MS, 5 * 60 * 1000, 10_000, 30 * 60 * 1000);
+const authEmailSendCooldownMs = normalizePositiveInt(process.env.AUTH_EMAIL_SEND_COOLDOWN_MS, 60 * 1000, 5_000, 10 * 60 * 1000);
+const authEmailAddressHourlyLimit = normalizePositiveInt(process.env.AUTH_EMAIL_ADDRESS_HOURLY_LIMIT, 5, 1, 100);
+const authEmailIpHourlyLimit = normalizePositiveInt(process.env.AUTH_EMAIL_IP_HOURLY_LIMIT, 30, 1, 1_000);
+const authEmailVerifyFailureLimit = normalizePositiveInt(process.env.AUTH_EMAIL_VERIFY_FAILURE_LIMIT, 10, 3, 100);
+const authEmailVerifyBlockMs = normalizePositiveInt(process.env.AUTH_EMAIL_VERIFY_BLOCK_MS, 15 * 60 * 1000, 30_000, 24 * 60 * 60 * 1000);
+const authEmailProviderMode = (cleanEnv(process.env.AUTH_EMAIL_PROVIDER) || 'mock').toLowerCase();
+const authEmailDebugReturnCodeRaw = cleanEnv(process.env.AUTH_EMAIL_DEBUG_RETURN_CODE);
+const authEmailDebugAllowlistRaw = cleanEnv(process.env.AUTH_EMAIL_DEBUG_ALLOWLIST);
 const authLoginRateLimitWindowMs = normalizePositiveInt(
   process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS,
   15 * 60 * 1000,
@@ -1012,6 +1060,20 @@ const maskPhoneNumber = (phoneNumber: string): string => {
   return `${prefix}****${suffix}`;
 };
 
+const normalizeEmailAddress = (value: unknown): string | null => {
+  const email = String(value || '').trim().toLowerCase();
+  if (!email || email.length > 254) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email;
+};
+
+const maskEmailAddress = (email: string): string => {
+  const normalized = normalizeEmailAddress(email) || email.trim().toLowerCase();
+  const [localPart, domain] = normalized.split('@');
+  if (!localPart || !domain) return '***';
+  return `${localPart.slice(0, Math.min(2, localPart.length))}***@${domain}`;
+};
+
 const isSmsDebugCodeEnabledForPhone = (phoneNumber: string): boolean => {
   if (process.env.NODE_ENV === 'production') return false;
   if (authSmsProviderMode !== 'mock') return false;
@@ -1026,7 +1088,27 @@ const isSmsDebugCodeEnabledForPhone = (phoneNumber: string): boolean => {
   return allowlist.includes(phoneNumber);
 };
 
+const isEmailDebugCodeEnabledForEmail = (email: string): boolean => {
+  if (process.env.NODE_ENV === 'production') return false;
+  if (authEmailProviderMode !== 'mock') return false;
+  if (!parseBool(authEmailDebugReturnCodeRaw, false)) return false;
+
+  const allowlist = (authEmailDebugAllowlistRaw || '')
+    .split(',')
+    .map((item) => normalizeEmailAddress(item))
+    .filter((item): item is string => Boolean(item));
+
+  if (allowlist.length === 0) return true;
+  return allowlist.includes(email);
+};
+
 const normalizeSmsCode = (value: unknown): string | null => {
+  const code = String(value || '').trim();
+  if (!/^\d{4,8}$/.test(code)) return null;
+  return code;
+};
+
+const normalizeEmailCode = (value: unknown): string | null => {
   const code = String(value || '').trim();
   if (!/^\d{4,8}$/.test(code)) return null;
   return code;
@@ -1035,6 +1117,12 @@ const normalizeSmsCode = (value: unknown): string | null => {
 const generateSmsCode = (): string => {
   const max = 10 ** Math.max(4, Math.min(8, authSmsCodeLength));
   return crypto.randomInt(0, max).toString().padStart(Math.max(4, Math.min(8, authSmsCodeLength)), '0');
+};
+
+const generateEmailCode = (): string => {
+  const length = Math.max(4, Math.min(8, authEmailCodeLength));
+  const max = 10 ** length;
+  return crypto.randomInt(0, max).toString().padStart(length, '0');
 };
 
 const getCookieValue = (req: Request, key: string): string | null => {
@@ -1246,6 +1334,53 @@ const clearSmsVerifyFailures = async (phoneNumber: string): Promise<void> => {
     where: { phoneNumber },
     create: {
       phoneNumber,
+      failedAttempts: 0,
+      blockedUntil: null,
+      lastFailedAt: null,
+    },
+    update: {
+      failedAttempts: 0,
+      blockedUntil: null,
+      lastFailedAt: null,
+    },
+  });
+};
+
+const registerEmailVerifyFailure = async (email: string, now: Date): Promise<{ blockedUntil: Date | null }> => {
+  const existing = await prisma.authEmailAuthState.findUnique({
+    where: { email },
+    select: { failedAttempts: true, blockedUntil: true },
+  });
+
+  const previousFailures = existing?.failedAttempts || 0;
+  const nextFailures = previousFailures + 1;
+  const blockedUntil = nextFailures >= authEmailVerifyFailureLimit
+    ? new Date(now.getTime() + authEmailVerifyBlockMs)
+    : existing?.blockedUntil || null;
+
+  await prisma.authEmailAuthState.upsert({
+    where: { email },
+    create: {
+      email,
+      failedAttempts: nextFailures,
+      blockedUntil,
+      lastFailedAt: now,
+    },
+    update: {
+      failedAttempts: nextFailures,
+      blockedUntil,
+      lastFailedAt: now,
+    },
+  });
+
+  return { blockedUntil };
+};
+
+const clearEmailVerifyFailures = async (email: string): Promise<void> => {
+  await prisma.authEmailAuthState.upsert({
+    where: { email },
+    create: {
+      email,
       failedAttempts: 0,
       blockedUntil: null,
       lastFailedAt: null,
@@ -3096,6 +3231,9 @@ router.get('/', (_req: Request, res: Response) => {
     endpoints: {
       authLogin: 'POST /v1/auth/login',
       authRegister: 'POST /v1/auth/register',
+      authEmailSend: 'POST /v1/auth/email/send',
+      authEmailLogin: 'POST /v1/auth/email/login',
+      authEmailRegister: 'POST /v1/auth/email/register',
       authSmsSend: 'POST /v1/auth/sms/send',
       authSmsLogin: 'POST /v1/auth/sms/login',
       authRefresh: 'POST /v1/auth/refresh',
@@ -3392,7 +3530,7 @@ router.post('/auth/login', async (req: Request, res: Response): Promise<void> =>
       data: { lastLoginAt: new Date() },
     });
 
-    await syncTencentIMUserBestEffort(user.id, 'bff-auth-login');
+    scheduleTencentIMUserSyncBestEffort(user.id, 'bff-auth-login');
     writeAuthAuditLog(req, {
       action: 'auth.login',
       outcome: 'success',
@@ -3663,6 +3801,459 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
   }
 });
 
+router.post('/auth/email/send', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, scene } = req.body as { email?: string; scene?: string };
+    const normalizedEmail = normalizeEmailAddress(email);
+    const sceneKey = String(scene || 'login').trim().toLowerCase() || 'login';
+    const now = new Date();
+    const clientIp = getClientIp(req);
+
+    if (!normalizedEmail) {
+      res.status(400).json({ error: 'Invalid email address', code: 'AUTH_EMAIL_INVALID' });
+      return;
+    }
+
+    if (sceneKey !== 'login' && sceneKey !== 'register') {
+      res.status(400).json({ error: 'Unsupported email scene', code: 'AUTH_EMAIL_SCENE_UNSUPPORTED' });
+      return;
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true, isActive: true },
+    });
+
+    if (sceneKey === 'login' && (!existingUser || !existingUser.isActive)) {
+      res.status(404).json({ error: 'Email is not registered', code: 'AUTH_EMAIL_NOT_REGISTERED' });
+      return;
+    }
+
+    if (sceneKey === 'register' && existingUser) {
+      res.status(409).json({ error: 'Email is already registered', code: 'AUTH_EMAIL_ALREADY_REGISTERED' });
+      return;
+    }
+
+    const [lastSent, sentByEmailInLastHour, sentByIpInLastHour] = await Promise.all([
+      prisma.authEmailCode.findFirst({
+        where: { email: normalizedEmail, scene: sceneKey },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }),
+      prisma.authEmailCode.count({
+        where: {
+          email: normalizedEmail,
+          scene: sceneKey,
+          createdAt: { gte: new Date(now.getTime() - 60 * 60 * 1000) },
+        },
+      }),
+      prisma.authEmailCode.count({
+        where: {
+          sendIp: clientIp,
+          createdAt: { gte: new Date(now.getTime() - 60 * 60 * 1000) },
+        },
+      }),
+    ]);
+
+    if (lastSent && now.getTime() - lastSent.createdAt.getTime() < authEmailSendCooldownMs) {
+      const retryAfterMs = authEmailSendCooldownMs - (now.getTime() - lastSent.createdAt.getTime());
+      res.status(429).json({
+        error: 'Email code request too frequent',
+        code: 'AUTH_EMAIL_SEND_COOLDOWN',
+        retryAfterSeconds: Math.ceil(retryAfterMs / 1000),
+      });
+      return;
+    }
+
+    if (sentByEmailInLastHour >= authEmailAddressHourlyLimit) {
+      res.status(429).json({
+        error: 'Email hourly limit exceeded',
+        code: 'AUTH_EMAIL_ADDRESS_HOURLY_LIMIT',
+        retryAfterSeconds: 60 * 60,
+      });
+      return;
+    }
+
+    if (sentByIpInLastHour >= authEmailIpHourlyLimit) {
+      res.status(429).json({
+        error: 'Email ip hourly limit exceeded',
+        code: 'AUTH_EMAIL_IP_HOURLY_LIMIT',
+        retryAfterSeconds: 60 * 60,
+      });
+      return;
+    }
+
+    const code = generateEmailCode();
+    await emailService.sendAuthCode(normalizedEmail, code, sceneKey);
+
+    await prisma.authEmailCode.create({
+      data: {
+        email: normalizedEmail,
+        scene: sceneKey,
+        codeHash: hashToken(code),
+        sendIp: clientIp,
+        expiresAt: new Date(now.getTime() + authEmailCodeTtlMs),
+      },
+      select: { id: true },
+    });
+
+    const responsePayload: {
+      success: true;
+      expiresInSeconds: number;
+      debugCode?: string;
+      debugProvider?: string;
+    } = {
+      success: true,
+      expiresInSeconds: Math.max(1, Math.floor(authEmailCodeTtlMs / 1000)),
+    };
+
+    if (isEmailDebugCodeEnabledForEmail(normalizedEmail)) {
+      responsePayload.debugCode = code;
+      responsePayload.debugProvider = 'mock';
+    }
+
+    res.status(201).json(responsePayload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('BFF email send error:', message);
+    res.status(502).json({ error: 'Failed to send email code', code: 'AUTH_EMAIL_PROVIDER_FAILED' });
+  }
+});
+
+router.post('/auth/email/login', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, code } = req.body as { email?: string; code?: string };
+    const normalizedEmail = normalizeEmailAddress(email);
+    const emailCode = normalizeEmailCode(code);
+    const now = new Date();
+
+    if (!normalizedEmail || !emailCode) {
+      res.status(400).json({ error: 'email and code are required', code: 'AUTH_EMAIL_LOGIN_REQUIRED' });
+      return;
+    }
+
+    const emailState = await timeAsync(
+      'auth.email_login',
+      'prisma.authEmailAuthState.findUnique',
+      () => prisma.authEmailAuthState.findUnique({
+        where: { email: normalizedEmail },
+        select: { blockedUntil: true },
+      }),
+      { email: maskEmailAddress(normalizedEmail) }
+    );
+
+    if (emailState?.blockedUntil && emailState.blockedUntil.getTime() > now.getTime()) {
+      res.status(429).json({
+        error: 'Email temporarily blocked due to too many failed attempts',
+        code: 'AUTH_EMAIL_VERIFY_BLOCKED',
+        retryAfterSeconds: Math.ceil((emailState.blockedUntil.getTime() - now.getTime()) / 1000),
+      });
+      return;
+    }
+
+    const latestCode = await timeAsync(
+      'auth.email_login',
+      'prisma.authEmailCode.findFirst',
+      () => prisma.authEmailCode.findFirst({
+        where: {
+          email: normalizedEmail,
+          scene: 'login',
+          consumedAt: null,
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          codeHash: true,
+          expiresAt: true,
+        },
+      }),
+      { email: maskEmailAddress(normalizedEmail) }
+    );
+
+    if (!latestCode || latestCode.expiresAt.getTime() <= now.getTime() || !isTokenHashMatch(emailCode, latestCode.codeHash)) {
+      const state = await registerEmailVerifyFailure(normalizedEmail, now);
+      console.warn('[auth:email] login verify failed', {
+        email: maskEmailAddress(normalizedEmail),
+        blockedUntil: state.blockedUntil ? state.blockedUntil.toISOString() : null,
+      });
+      res.status(401).json({
+        error: 'Invalid or expired email code',
+        code: 'AUTH_EMAIL_CODE_INVALID_OR_EXPIRED',
+        blockedUntil: state.blockedUntil ? state.blockedUntil.toISOString() : null,
+      });
+      return;
+    }
+
+    const user = await timeAsync(
+      'auth.email_login',
+      'prisma.user.findFirst',
+      () => prisma.user.findFirst({
+        where: { email: normalizedEmail, isActive: true },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          avatarUrl: true,
+          email: true,
+          role: true,
+          regionCode: true,
+          birthYear: true,
+          ageBand: true,
+          guardianContactEmail: true,
+        },
+      }),
+      { email: maskEmailAddress(normalizedEmail) }
+    );
+
+    if (!user) {
+      await registerEmailVerifyFailure(normalizedEmail, now);
+      res.status(404).json({ error: 'Email is not registered', code: 'AUTH_EMAIL_NOT_REGISTERED' });
+      return;
+    }
+
+    await timeAsync(
+      'auth.email_login',
+      'prisma.authEmailCode.update',
+      () => prisma.authEmailCode.update({
+        where: { id: latestCode.id },
+        data: { consumedAt: now },
+        select: { id: true },
+      }),
+      { email: maskEmailAddress(normalizedEmail) }
+    );
+    await timeAsync(
+      'auth.email_login',
+      'clearEmailVerifyFailures',
+      () => clearEmailVerifyFailures(normalizedEmail),
+      { email: maskEmailAddress(normalizedEmail) }
+    );
+
+    if (await timeAsync(
+      'auth.email_login',
+      'accountEnforcement.assertAllowed',
+      () => denyForEnforcement(user.id, 'login', res),
+      { userId: user.id }
+    )) {
+      writeAuthAuditLog(req, {
+        action: 'auth.email_login',
+        outcome: 'blocked',
+        userId: user.id,
+        identifier: normalizedEmail,
+        errorCode: 'AUTH_ACCOUNT_ENFORCEMENT_BLOCKED',
+      });
+      return;
+    }
+
+    await timeAsync(
+      'auth.email_login',
+      'prisma.user.updateLastLoginAt',
+      () => prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: now },
+        select: { id: true },
+      }),
+      { userId: user.id }
+    );
+
+    scheduleTencentIMUserSyncBestEffort(user.id, 'bff-auth-email-login');
+    writeAuthAuditLog(req, {
+      action: 'auth.email_login',
+      outcome: 'success',
+      userId: user.id,
+      identifier: normalizedEmail,
+    });
+    await timeAsync(
+      'auth.email_login',
+      'issueAuthSuccessResponse',
+      () => issueAuthSuccessResponse(req, res, user),
+      { userId: user.id }
+    );
+  } catch (error) {
+    console.error('BFF email login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/auth/email/register', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, code, displayName, birthYear, regionCode, guardianContactEmail } = req.body as {
+      email?: string;
+      code?: string;
+      displayName?: string;
+      birthYear?: number | string;
+      regionCode?: string;
+      guardianContactEmail?: string;
+    };
+
+    const normalizedEmail = normalizeEmailAddress(email);
+    const emailCode = normalizeEmailCode(code);
+    const normalizedDisplayName = normalizeDisplayName(displayName);
+    const normalizedDisplayNameKey = normalizeDisplayNameForUniqueness(normalizedDisplayName);
+    const complianceRegion = regionalCompliance.resolveRegion(regionCode);
+    const compliancePolicy = regionalCompliance.policyFor(complianceRegion);
+    const normalizedBirthYear =
+      typeof birthYear === 'number'
+        ? birthYear
+        : Number.parseInt(String(birthYear || ''), 10);
+    const hasBirthYear = Number.isInteger(normalizedBirthYear);
+    const now = new Date();
+
+    if (!normalizedEmail || !emailCode || !normalizedDisplayName) {
+      res.status(400).json({ error: 'email, code, and displayName are required', code: 'AUTH_EMAIL_REGISTER_REQUIRED' });
+      return;
+    }
+
+    if (normalizedDisplayName.length < 2 || normalizedDisplayName.length > 24) {
+      res.status(400).json({ error: '昵称需要 2-24 个字符', code: 'AUTH_DISPLAY_NAME_INVALID' });
+      return;
+    }
+
+    if (compliancePolicy.ageDeclarationRequired && !hasBirthYear) {
+      res.status(400).json({ error: 'Birth year is required for this region', code: 'AUTH_BIRTH_YEAR_REQUIRED' });
+      return;
+    }
+
+    if (hasBirthYear) {
+      const currentYear = new Date().getUTCFullYear();
+      if (normalizedBirthYear < 1900 || normalizedBirthYear > currentYear) {
+        res.status(400).json({ error: 'Birth year is invalid', code: 'AUTH_BIRTH_YEAR_INVALID' });
+        return;
+      }
+      if (regionalCompliance.ageBandForBirthYear(normalizedBirthYear) === 'under_13') {
+        res.status(403).json({
+          error: 'You must meet the minimum age requirement to create an account',
+          code: 'AUTH_MINIMUM_AGE_NOT_MET',
+        });
+        return;
+      }
+    }
+
+    const emailState = await prisma.authEmailAuthState.findUnique({
+      where: { email: normalizedEmail },
+      select: { blockedUntil: true },
+    });
+
+    if (emailState?.blockedUntil && emailState.blockedUntil.getTime() > now.getTime()) {
+      res.status(429).json({
+        error: 'Email temporarily blocked due to too many failed attempts',
+        code: 'AUTH_EMAIL_VERIFY_BLOCKED',
+        retryAfterSeconds: Math.ceil((emailState.blockedUntil.getTime() - now.getTime()) / 1000),
+      });
+      return;
+    }
+
+    const [existingUser, latestCode] = await Promise.all([
+      prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: normalizedEmail },
+            { displayNameNormalized: normalizedDisplayNameKey },
+          ],
+        },
+        select: { id: true, email: true, displayNameNormalized: true },
+      }),
+      prisma.authEmailCode.findFirst({
+        where: {
+          email: normalizedEmail,
+          scene: 'register',
+          consumedAt: null,
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          codeHash: true,
+          expiresAt: true,
+        },
+      }),
+    ]);
+
+    if (existingUser) {
+      res.status(409).json({
+        error: existingUser.displayNameNormalized === normalizedDisplayNameKey ? '昵称已被使用' : 'Email is already registered',
+        code: existingUser.displayNameNormalized === normalizedDisplayNameKey ? 'AUTH_DISPLAY_NAME_TAKEN' : 'AUTH_EMAIL_ALREADY_REGISTERED',
+      });
+      return;
+    }
+
+    if (!latestCode || latestCode.expiresAt.getTime() <= now.getTime() || !isTokenHashMatch(emailCode, latestCode.codeHash)) {
+      const state = await registerEmailVerifyFailure(normalizedEmail, now);
+      console.warn('[auth:email] register verify failed', {
+        email: maskEmailAddress(normalizedEmail),
+        blockedUntil: state.blockedUntil ? state.blockedUntil.toISOString() : null,
+      });
+      res.status(401).json({
+        error: 'Invalid or expired email code',
+        code: 'AUTH_EMAIL_CODE_INVALID_OR_EXPIRED',
+        blockedUntil: state.blockedUntil ? state.blockedUntil.toISOString() : null,
+      });
+      return;
+    }
+
+    const internalUsername = await createInternalUsername(normalizedEmail.split('@')[0] || normalizedDisplayNameKey);
+    const user = await prisma.$transaction(async (tx) => {
+      await tx.authEmailCode.update({
+        where: { id: latestCode.id },
+        data: { consumedAt: now },
+        select: { id: true },
+      });
+
+      return tx.user.create({
+        data: {
+          username: internalUsername,
+          email: normalizedEmail,
+          passwordHash: await hashPassword(generateRefreshToken()),
+          displayName: normalizedDisplayName,
+          displayNameNormalized: normalizedDisplayNameKey,
+          displayNameStatus: 'pending',
+          isActive: true,
+          regionCode: complianceRegion,
+          birthYear: hasBirthYear ? normalizedBirthYear : null,
+          ageBand: hasBirthYear ? regionalCompliance.ageBandForBirthYear(normalizedBirthYear) : 'unknown',
+          guardianContactEmail: String(guardianContactEmail || '').trim() || null,
+          ageDeclaredAt: hasBirthYear ? now : null,
+        },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          displayName: true,
+          avatarUrl: true,
+          role: true,
+          regionCode: true,
+          birthYear: true,
+          ageBand: true,
+          guardianContactEmail: true,
+        },
+      });
+    });
+
+    await clearEmailVerifyFailures(normalizedEmail);
+    await createProfileModerationJob(
+      user.id,
+      'display_name',
+      normalizedDisplayName,
+      normalizedDisplayNameKey
+    );
+    await syncTencentIMUserBestEffort(user.id, 'bff-auth-email-register');
+    writeAuthAuditLog(req, {
+      action: 'auth.email_register',
+      outcome: 'success',
+      userId: user.id,
+      identifier: normalizedEmail,
+    });
+    res.status(201);
+    await issueAuthSuccessResponse(req, res, user);
+  } catch (error) {
+    console.error('BFF email register error:', error);
+    writeAuthAuditLog(req, {
+      action: 'auth.email_register',
+      outcome: 'failed',
+      errorCode: 'AUTH_INTERNAL_ERROR',
+    });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/auth/sms/send', async (req: Request, res: Response): Promise<void> => {
   try {
     const { phone, scene } = req.body as { phone?: string; scene?: string };
@@ -3891,7 +4482,7 @@ router.post('/auth/sms/login', async (req: Request, res: Response): Promise<void
       select: { id: true },
     });
 
-    await syncTencentIMUserBestEffort(user.id, 'bff-auth-sms-login');
+    scheduleTencentIMUserSyncBestEffort(user.id, 'bff-auth-sms-login');
     await issueAuthSuccessResponse(req, res, user);
   } catch (error) {
     console.error('BFF sms login error:', error);
@@ -3961,7 +4552,7 @@ router.post('/auth/firebase-phone/login', async (req: Request, res: Response): P
     });
 
     await clearSmsVerifyFailures(phoneNumber);
-    await syncTencentIMUserBestEffort(user.id, 'bff-auth-firebase-phone-login');
+    scheduleTencentIMUserSyncBestEffort(user.id, 'bff-auth-firebase-phone-login');
     writeAuthAuditLog(req, {
       action: 'auth.firebase-phone-login',
       outcome: 'success',
@@ -4976,6 +5567,7 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
         : {}),
       ...(eventID
         ? {
+            content: { not: { contains: NEWS_MARKER } },
             OR: [
               { eventId: eventID },
               { boundEventIds: { has: eventID } },
@@ -5960,6 +6552,538 @@ router.get('/feed/experiments/summary', optionalAuth, async (req: Request, res: 
     });
   } catch (error) {
     console.error('BFF feed experiments summary error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+type NewsArticleRow = {
+  id: string;
+  authorId: string | null;
+  author?: BasicUser | null;
+  category: string;
+  source: string;
+  title: string;
+  summary: string;
+  body: string;
+  link: string | null;
+  coverImageUrl: string | null;
+  boundDjIds: string[];
+  boundBrandIds: string[];
+  boundEventIds: string[];
+  commentCount?: number | null;
+  publishedAt: Date;
+};
+
+const mapNewsArticle = (article: NewsArticleRow) => ({
+  id: article.id,
+  category: article.category,
+  source: article.source,
+  title: article.title,
+  summary: article.summary,
+  body: article.body,
+  link: article.link,
+  coverImageURL: article.coverImageUrl,
+  publishedAt: article.publishedAt.toISOString(),
+  replyCount: article.commentCount ?? 0,
+  authorID: article.authorId || '',
+  authorUsername: article.author?.username || 'raver',
+  authorName: article.author?.displayName || article.author?.username || 'Raver',
+  authorAvatarURL: article.author?.avatarUrl || null,
+  legacyEventID: null,
+  boundDjIDs: article.boundDjIds,
+  boundBrandIDs: article.boundBrandIds,
+  boundEventIDs: article.boundEventIds,
+});
+
+const selectNewsArticleAuthor = {
+  id: true,
+  username: true,
+  displayName: true,
+  avatarUrl: true,
+} as const;
+
+type NewsCommentRow = {
+  id: string;
+  articleId: string;
+  parentCommentId: string | null;
+  rootCommentId: string | null;
+  depth: number;
+  user: BasicUser;
+  replyToUser: BasicUser | null;
+  content: string;
+  createdAt: Date;
+};
+
+const mapNewsComment = (comment: NewsCommentRow, followingSet: Set<string>) => ({
+  id: comment.id,
+  postID: comment.articleId,
+  parentCommentID: comment.parentCommentId ?? null,
+  rootCommentID: comment.rootCommentId ?? null,
+  depth: comment.depth ?? 0,
+  author: toUserSummary(comment.user, followingSet.has(comment.user.id)),
+  replyToAuthor: comment.replyToUser
+    ? toUserSummary(comment.replyToUser, followingSet.has(comment.replyToUser.id))
+    : null,
+  content: comment.content,
+  createdAt: comment.createdAt,
+});
+
+const normalizeNewsParentCommentId = (body: {
+  parentCommentID?: unknown;
+  parentCommentId?: unknown;
+  replyToCommentID?: unknown;
+  replyToCommentId?: unknown;
+}): string | null => {
+  const rawParentID =
+    body.parentCommentID ??
+    body.parentCommentId ??
+    body.replyToCommentID ??
+    body.replyToCommentId;
+  const parentCommentID = typeof rawParentID === 'string' ? rawParentID.trim() : '';
+  return parentCommentID.length > 0 ? parentCommentID : null;
+};
+
+const normalizeNewsCategory = (value: unknown): string => {
+  const normalized = String(value || 'community').trim().toLowerCase();
+  return ['festival', 'scene', 'gear', 'industry', 'community'].includes(normalized) ? normalized : 'community';
+};
+
+const normalizeNewsDraft = (body: Record<string, unknown>) => {
+  const title = String(body.title || '').trim().slice(0, 180);
+  const summary = String(body.summary || '').trim().slice(0, 500);
+  const articleBody = String(body.body ?? body.content ?? '').trim();
+  const source = String(body.source || 'Raver').trim().slice(0, 80) || 'Raver';
+  const link = typeof body.link === 'string' && body.link.trim() ? body.link.trim().slice(0, 2000) : null;
+  const coverImageUrl =
+    typeof body.coverImageURL === 'string' && body.coverImageURL.trim()
+      ? body.coverImageURL.trim()
+      : typeof body.coverImageUrl === 'string' && body.coverImageUrl.trim()
+        ? body.coverImageUrl.trim()
+        : null;
+  const publishedAtInput = body.publishedAt ?? body.published_at ?? body.displayPublishedAt ?? body.display_published_at;
+  const parsedPublishedAt = parseFeedPostDateInput(publishedAtInput);
+
+  return {
+    title,
+    summary,
+    body: articleBody,
+    source,
+    link,
+    coverImageUrl,
+    category: normalizeNewsCategory(body.category),
+    boundDjIds: normalizePostBindingIDs(body.boundDjIDs ?? body.boundDjIds ?? body.boundDJIDs ?? body.bound_dj_ids),
+    boundBrandIds: normalizePostBindingIDs(body.boundBrandIDs ?? body.boundBrandIds ?? body.bound_brand_ids),
+    boundEventIds: normalizePostBindingIDs(body.boundEventIDs ?? body.boundEventIds ?? body.bound_event_ids),
+    publishedAt: parsedPublishedAt,
+  };
+};
+
+router.get('/news/search', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const viewerId = authReq.user?.userId;
+    const query = String(req.query.q || '').trim();
+    const limit = normalizeLimit(req.query.limit, 20, 50);
+
+    if (!query) {
+      res.json({ items: [], nextCursor: null });
+      return;
+    }
+
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
+    const rows = await prisma.newsArticle.findMany({
+      where: {
+        visibility: 'public',
+        authorId: blockedRelationUserIds.size > 0 ? { notIn: Array.from(blockedRelationUserIds) } : undefined,
+        OR: [
+          { title: { contains: query, mode: 'insensitive' } },
+          { summary: { contains: query, mode: 'insensitive' } },
+          { body: { contains: query, mode: 'insensitive' } },
+          { source: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      include: { author: { select: selectNewsArticleAuthor } },
+      orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+    });
+
+    res.json({ items: rows.map(mapNewsArticle), nextCursor: null });
+  } catch (error) {
+    console.error('BFF news search error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/news/bound', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const viewerId = authReq.user?.userId;
+    const eventID =
+      typeof req.query.eventID === 'string'
+        ? req.query.eventID.trim()
+        : typeof req.query.eventId === 'string'
+          ? req.query.eventId.trim()
+          : '';
+    const djID =
+      typeof req.query.djID === 'string'
+        ? req.query.djID.trim()
+        : typeof req.query.djId === 'string'
+          ? req.query.djId.trim()
+          : '';
+    const festivalID =
+      typeof req.query.festivalID === 'string'
+        ? req.query.festivalID.trim()
+        : typeof req.query.festivalId === 'string'
+          ? req.query.festivalId.trim()
+          : typeof req.query.brandID === 'string'
+            ? req.query.brandID.trim()
+            : typeof req.query.brandId === 'string'
+              ? req.query.brandId.trim()
+              : '';
+
+    if (!eventID && !djID && !festivalID) {
+      res.status(400).json({ error: 'At least one binding identifier is required' });
+      return;
+    }
+
+    const limit = normalizeLimit(req.query.limit, 20, 50);
+    const cursorDate = parseCursorDate(req.query.cursor);
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
+
+    const where = {
+      visibility: 'public' as const,
+      ...(eventID ? { boundEventIds: { has: eventID } } : {}),
+      ...(djID ? { boundDjIds: { has: djID } } : {}),
+      ...(festivalID ? { boundBrandIds: { has: festivalID } } : {}),
+      ...(blockedRelationUserIds.size > 0
+        ? {
+            authorId: { notIn: Array.from(blockedRelationUserIds) },
+          }
+        : {}),
+      ...(cursorDate
+        ? {
+            publishedAt: {
+              lt: cursorDate,
+            },
+          }
+        : {}),
+    };
+
+    const sourceArticles = await prisma.newsArticle.findMany({
+      where,
+      include: { author: { select: selectNewsArticleAuthor } },
+      orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+
+    const hasMore = sourceArticles.length > limit;
+    const pageArticles = hasMore ? sourceArticles.slice(0, limit) : sourceArticles;
+
+    res.json({
+      items: pageArticles.map(mapNewsArticle),
+      nextCursor: hasMore ? pageArticles[pageArticles.length - 1]?.publishedAt.toISOString() ?? null : null,
+    });
+  } catch (error) {
+    console.error('BFF bound news feed error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/news/:id/comments', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const viewerId = (req as BFFAuthRequest).user?.userId;
+    const articleId = String(req.params.id || '').trim();
+    const article = await prisma.newsArticle.findFirst({
+      where: { id: articleId, visibility: 'public' },
+      select: { id: true },
+    });
+    if (!article) {
+      res.status(404).json({ error: 'News article not found' });
+      return;
+    }
+
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
+    const comments = await prisma.newsComment.findMany({
+      where: { articleId },
+      include: {
+        user: { select: selectNewsArticleAuthor },
+        replyToUser: { select: selectNewsArticleAuthor },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const visibleComments = comments.filter(
+      (comment) =>
+        !blockedRelationUserIds.has(comment.user.id) &&
+        (!comment.replyToUser || !blockedRelationUserIds.has(comment.replyToUser.id))
+    );
+    const authorIds = Array.from(
+      new Set(
+        visibleComments
+          .flatMap((comment) => [comment.user.id, comment.replyToUser?.id ?? null])
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+    const followingSet = await buildFollowingMap(viewerId, authorIds);
+
+    res.json(visibleComments.map((comment) => mapNewsComment(comment, followingSet)));
+  } catch (error) {
+    console.error('BFF news comments error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/news/:id/comments', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+    if (await denyForEnforcement(userId, 'comment_create', res)) return;
+
+    const articleId = String(req.params.id || '').trim();
+    const body = (req.body ?? {}) as {
+      content?: unknown;
+      parentCommentID?: unknown;
+      parentCommentId?: unknown;
+      replyToCommentID?: unknown;
+      replyToCommentId?: unknown;
+    };
+    const content = String(body.content || '').trim();
+    if (!content) {
+      res.status(400).json({ error: 'content is required' });
+      return;
+    }
+
+    const normalizedParentCommentID = normalizeNewsParentCommentId(body);
+    const result = await prisma.$transaction(async (tx) => {
+      const article = await tx.newsArticle.findFirst({
+        where: { id: articleId, visibility: 'public' },
+        select: { id: true, authorId: true, title: true },
+      });
+      if (!article) {
+        return { status: 404 as const, error: 'News article not found' };
+      }
+
+      let parentComment:
+        | {
+            id: string;
+            articleId: string;
+            userId: string;
+            rootCommentId: string | null;
+            depth: number;
+          }
+        | null = null;
+      if (normalizedParentCommentID) {
+        parentComment = await tx.newsComment.findUnique({
+          where: { id: normalizedParentCommentID },
+          select: {
+            id: true,
+            articleId: true,
+            userId: true,
+            rootCommentId: true,
+            depth: true,
+          },
+        });
+        if (!parentComment || parentComment.articleId !== articleId) {
+          return { status: 400 as const, error: 'parentCommentID is invalid' };
+        }
+      }
+
+      const rootCommentId = parentComment ? parentComment.rootCommentId ?? parentComment.id : null;
+      const depth = parentComment ? Math.min((parentComment.depth ?? 0) + 1, 2) : 0;
+      const replyToUserId = parentComment?.userId ?? null;
+      const comment = await tx.newsComment.create({
+        data: {
+          articleId,
+          userId,
+          content,
+          parentCommentId: parentComment?.id ?? null,
+          rootCommentId,
+          depth,
+          replyToUserId,
+        },
+        include: {
+          user: { select: selectNewsArticleAuthor },
+          replyToUser: { select: selectNewsArticleAuthor },
+        },
+      });
+      await tx.newsArticle.update({
+        where: { id: articleId },
+        data: { commentCount: { increment: 1 } },
+        select: { id: true },
+      });
+
+      return { status: 201 as const, article, comment };
+    });
+
+    if ('error' in result) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+
+    if (result.article.authorId && result.article.authorId !== userId) {
+      publishCommunityInteractionSafely({
+        targetUserIds: [result.article.authorId],
+        title: '资讯互动',
+        body: '有人评论了你的资讯',
+        deeplink: `raver://news/${articleId}`,
+        metadata: {
+          source: 'news_comment',
+          actorUserID: userId,
+          commentID: result.comment.id,
+          articleID: articleId,
+          articleTitle: result.article.title,
+          commentPreview: truncateText(result.comment.content, 80) || null,
+        },
+        dedupeKey: `news:comment:${result.comment.id}:article_owner:${result.article.authorId}`,
+      });
+    }
+
+    if (
+      result.comment.replyToUser &&
+      result.comment.replyToUser.id !== userId &&
+      result.comment.replyToUser.id !== result.article.authorId
+    ) {
+      publishCommunityInteractionSafely({
+        targetUserIds: [result.comment.replyToUser.id],
+        title: '资讯互动',
+        body: '有人回复了你的评论',
+        deeplink: `raver://news/${articleId}`,
+        metadata: {
+          source: 'news_comment_reply',
+          actorUserID: userId,
+          commentID: result.comment.id,
+          articleID: articleId,
+          commentPreview: truncateText(result.comment.content, 80) || null,
+        },
+        dedupeKey: `news:comment:${result.comment.id}:reply_to:${result.comment.replyToUser.id}`,
+      });
+    }
+
+    res.status(201).json(mapNewsComment(result.comment, new Set<string>()));
+  } catch (error) {
+    console.error('BFF add news comment error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/news/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const articleId = String(req.params.id || '').trim();
+    const article = await prisma.newsArticle.findFirst({
+      where: { id: articleId, visibility: 'public' },
+      include: { author: { select: selectNewsArticleAuthor } },
+    });
+    if (!article) {
+      res.status(404).json({ error: 'News article not found' });
+      return;
+    }
+    res.json(mapNewsArticle(article));
+  } catch (error) {
+    console.error('BFF fetch news article error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/news', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const viewerId = authReq.user?.userId;
+    const limit = normalizeLimit(req.query.limit, 20, 50);
+    const cursorDate = parseCursorDate(req.query.cursor);
+    const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
+    const rows = await prisma.newsArticle.findMany({
+      where: {
+        visibility: 'public',
+        authorId: blockedRelationUserIds.size > 0 ? { notIn: Array.from(blockedRelationUserIds) } : undefined,
+        ...(cursorDate ? { publishedAt: { lt: cursorDate } } : {}),
+      },
+      include: { author: { select: selectNewsArticleAuthor } },
+      orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    res.json({
+      items: pageRows.map(mapNewsArticle),
+      nextCursor: hasMore ? pageRows[pageRows.length - 1]?.publishedAt.toISOString() ?? null : null,
+    });
+  } catch (error) {
+    console.error('BFF news feed error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/news', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (await denyForEnforcement(userId, 'post_create', res)) return;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const draft = normalizeNewsDraft(body);
+    if (draft.publishedAt === 'invalid') {
+      res.status(400).json({ error: 'publishedAt is invalid' });
+      return;
+    }
+    if (!draft.title && !draft.body) {
+      res.status(400).json({ error: 'title or body is required' });
+      return;
+    }
+
+    const viewerRole = authReq.user?.role ?? null;
+    const submissionPayload = {
+      ...body,
+      title: draft.title,
+      summary: draft.summary,
+      body: draft.body,
+      source: draft.source,
+      category: draft.category,
+      link: draft.link,
+      coverImageURL: draft.coverImageUrl,
+      boundDjIDs: draft.boundDjIds,
+      boundBrandIDs: draft.boundBrandIds,
+      boundEventIDs: draft.boundEventIds,
+      publishedAt: (draft.publishedAt || new Date()).toISOString(),
+    };
+    const complianceError = contentCompliance.validationError('news', submissionPayload);
+    if (complianceError) {
+      res.status(400).json({ error: complianceError });
+      return;
+    }
+
+    if (!canBypassContentReview(viewerRole)) {
+      const submission = await createPendingContentSubmission({
+        submitterId: userId,
+        entityType: 'news',
+        title: draft.title || newsTitleFromContent(draft.body),
+        payload: submissionPayload,
+      });
+      acceptedSubmission(res, submission, '资讯已提交审核，管理员审核通过后才会发布');
+      return;
+    }
+
+    const created = await prisma.newsArticle.create({
+      data: {
+        authorId: userId,
+        category: draft.category,
+        source: draft.source,
+        title: draft.title || newsTitleFromContent(draft.body),
+        summary: draft.summary,
+        body: draft.body,
+        link: draft.link,
+        coverImageUrl: draft.coverImageUrl,
+        visibility: 'public',
+        boundDjIds: draft.boundDjIds,
+        boundBrandIds: draft.boundBrandIds,
+        boundEventIds: draft.boundEventIds,
+        publishedAt: draft.publishedAt || new Date(),
+      },
+      include: { author: { select: selectNewsArticleAuthor } },
+    });
+    res.status(201).json(mapNewsArticle(created));
+  } catch (error) {
+    console.error('BFF create news article error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -8595,9 +9719,14 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
       .map((line) => line.trim())
       .includes('#RAVER_ID');
 
-    if (!canBypassContentReview(viewerRole) && (isNewsSubmission || isIDSubmission)) {
-      const entityType = isNewsSubmission ? 'news' : 'id';
-      const title = isNewsSubmission ? newsTitleFromContent(trimmed) : idTitleFromContent(trimmed);
+    if (isNewsSubmission) {
+      res.status(400).json({ error: 'News must be submitted through /v1/news' });
+      return;
+    }
+
+    if (!canBypassContentReview(viewerRole) && isIDSubmission) {
+      const entityType = 'id';
+      const title = idTitleFromContent(trimmed);
       const idPayload = isIDSubmission ? idPayloadFromContent(trimmed) : {};
       const submissionPayload = {
         ...body,
@@ -8625,7 +9754,7 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
       acceptedSubmission(
         res,
         submission,
-        isNewsSubmission ? '资讯已提交审核，管理员审核通过后才会发布' : 'ID 已提交审核，管理员审核通过后才会发布'
+        'ID 已提交审核，管理员审核通过后才会发布'
       );
       return;
     }
