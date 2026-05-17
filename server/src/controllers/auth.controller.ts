@@ -4,6 +4,7 @@ import OSS from 'ali-oss';
 import crypto from 'crypto';
 import { hashPassword, comparePassword, generateToken } from '../utils/auth';
 import { tencentIMUserService } from '../modules/im';
+import { mediaAssetService } from '../services/media-asset.service';
 
 const prisma = new PrismaClient();
 
@@ -62,7 +63,7 @@ const extensionForMimeType = (mimeType: string): string => {
 const uploadUserAvatarToOss = async (
   userId: string,
   file: Express.Multer.File
-): Promise<{ url: string; objectKey: string }> => {
+): Promise<{ assetId: string; url: string; objectKey: string }> => {
   if (!ossClient) {
     throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
   }
@@ -75,8 +76,25 @@ const uploadUserAvatarToOss = async (
       'Cache-Control': 'public, max-age=31536000, immutable',
     },
   });
+  const url = result.url || publicOssUrlForObjectKey(objectKey);
+  const asset = await mediaAssetService.register({
+    ownerType: 'user',
+    ownerId: userId,
+    purpose: 'avatar',
+    provider: 'oss',
+    objectKey,
+    url,
+    mimeType: file.mimetype,
+    sizeBytes: file.size,
+    uploadedById: userId,
+    metadata: {
+      originalName: file.originalname,
+      source: 'api/auth/avatar',
+    },
+  });
   return {
-    url: result.url || publicOssUrlForObjectKey(objectKey),
+    assetId: asset.id,
+    url,
     objectKey,
   };
 };
@@ -432,6 +450,11 @@ export const uploadAvatar = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
+    const previousUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { avatarUrl: true },
+    });
+
     const upload = await uploadUserAvatarToOss(userId, file);
     const avatarUrl = upload.url;
 
@@ -457,6 +480,10 @@ export const uploadAvatar = async (req: Request, res: Response): Promise<void> =
         createdAt: true,
       },
     });
+
+    if (previousUser?.avatarUrl && previousUser.avatarUrl !== avatarUrl) {
+      await mediaAssetService.markReplacedByUrl(previousUser.avatarUrl);
+    }
 
     await prisma.userProfileModerationJob.create({
       data: {

@@ -8,6 +8,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -105,10 +106,45 @@ model User {
   accountEnforcements              AccountEnforcement[]
   enforcementAppeals               EnforcementAppeal[]
   accountDeletionRequests          AccountDeletionRequest[]
+  mediaAssets                      MediaAsset[]                      @relation("MediaAssetUploader")
 
   @@index([regionCode])
   @@index([ageBand])
   @@map("users")
+}
+
+model MediaAsset {
+  id             String    @id @default(uuid())
+  ownerType      String    @map("owner_type")
+  ownerId        String?   @map("owner_id")
+  purpose        String
+  provider       String
+  bucket         String?
+  objectKey      String?   @map("object_key")
+  url            String    @db.Text
+  mimeType       String?   @map("mime_type")
+  sizeBytes      Int?      @map("size_bytes")
+  width          Int?
+  height         Int?
+  status         String    @default("active")
+  metadata       Json?
+  uploadedById   String?   @map("uploaded_by_id")
+  purgeAttempts  Int       @default(0) @map("purge_attempts")
+  purgeNextRunAt DateTime  @default(now()) @map("purge_next_run_at")
+  purgeLastError String?   @map("purge_last_error") @db.Text
+  purgedAt       DateTime? @map("purged_at")
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  uploadedBy User? @relation("MediaAssetUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([ownerType, ownerId, purpose])
+  @@index([uploadedById, createdAt])
+  @@index([provider, objectKey])
+  @@index([status, createdAt])
+  @@index([status, purgeNextRunAt])
+  @@map("media_assets")
 }
 
 model AccountDeletionRequest {
@@ -1086,7 +1122,7 @@ model Follow {
 
 model DJSet {
   id              String    @id @default(uuid())
-  djId            String    @map("dj_id")
+  djId            String?   @map("dj_id")
   coDjIds         String[]  @default([]) @map("co_dj_ids")
   customDjNames   String[]  @default([]) @map("custom_dj_names")
   uploadedById    String?   @map("uploaded_by_id")
@@ -1097,6 +1133,7 @@ model DJSet {
   descriptionI18n Json?     @map("description_i18n")
   thumbnailUrl    String?   @map("thumbnail_url")
   videoUrl        String    @map("video_url")
+  videoAuthorName String?   @map("video_author_name")
   platform        String // "youtube" or "bilibili"
   videoId         String    @map("video_id") // Platform-specific video ID
   duration        Int? // Duration in seconds
@@ -1109,7 +1146,7 @@ model DJSet {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  dj         DJ          @relation(fields: [djId], references: [id], onDelete: Cascade)
+  dj         DJ?         @relation(fields: [djId], references: [id], onDelete: SetNull)
   uploader   User?       @relation("UserUploadedSets", fields: [uploadedById], references: [id], onDelete: SetNull)
   tracks     Track[]
   tracklists Tracklist[]

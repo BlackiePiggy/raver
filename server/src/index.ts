@@ -29,6 +29,8 @@ import contentSubmissionRoutes from './routes/content-submission.routes';
 import djEnrichmentRoutes from './routes/dj-enrichment.routes';
 import { adminRoutes } from './modules/admin';
 import { startDjEnrichmentWorker } from './services/dj-enrichment.service';
+import { startMediaAssetPurgeScheduler } from './services/media-asset-purge.scheduler';
+import { isObjectStorageConfigured } from './services/media-storage.service';
 import {
   registerNotificationCenterAPNSHandler,
   startNotificationEventCountdownScheduler,
@@ -41,6 +43,7 @@ import {
 
 const app: Express = express();
 const port = process.env.PORT || 3901;
+const isProduction = process.env.NODE_ENV === 'production';
 
 const detectProxyEnv = (): string | null => {
   const keys = [
@@ -82,7 +85,9 @@ app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json({ limit: '512kb', verify: captureRawBody }));
 app.use(express.urlencoded({ extended: true, limit: '512kb', verify: captureRawBody }));
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+if (!isProduction || process.env.ALLOW_LOCAL_UPLOAD_STATIC === 'true') {
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+}
 
 // Health check
 app.get('/health', (_req: Request, res: Response) => {
@@ -155,6 +160,11 @@ app.use((err: Error, _req: Request, res: Response) => {
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
+if (isProduction && !isObjectStorageConfigured()) {
+  console.error('❌ OSS is required in production. Set OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET.');
+  process.exit(1);
+}
+
 app.listen(port, () => {
   const proxyHint = detectProxyEnv();
   if (proxyHint) {
@@ -172,4 +182,5 @@ app.listen(port, () => {
   startNotificationFollowedBrandUpdateScheduler();
   startNotificationOutboxWorker();
   startDjEnrichmentWorker();
+  startMediaAssetPurgeScheduler();
 });

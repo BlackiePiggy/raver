@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
 import OSS from 'ali-oss';
+import axios, { AxiosRequestConfig } from 'axios';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
@@ -37,6 +38,11 @@ import {
 } from '../utils/event-timezone';
 import { regionalCompliance, type RegionalComplianceUser } from '../config/regional-compliance';
 import { contentCompliance } from '../utils/content-compliance';
+import {
+  saveBufferToLocalUploads,
+  shouldAllowLocalUploadFallback,
+} from '../services/media-storage.service';
+import { mediaAssetService } from '../services/media-asset.service';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -1290,6 +1296,7 @@ const ossEndpoint = cleanEnv(process.env.OSS_ENDPOINT);
 const ossPostsPrefix = (cleanEnv(process.env.OSS_POSTS_PREFIX) || 'posts').replace(/^\/+|\/+$/g, '');
 const ossEventsPrefix = (cleanEnv(process.env.OSS_EVENTS_PREFIX) || 'wen-jasonlee/events').replace(/^\/+|\/+$/g, '');
 const ossDjsPrefix = (cleanEnv(process.env.OSS_DJS_PREFIX) || 'wen-jasonlee/djs').replace(/^\/+|\/+$/g, '');
+const ossDjSetsPrefix = (cleanEnv(process.env.OSS_DJ_SETS_PREFIX) || 'wen-jasonlee/dj-sets').replace(/^\/+|\/+$/g, '');
 const ossRatingsPrefix = (cleanEnv(process.env.OSS_RATINGS_PREFIX) || 'wen-jasonlee/ratings').replace(/^\/+|\/+$/g, '');
 const ossWikiBrandsPrefix = (cleanEnv(process.env.OSS_WIKI_BRANDS_PREFIX) || 'wiki/brands').replace(/^\/+|\/+$/g, '');
 const cozeWorkflowRunUrl = cleanEnv(process.env.COZE_WORKFLOW_RUN_URL) || 'https://dxy8zryvs2.coze.site/run';
@@ -1313,6 +1320,24 @@ const postMediaOssClient =
         endpoint: ossEndpoint || undefined,
       })
     : null;
+
+const youtubeProxyUrl = (process.env.YOUTUBE_PROXY_URL || process.env.YOUTUBE_HTTPS_PROXY || 'http://127.0.0.1:7897').trim();
+
+const youtubeAxiosProxyConfig = (): Pick<AxiosRequestConfig, 'proxy'> => {
+  if (!youtubeProxyUrl) return {};
+  try {
+    const parsed = new URL(youtubeProxyUrl);
+    return {
+      proxy: {
+        protocol: parsed.protocol.replace(':', ''),
+        host: parsed.hostname,
+        port: Number(parsed.port || 80),
+      },
+    };
+  } catch (_error) {
+    return {};
+  }
+};
 
 const looksLikePostMediaName = (name: string, kind: 'image' | 'video'): boolean => {
   const lower = name.trim().toLowerCase();
@@ -1859,6 +1884,25 @@ const buildDJMediaObjectKey = (
   return `${ossDjsPrefix}/${safeDJId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
 };
 
+const buildDJSetMediaObjectKey = (
+  ownerKey: string,
+  fileName: string,
+  mimeType: string,
+  usage: 'thumbnail'
+): string => {
+  const rawExt = path.extname(fileName || '').toLowerCase();
+  const mimeExt = mimeType.includes('png')
+    ? '.png'
+    : mimeType.includes('webp')
+      ? '.webp'
+      : mimeType.includes('gif')
+        ? '.gif'
+        : '.jpg';
+  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
+  const safeOwnerKey = sanitizeOssPathSegment(ownerKey) || 'unknown-set';
+  return `${ossDjSetsPrefix}/${safeOwnerKey}/${usage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+};
+
 const buildWikiBrandMediaObjectKey = (
   brandId: string | null,
   fileName: string,
@@ -1882,7 +1926,7 @@ const buildWikiBrandMediaObjectKey = (
 const uploadRemoteDJAvatarToOss = async (
   djId: string,
   sourceUrl: string
-): Promise<{ url: string; objectKey: string } | null> => {
+): Promise<{ assetId: string; url: string; objectKey: string } | null> => {
   if (!postMediaOssClient) return null;
   const trimmed = sourceUrl.trim();
   if (!trimmed) return null;
@@ -1914,14 +1958,98 @@ const uploadRemoteDJAvatarToOss = async (
       },
     });
 
+    const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+    const asset = await mediaAssetService.register({
+      ownerType: 'dj',
+      ownerId: djId,
+      purpose: 'avatar',
+      provider: 'oss',
+      objectKey,
+      url,
+      mimeType,
+      sizeBytes: buffer.length,
+      metadata: {
+        sourceUrl: trimmed,
+        source: 'remote-dj-avatar-mirror',
+      },
+    });
     return {
-      url: normalizeUploadedOssUrl(putResult.url, objectKey),
+      assetId: asset.id,
+      url,
       objectKey,
     };
   } catch (_error) {
     return null;
   } finally {
     clearTimeout(timeout);
+  }
+};
+
+const uploadRemoteImageToDJSetOss = async (
+  ownerKey: string,
+  sourceUrl: string
+): Promise<{ assetId: string; url: string; objectKey: string }> => {
+  if (!postMediaOssClient) throw new Error(ossConfigMissingMessage);
+  const trimmed = sourceUrl.trim();
+  if (!trimmed) throw new Error('Thumbnail URL is empty');
+
+  try {
+    const response = await axios.get<ArrayBuffer>(trimmed, {
+      responseType: 'arraybuffer',
+      timeout: Number(process.env.DJ_SET_THUMBNAIL_FETCH_TIMEOUT_MS || 3500),
+      headers: {
+        Accept: 'image/*',
+      },
+      maxContentLength: 10 * 1024 * 1024,
+      maxBodyLength: 10 * 1024 * 1024,
+      ...youtubeAxiosProxyConfig(),
+    });
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`Thumbnail fetch failed with HTTP ${response.status}`);
+    }
+
+    const mimeType = String(response.headers['content-type'] || 'image/jpeg').toLowerCase();
+    if (!mimeType.startsWith('image/')) throw new Error(`Thumbnail response is not an image (${mimeType})`);
+
+    const buffer = Buffer.from(response.data);
+    if (buffer.length === 0) throw new Error('Thumbnail response is empty');
+
+    const objectKey = buildDJSetMediaObjectKey(ownerKey, path.basename(trimmed.split('?')[0] || 'thumbnail.jpg'), mimeType, 'thumbnail');
+    const putResult = await postMediaOssClient.put(objectKey, buffer, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+
+    const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+    const asset = await mediaAssetService.register({
+      ownerType: 'dj_set',
+      ownerId: ownerKey.startsWith('draft-') ? null : ownerKey,
+      purpose: 'thumbnail',
+      provider: 'oss',
+      objectKey,
+      url,
+      mimeType,
+      sizeBytes: buffer.length,
+      uploadedById: ownerKey.startsWith('draft-') ? ownerKey.slice('draft-'.length) : null,
+      metadata: {
+        sourceUrl: trimmed,
+        source: 'remote-dj-set-thumbnail-mirror',
+      },
+    });
+    return {
+      assetId: asset.id,
+      url,
+      objectKey,
+    };
+  } catch (error) {
+    const message = axios.isAxiosError(error)
+      ? `${error.code || 'ERR'} ${error.message}`
+      : error instanceof Error
+        ? error.message
+        : String(error);
+    throw new Error(`Failed to mirror DJ set thumbnail to OSS: ${message}`);
   }
 };
 
@@ -2185,8 +2313,9 @@ const deleteWikiBrandOssFolder = async (brandId: string): Promise<void> => {
 const uploadPostMediaToOss = async (
   file: Express.Multer.File,
   kind: 'image' | 'video',
-  scopeKey?: string | null
-): Promise<{ url: string; fileName: string; mimeType: string; size: number }> => {
+  scopeKey?: string | null,
+  uploadedById?: string | null
+): Promise<{ assetId: string; url: string; fileName: string; mimeType: string; size: number }> => {
   if (!postMediaOssClient) {
     throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
   }
@@ -2211,8 +2340,26 @@ const uploadPostMediaToOss = async (
     await fs.promises.unlink(file.path).catch(() => undefined);
   }
 
+  const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const asset = await mediaAssetService.register({
+    ownerType: 'post',
+    ownerId: scopeKey || null,
+    purpose: kind,
+    provider: 'oss',
+    objectKey,
+    url,
+    mimeType,
+    sizeBytes: file.size,
+    uploadedById: uploadedById || null,
+    metadata: {
+      originalName: file.originalname,
+      source: kind === 'image' ? 'v1/feed/upload-image' : 'v1/feed/upload-video',
+    },
+  });
+
   return {
-    url: normalizeUploadedOssUrl(putResult.url, objectKey),
+    assetId: asset.id,
+    url,
     fileName: path.basename(objectKey),
     mimeType,
     size: file.size,
@@ -2222,11 +2369,12 @@ const uploadPostMediaToOss = async (
 const uploadEventMediaToOss = async (
   file: Express.Multer.File,
   eventId: string,
-  usage: string | null
-): Promise<{ url: string; fileName: string; mimeType: string; size: number }> => {
+  usage: string | null,
+  uploadedById?: string | null
+): Promise<{ assetId: string; url: string; fileName: string; mimeType: string; size: number }> => {
   if (!postMediaOssClient) {
     await fs.promises.unlink(file.path).catch(() => undefined);
-    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+    throw new Error(ossConfigMissingMessage);
   }
 
   const mimeType = file.mimetype || 'image/jpeg';
@@ -2244,12 +2392,82 @@ const uploadEventMediaToOss = async (
     await fs.promises.unlink(file.path).catch(() => undefined);
   }
 
+  const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const asset = await mediaAssetService.register({
+    ownerType: 'event',
+    ownerId: eventId,
+    purpose: usage || 'image',
+    provider: 'oss',
+    objectKey,
+    url,
+    mimeType,
+    sizeBytes: file.size,
+    uploadedById: uploadedById || null,
+    metadata: {
+      originalName: file.originalname,
+      source: 'v1/events/upload-image',
+    },
+  });
+
   return {
-    url: normalizeUploadedOssUrl(putResult.url, objectKey),
+    assetId: asset.id,
+    url,
     fileName: path.basename(objectKey),
     mimeType,
     size: file.size,
   };
+};
+
+const saveUploadedFileToLocalMediaAsset = async (
+  file: Express.Multer.File,
+  input: {
+    ownerType: string;
+    ownerId?: string | null;
+    purpose: string;
+    uploadedById?: string | null;
+    localDir: string;
+    publicSubdir: string;
+    source: string;
+  }
+): Promise<{ assetId: string; url: string; fileName: string; mimeType: string; size: number }> => {
+  const mimeType = file.mimetype || 'application/octet-stream';
+
+  try {
+    const buffer = await fs.promises.readFile(file.path);
+    const localUpload = await saveBufferToLocalUploads({
+      buffer,
+      localDir: input.localDir,
+      publicSubdir: input.publicSubdir,
+      originalName: file.originalname || file.filename || 'upload.bin',
+      mimeType,
+    });
+
+    const asset = await mediaAssetService.register({
+      ownerType: input.ownerType,
+      ownerId: input.ownerId || null,
+      purpose: input.purpose,
+      provider: 'local',
+      objectKey: null,
+      url: localUpload.url,
+      mimeType,
+      sizeBytes: file.size,
+      uploadedById: input.uploadedById || null,
+      metadata: {
+        originalName: file.originalname,
+        source: input.source,
+      },
+    });
+
+    return {
+      assetId: asset.id,
+      url: localUpload.url,
+      fileName: localUpload.fileName,
+      mimeType,
+      size: file.size,
+    };
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+  }
 };
 
 const uploadRatingMediaToOss = async (
@@ -2260,7 +2478,7 @@ const uploadRatingMediaToOss = async (
     ratingUnitId?: string | null;
   },
   usage: string | null
-): Promise<{ url: string; fileName: string; mimeType: string; size: number }> => {
+): Promise<{ assetId: string; url: string; fileName: string; mimeType: string; size: number }> => {
   if (!postMediaOssClient) {
     await fs.promises.unlink(file.path).catch(() => undefined);
     throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
@@ -2281,8 +2499,26 @@ const uploadRatingMediaToOss = async (
     await fs.promises.unlink(file.path).catch(() => undefined);
   }
 
+  const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const asset = await mediaAssetService.register({
+    ownerType: owner.ratingUnitId ? 'rating_unit' : owner.ratingEventId ? 'rating_event' : 'rating_draft',
+    ownerId: owner.ratingUnitId || owner.ratingEventId || owner.userId,
+    purpose: usage || 'image',
+    provider: 'oss',
+    objectKey,
+    url,
+    mimeType,
+    sizeBytes: file.size,
+    uploadedById: owner.userId,
+    metadata: {
+      originalName: file.originalname,
+      source: 'v1/rating/upload-image',
+    },
+  });
+
   return {
-    url: normalizeUploadedOssUrl(putResult.url, objectKey),
+    assetId: asset.id,
+    url,
     fileName: path.basename(objectKey),
     mimeType,
     size: file.size,
@@ -2297,7 +2533,7 @@ const uploadRemoteImageToRatingOss = async (
   },
   sourceUrl: string,
   usage: string | null
-): Promise<{ url: string; objectKey: string } | null> => {
+): Promise<{ assetId: string; url: string; objectKey: string } | null> => {
   if (!postMediaOssClient) return null;
   const trimmed = sourceUrl.trim();
   if (!trimmed) return null;
@@ -2329,8 +2565,25 @@ const uploadRemoteImageToRatingOss = async (
       },
     });
 
+    const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+    const asset = await mediaAssetService.register({
+      ownerType: owner.ratingUnitId ? 'rating_unit' : owner.ratingEventId ? 'rating_event' : 'rating_draft',
+      ownerId: owner.ratingUnitId || owner.ratingEventId || owner.userId,
+      purpose: usage || 'image',
+      provider: 'oss',
+      objectKey,
+      url,
+      mimeType,
+      sizeBytes: buffer.length,
+      uploadedById: owner.userId,
+      metadata: {
+        sourceUrl: trimmed,
+        source: 'remote-rating-image-mirror',
+      },
+    });
     return {
-      url: normalizeUploadedOssUrl(putResult.url, objectKey),
+      assetId: asset.id,
+      url,
       objectKey,
     };
   } catch (_error) {
@@ -2343,8 +2596,9 @@ const uploadRemoteImageToRatingOss = async (
 const uploadDJMediaToOss = async (
   file: Express.Multer.File,
   djId: string,
-  usage: 'avatar' | 'banner'
-): Promise<{ url: string; fileName: string; mimeType: string; size: number }> => {
+  usage: 'avatar' | 'banner',
+  uploadedById?: string | null
+): Promise<{ assetId: string; url: string; fileName: string; mimeType: string; size: number }> => {
   if (!postMediaOssClient) {
     await fs.promises.unlink(file.path).catch(() => undefined);
     throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
@@ -2365,8 +2619,77 @@ const uploadDJMediaToOss = async (
     await fs.promises.unlink(file.path).catch(() => undefined);
   }
 
+  const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const asset = await mediaAssetService.register({
+    ownerType: 'dj',
+    ownerId: djId,
+    purpose: usage,
+    provider: 'oss',
+    objectKey,
+    url,
+    mimeType,
+    sizeBytes: file.size,
+    uploadedById: uploadedById || null,
+    metadata: {
+      originalName: file.originalname,
+      source: 'v1/djs/upload-image',
+    },
+  });
+
   return {
-    url: normalizeUploadedOssUrl(putResult.url, objectKey),
+    assetId: asset.id,
+    url,
+    fileName: path.basename(objectKey),
+    mimeType,
+    size: file.size,
+  };
+};
+
+const uploadDJSetImageToOss = async (
+  file: Express.Multer.File,
+  ownerKey: string,
+  uploadedById: string | null
+): Promise<{ assetId: string; url: string; fileName: string; mimeType: string; size: number }> => {
+  if (!postMediaOssClient) {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  const mimeType = file.mimetype || 'image/jpeg';
+  const objectKey = buildDJSetMediaObjectKey(ownerKey, file.originalname || file.filename || 'thumbnail.jpg', mimeType, 'thumbnail');
+
+  let putResult: { url?: string };
+  try {
+    putResult = await postMediaOssClient.put(objectKey, file.path, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+  }
+
+  const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const asset = await mediaAssetService.register({
+    ownerType: 'dj_set',
+    ownerId: ownerKey.startsWith('draft-') ? null : ownerKey,
+    purpose: 'thumbnail',
+    provider: 'oss',
+    objectKey,
+    url,
+    mimeType,
+    sizeBytes: file.size,
+    uploadedById,
+    metadata: {
+      originalName: file.originalname,
+      source: 'v1/dj-sets/upload-thumbnail',
+    },
+  });
+
+  return {
+    assetId: asset.id,
+    url,
     fileName: path.basename(objectKey),
     mimeType,
     size: file.size,
@@ -2376,8 +2699,9 @@ const uploadDJMediaToOss = async (
 const uploadWikiBrandMediaToOss = async (
   file: Express.Multer.File,
   brandId: string | null,
-  usage: string | null
-): Promise<{ url: string; fileName: string; mimeType: string; size: number }> => {
+  usage: string | null,
+  uploadedById?: string | null
+): Promise<{ assetId: string; url: string; fileName: string; mimeType: string; size: number }> => {
   if (!postMediaOssClient) {
     await fs.promises.unlink(file.path).catch(() => undefined);
     throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
@@ -2398,8 +2722,26 @@ const uploadWikiBrandMediaToOss = async (
     await fs.promises.unlink(file.path).catch(() => undefined);
   }
 
+  const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const asset = await mediaAssetService.register({
+    ownerType: 'wiki_brand',
+    ownerId: brandId,
+    purpose: usage || 'image',
+    provider: 'oss',
+    objectKey,
+    url,
+    mimeType,
+    sizeBytes: file.size,
+    uploadedById: uploadedById || null,
+    metadata: {
+      originalName: file.originalname,
+      source: 'v1/wiki/brands/upload-image',
+    },
+  });
+
   return {
-    url: normalizeUploadedOssUrl(putResult.url, objectKey),
+    assetId: asset.id,
+    url,
     fileName: path.basename(objectKey),
     mimeType,
     size: file.size,
@@ -2923,6 +3265,8 @@ const extraOssImageHostSuffixes = (process.env.RAVER_OSS_IMAGE_HOSTS || process.
   .map((item) => item.trim().toLowerCase())
   .filter(Boolean);
 
+const ossConfigMissingMessage = 'OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET';
+
 const isLikelyAliyunOssHost = (host: string): boolean => {
   const normalized = host.trim().toLowerCase();
   if (!normalized) return false;
@@ -2930,6 +3274,17 @@ const isLikelyAliyunOssHost = (host: string): boolean => {
     return true;
   }
   return extraOssImageHostSuffixes.some((suffix) => normalized === suffix || normalized.endsWith(`.${suffix}`));
+};
+
+const shouldMirrorRemoteImageToOss = (value: string): boolean => {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return !isLikelyAliyunOssHost(parsed.hostname);
+  } catch (_error) {
+    return false;
+  }
 };
 
 const buildOssAvatarVariantUrl = (
@@ -3508,6 +3863,7 @@ const mapDJSet = (row: any) => ({
   description: row.description,
   thumbnailUrl: row.thumbnailUrl,
   videoUrl: row.videoUrl,
+  videoAuthorName: row.videoAuthorName,
   platform: row.platform,
   videoId: row.videoId,
   duration: row.duration,
@@ -5623,9 +5979,11 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     }
 
     if (hasCoverImageField && existing.coverImageUrl && existing.coverImageUrl !== updated.coverImageUrl) {
+      await mediaAssetService.markDeletedByUrl(existing.coverImageUrl);
       await deleteSingleEventOssObjectIfOwned(existing.coverImageUrl, eventId);
     }
     if (hasLineupImageField && existing.lineupImageUrl && existing.lineupImageUrl !== updated.lineupImageUrl) {
+      await mediaAssetService.markDeletedByUrl(existing.lineupImageUrl);
       await deleteSingleEventOssObjectIfOwned(existing.lineupImageUrl, eventId);
     }
     if (hasImageAssetsField) {
@@ -5642,6 +6000,7 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         return !nextUrlSet.has(key);
       });
       for (const asset of removedAssets) {
+        await mediaAssetService.markDeletedByUrl(asset.url);
         await deleteSingleEventOssObjectIfOwned(asset.url, eventId);
       }
     }
@@ -5693,7 +6052,19 @@ router.delete('/events/:id', optionalAuth, async (req: Request, res: Response): 
       return;
     }
 
+    const eventAssets = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { coverImageUrl: true, lineupImageUrl: true, imageAssets: true },
+    });
     await prisma.event.delete({ where: { id: eventId } });
+    await mediaAssetService.markDeletedByUrl(eventAssets?.coverImageUrl);
+    await mediaAssetService.markDeletedByUrl(eventAssets?.lineupImageUrl);
+    const imageAssets = Array.isArray(eventAssets?.imageAssets) ? eventAssets?.imageAssets : [];
+    for (const asset of imageAssets) {
+      if (asset && typeof asset === 'object' && 'url' in asset) {
+        await mediaAssetService.markDeletedByUrl((asset as { url?: unknown }).url as string | null | undefined);
+      }
+    }
     await deleteEventOssFolder(eventId);
     ok(res, { success: true });
   } catch (error) {
@@ -5746,23 +6117,33 @@ router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image
         return;
       }
 
-      const uploaded = await uploadEventMediaToOss(file, eventId, usage || null);
+      const uploaded = await uploadEventMediaToOss(file, eventId, usage || null, userId);
       ok(res, uploaded);
       return;
     }
 
     if (looksLikePostMediaName(file.originalname || '', 'image')) {
-      const uploaded = await uploadPostMediaToOss(file, 'image');
+      const uploaded = await uploadPostMediaToOss(file, 'image', null, userId);
       ok(res, uploaded);
       return;
     }
 
-    ok(res, {
-      url: `/uploads/events/${file.filename}`,
-      fileName: file.filename,
-      mimeType: file.mimetype,
-      size: file.size,
+    if (!shouldAllowLocalUploadFallback()) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(503).json({ error: 'Object storage is required for event image upload' });
+      return;
+    }
+
+    const uploaded = await saveUploadedFileToLocalMediaAsset(file, {
+      ownerType: 'event',
+      ownerId: null,
+      purpose: usage || 'image',
+      uploadedById: userId,
+      localDir: eventUploadDir,
+      publicSubdir: 'events',
+      source: 'v1/events/upload-image:local-fallback',
     });
+    ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload event image error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -5793,7 +6174,7 @@ router.post('/wiki/brands/upload-image', optionalAuth, wikiBrandImageUpload.sing
     const brandId = brandIdRaw.length > 0 ? brandIdRaw : null;
     const usage = usageRaw.length > 0 ? usageRaw : null;
 
-    const uploaded = await uploadWikiBrandMediaToOss(file, brandId, usage);
+    const uploaded = await uploadWikiBrandMediaToOss(file, brandId, usage, userId);
     ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload wiki brand image error:', error);
@@ -5873,7 +6254,7 @@ router.post('/feed/upload-image', optionalAuth, feedImageUpload.single('image'),
       ? `post-${postIdRaw}`
       : (newsKeyRaw ? `draft-${newsKeyRaw}` : null);
 
-    const uploaded = await uploadPostMediaToOss(file, 'image', scopeKey);
+    const uploaded = await uploadPostMediaToOss(file, 'image', scopeKey, userId);
     ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload feed image error:', error);
@@ -5898,7 +6279,7 @@ router.post('/feed/upload-video', optionalAuth, feedVideoUpload.single('video'),
       ? `post-${postIdRaw}`
       : (newsKeyRaw ? `draft-${newsKeyRaw}` : null);
 
-    const uploaded = await uploadPostMediaToOss(file, 'video', scopeKey);
+    const uploaded = await uploadPostMediaToOss(file, 'video', scopeKey, userId);
     ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload feed video error:', error);
@@ -7457,7 +7838,7 @@ router.post('/djs/upload-image', optionalAuth, djImageUpload.single('image'), as
       return;
     }
 
-    const uploaded = await uploadDJMediaToOss(file, djId, usage);
+    const uploaded = await uploadDJMediaToOss(file, djId, usage, userId);
     const previousUrl = usage === 'avatar' ? existing.avatarUrl : existing.bannerUrl;
 
     await prisma.dJ.update({
@@ -7472,6 +7853,9 @@ router.post('/djs/upload-image', optionalAuth, djImageUpload.single('image'), as
               bannerUrl: uploaded.url,
             },
     });
+    if (previousUrl && previousUrl !== uploaded.url) {
+      await mediaAssetService.markReplacedByUrl(previousUrl);
+    }
 
     if (previousUrl && previousUrl !== uploaded.url) {
       await deleteSingleDJMediaOssObjectIfOwned(previousUrl, djId);
@@ -7894,6 +8278,7 @@ router.delete('/djs/:id', optionalAuth, async (req: Request, res: Response): Pro
 
     await prisma.dJ.delete({ where: { id: djId } });
     for (const url of urlsToDelete) {
+      await mediaAssetService.markDeletedByUrl(url);
       await deleteSingleDJMediaOssObjectIfOwned(url, djId);
     }
     await deleteDJOssFolder(djId);
@@ -8287,34 +8672,17 @@ router.get('/dj-sets', optionalAuth, async (req: Request, res: Response): Promis
     const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : 'latest';
     const djIdFilter = typeof req.query.djId === 'string' ? req.query.djId.trim() : '';
     const eventNameFilter = typeof req.query.eventName === 'string' ? req.query.eventName.trim() : '';
-
-    let sets = await djSetService.getAllDJSets();
-    if (djIdFilter) {
-      sets = sets.filter((set) => set.djId === djIdFilter);
-    }
-    if (eventNameFilter) {
-      const normalizedEventName = eventNameFilter.toLowerCase();
-      sets = sets.filter((set) => {
-        const currentEventName = typeof set.eventName === 'string' ? set.eventName.trim().toLowerCase() : '';
-        return currentEventName.length > 0 && currentEventName === normalizedEventName;
-      });
-    }
-
-    if (sortBy === 'popular') {
-      sets.sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0));
-    } else if (sortBy === 'tracks') {
-      sets.sort((a, b) => (b.tracks?.length || 0) - (a.tracks?.length || 0));
-    } else {
-      sets.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }
-
-    const total = sets.length;
-    const start = (page - 1) * limit;
-    const paged = sets.slice(start, start + limit);
+    const { items, total } = await djSetService.listDJSets({
+      page,
+      limit,
+      sortBy: sortBy === 'popular' || sortBy === 'tracks' ? sortBy : 'latest',
+      djId: djIdFilter || undefined,
+      eventName: eventNameFilter || undefined,
+    });
 
     ok(
       res,
-      { items: paged.map(mapDJSet) },
+      { items: items.map(mapDJSet) },
       {
         page,
         limit,
@@ -8352,6 +8720,71 @@ router.get('/dj-sets/preview', optionalAuth, async (req: Request, res: Response)
   } catch (error) {
     res.status(500).json({ error: (error as Error).message || 'Internal server error' });
   }
+});
+
+router.get('/dj-sets/youtube-embed/:videoId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  const rawVideoId = String(req.params.videoId || '').trim();
+  if (!/^[A-Za-z0-9_-]{11}$/.test(rawVideoId)) {
+    res.status(400).type('text/plain; charset=utf-8').send('Invalid YouTube video ID');
+    return;
+  }
+
+  const embedUrl = `https://www.youtube.com/embed/${rawVideoId}?playsinline=1&rel=0&modestbranding=1`;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe
+      id="player"
+      src="${embedUrl}"
+      title="YouTube video player"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      allowfullscreen
+    ></iframe>
+    <script>
+      (function () {
+        function log(message) {
+          console.log('[RaverEmbedPage] ' + message);
+        }
+        var frame = document.getElementById('player');
+        log('page loaded videoId=${rawVideoId} iframeSrc=' + frame.src + ' viewport=' + window.innerWidth + 'x' + window.innerHeight);
+        frame.addEventListener('load', function () {
+          log('iframe load iframeSrc=' + frame.src + ' size=' + frame.offsetWidth + 'x' + frame.offsetHeight);
+        });
+        frame.addEventListener('error', function () {
+          log('iframe error iframeSrc=' + frame.src);
+        });
+        window.addEventListener('message', function (event) {
+          log('message origin=' + event.origin + ' data=' + (typeof event.data === 'string' ? event.data.slice(0, 200) : '[object]'));
+        });
+      })();
+    </script>
+  </body>
+</html>`);
 });
 
 router.get('/dj-sets/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
@@ -8463,15 +8896,14 @@ router.post('/dj-sets', optionalAuth, async (req: Request, res: Response): Promi
     const authReq = req as BFFAuthRequest;
     const userId = requireAuth(authReq, res);
     if (!userId) return;
-    const viewerRole = authReq.user?.role ?? null;
 
     const body = req.body as Record<string, unknown>;
     const djId = String(body.djId || '').trim();
     const title = String(body.title || '').trim();
     const videoUrl = String(body.videoUrl || '').trim();
 
-    if (!djId || !title || !videoUrl) {
-      res.status(400).json({ error: 'djId, title and videoUrl are required' });
+    if (!title || !videoUrl) {
+      res.status(400).json({ error: 'title and videoUrl are required' });
       return;
     }
 
@@ -8481,16 +8913,11 @@ router.post('/dj-sets', optionalAuth, async (req: Request, res: Response): Promi
       return;
     }
 
-    if (!canBypassContentReview(viewerRole)) {
-      const submission = await createPendingContentSubmission({
-        submitterId: userId,
-        entityType: 'set',
-        title,
-        payload: body,
-      });
-      acceptedSubmission(res, submission, 'Set 信息已提交审核，管理员审核通过后才会入库');
-      return;
-    }
+    const inputThumbnailUrl = typeof body.thumbnailUrl === 'string' ? body.thumbnailUrl.trim() : '';
+    const uploadedThumbnail = inputThumbnailUrl && shouldMirrorRemoteImageToOss(inputThumbnailUrl)
+      ? await uploadRemoteImageToDJSetOss(`draft-${userId}`, inputThumbnailUrl)
+      : null;
+    const thumbnailUrl = uploadedThumbnail?.url || inputThumbnailUrl || undefined;
 
     const created = await djSetService.createDJSet({
       djId,
@@ -8503,7 +8930,8 @@ router.post('/dj-sets', optionalAuth, async (req: Request, res: Response): Promi
       uploadedById: userId,
       title,
       videoUrl,
-      thumbnailUrl: typeof body.thumbnailUrl === 'string' ? body.thumbnailUrl : undefined,
+      videoAuthorName: typeof body.videoAuthorName === 'string' ? body.videoAuthorName : undefined,
+      thumbnailUrl,
       description: typeof body.description === 'string' ? body.description : undefined,
       recordedAt: typeof body.recordedAt === 'string' ? new Date(body.recordedAt) : undefined,
       venue: typeof body.venue === 'string' ? body.venue : undefined,
@@ -8536,6 +8964,7 @@ router.patch('/dj-sets/:id', optionalAuth, async (req: Request, res: Response): 
       title: typeof body.title === 'string' ? body.title : undefined,
       description: typeof body.description === 'string' ? body.description : undefined,
       videoUrl: typeof body.videoUrl === 'string' ? body.videoUrl : undefined,
+      videoAuthorName: typeof body.videoAuthorName === 'string' ? body.videoAuthorName : undefined,
       thumbnailUrl: typeof body.thumbnailUrl === 'string' ? body.thumbnailUrl : undefined,
       venue: typeof body.venue === 'string' ? body.venue : undefined,
       eventName: typeof body.eventName === 'string' ? body.eventName : undefined,
@@ -8564,7 +8993,8 @@ router.delete('/dj-sets/:id', optionalAuth, async (req: Request, res: Response):
     if (!userId) return;
 
     const setId = req.params.id as string;
-    await djSetService.deleteDJSetByUploader(setId, userId, authReq.user?.role);
+    const deleted = await djSetService.deleteDJSetByUploader(setId, userId, authReq.user?.role);
+    await mediaAssetService.markDeletedByUrl(deleted.thumbnailUrl);
     ok(res, { success: true });
   } catch (error) {
     const message = (error as Error).message || 'Internal server error';
@@ -8660,12 +9090,8 @@ router.post('/dj-sets/upload-thumbnail', optionalAuth, djSetThumbUpload.single('
       return;
     }
 
-    ok(res, {
-      url: `/uploads/dj-sets/${file.filename}`,
-      fileName: file.filename,
-      mimeType: file.mimetype,
-      size: file.size,
-    });
+    const uploaded = await uploadDJSetImageToOss(file, `draft-${userId}`, userId);
+    ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload dj set thumbnail error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -8684,17 +9110,27 @@ router.post('/dj-sets/upload-video', optionalAuth, djSetVideoUpload.single('vide
     }
 
     if (looksLikePostMediaName(file.originalname || '', 'video')) {
-      const uploaded = await uploadPostMediaToOss(file, 'video');
+      const uploaded = await uploadPostMediaToOss(file, 'video', null, userId);
       ok(res, uploaded);
       return;
     }
 
-    ok(res, {
-      url: `/uploads/dj-sets/${file.filename}`,
-      fileName: file.filename,
-      mimeType: file.mimetype,
-      size: file.size,
+    if (!shouldAllowLocalUploadFallback()) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(503).json({ error: 'Object storage is required for DJ set video upload' });
+      return;
+    }
+
+    const uploaded = await saveUploadedFileToLocalMediaAsset(file, {
+      ownerType: 'dj_set',
+      ownerId: null,
+      purpose: 'video',
+      uploadedById: userId,
+      localDir: djSetUploadDir,
+      publicSubdir: 'dj-sets',
+      source: 'v1/dj-sets/upload-video:local-fallback',
     });
+    ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload dj set video error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -9679,6 +10115,7 @@ router.patch('/rating-events/:id', optionalAuth, async (req: Request, res: Respo
     });
 
     if (nextImageUrl !== undefined && nextImageUrl !== existing.imageUrl) {
+      await mediaAssetService.markDeletedByUrl(existing.imageUrl);
       await deleteSingleRatingOssObjectIfOwned(existing.imageUrl);
     }
 
@@ -9718,8 +10155,10 @@ router.delete('/rating-events/:id', optionalAuth, async (req: Request, res: Resp
     }
 
     await prisma.ratingEvent.delete({ where: { id: eventId } });
+    await mediaAssetService.markDeletedByUrl(existing.imageUrl);
     await deleteSingleRatingOssObjectIfOwned(existing.imageUrl);
     for (const unit of existing.units) {
+      await mediaAssetService.markDeletedByUrl(unit.imageUrl);
       await deleteSingleRatingOssObjectIfOwned(unit.imageUrl);
     }
     ok(res, { success: true });
@@ -10762,6 +11201,7 @@ router.delete('/learn/festivals/:id', optionalAuth, async (req: Request, res: Re
 
     await prisma.wikiFestival.delete({ where: { id: festivalId } });
     for (const url of urlsToDelete) {
+      await mediaAssetService.markDeletedByUrl(url);
       await deleteSingleWikiBrandOssObjectIfOwned(url, festivalId);
     }
     await deleteWikiBrandOssFolder(festivalId);
@@ -11168,7 +11608,7 @@ router.post('/learn/rankings/upload-image', optionalAuth, wikiBrandImageUpload.s
     const body = req.body as Record<string, unknown>;
     const boardId = sanitizeRankingBoardId(String(body?.boardId || 'ranking-temp'));
     const usage = 'cover';
-    const uploaded = await uploadWikiBrandMediaToOss(req.file, boardId, usage);
+    const uploaded = await uploadWikiBrandMediaToOss(req.file, boardId, usage, userId);
     ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload ranking image error:', error);
@@ -11317,6 +11757,7 @@ router.delete('/learn/rankings/:boardId', optionalAuth, async (req: Request, res
       : [];
 
     if (target.coverImageUrl) {
+      await mediaAssetService.markDeletedByUrl(target.coverImageUrl);
       await deleteSingleWikiBrandOssObjectIfOwned(target.coverImageUrl, boardId);
     }
     await deleteWikiBrandOssFolder(boardId);

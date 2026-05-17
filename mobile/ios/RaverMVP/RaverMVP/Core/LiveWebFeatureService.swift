@@ -507,7 +507,8 @@ final class LiveWebFeatureService: WebFeatureService {
             "videoId": response.data.videoId,
             "title": response.data.title,
             "description": response.data.description,
-            "thumbnailUrl": response.data.thumbnailUrl
+            "thumbnailUrl": response.data.thumbnailUrl,
+            "authorName": response.data.authorName ?? ""
         ]
     }
 
@@ -1316,6 +1317,7 @@ private struct VideoPreviewPayload: Decodable {
     var title: String
     var description: String
     var thumbnailUrl: String
+    var authorName: String?
 }
 
 private struct BFFErrorResponse: Decodable {

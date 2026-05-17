@@ -2932,7 +2932,7 @@ struct EventDetailView: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(RaverTheme.primaryText)
                                 .lineLimit(2)
-                            Text(set.dj?.name ?? set.djId)
+                            Text(set.dj?.name ?? set.customDjNames.first ?? set.djId ?? LT("未关联 DJ", "No DJ Linked", "DJ未関連"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                                 .lineLimit(1)

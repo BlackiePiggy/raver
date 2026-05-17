@@ -195,6 +195,7 @@ actor MockWebFeatureService: WebFeatureService {
             description: "Peak-time set.",
             thumbnailUrl: nil,
             videoUrl: "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+            videoAuthorName: nil,
             platform: "native",
             videoId: "BigBuckBunny",
             duration: 5400,
@@ -1332,8 +1333,8 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func createDJSet(input: CreateDJSetInput) async throws -> CreateContentResult<WebDJSet> {
-        guard let dj = djs.first(where: { $0.id == input.djId }) else {
-            throw ServiceError.message("DJ 不存在")
+        let dj = input.djId.flatMap { targetID in
+            djs.first(where: { $0.id == targetID })
         }
 
         let parsed = parseVideo(input.videoUrl)
@@ -1345,6 +1346,7 @@ actor MockWebFeatureService: WebFeatureService {
             description: input.description,
             thumbnailUrl: input.thumbnailUrl,
             videoUrl: input.videoUrl,
+            videoAuthorName: input.videoAuthorName,
             platform: parsed.platform,
             videoId: parsed.videoId,
             duration: 0,
@@ -1360,7 +1362,7 @@ actor MockWebFeatureService: WebFeatureService {
             coDjIds: [],
             customDjNames: [],
             dj: dj,
-            lineupDjs: [dj],
+            lineupDjs: dj.map { [$0] } ?? [],
             tracks: [],
             trackCount: 0,
             uploader: currentUser,
@@ -1397,6 +1399,7 @@ actor MockWebFeatureService: WebFeatureService {
             sets[idx].platform = parsed.platform
             sets[idx].videoId = parsed.videoId
         }
+        if let videoAuthorName = input.videoAuthorName { sets[idx].videoAuthorName = videoAuthorName }
         if let thumbnail = input.thumbnailUrl { sets[idx].thumbnailUrl = thumbnail }
         if let venue = input.venue { sets[idx].venue = venue }
         if let eventName = input.eventName { sets[idx].eventName = eventName }
@@ -1544,7 +1547,8 @@ actor MockWebFeatureService: WebFeatureService {
             "videoId": parsed.videoId,
             "title": "Preview for \(parsed.videoId)",
             "description": "Auto parsed preview",
-            "thumbnailUrl": ""
+            "thumbnailUrl": parsed.platform == "youtube" ? "https://img.youtube.com/vi/\(parsed.videoId)/hqdefault.jpg" : "",
+            "authorName": parsed.platform == "youtube" ? "YouTube Channel" : ""
         ]
     }
 

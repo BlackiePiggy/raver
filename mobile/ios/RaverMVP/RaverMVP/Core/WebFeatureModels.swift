@@ -948,12 +948,13 @@ struct WebTracklistDetail: Codable, Identifiable, Hashable {
 
 struct WebDJSet: Codable, Identifiable, Hashable {
     let id: String
-    var djId: String
+    var djId: String?
     var title: String
     var slug: String
     var description: String?
     var thumbnailUrl: String?
     var videoUrl: String
+    var videoAuthorName: String?
     var platform: String
     var videoId: String
     var duration: Int?
@@ -994,9 +995,10 @@ struct WebContributorProfile: Codable, Identifiable, Hashable {
 }
 
 struct CreateDJSetInput: Codable {
-    var djId: String
+    var djId: String?
     var title: String
     var videoUrl: String
+    var videoAuthorName: String?
     var thumbnailUrl: String?
     var description: String?
     var venue: String?
@@ -1009,6 +1011,7 @@ struct UpdateDJSetInput: Codable {
     var djId: String?
     var title: String?
     var videoUrl: String?
+    var videoAuthorName: String?
     var thumbnailUrl: String?
     var description: String?
     var venue: String?

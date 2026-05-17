@@ -1,6 +1,15 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import path from 'path';
 import { AuthRequest } from '../middleware/auth';
+import {
+  buildMediaObjectKey,
+  isObjectStorageConfigured,
+  saveBufferToLocalUploads,
+  shouldAllowLocalUploadFallback,
+  uploadBufferToObjectStorage,
+} from '../services/media-storage.service';
+import { mediaAssetService } from '../services/media-asset.service';
 import {
   DEFAULT_EVENT_TIME_ZONE,
   diffEventDays,
@@ -891,7 +900,7 @@ export const deleteEvent = async (req: AuthRequest, res: Response): Promise<void
 
     const existing = await prisma.event.findUnique({
       where: { id: id as string },
-      select: { id: true, organizerId: true },
+      select: { id: true, organizerId: true, coverImageUrl: true, lineupImageUrl: true, imageAssets: true },
     });
     if (!existing) {
       res.status(404).json({ error: 'Event not found' });
@@ -905,6 +914,14 @@ export const deleteEvent = async (req: AuthRequest, res: Response): Promise<void
     await prisma.event.delete({
       where: { id: id as string },
     });
+    await mediaAssetService.markDeletedByUrl(existing.coverImageUrl);
+    await mediaAssetService.markDeletedByUrl(existing.lineupImageUrl);
+    const imageAssets = Array.isArray(existing.imageAssets) ? existing.imageAssets : [];
+    for (const asset of imageAssets) {
+      if (asset && typeof asset === 'object' && 'url' in asset) {
+        await mediaAssetService.markDeletedByUrl((asset as { url?: unknown }).url as string | null | undefined);
+      }
+    }
 
     res.status(204).send();
   } catch (error) {
@@ -921,11 +938,55 @@ export const uploadEventImage = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const publicUrl = `/uploads/events/${file.filename}`;
+    if (!file.buffer) {
+      res.status(400).json({ error: 'Invalid upload payload' });
+      return;
+    }
+
+    if (!isObjectStorageConfigured() && !shouldAllowLocalUploadFallback()) {
+      res.status(503).json({ error: 'Object storage is not configured for uploads' });
+      return;
+    }
+
+    const uploaded = isObjectStorageConfigured()
+      ? await uploadBufferToObjectStorage({
+          buffer: file.buffer,
+          mimeType: file.mimetype || 'image/jpeg',
+          objectKey: buildMediaObjectKey(
+            process.env.OSS_EVENTS_PREFIX || 'wen-jasonlee/events',
+            (req.body?.eventId as string | undefined) || 'legacy-api',
+            (req.body?.usage as string | undefined) || 'image',
+            file.originalname || 'image.jpg',
+            file.mimetype || 'image/jpeg'
+          ),
+        })
+      : await saveBufferToLocalUploads({
+          buffer: file.buffer,
+          localDir: path.join(process.cwd(), 'uploads', 'events'),
+          publicSubdir: 'events',
+          originalName: file.originalname || 'image.jpg',
+          mimeType: file.mimetype || 'image/jpeg',
+        });
+    const asset = await mediaAssetService.register({
+      ownerType: 'event',
+      ownerId: typeof req.body?.eventId === 'string' ? req.body.eventId : null,
+      purpose: typeof req.body?.usage === 'string' && req.body.usage.trim() ? req.body.usage.trim() : 'image',
+      provider: 'objectKey' in uploaded ? 'oss' : 'local',
+      objectKey: 'objectKey' in uploaded ? uploaded.objectKey : null,
+      url: uploaded.url,
+      mimeType: file.mimetype || 'image/jpeg',
+      sizeBytes: file.size,
+      uploadedById: req.user?.userId || null,
+      metadata: {
+        originalName: file.originalname,
+        source: 'api/events/upload-image',
+      },
+    });
 
     res.status(201).json({
-      url: publicUrl,
-      filename: file.filename,
+      assetId: asset.id,
+      url: uploaded.url,
+      filename: 'fileName' in uploaded ? uploaded.fileName : uploaded.objectKey.split('/').pop(),
       originalName: file.originalname,
       size: file.size,
       mimeType: file.mimetype,

@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import AVKit
 import AVFoundation
+import WebKit
 import UIKit
 import Photos
 import CoreImage.CIFilterBuiltins
@@ -280,6 +281,12 @@ struct SetsModuleView: View {
             phase = sets.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
+            if error.isUserInitiatedCancellation {
+                if sets.isEmpty, case .initialLoading = phase {
+                    phase = .idle
+                }
+                return
+            }
             let message = error.userFacingMessage ?? LT("Sets 加载失败，请稍后重试", "Failed to load sets. Please try again later.", "Setを読み込めませんでした。時間をおいて再試行してください。")
             if reset {
                 phase = .failure(message: message)
@@ -306,6 +313,19 @@ struct SetsModuleView: View {
 
 struct DJSetGridCard: View {
     let set: WebDJSet
+
+    private var djLabel: String {
+        if let name = set.dj?.name.nilIfBlank {
+            return name
+        }
+        if let custom = set.customDjNames.first?.nilIfBlank {
+            return custom
+        }
+        if let djID = set.djId?.nilIfBlank {
+            return djID
+        }
+        return LT("未关联 DJ", "No DJ Linked", "DJ未関連")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -352,7 +372,7 @@ struct DJSetGridCard: View {
                     DefaultDJAvatarPlaceholderView(size: 18, backgroundColor: RaverTheme.card)
                 }
 
-                Text(set.dj?.name ?? set.djId)
+                Text(djLabel)
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .lineLimit(1)
@@ -413,6 +433,7 @@ struct DJSetDetailView: View {
     @State private var pendingSeekTime: Double?
     @State private var activeTrackID: String?
     @State private var nativePlayerError: String?
+    @State private var embeddedPlayerError: String?
     @StateObject private var nativePlayerSession = NativeVideoSession()
     @State private var isTracklistExpanded = false
     @State private var tracklists: [WebTracklistSummary] = []
@@ -809,7 +830,7 @@ struct DJSetDetailView: View {
                     Circle()
                         .fill(RaverTheme.card)
                         .frame(width: 22, height: 22)
-                    Text(set.djId)
+                    Text(primaryDJLabel(for: set))
                         .foregroundStyle(RaverTheme.secondaryText)
                         .font(.subheadline)
                 }
@@ -847,7 +868,7 @@ struct DJSetDetailView: View {
             }
         }
 
-        if let playerError = nativePlayerError {
+        if let playerError = nativePlayerError ?? embeddedPlayerError {
             VStack(alignment: .leading, spacing: 6) {
                 Text(playerError)
                     .font(.caption)
@@ -913,26 +934,41 @@ struct DJSetDetailView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-                EmbeddedNativeAudioPlayer(
-                    session: nativePlayerSession,
-                    mediaURL: resolvedPlayableVideoURL(for: set) ?? URL(string: "about:blank")!,
-                    currentTime: $playbackTime,
-                    duration: $playbackDuration,
-                    pendingSeekTime: $pendingSeekTime,
-                    isPaused: isPlaybackPaused,
-                    onReady: {},
-                    onPlaybackStateChanged: { paused in
-                        if isPlaybackPaused != paused {
-                            isPlaybackPaused = paused
-                        }
-                    },
-                    onError: { message in
-                        nativePlayerError = message
+                if let source = resolvedPlaybackSource(for: set) {
+                    switch source {
+                    case .native(let playableURL):
+                        EmbeddedNativeAudioPlayer(
+                            session: nativePlayerSession,
+                            mediaURL: playableURL,
+                            currentTime: $playbackTime,
+                            duration: $playbackDuration,
+                            pendingSeekTime: $pendingSeekTime,
+                            isPaused: isPlaybackPaused,
+                            onReady: {},
+                            onPlaybackStateChanged: { paused in
+                                if isPlaybackPaused != paused {
+                                    isPlaybackPaused = paused
+                                }
+                            },
+                            onError: { message in
+                                nativePlayerError = message
+                            }
+                        )
+                        .frame(width: 1, height: 1)
+                        .opacity(0.01)
+                        .allowsHitTesting(false)
+                    case .youtube(let videoID):
+                        SimpleYouTubeEmbedView(
+                            videoID: videoID,
+                            onError: { message in
+                                embeddedPlayerError = message
+                            }
+                        )
+                        .frame(width: 1, height: 1)
+                        .opacity(0.01)
+                        .allowsHitTesting(false)
                     }
-                )
-                .frame(width: 1, height: 1)
-                .opacity(0.01)
-                .allowsHitTesting(false)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -1044,6 +1080,10 @@ struct DJSetDetailView: View {
 
     @ViewBuilder
     private func playerViewport(for set: WebDJSet, isFullscreen: Bool, reservedTrailingWidth: CGFloat) -> some View {
+        if case .youtube = resolvedPlaybackSource(for: set) {
+            playerSection(for: set)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
         GeometryReader { proxy in
             let interactiveWidth = max(40, proxy.size.width - reservedTrailingWidth)
             ZStack {
@@ -1087,6 +1127,7 @@ struct DJSetDetailView: View {
                 playerVolumeLevel = min(max(nativePlayerSession.player.volume, 0), 1)
                 showControlsTemporarily()
             }
+        }
         }
     }
 
@@ -1405,7 +1446,7 @@ struct DJSetDetailView: View {
     private func seekToTime(_ target: Double, in set: WebDJSet) {
         playbackTime = target
         syncActiveTrack(for: set, at: target)
-        if resolvedPlayableVideoURL(for: set) != nil {
+        if resolvedPlaybackSource(for: set) != nil {
             pendingSeekTime = target
         }
     }
@@ -1556,7 +1597,7 @@ struct DJSetDetailView: View {
             }
             .ignoresSafeArea()
 
-            if let playerError = nativePlayerError {
+            if let playerError = nativePlayerError ?? embeddedPlayerError {
                 VStack {
                     Spacer()
                     Text(playerError)
@@ -1681,7 +1722,7 @@ struct DJSetDetailView: View {
         let activeIndex = resolvedActiveTrackIndex(in: tracks)
         let activeTrack = tracks.indices.contains(activeIndex) ? tracks[activeIndex] : nil
         let title = activeTrack.map(wheelTrackTitle(for:)) ?? "Unknown Track"
-        let djName = activeTrack.map { wheelDJInfo(for: $0, in: set).name } ?? (set.dj?.name ?? set.djId)
+        let djName = activeTrack.map { wheelDJInfo(for: $0, in: set).name } ?? primaryDJLabel(for: set)
 
         ZStack(alignment: .trailing) {
             VStack {
@@ -1828,13 +1869,26 @@ struct DJSetDetailView: View {
         let nameFromTrack = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = matchedDJ?.name
             ?? fallbackDJ?.name
-            ?? (nameFromTrack.isEmpty ? set.djId : nameFromTrack)
+            ?? (nameFromTrack.isEmpty ? primaryDJLabel(for: set) : nameFromTrack)
         let avatarRaw = matchedDJ?.avatarUrl ?? fallbackDJ?.avatarUrl
         let avatarResolved = AppConfig.resolvedURLString(avatarRaw ?? "")
         let avatarURL = avatarResolved.flatMap { resolved in
             resolved.isEmpty ? nil : URL(string: resolved)
         }
         return (name, avatarURL)
+    }
+
+    private func primaryDJLabel(for set: WebDJSet) -> String {
+        if let name = set.dj?.name.nilIfBlank {
+            return name
+        }
+        if let custom = set.customDjNames.first?.nilIfBlank {
+            return custom
+        }
+        if let djID = set.djId?.nilIfBlank {
+            return djID
+        }
+        return LT("未关联 DJ", "No DJ Linked", "DJ未関連")
     }
 
     private func resolvedActiveTrackIndex(in tracks: [WebDJSetTrack]) -> Int {
@@ -2269,6 +2323,7 @@ struct DJSetDetailView: View {
             controlsAutoHideTask?.cancel()
             controlsAutoHideTask = nil
             nativePlayerError = nil
+            embeddedPlayerError = nil
             phase = .success
             bannerMessage = nil
             syncActiveTrack(for: loadedSet, at: 0)
@@ -2364,7 +2419,9 @@ struct DJSetDetailView: View {
     private func playerSection(for set: WebDJSet) -> some View {
         if isAudioOnlyMode {
             audioPlayerSection(for: set)
-        } else if let playableURL = resolvedPlayableVideoURL(for: set) {
+        } else if let source = resolvedPlaybackSource(for: set) {
+            switch source {
+            case .native(let playableURL):
             EmbeddedNativeVideoPlayer(
                 session: nativePlayerSession,
                 videoURL: playableURL,
@@ -2383,11 +2440,20 @@ struct DJSetDetailView: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .youtube(let videoID):
+                SimpleYouTubeEmbedView(
+                    videoID: videoID,
+                    onError: { message in
+                        embeddedPlayerError = message
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 Label(LT("无法直接播放该视频地址", "无法直接播放该视频地址", "この動画URLは直接再生できません"), systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.yellow)
-                Text(LT("当前仅支持原生直连媒体地址（mp4/mov/webm/m3u8）。", "当前仅支持原生直连媒体地址（mp4/mov/webm/m3u8）。", "現在は直接再生可能なメディアURL（mp4/mov/webm/m3u8）のみ対応しています。"))
+                Text(LT("当前支持 YouTube 链接和原生直连媒体地址（mp4/mov/webm/m3u8）。", "当前支持 YouTube 链接和原生直连媒体地址（mp4/mov/webm/m3u8）。", "現在はYouTubeリンクと直接再生可能なメディアURL（mp4/mov/webm/m3u8）に対応しています。"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -2399,7 +2465,7 @@ struct DJSetDetailView: View {
 
     @ViewBuilder
     private func audioPlayerSection(for set: WebDJSet) -> some View {
-        if let playableURL = resolvedPlayableVideoURL(for: set) {
+        if let source = resolvedPlaybackSource(for: set) {
             ZStack {
                 LinearGradient(
                     colors: [
@@ -2423,33 +2489,38 @@ struct DJSetDetailView: View {
                         .foregroundStyle(Color.white.opacity(0.75))
                 }
 
-                EmbeddedNativeAudioPlayer(
-                    session: nativePlayerSession,
-                    mediaURL: playableURL,
-                    currentTime: $playbackTime,
-                    duration: $playbackDuration,
-                    pendingSeekTime: $pendingSeekTime,
-                    isPaused: isPlaybackPaused,
-                    onReady: {},
-                    onPlaybackStateChanged: { paused in
-                        if isPlaybackPaused != paused {
-                            isPlaybackPaused = paused
+                switch source {
+                case .native(let playableURL):
+                    EmbeddedNativeAudioPlayer(
+                        session: nativePlayerSession,
+                        mediaURL: playableURL,
+                        currentTime: $playbackTime,
+                        duration: $playbackDuration,
+                        pendingSeekTime: $pendingSeekTime,
+                        isPaused: isPlaybackPaused,
+                        onReady: {},
+                        onPlaybackStateChanged: { paused in
+                            if isPlaybackPaused != paused {
+                                isPlaybackPaused = paused
+                            }
+                        },
+                        onError: { message in
+                            nativePlayerError = message
                         }
-                    },
-                    onError: { message in
-                        nativePlayerError = message
-                    }
-                )
-                .frame(width: 1, height: 1)
-                .opacity(0.01)
-                .allowsHitTesting(false)
+                    )
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
+                    .allowsHitTesting(false)
+                case .youtube:
+                    EmptyView()
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 Label(LT("无法直接播放该视频地址", "无法直接播放该视频地址", "この動画URLは直接再生できません"), systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.yellow)
-                Text(LT("当前仅支持原生直连媒体地址（mp4/mov/webm/m3u8）。", "当前仅支持原生直连媒体地址（mp4/mov/webm/m3u8）。", "現在は直接再生可能なメディアURL（mp4/mov/webm/m3u8）のみ対応しています。"))
+                Text(LT("当前支持 YouTube 链接和原生直连媒体地址（mp4/mov/webm/m3u8）。", "当前支持 YouTube 链接和原生直连媒体地址（mp4/mov/webm/m3u8）。", "現在はYouTubeリンクと直接再生可能なメディアURL（mp4/mov/webm/m3u8）に対応しています。"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
             }
@@ -2693,6 +2764,24 @@ struct DJSetDetailView: View {
                     .font(.headline)
                     .foregroundStyle(RaverTheme.primaryText)
 
+                if let authorName = set.videoAuthorName?.trimmingCharacters(in: .whitespacesAndNewlines), !authorName.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "play.rectangle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(LT("YouTube 发布人", "YouTube Publisher", "YouTube投稿者"))
+                                .font(.caption2)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            Text(authorName)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                    }
+                }
+
                 if let video = set.videoContributor {
                     contributorRow(title: LT("视频贡献", "Video Contributor", "動画投稿者"), contributor: video)
                 }
@@ -2870,7 +2959,7 @@ struct DJSetDetailView: View {
         let target = Double(track.startTime)
         playbackTime = target
         syncActiveTrack(for: set, at: target)
-        if resolvedPlayableVideoURL(for: set) != nil {
+        if resolvedPlaybackSource(for: set) != nil {
             pendingSeekTime = target
         }
     }
@@ -2915,14 +3004,21 @@ struct DJSetDetailView: View {
             : Color(red: 0.29, green: 0.19, blue: 0.46)
     }
 
-    private func resolvedPlayableVideoURL(for set: WebDJSet) -> URL? {
+    private func resolvedPlaybackSource(for set: WebDJSet) -> DJSetPlaybackSource? {
         guard let resolved = AppConfig.resolvedURLString(set.videoUrl), !resolved.isEmpty else { return nil }
+        if let videoID = YouTubeVideoIDParser.videoID(from: resolved, fallbackPlatform: set.platform, fallbackVideoID: set.videoId) {
+            return .youtube(videoID)
+        }
+        if set.platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "youtube",
+           let videoID = YouTubeVideoIDParser.videoID(from: set.videoId) {
+            return .youtube(videoID)
+        }
         if let direct = URL(string: resolved) {
-            return direct
+            return .native(direct)
         }
         let encoded = resolved.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
         if let encoded, let url = URL(string: encoded) {
-            return url
+            return .native(url)
         }
         return nil
     }
@@ -3079,6 +3175,50 @@ private struct MarqueeWidthPreferenceKey: PreferenceKey {
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
+    }
+}
+
+private enum DJSetPlaybackSource: Equatable {
+    case native(URL)
+    case youtube(String)
+}
+
+private enum YouTubeVideoIDParser {
+    private static let patterns: [String] = [
+        #"(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]{11})"#,
+        #"youtube\.com/embed/([A-Za-z0-9_-]{11})"#,
+        #"youtube\.com/shorts/([A-Za-z0-9_-]{11})"#,
+        #"youtube-nocookie\.com/embed/([A-Za-z0-9_-]{11})"#
+    ]
+
+    static func videoID(from raw: String?, fallbackPlatform: String? = nil, fallbackVideoID: String? = nil) -> String? {
+        if let candidate = normalizedVideoID(from: raw) {
+            return candidate
+        }
+
+        let platform = fallbackPlatform?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        if platform == "youtube", let candidate = normalizedVideoID(from: fallbackVideoID) {
+            return candidate
+        }
+
+        return nil
+    }
+
+    private static func normalizedVideoID(from raw: String?) -> String? {
+        let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !value.isEmpty else { return nil }
+        if value.range(of: #"^[A-Za-z0-9_-]{11}$"#, options: .regularExpression) != nil {
+            return value
+        }
+        for pattern in patterns {
+            if let range = value.range(of: pattern, options: .regularExpression) {
+                let match = String(value[range])
+                if let idRange = match.range(of: #"[A-Za-z0-9_-]{11}$"#, options: .regularExpression) {
+                    return String(match[idRange])
+                }
+            }
+        }
+        return nil
     }
 }
 
@@ -3388,6 +3528,638 @@ private struct EmbeddedNativeAudioPlayer: UIViewRepresentable {
             timeObserverToken = nil
             observedItem = nil
             self.player = nil
+        }
+    }
+}
+
+private struct SimpleYouTubeEmbedView: UIViewRepresentable {
+    let videoID: String
+    let onError: (String) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        configuration.userContentController.add(context.coordinator, name: Coordinator.consoleHandlerName)
+        configuration.userContentController.addUserScript(Coordinator.consoleBridgeScript)
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
+        webView.isOpaque = false
+        webView.backgroundColor = .black
+        webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
+        context.coordinator.webView = webView
+        context.coordinator.load(videoID: videoID)
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.parent = self
+        context.coordinator.webView = webView
+        if context.coordinator.loadedVideoID != videoID {
+            context.coordinator.load(videoID: videoID)
+        }
+    }
+
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        coordinator.cleanup()
+        webView.stopLoading()
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+        static let consoleHandlerName = "raverSimpleEmbed"
+        static let consoleBridgeScript = WKUserScript(
+            source: """
+            (function() {
+              if (window.__raverSimpleEmbedConsoleInstalled) { return; }
+              window.__raverSimpleEmbedConsoleInstalled = true;
+              function send(level, parts) {
+                try {
+                  window.webkit.messageHandlers.raverSimpleEmbed.postMessage({
+                    level: level,
+                    message: Array.prototype.slice.call(parts).map(function(item) {
+                      if (typeof item === 'string') { return item; }
+                      try { return JSON.stringify(item); } catch (_) { return String(item); }
+                    }).join(' ')
+                  });
+                } catch (_) {}
+              }
+              ['log', 'warn', 'error'].forEach(function(level) {
+                var original = console[level];
+                console[level] = function() {
+                  send(level, arguments);
+                  if (typeof original === 'function') {
+                    return original.apply(console, arguments);
+                  }
+                };
+              });
+            })();
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+
+        var parent: SimpleYouTubeEmbedView
+        weak var webView: WKWebView?
+        private(set) var loadedVideoID: String?
+
+        init(parent: SimpleYouTubeEmbedView) {
+            self.parent = parent
+        }
+
+        func load(videoID: String) {
+            guard loadedVideoID != videoID || webView?.url == nil else { return }
+            loadedVideoID = videoID
+            print("[RaverYouTubeSimpleEmbed] loading youtube-nocookie iframe videoID=\(videoID)")
+            webView?.loadHTMLString(Self.html(videoID: videoID), baseURL: URL(string: "https://www.youtube-nocookie.com"))
+        }
+
+        func cleanup() {
+            webView?.configuration.userContentController.removeScriptMessageHandler(forName: Self.consoleHandlerName)
+            webView?.navigationDelegate = nil
+            webView?.uiDelegate = nil
+            webView = nil
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            let url = navigationAction.request.url?.absoluteString ?? "nil"
+            let target = navigationAction.targetFrame?.isMainFrame == true ? "main" : "subframe"
+            print("[RaverYouTubeSimpleEmbed] action target=\(target) url=\(url)")
+            decisionHandler(.allow)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationResponse: WKNavigationResponse,
+            decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+        ) {
+            let url = navigationResponse.response.url?.absoluteString ?? "nil"
+            if let http = navigationResponse.response as? HTTPURLResponse {
+                print("[RaverYouTubeSimpleEmbed] response status=\(http.statusCode) url=\(url)")
+            }
+            decisionHandler(.allow)
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            print("[RaverYouTubeSimpleEmbed] didFinish url=\(webView.url?.absoluteString ?? "nil") title=\(webView.title ?? "nil")")
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            print("[RaverYouTubeSimpleEmbed] didFail error=\(error.localizedDescription)")
+            parent.onError(error.localizedDescription)
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            print("[RaverYouTubeSimpleEmbed] didFailProvisional error=\(error.localizedDescription)")
+            parent.onError(error.localizedDescription)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            if navigationAction.targetFrame == nil {
+                webView.load(navigationAction.request)
+            }
+            return nil
+        }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == Self.consoleHandlerName else { return }
+            if let body = message.body as? [String: Any] {
+                let level = body["level"] as? String ?? "log"
+                let text = body["message"] as? String ?? ""
+                print("[RaverYouTubeSimpleEmbed] js \(level): \(text)")
+            } else {
+                print("[RaverYouTubeSimpleEmbed] js message: \(message.body)")
+            }
+        }
+
+        private static func html(videoID: String) -> String {
+            let cleanID = videoID
+                .components(separatedBy: CharacterSet(charactersIn: "?&"))
+                .first?
+                .replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "\"", with: "&quot;")
+                .replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;") ?? videoID
+            let source = "https://www.youtube-nocookie.com/embed/\(cleanID)?playsinline=1&modestbranding=1&rel=0&enablejsapi=1&origin=https://www.youtube-nocookie.com"
+            return """
+            <html>
+            <head>
+                <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0">
+                <style>
+                    html, body {
+                        width: 100%;
+                        height: 100%;
+                        margin: 0;
+                        padding: 0;
+                        overflow: hidden;
+                        background: #000;
+                    }
+                    iframe {
+                        display: block;
+                        width: 100%;
+                        height: 100%;
+                        border: 0;
+                        background: #000;
+                    }
+                </style>
+            </head>
+            <body>
+                <script>
+                    console.log('[RaverEmbedPage] local youtube-nocookie page loaded videoId=\(cleanID)');
+                </script>
+                <iframe
+                    width="100%"
+                    height="100%"
+                    src="\(source)"
+                    frameborder="0"
+                    allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen>
+                </iframe>
+            </body>
+            </html>
+            """
+        }
+    }
+}
+
+private struct EmbeddedYouTubePlayer: UIViewRepresentable {
+    let videoID: String
+    @Binding var currentTime: Double
+    @Binding var duration: Double
+    @Binding var pendingSeekTime: Double?
+    let isPaused: Bool
+    let onReady: () -> Void
+    let onPlaybackStateChanged: (Bool) -> Void
+    let onError: (String) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        configuration.userContentController.add(context.coordinator, name: "raverPlayer")
+        configuration.userContentController.addUserScript(EmbeddedYouTubePlayer.Coordinator.consoleBridgeScript)
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
+        webView.isOpaque = false
+        webView.backgroundColor = .black
+        context.coordinator.webView = webView
+        context.coordinator.load(videoID: videoID, in: webView)
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.parent = self
+        if context.coordinator.loadedVideoID != videoID {
+            context.coordinator.load(videoID: videoID, in: webView)
+        }
+        context.coordinator.seekIfNeeded()
+        context.coordinator.ensurePlaybackState()
+    }
+
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        coordinator.cleanup()
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "raverPlayer")
+        webView.stopLoading()
+        webView.loadHTMLString("", baseURL: nil)
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+        static let consoleBridgeScript = WKUserScript(
+            source: """
+            (function() {
+              function send(level, args) {
+                try {
+                  window.webkit.messageHandlers.raverPlayer.postMessage({
+                    type: 'console',
+                    level: level,
+                    message: Array.prototype.slice.call(args).map(function(item) {
+                      try {
+                        if (typeof item === 'string') return item;
+                        return JSON.stringify(item);
+                      } catch (_) {
+                        return String(item);
+                      }
+                    }).join(' ')
+                  });
+                } catch (_) {}
+              }
+              ['log', 'info', 'warn', 'error'].forEach(function(level) {
+                var original = console[level];
+                console[level] = function() {
+                  send(level, arguments);
+                  if (original) original.apply(console, arguments);
+                };
+              });
+              window.addEventListener('error', function(event) {
+                send('window-error', [event.message, event.filename, event.lineno, event.colno]);
+              });
+              window.addEventListener('unhandledrejection', function(event) {
+                send('unhandled-rejection', [event.reason && event.reason.message ? event.reason.message : event.reason]);
+              });
+            })();
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+
+        var parent: EmbeddedYouTubePlayer
+        weak var webView: WKWebView?
+        private(set) var loadedVideoID: String?
+        private var isReady = false
+        private var lastAppliedPausedState: Bool?
+        private var lastSeekTime: Double?
+
+        init(parent: EmbeddedYouTubePlayer) {
+            self.parent = parent
+        }
+
+        func load(videoID: String, in webView: WKWebView) {
+            log("load requested videoID=\(videoID)")
+            if loadedVideoID == videoID, webView.isLoading || webView.url != nil {
+                log("skip duplicate load videoID=\(videoID) currentURL=\(webView.url?.absoluteString ?? "nil") isLoading=\(webView.isLoading)")
+                return
+            }
+            loadedVideoID = videoID
+            isReady = false
+            lastAppliedPausedState = nil
+            lastSeekTime = nil
+            webView.navigationDelegate = self
+            webView.uiDelegate = self
+            guard let url = Self.embedPageURL(videoID: videoID) else {
+                log("failed to build embed URL for videoID=\(videoID)")
+                parent.onError(LT("YouTube 视频链接无效。", "Invalid YouTube video link.", "YouTube動画リンクが無効です。"))
+                return
+            }
+            var request = URLRequest(url: url)
+            log("loading BFF embed page url=\(url.absoluteString)")
+            webView.load(request)
+        }
+
+        func seekIfNeeded() {
+            guard isReady, let seconds = parent.pendingSeekTime else { return }
+            let target = max(0, seconds)
+            guard lastSeekTime != target else { return }
+            lastSeekTime = target
+            evaluate("window.__raverYouTubeBridge && window.__raverYouTubeBridge.seekTo(\(target));")
+            DispatchQueue.main.async {
+                self.parent.pendingSeekTime = nil
+            }
+        }
+
+        func ensurePlaybackState() {
+            guard isReady, lastAppliedPausedState != parent.isPaused else { return }
+            lastAppliedPausedState = parent.isPaused
+            evaluate(parent.isPaused
+                ? "window.__raverYouTubeBridge && window.__raverYouTubeBridge.pause();"
+                : "window.__raverYouTubeBridge && window.__raverYouTubeBridge.play();")
+        }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "raverPlayer",
+                  let payload = message.body as? [String: Any],
+                  let type = payload["type"] as? String else { return }
+
+            DispatchQueue.main.async {
+                switch type {
+                case "ready":
+                    self.isReady = true
+                    if let duration = payload["duration"] as? Double, duration.isFinite, duration > 0 {
+                        self.parent.duration = duration
+                    }
+                    self.parent.onReady()
+                    self.seekIfNeeded()
+                    self.ensurePlaybackState()
+                case "time":
+                    if let time = payload["currentTime"] as? Double, time.isFinite {
+                        self.parent.currentTime = max(0, time)
+                    }
+                    if let duration = payload["duration"] as? Double, duration.isFinite, duration > 0 {
+                        self.parent.duration = duration
+                    }
+                case "state":
+                    if let state = payload["state"] as? Int {
+                        self.log("iframe api state=\(state)")
+                        self.parent.onPlaybackStateChanged(state != 1)
+                    }
+                case "error":
+                    let code = payload["code"].map { "\($0)" } ?? "unknown"
+                    self.log("iframe api error code=\(code)")
+                    self.parent.onError(LT("YouTube 播放器加载失败，请确认视频允许嵌入播放。", "YouTube player failed to load. Please confirm the video allows embedded playback.", "YouTubeプレーヤーを読み込めません。動画が埋め込み再生を許可しているか確認してください。"))
+                case "console":
+                    let level = payload["level"] as? String ?? "log"
+                    let message = payload["message"] as? String ?? ""
+                    self.log("js \(level): \(message)")
+                default:
+                    break
+                }
+            }
+        }
+
+        func cleanup() {
+            evaluate("window.__raverYouTubeBridge && window.__raverYouTubeBridge.destroy && window.__raverYouTubeBridge.destroy();")
+            isReady = false
+            loadedVideoID = nil
+            webView?.navigationDelegate = nil
+            webView?.uiDelegate = nil
+            webView = nil
+        }
+
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            log("didStartProvisionalNavigation url=\(webView.url?.absoluteString ?? "nil")")
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            let url = navigationAction.request.url?.absoluteString ?? "nil"
+            let target = navigationAction.targetFrame?.isMainFrame == true ? "main" : "subframe"
+            log("decidePolicy action=\(navigationAction.navigationType.rawValue) target=\(target) url=\(url)")
+            decisionHandler(.allow)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationResponse: WKNavigationResponse,
+            decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+        ) {
+            let url = navigationResponse.response.url?.absoluteString ?? "nil"
+            if let http = navigationResponse.response as? HTTPURLResponse {
+                log("navigationResponse status=\(http.statusCode) url=\(url)")
+            } else {
+                log("navigationResponse url=\(url)")
+            }
+            decisionHandler(.allow)
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            log("didFinish url=\(webView.url?.absoluteString ?? "nil") title=\(webView.title ?? "nil")")
+            installVideoBridge()
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            log("didFail url=\(webView.url?.absoluteString ?? "nil") error=\(error.localizedDescription)")
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            log("didFailProvisionalNavigation url=\(webView.url?.absoluteString ?? "nil") error=\(error.localizedDescription)")
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            log("webContentProcessDidTerminate url=\(webView.url?.absoluteString ?? "nil")")
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            log("createWebViewWith url=\(navigationAction.request.url?.absoluteString ?? "nil")")
+            if navigationAction.targetFrame == nil {
+                webView.load(navigationAction.request)
+            }
+            return nil
+        }
+
+        private func evaluate(_ script: String) {
+            webView?.evaluateJavaScript(script, completionHandler: nil)
+        }
+
+        private func installVideoBridge() {
+            let script = """
+            (function() {
+              if (window.__raverYouTubeBridgeInstalled) { return "already-installed"; }
+              function post(payload) {
+                try { window.webkit.messageHandlers.raverPlayer.postMessage(payload); } catch (_) {}
+              }
+              function emitState(video) {
+                post({ type: 'state', state: video.paused ? 2 : 1 });
+              }
+              function emitTime(video) {
+                post({
+                  type: 'time',
+                  currentTime: Number(video.currentTime || 0),
+                  duration: Number(video.duration || 0)
+                });
+              }
+              function attach(video) {
+                if (!video) { return false; }
+                if (video.__raverBridgeAttached) { return true; }
+                video.__raverBridgeAttached = true;
+                window.__raverYouTubeBridgeInstalled = true;
+                window.__raverYouTubeBridge = {
+                  play: function() {
+                    var p = video.play && video.play();
+                    if (p && p.catch) { p.catch(function(err) { console.warn("video.play failed", err && err.message ? err.message : err); }); }
+                  },
+                  pause: function() { if (video.pause) video.pause(); },
+                  seekTo: function(seconds) { video.currentTime = Math.max(0, Number(seconds || 0)); emitTime(video); },
+                  destroy: function() {}
+                };
+                ["play", "playing", "pause", "seeking", "seeked", "timeupdate", "durationchange", "loadedmetadata"].forEach(function(name) {
+                  video.addEventListener(name, function() {
+                    emitState(video);
+                    emitTime(video);
+                  });
+                });
+                video.addEventListener("error", function() {
+                  var mediaError = video.error;
+                  post({ type: "error", code: mediaError && mediaError.code ? mediaError.code : "video-element-error" });
+                });
+                post({ type: 'ready', duration: Number(video.duration || 0) });
+                emitState(video);
+                emitTime(video);
+                return true;
+              }
+              var attempts = 0;
+              var timer = window.setInterval(function() {
+                attempts += 1;
+                var video = document.querySelector("video");
+                if (attach(video)) {
+                  window.clearInterval(timer);
+                  console.log("Raver bridge attached to video element");
+                  return;
+                }
+                if (attempts >= 80) {
+                  window.clearInterval(timer);
+                  console.warn("Raver bridge could not find video element");
+                }
+              }, 250);
+              return "installing";
+            })();
+            """
+            webView?.evaluateJavaScript(script) { _, error in
+                if let error {
+                    self.log("installVideoBridge js error=\(error.localizedDescription)")
+                } else {
+                    self.log("installVideoBridge dispatched")
+                }
+            }
+        }
+
+        private func log(_ message: String) {
+            print("[RaverYouTubeEmbed] \(message)")
+        }
+
+        private static func embedPageURL(videoID: String) -> URL? {
+            AppConfig.resolvedURLString("/v1/dj-sets/youtube-embed/\(videoID)").flatMap(URL.init(string:))
+        }
+
+        private static func html(videoID: String) -> String {
+            let escapedVideoID = videoID
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "'", with: "\\'")
+            let embedURL = "https://www.youtube.com/embed/\(escapedVideoID)?enablejsapi=1&playsinline=1&rel=0"
+            return """
+            <!doctype html>
+            <html>
+            <head>
+              <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+              <meta name="referrer" content="strict-origin-when-cross-origin">
+              <style>
+                html, body, #player {
+                  width: 100%;
+                  height: 100%;
+                  margin: 0;
+                  padding: 0;
+                  overflow: hidden;
+                  background: #000;
+                  border: 0;
+                }
+              </style>
+            </head>
+            <body>
+              <iframe
+                id="player"
+                type="text/html"
+                width="100%"
+                height="100%"
+                src="\(embedURL)"
+                title="YouTube video player"
+                frameborder="0"
+                referrerpolicy="strict-origin-when-cross-origin"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowfullscreen
+              ></iframe>
+              <script src="https://www.youtube.com/iframe_api"></script>
+              <script>
+                var player;
+                var poller;
+                function post(payload) {
+                  window.webkit.messageHandlers.raverPlayer.postMessage(payload);
+                }
+                function onYouTubeIframeAPIReady() {
+                  player = new YT.Player('player', {
+                    events: {
+                      onReady: function() {
+                        post({ type: 'ready', duration: player.getDuration() || 0 });
+                        startPolling();
+                      },
+                      onStateChange: function(event) {
+                        post({ type: 'state', state: event.data });
+                      },
+                      onError: function(event) {
+                        post({ type: 'error', code: event.data });
+                      }
+                    }
+                  });
+                }
+                function startPolling() {
+                  if (poller) window.clearInterval(poller);
+                  poller = window.setInterval(function() {
+                    if (!player || !player.getCurrentTime) return;
+                    post({
+                      type: 'time',
+                      currentTime: player.getCurrentTime() || 0,
+                      duration: player.getDuration() || 0
+                    });
+                  }, 350);
+                }
+                function seekTo(seconds) {
+                  if (player && player.seekTo) player.seekTo(Math.max(0, seconds), true);
+                }
+                function play() {
+                  if (player && player.playVideo) player.playVideo();
+                }
+                function pause() {
+                  if (player && player.pauseVideo) player.pauseVideo();
+                }
+                function destroy() {
+                  if (poller) window.clearInterval(poller);
+                  if (player && player.destroy) player.destroy();
+                  player = null;
+                }
+              </script>
+            </body>
+            </html>
+            """
         }
     }
 }
@@ -3787,6 +4559,11 @@ struct DJSetEditorView: View {
     let onSaved: () -> Void
 
     @State private var djId = ""
+    @State private var selectedDJ: WebDJ?
+    @State private var djSearchText = ""
+    @State private var djSearchResults: [WebDJ] = []
+    @State private var isSearchingDJs = false
+    @State private var showDJBindingSheet = false
     @State private var title = ""
     @State private var videoUrl = ""
     @State private var description = ""
@@ -3794,20 +4571,61 @@ struct DJSetEditorView: View {
     @State private var eventName = ""
     @State private var thumbnailUrl = ""
     @State private var selectedPhoto: PhotosPickerItem?
-    @State private var selectedVideo: PhotosPickerItem?
     @State private var isSaving = false
-    @State private var isUploadingVideo = false
+    @State private var isPreviewingVideo = false
     @State private var previewText = ""
+    @State private var previewAuthorName = ""
+    @State private var lastPreviewedVideoUrl = ""
     @State private var errorMessage: String?
     @State private var showEventBindingSheet = false
     @State private var rightsConfirmed = false
 
-    private let demoVideoURL = "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-
     var body: some View {
         Form {
                 Section(LT("基础", "基础", "基本")) {
-                    TextField(LT("DJ ID", "DJ ID", "DJ ID"), text: $djId)
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let selectedDJ {
+                            HStack(spacing: 10) {
+                                if let avatar = AppConfig.resolvedURLString(selectedDJ.avatarSmallUrl ?? selectedDJ.avatarUrl), !avatar.isEmpty {
+                                    ImageLoaderView(urlString: avatar)
+                                        .background(Circle().fill(RaverTheme.card))
+                                        .frame(width: 28, height: 28)
+                                        .clipShape(Circle())
+                                } else {
+                                    Circle()
+                                        .fill(RaverTheme.card)
+                                        .frame(width: 28, height: 28)
+                                }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(selectedDJ.name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                    Text(LT("已关联 DJ", "Linked DJ", "関連付け済みDJ"))
+                                        .font(.caption)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                }
+                                Spacer()
+                                Button(role: .destructive) {
+                                    self.selectedDJ = nil
+                                    self.djId = ""
+                                } label: {
+                                    Text(LT("清除", "Clear", "クリア"))
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        } else {
+                            Text(LT("未关联 DJ（可留空）", "No DJ linked (optional)", "DJ未関連（任意）"))
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+
+                        Button {
+                            showDJBindingSheet = true
+                        } label: {
+                            Label(LT("搜索并选择 DJ", "Search and Select DJ", "DJを検索して選択"), systemImage: "magnifyingglass")
+                        }
+                        .buttonStyle(.bordered)
+                    }
                     TextField(LT("标题", "标题", "タイトル"), text: $title)
                     TextField(LT("简介", "简介", "概要"), text: $description, axis: .vertical)
                     TextField(LT("场地", "场地", "会場"), text: $venue)
@@ -3844,44 +4662,52 @@ struct DJSetEditorView: View {
                     }
                 }
 
-                Section(LT("视频资源", "视频资源", "動画リソース")) {
-                    TextField(LT("视频链接（可选）", "视频链接（可选）", "動画リンク（任意）"), text: $videoUrl)
-                    PhotosPicker(selection: $selectedVideo, matching: .videos) {
-                        Label(LT("上传视频到资源库", "上传视频到资源库", "動画をライブラリにアップロード"), systemImage: "video.badge.plus")
-                    }
-                    if isUploadingVideo {
+                Section(LT("YouTube 视频", "YouTube 视频", "YouTube動画")) {
+                    TextField(LT("粘贴 YouTube 视频链接", "Paste YouTube video link", "YouTube動画リンクを貼り付け"), text: $videoUrl)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .onSubmit {
+                            Task { await preview() }
+                        }
+                        .onChange(of: videoUrl) { _, newValue in
+                            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if trimmed != lastPreviewedVideoUrl {
+                                previewText = ""
+                                previewAuthorName = ""
+                            }
+                        }
+
+                    if isPreviewingVideo {
                         HStack(spacing: 8) {
                             ProgressView()
-                            Text(LT("视频上传中...", "视频上传中...", "動画をアップロード中..."))
+                            Text(LT("正在解析 YouTube 信息...", "Parsing YouTube metadata...", "YouTube情報を解析中..."))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
                     }
-                    Button(LT("填入 Demo 视频", "填入 Demo 视频", "Demo動画を入力")) {
-                        videoUrl = demoVideoURL
+
+                    Button(LT("解析 YouTube 信息", "Parse YouTube Info", "YouTube情報を解析")) {
+                        Task { await preview() }
+                    }
+                    .disabled(isPreviewingVideo || videoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    if !previewText.isEmpty || !previewAuthorName.isEmpty {
+                        youtubePreviewCard
                     }
 
                     Toggle(isOn: $rightsConfirmed) {
-                        Text(LT("我确认拥有发布该视频的权利，或确认链接来源合法且可公开引用。", "I confirm I have the right to post this video, or that the link source is lawful and publicly referenceable.", "この動画を投稿する権利がある、またはリンク元が合法で公開参照可能であることを確認します。"))
+                        Text(LT("我确认该 YouTube 视频来源合法且允许公开引用/嵌入。", "I confirm this YouTube video source is lawful and allows public reference/embedding.", "このYouTube動画の出典が合法で、公開参照/埋め込みが許可されていることを確認します。"))
                             .font(.caption)
                     }
                 }
 
                 Section(LT("封面", "封面", "カバー")) {
                     TextField(LT("封面 URL", "封面 URL", "カバーURL"), text: $thumbnailUrl)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
                         Label(LT("上传封面", "上传封面", "カバーをアップロード"), systemImage: "photo")
-                    }
-                }
-
-                Section {
-                    Button(LT("预解析视频", "预解析视频", "動画を事前解析")) {
-                        Task { await preview() }
-                    }
-                    if !previewText.isEmpty {
-                        Text(previewText)
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
                     }
                 }
             }
@@ -3913,33 +4739,115 @@ struct DJSetEditorView: View {
                 }
                 .environmentObject(appContainer)
             }
+            .sheet(isPresented: $showDJBindingSheet) {
+                DJSetDJBindingSheet(
+                    selectedDJ: selectedDJ,
+                    searchText: djSearchText,
+                    searchResults: djSearchResults,
+                    isSearching: isSearchingDJs,
+                    onSearch: { keyword in
+                        await searchDJs(keyword: keyword)
+                    },
+                    onSelect: { dj in
+                        selectedDJ = dj
+                        djId = dj.id
+                    }
+                )
+            }
+    }
+
+    @ViewBuilder
+    private var youtubePreviewCard: some View {
+        let cover = thumbnailUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(RaverTheme.card)
+                if !cover.isEmpty {
+                    ImageLoaderView(urlString: cover)
+                } else {
+                    Image(systemName: "play.rectangle.fill")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                }
+            }
+            .frame(width: 116, height: 65)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 5) {
+                if !previewText.isEmpty {
+                    Text(previewText)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(2)
+                }
+                if !previewAuthorName.isEmpty {
+                    Text(LT("发布人：\(previewAuthorName)", "Publisher: \(previewAuthorName)", "投稿者: \(previewAuthorName)"))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(1)
+                }
+                if !cover.isEmpty {
+                    Text(LT("封面已自动填充", "Cover auto-filled", "カバーを自動入力しました"))
+                        .font(.caption2)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
     }
 
     private func prefillIfNeeded() {
         guard case .edit(let set) = mode else { return }
         if !title.isEmpty { return }
 
-        djId = set.djId
+        djId = set.djId ?? ""
+        selectedDJ = set.dj
         title = set.title
         videoUrl = set.videoUrl
         description = set.description ?? ""
         venue = set.venue ?? ""
         eventName = set.eventName ?? ""
         thumbnailUrl = set.thumbnailUrl ?? ""
+        previewAuthorName = set.videoAuthorName ?? ""
         rightsConfirmed = true
     }
 
     private func preview() async {
         let url = videoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !url.isEmpty else {
-            errorMessage = LT("请先输入视频链接，或直接上传视频后再保存", "Please enter a video URL, or upload a video first.", "動画URLを入力するか、動画を直接アップロードしてから保存してください。")
+            errorMessage = LT("请先粘贴 YouTube 视频链接", "Please paste a YouTube video link first.", "先にYouTube動画リンクを貼り付けてください。")
             return
         }
+        isPreviewingVideo = true
+        defer { isPreviewingVideo = false }
         do {
             let data = try await setMediaRepository.previewVideo(videoURL: url)
-            let title = data["title"] ?? ""
+            let parsedTitle = data["title"] ?? ""
             let platform = data["platform"] ?? ""
-            previewText = "\(platform) \(title)"
+            let authorName = data["authorName"] ?? ""
+            let parsedDescription = data["description"] ?? ""
+            let parsedThumbnail = data["thumbnailUrl"] ?? ""
+
+            guard platform.lowercased() == "youtube" else {
+                errorMessage = LT("当前发布仅支持 YouTube 视频链接", "Only YouTube video links are supported for publishing now.", "現在の投稿はYouTube動画リンクのみ対応しています。")
+                return
+            }
+
+            if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !parsedTitle.isEmpty {
+                title = parsedTitle
+            }
+            if description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !parsedDescription.isEmpty {
+                description = parsedDescription
+            }
+            if thumbnailUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !parsedThumbnail.isEmpty {
+                thumbnailUrl = parsedThumbnail
+            }
+
+            previewText = [platform.uppercased(), parsedTitle].filter { !$0.isEmpty }.joined(separator: " · ")
+            previewAuthorName = authorName
+            lastPreviewedVideoUrl = url
         } catch {
             errorMessage = error.userFacingMessage
         }
@@ -3947,19 +4855,23 @@ struct DJSetEditorView: View {
 
     private func save() async {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedDJID = djId.trimmingCharacters(in: .whitespacesAndNewlines)
-        var finalVideo = videoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalVideo = videoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !trimmedTitle.isEmpty, !trimmedDJID.isEmpty else {
-            errorMessage = LT("请补全 DJ ID 和标题", "Please complete DJ ID and title.", "DJ IDとタイトルを入力してください。")
+        guard !trimmedTitle.isEmpty else {
+            errorMessage = LT("请填写标题", "Please fill in the title.", "タイトルを入力してください。")
             return
         }
-        if finalVideo.isEmpty, selectedVideo == nil {
-            errorMessage = LT("请填写视频链接或上传视频文件", "Please provide a video URL or upload a video file.", "動画URLを入力するか動画ファイルをアップロードしてください。")
+        if finalVideo.isEmpty {
+            errorMessage = LT("请填写 YouTube 视频链接", "Please provide a YouTube video link.", "YouTube動画リンクを入力してください。")
             return
         }
         guard rightsConfirmed else {
             errorMessage = LT("请先确认你拥有发布权利，或链接来源合法且可公开引用。", "Please confirm you have posting rights, or that the link source is lawful and publicly referenceable.", "投稿権利がある、またはリンク元が合法で公開参照可能であることを確認してください。")
+            return
+        }
+
+        if YouTubeVideoIDParser.videoID(from: finalVideo) == nil {
+            errorMessage = LT("当前仅支持合法的 YouTube 视频链接", "Only valid YouTube video links are supported right now.", "現在は有効なYouTube動画リンクのみ対応しています。")
             return
         }
 
@@ -3979,31 +4891,14 @@ struct DJSetEditorView: View {
                 finalThumb = upload.url
             }
 
-            if let selectedVideo {
-                isUploadingVideo = true
-                defer { isUploadingVideo = false }
-                guard let videoData = try await selectedVideo.loadTransferable(type: Data.self) else {
-                    throw ServiceError.message(LT("读取视频文件失败，请重新选择", "Failed to read video file. Please reselect.", "動画ファイルを読み込めませんでした。再選択してください。"))
-                }
-                let upload = try await setMediaRepository.uploadSetVideo(
-                    videoData: videoData,
-                    fileName: "set-video-\(UUID().uuidString).mp4",
-                    mimeType: "video/mp4"
-                )
-                finalVideo = upload.url
-            }
-
-            guard !finalVideo.isEmpty else {
-                throw ServiceError.message(LT("视频上传失败，请重试", "Video upload failed. Please try again.", "動画のアップロードに失敗しました。もう一度お試しください。"))
-            }
-
             switch mode {
             case .create:
                 let result = try await setCommandRepository.createDJSet(
                     input: CreateDJSetInput(
-                        djId: trimmedDJID,
+                        djId: selectedDJ?.id.nilIfBlank,
                         title: trimmedTitle,
                         videoUrl: finalVideo,
+                        videoAuthorName: previewAuthorName.nilIfEmpty,
                         thumbnailUrl: finalThumb.nilIfEmpty,
                         description: description.nilIfEmpty,
                         venue: venue.nilIfEmpty,
@@ -4019,9 +4914,10 @@ struct DJSetEditorView: View {
                 _ = try await setCommandRepository.updateDJSet(
                     id: set.id,
                     input: UpdateDJSetInput(
-                        djId: trimmedDJID,
+                        djId: selectedDJ?.id.nilIfBlank,
                         title: trimmedTitle,
                         videoUrl: finalVideo,
+                        videoAuthorName: previewAuthorName.nilIfEmpty,
                         thumbnailUrl: finalThumb.nilIfEmpty,
                         description: description.nilIfEmpty,
                         venue: venue.nilIfEmpty,
@@ -4035,6 +4931,140 @@ struct DJSetEditorView: View {
             dismiss()
         } catch {
             errorMessage = error.userFacingMessage
+        }
+    }
+
+    @MainActor
+    private func searchDJs(keyword: String) async {
+        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            djSearchResults = []
+            djSearchText = ""
+            return
+        }
+        djSearchText = trimmed
+        isSearchingDJs = true
+        defer { isSearchingDJs = false }
+        do {
+            let page = try await appContainer.webService.fetchDJs(page: 1, limit: 20, search: trimmed, sortBy: "name")
+            djSearchResults = page.items
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+}
+
+private struct DJSetDJBindingSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let selectedDJ: WebDJ?
+    let searchText: String
+    let searchResults: [WebDJ]
+    let isSearching: Bool
+    let onSearch: (String) async -> Void
+    let onSelect: (WebDJ) -> Void
+
+    @State private var query: String
+
+    init(
+        selectedDJ: WebDJ?,
+        searchText: String,
+        searchResults: [WebDJ],
+        isSearching: Bool,
+        onSearch: @escaping (String) async -> Void,
+        onSelect: @escaping (WebDJ) -> Void
+    ) {
+        self.selectedDJ = selectedDJ
+        self.searchText = searchText
+        self.searchResults = searchResults
+        self.isSearching = isSearching
+        self.onSearch = onSearch
+        self.onSelect = onSelect
+        _query = State(initialValue: searchText)
+    }
+
+    var body: some View {
+        List {
+            Section(LT("搜索 DJ", "Search DJ", "DJを検索")) {
+                HStack(spacing: 8) {
+                    TextField(LT("输入 DJ 名称", "Enter DJ name", "DJ名を入力"), text: $query)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .onSubmit { Task { await onSearch(query) } }
+                    Button(LT("搜索", "Search", "検索")) {
+                        Task { await onSearch(query) }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
+                }
+
+                if isSearching {
+                    ProgressView(LT("搜索 DJ 中...", "Searching DJs...", "DJを検索中..."))
+                        .font(.caption)
+                }
+            }
+
+            if let selectedDJ {
+                Section(LT("当前关联", "Current Link", "現在の関連")) {
+                    djRow(selectedDJ, isSelected: true)
+                }
+            }
+
+            Section(LT("搜索结果", "Search Results", "検索結果")) {
+                if searchResults.isEmpty {
+                    Text(LT("搜索并选择一个 DJ，也可以留空发布。", "Search and select a DJ, or publish without one.", "DJを検索して選択できます。未選択でも投稿できます。"))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                } else {
+                    ForEach(searchResults) { dj in
+                        Button {
+                            onSelect(dj)
+                            dismiss()
+                        } label: {
+                            djRow(dj, isSelected: selectedDJ?.id == dj.id)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .raverSystemNavigation(title: LT("选择 DJ", "Select DJ", "DJを選択"))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(LT("关闭", "Close", "閉じる")) {
+                    dismiss()
+                }
+            }
+        }
+    }
+
+    private func djRow(_ dj: WebDJ, isSelected: Bool) -> some View {
+        HStack(spacing: 10) {
+            if let avatar = AppConfig.resolvedURLString(dj.avatarSmallUrl ?? dj.avatarUrl), !avatar.isEmpty {
+                ImageLoaderView(urlString: avatar)
+                    .background(Circle().fill(RaverTheme.card))
+                    .frame(width: 34, height: 34)
+                    .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(RaverTheme.card)
+                    .frame(width: 34, height: 34)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(dj.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Text([dj.country?.nilIfBlank, (dj.genres ?? []).prefix(2).joined(separator: " / ").nilIfBlank].compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+            }
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(RaverTheme.accent)
+            }
         }
     }
 }

@@ -257,7 +257,10 @@ final class FeedViewModel: ObservableObject {
     }
 
     func refresh() async {
-        await load()
+        let task = Task { @MainActor in
+            await load()
+        }
+        await task.value
     }
 
     func loadMoreIfNeeded(currentPost: Post) async {

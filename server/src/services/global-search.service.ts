@@ -782,7 +782,7 @@ const searchSets = async (query: string, limit: number): Promise<GlobalSearchIte
   ]);
 
   const setItems = setRows.map((row) => {
-    const performerNames = [row.dj.name, ...row.customDjNames];
+    const performerNames = [row.dj?.name, ...row.customDjNames].filter((name): name is string => Boolean(name));
     const durationMinutes = row.duration ? `${Math.round(row.duration / 60)} min` : null;
     const score = Math.max(
       scoreText(query, row.title),
@@ -797,7 +797,7 @@ const searchSets = async (query: string, limit: number): Promise<GlobalSearchIte
       title: row.title,
       subtitle: compact([performerNames.join(', '), row.eventName, durationMinutes]),
       summary: truncate(row.description || row.venue),
-      imageUrl: row.thumbnailUrl || row.dj.avatarUrl,
+      imageUrl: row.thumbnailUrl || row.dj?.avatarUrl || null,
       badgeText: row.platform,
       deeplink: buildSetDeeplink(row.id),
       relevanceScore: finalizeScore(score),
@@ -809,7 +809,7 @@ const searchSets = async (query: string, limit: number): Promise<GlobalSearchIte
 
   const trackItems = trackRows.map((row) => {
     const set = row.tracklist.set;
-    const performerNames = [set.dj.name, ...set.customDjNames];
+    const performerNames = [set.dj?.name, ...set.customDjNames].filter((name): name is string => Boolean(name));
     const timeLabel = formatSecondsLabel(row.startTime);
     const score = Math.max(
       scoreText(query, row.title, { exact: 100, prefix: 88, contains: 74 }),
@@ -836,7 +836,7 @@ const searchSets = async (query: string, limit: number): Promise<GlobalSearchIte
         ),
         140
       ),
-      imageUrl: set.thumbnailUrl || set.dj.avatarUrl,
+      imageUrl: set.thumbnailUrl || set.dj?.avatarUrl || null,
       badgeText: timeLabel ? `Tracklist ${timeLabel}` : 'Tracklist',
       deeplink: buildSetDeeplink(set.id, {
         tracklistId: row.tracklist.id,

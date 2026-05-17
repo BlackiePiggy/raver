@@ -3,7 +3,6 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import OSS from 'ali-oss';
 import multer from 'multer';
 import crypto from 'crypto';
-import fs from 'fs/promises';
 import path from 'path';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
@@ -61,6 +60,13 @@ import { accountDeletionService } from '../services/account-deletion.service';
 import { analyzeI18nCompleteness } from '../utils/i18n';
 import { contentCompliance } from '../utils/content-compliance';
 import { regionalCompliance } from '../config/regional-compliance';
+import {
+  publicObjectStorageUrlForKey,
+  saveBufferToLocalUploads,
+  securePublicAssetUrl as resolveSecurePublicAssetUrl,
+  shouldAllowLocalUploadFallback,
+} from '../services/media-storage.service';
+import { mediaAssetService } from '../services/media-asset.service';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -135,25 +141,10 @@ const createInternalUsername = async (seed: string): Promise<string> => {
   return `user_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
 };
 
-const publicOssUrlForObjectKey = (objectKey: string): string => {
-  if (!ossBucket || !ossRegion) {
-    return `/${objectKey}`;
-  }
-
-  const endpointHost = ossEndpoint
-    ? ossEndpoint.replace(/^https?:\/\//, '').replace(/^\/+|\/+$/g, '')
-    : `${ossRegion}.aliyuncs.com`;
-  const bucketHost = endpointHost.startsWith(`${ossBucket}.`) ? endpointHost : `${ossBucket}.${endpointHost}`;
-  return `https://${bucketHost}/${objectKey}`;
-};
+const publicOssUrlForObjectKey = (objectKey: string): string => publicObjectStorageUrlForKey(objectKey);
 
 const securePublicAssetUrl = (rawUrl: string | undefined | null, objectKey: string): string => {
-  const fallback = publicOssUrlForObjectKey(objectKey);
-  const trimmed = typeof rawUrl === 'string' ? rawUrl.trim() : '';
-  if (!trimmed) return fallback;
-  if (trimmed.startsWith('//')) return `https:${trimmed}`;
-  if (trimmed.startsWith('http://')) return `https://${trimmed.slice('http://'.length)}`;
-  return trimmed;
+  return resolveSecurePublicAssetUrl(rawUrl, objectKey);
 };
 
 const extensionForMimeType = (mimeType: string): string => {
@@ -167,7 +158,7 @@ const extensionForMimeType = (mimeType: string): string => {
 const uploadUserAvatarToOss = async (
   userId: string,
   file: Express.Multer.File
-): Promise<{ url: string; objectKey: string }> => {
+): Promise<{ assetId: string; url: string; objectKey: string }> => {
   if (!ossClient) {
     throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
   }
@@ -180,8 +171,25 @@ const uploadUserAvatarToOss = async (
       'Cache-Control': 'public, max-age=31536000, immutable',
     },
   });
+  const url = securePublicAssetUrl(result.url, objectKey);
+  const asset = await mediaAssetService.register({
+    ownerType: 'user',
+    ownerId: userId,
+    purpose: 'avatar',
+    provider: 'oss',
+    objectKey,
+    url,
+    mimeType: file.mimetype,
+    sizeBytes: file.size,
+    uploadedById: userId,
+    metadata: {
+      originalName: file.originalname,
+      source: 'v1/profile/me/avatar',
+    },
+  });
   return {
-    url: securePublicAssetUrl(result.url, objectKey),
+    assetId: asset.id,
+    url,
     objectKey,
   };
 };
@@ -189,7 +197,7 @@ const uploadUserAvatarToOss = async (
 const uploadSquadAvatarAsset = async (
   squadId: string,
   file: Express.Multer.File
-): Promise<{ url: string; objectKey: string | null }> => {
+): Promise<{ assetId: string; url: string; objectKey: string | null }> => {
   const ext = extensionForMimeType(file.mimetype);
 
   if (ossClient) {
@@ -200,18 +208,56 @@ const uploadSquadAvatarAsset = async (
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });
+    const url = result.url || publicOssUrlForObjectKey(objectKey);
+    const asset = await mediaAssetService.register({
+      ownerType: 'squad',
+      ownerId: squadId,
+      purpose: 'avatar',
+      provider: 'oss',
+      objectKey,
+      url,
+      mimeType: file.mimetype,
+      sizeBytes: file.size,
+      metadata: {
+        originalName: file.originalname,
+        source: 'v1/squads/:id/avatar',
+      },
+    });
     return {
-      url: result.url || publicOssUrlForObjectKey(objectKey),
+      assetId: asset.id,
+      url,
       objectKey,
     };
   }
 
-  const fileName = `squad-${squadId}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
-  const uploadDir = path.join(process.cwd(), 'uploads', 'avatars');
-  await fs.mkdir(uploadDir, { recursive: true });
-  await fs.writeFile(path.join(uploadDir, fileName), file.buffer);
+  if (!shouldAllowLocalUploadFallback()) {
+    throw new Error('Squad avatar upload requires OSS configuration');
+  }
+
+  const localUpload = await saveBufferToLocalUploads({
+    buffer: file.buffer,
+    localDir: path.join(process.cwd(), 'uploads', 'avatars'),
+    publicSubdir: 'avatars',
+    originalName: `squad-${squadId}${ext}`,
+    mimeType: file.mimetype,
+  });
+  const asset = await mediaAssetService.register({
+    ownerType: 'squad',
+    ownerId: squadId,
+    purpose: 'avatar',
+    provider: 'local',
+    objectKey: null,
+    url: localUpload.url,
+    mimeType: file.mimetype,
+    sizeBytes: file.size,
+    metadata: {
+      originalName: file.originalname,
+      source: 'v1/squads/:id/avatar',
+    },
+  });
   return {
-    url: `/uploads/avatars/${fileName}`,
+    assetId: asset.id,
+    url: localUpload.url,
     objectKey: null,
   };
 };
@@ -7973,6 +8019,9 @@ router.post(
         data: { avatarUrl },
         select: { id: true },
       });
+      if (previousSquad?.avatarUrl && previousSquad.avatarUrl !== avatarUrl) {
+        await mediaAssetService.markReplacedByUrl(previousSquad.avatarUrl);
+      }
 
       try {
         await syncSquadGroupInfo(squadId);
@@ -7982,10 +8031,11 @@ router.post(
           data: { avatarUrl: previousSquad?.avatarUrl || null },
           select: { id: true },
         });
+        await mediaAssetService.markReplacedByUrl(avatarUrl);
         throw error;
       }
 
-      res.status(201).json({ avatarURL: avatarUrl });
+      res.status(201).json({ avatarURL: avatarUrl, assetId: upload.assetId });
     } catch (error) {
       console.error('BFF upload squad avatar error:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -10275,6 +10325,11 @@ router.post(
         return;
       }
 
+      const previousUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { avatarUrl: true },
+      });
+
       const upload = await uploadUserAvatarToOss(userId, file);
       const avatarUrl = upload.url;
       await prisma.user.update({
@@ -10287,6 +10342,10 @@ router.post(
         select: { id: true },
       });
 
+      if (previousUser?.avatarUrl && previousUser.avatarUrl !== avatarUrl) {
+        await mediaAssetService.markReplacedByUrl(previousUser.avatarUrl);
+      }
+
       await createProfileModerationJob(
         userId,
         'avatar',
@@ -10296,7 +10355,7 @@ router.post(
 
       await syncTencentIMUserBestEffort(userId, 'bff-profile-avatar');
 
-      res.status(201).json({ avatarURL: avatarUrl });
+      res.status(201).json({ avatarURL: avatarUrl, assetId: upload.assetId });
     } catch (error) {
       console.error('BFF upload avatar error:', error);
       res.status(500).json({ error: 'Internal server error' });

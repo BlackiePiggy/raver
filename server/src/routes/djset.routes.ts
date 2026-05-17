@@ -1,29 +1,22 @@
 import { Router, Request, Response } from 'express';
 import type { IRouter } from 'express';
 import multer from 'multer';
-import fs from 'fs';
-import path from 'path';
 import { djSetService } from '../modules/music';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import {
+  buildMediaObjectKey,
+  isObjectStorageConfigured,
+  saveBufferToLocalUploads,
+  shouldAllowLocalUploadFallback,
+  uploadBufferToObjectStorage,
+} from '../services/media-storage.service';
+import { mediaAssetService } from '../services/media-asset.service';
+import path from 'path';
 
 const router: IRouter = Router();
 
-const uploadDir = path.join(process.cwd(), 'uploads', 'dj-sets');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || '').toLowerCase();
-    const safeExt = ext && ext.length <= 8 ? ext : '.jpg';
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${safeExt}`);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype.startsWith('image/')) {
@@ -60,9 +53,9 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    const { djId, djIds, customDjNames, title, videoUrl, thumbnailUrl, description, recordedAt, venue, eventName } = req.body;
+    const { djId, djIds, customDjNames, title, videoUrl, videoAuthorName, thumbnailUrl, description, recordedAt, venue, eventName } = req.body;
 
-    if (!djId || !title || !videoUrl) {
+    if (!title || !videoUrl) {
       res.status(400).json({ error: 'Missing required fields' });
       return;
     }
@@ -74,6 +67,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       uploadedById: userId,
       title,
       videoUrl,
+      videoAuthorName,
       thumbnailUrl,
       description,
       recordedAt: recordedAt ? new Date(recordedAt) : undefined,
@@ -125,12 +119,56 @@ router.post('/upload-thumbnail', authenticate, upload.single('image'), async (re
       res.status(400).json({ error: 'No file uploaded' });
       return;
     }
+    if (!file.buffer) {
+      res.status(400).json({ error: 'Invalid upload payload' });
+      return;
+    }
 
-    const publicUrl = `/uploads/dj-sets/${file.filename}`;
+    if (!isObjectStorageConfigured() && !shouldAllowLocalUploadFallback()) {
+      res.status(503).json({ error: 'Object storage is not configured for uploads' });
+      return;
+    }
+
+    const userId = req.user?.userId || 'legacy-api';
+    const uploaded = isObjectStorageConfigured()
+      ? await uploadBufferToObjectStorage({
+          buffer: file.buffer,
+          mimeType: file.mimetype || 'image/jpeg',
+          objectKey: buildMediaObjectKey(
+            process.env.OSS_DJ_SETS_PREFIX || 'wen-jasonlee/dj-sets',
+            userId,
+            'thumbnail',
+            file.originalname || 'thumbnail.jpg',
+            file.mimetype || 'image/jpeg'
+          ),
+        })
+      : await saveBufferToLocalUploads({
+          buffer: file.buffer,
+          localDir: path.join(process.cwd(), 'uploads', 'dj-sets'),
+          publicSubdir: 'dj-sets',
+          originalName: file.originalname || 'thumbnail.jpg',
+          mimeType: file.mimetype || 'image/jpeg',
+        });
+    const asset = await mediaAssetService.register({
+      ownerType: 'dj_set',
+      ownerId: typeof req.body?.setId === 'string' ? req.body.setId : null,
+      purpose: 'thumbnail',
+      provider: 'objectKey' in uploaded ? 'oss' : 'local',
+      objectKey: 'objectKey' in uploaded ? uploaded.objectKey : null,
+      url: uploaded.url,
+      mimeType: file.mimetype || 'image/jpeg',
+      sizeBytes: file.size,
+      uploadedById: req.user?.userId || null,
+      metadata: {
+        originalName: file.originalname,
+        source: 'api/dj-sets/upload-thumbnail',
+      },
+    });
 
     res.status(201).json({
-      url: publicUrl,
-      filename: file.filename,
+      assetId: asset.id,
+      url: uploaded.url,
+      filename: 'fileName' in uploaded ? uploaded.fileName : uploaded.objectKey.split('/').pop(),
       originalName: file.originalname,
       size: file.size,
       mimeType: file.mimetype,
@@ -212,6 +250,7 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response): Promis
       title,
       description,
       videoUrl,
+      videoAuthorName,
       thumbnailUrl,
       venue,
       eventName,
@@ -225,6 +264,7 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response): Promis
       title,
       description,
       videoUrl,
+      videoAuthorName: typeof videoAuthorName === 'string' ? videoAuthorName : undefined,
       thumbnailUrl,
       venue,
       eventName,
@@ -263,7 +303,8 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response): Pro
       return;
     }
 
-    await djSetService.deleteDJSetByUploader(req.params.id as string, userId, role);
+    const deleted = await djSetService.deleteDJSetByUploader(req.params.id as string, userId, role);
+    await mediaAssetService.markDeletedByUrl(deleted.thumbnailUrl);
     res.status(204).send();
   } catch (error) {
     const message = (error as Error).message || 'Failed to delete DJ set';

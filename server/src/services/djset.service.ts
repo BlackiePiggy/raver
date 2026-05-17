@@ -1,16 +1,45 @@
 import { PrismaClient } from '@prisma/client';
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import path from 'path';
 
 const prisma = new PrismaClient();
 
+const youtubeProxyUrl = (process.env.YOUTUBE_PROXY_URL || process.env.YOUTUBE_HTTPS_PROXY || 'http://127.0.0.1:7897').trim();
+
+const youtubeAxiosProxyConfig = (): Pick<AxiosRequestConfig, 'proxy'> => {
+  if (!youtubeProxyUrl) return {};
+  try {
+    const parsed = new URL(youtubeProxyUrl);
+    return {
+      proxy: {
+        protocol: parsed.protocol.replace(':', ''),
+        host: parsed.hostname,
+        port: Number(parsed.port || 80),
+      },
+    };
+  } catch (_error) {
+    return {};
+  }
+};
+
+type DJSetSortBy = 'latest' | 'popular' | 'tracks';
+
+interface DJSetListOptions {
+  page?: number;
+  limit?: number;
+  sortBy?: DJSetSortBy;
+  djId?: string;
+  eventName?: string;
+}
+
 interface CreateDJSetInput {
-  djId: string;
+  djId?: string | null;
   djIds?: string[];
   customDjNames?: string[];
   uploadedById?: string;
   title: string;
   videoUrl: string;
+  videoAuthorName?: string;
   thumbnailUrl?: string;
   description?: string;
   recordedAt?: Date;
@@ -40,6 +69,7 @@ interface UpdateDJSetInput {
   title?: string;
   description?: string;
   videoUrl?: string;
+  videoAuthorName?: string;
   thumbnailUrl?: string;
   venue?: string;
   eventName?: string;
@@ -47,6 +77,8 @@ interface UpdateDJSetInput {
 }
 
 export class DJSetService {
+  private readonly youtubeOEmbedTimeoutMs = Number(process.env.YOUTUBE_OEMBED_TIMEOUT_MS || 1000);
+
   private readonly contributorUserSelect = {
     id: true,
     username: true,
@@ -272,17 +304,27 @@ export class DJSetService {
     let title = '';
     let description = '';
     let thumbnailUrl = '';
+    let authorName = '';
 
-    // Prefer oEmbed for YouTube title
+    // Prefer oEmbed for YouTube metadata, but always keep a fast thumbnail fallback.
     if (parsed.platform === 'youtube') {
+      const canonicalYouTubeUrl = `https://www.youtube.com/watch?v=${parsed.videoId}`;
+      thumbnailUrl = `https://img.youtube.com/vi/${parsed.videoId}/hqdefault.jpg`;
+
       try {
         const oembed = await axios.get('https://www.youtube.com/oembed', {
-          params: { url: videoUrl, format: 'json' },
-          timeout: 2500,
+          params: { url: canonicalYouTubeUrl, format: 'json' },
+          timeout: this.youtubeOEmbedTimeoutMs,
+          ...youtubeAxiosProxyConfig(),
         });
         title = oembed.data?.title || '';
+        authorName = oembed.data?.author_name || '';
+        thumbnailUrl = oembed.data?.thumbnail_url || thumbnailUrl;
       } catch (error) {
-        console.warn('YouTube oEmbed preview fetch failed:', error);
+        if (!axios.isAxiosError(error) || error.code !== 'ECONNABORTED') {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(`YouTube oEmbed preview unavailable for ${parsed.videoId}: ${message}`);
+        }
       }
     }
 
@@ -316,6 +358,7 @@ export class DJSetService {
       title,
       description,
       thumbnailUrl,
+      authorName,
     };
   }
 
@@ -327,17 +370,18 @@ export class DJSetService {
     if (!videoInfo) {
       throw new Error('Invalid video URL');
     }
+    const normalizedPrimaryDjId = String(input.djId || '').trim() || undefined;
     const thumbnailUrl = input.thumbnailUrl?.trim() || undefined;
 
-    const normalizedDjIds = this.normalizeDjIds(input.djId, input.djIds);
-    const coDjIds = normalizedDjIds.filter((id) => id !== input.djId);
+    const normalizedDjIds = this.normalizeDjIds(normalizedPrimaryDjId, input.djIds);
+    const coDjIds = normalizedDjIds.filter((id) => id !== normalizedPrimaryDjId);
     const customDjNames = this.normalizeCustomDjNames(input.customDjNames);
 
     const slug = await this.generateUniqueSlug(input.title);
 
     return await prisma.dJSet.create({
       data: {
-        djId: input.djId,
+        djId: normalizedPrimaryDjId,
         coDjIds,
         customDjNames,
         uploadedById: input.uploadedById,
@@ -346,6 +390,7 @@ export class DJSetService {
         description: input.description,
         thumbnailUrl,
         videoUrl: input.videoUrl,
+        videoAuthorName: input.videoAuthorName?.trim() || undefined,
         platform: videoInfo.platform,
         videoId: videoInfo.videoId,
         recordedAt: input.recordedAt,
@@ -494,6 +539,59 @@ export class DJSetService {
     );
   }
 
+  async listDJSets(options: DJSetListOptions = {}) {
+    const page = Math.max(1, Math.floor(options.page || 1));
+    const limit = Math.min(Math.max(1, Math.floor(options.limit || 20)), 100);
+    const sortBy = options.sortBy || 'latest';
+    const djId = String(options.djId || '').trim();
+    const eventName = String(options.eventName || '').trim();
+    const where = {
+      ...(djId ? { djId } : {}),
+      ...(eventName ? { eventName: { equals: eventName, mode: 'insensitive' as const } } : {}),
+    };
+    const orderBy =
+      sortBy === 'popular'
+        ? [{ viewCount: 'desc' as const }, { createdAt: 'desc' as const }]
+        : sortBy === 'tracks'
+          ? [{ tracks: { _count: 'desc' as const } }, { createdAt: 'desc' as const }]
+          : [{ createdAt: 'desc' as const }];
+    const skip = (page - 1) * limit;
+
+    const [total, sets] = await Promise.all([
+      prisma.dJSet.count({ where }),
+      prisma.dJSet.findMany({
+        where,
+        include: {
+          dj: true,
+          uploader: {
+            select: this.contributorUserSelect,
+          },
+          tracks: {
+            orderBy: { position: 'asc' },
+          },
+        },
+        orderBy,
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    const visibleSets = await this.filterActiveCopyrightTakedowns(sets);
+    const items = await Promise.all(
+      visibleSets.map(async (set) => {
+        const contributor = await this.mapContributorProfile(set.uploader);
+        const withLineup = await this.attachLineupInfo(set as any);
+        return {
+          ...withLineup,
+          videoContributor: contributor,
+          tracklistContributor: contributor,
+        };
+      })
+    );
+
+    return { items, total };
+  }
+
   async getDJSetsByUploader(userId: string) {
     const sets = await prisma.dJSet.findMany({
       where: { uploadedById: userId },
@@ -624,12 +722,12 @@ export class DJSetService {
       videoId = parsed.videoId;
     }
 
-    const nextDjId = input.djId ?? current.djId;
+    const nextDjId = input.djId !== undefined ? (String(input.djId || '').trim() || null) : current.djId;
     const normalizedDjIds = this.normalizeDjIds(
       nextDjId,
       input.djIds && input.djIds.length > 0 ? input.djIds : current.coDjIds
     );
-    const coDjIds = normalizedDjIds.filter((id) => id !== nextDjId);
+    const coDjIds = normalizedDjIds.filter((id) => id !== (nextDjId ?? undefined));
     const customDjNames =
       input.customDjNames !== undefined
         ? this.normalizeCustomDjNames(input.customDjNames)
@@ -644,6 +742,7 @@ export class DJSetService {
         title: input.title ?? undefined,
         description: input.description ?? undefined,
         videoUrl: input.videoUrl ?? undefined,
+        videoAuthorName: input.videoAuthorName?.trim() || undefined,
         thumbnailUrl,
         venue: input.venue ?? undefined,
         eventName: input.eventName ?? undefined,
@@ -671,7 +770,7 @@ export class DJSetService {
   ) {
     const current = await prisma.dJSet.findUnique({
       where: { id: setId },
-      select: { id: true, uploadedById: true },
+      select: { id: true, uploadedById: true, thumbnailUrl: true },
     });
     if (!current) {
       throw new Error('DJ set not found');
@@ -703,7 +802,7 @@ export class DJSetService {
     return await this.getDJSet(setId);
   }
 
-  private normalizeDjIds(primaryDjId: string, candidateIds?: string[]): string[] {
+  private normalizeDjIds(primaryDjId?: string | null, candidateIds?: string[]): string[] {
     const ids = [primaryDjId, ...(candidateIds || [])]
       .map((id) => String(id || '').trim())
       .filter(Boolean);
@@ -718,7 +817,7 @@ export class DJSetService {
     return [...new Set(cleaned)];
   }
 
-  private async attachLineupInfo<T extends { djId: string; coDjIds: string[]; customDjNames: string[] }>(
+  private async attachLineupInfo<T extends { djId?: string | null; coDjIds: string[]; customDjNames: string[] }>(
     set: T
   ) {
     const lineupIds = this.normalizeDjIds(set.djId, set.coDjIds);
@@ -738,7 +837,7 @@ export class DJSetService {
   async deleteDJSetByUploader(setId: string, userId: string, role?: string) {
     const current = await prisma.dJSet.findUnique({
       where: { id: setId },
-      select: { id: true, uploadedById: true },
+      select: { id: true, uploadedById: true, thumbnailUrl: true },
     });
 
     if (!current) {
@@ -751,6 +850,7 @@ export class DJSetService {
     await prisma.dJSet.delete({
       where: { id: setId },
     });
+    return current;
   }
 
   /**

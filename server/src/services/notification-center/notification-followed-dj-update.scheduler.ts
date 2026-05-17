@@ -141,7 +141,7 @@ const resolveSetCountMap = async (djIds: string[], since: Date): Promise<Map<str
   const countMap = new Map<string, number>();
   const djIdSet = new Set(djIds);
   for (const row of sets) {
-    const uniqueDjIds = new Set<string>([row.djId, ...row.coDjIds].map((item) => item.trim()).filter(Boolean));
+    const uniqueDjIds = new Set<string>([row.djId, ...row.coDjIds].map((item) => String(item || '').trim()).filter(Boolean));
     for (const djId of uniqueDjIds) {
       if (!djIdSet.has(djId)) continue;
       countMap.set(djId, (countMap.get(djId) ?? 0) + 1);

@@ -8,6 +8,7 @@ import contentSubmissionRoutes from '../../routes/content-submission.routes';
 import accountEnforcementRoutes from '../../routes/account-enforcement.routes';
 import { adminAuditService } from './admin-audit.service';
 import { requireAdmin, requireAdminOrOperator } from './admin-auth.policy';
+import { adminMediaAssetsService } from './admin-media-assets.service';
 import { adminStatusService } from './admin-status.service';
 import { accountEnforcementService } from '../../services/account-enforcement.service';
 import { accountDeletionService } from '../../services/account-deletion.service';
@@ -1002,6 +1003,50 @@ router.get('/status', authenticate, requireAdminOrOperator, async (req: AuthRequ
   } catch (error) {
     console.error('Fetch admin status error:', error);
     res.status(500).json({ error: 'Failed to fetch admin status' });
+  }
+});
+
+router.get('/media-assets/summary', authenticate, requireAdminOrOperator, async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const summary = await adminMediaAssetsService.getSummary();
+    res.json({ success: true, summary });
+  } catch (error) {
+    console.error('Fetch admin media asset summary error:', error);
+    res.status(500).json({ error: 'Failed to fetch media asset summary' });
+  }
+});
+
+router.get('/media-assets', authenticate, requireAdminOrOperator, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const query = req.query as Request['query'];
+    const items = await adminMediaAssetsService.listAssets({
+      status: query.status,
+      ownerType: query.ownerType,
+      provider: query.provider,
+      q: query.q,
+      limit: query.limit,
+    });
+    res.json({ success: true, items });
+  } catch (error) {
+    console.error('Fetch admin media assets error:', error);
+    res.status(500).json({ error: 'Failed to fetch media assets' });
+  }
+});
+
+router.post('/media-assets/purge', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const result = await adminMediaAssetsService.runPurgeNow({ limit: req.body?.limit });
+    await adminAuditService.createAction({
+      actorId: req.user?.userId || 'unknown',
+      action: 'media_assets.purge',
+      targetType: 'media_assets',
+      targetId: 'batch',
+      detail: result,
+    });
+    res.json({ success: true, result });
+  } catch (error) {
+    console.error('Run admin media asset purge error:', error);
+    res.status(500).json({ error: 'Failed to run media asset purge' });
   }
 });
 

@@ -235,6 +235,12 @@ struct NewsModuleView: View {
             phase = articles.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
+            if error.isUserInitiatedCancellation {
+                if !hadContent, case .initialLoading = phase {
+                    phase = .idle
+                }
+                return
+            }
             let message = error.userFacingMessage ?? LT("资讯加载失败，请稍后重试", "Failed to load news. Please try again later.", "ニュースを読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
@@ -271,6 +277,9 @@ struct NewsModuleView: View {
             articles = sortedArticles(deduplicatedArticles(articles))
             nextCursor = fetchedPageCursor
         } catch {
+            if error.isUserInitiatedCancellation {
+                return
+            }
             bannerMessage = error.userFacingMessage ?? LT("更多资讯加载失败，请稍后重试", "Failed to load more news. Please try again later.", "さらにニュースを読み込めませんでした。時間をおいて再試行してください。")
         }
     }
