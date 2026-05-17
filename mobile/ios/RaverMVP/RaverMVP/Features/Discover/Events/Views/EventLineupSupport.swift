@@ -79,7 +79,12 @@ enum EventLineupActCodec {
                     id: "slot-\(slot.id)-p-0",
                     name: fallbackName.isEmpty ? rawName : fallbackName,
                     djID: normalizedID,
-                    avatarUrl: normalizedID == nil ? nil : slot.dj?.avatarUrl
+                    avatarUrl: normalizedID == nil ? nil : firstNonEmpty(
+                        slot.dj?.avatarSmallUrl,
+                        slot.dj?.avatarMediumUrl,
+                        slot.dj?.avatarUrl,
+                        slot.dj?.avatarOriginalUrl
+                    )
                 )
             ]
         )

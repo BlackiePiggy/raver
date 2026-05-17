@@ -46,6 +46,7 @@ model User {
 
   checkins            Checkin[]
   eventFavorites      EventFavorite[]
+  dailyEventRecommendations UserDailyEventRecommendation[]
   follows             Follow[]        @relation("UserFollows")
   followers           Follow[]        @relation("UserFollowers")
   uploadedSets        DJSet[]         @relation("UserUploadedSets")
@@ -508,6 +509,24 @@ model EventFavorite {
   @@index([userId, createdAt])
   @@index([eventId, createdAt])
   @@map("event_favorites")
+}
+
+model UserDailyEventRecommendation {
+  id                 String   @id @default(uuid())
+  userId             String   @map("user_id")
+  recommendationDate DateTime @map("recommendation_date") @db.Date
+  activityIds        String[] @default([]) @map("activity_ids")
+  algorithmVersion   String   @map("algorithm_version")
+  statuses           String[] @default([])
+  generatedAt        DateTime @default(now()) @map("generated_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, recommendationDate])
+  @@index([recommendationDate, generatedAt])
+  @@map("user_daily_event_recommendations")
 }
 
 model EventTicketTier {

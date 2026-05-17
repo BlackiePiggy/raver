@@ -4487,6 +4487,26 @@ const normalizeEventWikiFestivalId = (value: unknown): string | null => {
 
 type EventRecommendationStatus = 'ongoing' | 'upcoming' | 'ended' | 'cancelled';
 
+const DAILY_EVENT_RECOMMENDATION_ALGORITHM_VERSION = 'daily-event-recommendations-v1';
+const DAILY_EVENT_RECOMMENDATION_SIZE = 10;
+const DAILY_EVENT_RECOMMENDATION_TIME_ZONE = 'Asia/Shanghai';
+const DAILY_EVENT_RECOMMENDATION_MEMORY_TTL_MS = 5 * 60 * 1000;
+
+type DailyEventRecommendationSnapshot = {
+  userId: string;
+  dateKey: string;
+  recommendationDate: Date;
+  activityIds: string[];
+  statuses: EventRecommendationStatus[];
+  algorithmVersion: string;
+  generatedAt: Date;
+};
+
+const dailyEventRecommendationMemoryCache = new Map<
+  string,
+  { expiresAt: number; snapshot: DailyEventRecommendationSnapshot }
+>();
+
 const eventRecommendationStatusOrder: EventRecommendationStatus[] = [
   'ongoing',
   'upcoming',
@@ -4553,54 +4573,178 @@ const popRandomItem = <T>(items: T[]): T | null => {
   return items.splice(randomIndex, 1)[0] ?? null;
 };
 
+const getDailyEventRecommendationDateKey = (now: Date): string => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: DAILY_EVENT_RECOMMENDATION_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return `${year}-${month}-${day}`;
+};
+
+const parseDailyEventRecommendationStatuses = (values: string[]): EventRecommendationStatus[] => {
+  const statuses = values.filter((value): value is EventRecommendationStatus =>
+    value === 'ongoing' || value === 'upcoming' || value === 'ended' || value === 'cancelled'
+  );
+  return statuses.length > 0 ? statuses : ['ongoing', 'upcoming', 'ended'];
+};
+
+const selectEventRecommendationIds = async (
+  statuses: EventRecommendationStatus[],
+  limit: number,
+  now: Date
+): Promise<string[]> => {
+  const poolEntries = await Promise.all(
+    statuses.map(async (status) => {
+      const rows = await prisma.event.findMany({
+        where: buildEventStatusWhere(status, now),
+        select: { id: true },
+      });
+      return [status, rows.map((row) => row.id)] as const;
+    })
+  );
+
+  const idPoolByStatus: Record<EventRecommendationStatus, string[]> = {
+    ongoing: [],
+    upcoming: [],
+    ended: [],
+    cancelled: [],
+  };
+  for (const [status, ids] of poolEntries) {
+    idPoolByStatus[status] = ids;
+  }
+
+  const selectedIds: string[] = [];
+  const selectedSet = new Set<string>();
+
+  for (const status of statuses) {
+    if (selectedIds.length >= limit) break;
+    const picked = popRandomItem(idPoolByStatus[status]);
+    if (!picked || selectedSet.has(picked)) continue;
+    selectedSet.add(picked);
+    selectedIds.push(picked);
+  }
+
+  const remainingPool = statuses.flatMap((status) => idPoolByStatus[status]);
+  while (selectedIds.length < limit) {
+    const picked = popRandomItem(remainingPool);
+    if (!picked) break;
+    if (selectedSet.has(picked)) continue;
+    selectedSet.add(picked);
+    selectedIds.push(picked);
+  }
+
+  return selectedIds;
+};
+
+const mapDailyEventRecommendationSnapshot = (row: {
+  userId: string;
+  recommendationDate: Date;
+  activityIds: string[];
+  statuses: string[];
+  algorithmVersion: string;
+  generatedAt: Date;
+}): DailyEventRecommendationSnapshot => {
+  const dateKey = row.recommendationDate.toISOString().slice(0, 10);
+  return {
+    userId: row.userId,
+    dateKey,
+    recommendationDate: row.recommendationDate,
+    activityIds: row.activityIds,
+    statuses: parseDailyEventRecommendationStatuses(row.statuses),
+    algorithmVersion: row.algorithmVersion,
+    generatedAt: row.generatedAt,
+  };
+};
+
+const readDailyEventRecommendationSnapshot = async (
+  userId: string,
+  dateKey: string
+): Promise<DailyEventRecommendationSnapshot | null> => {
+  const cacheKey = `${userId}:${dateKey}`;
+  const cached = dailyEventRecommendationMemoryCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.snapshot;
+  }
+  dailyEventRecommendationMemoryCache.delete(cacheKey);
+
+  const recommendationDate = new Date(`${dateKey}T00:00:00.000Z`);
+  const row = await prisma.userDailyEventRecommendation.findUnique({
+    where: {
+      userId_recommendationDate: {
+        userId,
+        recommendationDate,
+      },
+    },
+  });
+  if (!row) return null;
+
+  const snapshot = mapDailyEventRecommendationSnapshot(row);
+  dailyEventRecommendationMemoryCache.set(cacheKey, {
+    expiresAt: Date.now() + DAILY_EVENT_RECOMMENDATION_MEMORY_TTL_MS,
+    snapshot,
+  });
+  return snapshot;
+};
+
+const getOrCreateDailyEventRecommendationSnapshot = async (
+  userId: string,
+  statuses: EventRecommendationStatus[],
+  now: Date
+): Promise<DailyEventRecommendationSnapshot> => {
+  const dateKey = getDailyEventRecommendationDateKey(now);
+  const existing = await readDailyEventRecommendationSnapshot(userId, dateKey);
+  if (existing) return existing;
+
+  const recommendationDate = new Date(`${dateKey}T00:00:00.000Z`);
+  const selectedIds = await selectEventRecommendationIds(
+    statuses,
+    DAILY_EVENT_RECOMMENDATION_SIZE,
+    now
+  );
+
+  try {
+    const row = await prisma.userDailyEventRecommendation.create({
+      data: {
+        userId,
+        recommendationDate,
+        activityIds: selectedIds,
+        algorithmVersion: DAILY_EVENT_RECOMMENDATION_ALGORITHM_VERSION,
+        statuses,
+      },
+    });
+    const snapshot = mapDailyEventRecommendationSnapshot(row);
+    dailyEventRecommendationMemoryCache.set(`${userId}:${dateKey}`, {
+      expiresAt: Date.now() + DAILY_EVENT_RECOMMENDATION_MEMORY_TTL_MS,
+      snapshot,
+    });
+    return snapshot;
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const raced = await readDailyEventRecommendationSnapshot(userId, dateKey);
+      if (raced) return raced;
+    }
+    throw error;
+  }
+};
+
 router.get('/events/recommendations', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as BFFAuthRequest).user?.userId;
     const limit = normalizeLimit(req.query.limit, 10, 20);
     const requestedStatuses = parseEventRecommendationStatuses(req.query.statuses);
     const now = new Date();
-
-    const poolEntries = await Promise.all(
-      requestedStatuses.map(async (status) => {
-        const rows = await prisma.event.findMany({
-          where: buildEventStatusWhere(status, now),
-          select: { id: true },
-        });
-        return [status, rows.map((row) => row.id)] as const;
-      })
-    );
-
-    const idPoolByStatus: Record<EventRecommendationStatus, string[]> = {
-      ongoing: [],
-      upcoming: [],
-      ended: [],
-      cancelled: [],
-    };
-    for (const [status, ids] of poolEntries) {
-      idPoolByStatus[status] = ids;
-    }
-
-    const selectedIds: string[] = [];
-    const selectedSet = new Set<string>();
-
-    // Step 1: Keep diversity by taking at least one event from each requested status bucket when possible.
-    for (const status of requestedStatuses) {
-      if (selectedIds.length >= limit) break;
-      const picked = popRandomItem(idPoolByStatus[status]);
-      if (!picked || selectedSet.has(picked)) continue;
-      selectedSet.add(picked);
-      selectedIds.push(picked);
-    }
-
-    // Step 2: Fill remaining slots from the merged pool.
-    const remainingPool = requestedStatuses.flatMap((status) => idPoolByStatus[status]);
-    while (selectedIds.length < limit) {
-      const picked = popRandomItem(remainingPool);
-      if (!picked) break;
-      if (selectedSet.has(picked)) continue;
-      selectedSet.add(picked);
-      selectedIds.push(picked);
-    }
+    const snapshot = userId
+      ? await getOrCreateDailyEventRecommendationSnapshot(userId, requestedStatuses, now)
+      : null;
+    const selectedIds = snapshot
+      ? snapshot.activityIds.slice(0, limit)
+      : await selectEventRecommendationIds(requestedStatuses, limit, now);
 
     if (selectedIds.length === 0) {
       ok(res, {
@@ -4608,7 +4752,17 @@ router.get('/events/recommendations', optionalAuth, async (req: Request, res: Re
         meta: {
           limit,
           selected: 0,
-          statuses: requestedStatuses,
+          statuses: snapshot?.statuses ?? requestedStatuses,
+          cache: snapshot
+            ? {
+                scope: 'daily-user',
+                hit: true,
+                date: snapshot.dateKey,
+                algorithmVersion: snapshot.algorithmVersion,
+                generatedAt: snapshot.generatedAt.toISOString(),
+                timeZone: DAILY_EVENT_RECOMMENDATION_TIME_ZONE,
+              }
+            : { scope: 'request', hit: false },
         },
       });
       return;
@@ -4635,7 +4789,17 @@ router.get('/events/recommendations', optionalAuth, async (req: Request, res: Re
       meta: {
         limit,
         selected: orderedRows.length,
-        statuses: requestedStatuses,
+        statuses: snapshot?.statuses ?? requestedStatuses,
+        cache: snapshot
+          ? {
+              scope: 'daily-user',
+              hit: true,
+              date: snapshot.dateKey,
+              algorithmVersion: snapshot.algorithmVersion,
+              generatedAt: snapshot.generatedAt.toISOString(),
+              timeZone: DAILY_EVENT_RECOMMENDATION_TIME_ZONE,
+            }
+          : { scope: 'request', hit: false },
       },
     });
   } catch (error) {
