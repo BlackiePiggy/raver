@@ -126,7 +126,7 @@ private struct ShareLinkEventResponse: Decodable {
 
 struct UniversalLinkRouter {
     let service: ShareLinkService
-    var allowedHosts: Set<String> = ["raver.app", "www.raver.app"]
+    var allowedHosts: Set<String> = ["ravehub.top", "www.ravehub.top"]
 
     func resolve(_ url: URL) async -> String? {
         guard let scheme = url.scheme?.lowercased() else { return nil }
@@ -358,14 +358,14 @@ final class MockShareLinkService: ShareLinkService {
         _ = preferPermanent
         _ = expiresInHours
         _ = maxUses
-        let short = "https://raver.app/s/mock-\(target.type.rawValue)-\(target.id)"
+        let short = "https://ravehub.top/s/mock-\(target.type.rawValue)-\(target.id)"
         return ShareLinkPayload(
             code: "mock-\(target.id)",
             shortURL: short,
             canonicalURL: ShareLinkCoordinator.canonicalFallback(for: target),
             deepLink: ShareLinkCoordinator.deepLinkFallback(for: target),
             fallbackURL: ShareLinkCoordinator.canonicalFallback(for: target),
-            qrCodeURL: "https://raver.app/qr/mock-\(target.id).png",
+            qrCodeURL: "https://ravehub.top/qr/mock-\(target.id).png",
             posterURL: nil,
             title: target.title ?? "Raver Share",
             subtitle: target.subtitle,
@@ -385,11 +385,11 @@ final class MockShareLinkService: ShareLinkService {
         let target = ShareTarget(type: .post, id: targetId, title: "Raver Share")
         return ShareLinkPayload(
             code: normalizedCode,
-            shortURL: "https://raver.app/s/\(normalizedCode)",
+            shortURL: "https://ravehub.top/s/\(normalizedCode)",
             canonicalURL: ShareLinkCoordinator.canonicalFallback(for: target),
             deepLink: ShareLinkCoordinator.deepLinkFallback(for: target),
             fallbackURL: ShareLinkCoordinator.canonicalFallback(for: target),
-            qrCodeURL: "https://raver.app/qr/\(normalizedCode).png",
+            qrCodeURL: "https://ravehub.top/qr/\(normalizedCode).png",
             posterURL: nil,
             title: target.title ?? "Raver Share",
             subtitle: target.subtitle,
@@ -535,33 +535,33 @@ struct ShareLinkCoordinator {
     static func canonicalFallback(for target: ShareTarget) -> String {
         switch target.type {
         case .post:
-            return "https://raver.app/p/\(target.id)"
+            return "https://ravehub.top/p/\(target.id)"
         case .event:
-            return "https://raver.app/e/\(target.id)"
+            return "https://ravehub.top/e/\(target.id)"
         case .news:
-            return "https://raver.app/n/\(target.id)"
+            return "https://ravehub.top/n/\(target.id)"
         case .dj:
-            return "https://raver.app/dj/\(target.id)"
+            return "https://ravehub.top/dj/\(target.id)"
         case .set:
-            return "https://raver.app/set/\(target.id)"
+            return "https://ravehub.top/set/\(target.id)"
         case .label:
-            return "https://raver.app/label/\(target.id)"
+            return "https://ravehub.top/label/\(target.id)"
         case .festival:
-            return "https://raver.app/festival/\(target.id)"
+            return "https://ravehub.top/festival/\(target.id)"
         case .rankingBoard:
-            return "https://raver.app/ranking-board/\(target.id)"
+            return "https://ravehub.top/ranking-board/\(target.id)"
         case .circleID:
-            return "https://raver.app/circle/id/\(target.id)"
+            return "https://ravehub.top/circle/id/\(target.id)"
         case .ratingEvent:
-            return "https://raver.app/rating-event/\(target.id)"
+            return "https://ravehub.top/rating-event/\(target.id)"
         case .ratingUnit:
-            return "https://raver.app/rating-unit/\(target.id)"
+            return "https://ravehub.top/rating-unit/\(target.id)"
         case .userCard:
-            return "https://raver.app/u/\(target.id)"
+            return "https://ravehub.top/u/\(target.id)"
         case .squadCard:
-            return "https://raver.app/g/\(target.id)"
+            return "https://ravehub.top/g/\(target.id)"
         case .squadInvite:
-            return "https://raver.app/s/\(target.id)"
+            return "https://ravehub.top/s/\(target.id)"
         }
     }
 

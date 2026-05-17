@@ -13,6 +13,7 @@ import { adminStatusService } from './admin-status.service';
 import { accountEnforcementService } from '../../services/account-enforcement.service';
 import { accountDeletionService } from '../../services/account-deletion.service';
 import { Prisma, PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 import { notificationCenterService } from '../../modules/notifications';
 import { verifyReauthProof } from '../../utils/auth';
 import { normalizeTriTextPayload, resolveLocalizedText } from '../../utils/i18n';
@@ -164,6 +165,58 @@ const maskIdentifier = (value: string): string => {
   if (value.length <= 6) return `${value.slice(0, 1)}***`;
   return `${value.slice(0, 3)}***${value.slice(-3)}`;
 };
+
+const mapAdminUser = (user: {
+  id: string;
+  username: string;
+  email: string;
+  phoneNumber: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  role: string;
+  isActive: boolean;
+  isVerified: boolean;
+  regionCode: string;
+  birthYear: number | null;
+  ageBand: string;
+  createdAt: Date;
+  updatedAt: Date;
+  lastLoginAt: Date | null;
+  _count?: {
+    posts: number;
+    follows: number;
+    followers: number;
+    authRefreshTokens: number;
+    accountEnforcements: number;
+    accountDeletionRequests: number;
+  };
+}) => ({
+  id: user.id,
+  username: user.username,
+  email: user.email,
+  phoneNumber: user.phoneNumber,
+  displayName: user.displayName,
+  avatarUrl: user.avatarUrl,
+  role: user.role,
+  isActive: user.isActive,
+  isVerified: user.isVerified,
+  regionCode: user.regionCode,
+  birthYear: user.birthYear,
+  ageBand: user.ageBand,
+  createdAt: user.createdAt.toISOString(),
+  updatedAt: user.updatedAt.toISOString(),
+  lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
+  counts: user._count
+    ? {
+        posts: user._count.posts,
+        follows: user._count.follows,
+        followers: user._count.followers,
+        authSessions: user._count.authRefreshTokens,
+        enforcements: user._count.accountEnforcements,
+        deletionRequests: user._count.accountDeletionRequests,
+      }
+    : undefined,
+});
 
 const mapAuthSessionForAdmin = (session: {
   id: string;
@@ -934,6 +987,254 @@ router.post('/auth-sessions/:id/revoke', authenticate, requireAdmin, async (req:
   } catch (error) {
     console.error('Revoke admin auth session error:', error);
     res.status(500).json({ error: 'Failed to revoke auth session' });
+  }
+});
+
+router.get('/users', authenticate, requireAdminOrOperator, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const query = req.query as Request['query'];
+    const q = firstQueryValue(query.q)?.trim();
+    const role = firstQueryValue(query.role)?.trim();
+    const status = firstQueryValue(query.status)?.trim();
+    const limit = parseLimit(query.limit, 50, 200);
+    const cursor = firstQueryValue(query.cursor)?.trim();
+
+    const where: Prisma.UserWhereInput = {};
+    if (q) {
+      where.OR = [
+        { id: q },
+        { email: { contains: q, mode: 'insensitive' } },
+        { phoneNumber: { contains: q, mode: 'insensitive' } },
+        { username: { contains: q, mode: 'insensitive' } },
+        { displayName: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+    if (role) {
+      where.role = role;
+    }
+    if (status === 'active') {
+      where.isActive = true;
+    } else if (status === 'inactive' || status === 'deleted') {
+      where.isActive = false;
+    }
+
+    const users = await prisma.user.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        phoneNumber: true,
+        displayName: true,
+        avatarUrl: true,
+        role: true,
+        isActive: true,
+        isVerified: true,
+        regionCode: true,
+        birthYear: true,
+        ageBand: true,
+        createdAt: true,
+        updatedAt: true,
+        lastLoginAt: true,
+        _count: {
+          select: {
+            posts: true,
+            follows: true,
+            followers: true,
+            authRefreshTokens: true,
+            accountEnforcements: true,
+            accountDeletionRequests: true,
+          },
+        },
+      },
+    });
+
+    const hasMore = users.length > limit;
+    const pageItems = hasMore ? users.slice(0, limit) : users;
+    res.json({
+      success: true,
+      items: pageItems.map(mapAdminUser),
+      nextCursor: hasMore ? pageItems[pageItems.length - 1]?.id ?? null : null,
+    });
+  } catch (error) {
+    console.error('Fetch admin users error:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+router.get('/users/:id', authenticate, requireAdminOrOperator, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = String(req.params.id || '').trim();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        phoneNumber: true,
+        displayName: true,
+        avatarUrl: true,
+        role: true,
+        isActive: true,
+        isVerified: true,
+        regionCode: true,
+        birthYear: true,
+        ageBand: true,
+        createdAt: true,
+        updatedAt: true,
+        lastLoginAt: true,
+        _count: {
+          select: {
+            posts: true,
+            follows: true,
+            followers: true,
+            authRefreshTokens: true,
+            accountEnforcements: true,
+            accountDeletionRequests: true,
+          },
+        },
+      },
+    });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const [activeSessions, activePushTokens, activeEnforcements, latestDeletionRequest] = await Promise.all([
+      prisma.authRefreshToken.count({ where: { userId, revokedAt: null, expiresAt: { gt: new Date() } } }),
+      prisma.devicePushToken.count({ where: { userId, isActive: true } }),
+      prisma.accountEnforcement.count({ where: { userId, status: 'active' } }),
+      prisma.accountDeletionRequest.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, status: true, requestedBy: true, requestSource: true, createdAt: true, completedAt: true },
+      }),
+    ]);
+
+    res.json({
+      success: true,
+      user: mapAdminUser(user),
+      stats: {
+        activeSessions,
+        activePushTokens,
+        activeEnforcements,
+      },
+      latestDeletionRequest: latestDeletionRequest
+        ? {
+            ...latestDeletionRequest,
+            createdAt: latestDeletionRequest.createdAt.toISOString(),
+            completedAt: latestDeletionRequest.completedAt ? latestDeletionRequest.completedAt.toISOString() : null,
+          }
+        : null,
+    });
+  } catch (error) {
+    console.error('Fetch admin user detail error:', error);
+    res.status(500).json({ error: 'Failed to fetch user detail' });
+  }
+});
+
+router.post('/users/:id/delete-account', authenticate, requireAdmin, requireReauthProof('account_deletion.write'), async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = String(req.params.id || '').trim();
+  try {
+    if (!userId) {
+      res.status(400).json({ error: 'User id is required' });
+      return;
+    }
+    if (userId === req.user?.userId) {
+      res.status(400).json({ error: 'Admins cannot delete their own account from this panel' });
+      return;
+    }
+
+    const now = new Date();
+    const anonymizedSuffix = userId.replace(/-/g, '').slice(0, 12);
+    let deletionRequestId: string | null = null;
+    let wasAlreadyInactive = false;
+
+    await prisma.$transaction(async (tx) => {
+      const userSnapshot = await tx.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          phoneNumber: true,
+          isActive: true,
+          avatarUrl: true,
+          profileShareQrCodeUrl: true,
+          posts: { select: { images: true } },
+          eventLiveComments: { select: { imageUrls: true } },
+          squadMessages: { select: { imageUrl: true } },
+          uploadedPhotos: { select: { url: true } },
+        },
+      });
+
+      if (!userSnapshot) {
+        throw new Error('admin_user_not_found');
+      }
+
+      wasAlreadyInactive = !userSnapshot.isActive;
+      const deletionRequest = await accountDeletionService.createOrGetRequest(tx, {
+        user: userSnapshot,
+        requestedBy: req.user?.userId || 'admin',
+        requestSource: 'admin',
+      });
+      deletionRequestId = deletionRequest.id;
+
+      await tx.authRefreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now, lastUsedAt: now },
+      });
+      await tx.devicePushToken.updateMany({
+        where: { userId, isActive: true },
+        data: { isActive: false, lastSeenAt: now },
+      });
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          username: `deleted-${anonymizedSuffix}`,
+          isActive: false,
+          email: `deleted-${anonymizedSuffix}@deleted.raver.local`,
+          phoneNumber: null,
+          passwordHash: `deleted:${crypto.randomBytes(32).toString('hex')}`,
+          displayName: 'Deleted User',
+          displayNameNormalized: `deleted-${anonymizedSuffix}`,
+          displayNameStatus: 'approved',
+          displayNameReviewNote: null,
+          avatarUrl: null,
+          avatarStatus: 'none',
+          avatarReviewNote: null,
+          bio: null,
+          location: null,
+          favoriteDjIds: [],
+          favoriteGenres: [],
+          isVerified: false,
+          profileShareCode: null,
+          profileShareQrCodeUrl: null,
+        },
+        select: { id: true },
+      });
+    });
+
+    await adminAuditService.createAction({
+      actorId: req.user?.userId || 'unknown',
+      action: 'user.account_delete',
+      targetType: 'user',
+      targetId: userId,
+      detail: {
+        strategy: 'soft_delete_and_anonymize',
+        deletionRequestId,
+        wasAlreadyInactive,
+      },
+    });
+
+    res.json({ success: true, userId, status: 'deleted', deletionRequestId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const status = message === 'admin_user_not_found' ? 404 : 500;
+    console.error('Admin delete user account error:', error);
+    res.status(status).json({ error: status === 404 ? 'User not found' : 'Failed to delete user account' });
   }
 });
 

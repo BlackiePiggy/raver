@@ -743,6 +743,12 @@ private extension UIImage {
     }
 }
 
+private struct RegisterOnboardingGenreOption: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let level: Int
+}
+
 private struct RegisterProfileView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
@@ -764,7 +770,17 @@ private struct RegisterProfileView: View {
     @State private var selectedAvatarData: Data?
     @State private var selectedAvatarImage: UIImage?
     @State private var isSubmitting = false
+    @State private var isLoadingOnboardingOptions = false
+    @State private var isSavingOnboarding = false
     @State private var registrationErrorMessage: String?
+    @State private var onboardingErrorMessage: String?
+    @State private var onboardingGenres: [RegisterOnboardingGenreOption] = []
+    @State private var onboardingBrands: [WebLearnFestival] = []
+    @State private var onboardingDJs: [WebDJ] = []
+    @State private var selectedGenreIDs: Set<String> = []
+    @State private var selectedBrandIDs: Set<String> = []
+    @State private var selectedDJIDs: Set<String> = []
+    @State private var showWelcomeCard = false
 
     @FocusState private var focusedField: RegisterField?
 
@@ -777,6 +793,15 @@ private struct RegisterProfileView: View {
     private enum RegisterPage {
         case emailVerification
         case profile
+        case preferences
+
+        var index: Int {
+            switch self {
+            case .emailVerification: return 0
+            case .profile: return 1
+            case .preferences: return 2
+            }
+        }
     }
 
     private var compliancePolicy: RegionalCompliancePolicy {
@@ -803,10 +828,18 @@ private struct RegisterProfileView: View {
 
                     profilePage
                         .frame(width: proxy.size.width, height: proxy.size.height)
+
+                    preferencesPage
+                        .frame(width: proxy.size.width, height: proxy.size.height)
                 }
-                .offset(x: currentPage == .emailVerification ? 0 : -proxy.size.width)
+                .offset(x: -CGFloat(currentPage.index) * proxy.size.width)
                 .animation(.interactiveSpring(response: 0.36, dampingFraction: 0.88), value: currentPage)
                 .clipped()
+            }
+
+            if showWelcomeCard {
+                welcomeOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
         }
         .foregroundStyle(.white)
@@ -866,6 +899,38 @@ private struct RegisterProfileView: View {
         .scrollDismissesKeyboard(.interactively)
     }
 
+    private var preferencesPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                preferencesHeader
+
+                if isLoadingOnboardingOptions && onboardingGenres.isEmpty && onboardingBrands.isEmpty && onboardingDJs.isEmpty {
+                    onboardingLoadingView
+                } else {
+                    onboardingGenreSection
+                    onboardingBrandSection
+                    onboardingDJSection
+                    onboardingSubmitButton
+                }
+
+                if let error = onboardingErrorMessage, !error.isEmpty {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(Color(red: 1, green: 0.82, blue: 0.82))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+            .padding(.bottom, 34)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task(id: currentPage) {
+            guard currentPage == .preferences else { return }
+            await loadOnboardingOptionsIfNeeded()
+        }
+    }
+
     private var emailVerificationHeader: some View {
         VStack(alignment: .leading, spacing: 18) {
             Button {
@@ -916,6 +981,36 @@ private struct RegisterProfileView: View {
                     .font(.system(size: 32, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.98))
                 Text(LT("邮箱已验证，请补充头像、昵称和年龄信息。", "Email verified. Add your avatar, nickname, and age details.", "メールを確認しました。アイコン、ニックネーム、年齢情報を入力してください。"))
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.66))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var preferencesHeader: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Spacer()
+                Button {
+                    enterApp()
+                } label: {
+                    Text(LT("跳过", "Skip", "スキップ"))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.78))
+                        .padding(.horizontal, 14)
+                        .frame(height: 40)
+                        .background(Capsule().fill(Color.white.opacity(0.1)))
+                }
+                .buttonStyle(.plain)
+                .disabled(isSavingOnboarding)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(LT("调好你的频率", "Tune Your Frequency", "好みをチューニング"))
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.98))
+                Text(LT("选几个你喜欢的风格、音乐节和 DJ。", "Pick a few genres, festivals, and DJs you like.", "好きなジャンル、フェス、DJを選んでください。"))
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.white.opacity(0.66))
                     .fixedSize(horizontal: false, vertical: true)
@@ -1137,6 +1232,283 @@ private struct RegisterProfileView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("register.agreeTermsButton")
+    }
+
+    private var onboardingLoadingView: some View {
+        VStack(spacing: 12) {
+            ProgressView().tint(.white)
+            Text(LT("正在准备推荐", "Preparing picks", "おすすめを準備中"))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.68))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 46)
+        .background(fieldBackground)
+    }
+
+    private var onboardingGenreSection: some View {
+        onboardingSelectionSection(
+            title: LT("喜欢的风格", "Favorite Genres", "好きなジャンル"),
+            subtitle: LT("来自流派树的不同层级", "Mixed from the genre tree", "ジャンルツリーから選出")
+        ) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 82), spacing: 8)], alignment: .leading, spacing: 8) {
+                ForEach(onboardingGenres) { genre in
+                    onboardingChip(
+                        title: genre.name,
+                        subtitle: genre.level > 0 ? String(repeating: "/", count: min(2, genre.level)) : nil,
+                        isSelected: selectedGenreIDs.contains(genre.id)
+                    ) {
+                        toggleGenreSelection(genre.id)
+                    }
+                }
+            }
+        }
+    }
+
+    private var onboardingBrandSection: some View {
+        onboardingSelectionSection(
+            title: LT("关注的电音节", "Festival Brands", "フォローするフェス"),
+            subtitle: LT("关注后可收到相关动态", "Follow for future updates", "今後の更新を受け取れます")
+        ) {
+            VStack(spacing: 10) {
+                ForEach(onboardingBrands.prefix(10)) { brand in
+                    onboardingBrandRow(brand)
+                }
+            }
+        }
+    }
+
+    private var onboardingDJSection: some View {
+        onboardingSelectionSection(
+            title: LT("喜欢的 DJ", "Favorite DJs", "好きなDJ"),
+            subtitle: LT("从 SoundCloud 粉丝量 Top 300 中随机抽取", "Randomly picked from SoundCloud top 300", "SoundCloud上位300組からランダム選出")
+        ) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 94), spacing: 10)], spacing: 10) {
+                ForEach(onboardingDJs.prefix(18)) { dj in
+                    onboardingDJCard(dj)
+                }
+            }
+        }
+    }
+
+    private func onboardingSelectionSection<Content: View>(
+        title: String,
+        subtitle: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.96))
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.56))
+            }
+
+            content()
+        }
+        .padding(16)
+        .background(fieldBackground)
+    }
+
+    private func onboardingChip(title: String, subtitle: String?, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(isSelected ? Color.black.opacity(0.62) : Color.white.opacity(0.44))
+                }
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.black.opacity(0.88) : Color.white.opacity(0.84))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 34)
+            .background(
+                Capsule().fill(isSelected ? Color.white.opacity(0.92) : Color.white.opacity(0.11))
+            )
+            .overlay(
+                Capsule().stroke(Color.white.opacity(isSelected ? 0.0 : 0.18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func onboardingBrandRow(_ brand: WebLearnFestival) -> some View {
+        let isSelected = selectedBrandIDs.contains(brand.id)
+        return Button {
+            toggleBrandSelection(brand.id)
+        } label: {
+            HStack(spacing: 12) {
+                onboardingRemoteArtwork(urlString: brand.avatarUrl, fallbackIcon: "sparkles", size: 42)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(brand.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.94))
+                        .lineLimit(1)
+                    Text([brand.city, brand.country].filter { !$0.isEmpty }.joined(separator: " / "))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.54))
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(isSelected ? .white.opacity(0.94) : .white.opacity(0.42))
+            }
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isSelected ? Color.white.opacity(0.16) : Color.white.opacity(0.07))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func onboardingDJCard(_ dj: WebDJ) -> some View {
+        let isSelected = selectedDJIDs.contains(dj.id)
+        return Button {
+            toggleDJSelection(dj.id)
+        } label: {
+            VStack(spacing: 8) {
+                ZStack(alignment: .topTrailing) {
+                    onboardingRemoteArtwork(
+                        urlString: AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarMediumUrl ?? dj.avatarUrl, size: .small),
+                        fallbackIcon: "music.mic",
+                        size: 58
+                    )
+
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
+                            .offset(x: 4, y: -4)
+                    }
+                }
+
+                Text(dj.name)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isSelected ? Color.white.opacity(0.16) : Color.white.opacity(0.07))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(isSelected ? 0.34 : 0.1), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func onboardingRemoteArtwork(urlString: String?, fallbackIcon: String, size: CGFloat) -> some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.12))
+                .frame(width: size, height: size)
+
+            if let urlString, let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        Image(systemName: fallbackIcon)
+                            .font(.system(size: size * 0.34, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.68))
+                    }
+                }
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+            } else {
+                Image(systemName: fallbackIcon)
+                    .font(.system(size: size * 0.34, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.68))
+            }
+        }
+    }
+
+    private var onboardingSubmitButton: some View {
+        Button {
+            Task { await submitOnboardingPreferences() }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white.opacity(0.92))
+                if isSavingOnboarding {
+                    ProgressView().tint(.black)
+                } else {
+                    Text(LT("完成选择", "Finish", "完了"))
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color.black.opacity(0.88))
+                }
+            }
+            .frame(height: 54)
+        }
+        .buttonStyle(.plain)
+        .disabled(isSavingOnboarding)
+    }
+
+    private var welcomeOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.62)
+                .ignoresSafeArea()
+
+            VStack(spacing: 22) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.12))
+                        .frame(width: 94, height: 94)
+                        .blur(radius: 1)
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 38, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.94))
+                }
+
+                Text("这里是RaveHub，欢迎回家Raver！")
+                    .font(.system(size: 25, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button {
+                    enterApp()
+                } label: {
+                    Text(LT("点击进入", "Enter", "入る"))
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color.black.opacity(0.88))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Capsule().fill(Color.white.opacity(0.94)))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(28)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color(red: 0.07, green: 0.07, blue: 0.09).opacity(0.96))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .stroke(Color.white.opacity(0.24), lineWidth: 1)
+                    )
+            )
+            .shadow(color: Color.white.opacity(0.14), radius: 30, x: 0, y: 0)
+            .padding(.horizontal, 28)
+        }
     }
 
     private var submitButton: some View {
@@ -1385,6 +1757,164 @@ private struct RegisterProfileView: View {
                 registrationErrorMessage = LT("注册成功，但头像上传失败，请稍后在个人主页重试", "Registered, but avatar upload failed. Please retry from your profile later.", "登録は完了しましたが、アイコンのアップロードに失敗しました。後ほどプロフィールから再試行してください。")
             }
         }
+
+        withAnimation(.interactiveSpring(response: 0.36, dampingFraction: 0.88)) {
+            currentPage = .preferences
+        }
+    }
+
+    private func loadOnboardingOptionsIfNeeded() async {
+        guard !isLoadingOnboardingOptions else { return }
+        guard onboardingGenres.isEmpty || onboardingBrands.isEmpty || onboardingDJs.isEmpty else { return }
+
+        isLoadingOnboardingOptions = true
+        defer { isLoadingOnboardingOptions = false }
+
+        do {
+            async let genresTask = appContainer.webService.fetchLearnGenres()
+            async let brandsTask = appContainer.webService.fetchLearnFestivals(search: nil)
+            async let djsTask = appContainer.webService.fetchOnboardingDJCandidates(limit: 300)
+
+            let (genreTree, brands, topDJs) = try await (genresTask, brandsTask, djsTask)
+            onboardingGenres = Self.sampleGenreOptions(from: genreTree, limit: 24)
+            onboardingBrands = Array(brands.shuffled().prefix(10))
+            onboardingDJs = Array(topDJs.shuffled().prefix(18))
+            onboardingErrorMessage = nil
+        } catch {
+            onboardingErrorMessage = error.userFacingMessage ?? LT("推荐选项加载失败，请稍后重试。", "Could not load picks. Please try again later.", "おすすめを読み込めませんでした。時間をおいて再試行してください。")
+        }
+    }
+
+    private func submitOnboardingPreferences() async {
+        guard !isSavingOnboarding else { return }
+        isSavingOnboarding = true
+        defer { isSavingOnboarding = false }
+
+        do {
+            let selectedGenres = onboardingGenres
+                .filter { selectedGenreIDs.contains($0.id) }
+                .map(\.name)
+
+            let selectedDJList = onboardingDJs.filter { selectedDJIDs.contains($0.id) }
+
+            if !selectedGenres.isEmpty {
+                let profile = try await appContainer.profileUserRepository.fetchMyProfile()
+                let mergedTags = Self.uniqueStrings(profile.tags + selectedGenres)
+                let updated = try await appContainer.profileUserRepository.updateMyProfile(
+                    input: UpdateMyProfileInput(
+                        displayName: profile.displayName,
+                        bio: profile.bio,
+                        tags: mergedTags,
+                        isFollowersListPublic: profile.isFollowersListPublic,
+                        isFollowingListPublic: profile.isFollowingListPublic
+                    )
+                )
+                appState.applyCurrentUserProfile(updated)
+                NotificationCenter.default.post(name: .profileDidUpdate, object: updated)
+            }
+
+            for dj in selectedDJList {
+                _ = try await appContainer.webService.toggleDJFollow(djID: dj.id, shouldFollow: true)
+            }
+            if !selectedDJIDs.isEmpty {
+                NotificationCenter.default.post(name: .raverFollowedDJsDidMutate, object: nil)
+            }
+
+            if !selectedBrandIDs.isEmpty {
+                let currentPreference = (try? await appContainer.socialService.fetchFollowedBrandUpdatePreference()) ?? .empty
+                let mergedBrandIDs = Self.uniqueStrings(currentPreference.watchedBrandIds + Array(selectedBrandIDs))
+                _ = try await appContainer.socialService.updateFollowedBrandUpdatePreference(
+                    FollowedBrandUpdatePreferenceInput(
+                        enabled: true,
+                        reminderHours: nil,
+                        timezone: nil,
+                        channels: nil,
+                        watchedBrandIds: mergedBrandIDs,
+                        includeInfos: nil,
+                        includeEvents: nil
+                    )
+                )
+                NotificationCenter.default.post(name: .raverFollowedBrandsDidMutate, object: nil)
+            }
+
+            onboardingErrorMessage = nil
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+                showWelcomeCard = true
+            }
+        } catch {
+            onboardingErrorMessage = error.userFacingMessage ?? LT("保存失败，请稍后重试。", "Could not save. Please try again later.", "保存できませんでした。時間をおいて再試行してください。")
+        }
+    }
+
+    private func toggleGenreSelection(_ id: String) {
+        if selectedGenreIDs.contains(id) {
+            selectedGenreIDs.remove(id)
+        } else {
+            selectedGenreIDs.insert(id)
+        }
+    }
+
+    private func toggleBrandSelection(_ id: String) {
+        if selectedBrandIDs.contains(id) {
+            selectedBrandIDs.remove(id)
+        } else {
+            selectedBrandIDs.insert(id)
+        }
+    }
+
+    private func toggleDJSelection(_ id: String) {
+        if selectedDJIDs.contains(id) {
+            selectedDJIDs.remove(id)
+        } else {
+            selectedDJIDs.insert(id)
+        }
+    }
+
+    private func enterApp() {
+        withAnimation(.easeInOut(duration: 0.26)) {
+            showWelcomeCard = false
+        }
+        dismiss()
+    }
+
+    private static func sampleGenreOptions(from roots: [LearnGenreNode], limit: Int) -> [RegisterOnboardingGenreOption] {
+        let flattened = flattenGenreOptions(roots, level: 0)
+        let grouped = Dictionary(grouping: flattened, by: \.level)
+        var sampled: [RegisterOnboardingGenreOption] = []
+        for level in grouped.keys.sorted() {
+            sampled.append(contentsOf: Array((grouped[level] ?? []).shuffled().prefix(8)))
+        }
+        return Array(uniqueGenreOptions(sampled.shuffled() + flattened.shuffled()).prefix(limit))
+    }
+
+    private static func flattenGenreOptions(_ nodes: [LearnGenreNode], level: Int) -> [RegisterOnboardingGenreOption] {
+        nodes.flatMap { node -> [RegisterOnboardingGenreOption] in
+            let current = RegisterOnboardingGenreOption(id: node.id, name: node.name, level: level)
+            return [current] + flattenGenreOptions(node.children ?? [], level: level + 1)
+        }
+    }
+
+    private static func uniqueGenreOptions(_ items: [RegisterOnboardingGenreOption]) -> [RegisterOnboardingGenreOption] {
+        var seen = Set<String>()
+        return items.filter { item in
+            guard !seen.contains(item.id) else { return false }
+            seen.insert(item.id)
+            return true
+        }
+    }
+
+    private static func uniqueStrings(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.lowercased()
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            result.append(trimmed)
+        }
+        return result
     }
 
     private func scheduleDisplayNameAvailabilityCheck(_ rawValue: String) {

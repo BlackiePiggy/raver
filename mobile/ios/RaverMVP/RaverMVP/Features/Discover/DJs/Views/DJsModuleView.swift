@@ -3921,9 +3921,9 @@ struct DJDetailView: View {
             title: dj.name,
             subtitle: subtitle.isEmpty ? nil : subtitle,
             imageURL: imageURL,
-            canonicalURL: "https://raver.app/dj/\(dj.id)",
+            canonicalURL: "https://ravehub.top/dj/\(dj.id)",
             deepLink: "raver://dj/\(dj.id)",
-            fallbackURL: "https://raver.app/dj/\(dj.id)",
+            fallbackURL: "https://ravehub.top/dj/\(dj.id)",
             previewType: "content_card",
             visibility: "public"
         )
@@ -4594,7 +4594,9 @@ struct DJDetailView: View {
     @ViewBuilder
     private func introTabContent(_ dj: WebDJ) -> some View {
         HStack(spacing: 14) {
-            infoPill(icon: "headphones", text: LT("已看 \(watchedSetCount) 场", "Watched \(watchedSetCount) sets", "視聴済み \(watchedSetCount)件"))
+            if watchedSetCount > 0 {
+                infoPill(icon: "headphones", text: LT("已看 \(watchedSetCount) 场", "Watched \(watchedSetCount) sets", "視聴済み \(watchedSetCount)件"))
+            }
             if let country = dj.country, !country.isEmpty {
                 infoPill(icon: "globe", text: country)
             }

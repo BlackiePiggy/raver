@@ -14,7 +14,7 @@ import {
 
 const router: Router = Router();
 const prisma = new PrismaClient();
-const APP_DOWNLOAD_URL = process.env.RAVER_IOS_DOWNLOAD_URL || 'https://raver.app/download';
+const APP_DOWNLOAD_URL = process.env.RAVER_IOS_DOWNLOAD_URL || 'https://ravehub.top/download';
 const IP_HASH_SALT = process.env.SHARE_LINK_IP_HASH_SALT || process.env.AUTH_REFRESH_TOKEN_SECRET || 'raver-share-link';
 const APP_ICON_PATH = path.resolve(
   __dirname,

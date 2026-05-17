@@ -19,6 +19,8 @@ type DeletionUserSnapshot = {
   uploadedPhotos?: Array<{ url: string }>;
 };
 
+type AccountDeletionRequestSource = 'ios' | 'web' | 'admin';
+
 const cleanEnv = (value: string | undefined): string | null => {
   const trimmed = String(value || '').trim();
   return trimmed || null;
@@ -115,7 +117,7 @@ export const accountDeletionService = {
     input: {
       user: DeletionUserSnapshot;
       requestedBy?: string;
-      requestSource?: string;
+      requestSource?: AccountDeletionRequestSource;
     }
   ) {
     const existing = await tx.accountDeletionRequest.findFirst({

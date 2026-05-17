@@ -167,15 +167,15 @@ struct SettingsView: View {
                         Label(LT("帮助中心", "Help Center", "ヘルプセンター"), systemImage: "questionmark.circle")
                     }
 
-                    Link(destination: URL(string: "https://raver.app/legal/terms")!) {
+                    Link(destination: URL(string: "https://ravehub.top/legal/terms")!) {
                         Label(LT("服务条款", "Terms of Service", "利用規約"), systemImage: "doc.text")
                     }
 
-                    Link(destination: URL(string: "https://raver.app/legal/privacy")!) {
+                    Link(destination: URL(string: "https://ravehub.top/legal/privacy")!) {
                         Label(LT("隐私政策", "Privacy Policy", "プライバシーポリシー"), systemImage: "hand.raised.shield")
                     }
 
-                    Link(destination: URL(string: "https://raver.app/legal/data-requests")!) {
+                    Link(destination: URL(string: "https://ravehub.top/legal/data-requests")!) {
                         Label(LT("数据请求", "Data Requests", "データリクエスト"), systemImage: "tray.and.arrow.down")
                     }
 

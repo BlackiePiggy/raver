@@ -90,7 +90,7 @@ class DiscogsArtistService {
     if (!Number.isFinite(parsed)) return 1;
     return Math.max(0, Math.min(3, Math.floor(parsed)));
   })();
-  private readonly userAgent = process.env.DISCOGS_USER_AGENT?.trim() || 'RaverHub/1.0 +https://raver.app';
+  private readonly userAgent = process.env.DISCOGS_USER_AGENT?.trim() || 'RaverHub/1.0 +https://ravehub.top';
 
   private shouldLog(): boolean {
     return process.env.DISCOGS_DEBUG_LOG === '1';

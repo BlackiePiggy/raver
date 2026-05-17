@@ -1262,11 +1262,11 @@ struct PostSharePayload: Identifiable {
     }
 
     var shareURLString: String {
-        "https://raver.app/posts/\(post.id)"
+        "https://ravehub.top/posts/\(post.id)"
     }
 
     var shareURL: URL {
-        URL(string: shareURLString) ?? URL(string: "https://raver.app")!
+        URL(string: shareURLString) ?? URL(string: "https://ravehub.top")!
     }
 
     var firstMedia: FullscreenMediaItem? {

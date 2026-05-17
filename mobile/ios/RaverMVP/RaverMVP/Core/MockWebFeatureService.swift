@@ -847,6 +847,8 @@ actor MockWebFeatureService: WebFeatureService {
             filtered.sort(by: { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending })
         case "createdAt":
             filtered.sort(by: { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) })
+        case "soundcloudFollowers":
+            filtered.sort(by: { ($0.soundCloudFollowers ?? 0) > ($1.soundCloudFollowers ?? 0) })
         default:
             filtered.sort(by: { ($0.followerCount ?? 0) > ($1.followerCount ?? 0) })
         }
@@ -1271,6 +1273,15 @@ actor MockWebFeatureService: WebFeatureService {
             djs[idx].updatedAt = Date()
         }
         return djs[idx]
+    }
+
+    func fetchOnboardingDJCandidates(limit: Int) async throws -> [WebDJ] {
+        Array(
+            djs
+                .filter { ($0.soundCloudFollowers ?? 0) > 0 }
+                .sorted { ($0.soundCloudFollowers ?? 0) > ($1.soundCloudFollowers ?? 0) }
+                .prefix(max(1, min(100, limit)))
+        )
     }
 
     func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage {

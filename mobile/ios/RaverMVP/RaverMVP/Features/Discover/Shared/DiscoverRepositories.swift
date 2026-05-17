@@ -3,6 +3,7 @@ import Foundation
 protocol DJListRepository {
     func fetchDJs(page: Int, limit: Int, search: String?, sortBy: String) async throws -> DJListPage
     func fetchRecommendedDJs(limit: Int) async throws -> [WebDJ]
+    func fetchOnboardingDJCandidates(limit: Int) async throws -> [WebDJ]
 }
 
 protocol DJReadRepository {
@@ -61,6 +62,10 @@ struct DJListRepositoryAdapter: DJListRepository {
 
     func fetchRecommendedDJs(limit: Int) async throws -> [WebDJ] {
         try await service.fetchRecommendedDJs(limit: limit)
+    }
+
+    func fetchOnboardingDJCandidates(limit: Int) async throws -> [WebDJ] {
+        try await service.fetchOnboardingDJCandidates(limit: limit)
     }
 }
 

@@ -4885,7 +4885,7 @@ private func circleIDShareTarget(from payload: CircleIDShareCardPayload) -> Shar
         .filter { !$0.isEmpty }
         .prefix(3)
         .joined(separator: " · ")
-    let canonicalURL = "https://raver.app/circle/id/\(payload.entryID)"
+    let canonicalURL = "https://ravehub.top/circle/id/\(payload.entryID)"
     return ShareTarget(
         type: .circleID,
         id: payload.entryID,
@@ -4911,7 +4911,7 @@ private func ratingShareTarget(from payload: RatingDetailSharePayload) -> ShareT
         canonicalPath = "rating-unit/\(payload.entityID)"
         type = .ratingUnit
     }
-    let canonicalURL = "https://raver.app/\(canonicalPath)"
+    let canonicalURL = "https://ravehub.top/\(canonicalPath)"
     return ShareTarget(
         type: type,
         id: payload.entityID,

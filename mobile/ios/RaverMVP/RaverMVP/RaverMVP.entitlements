@@ -10,7 +10,8 @@
 	<string>$(APS_ENVIRONMENT)</string>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
-		<string>applinks:raver.app</string>
+		<string>applinks:ravehub.top</string>
+		<string>applinks:www.ravehub.top</string>
 	</array>
 </dict>
 </plist>

@@ -170,7 +170,7 @@ enum AppConfig {
         }
         return URL(string: "http://localhost:8787")!
 #else
-        return URL(string: "https://api.raver.app")!
+        return URL(string: "https://api.ravehub.top")!
 #endif
     }
 
@@ -320,7 +320,7 @@ enum AppConfig {
             return nil
         }
 
-        guard remoteHost == "raver.app" || remoteHost == "www.raver.app" else {
+        guard remoteHost == "ravehub.top" || remoteHost == "www.ravehub.top" else {
             return nil
         }
 

@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { Prisma, PrismaClient, ShareLink } from '@prisma/client';
 import { tencentIMGroupService } from '../modules/im';
 
-const SHARE_BASE_URL = 'https://raver.app';
+const SHARE_BASE_URL = (process.env.PUBLIC_SHARE_BASE_URL || 'https://ravehub.top').replace(/\/+$/, '');
 const SHARE_CODE_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const NEWS_MARKER = '#RAVER_NEWS';
 

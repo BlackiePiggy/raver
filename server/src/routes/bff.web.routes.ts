@@ -6643,7 +6643,8 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
     const viewerId = authReq.user?.userId;
     const viewerRole = authReq.user?.role ?? null;
     const page = normalizePage(req.query.page, 1);
-    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const isOnboardingCandidates = req.query.onboarding === '1' || req.query.onboarding === 'true';
+    const limit = normalizeLimit(req.query.limit, 20, isOnboardingCandidates ? 300 : 100);
     const skip = (page - 1) * limit;
 
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
@@ -6653,6 +6654,9 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
     const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : 'followerCount';
 
     const where: Prisma.DJWhereInput = {};
+    if (isOnboardingCandidates) {
+      where.soundCloudFollowers = { not: null };
+    }
     if (search) {
       const normalizedSearchVariants = Array.from(
         new Set([search, search.toLowerCase(), search.toUpperCase()])
@@ -6830,7 +6834,9 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
           ? { name: 'asc' }
           : sortBy === 'createdAt'
             ? { createdAt: 'desc' }
-            : { followerCount: 'desc' };
+            : sortBy === 'soundcloudFollowers'
+              ? { soundCloudFollowers: 'desc' }
+              : { followerCount: 'desc' };
 
       const [sortedRows, totalCount] = await Promise.all([
         prisma.dJ.findMany({

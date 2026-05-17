@@ -2179,7 +2179,7 @@ struct DJSetDetailView: View {
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
-        let canonicalURL = "https://raver.app/set/\(set.id)"
+        let canonicalURL = "https://ravehub.top/set/\(set.id)"
         let deepLink = "raver://set/\(set.id)"
         return ShareTarget(
             type: .set,

@@ -3581,7 +3581,7 @@ struct LearnLabelDetailView: View {
     }
 
     private func shareTarget() -> ShareTarget {
-        let canonicalURL = "https://raver.app/label/\(label.id)"
+        let canonicalURL = "https://ravehub.top/label/\(label.id)"
         let coverImageURL = AppConfig.resolvedURLString(label.backgroundUrl)
             ?? AppConfig.resolvedURLString(label.avatarUrl)
         let subtitle = [
@@ -4842,7 +4842,7 @@ struct LearnFestivalDetailView: View {
     }
 
     private func shareTarget(for festival: LearnFestival) -> ShareTarget {
-        let canonicalURL = "https://raver.app/festival/\(festival.id)"
+        let canonicalURL = "https://ravehub.top/festival/\(festival.id)"
         let imageURL = AppConfig.resolvedURLString(festival.backgroundUrl)
             ?? AppConfig.resolvedURLString(festival.avatarUrl)
         let subtitle = [
@@ -7126,7 +7126,7 @@ struct RankingBoardDetailView: View {
 
     private func shareTarget() -> ShareTarget {
         let payload = makeRankingBoardShareCardPayload()
-        let canonicalURL = "https://raver.app/ranking-board/\(payload.boardID)?year=\(payload.year)"
+        let canonicalURL = "https://ravehub.top/ranking-board/\(payload.boardID)?year=\(payload.year)"
         return ShareTarget(
             type: .rankingBoard,
             id: payload.boardID,

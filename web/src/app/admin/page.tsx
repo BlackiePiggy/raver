@@ -153,6 +153,13 @@ export default function AdminOverviewPage() {
         {error && <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>}
 
         <div className="grid gap-4 md:grid-cols-3">
+          {rolePolicy.canAccessOperations && (
+            <Link href="/admin/users" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
+              <div className="text-sm text-text-secondary">User Admin</div>
+              <div className="mt-2 text-lg font-semibold">用户管理</div>
+              <div className="mt-2 text-sm leading-6 text-text-secondary">检索邮箱、手机号、账号状态，处理会话、处罚与删除</div>
+            </Link>
+          )}
           <Link href="/admin/content-cms" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
             <div className="text-sm text-text-secondary">Content CMS</div>
             <div className="mt-2 text-lg font-semibold">内容管理中心</div>
