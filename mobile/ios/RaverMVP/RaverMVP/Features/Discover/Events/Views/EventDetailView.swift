@@ -1352,6 +1352,8 @@ struct EventDetailView: View {
     @State private var showExpandedLineupList = false
     @State private var lineupSortMode: LineupSortMode = .alphabetical
     @State private var expandedLineupPage = 0
+    @State private var prefetchedLineupAvatarPageKeys: Set<String> = []
+    @State private var prefetchedLineupOverviewEventIDs: Set<String> = []
     @State private var venueMapContext: EventVenueMapContext?
     @State private var selectedLineupMedia: FullscreenMediaSelection?
     @State private var isCachingManualSnapshot = false
@@ -2027,7 +2029,13 @@ struct EventDetailView: View {
             await loadSelectedTabDataIfNeeded()
         }
         .onChange(of: selectedTab) { _, _ in
-            Task { await loadSelectedTabDataIfNeeded() }
+            Task {
+                await loadSelectedTabDataIfNeeded()
+                prefetchVisibleLineupAvatarsIfNeeded()
+            }
+        }
+        .onChange(of: expandedLineupPage) { _, _ in
+            prefetchVisibleLineupAvatarsIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { notification in
             let savedEventID = notification.object as? String
@@ -3850,7 +3858,7 @@ struct EventDetailView: View {
 
                 HorizontalAxisLockedScrollView(showsIndicators: false) {
                     HStack(alignment: .top, spacing: 7) {
-                        ForEach(djs) { dj in
+                        ForEach(Array(djs.prefix(24))) { dj in
                             lineupDJAvatarItem(dj)
                         }
                     }
@@ -3938,6 +3946,9 @@ struct EventDetailView: View {
                 removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
             )
         )
+        .onAppear {
+            prefetchVisibleLineupAvatarsIfNeeded()
+        }
     }
 
     private func lineupExpandedGrid(_ djs: [EventLineupDJEntry]) -> some View {
@@ -4573,6 +4584,7 @@ struct EventDetailView: View {
             + event.timetableAssetURLs
             + snapshot.relatedEventSets.compactMap(\.thumbnailUrl)
             + snapshot.relatedArticles.compactMap(\.coverImageURL)
+            + lineupAvatarURLs(for: Array(lineupDJEntries(for: event, sortMode: lineupSortMode).prefix(24)))
 
         let urls = rawURLs
             .compactMap(AppConfig.resolvedURLString)
@@ -4580,6 +4592,58 @@ struct EventDetailView: View {
 
         guard !urls.isEmpty else { return }
         SDWebImagePrefetcher.shared.prefetchURLs(urls)
+    }
+
+    private func lineupAvatarURLs(for entries: [EventLineupDJEntry]) -> [String] {
+        var urls: [String] = []
+        var seen = Set<String>()
+
+        for entry in entries {
+            for performer in entry.act.performers.prefix(entry.act.type.performerCount) {
+                guard let avatar = AppConfig.resolvedDJAvatarURLString(performer.avatarUrl, size: .small),
+                      !avatar.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      !seen.contains(avatar) else {
+                    continue
+                }
+                seen.insert(avatar)
+                urls.append(avatar)
+            }
+        }
+
+        return urls
+    }
+
+    private func prefetchLineupAvatarURLs(_ rawURLs: [String]) {
+        let urls = rawURLs
+            .compactMap(AppConfig.resolvedURLString)
+            .compactMap(URL.init(string:))
+        guard !urls.isEmpty else { return }
+        SDWebImagePrefetcher.shared.prefetchURLs(urls)
+    }
+
+    private func prefetchLineupOverviewAvatarsIfNeeded(for event: WebEvent) {
+        guard !prefetchedLineupOverviewEventIDs.contains(event.id) else { return }
+        prefetchedLineupOverviewEventIDs.insert(event.id)
+        let entries = Array(lineupDJEntries(for: event, sortMode: lineupSortMode).prefix(24))
+        prefetchLineupAvatarURLs(lineupAvatarURLs(for: entries))
+    }
+
+    private func prefetchVisibleLineupAvatarsIfNeeded() {
+        guard let event else { return }
+        guard selectedTab == .lineup || showExpandedLineupList else { return }
+
+        prefetchLineupOverviewAvatarsIfNeeded(for: event)
+
+        guard showExpandedLineupList else { return }
+        let pages = lineupDJPages(lineupDJEntries(for: event, sortMode: lineupSortMode))
+        let clampedPage = min(max(0, expandedLineupPage), max(0, pages.count - 1))
+
+        for pageIndex in [clampedPage, clampedPage + 1] where pages.indices.contains(pageIndex) {
+            let key = "\(event.id):\(lineupSortMode.rawValue):\(pageIndex)"
+            guard !prefetchedLineupAvatarPageKeys.contains(key) else { continue }
+            prefetchedLineupAvatarPageKeys.insert(key)
+            prefetchLineupAvatarURLs(lineupAvatarURLs(for: pages[pageIndex]))
+        }
     }
 
     private func makeManualCacheSnapshot(

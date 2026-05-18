@@ -382,6 +382,19 @@ enum AppConfig {
             return resolved
         }
 
+        if components.path.lowercased().hasSuffix("/avatar_original.webp") {
+            switch size {
+            case .original:
+                return resolved
+            case .medium:
+                components.path = String(components.path.dropLast("avatar_original.webp".count)) + "avatar_480.webp"
+            case .small:
+                components.path = String(components.path.dropLast("avatar_original.webp".count)) + "avatar_160.webp"
+            }
+            components.queryItems = components.queryItems?.filter { $0.name.lowercased() != "x-oss-process" }
+            return components.string ?? resolved
+        }
+
         let process: String
         switch size {
         case .original:

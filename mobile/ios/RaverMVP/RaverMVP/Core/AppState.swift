@@ -1156,6 +1156,28 @@ final class AppState: ObservableObject {
         )
     }
 
+    func currentUserProfileSnapshot(avatarURL: String? = nil) -> UserProfile? {
+        guard let user = session?.user else { return nil }
+        return UserProfile(
+            id: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            bio: "",
+            avatarURL: avatarURL ?? user.avatarURL,
+            tags: [],
+            isFollowersListPublic: true,
+            isFollowingListPublic: true,
+            canViewFollowersList: true,
+            canViewFollowingList: true,
+            followersCount: 0,
+            followingCount: 0,
+            friendsCount: 0,
+            postsCount: 0,
+            isFollowing: user.isFollowing,
+            isFriend: user.isFriend
+        )
+    }
+
     func sendLoginSmsCode(phoneNumber: String) async -> Int? {
         do {
             let expiresInSeconds = try await service.sendLoginSmsCode(phoneNumber: phoneNumber)

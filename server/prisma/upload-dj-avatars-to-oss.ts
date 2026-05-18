@@ -12,11 +12,21 @@ const REPORT_FILE = path.join(CACHE_DIR, 'dj-avatar-oss-report.json');
 
 const DEFAULT_CONCURRENCY = 6;
 const DEFAULT_RETRIES = 3;
-const DEFAULT_PREFIX = 'djs/avatar';
+const DEFAULT_PREFIX = 'wen-jasonlee/djs';
 
 type ProgressPayload = {
   completedIds: string[];
   failed: Array<{ id: string; slug: string; error: string }>;
+};
+
+type OssImageProcessClient = OSS & {
+  processObjectSave: (
+    sourceObject: string,
+    targetObject: string,
+    process: string,
+    bucket?: string,
+    options?: Record<string, unknown>
+  ) => Promise<unknown>;
 };
 
 function cleanString(value: unknown): string | null {
@@ -48,9 +58,20 @@ function detectExt(url: string, contentType?: string | null): string {
   return '.jpg';
 }
 
+function sanitizePathSegment(value: string): string {
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9-_]/g, '')
+    .slice(0, 128);
+}
+
 function normalizeOssUrl(url: string): string {
   if (url.startsWith('http://')) return `https://${url.slice('http://'.length)}`;
   return url;
+}
+
+function publicOssUrl(bucket: string, region: string, objectKey: string): string {
+  return `https://${bucket}.${region}.aliyuncs.com/${objectKey}`;
 }
 
 function normalizePrefix(value: string): string {
@@ -148,7 +169,7 @@ async function main(): Promise<void> {
     .map((item) => item.trim())
     .filter(Boolean);
   const onlySlugSet = new Set(onlySlugs);
-  const prefix = normalizePrefix(cleanString(process.env.OSS_DJ_AVATAR_PREFIX) || DEFAULT_PREFIX);
+  const prefix = normalizePrefix(cleanString(process.env.OSS_DJ_AVATAR_PREFIX) || cleanString(process.env.OSS_DJS_PREFIX) || DEFAULT_PREFIX);
   const region = cleanString(process.env.OSS_REGION)!;
   const bucket = cleanString(process.env.OSS_BUCKET)!;
   const canonicalPrefix = `https://${bucket}.${region}.aliyuncs.com/${prefix}/`;
@@ -181,7 +202,7 @@ async function main(): Promise<void> {
     if (!source) return false;
     if (!isLikelyRemoteUrl(source)) return false;
     const currentAvatar = cleanString(row.avatarUrl);
-    if (currentAvatar && currentAvatar.startsWith(canonicalPrefix)) return false;
+    if (currentAvatar && currentAvatar.includes(`/${prefix}/${sanitizePathSegment(row.id)}/avatar_original.webp`)) return false;
     return true;
   });
   if (onlySlugSet.size > 0) {
@@ -216,20 +237,52 @@ async function main(): Promise<void> {
       try {
         const { buffer, contentType } = await fetchBufferWithRetry(sourceUrl, retries);
         const ext = detectExt(sourceUrl, contentType);
-        const objectKey = `${prefix}/${target.slug}${ext}`;
+        const safeDJId = sanitizePathSegment(target.id) || sanitizePathSegment(target.slug) || 'unknown-dj';
+        const sourceObjectKey = `${prefix}/${safeDJId}/avatar-source${ext}`;
 
-        const result = await ossClient.put(objectKey, buffer, {
+        await ossClient.put(sourceObjectKey, buffer, {
           headers: contentType
             ? {
                 'Content-Type': contentType,
-                'Cache-Control': 'public, max-age=31536000',
+                'Cache-Control': 'public, max-age=31536000, immutable',
               }
             : {
-                'Cache-Control': 'public, max-age=31536000',
+                'Cache-Control': 'public, max-age=31536000, immutable',
               },
         });
 
-        const uploaded = normalizeOssUrl(result.url || `${canonicalPrefix}${target.slug}${ext}`);
+        const variants = [
+          {
+            objectKey: `${prefix}/${safeDJId}/avatar_original.webp`,
+            process: 'image/resize,m_lfit,w_1600,h_1600/quality,q_92/format,webp',
+          },
+          {
+            objectKey: `${prefix}/${safeDJId}/avatar_480.webp`,
+            process: 'image/resize,m_fill,w_480,h_480/quality,q_88/format,webp',
+          },
+          {
+            objectKey: `${prefix}/${safeDJId}/avatar_160.webp`,
+            process: 'image/resize,m_fill,w_160,h_160/quality,q_82/format,webp',
+          },
+        ];
+
+        const ossImageClient = ossClient as OssImageProcessClient;
+        for (const variant of variants) {
+          await ossImageClient.processObjectSave(
+            `/${sourceObjectKey}`,
+            variant.objectKey,
+            variant.process,
+            undefined,
+            {
+              headers: {
+                'Content-Type': 'image/webp',
+                'Cache-Control': 'public, max-age=31536000, immutable',
+              },
+            }
+          );
+        }
+
+        const uploaded = normalizeOssUrl(publicOssUrl(bucket, region, `${prefix}/${safeDJId}/avatar_original.webp`));
         await prisma.dJ.update({
           where: { id: target.id },
           data: {

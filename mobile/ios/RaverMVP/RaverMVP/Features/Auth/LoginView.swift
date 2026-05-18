@@ -749,6 +749,78 @@ private struct RegisterOnboardingGenreOption: Identifiable, Hashable {
     let level: Int
 }
 
+private struct FlexibleWrapLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout Void
+    ) -> CGSize {
+        let rows = arrangeRows(proposal: proposal, subviews: subviews)
+        let width = proposal.width ?? rows.map(\.width).max() ?? 0
+        let height = rows.reduce(CGFloat.zero) { $0 + $1.height } + CGFloat(max(0, rows.count - 1)) * lineSpacing
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout Void
+    ) {
+        let rows = arrangeRows(proposal: ProposedViewSize(width: bounds.width, height: proposal.height), subviews: subviews)
+        var y = bounds.minY
+        for row in rows {
+            var x = bounds.minX
+            for item in row.items {
+                let size = item.size
+                subviews[item.index].place(
+                    at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
+                    proposal: ProposedViewSize(size)
+                )
+                x += size.width + spacing
+            }
+            y += row.height + lineSpacing
+        }
+    }
+
+    private func arrangeRows(proposal: ProposedViewSize, subviews: Subviews) -> [FlexibleWrapLayoutRow] {
+        let maxWidth = proposal.width ?? .infinity
+        var rows: [FlexibleWrapLayoutRow] = []
+        var current = FlexibleWrapLayoutRow()
+
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let nextWidth = current.items.isEmpty ? size.width : current.width + spacing + size.width
+            if !current.items.isEmpty && nextWidth > maxWidth {
+                rows.append(current)
+                current = FlexibleWrapLayoutRow()
+            }
+            current.items.append(FlexibleWrapLayoutItem(index: index, size: size))
+            current.width = current.items.count == 1 ? size.width : current.width + spacing + size.width
+            current.height = max(current.height, size.height)
+        }
+
+        if !current.items.isEmpty {
+            rows.append(current)
+        }
+        return rows
+    }
+}
+
+private struct FlexibleWrapLayoutRow {
+    var items: [FlexibleWrapLayoutItem] = []
+    var width: CGFloat = 0
+    var height: CGFloat = 0
+}
+
+private struct FlexibleWrapLayoutItem {
+    let index: Int
+    let size: CGSize
+}
+
 private struct RegisterProfileView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
@@ -1251,11 +1323,10 @@ private struct RegisterProfileView: View {
             title: LT("喜欢的风格", "Favorite Genres", "好きなジャンル"),
             subtitle: LT("来自流派树的不同层级", "Mixed from the genre tree", "ジャンルツリーから選出")
         ) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 82), spacing: 8)], alignment: .leading, spacing: 8) {
+            FlexibleWrapLayout(spacing: 8, lineSpacing: 8) {
                 ForEach(onboardingGenres) { genre in
                     onboardingChip(
                         title: genre.name,
-                        subtitle: genre.level > 0 ? String(repeating: "/", count: min(2, genre.level)) : nil,
                         isSelected: selectedGenreIDs.contains(genre.id)
                     ) {
                         toggleGenreSelection(genre.id)
@@ -1281,7 +1352,7 @@ private struct RegisterProfileView: View {
     private var onboardingDJSection: some View {
         onboardingSelectionSection(
             title: LT("喜欢的 DJ", "Favorite DJs", "好きなDJ"),
-            subtitle: LT("从 SoundCloud 粉丝量 Top 300 中随机抽取", "Randomly picked from SoundCloud top 300", "SoundCloud上位300組からランダム選出")
+            subtitle: LT("从 SoundCloud 粉丝量 Top 100 中随机抽取", "Randomly picked from SoundCloud top 100", "SoundCloud上位100組からランダム選出")
         ) {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 94), spacing: 10)], spacing: 10) {
                 ForEach(onboardingDJs.prefix(18)) { dj in
@@ -1312,18 +1383,13 @@ private struct RegisterProfileView: View {
         .background(fieldBackground)
     }
 
-    private func onboardingChip(title: String, subtitle: String?, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func onboardingChip(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(isSelected ? Color.black.opacity(0.62) : Color.white.opacity(0.44))
-                }
+            HStack(spacing: 0) {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(isSelected ? Color.black.opacity(0.88) : Color.white.opacity(0.84))
-                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .padding(.horizontal, 12)
             .frame(height: 34)
@@ -1743,25 +1809,15 @@ private struct RegisterProfileView: View {
 
         registrationErrorMessage = nil
 
-        if let selectedAvatarData {
-            do {
-                let uploaded = try await appContainer.profileUserRepository.uploadMyAvatar(
-                    imageData: selectedAvatarData,
-                    fileName: "avatar-\(Int(Date().timeIntervalSince1970)).jpg",
-                    mimeType: "image/jpeg"
-                )
-                appState.updateCurrentUserAvatarURL(uploaded.avatarURL)
-                if let updatedProfile = try? await appContainer.profileUserRepository.fetchMyProfile() {
-                    appState.applyCurrentUserProfile(updatedProfile)
-                    NotificationCenter.default.post(name: .profileDidUpdate, object: updatedProfile)
-                }
-            } catch {
-                registrationErrorMessage = LT("注册成功，但头像上传失败，请稍后在个人主页重试", "Registered, but avatar upload failed. Please retry from your profile later.", "登録は完了しましたが、アイコンのアップロードに失敗しました。後ほどプロフィールから再試行してください。")
-            }
-        }
-
         withAnimation(.interactiveSpring(response: 0.36, dampingFraction: 0.88)) {
             currentPage = .preferences
+        }
+
+        if let selectedAvatarData {
+            let avatarData = selectedAvatarData
+            Task {
+                await uploadRegistrationAvatarInBackground(avatarData)
+            }
         }
     }
 
@@ -1775,7 +1831,7 @@ private struct RegisterProfileView: View {
         do {
             async let genresTask = appContainer.webService.fetchLearnGenres()
             async let brandsTask = appContainer.webService.fetchLearnFestivals(search: nil)
-            async let djsTask = appContainer.webService.fetchOnboardingDJCandidates(limit: 300)
+            async let djsTask = appContainer.webService.fetchOnboardingDJCandidates(limit: 100)
 
             let (genreTree, brands, topDJs) = try await (genresTask, brandsTask, djsTask)
             onboardingGenres = Self.sampleGenreOptions(from: genreTree, limit: 24)
@@ -1784,6 +1840,23 @@ private struct RegisterProfileView: View {
             onboardingErrorMessage = nil
         } catch {
             onboardingErrorMessage = error.userFacingMessage ?? LT("推荐选项加载失败，请稍后重试。", "Could not load picks. Please try again later.", "おすすめを読み込めませんでした。時間をおいて再試行してください。")
+        }
+    }
+
+    private func uploadRegistrationAvatarInBackground(_ avatarData: Data) async {
+        do {
+            let uploaded = try await appContainer.profileUserRepository.uploadMyAvatar(
+                imageData: avatarData,
+                fileName: "avatar-\(Int(Date().timeIntervalSince1970)).jpg",
+                mimeType: "image/jpeg"
+            )
+            appState.updateCurrentUserAvatarURL(uploaded.avatarURL)
+            NotificationCenter.default.post(
+                name: .profileDidUpdate,
+                object: appState.currentUserProfileSnapshot(avatarURL: uploaded.avatarURL)
+            )
+        } catch {
+            onboardingErrorMessage = LT("头像上传失败，请稍后在个人主页重试", "Avatar upload failed. Please retry from your profile later.", "アイコンのアップロードに失敗しました。後ほどプロフィールから再試行してください。")
         }
     }
 

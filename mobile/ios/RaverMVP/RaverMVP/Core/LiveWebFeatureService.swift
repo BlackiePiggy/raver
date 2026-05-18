@@ -269,7 +269,7 @@ final class LiveWebFeatureService: WebFeatureService {
             method: "GET",
             queryItems: [
                 URLQueryItem(name: "page", value: "1"),
-                URLQueryItem(name: "limit", value: "\(max(1, min(300, limit)))"),
+                URLQueryItem(name: "limit", value: "\(max(1, min(100, limit)))"),
                 URLQueryItem(name: "sortBy", value: "soundcloudFollowers"),
                 URLQueryItem(name: "onboarding", value: "1")
             ]

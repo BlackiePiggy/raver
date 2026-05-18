@@ -1,16 +1,16 @@
 {
-  "startedAt": "2026-03-22T11:57:37.127Z",
-  "finishedAt": "2026-03-22T11:58:20.404Z",
-  "durationSeconds": 43,
-  "prefix": "djs/avatar",
-  "canonicalPrefix": "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/djs/avatar/",
+  "startedAt": "2026-05-18T01:33:57.503Z",
+  "finishedAt": "2026-05-18T02:03:10.492Z",
+  "durationSeconds": 1753,
+  "prefix": "wen-jasonlee/djs",
+  "canonicalPrefix": "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/wen-jasonlee/djs/",
   "stats": {
-    "totalRows": 12546,
-    "targets": 5,
-    "uploaded": 1,
-    "skippedAlreadyOss": 12541,
-    "failed": 4,
-    "processed": 5
+    "totalRows": 7832,
+    "targets": 6184,
+    "uploaded": 6184,
+    "skippedAlreadyOss": 1648,
+    "failed": 0,
+    "processed": 6184
   },
   "files": {
     "progress": "/Users/blackie/Projects/raver/server/prisma/.cache/dj-avatar-oss-progress.json",

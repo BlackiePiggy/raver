@@ -1864,6 +1864,105 @@ const buildDJAvatarObjectKey = (djId: string, mimeType: string, sourceUrl?: stri
   return `${ossDjsPrefix}/${safeDJId}/avatar-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
 };
 
+const buildDJAvatarVariantObjectKey = (djId: string, size: 'small' | 'medium' | 'original'): string => {
+  const safeDJId = sanitizeOssPathSegment(djId) || 'unknown-dj';
+  return `${ossDjsPrefix}/${safeDJId}/avatar_${size === 'small' ? '160' : size === 'medium' ? '480' : 'original'}.webp`;
+};
+
+const buildDJAvatarVariantURL = (djId: string, size: 'small' | 'medium' | 'original'): string | null => {
+  if (!ossBucket || !ossRegion) return null;
+  return normalizeUploadedOssUrl(undefined, buildDJAvatarVariantObjectKey(djId, size));
+};
+
+const uploadDJAvatarVariantsToOss = async (input: {
+  djId: string;
+  sourceObjectKey: string;
+  uploadedById?: string | null;
+}): Promise<{ originalUrl: string; mediumUrl: string; smallUrl: string } | null> => {
+  if (!postMediaOssClient) return null;
+
+  const source = `/${input.sourceObjectKey}`;
+  const variants = [
+    {
+      size: 'original' as const,
+      process: 'image/resize,m_lfit,w_1600,h_1600/quality,q_92/format,webp',
+      mimeType: 'image/webp',
+    },
+    {
+      size: 'medium' as const,
+      process: 'image/resize,m_fill,w_480,h_480/quality,q_88/format,webp',
+      mimeType: 'image/webp',
+    },
+    {
+      size: 'small' as const,
+      process: 'image/resize,m_fill,w_160,h_160/quality,q_82/format,webp',
+      mimeType: 'image/webp',
+    },
+  ];
+
+  const uploaded: Record<'original' | 'medium' | 'small', string> = {
+    original: '',
+    medium: '',
+    small: '',
+  };
+
+  try {
+    for (const variant of variants) {
+      const objectKey = buildDJAvatarVariantObjectKey(input.djId, variant.size);
+      const ossWithImageProcess = postMediaOssClient as OSS & {
+        processObjectSave: (
+          sourceObject: string,
+          targetObject: string,
+          process: string,
+          bucket?: string,
+          options?: Record<string, unknown>
+        ) => Promise<unknown>;
+      };
+      await ossWithImageProcess.processObjectSave(
+        source,
+        objectKey,
+        variant.process,
+        undefined,
+        {
+          headers: {
+            'Content-Type': variant.mimeType,
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        }
+      );
+      const url = normalizeUploadedOssUrl(undefined, objectKey);
+      uploaded[variant.size] = url;
+      await mediaAssetService.register({
+        ownerType: 'dj',
+        ownerId: input.djId,
+        purpose: `avatar_${variant.size}`,
+        provider: 'oss',
+        objectKey,
+        url,
+        mimeType: variant.mimeType,
+        uploadedById: input.uploadedById || null,
+        metadata: {
+          sourceObjectKey: input.sourceObjectKey,
+          source: 'dj-avatar-variant',
+        },
+      });
+    }
+  } catch (error) {
+    console.error('BFF web generate DJ avatar variants error:', {
+      djId: input.djId,
+      sourceObjectKey: input.sourceObjectKey,
+      error,
+    });
+    return null;
+  }
+
+  return {
+    originalUrl: uploaded.original,
+    mediumUrl: uploaded.medium,
+    smallUrl: uploaded.small,
+  };
+};
+
 const buildDJMediaObjectKey = (
   djId: string,
   fileName: string,
@@ -1958,19 +2057,27 @@ const uploadRemoteDJAvatarToOss = async (
       },
     });
 
-    const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+    const uploadedOriginalUrl = normalizeUploadedOssUrl(putResult.url, objectKey);
+    const variants = await uploadDJAvatarVariantsToOss({
+      djId,
+      sourceObjectKey: objectKey,
+    });
+    const url = variants?.originalUrl ?? uploadedOriginalUrl;
     const asset = await mediaAssetService.register({
       ownerType: 'dj',
       ownerId: djId,
       purpose: 'avatar',
       provider: 'oss',
       objectKey,
-      url,
+      url: uploadedOriginalUrl,
       mimeType,
       sizeBytes: buffer.length,
       metadata: {
         sourceUrl: trimmed,
         source: 'remote-dj-avatar-mirror',
+        originalVariantUrl: variants?.originalUrl ?? null,
+        mediumVariantUrl: variants?.mediumUrl ?? null,
+        smallVariantUrl: variants?.smallUrl ?? null,
       },
     });
     return {
@@ -2122,18 +2229,17 @@ const deleteSingleEventOssObjectIfOwned = async (url: string | null | undefined,
   await deleteOssObjects([objectKey]);
 };
 
-const deleteSingleDJAvatarOssObjectIfOwned = async (url: string | null | undefined, djId: string): Promise<void> => {
-  if (!postMediaOssClient || !url) return;
-  const objectKey = parseOssObjectKeyFromUrl(url);
-  if (!objectKey || !isDjAvatarOssObjectKey(objectKey, djId)) return;
-  await deleteOssObjects([objectKey]);
-};
-
 const deleteSingleDJMediaOssObjectIfOwned = async (url: string | null | undefined, djId: string): Promise<void> => {
   if (!postMediaOssClient || !url) return;
   const objectKey = parseOssObjectKeyFromUrl(url);
   if (!objectKey || !isDjAvatarOssObjectKey(objectKey, djId)) return;
-  await deleteOssObjects([objectKey]);
+  const dirname = path.posix.dirname(objectKey);
+  const basename = path.posix.basename(objectKey);
+  const keys = [objectKey];
+  if (basename === 'avatar_original.webp') {
+    keys.push(`${dirname}/avatar_480.webp`, `${dirname}/avatar_160.webp`);
+  }
+  await deleteOssObjects(Array.from(new Set(keys)));
 };
 
 const deleteSingleWikiBrandOssObjectIfOwned = async (
@@ -2598,7 +2704,16 @@ const uploadDJMediaToOss = async (
   djId: string,
   usage: 'avatar' | 'banner',
   uploadedById?: string | null
-): Promise<{ assetId: string; url: string; fileName: string; mimeType: string; size: number }> => {
+): Promise<{
+  assetId: string;
+  url: string;
+  originalUrl: string | null;
+  mediumUrl: string | null;
+  smallUrl: string | null;
+  fileName: string;
+  mimeType: string;
+  size: number;
+}> => {
   if (!postMediaOssClient) {
     await fs.promises.unlink(file.path).catch(() => undefined);
     throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
@@ -2619,26 +2734,40 @@ const uploadDJMediaToOss = async (
     await fs.promises.unlink(file.path).catch(() => undefined);
   }
 
-  const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const uploadedOriginalUrl = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const variants = usage === 'avatar'
+    ? await uploadDJAvatarVariantsToOss({
+        djId,
+        sourceObjectKey: objectKey,
+        uploadedById,
+      })
+    : null;
+  const url = variants?.originalUrl ?? uploadedOriginalUrl;
   const asset = await mediaAssetService.register({
     ownerType: 'dj',
     ownerId: djId,
     purpose: usage,
     provider: 'oss',
     objectKey,
-    url,
+    url: uploadedOriginalUrl,
     mimeType,
     sizeBytes: file.size,
     uploadedById: uploadedById || null,
     metadata: {
       originalName: file.originalname,
       source: 'v1/djs/upload-image',
+      originalVariantUrl: variants?.originalUrl ?? null,
+      mediumVariantUrl: variants?.mediumUrl ?? null,
+      smallVariantUrl: variants?.smallUrl ?? null,
     },
   });
 
   return {
     assetId: asset.id,
     url,
+    originalUrl: variants?.originalUrl ?? null,
+    mediumUrl: variants?.mediumUrl ?? null,
+    smallUrl: variants?.smallUrl ?? null,
     fileName: path.basename(objectKey),
     mimeType,
     size: file.size,
@@ -3289,6 +3418,23 @@ const shouldMirrorRemoteImageToOss = (value: string): boolean => {
 
 const buildOssAvatarVariantUrl = (
   rawUrl: string | null | undefined,
+  djIdOrSize: string | 'small' | 'medium' | 'original',
+  requestedSize?: 'small' | 'medium' | 'original'
+): string | null => {
+  const djId = requestedSize ? djIdOrSize : null;
+  const size = requestedSize ?? (djIdOrSize as 'small' | 'medium' | 'original');
+  const hasMaterializedVariants =
+    typeof rawUrl === 'string' && /\/avatar_original\.webp(?:$|\?)/.test(rawUrl.trim());
+  const materialized = djId && size !== 'original' && hasMaterializedVariants
+    ? buildDJAvatarVariantURL(djId, size)
+    : null;
+  if (materialized) return materialized;
+
+  return buildDynamicOssAvatarVariantUrl(rawUrl, size);
+};
+
+const buildDynamicOssAvatarVariantUrl = (
+  rawUrl: string | null | undefined,
   size: 'small' | 'medium' | 'original'
 ): string | null => {
   const normalized = typeof rawUrl === 'string' ? rawUrl.trim() : '';
@@ -3364,8 +3510,8 @@ const mapDJ = (
     bioI18n: bioI18n ?? null,
     avatarUrl: resolvedAvatarUrl,
     avatarOriginalUrl: resolvedAvatarUrl,
-    avatarMediumUrl: buildOssAvatarVariantUrl(resolvedAvatarUrl, 'medium'),
-    avatarSmallUrl: buildOssAvatarVariantUrl(resolvedAvatarUrl, 'small'),
+    avatarMediumUrl: buildOssAvatarVariantUrl(resolvedAvatarUrl, row.id, 'medium'),
+    avatarSmallUrl: buildOssAvatarVariantUrl(resolvedAvatarUrl, row.id, 'small'),
     avatarSourceUrl: row.avatarSourceUrl ?? null,
     bannerUrl: row.bannerUrl,
     country: row.country,
@@ -3711,9 +3857,9 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
                 id: artist.dj.id,
                 name: artist.dj.name,
                 avatarUrl: artist.dj.avatarUrl,
-                avatarOriginalUrl: buildOssAvatarVariantUrl(artist.dj.avatarUrl, 'original'),
-                avatarMediumUrl: buildOssAvatarVariantUrl(artist.dj.avatarUrl, 'medium'),
-                avatarSmallUrl: buildOssAvatarVariantUrl(artist.dj.avatarUrl, 'small'),
+                avatarOriginalUrl: buildOssAvatarVariantUrl(artist.dj.avatarUrl, artist.dj.id, 'original'),
+                avatarMediumUrl: buildOssAvatarVariantUrl(artist.dj.avatarUrl, artist.dj.id, 'medium'),
+                avatarSmallUrl: buildOssAvatarVariantUrl(artist.dj.avatarUrl, artist.dj.id, 'small'),
                 bannerUrl: artist.dj.bannerUrl,
                 country: artist.dj.country,
                 soundCloudFollowers: artist.dj.soundCloudFollowers ?? null,
@@ -3739,9 +3885,9 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
             id: slot.dj.id,
             name: slot.dj.name,
             avatarUrl: slot.dj.avatarUrl,
-            avatarOriginalUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'original'),
-            avatarMediumUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'medium'),
-            avatarSmallUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'small'),
+            avatarOriginalUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, slot.dj.id, 'original'),
+            avatarMediumUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, slot.dj.id, 'medium'),
+            avatarSmallUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, slot.dj.id, 'small'),
             bannerUrl: slot.dj.bannerUrl,
             country: slot.dj.country,
             soundCloudFollowers: slot.dj.soundCloudFollowers ?? null,
@@ -3760,9 +3906,9 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
                 id: dj.id,
                 name: dj.name,
                 avatarUrl: dj.avatarUrl,
-                avatarOriginalUrl: buildOssAvatarVariantUrl(dj.avatarUrl, 'original'),
-                avatarMediumUrl: buildOssAvatarVariantUrl(dj.avatarUrl, 'medium'),
-                avatarSmallUrl: buildOssAvatarVariantUrl(dj.avatarUrl, 'small'),
+                avatarOriginalUrl: buildOssAvatarVariantUrl(dj.avatarUrl, dj.id, 'original'),
+                avatarMediumUrl: buildOssAvatarVariantUrl(dj.avatarUrl, dj.id, 'medium'),
+                avatarSmallUrl: buildOssAvatarVariantUrl(dj.avatarUrl, dj.id, 'small'),
                 bannerUrl: dj.bannerUrl,
                 country: dj.country,
                 soundCloudFollowers: dj.soundCloudFollowers ?? null,
@@ -3779,9 +3925,9 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
                 id: slot.dj.id,
                 name: slot.dj.name,
                 avatarUrl: slot.dj.avatarUrl,
-                avatarOriginalUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'original'),
-                avatarMediumUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'medium'),
-                avatarSmallUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, 'small'),
+                avatarOriginalUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, slot.dj.id, 'original'),
+                avatarMediumUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, slot.dj.id, 'medium'),
+                avatarSmallUrl: buildOssAvatarVariantUrl(slot.dj.avatarUrl, slot.dj.id, 'small'),
                 bannerUrl: slot.dj.bannerUrl,
                 country: slot.dj.country,
                 soundCloudFollowers: slot.dj.soundCloudFollowers ?? null,
@@ -3885,9 +4031,9 @@ const mapDJSet = (row: any) => ({
         name: row.dj.name,
         slug: row.dj.slug,
         avatarUrl: row.dj.avatarUrl,
-        avatarOriginalUrl: buildOssAvatarVariantUrl(row.dj.avatarUrl, 'original'),
-        avatarMediumUrl: buildOssAvatarVariantUrl(row.dj.avatarUrl, 'medium'),
-        avatarSmallUrl: buildOssAvatarVariantUrl(row.dj.avatarUrl, 'small'),
+        avatarOriginalUrl: buildOssAvatarVariantUrl(row.dj.avatarUrl, row.dj.id, 'original'),
+        avatarMediumUrl: buildOssAvatarVariantUrl(row.dj.avatarUrl, row.dj.id, 'medium'),
+        avatarSmallUrl: buildOssAvatarVariantUrl(row.dj.avatarUrl, row.dj.id, 'small'),
         bannerUrl: row.dj.bannerUrl,
         country: row.dj.country,
       }
@@ -3897,9 +4043,9 @@ const mapDJSet = (row: any) => ({
         id: dj.id,
         name: dj.name,
         avatarUrl: dj.avatarUrl,
-        avatarOriginalUrl: buildOssAvatarVariantUrl(dj.avatarUrl, 'original'),
-        avatarMediumUrl: buildOssAvatarVariantUrl(dj.avatarUrl, 'medium'),
-        avatarSmallUrl: buildOssAvatarVariantUrl(dj.avatarUrl, 'small'),
+        avatarOriginalUrl: buildOssAvatarVariantUrl(dj.avatarUrl, dj.id, 'original'),
+        avatarMediumUrl: buildOssAvatarVariantUrl(dj.avatarUrl, dj.id, 'medium'),
+        avatarSmallUrl: buildOssAvatarVariantUrl(dj.avatarUrl, dj.id, 'small'),
       }))
     : [],
   tracks: Array.isArray(row.tracks) ? row.tracks.map(mapTrack) : [],
@@ -4491,10 +4637,10 @@ const DAILY_EVENT_RECOMMENDATION_ALGORITHM_VERSION = 'daily-event-recommendation
 const DAILY_EVENT_RECOMMENDATION_SIZE = 10;
 const DAILY_EVENT_RECOMMENDATION_TIME_ZONE = 'Asia/Shanghai';
 const DAILY_EVENT_RECOMMENDATION_MEMORY_TTL_MS = 5 * 60 * 1000;
-const DAILY_DJ_RECOMMENDATION_ALGORITHM_VERSION = 'daily-dj-recommendations-soundcloud-top500-v1';
+const DAILY_DJ_RECOMMENDATION_ALGORITHM_VERSION = 'daily-dj-recommendations-soundcloud-top100-v1';
 const DAILY_DJ_RECOMMENDATION_SIZE = 10;
-const DAILY_DJ_RECOMMENDATION_CANDIDATE_LIMIT = 500;
-const DAILY_DJ_RECOMMENDATION_CANDIDATE_SOURCE = 'soundcloud_followers_top_500';
+const DAILY_DJ_RECOMMENDATION_CANDIDATE_LIMIT = 100;
+const DAILY_DJ_RECOMMENDATION_CANDIDATE_SOURCE = 'soundcloud_followers_top_100';
 
 type DailyEventRecommendationSnapshot = {
   userId: string;
@@ -7615,7 +7761,7 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
           },
         });
         if (previousAvatarUrl && previousAvatarUrl !== uploadedAvatar.url) {
-          await deleteSingleDJAvatarOssObjectIfOwned(previousAvatarUrl, persisted.id);
+          await deleteSingleDJMediaOssObjectIfOwned(previousAvatarUrl, persisted.id);
         }
         persisted = updated;
       } else if (!persisted.avatarUrl) {
@@ -7932,7 +8078,7 @@ router.post('/djs/discogs/import', optionalAuth, async (req: Request, res: Respo
           },
         });
         if (previousAvatarUrl && previousAvatarUrl !== uploadedAvatar.url) {
-          await deleteSingleDJAvatarOssObjectIfOwned(previousAvatarUrl, persisted.id);
+          await deleteSingleDJMediaOssObjectIfOwned(previousAvatarUrl, persisted.id);
         }
         persisted = updated;
       } else if (!persisted.avatarUrl) {
@@ -8242,23 +8388,27 @@ router.post('/djs/upload-image', optionalAuth, djImageUpload.single('image'), as
     const uploaded = await uploadDJMediaToOss(file, djId, usage, userId);
     const previousUrl = usage === 'avatar' ? existing.avatarUrl : existing.bannerUrl;
 
+    const nextMediaUrl = usage === 'avatar'
+      ? (uploaded.originalUrl || uploaded.url)
+      : uploaded.url;
+
     await prisma.dJ.update({
       where: { id: djId },
       data:
         usage === 'avatar'
           ? {
-              avatarUrl: uploaded.url,
-              avatarSourceUrl: uploaded.url,
+              avatarUrl: nextMediaUrl,
+              avatarSourceUrl: nextMediaUrl,
             }
           : {
-              bannerUrl: uploaded.url,
+              bannerUrl: nextMediaUrl,
             },
     });
-    if (previousUrl && previousUrl !== uploaded.url) {
+    if (previousUrl && previousUrl !== nextMediaUrl) {
       await mediaAssetService.markReplacedByUrl(previousUrl);
     }
 
-    if (previousUrl && previousUrl !== uploaded.url) {
+    if (previousUrl && previousUrl !== nextMediaUrl) {
       await deleteSingleDJMediaOssObjectIfOwned(previousUrl, djId);
     }
 
@@ -10813,7 +10963,7 @@ const normalizeGenreKeyArtistBindings = (
             id: dj.id,
             name: dj.name,
             avatarUrl,
-            avatarMediumUrl: buildOssAvatarVariantUrl(avatarUrl, 'medium'),
+            avatarMediumUrl: buildOssAvatarVariantUrl(avatarUrl, dj.id, 'medium'),
           }
         : null,
     };

@@ -15,6 +15,8 @@ enum ImageCacheBootstrap {
         cache.config.shouldUseWeakMemoryCache = true
 
         SDWebImageDownloader.shared.config.downloadTimeout = 15
+        SDWebImageDownloader.shared.config.maxConcurrentDownloads = 5
         SDWebImageDownloader.shared.config.executionOrder = .lifoExecutionOrder
+        SDWebImagePrefetcher.shared.options = [.lowPriority, .scaleDownLargeImages]
     }
 }

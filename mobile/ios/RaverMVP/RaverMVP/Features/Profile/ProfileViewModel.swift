@@ -416,7 +416,27 @@ final class ProfileViewModel: ObservableObject {
     }
 
     func applyUpdatedProfile(_ profile: UserProfile) {
-        self.profile = profile
+        if var existing = self.profile, existing.id == profile.id {
+            existing.username = profile.username
+            existing.displayName = profile.displayName
+            existing.bio = profile.bio.isEmpty ? existing.bio : profile.bio
+            existing.avatarURL = profile.avatarURL
+            existing.qrCodeURL = profile.qrCodeURL ?? existing.qrCodeURL
+            existing.tags = profile.tags.isEmpty ? existing.tags : profile.tags
+            existing.isFollowersListPublic = profile.isFollowersListPublic
+            existing.isFollowingListPublic = profile.isFollowingListPublic
+            existing.canViewFollowersList = profile.canViewFollowersList
+            existing.canViewFollowingList = profile.canViewFollowingList
+            if profile.followersCount > 0 { existing.followersCount = profile.followersCount }
+            if profile.followingCount > 0 { existing.followingCount = profile.followingCount }
+            if profile.friendsCount > 0 { existing.friendsCount = profile.friendsCount }
+            if profile.postsCount > 0 { existing.postsCount = profile.postsCount }
+            existing.isFollowing = profile.isFollowing ?? existing.isFollowing
+            existing.isFriend = profile.isFriend ?? existing.isFriend
+            self.profile = existing
+        } else {
+            self.profile = profile
+        }
         phase = .success
         persistOfflineSnapshot()
     }
