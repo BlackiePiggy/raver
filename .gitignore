@@ -51,8 +51,20 @@ yarn-error.log*
 logs/
 *.log
 
-# scrapeRave
-scrapRave/
+# Festival Viewer / WebTool
+scrapRave/.env.local
+scrapRave/.DS_Store
+scrapRave/brands/
+scrapRave/reports/
+scrapRave/tmp_unmatched_export/
+scrapRave/tmp_unmatched_export_new/
+scrapRave/web_tool/.cache/
+scrapRave/web_tool/.DS_Store
+scrapRave/*.zip
+scrapRave/*.ipynb
+scrapRave/sample_*.json
+scrapRave/*festtimetable*.json
+scrapRave/coze_lineup_response_*.json
 cached_dj_profile/
 
 # Third-party local demos

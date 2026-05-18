@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DJ 检索管理库</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <div class="row row-between">
+        <div>
+          <h1>DJ 检索管理库</h1>
+          <p class="sub">数据来源：Raver 后端数据库（通过 `/v1/djs` 等接口）。可搜索、查看详情、浏览关联演出和 Sets。</p>
+        </div>
+        <a class="action-link secondary" href="/index.html">返回 Festival Viewer</a>
+      </div>
+
+      <section class="panel">
+        <div class="inline-form">
+          <label>
+            关键词
+            <input id="searchInput" type="text" placeholder="DJ 名称 / 别名 / 简介" />
+          </label>
+          <label>
+            国家/地区
+            <input id="countryInput" type="text" placeholder="如 NL / CN / US" />
+          </label>
+          <label>
+            排序
+            <select id="sortBySelect">
+              <option value="followerCount" selected>粉丝数</option>
+              <option value="name">名称</option>
+              <option value="createdAt">创建时间</option>
+              <option value="random">随机</option>
+            </select>
+          </label>
+          <label>
+            每页
+            <select id="limitSelect">
+              <option value="20" selected>20</option>
+              <option value="40">40</option>
+              <option value="80">80</option>
+            </select>
+          </label>
+          <label>
+            认证状态
+            <select id="verifiedSelect">
+              <option value="all" selected>全部</option>
+              <option value="verified">仅认证</option>
+              <option value="unverified">仅未认证</option>
+            </select>
+          </label>
+          <button id="searchBtn">检索</button>
+          <button id="resetBtn" class="secondary">重置</button>
+        </div>
+        <p id="statusText" class="status"></p>
+      </section>
+
+      <section class="panel">
+        <div class="row row-between">
+          <div class="meta" id="pageInfo">-</div>
+          <div class="row small-gap">
+            <button id="prevPageBtn" class="secondary">上一页</button>
+            <button id="nextPageBtn" class="secondary">下一页</button>
+          </div>
+        </div>
+        <div class="dj-layout">
+          <div id="djList" class="dj-list"></div>
+          <div id="djDetail" class="dj-detail">
+            <div class="dj-detail-body">
+              <p class="meta">请选择左侧 DJ 查看详情。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/dj-library.js"></script>
+  </body>
+</html>

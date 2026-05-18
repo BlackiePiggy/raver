@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAVE ARCHIVE — 电音节档案馆</title>
+<script>
+(() => {
+  const key = 'festivalViewerTheme';
+  let theme = 'light';
+  try {
+    const saved = String(localStorage.getItem(key) || '').trim().toLowerCase();
+    if (saved === 'dark' || saved === 'light') theme = saved;
+  } catch (_) {}
+  document.documentElement.dataset.theme = theme;
+})();
+</script>
+<link rel="stylesheet" href="./festival-viewer/css/festival-viewer.css?v=20260419-tt-edit">
+</head>
+<body>
+<div class="scanlines"></div>
+<div id="event-editor-overlay" onclick="handleEventEditorOverlayClick(event)"></div>
+
+<div id="auth-gate-overlay">
+  <div id="auth-gate-card">
+    <div class="auth-gate-title">RAVER LOGIN</div>
+    <div class="auth-gate-sub">登录后可自动带鉴权编辑 DJ 资料（无需手填 Bearer Token）</div>
+    <div class="auth-gate-grid">
+      <label for="auth-login-identifier">账号</label>
+      <input id="auth-login-identifier" type="text" value="uploadtester" autocomplete="username">
+      <label for="auth-login-password">密码</label>
+      <input id="auth-login-password" type="password" value="123456" autocomplete="current-password">
+    </div>
+    <div class="auth-gate-actions">
+      <button class="auth-gate-btn primary" id="auth-login-submit-btn" onclick="submitViewerLogin()">登录进入</button>
+      <button class="auth-gate-btn" onclick="fillDefaultViewerLogin()">填入默认账号</button>
+      <button class="auth-gate-btn" id="auth-login-close-btn" onclick="closeViewerLogin()" style="display:none">关闭</button>
+    </div>
+    <div id="auth-login-status"></div>
+  </div>
+</div>
+
+<div id="float-nav-edge"></div>
+<div id="float-nav-trigger"></div>
+
+<nav id="float-nav">
+  <div id="float-nav-panel">
+    <div id="float-nav-header">
+      <span class="fnav-logo-text">INDEX</span>
+      <span class="fnav-year-badge" id="fnav-year-badge">—</span>
+    </div>
+    <div id="float-nav-list"></div>
+    <div id="float-nav-footer">
+      <button class="fnav-pin-btn" id="fnav-pin-btn" onclick="fnavTogglePin()">PIN</button>
+    </div>
+  </div>
+</nav>
+
+<header>
+  <div>
+    <div class="header-title">RAVE<br>ARCHIVE</div>
+    <div class="header-sub">电音节 · 活动档案 · 时间轴</div>
+  </div>
+  <div class="header-count">
+    <span id="total-count">—</span>
+    <span id="total-label">FESTIVALS LOADED</span>
+    <div class="folder-switcher">
+      <div class="folder-path" id="current-folder-path">当前目录：未选择</div>
+      <div class="folder-actions">
+        <button class="folder-btn primary" onclick="pickFolder()">切换文件夹</button>
+        <button class="folder-btn" id="global-add-event-btn" onclick="openAddEventModal()">新增活动</button>
+        <button class="folder-btn" onclick="openDJLibraryPage()">DJ检索库</button>
+        <button class="folder-btn ai-action-btn" id="global-translate-btn" onclick="openTranslateBatchModal()" title="批量生成活动名称、地点等字段的中英双语版本；确认后保存修改">批量翻译活动字段</button>
+        <button class="folder-btn" id="auth-login-open-btn" onclick="openViewerLogin()">登录</button>
+        <button class="folder-btn" id="auth-logout-btn" onclick="logoutViewerAuth()" style="display:none">退出登录</button>
+        <button class="folder-btn" onclick="clearRememberedFolder()">清除记忆</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<button
+  class="theme-toggle-btn"
+  id="theme-toggle-btn"
+  type="button"
+  onclick="toggleViewerTheme()"
+  aria-label="切换暗色主题"
+  title="切换暗色主题"
+>
+  <span class="theme-toggle-icon" aria-hidden="true">☾</span>
+</button>
+
+<div id="app-page-nav">
+  <div class="app-page-nav-head">
+    <div class="app-page-nav-logo">R</div>
+    <div class="app-page-nav-brand">
+      <div class="app-page-nav-title">RAVER ADMIN</div>
+      <div class="app-page-nav-sub">Festival Viewer</div>
+    </div>
+    <button class="app-page-nav-toggle" type="button" onclick="toggleAppSidebar()" aria-label="收起侧栏" title="收起侧栏">‹</button>
+  </div>
+  <button class="app-page-tab active" id="tab-archive" onclick="switchAppPage('archive')" data-icon="◎"><span class="app-page-tab-label">Events</span></button>
+  <button class="app-page-tab" id="tab-dj" onclick="switchAppPage('dj')" data-icon="♬"><span class="app-page-tab-label">DJ Library</span></button>
+  <button class="app-page-tab" id="tab-brand" onclick="switchAppPage('brand')" data-icon="◆"><span class="app-page-tab-label">Brands</span></button>
+  <button class="app-page-tab" id="tab-event-brand" onclick="switchAppPage('event-brand')" data-icon="⇄"><span class="app-page-tab-label">Event ↔ Brand</span></button>
+  <button class="app-page-tab" id="tab-news" onclick="switchAppPage('news')" data-icon="✦"><span class="app-page-tab-label">News</span></button>
+  <button class="app-page-tab" id="tab-ranking" onclick="switchAppPage('ranking')" data-icon="≋"><span class="app-page-tab-label">Rankings</span></button>
+  <button class="app-page-tab" id="tab-genre" onclick="switchAppPage('genre')" data-icon="◌"><span class="app-page-tab-label">Genres</span></button>
+  <button class="app-page-tab" id="tab-review" onclick="switchAppPage('review')" data-icon="✓"><span class="app-page-tab-label">Review</span><span class="app-page-badge" id="review-pending-badge" style="display:none">0</span></button>
+</div>
+
+<div id="archive-page">
+<div id="pick-zone" onclick="pickFolder()">
+  <span class="pick-icon">📁</span>
+  <div class="pick-title">选择图片缓存目录</div>
+  <div class="pick-sub">活动数据读取后端数据库；本地目录仅用于缓存 OSS 图片<br>本地有缓存优先读取，无缓存会自动回源下载</div>
+  <div class="pick-warn">⚠️ 需要 Chrome / Edge 浏览器（不支持 Safari / Firefox）</div>
+</div>
+
+<div id="loading">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">正在读取后端活动数据...</div>
+  <div id="loading-detail"></div>
+</div>
+
+<nav id="year-nav" style="display:none"></nav>
+<div id="filter-bar" style="display:none">
+  <span class="filter-label">年份内搜索</span>
+  <input type="text" id="search-input" placeholder="节日名称 / 地点...">
+  <span class="filter-label">全局搜索</span>
+  <input type="text" id="global-search-input" placeholder="跨年份搜索（名称 / 地点）...">
+  <div class="country-filter-wrap" id="country-filter-wrap">
+    <button type="button" class="country-filter-trigger" id="country-filter-trigger">国家筛选</button>
+    <div class="country-filter-panel" id="country-filter-panel">
+      <div class="country-filter-head">
+        <span>国家（多选）</span>
+        <button type="button" class="country-filter-clear" id="country-filter-clear">清空</button>
+      </div>
+      <div class="country-filter-options" id="country-filter-options"></div>
+    </div>
+  </div>
+  <div class="country-filter-wrap" id="event-type-filter-wrap">
+    <button type="button" class="country-filter-trigger" id="event-type-filter-trigger">活动类型筛选</button>
+    <div class="country-filter-panel" id="event-type-filter-panel">
+      <div class="country-filter-head">
+        <span>活动类型（多选）</span>
+        <button type="button" class="country-filter-clear" id="event-type-filter-clear">清空</button>
+      </div>
+      <div class="country-filter-options" id="event-type-filter-options"></div>
+    </div>
+  </div>
+  <span class="filter-label" style="margin-left:1rem">月份</span>
+  <div class="month-chips" id="month-chips"></div>
+</div>
+
+  <div id="import-bar">
+  <div class="import-top">
+    <span class="filter-label">FestTimetable 导入</span>
+    <input class="import-input" id="import-keyword" type="text" placeholder="关键词，如 tomorrowland">
+    <select class="import-select" id="import-locale">
+      <option value="en-GB" selected>en-GB</option>
+      <option value="en-US">en-US</option>
+      <option value="zh-CN">zh-CN</option>
+      <option value="zh-TW">zh-TW</option>
+      <option value="ja-JP">ja-JP</option>
+      <option value="ko-KR">ko-KR</option>
+      <option value="es-ES">es-ES</option>
+    </select>
+    <button class="import-btn" id="import-search-btn">搜索活动</button>
+    <button class="import-btn" id="import-select-all-btn">全选</button>
+    <button class="import-btn primary" id="import-run-btn">抓取并入库</button>
+    <button class="import-btn" id="tt-dj-prefetch-btn">预抓取未绑定DJ候选</button>
+  </div>
+  <div class="import-status" id="import-status"></div>
+  <div class="import-results" id="import-results"></div>
+  <div class="import-progress" id="import-progress"></div>
+  <div class="import-substatus" id="tt-dj-prefetch-status">DJ 候选缓存任务：未开始</div>
+</div>
+
+<main id="main"></main>
+</div>
+
+<section id="dj-page">
+  <div class="dj-toolbar">
+    <span class="filter-label">DJ 搜索</span>
+    <input class="dj-search-input" id="dj-search-input" type="text" placeholder="搜索 DJ 姓名 / 外号（aliases）">
+    <button class="dj-tool-btn" id="dj-open-import-btn" onclick="openDJLibraryImportModal()">导入新DJ</button>
+    <button class="dj-tool-btn" id="dj-selection-mode-btn" onclick="toggleDJSelectionMode()">进入选择模式</button>
+    <button class="dj-tool-btn" id="dj-select-visible-btn" onclick="toggleDJSelectVisible()">全选当前结果</button>
+    <button class="dj-tool-btn" id="dj-clear-selection-btn" onclick="clearDJSelection()">清空选择</button>
+    <span class="filter-label">并发</span>
+    <input class="dj-search-input" id="dj-enrichment-concurrency-input" type="number" min="1" max="20" step="1" value="10" style="max-width:84px">
+    <button class="dj-tool-btn" id="dj-bilingualize-btn" onclick="runDJBulkBilingualizeSelected()">选中DJ一键双语化</button>
+    <button class="dj-tool-btn" id="dj-enrichment-btn" onclick="submitDJEnrichmentSelected()">提交 Coze Enrichment</button>
+    <button class="dj-tool-btn" id="dj-bilingual-stop-btn" onclick="stopDJBulkBilingualizeJob()" disabled>停止任务</button>
+    <button class="dj-tool-btn" id="dj-avatar-toggle-btn" onclick="toggleDJAvatarVisibility()">加载头像</button>
+    <button class="dj-tool-btn" onclick="refreshDJLibrary()">刷新DJ库</button>
+    <button class="dj-tool-btn" onclick="switchToArchivePage()">返回Archive</button>
+    <span class="dj-toolbar-meta" id="dj-toolbar-meta"></span>
+  </div>
+  <div class="dj-letter-nav" id="dj-letter-nav"></div>
+  <div class="dj-status" id="dj-status"></div>
+  <div class="dj-batch-panel dj-enrichment-panel collapsed" id="dj-enrichment-progress-panel">
+    <div class="dj-batch-head">
+      <div class="dj-batch-summary" id="dj-enrichment-progress-summary">Coze enrichment 任务：未开始</div>
+      <div class="dj-batch-actions">
+        <button class="dj-tool-btn" id="dj-enrichment-collapse-btn" onclick="toggleDJEnrichmentPanel()">展开</button>
+        <button class="dj-tool-btn" id="dj-enrichment-jobs-refresh-btn" onclick="refreshDJEnrichmentJobs(true)">刷新任务</button>
+        <button class="dj-tool-btn" id="dj-enrichment-refresh-btn" onclick="refreshDJEnrichmentJobProgress(true)">刷新进度</button>
+      </div>
+    </div>
+    <div class="dj-enrichment-panel-body" id="dj-enrichment-panel-body">
+      <div class="dj-enrichment-job-list" id="dj-enrichment-job-list"></div>
+      <div class="dj-batch-bar">
+        <div class="dj-batch-bar-fill" id="dj-enrichment-progress-bar-fill"></div>
+      </div>
+      <div class="dj-enrichment-progress-meta" id="dj-enrichment-progress-meta"></div>
+    </div>
+  </div>
+  <div class="dj-batch-panel" id="dj-batch-panel">
+    <div class="dj-batch-head">
+      <div class="dj-batch-summary" id="dj-batch-summary">批量双语化任务：未开始</div>
+      <div class="dj-batch-actions">
+        <div class="dj-batch-range">
+          <span>索引选中</span>
+          <input id="dj-bilingual-range-start" type="number" min="1" step="1" placeholder="起始(1)" onkeydown="if(event.key==='Enter'){event.preventDefault();selectDJByRange();}">
+          <span>~</span>
+          <input id="dj-bilingual-range-end" type="number" min="1" step="1" placeholder="结束" onkeydown="if(event.key==='Enter'){event.preventDefault();selectDJByRange();}">
+          <button class="dj-tool-btn" id="dj-select-range-btn" onclick="selectDJByRange()">按索引选中</button>
+        </div>
+        <button class="dj-tool-btn" id="dj-batch-reselect-btn" onclick="reselectDJBulkUnsuccessful()">重选未成功</button>
+        <button class="dj-tool-btn" id="dj-batch-clear-log-btn" onclick="clearDJBulkLogs()">清空日志</button>
+      </div>
+    </div>
+    <div class="dj-batch-bar">
+      <div class="dj-batch-bar-fill" id="dj-batch-bar-fill"></div>
+    </div>
+    <div class="dj-batch-logs" id="dj-batch-logs"></div>
+  </div>
+  <div class="dj-grid-wrap">
+    <div class="dj-grid" id="dj-grid"></div>
+  </div>
+</section>
+
+<section id="genre-page" style="display:none">
+  <div class="genre-admin-toolbar">
+    <div>
+      <div class="genre-admin-title">Genre Tree</div>
+      <div class="genre-admin-sub">管理流派多级关系与 key artists ↔ DJ 绑定</div>
+    </div>
+    <div class="genre-admin-actions">
+      <input class="genre-admin-search" id="genre-admin-search" type="text" placeholder="搜索 genre / artist">
+      <button class="dj-tool-btn" onclick="refreshGenreAdminPage()">刷新</button>
+      <button class="dj-tool-btn primary" id="genre-admin-auto-match-btn" onclick="runGenreArtistAutoMatch()">一键匹配所有 Key Artists</button>
+    </div>
+  </div>
+  <div class="genre-admin-status" id="genre-admin-status">未加载</div>
+  <div class="genre-admin-layout">
+    <div class="genre-admin-tree" id="genre-admin-tree"></div>
+    <div class="genre-admin-detail" id="genre-admin-detail"></div>
+  </div>
+</section>
+
+<section id="brand-page">
+  <div class="brand-toolbar">
+    <span class="filter-label">Brand 搜索</span>
+    <input class="brand-search-input" id="brand-search-input" type="text" placeholder="搜索品牌名称 / 别名 / 国家 / 城市">
+    <button class="brand-tool-btn" id="brand-create-btn" onclick="openBrandEditorCreate()">新增 Brand</button>
+    <button class="brand-tool-btn" onclick="refreshBrandPage(true)">刷新</button>
+    <button class="brand-tool-btn" onclick="switchToArchivePage()">返回 Archive</button>
+    <span class="brand-toolbar-meta" id="brand-toolbar-meta"></span>
+  </div>
+  <div class="brand-status" id="brand-status"></div>
+  <div class="brand-grid-wrap">
+    <div class="brand-grid" id="brand-grid"></div>
+  </div>
+</section>
+
+<section id="event-brand-page">
+  <div class="event-brand-toolbar">
+    <span class="filter-label">Event 搜索</span>
+    <input class="event-brand-search-input" id="event-brand-search-input" type="text" placeholder="搜索活动名称（中英文）">
+    <select class="event-brand-filter-select" id="event-brand-filter-select">
+      <option value="all">全部</option>
+      <option value="unmatched">仅未匹配</option>
+      <option value="matched">仅已匹配</option>
+    </select>
+    <button class="event-brand-tool-btn active" id="event-brand-view-list-btn" onclick="setEventBrandViewMode('list')">列表</button>
+    <button class="event-brand-tool-btn" id="event-brand-view-cluster-btn" onclick="setEventBrandViewMode('cluster')">聚类</button>
+    <button class="event-brand-tool-btn" onclick="refreshEventBrandBindingPage(true)">刷新</button>
+    <button class="event-brand-tool-btn" onclick="switchToArchivePage()">返回 Archive</button>
+    <span class="event-brand-toolbar-meta" id="event-brand-toolbar-meta"></span>
+  </div>
+  <div class="event-brand-batch">
+    <span class="event-brand-batch-label">批量绑定到同一 Brand</span>
+    <input class="event-brand-batch-input" id="event-brand-batch-brand-input" type="text" placeholder="搜索并选择 Brand">
+    <input id="event-brand-batch-brand-id" type="hidden">
+    <button class="event-brand-tool-btn" onclick="selectAllEventBrandVisible()">全选当前结果</button>
+    <button class="event-brand-tool-btn" onclick="clearEventBrandSelection()">清空选择</button>
+    <button class="event-brand-tool-btn" onclick="applyBatchBrandBinding()">批量绑定</button>
+    <button class="event-brand-tool-btn" onclick="clearBatchBrandBinding()">批量解绑</button>
+  </div>
+  <div class="event-brand-status" id="event-brand-status"></div>
+  <div class="event-brand-table-wrap" id="event-brand-table-wrap"></div>
+</section>
+
+<section id="news-page">
+  <div class="news-toolbar">
+    <span class="filter-label">资讯搜索</span>
+    <input class="news-input news-search-input" id="news-search-input" type="text" placeholder="搜索标题 / 摘要 / 来源 / 发布者">
+    <select class="news-select" id="news-sort-select">
+      <option value="published_desc">发布时间：最新</option>
+      <option value="published_asc">发布时间：最早</option>
+      <option value="title_asc">标题 A→Z</option>
+      <option value="source_asc">发布方 A→Z</option>
+      <option value="category_asc">主题 A→Z</option>
+    </select>
+    <select class="news-select" id="news-group-select">
+      <option value="none">不分组</option>
+      <option value="category">按主题聚类</option>
+      <option value="source">按发布方聚类</option>
+      <option value="brand">按关联 Brand 聚类</option>
+    </select>
+    <select class="news-select" id="news-category-filter-select">
+      <option value="all">主题：全部</option>
+    </select>
+    <select class="news-select" id="news-source-filter-select">
+      <option value="all">发布方：全部</option>
+    </select>
+    <select class="news-select" id="news-binding-filter-select">
+      <option value="all">关联对象：全部</option>
+      <option value="has_brand">仅关联 Brand</option>
+      <option value="has_event">仅关联 Event</option>
+      <option value="has_dj">仅关联 DJ</option>
+      <option value="unbound">仅未关联</option>
+    </select>
+    <select class="news-select" id="news-brand-filter-select">
+      <option value="all">关联 Brand：全部</option>
+    </select>
+    <button class="news-tool-btn" id="news-create-btn" onclick="openNewsEditorCreate()">新增资讯</button>
+    <button class="news-tool-btn" onclick="refreshNewsPage(true)">刷新</button>
+    <button class="news-tool-btn" onclick="switchToArchivePage()">返回 Archive</button>
+    <span class="news-toolbar-meta" id="news-toolbar-meta"></span>
+  </div>
+  <div class="news-status" id="news-status"></div>
+  <div class="news-list-wrap" id="news-list-wrap"></div>
+</section>
+
+<section id="review-page">
+  <div class="review-toolbar">
+    <span class="filter-label">共建审核</span>
+    <select class="review-select" id="review-source-select" onchange="onReviewSourceChanged()">
+      <option value="content_submission">用户投稿审核</option>
+      <option value="dj_enrichment">DJ Enrichment 审核</option>
+    </select>
+    <select class="review-select" id="review-status-select" onchange="onReviewFilterChanged()">
+      <option value="pending">待审核</option>
+      <option value="approved">已通过</option>
+      <option value="rejected">未通过</option>
+      <option value="">全部状态</option>
+    </select>
+    <select class="review-select" id="review-processing-status-select" onchange="onReviewProcessingStatusChanged()" style="display:none">
+      <option value="">处理状态：全部</option>
+      <option value="completed">处理成功</option>
+      <option value="failed">处理失败</option>
+      <option value="queued">排队中</option>
+      <option value="running">处理中</option>
+    </select>
+    <button class="review-tool-btn" onclick="refreshReviewPage(true)">刷新</button>
+    <button class="review-tool-btn" onclick="switchToArchivePage()">返回 Archive</button>
+    <span class="review-toolbar-meta" id="review-toolbar-meta"></span>
+  </div>
+  <div class="review-status" id="review-status"></div>
+  <div class="review-source-stats" id="review-source-stats"></div>
+  <div class="review-workspace">
+    <aside class="review-left-pane">
+      <div class="review-type-nav" id="review-type-nav"></div>
+      <div class="review-bulk-bar" id="review-bulk-bar"></div>
+      <div class="review-list" id="review-list"></div>
+      <div class="review-pagination" id="review-pagination"></div>
+    </aside>
+    <main class="review-detail" id="review-detail"></main>
+  </div>
+</section>
+
+<section id="ranking-page">
+  <div class="ranking-toolbar">
+    <button class="ranking-tool-btn" onclick="openRankingBoardEditorCreate()">新增榜单</button>
+    <button class="ranking-tool-btn" onclick="openRankingBoardEditorEdit()">编辑榜单</button>
+    <button class="ranking-tool-btn" onclick="openRankingEntriesEditor()">编辑位次 / 导入</button>
+    <button class="ranking-tool-btn" onclick="refreshRankingPage(true)">刷新</button>
+    <button class="ranking-tool-btn" onclick="switchToArchivePage()">返回 Archive</button>
+    <span class="ranking-toolbar-meta" id="ranking-toolbar-meta"></span>
+  </div>
+  <div class="ranking-status" id="ranking-status"></div>
+  <div class="ranking-board-strip" id="ranking-board-strip"></div>
+  <div class="ranking-year-strip" id="ranking-year-strip"></div>
+  <select class="ranking-select ranking-year-native" id="ranking-year-select" onchange="onRankingYearChanged()"></select>
+  <div class="ranking-board-summary" id="ranking-board-summary"></div>
+  <div class="ranking-grid-wrap">
+    <div class="ranking-grid" id="ranking-grid"></div>
+  </div>
+</section>
+
+<div id="news-editor-overlay" onclick="handleNewsEditorOverlayClick(event)">
+  <div id="news-editor-modal">
+    <div class="brand-editor-head">
+      <div>
+        <div class="brand-editor-title" id="news-editor-title">新增资讯</div>
+        <div class="brand-editor-sub" id="news-editor-sub">管理资讯内容、关联对象与发布时间排序展示</div>
+      </div>
+      <div class="modal-header-actions">
+        <button class="brand-editor-btn danger" type="button" id="news-delete-btn" onclick="deleteNewsEditor()">删除</button>
+        <button class="brand-editor-btn" type="button" onclick="closeNewsEditor()">取消</button>
+        <button class="brand-editor-btn primary" type="button" id="news-save-btn" onclick="saveNewsEditor()">保存</button>
+        <button class="brand-editor-close" onclick="closeNewsEditor()">✕ CLOSE</button>
+      </div>
+    </div>
+    <div class="news-editor-body">
+      <div class="news-edit-grid">
+        <div class="news-edit-field full">
+          <label for="news-edit-title-input">标题 *</label>
+          <input class="news-input" id="news-edit-title-input" type="text" placeholder="资讯标题">
+        </div>
+        <div class="news-edit-field">
+          <label for="news-edit-category-input">主题分类 *</label>
+          <select class="news-input" id="news-edit-category-input">
+            <option value="电音节">电音节</option>
+            <option value="活动·Festival">活动·Festival</option>
+            <option value="活动·Rave">活动·Rave</option>
+            <option value="活动·Concert">活动·Concert</option>
+            <option value="活动·Party">活动·Party</option>
+            <option value="活动·Club">活动·Club</option>
+            <option value="活动·Showcase">活动·Showcase</option>
+            <option value="活动·Tour">活动·Tour</option>
+            <option value="活动·Other">活动·Other</option>
+            <option value="社区">社区</option>
+            <option value="行业">行业</option>
+            <option value="现场">现场</option>
+            <option value="厂牌">厂牌</option>
+            <option value="DJ">DJ</option>
+            <option value="攻略">攻略</option>
+            <option value="公告">公告</option>
+            <option value="其他">其他</option>
+          </select>
+        </div>
+        <div class="news-edit-field">
+          <label for="news-edit-source-input">发布方 *</label>
+          <input class="news-input" id="news-edit-source-input" type="text" placeholder="如 DJ Mag / Community">
+        </div>
+        <div class="news-edit-field full">
+          <label for="news-edit-summary-input">摘要 *</label>
+          <textarea id="news-edit-summary-input" placeholder="简要摘要，列表页会优先展示"></textarea>
+        </div>
+        <div class="news-edit-field">
+          <label for="news-edit-link-input">链接</label>
+          <input class="news-input" id="news-edit-link-input" type="text" placeholder="https://...">
+        </div>
+        <div class="news-edit-field">
+          <label for="news-edit-cover-input">封面图片 URL</label>
+          <input class="news-input" id="news-edit-cover-input" type="text" placeholder="https://...">
+          <div class="news-cover-upload-hint" id="news-cover-upload-hint">可手动粘贴 URL，或从下方资源库中一键设为封面。</div>
+        </div>
+        <div class="news-edit-field full">
+          <label for="news-edit-location-input">位置（可选）</label>
+          <input class="news-input" id="news-edit-location-input" type="text" placeholder="如 Shanghai / Ibiza">
+        </div>
+        <div class="news-edit-field">
+          <label for="news-edit-display-published-at-input">展示发布时间 *</label>
+          <input class="news-input" id="news-edit-display-published-at-input" type="datetime-local">
+          <div class="news-cover-upload-hint">用于用户端显示的发布时间，可手动调整。</div>
+        </div>
+        <div class="news-edit-field">
+          <label>系统时间（只读）</label>
+          <div class="news-edit-time-meta" id="news-edit-system-time-meta">首次发布时间：未知时间<br>最后修改时间：未知时间</div>
+        </div>
+        <div class="news-edit-field full">
+          <label>图片资源库（封面图 / 正文图统一上传）</label>
+          <div
+            class="news-media-dropzone"
+            id="news-media-dropzone"
+            onclick="triggerNewsMediaFileSelect()"
+            ondragover="onNewsMediaDragOver(event)"
+            ondragleave="onNewsMediaDragLeave(event)"
+            ondrop="onNewsMediaDrop(event)"
+          >
+            拖拽图片到这里，或点击选择文件（支持多选）
+          </div>
+          <div class="news-media-action-row">
+            <button class="brand-editor-btn" type="button" id="news-media-select-btn" onclick="triggerNewsMediaFileSelect()">选择图片</button>
+            <button class="brand-editor-btn primary" type="button" id="news-media-upload-btn" onclick="uploadNewsMediaFiles()">上传到 OSS</button>
+            <button class="brand-editor-btn news-wechat-import-btn" type="button" id="news-wechat-import-btn" onclick="importNewsFromWechatLink()">
+              <span class="news-wechat-import-icon" aria-hidden="true">🔗</span>
+              公众号链接导入
+            </button>
+            <button class="brand-editor-btn" type="button" id="news-cover-clear-btn" onclick="clearNewsCoverUrl()">清空封面</button>
+            <input id="news-media-file-input" type="file" accept="image/*" multiple style="display:none">
+          </div>
+          <div class="news-wechat-import-row">
+            <input class="news-input" id="news-wechat-link-input" type="text" placeholder="粘贴公众号文章链接（https://mp.weixin.qq.com/s?...）">
+            <button class="brand-editor-btn news-wechat-import-btn" type="button" id="news-wechat-import-run-btn" onclick="importNewsFromWechatLink()">导入并回填</button>
+          </div>
+          <div class="news-cover-upload-hint">上传后会进入当前资讯的资源库。可将任意图片设为封面，并可插入到 Markdown 正文中。</div>
+          <div class="news-resource-list" id="news-resource-list"></div>
+        </div>
+        <div class="news-edit-field full">
+          <label for="news-edit-body-input">正文（Markdown）</label>
+          <div class="news-md-editor-wrap">
+            <textarea
+              id="news-edit-body-input"
+              class="news-md-editor"
+              placeholder="支持 Markdown：标题、列表、引用、代码块、链接、图片等。可在资源库里点击“插入正文”快速插入图片。"
+            ></textarea>
+            <div class="news-md-preview-pane">
+              <div class="news-md-preview-title">Preview</div>
+              <div class="news-md-preview" id="news-md-preview"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="news-edit-grid">
+        <div class="news-edit-field full">
+          <label>关联 DJ</label>
+          <div class="news-bind-row">
+            <input class="news-bind-input" id="news-bind-dj-input" type="text" placeholder="搜索 DJ 名称 / 别名后添加">
+            <button class="edit-btn" type="button" onclick="newsAddBindingByInput('dj')">添加</button>
+          </div>
+          <div class="news-bind-suggest" id="news-bind-dj-suggest"></div>
+          <div class="news-bind-chip-wrap" id="news-bind-dj-chip-wrap"></div>
+        </div>
+        <div class="news-edit-field full">
+          <label>关联 Brand</label>
+          <div class="news-bind-row">
+            <input class="news-bind-input" id="news-bind-brand-input" type="text" placeholder="搜索 Brand 名称 / 别名后添加">
+            <button class="edit-btn" type="button" onclick="newsAddBindingByInput('brand')">添加</button>
+          </div>
+          <div class="news-bind-suggest" id="news-bind-brand-suggest"></div>
+          <div class="news-bind-chip-wrap" id="news-bind-brand-chip-wrap"></div>
+        </div>
+        <div class="news-edit-field full">
+          <label>关联 Event</label>
+          <div class="news-bind-row">
+            <input class="news-bind-input" id="news-bind-event-input" type="text" placeholder="搜索 Event 名称后添加">
+            <button class="edit-btn" type="button" onclick="newsAddBindingByInput('event')">添加</button>
+          </div>
+          <div class="news-bind-suggest" id="news-bind-event-suggest"></div>
+          <div class="news-bind-chip-wrap" id="news-bind-event-chip-wrap"></div>
+        </div>
+      </div>
+
+      <div class="news-edit-hint">
+        资讯内容会按 iOS 端兼容格式写入（#RAVER_NEWS + 标题/分类/来源/摘要/正文MD64/链接），并同步写入关联 DJ/Brand/Event 绑定字段。
+      </div>
+      <div class="brand-edit-status" id="news-edit-status"></div>
+    </div>
+  </div>
+</div>
+
+<div id="brand-editor-overlay" onclick="handleBrandEditorOverlayClick(event)">
+  <div id="brand-editor-modal">
+    <div class="brand-editor-head">
+      <div>
+        <div class="brand-editor-title" id="brand-editor-title">新增 Brand</div>
+        <div class="brand-editor-sub" id="brand-editor-sub">填写品牌信息并保存到数据库</div>
+      </div>
+      <div class="modal-header-actions">
+        <button class="brand-edit-save-btn" onclick="saveBrandEditor()">保存 Brand</button>
+        <button class="brand-edit-save-btn brand-edit-danger-btn" id="brand-delete-btn" onclick="deleteBrandEditor()" style="display:none;">删除 Brand</button>
+        <button class="brand-editor-close" onclick="closeBrandEditor()">✕ CLOSE</button>
+      </div>
+    </div>
+    <div class="brand-editor-body">
+      <div class="brand-edit-grid">
+        <div class="brand-edit-field full">
+          <label>名称 *（双语）</label>
+          <div class="tt-dj-manual-bi-row">
+            <input id="brand-edit-name-en" type="text" placeholder="English Name">
+            <input id="brand-edit-name-zh" type="text" placeholder="中文名称">
+          </div>
+        </div>
+        <div class="brand-edit-field">
+          <label for="brand-edit-aliases">别名（逗号分隔）</label>
+          <input id="brand-edit-aliases" type="text" placeholder="如 明日世界, TML">
+        </div>
+        <div class="brand-edit-field full">
+          <label>国家（双语）</label>
+          <div class="tt-dj-manual-bi-row">
+            <input id="brand-edit-country-en" type="text" placeholder="Country (EN)">
+            <input id="brand-edit-country-zh" type="text" placeholder="国家（中文）">
+          </div>
+        </div>
+        <div class="brand-edit-field full">
+          <label>城市（双语）</label>
+          <div class="tt-dj-manual-bi-row">
+            <input id="brand-edit-city-en" type="text" placeholder="City (EN)">
+            <input id="brand-edit-city-zh" type="text" placeholder="城市（中文）">
+          </div>
+        </div>
+        <div class="brand-edit-field">
+          <label for="brand-edit-founded-year">创立年份</label>
+          <input id="brand-edit-founded-year" type="text" placeholder="如 2005">
+        </div>
+        <div class="brand-edit-field full">
+          <label>频率（双语）</label>
+          <div class="tt-dj-manual-bi-row">
+            <input id="brand-edit-frequency-en" type="text" placeholder="Frequency (EN)">
+            <input id="brand-edit-frequency-zh" type="text" placeholder="频率（中文）">
+          </div>
+        </div>
+        <div class="brand-edit-field full">
+          <label for="brand-edit-tagline">Tagline</label>
+          <input id="brand-edit-tagline" type="text" placeholder="一句话描述品牌">
+        </div>
+        <div class="brand-edit-field full">
+          <label>简介（双语）</label>
+          <div class="tt-dj-manual-bi-row">
+            <textarea id="brand-edit-introduction-en" placeholder="Brand Introduction (EN)"></textarea>
+            <textarea id="brand-edit-introduction-zh" placeholder="品牌介绍（中文）"></textarea>
+          </div>
+        </div>
+        <div class="brand-edit-field full">
+          <label for="brand-edit-links">链接（JSON 数组，可选）</label>
+          <textarea id="brand-edit-links" placeholder='[{"title":"官网","icon":"globe","url":"https://..."}]'></textarea>
+        </div>
+      </div>
+
+      <div class="brand-edit-media">
+        <div class="brand-edit-media-row">
+          <div class="brand-edit-media-preview" id="brand-avatar-preview"></div>
+          <div class="brand-edit-media-controls">
+            <div class="filter-label">Avatar</div>
+            <input id="brand-avatar-file" type="file" accept="image/*">
+            <div class="brand-edit-media-actions">
+              <button class="brand-edit-media-upload" id="brand-avatar-upload-btn" onclick="uploadBrandImageAsset('avatar')">上传 Avatar</button>
+              <button class="brand-edit-media-upload" onclick="clearBrandImageAsset('avatar')">清空</button>
+            </div>
+          </div>
+        </div>
+        <div class="brand-edit-media-row">
+          <div class="brand-edit-media-preview cover" id="brand-cover-preview"></div>
+          <div class="brand-edit-media-controls">
+            <div class="filter-label">Cover</div>
+            <input id="brand-cover-file" type="file" accept="image/*">
+            <div class="brand-edit-media-actions">
+              <button class="brand-edit-media-upload" id="brand-cover-upload-btn" onclick="uploadBrandImageAsset('cover')">上传 Cover</button>
+              <button class="brand-edit-media-upload" onclick="clearBrandImageAsset('cover')">清空</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="brand-edit-status" id="brand-edit-status"></div>
+    </div>
+  </div>
+</div>
+
+<div id="ranking-board-editor-overlay" onclick="handleRankingBoardEditorOverlayClick(event)">
+  <div id="ranking-board-editor-modal">
+    <div class="brand-editor-head">
+      <div>
+        <div class="brand-editor-title" id="ranking-board-editor-title">新增榜单</div>
+        <div class="brand-editor-sub" id="ranking-board-editor-sub">创建或修改榜单信息</div>
+      </div>
+      <div class="modal-header-actions">
+        <button class="brand-edit-save-btn" id="ranking-board-save-btn" onclick="saveRankingBoardEditor()">保存榜单</button>
+        <button class="brand-edit-save-btn brand-edit-danger-btn" id="ranking-board-delete-btn" onclick="deleteRankingBoardEditor()" style="display:none;">删除榜单</button>
+        <button class="brand-editor-close" onclick="closeRankingBoardEditor()">✕ CLOSE</button>
+      </div>
+    </div>
+    <div class="brand-editor-body">
+      <div class="brand-edit-grid">
+        <div class="brand-edit-field">
+          <label for="ranking-board-edit-id">榜单 ID *</label>
+          <input id="ranking-board-edit-id" type="text" placeholder="如 djmag_festival_2026">
+        </div>
+        <div class="brand-edit-field">
+          <label for="ranking-board-edit-title">榜单名称 *</label>
+          <input id="ranking-board-edit-title" type="text" placeholder="如 DJ MAG TOP 100 Festivals 2026">
+        </div>
+        <div class="brand-edit-field">
+          <label for="ranking-board-edit-entity-type">榜单类型 *</label>
+          <select id="ranking-board-edit-entity-type">
+            <option value="festival">Brand 榜单</option>
+            <option value="dj">DJ 榜单</option>
+          </select>
+        </div>
+        <div class="brand-edit-field">
+          <label for="ranking-board-edit-years">年份列表（逗号）</label>
+          <input id="ranking-board-edit-years" type="text" placeholder="如 2025,2026">
+        </div>
+        <div class="brand-edit-field full">
+          <label for="ranking-board-edit-subtitle">副标题</label>
+          <input id="ranking-board-edit-subtitle" type="text" placeholder="如 全球电音节品牌百大榜单">
+        </div>
+        <div class="brand-edit-field full">
+          <label for="ranking-board-edit-description">描述</label>
+          <textarea id="ranking-board-edit-description" placeholder="榜单来源、统计方式、说明"></textarea>
+        </div>
+      </div>
+      <div class="brand-edit-media">
+        <div class="brand-edit-media-row">
+          <div class="brand-edit-media-preview cover" id="ranking-board-cover-preview"></div>
+          <div class="brand-edit-media-controls">
+            <div class="filter-label">榜单封面</div>
+            <input id="ranking-board-cover-file" type="file" accept="image/*">
+            <div class="brand-edit-media-actions">
+              <button class="brand-edit-media-upload" id="ranking-board-cover-upload-btn" onclick="uploadRankingBoardCover()">上传 Cover</button>
+              <button class="brand-edit-media-upload" onclick="clearRankingBoardCover()">清空</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="brand-edit-status" id="ranking-board-edit-status"></div>
+    </div>
+  </div>
+</div>
+
+<div id="ranking-entries-editor-overlay" onclick="handleRankingEntriesEditorOverlayClick(event)">
+  <div id="ranking-entries-editor-modal">
+    <div class="brand-editor-head">
+      <div>
+        <div class="brand-editor-title" id="ranking-entries-editor-title">编辑位次</div>
+        <div class="brand-editor-sub" id="ranking-entries-editor-sub">可以逐行绑定现有 Brand / DJ，或从文本导入</div>
+      </div>
+      <div class="modal-header-actions">
+        <button class="brand-edit-save-btn" onclick="saveRankingEntriesEditor()">保存位次</button>
+        <button class="brand-editor-close" onclick="closeRankingEntriesEditor()">✕ CLOSE</button>
+      </div>
+    </div>
+    <div class="brand-editor-body">
+      <div class="ranking-entry-edit-top">
+        <div class="brand-edit-field">
+          <label for="ranking-entries-edit-year">年份</label>
+          <input id="ranking-entries-edit-year" type="number" min="1900" max="2200" step="1">
+        </div>
+        <div class="brand-edit-field full">
+          <label for="ranking-entries-import-text">文本导入（格式：1. Name）</label>
+          <textarea id="ranking-entries-import-text" placeholder="1. Tomorrowland&#10;2. Ultra Music Festival"></textarea>
+        </div>
+      </div>
+      <div class="brand-edit-actions ranking-entry-import-actions">
+        <button class="brand-edit-save-btn" onclick="applyRankingImportText()">用文本替换当前位次</button>
+        <button class="brand-edit-save-btn" onclick="autoBindAllRankingEntryRows()">按名称自动匹配</button>
+        <button class="brand-edit-save-btn" onclick="appendRankingEntryRow()">新增一行</button>
+      </div>
+      <div class="ranking-entry-match-summary" id="ranking-entry-match-summary"></div>
+      <div class="ranking-entry-unmatched-wrap" id="ranking-entry-unmatched-wrap" style="display:none;"></div>
+      <div class="ranking-entry-table-wrap">
+        <table class="ranking-entry-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>名称</th>
+              <th>绑定现有对象（可选）</th>
+              <th>匹配状态</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="ranking-entries-editor-tbody"></tbody>
+        </table>
+      </div>
+      <datalist id="ranking-entity-datalist"></datalist>
+      <div class="brand-edit-status" id="ranking-entries-edit-status"></div>
+    </div>
+  </div>
+</div>
+
+<div id="dj-profile-overlay" onclick="handleDJProfileOverlayClick(event)">
+  <div id="dj-profile-modal">
+    <div class="dj-profile-head">
+      <div class="dj-profile-title" id="dj-profile-title">DJ PROFILE</div>
+      <div class="dj-profile-sub" id="dj-profile-sub">LOADING</div>
+      <button class="dj-profile-save" id="dj-profile-head-save-btn" onclick="saveCurrentDJProfileFromHeader()" disabled>保存到数据库</button>
+      <button class="dj-profile-close" onclick="closeDJProfileModal()">✕ CLOSE</button>
+    </div>
+    <div class="dj-profile-body" id="dj-profile-body"></div>
+  </div>
+</div>
+
+<div id="dj-source-replace-overlay" onclick="handleDJSourceReplaceOverlayClick(event)">
+  <div id="dj-source-replace-modal">
+    <div class="dj-source-replace-header">
+      <div>
+        <div class="dj-source-replace-title">多源字段替换</div>
+        <div class="dj-source-replace-sub" id="dj-source-replace-sub">按字段选择来源，支持头像替换</div>
+      </div>
+      <button class="dj-source-replace-close" onclick="closeDJSourceReplaceModal()">✕ CLOSE</button>
+    </div>
+    <div class="dj-source-replace-body">
+      <section class="dj-source-replace-panel">
+        <div class="tt-dj-search-row">
+          <input class="tt-dj-search-input" id="dj-source-query" type="text" placeholder="输入 DJ 名称后抓取多源信息">
+          <label class="tt-dj-search-btn"><input type="checkbox" id="dj-source-toggle-spotify" checked onchange="djHandleProfileSourceToggleChange()"> Spotify</label>
+          <label class="tt-dj-search-btn"><input type="checkbox" id="dj-source-toggle-discogs" checked onchange="djHandleProfileSourceToggleChange()"> Discogs</label>
+          <label class="tt-dj-search-btn"><input type="checkbox" id="dj-source-toggle-soundcloud" checked onchange="djHandleProfileSourceToggleChange()"> SoundCloud</label>
+          <button class="tt-dj-search-btn primary" onclick="djFetchProfileSourceCandidates()">抓取</button>
+          <button class="tt-dj-search-btn" onclick="djResetProfileFieldSourceSelection()">全设为保持当前</button>
+          <button class="tt-dj-search-btn primary" onclick="djApplyProfileSourceSelectionToEditor()">应用到编辑表单</button>
+        </div>
+
+        <div class="tt-dj-source-grid" id="dj-source-grid"></div>
+
+        <div style="overflow:auto">
+          <table class="tt-dj-compare-table equal-source-cols">
+            <colgroup>
+              <col class="tt-col-field">
+              <col class="tt-col-source">
+              <col class="tt-col-source">
+              <col class="tt-col-source">
+              <col class="tt-col-source">
+              <col class="tt-col-final">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>字段</th>
+                <th>保持当前</th>
+                <th>Spotify</th>
+                <th>Discogs</th>
+                <th>SoundCloud</th>
+                <th>应用预览</th>
+              </tr>
+            </thead>
+            <tbody id="dj-source-compare-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="tt-dj-empty-note" id="dj-source-replace-status"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- EVENT LOCATION PICKER MODAL -->
+<div id="event-location-picker-overlay" onclick="handleEventLocationPickerOverlayClick(event)">
+  <div id="event-location-picker-modal">
+    <div class="event-location-picker-head">
+      <div>
+        <div class="event-location-picker-title" id="event-location-picker-title">活动地点绑定（地图）</div>
+        <div class="event-location-picker-sub">支持搜索地点、中心 Pin 选点、拖拽精调与当前位置辅助定位</div>
+      </div>
+      <button class="event-location-picker-close" type="button" onclick="closeEventLocationPickerModal()">✕ CLOSE</button>
+    </div>
+    <div class="event-location-picker-toolbar">
+      <input id="event-location-picker-search-input" class="event-location-picker-search-input" type="text" placeholder="搜索地点，例如：上海 梅赛德斯奔驰文化中心">
+      <button id="event-location-picker-search-btn" class="event-location-picker-btn primary" type="button">搜索</button>
+      <button id="event-location-picker-fill-zh-btn" class="event-location-picker-btn" type="button">填入中文地址</button>
+      <button id="event-location-picker-fill-en-btn" class="event-location-picker-btn" type="button">填入英文地址</button>
+      <button id="event-location-picker-my-pos-btn" class="event-location-picker-btn" type="button">定位到我</button>
+    </div>
+    <div class="event-location-picker-map-wrap">
+      <div id="event-location-picker-map"></div>
+      <aside id="event-location-poi-panel" class="event-location-poi-panel" aria-live="polite" aria-label="POI 信息面板">
+        <div class="event-location-poi-panel-head">
+          <span>POI 信息</span>
+          <button id="event-location-poi-panel-close" class="event-location-poi-panel-close" type="button" aria-label="关闭">×</button>
+        </div>
+        <div id="event-location-poi-panel-body" class="event-location-poi-panel-body"></div>
+      </aside>
+      <button id="event-location-return-anchor-btn" class="event-location-return-anchor-btn" type="button">回到活动场地</button>
+      <div id="event-location-center-pin" class="event-location-center-pin">📍</div>
+    </div>
+    <div class="event-location-picker-candidates" id="event-location-picker-candidates"></div>
+    <div class="event-location-picker-footer">
+      <span id="event-location-picker-status" class="event-location-picker-status"></span>
+      <button id="event-location-picker-cancel-btn" class="event-location-picker-btn" type="button">取消</button>
+      <button id="event-location-picker-confirm-btn" class="event-location-picker-btn primary" type="button">确认绑定</button>
+    </div>
+  </div>
+</div>
+
+<!-- EVENT LOCATION MANUAL ENTRY MODAL -->
+<div id="event-location-manual-overlay" onclick="handleEventLocationManualOverlayClick(event)">
+  <div id="event-location-manual-modal">
+    <div class="event-location-manual-head">
+      <div>
+        <div class="event-location-manual-title">手动填写定位信息</div>
+        <div class="event-location-manual-sub">可直接粘贴地图搜索结果，按数据库 locationPoint 结构写入</div>
+      </div>
+      <div class="event-location-manual-head-actions">
+        <button id="event-location-manual-normalize-btn" class="event-location-picker-btn ai-action-btn" type="button" title="根据手填经纬度和地址，规范化定位点名称、城市、国家等字段；会先确认再应用">规范化定位字段</button>
+        <button class="event-location-manual-close" type="button" onclick="closeEventLocationManualModal()">✕ CLOSE</button>
+      </div>
+    </div>
+    <div class="event-location-manual-body">
+      <div class="event-location-manual-grid">
+        <div class="edit-field">
+          <label>provider</label>
+          <select id="event-location-manual-provider" class="edit-input">
+            <option value="amap">amap</option>
+            <option value="mapkit">mapkit</option>
+            <option value="mapbox">mapbox</option>
+            <option value="geoapify">geoapify</option>
+            <option value="google">google</option>
+          </select>
+        </div>
+        <div class="edit-field">
+          <label>sourceMode</label>
+          <input id="event-location-manual-source-mode" class="edit-input" type="text" placeholder="manual_input">
+        </div>
+        <div class="edit-field">
+          <label>longitude (lng)</label>
+          <input id="event-location-manual-lng" class="edit-input" type="text" placeholder="121.499809">
+        </div>
+        <div class="edit-field">
+          <label>latitude (lat)</label>
+          <input id="event-location-manual-lat" class="edit-input" type="text" placeholder="31.239666">
+        </div>
+        <div class="edit-field">
+          <label>nameI18n.zh</label>
+          <input id="event-location-manual-name-zh" class="edit-input" type="text" placeholder="地点中文名">
+        </div>
+        <div class="edit-field">
+          <label>nameI18n.en</label>
+          <input id="event-location-manual-name-en" class="edit-input" type="text" placeholder="Location Name EN">
+        </div>
+        <div class="edit-field full">
+          <label>addressI18n.zh</label>
+          <textarea id="event-location-manual-address-zh" class="edit-input edit-textarea" placeholder="地址中文"></textarea>
+        </div>
+        <div class="edit-field full">
+          <label>addressI18n.en</label>
+          <textarea id="event-location-manual-address-en" class="edit-input edit-textarea" placeholder="Address EN"></textarea>
+        </div>
+        <div class="edit-field full">
+          <label>formattedAddressI18n.zh</label>
+          <textarea id="event-location-manual-formatted-zh" class="edit-input edit-textarea" placeholder="中国 · 上海 · 梅赛德斯奔驰文化中心"></textarea>
+        </div>
+        <div class="edit-field full">
+          <label>formattedAddressI18n.en</label>
+          <textarea id="event-location-manual-formatted-en" class="edit-input edit-textarea" placeholder="China · Shanghai · Mercedes-Benz Arena"></textarea>
+        </div>
+        <div class="edit-field">
+          <label>countryCode</label>
+          <input id="event-location-manual-country-code" class="edit-input" type="text" placeholder="CHN">
+        </div>
+        <div class="edit-field">
+          <label>city</label>
+          <input id="event-location-manual-city" class="edit-input" type="text" placeholder="Shanghai">
+        </div>
+        <div class="edit-field">
+          <label>district</label>
+          <input id="event-location-manual-district" class="edit-input" type="text" placeholder="Pudong">
+        </div>
+        <div class="edit-field">
+          <label>province</label>
+          <input id="event-location-manual-province" class="edit-input" type="text" placeholder="Shanghai">
+        </div>
+        <div class="edit-field">
+          <label>providerPlaceId</label>
+          <input id="event-location-manual-provider-place-id" class="edit-input" type="text" placeholder="provider place id">
+        </div>
+        <div class="edit-field">
+          <label>amap.poiId (legacy)</label>
+          <input id="event-location-manual-poi-id" class="edit-input" type="text" placeholder="B0FF...">
+        </div>
+        <div class="edit-field">
+          <label>amap.adcode (legacy)</label>
+          <input id="event-location-manual-adcode" class="edit-input" type="text" placeholder="310115">
+        </div>
+        <div class="edit-field">
+          <label>mapkit.mapItemIdentifier</label>
+          <input id="event-location-manual-mapkit-id" class="edit-input" type="text" placeholder="mapkit item id">
+        </div>
+        <div class="edit-field">
+          <label>mapbox.placeId</label>
+          <input id="event-location-manual-mapbox-id" class="edit-input" type="text" placeholder="mapbox place id">
+        </div>
+        <div class="edit-field">
+          <label>mapbox.featureType</label>
+          <input id="event-location-manual-mapbox-type" class="edit-input" type="text" placeholder="poi / address / locality">
+        </div>
+        <div class="edit-field">
+          <label>geoapify.placeId</label>
+          <input id="event-location-manual-geoapify-id" class="edit-input" type="text" placeholder="geoapify place id">
+        </div>
+        <div class="edit-field">
+          <label>geoapify.featureType</label>
+          <input id="event-location-manual-geoapify-type" class="edit-input" type="text" placeholder="amenity / address / city">
+        </div>
+        <div class="edit-field">
+          <label>google.placeId</label>
+          <input id="event-location-manual-google-id" class="edit-input" type="text" placeholder="google place id">
+        </div>
+        <div class="edit-field">
+          <label>google.types (comma)</label>
+          <input id="event-location-manual-google-types" class="edit-input" type="text" placeholder="establishment,point_of_interest">
+        </div>
+      </div>
+    </div>
+    <div class="event-location-manual-footer">
+      <span id="event-location-manual-status" class="event-location-manual-status"></span>
+      <button id="event-location-manual-cancel-btn" class="event-location-picker-btn" type="button">取消</button>
+      <button id="event-location-manual-confirm-btn" class="event-location-picker-btn primary" type="button">确认写入定位</button>
+    </div>
+  </div>
+</div>
+
+<!-- EVENT LOCATION REUSE MODAL -->
+<div id="event-location-reuse-overlay" onclick="handleEventLocationReuseOverlayClick(event)">
+  <div id="event-location-reuse-modal">
+    <div class="event-location-reuse-head">
+      <div>
+        <div class="event-location-reuse-title">复用其他 Event 地址</div>
+        <div class="event-location-reuse-sub">左侧选 1 个来源，右侧批量选目标，支持覆盖已有定位信息</div>
+      </div>
+      <button class="event-location-reuse-close" type="button" onclick="closeEventLocationReuseModal()">✕ CLOSE</button>
+    </div>
+    <div class="event-location-reuse-body">
+      <div class="event-location-reuse-col">
+        <div class="event-location-reuse-col-head">定位来源（仅有定位信息）</div>
+        <input id="event-location-reuse-source-search" class="event-location-reuse-search" type="text" placeholder="搜索来源活动名称 / 城市 / 国家">
+        <div id="event-location-reuse-source-list" class="event-location-reuse-list"></div>
+      </div>
+      <div class="event-location-reuse-col">
+        <div class="event-location-reuse-col-head">目标活动（全量，可多选）</div>
+        <input id="event-location-reuse-target-search" class="event-location-reuse-search" type="text" placeholder="搜索目标活动名称 / 城市 / 国家">
+        <div id="event-location-reuse-target-list" class="event-location-reuse-list"></div>
+      </div>
+    </div>
+    <div class="event-location-reuse-footer">
+      <span id="event-location-reuse-status" class="event-location-reuse-status"></span>
+      <button id="event-location-reuse-apply-current-btn" class="event-location-picker-btn" type="button">写入当前编辑活动</button>
+      <button id="event-location-reuse-apply-batch-btn" class="event-location-picker-btn primary" type="button">批量复用到右侧已选</button>
+    </div>
+  </div>
+</div>
+
+<!-- IMAGE LIGHTBOX -->
+<div id="lightbox">
+  <div class="lb-header">
+    <div class="lb-title" id="lb-title"></div>
+    <div class="lb-type-badge" id="lb-type-badge"></div>
+    <div class="lb-counter" id="lb-counter"></div>
+    <button class="lb-download" id="lb-download-btn" onclick="downloadCurrentLightboxImage()">⬇ DOWNLOAD</button>
+    <button class="lb-close" onclick="closeLightbox()">✕ CLOSE</button>
+  </div>
+  <div class="lb-img-area">
+    <button class="lb-nav-btn" id="lb-prev" onclick="lbNavigate(-1)">‹</button>
+    <img id="lb-main-img" src="" alt="">
+    <button class="lb-nav-btn" id="lb-next" onclick="lbNavigate(1)">›</button>
+  </div>
+  <div class="lb-footer" id="lb-footer"></div>
+</div>
+
+<!-- TIMETABLE MODAL -->
+<div id="tt-modal-overlay" onclick="handleOverlayClick(event)">
+  <div id="tt-modal">
+    <div class="tt-modal-header">
+      <span class="tt-modal-icon">🎵</span>
+      <div>
+        <div class="tt-modal-title" id="tt-modal-title">LINEUP / TIMETABLE</div>
+        <div class="tt-modal-sub" id="tt-modal-sub"></div>
+      </div>
+      <div class="tt-modal-actions">
+        <span class="tt-edit-status" id="tt-edit-status"></span>
+        <button class="tt-modal-btn" id="tt-edit-btn" onclick="enterTtEditMode()">编辑</button>
+        <button class="tt-modal-btn save" id="tt-save-btn" style="display:none" onclick="saveTtEditChanges()">保存</button>
+        <button class="tt-modal-btn" id="tt-cancel-btn" style="display:none" onclick="cancelTtEditMode()">取消</button>
+      </div>
+      <button class="tt-modal-close" onclick="closeTtModal()">✕ CLOSE</button>
+    </div>
+    <div class="tt-modal-body" id="tt-modal-body"></div>
+  </div>
+</div>
+
+<!-- EVENT LINEUP MODAL -->
+<div id="event-lineup-modal-overlay" onclick="handleEventLineupOverlayClick(event)">
+  <div id="event-lineup-modal">
+    <div class="tt-modal-header event-lineup-modal-header">
+      <span class="tt-modal-icon">🎧</span>
+      <div>
+        <div class="tt-modal-title" id="event-lineup-modal-title">DJ LINEUP</div>
+        <div class="tt-modal-sub" id="event-lineup-modal-sub"></div>
+      </div>
+      <div class="tt-modal-actions">
+        <span class="tt-edit-status" id="event-lineup-modal-status"></span>
+        <button class="tt-modal-btn" id="event-lineup-modal-edit-btn" onclick="enterEventLineupEditMode()">编辑</button>
+        <button class="tt-modal-btn save" id="event-lineup-modal-save-btn" style="display:none" onclick="saveEventLineupModalChanges()">保存</button>
+        <button class="tt-modal-btn" id="event-lineup-modal-cancel-btn" style="display:none" onclick="cancelEventLineupEditMode()">取消</button>
+      </div>
+      <button class="tt-modal-close" onclick="closeEventLineupModal()">✕ CLOSE</button>
+    </div>
+    <div class="tt-modal-body event-lineup-modal-body" id="event-lineup-modal-body"></div>
+  </div>
+</div>
+
+<!-- TIMETABLE DJ BIND MODAL -->
+<div id="tt-dj-bind-overlay" onclick="handleTtDJBindOverlayClick(event)">
+  <div id="tt-dj-bind-modal">
+    <div class="tt-dj-bind-header">
+      <div>
+        <div class="tt-dj-bind-title" id="tt-dj-bind-title">绑定表演 DJ</div>
+        <div class="tt-dj-bind-sub" id="tt-dj-bind-sub">—</div>
+      </div>
+      <button class="tt-dj-bind-close" onclick="closeTtDJBindModal()">✕ CLOSE</button>
+    </div>
+    <div class="tt-dj-bind-tabbar" id="tt-dj-bind-tabbar">
+      <button class="tt-dj-bind-tab active" id="tt-dj-bind-tab-existing" onclick="switchTtDJBindTab('existing')">现有 DJ 库</button>
+      <button class="tt-dj-bind-tab" id="tt-dj-bind-tab-import" onclick="switchTtDJBindTab('import')">导入新 DJ</button>
+    </div>
+    <div class="tt-dj-bind-body">
+      <section class="tt-dj-bind-panel active" id="tt-dj-bind-panel-existing">
+        <div class="tt-dj-search-row">
+          <input class="tt-dj-search-input" id="tt-dj-existing-search" type="text" placeholder="搜索 DJ 名称 / 别名（不区分大小写）">
+          <button class="tt-dj-search-btn" onclick="ttDJBindSelectAllExisting(false)">清空选择</button>
+          <button class="tt-dj-search-btn primary" onclick="ttConfirmBindExistingDJ()">确认绑定</button>
+        </div>
+        <div class="tt-dj-existing-list" id="tt-dj-existing-list"></div>
+      </section>
+
+      <section class="tt-dj-bind-panel" id="tt-dj-bind-panel-import">
+        <div class="tt-dj-search-row">
+          <input class="tt-dj-search-input" id="tt-dj-import-query" type="text" placeholder="输入 DJ 名称后抓取多源数据（Spotify / Discogs / SoundCloud）">
+          <label class="tt-dj-search-btn"><input type="checkbox" id="tt-dj-src-spotify" checked> Spotify</label>
+          <label class="tt-dj-search-btn"><input type="checkbox" id="tt-dj-src-discogs" checked> Discogs</label>
+          <label class="tt-dj-search-btn"><input type="checkbox" id="tt-dj-src-soundcloud" checked> SoundCloud</label>
+          <button class="tt-dj-search-btn primary" id="tt-dj-fetch-btn" onclick="ttFetchImportSources()">爬取</button>
+          <button class="tt-dj-search-btn" id="tt-dj-fetch-no-cache-btn" onclick="ttFetchImportSourcesNoCache()">直连抓取（忽略缓存）</button>
+          <button class="tt-dj-search-btn" id="tt-timetable-auto-match-btn" onclick="ttRunAutoMatchForCurrentEventFromBindModal()">自动匹配当前Timetable</button>
+        </div>
+
+        <div class="tt-dj-source-grid" id="tt-dj-source-grid"></div>
+
+        <div style="overflow:auto">
+          <table class="tt-dj-compare-table equal-source-cols">
+            <colgroup>
+              <col class="tt-col-field">
+              <col class="tt-col-source">
+              <col class="tt-col-source">
+              <col class="tt-col-source">
+              <col class="tt-col-source">
+              <col class="tt-col-final">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>字段</th>
+                <th>手动</th>
+                <th>Spotify</th>
+                <th>Discogs</th>
+                <th>SoundCloud</th>
+                <th>最终值预览</th>
+              </tr>
+            </thead>
+            <tbody id="tt-dj-compare-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="tt-dj-import-grid">
+          <div class="tt-dj-import-field">
+            <label>名称 *</label>
+            <input id="tt-dj-manual-name" type="text" placeholder="如: Martin Garrix">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>国家</label>
+            <input id="tt-dj-manual-country" type="text" placeholder="如: Netherlands">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>官网链接</label>
+            <input id="tt-dj-manual-website" type="text" placeholder="如: https://example.com">
+          </div>
+          <div class="tt-dj-import-field full">
+            <label>别名（逗号分隔）</label>
+            <input id="tt-dj-manual-aliases" type="text" placeholder="如: GRX, Ytram">
+          </div>
+          <div class="tt-dj-import-field full">
+            <label>GENRES（逗号分隔）</label>
+            <input id="tt-dj-manual-genres" type="text" placeholder="如: House, EDM">
+          </div>
+          <div class="tt-dj-import-field full">
+            <label>简介</label>
+            <textarea id="tt-dj-manual-bio"></textarea>
+          </div>
+          <div class="tt-dj-import-field">
+            <label>Country (EN)</label>
+            <input id="tt-dj-manual-country-en" type="text" placeholder="如: France">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>Country (ZH)</label>
+            <input id="tt-dj-manual-country-zh" type="text" placeholder="如: 法国">
+          </div>
+          <div class="tt-dj-import-field full">
+            <label>Bio (EN)</label>
+            <textarea id="tt-dj-manual-bio-en"></textarea>
+          </div>
+          <div class="tt-dj-import-field full">
+            <label>Bio (ZH)</label>
+            <textarea id="tt-dj-manual-bio-zh"></textarea>
+          </div>
+          <div class="tt-dj-import-field">
+            <label>Spotify ID</label>
+            <input id="tt-dj-manual-spotify-id" type="text">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>Spotify Followers</label>
+            <input id="tt-dj-manual-spotify-followers" type="text" placeholder="如: 1035641">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>Instagram URL</label>
+            <input id="tt-dj-manual-instagram-url" type="text">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>Facebook URL</label>
+            <input id="tt-dj-manual-facebook-url" type="text">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>SoundCloud URL</label>
+            <input id="tt-dj-manual-soundcloud-url" type="text">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>SoundCloud ID</label>
+            <input id="tt-dj-manual-soundcloud-id" type="text" placeholder="如: 203410014">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>发歌数量</label>
+            <input id="tt-dj-manual-track-count" type="text" placeholder="如: 381">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>专辑数量</label>
+            <input id="tt-dj-manual-playlist-count" type="text" placeholder="如: 78">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>SoundCloud 粉丝数量</label>
+            <input id="tt-dj-manual-soundcloud-followers" type="text" placeholder="如: 351742">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>SoundCloud 点赞数量</label>
+            <input id="tt-dj-manual-soundcloud-favorites" type="text" placeholder="如: 64">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>X / Twitter URL</label>
+            <input id="tt-dj-manual-twitter-url" type="text">
+          </div>
+          <div class="tt-dj-import-field">
+            <label>YouTube URL</label>
+            <input id="tt-dj-manual-youtube-url" type="text">
+          </div>
+          <div class="tt-dj-import-field full">
+            <label>头像（可选，支持完全手动上传）</label>
+            <div class="tt-dj-avatar-upload-row">
+              <div class="tt-dj-avatar-preview" id="tt-dj-avatar-preview"></div>
+              <input id="tt-dj-avatar-file" type="file" accept="image/*">
+              <button class="tt-dj-search-btn" onclick="ttClearImportAvatarFile()">清除头像</button>
+            </div>
+          </div>
+          <div class="tt-dj-import-field">
+            <label>认证状态</label>
+            <label class="tt-dj-search-btn"><input id="tt-dj-manual-verified" type="checkbox" checked> 已认证</label>
+          </div>
+        </div>
+
+        <div class="tt-dj-empty-note">
+          说明：可从多源抓取后按字段选择来源，也可完全不抓取，纯手动填写并上传头像。
+        </div>
+      </section>
+
+      <div class="tt-dj-bind-footer">
+        <div class="tt-dj-bind-status-text" id="tt-dj-bind-status"></div>
+        <button class="tt-dj-search-btn" onclick="closeTtDJBindModal()">取消</button>
+        <button class="tt-dj-search-btn purple ai-action-btn" id="tt-dj-translate-btn" onclick="ttTranslateImportDraftBilingual()" title="为当前导入 DJ 批量生成 country 和 bio 的中英双语字段">翻译 DJ 国家与简介</button>
+        <button class="tt-dj-search-btn primary" id="tt-dj-import-confirm-btn" onclick="ttConfirmImportAndBind()">保存并绑定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COZE REVIEW MODAL -->
+<div id="coze-modal-overlay" onclick="handleCozeOverlayClick(event)">
+  <div id="coze-modal">
+    <div class="coze-modal-header">
+      <div>
+          <div class="coze-modal-title" id="coze-modal-title">时间表识别确认</div>
+        <div class="coze-modal-sub" id="coze-modal-sub"></div>
+      </div>
+      <button class="coze-modal-close" onclick="closeCozeReviewModal()">✕ CLOSE</button>
+    </div>
+    <div class="coze-modal-body">
+      <div class="coze-step">
+        <div class="coze-step-head">
+          <div class="coze-step-title">1. 选择要识别的图片</div>
+          <div class="coze-btn-row">
+            <button class="coze-btn" onclick="cozeSelectAllImages(true)">全选</button>
+            <button class="coze-btn" onclick="cozeSelectAllImages(false)">清空</button>
+            <button class="coze-btn primary ai-action-btn" id="coze-run-btn" onclick="cozeRecognizeSelectedImages()" title="识别选中图片中的 DJ、日期、时间和舞台">识别选中图片的时间表</button>
+          </div>
+        </div>
+        <div class="coze-image-list" id="coze-image-list"></div>
+        <div class="coze-run-status" id="coze-run-status"></div>
+      </div>
+      <div class="coze-step">
+        <div class="coze-step-head">
+          <div class="coze-step-title">2. 确认并编辑要添加的结果</div>
+          <div class="coze-btn-row">
+            <button class="coze-btn" onclick="cozeSelectAllRows(true)">全选结果</button>
+            <button class="coze-btn" onclick="cozeSelectAllRows(false)">全不选</button>
+            <button class="coze-btn" onclick="cozeClearAllStages()">清空全部舞台</button>
+            <button class="coze-btn" onclick="cozeAddManualRow()">+ 手动添加</button>
+          </div>
+        </div>
+        <div class="coze-result-wrap">
+          <div class="coze-result-summary" id="coze-result-summary"></div>
+          <div class="coze-result-empty" id="coze-result-empty">还没有识别结果。请先在左侧选择图片并点击「开始识别」。</div>
+          <div class="coze-table-wrap" id="coze-table-wrap" style="display:none">
+            <table class="coze-result-table">
+              <thead>
+                <tr>
+                  <th>添加</th>
+                  <th>Musician</th>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Stage</th>
+                  <th>来源图片</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="coze-result-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="coze-modal-footer">
+      <span class="coze-modal-status" id="coze-modal-status"></span>
+      <button class="coze-btn" onclick="closeCozeReviewModal()">取消</button>
+      <button class="coze-btn primary" id="coze-save-btn" onclick="cozeConfirmSave()">确认保存时间表</button>
+    </div>
+  </div>
+</div>
+
+<!-- POSTER INFO MODAL -->
+<div id="poster-modal-overlay" onclick="handlePosterOverlayClick(event)">
+  <div id="poster-modal">
+    <div class="poster-modal-header">
+      <div>
+        <div class="poster-modal-title" id="poster-modal-title">海报活动信息识别</div>
+        <div class="poster-modal-sub" id="poster-modal-sub"></div>
+      </div>
+      <button class="poster-modal-close" onclick="closePosterReviewModal()">✕ CLOSE</button>
+    </div>
+    <div class="poster-modal-body">
+      <div class="poster-step">
+        <div class="poster-step-head">
+          <div class="poster-step-title">1. 选择海报图片并识别</div>
+          <div class="coze-btn-row">
+            <button class="coze-btn" onclick="posterSelectAllImages(true)">全选</button>
+            <button class="coze-btn" onclick="posterSelectAllImages(false)">清空</button>
+            <button class="coze-btn primary ai-action-btn" id="poster-run-btn" onclick="posterRecognizeSelectedImages()" title="识别选中海报里的活动名称、日期、地点、票务等基础字段">识别选中海报的活动信息</button>
+          </div>
+        </div>
+        <div class="poster-image-list" id="poster-image-list"></div>
+        <div class="poster-run-status" id="poster-run-status"></div>
+      </div>
+      <div class="poster-step">
+        <div class="poster-step-head">
+          <div class="poster-step-title">2. 统一整合结果并回填编辑区</div>
+          <div class="coze-btn-row">
+            <button class="coze-btn" onclick="posterClearFields()">清空整合结果</button>
+          </div>
+        </div>
+        <div class="poster-fields-wrap">
+          <div class="poster-fields-summary" id="poster-fields-summary">识别后将自动整合多个图片结果，你也可以手动修改。</div>
+          <div class="poster-field-grid">
+            <div class="poster-field">
+              <label>Event Name (EN)</label>
+              <input id="poster-field-name_en" type="text" oninput="posterUpdateField('name_en', this.value)">
+            </div>
+            <div class="poster-field">
+              <label>活动名称（中文）</label>
+              <input id="poster-field-name_zh" type="text" oninput="posterUpdateField('name_zh', this.value)">
+            </div>
+            <div class="poster-field">
+              <label>Start Date</label>
+              <input id="poster-field-start_date" type="text" oninput="posterUpdateField('start_date', this.value)">
+            </div>
+            <div class="poster-field">
+              <label>End Date</label>
+              <input id="poster-field-end_date" type="text" oninput="posterUpdateField('end_date', this.value)">
+            </div>
+            <div class="poster-field">
+              <label>Country (EN)</label>
+              <input id="poster-field-country_en" type="text" oninput="posterUpdateField('country_en', this.value)">
+            </div>
+            <div class="poster-field">
+              <label>Country (EN Full)</label>
+              <input id="poster-field-country_en_full" type="text" oninput="posterUpdateField('country_en_full', this.value)">
+            </div>
+            <div class="poster-field">
+              <label>国家（中文）</label>
+              <input id="poster-field-country_zh" type="text" oninput="posterUpdateField('country_zh', this.value)">
+            </div>
+            <div class="poster-field">
+              <label>City (EN)</label>
+              <input id="poster-field-city_en" type="text" oninput="posterUpdateField('city_en', this.value)">
+            </div>
+            <div class="poster-field">
+              <label>城市（中文）</label>
+              <input id="poster-field-city_zh" type="text" oninput="posterUpdateField('city_zh', this.value)">
+            </div>
+            <div class="poster-field full">
+              <label>Detailed Address (EN)</label>
+              <input id="poster-field-detail_address_en" type="text" oninput="posterUpdateField('detail_address_en', this.value)">
+            </div>
+            <div class="poster-field full">
+              <label>详细地址（中文）</label>
+              <input id="poster-field-detail_address_zh" type="text" oninput="posterUpdateField('detail_address_zh', this.value)">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="poster-modal-footer">
+      <span class="poster-modal-status" id="poster-modal-status"></span>
+      <button class="coze-btn" onclick="closePosterReviewModal()">取消</button>
+      <button class="coze-btn primary" id="poster-apply-btn" onclick="posterApplyToEditForm()">回填到活动编辑表单</button>
+    </div>
+  </div>
+</div>
+
+<!-- BATCH TRANSLATE MODAL -->
+<div id="translate-modal-overlay" onclick="handleTranslateOverlayClick(event)">
+  <div id="translate-modal">
+    <div class="coze-modal-header">
+      <div>
+        <div class="coze-modal-title">批量翻译活动字段</div>
+        <div class="coze-modal-sub" id="translate-modal-sub"></div>
+      </div>
+      <button class="coze-modal-close" onclick="closeTranslateBatchModal()">✕ CLOSE</button>
+    </div>
+    <div class="translate-modal-body">
+      <div class="coze-step">
+        <div class="coze-step-head">
+          <div class="coze-step-title">1. 选择活动</div>
+          <div class="coze-btn-row">
+            <button class="coze-btn" onclick="translateSelectAllFestivals(true)">全选</button>
+            <button class="coze-btn" onclick="translateSelectAllFestivals(false)">清空</button>
+            <button class="coze-btn primary ai-action-btn" id="translate-run-btn" onclick="runTranslateBatch()" title="为选中活动生成中英双语名称、城市、国家、地址等字段">翻译选中活动字段</button>
+          </div>
+        </div>
+        <div class="translate-filter-wrap">
+          <input id="translate-search-input" class="translate-search-input" type="text" placeholder="搜索活动名 / 城市 / 国家..." oninput="translateSetQuery(this.value)">
+          <div class="translate-filter-actions">
+            <button class="coze-btn" onclick="translateSelectAllYears(true)">年份全选</button>
+            <button class="coze-btn" onclick="translateSelectAllYears(false)">年份全不选</button>
+            <label class="translate-filter-opt">
+              <input id="translate-require-confirm" type="checkbox" checked onchange="translateSetRequireConfirm(this.checked)">
+              <span>翻译后先确认再写入</span>
+            </label>
+          </div>
+          <div class="translate-year-filters" id="translate-year-filters"></div>
+        </div>
+        <div class="translate-fest-list" id="translate-fest-list"></div>
+        <div class="coze-run-status" id="translate-run-status"></div>
+      </div>
+      <div class="coze-step">
+        <div class="coze-step-head">
+          <div class="coze-step-title">2. 翻译结果确认</div>
+          <div class="coze-btn-row">
+            <button class="coze-btn" onclick="translateSelectAllReady(true)">全选待保存</button>
+            <button class="coze-btn" onclick="translateSelectAllReady(false)">全不选待保存</button>
+            <button class="coze-btn" onclick="translateClearFinished()">仅保留未完成</button>
+          </div>
+        </div>
+        <div class="translate-progress-list" id="translate-progress-list"></div>
+      </div>
+    </div>
+    <div class="coze-modal-footer">
+      <span class="coze-modal-status" id="translate-modal-status"></span>
+      <button class="coze-btn primary" id="translate-save-btn" onclick="confirmTranslateBatchSave()">确认保存修改</button>
+      <button class="coze-btn" onclick="closeTranslateBatchModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD EVENT MODAL -->
+<div id="add-event-modal-overlay" onclick="handleAddEventOverlayClick(event)">
+  <div id="add-event-modal">
+    <div class="coze-modal-header">
+      <div>
+        <div class="coze-modal-title">新增活动</div>
+        <div class="coze-modal-sub" id="add-event-modal-sub">填写活动信息并直接入库（含 OSS 图片上传）</div>
+      </div>
+      <div class="coze-modal-header-actions">
+        <button class="coze-btn add-event-translate-btn ai-action-btn" id="add-event-translate-btn" onclick="runAddEventTranslateWithCoze()" title="把新增活动表单里的名称、城市、国家、地址翻译成中英双语">翻译新增活动字段</button>
+        <button class="coze-btn ai-action-btn" id="add-event-coze-lineup-btn" onclick="runAddEventLineupRecognitionWithCoze()" title="从新增活动图片中识别 DJ、日期、时间和舞台，并回填到 Timetable JSON">从图片识别时间表</button>
+        <button class="coze-btn ai-action-btn" id="add-event-coze-poster-btn" onclick="runAddEventPosterRecognitionWithCoze()" title="从新增活动海报中识别名称、日期、地点、票务等基础信息并回填表单">从海报识别活动信息</button>
+        <button class="coze-btn primary" id="add-event-save-btn" onclick="confirmAddEventCreate()">💾 创建并同步数据库</button>
+        <button class="coze-btn" onclick="closeAddEventModal()">取消</button>
+        <button class="coze-modal-close" onclick="closeAddEventModal()">✕ CLOSE</button>
+      </div>
+    </div>
+    <div class="add-event-modal-body">
+      <div class="add-event-required-hint">
+        必填：名称 + 共享基础层（城市/国家双语）+ 开启状态 + 活动类型 + 至少 1 张图片；详细地址层（中英文）建议填写
+      </div>
+      <div class="add-event-form-panel" id="add-event-form-panel">
+        <div class="fest-info-edit">
+          <div class="edit-grid">
+            <div class="edit-field">
+              <label>Festival Name (EN)</label>
+              <input class="edit-input" data-field="nameEn" type="text">
+            </div>
+            <div class="edit-field">
+              <label>Festival Name (ZH)</label>
+              <input class="edit-input" data-field="nameZh" type="text">
+            </div>
+            <div class="edit-section-title full">共享基础层（双语）</div>
+            <div class="edit-field">
+              <label>City (EN)</label>
+              <input class="edit-input" data-field="cityEn" type="text" placeholder="Shanghai / Phuket / Amsterdam">
+            </div>
+            <div class="edit-field">
+              <label>城市（中文）</label>
+              <input class="edit-input" data-field="cityZh" type="text" placeholder="上海 / 普吉岛 / 阿姆斯特丹">
+            </div>
+            <div class="edit-field">
+              <label>Country (EN)</label>
+              <input class="edit-input" data-field="countryEn" type="text" placeholder="China / Thailand / Netherlands">
+            </div>
+            <div class="edit-field">
+              <label>Country (EN Full)</label>
+              <input class="edit-input" data-field="countryEnFull" type="text" placeholder="People's Republic of China / Kingdom of Thailand">
+            </div>
+            <div class="edit-field">
+              <label>国家（中文）</label>
+              <input class="edit-input" data-field="countryZh" type="text" placeholder="中国 / 泰国 / 荷兰">
+            </div>
+            <div class="edit-section-title full">详细地址层（中英文）</div>
+            <div class="edit-field full">
+              <label>详细地址（中文）</label>
+              <textarea class="edit-input edit-textarea event-manual-address" data-field="detailAddressZh" placeholder="普吉岛 Boat Avenue Lakefront"></textarea>
+            </div>
+            <div class="edit-field full">
+              <label>Detailed Address (EN)</label>
+              <textarea class="edit-input edit-textarea event-manual-address" data-field="detailAddressEn" placeholder="Boat Avenue Lakefront, Phuket"></textarea>
+            </div>
+            <div class="edit-section-title full">地图辅助层（定位点，可选地图）</div>
+            <div class="edit-field full event-location-field">
+              <label>定位地点（地图辅助）</label>
+              <div class="event-location-provider-row">
+                <span class="event-location-provider-label">地图服务</span>
+                <select class="edit-input event-location-provider-select" data-field="locationProvider">
+                  <option value="amap">高德地图（AMap）</option>
+                  <option value="mapkit">Apple MapKit JS</option>
+                  <option value="mapbox">Mapbox</option>
+                  <option value="geoapify">Geoapify</option>
+                </select>
+              </div>
+              <input class="edit-input" data-field="locationPointJson" type="hidden">
+              <div class="event-location-preview empty" data-location-preview>未绑定定位地点</div>
+              <div class="event-location-actions">
+                <button class="edit-btn" type="button" data-action="location-composed-search">按国家/城市/场所搜索</button>
+                <button class="edit-btn" type="button" data-action="location-manual-search">手动搜索地点</button>
+                <button class="edit-btn" type="button" data-action="location-manual-entry">手动填写定位</button>
+                <button class="edit-btn" type="button" data-action="location-reuse-from-event">复用其他 Event 地址</button>
+                <button class="edit-btn" type="button" data-action="location-use-my-pos">使用我的位置</button>
+                <button class="edit-btn" type="button" data-action="location-clear">清空定位</button>
+              </div>
+            </div>
+            <div class="edit-field">
+              <label>关联 Brand（搜索名称）</label>
+              <input class="edit-input" data-field="wikiFestivalName" type="text" placeholder="搜索并选择现有 Brand">
+              <input class="edit-input" data-field="wikiFestivalId" type="hidden">
+            </div>
+            <div class="edit-field">
+              <label>开启状态</label>
+              <select class="edit-input" data-field="status">
+                <option value="upcoming">upcoming</option>
+                <option value="ongoing">ongoing</option>
+                <option value="ended">ended</option>
+                <option value="cancelled">cancelled</option>
+              </select>
+            </div>
+            <div class="edit-field">
+              <label>是否取消</label>
+              <select class="edit-input" data-field="canceled">
+                <option value="false">未取消</option>
+                <option value="true">已取消</option>
+              </select>
+            </div>
+            <div class="edit-field">
+              <label>活动类型</label>
+              <select class="edit-input" data-field="eventType">
+                <option value="festival">festival</option>
+                <option value="rave">rave</option>
+                <option value="concert">concert</option>
+                <option value="party">party</option>
+                <option value="club">club</option>
+                <option value="showcase">showcase</option>
+                <option value="tour">tour</option>
+                <option value="other">other</option>
+              </select>
+            </div>
+            <div class="edit-field">
+              <label>Event Time Zone</label>
+              <select class="edit-input" data-field="timeZone">
+                <option value="Asia/Shanghai">Asia/Shanghai · 北京时间</option>
+                <option value="UTC">UTC</option>
+                <option value="Asia/Tokyo">Asia/Tokyo</option>
+                <option value="Asia/Singapore">Asia/Singapore</option>
+                <option value="Asia/Bangkok">Asia/Bangkok</option>
+                <option value="Europe/Amsterdam">Europe/Amsterdam</option>
+                <option value="Europe/London">Europe/London</option>
+                <option value="America/Los_Angeles">America/Los_Angeles</option>
+                <option value="America/New_York">America/New_York</option>
+              </select>
+            </div>
+            <div class="edit-field">
+              <label>Start Date</label>
+              <input class="edit-input" data-field="startDate" type="text" placeholder="2026-04-02">
+            </div>
+            <div class="edit-field">
+              <label>End Date</label>
+              <input class="edit-input" data-field="endDate" type="text" placeholder="2026-04-04">
+            </div>
+            <div class="edit-field">
+              <label>票价最低</label>
+              <input class="edit-input" data-field="ticketPriceMin" type="text" placeholder="99.00">
+            </div>
+            <div class="edit-field">
+              <label>票价最高</label>
+              <input class="edit-input" data-field="ticketPriceMax" type="text" placeholder="399.00">
+            </div>
+            <div class="edit-field">
+              <label>票价币种</label>
+              <input class="edit-input" data-field="ticketCurrency" type="text" placeholder="CNY / USD / EUR">
+            </div>
+            <div class="edit-field">
+              <label>购票链接</label>
+              <input class="edit-input" data-field="ticketUrl" type="text" placeholder="https://tickets.example.com/...">
+            </div>
+          </div>
+          <div class="edit-field">
+            <label>票务备注</label>
+            <textarea class="edit-textarea" data-field="ticketNotes" placeholder="预售时间、票档说明、实名规则等"></textarea>
+          </div>
+          <div class="edit-field">
+            <label>官网 / 社媒链接（每行一个 URL）</label>
+            <textarea class="edit-textarea" data-field="socialLinks" placeholder="https://instagram.com/..."></textarea>
+          </div>
+          <div class="edit-field">
+            <label>Related Links（每行一个 URL）</label>
+            <textarea class="edit-textarea" data-field="relatedLinks" placeholder="https://..."></textarea>
+          </div>
+          <div class="edit-lineup-area">
+            <label>🎵 Lineup JSON（可选）</label>
+            <div class="edit-lineup-hint">格式：{"lineup_info":[{"musician":"...","date":"Oct.2","time":"22:00—23:30","stage":"Main Stage"},...]} 或直接粘贴数组 [...]</div>
+            <textarea class="edit-lineup-textarea" data-field="lineup" placeholder='{"lineup_info":[{"musician":"Artist Name","date":"Oct.2","time":"22:00—23:30","stage":"Main Stage"}]}'></textarea>
+          </div>
+          <div class="edit-image-zone-area">
+            <label>🖼 图片分区上传（本地缓存 + OSS）</label>
+            <div class="edit-lineup-hint">分区：poster / lineup / timetable / cover / map / other。每区支持多张，自动命名为 zone、zone-2、zone-3...</div>
+            <div class="edit-image-zone-grid" id="add-event-image-zone-grid"></div>
+          </div>
+          <div class="edit-actions edit-actions-meta">
+            <span class="edit-save-status" id="add-event-save-status"></span>
+            <span class="add-event-json-hint">新建活动会自动生成 festivalId，并同步到 DB + OSS</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="./country-codes-iso3166.js"></script>
+<script src="./festival-viewer/js/core/00-state-and-api.js"></script>
+<script src="./festival-viewer/js/core/state/00-ranking-state-facade.js"></script>
+<script src="./festival-viewer/js/core/state/20-import-state-facade.js"></script>
+<script src="./festival-viewer/js/core/archive/00-asset-mapping.js"></script>
+<script src="./festival-viewer/js/core/archive/10-cache-storage-and-meta.js"></script>
+<script src="./festival-viewer/js/core/archive/20-hydrate-and-load.js"></script>
+<script src="./festival-viewer/js/core/source-cache/00-base-and-idb.js"></script>
+<script src="./festival-viewer/js/core/source-cache/10-query-cache-and-logs.js"></script>
+<script src="./festival-viewer/js/core/source-cache/20-avatar-and-display.js"></script>
+<script src="./festival-viewer/js/00-app-core.js"></script>
+<script src="./festival-viewer/js/features/brand/admin/00-model-grid-loading.js"></script>
+<script src="./festival-viewer/js/features/brand/admin/10-editor-form-lifecycle.js"></script>
+<script src="./festival-viewer/js/features/brand/admin/20-media-save-delete.js"></script>
+<script src="./festival-viewer/js/features/brand/binding/00-source-filter-candidates.js"></script>
+<script src="./festival-viewer/js/features/brand/binding/10-table-render-selection.js"></script>
+<script src="./festival-viewer/js/features/brand/binding/20-actions-batch-page.js"></script>
+<script src="./festival-viewer/js/core/helpers/05-entity-association-search.js"></script>
+<script src="./festival-viewer/js/features/news/00-model-and-list.js"></script>
+<script src="./festival-viewer/js/features/news/editor/00-draft-markdown-resources.js"></script>
+<script src="./festival-viewer/js/features/news/editor/10-media-upload.js"></script>
+<script src="./festival-viewer/js/features/news/editor/15-wechat-import.js"></script>
+<script src="./festival-viewer/js/features/news/editor/20-editor-overlay.js"></script>
+<script src="./festival-viewer/js/features/news/20-binding-and-crud.js"></script>
+<script src="./festival-viewer/js/features/ranking/00-board-editor.js"></script>
+<script src="./festival-viewer/js/features/ranking/10-entity-catalog-and-search.js"></script>
+<script src="./festival-viewer/js/features/ranking/entries/00-normalize-render-and-summary.js"></script>
+<script src="./festival-viewer/js/features/ranking/entries/10-catalog-actions-and-import.js"></script>
+<script src="./festival-viewer/js/features/ranking/entries/20-lifecycle-payload-save.js"></script>
+<script src="./festival-viewer/js/features/ranking-dashboard.js"></script>
+<script src="./festival-viewer/js/features/genre-admin.js"></script>
+<script src="./festival-viewer/js/features/content-review/00-review-workspace.js"></script>
+<script src="./festival-viewer/js/core/persistence/00-idb-handle-store.js"></script>
+<script src="./festival-viewer/js/core/persistence/10-folder-selection-bootstrap.js"></script>
+<script src="./festival-viewer/js/core/persistence/20-scan-and-loading.js"></script>
+<script src="./festival-viewer/js/core/helpers/00-festival-core-utils.js"></script>
+<script src="./festival-viewer/js/core/helpers/10-lineup-poster-review.js"></script>
+<script src="./festival-viewer/js/core/helpers/20-lineup-sync-and-payload.js"></script>
+<script src="./festival-viewer/js/core/helpers/30-backend-sync-persist.js"></script>
+<script src="./festival-viewer/js/core/helpers/40-coze-lineup-review.js"></script>
+<script src="./festival-viewer/js/core/map/00-amap-loader.js"></script>
+<script src="./festival-viewer/js/core/map/10-amap-services.js"></script>
+<script src="./festival-viewer/js/core/map/20-map-provider.js"></script>
+<script src="./festival-viewer/js/core/map/20-mapkit-loader.js"></script>
+<script src="./festival-viewer/js/core/map/30-mapkit-services.js"></script>
+<script src="./festival-viewer/js/core/map/40-mapbox-loader.js"></script>
+<script src="./festival-viewer/js/core/map/50-mapbox-services.js"></script>
+<script src="./festival-viewer/js/core/map/60-geoapify-loader.js"></script>
+<script src="./festival-viewer/js/core/map/70-geoapify-services.js"></script>
+<script src="./festival-viewer/js/features/event/location/00-location-state.js"></script>
+<script src="./festival-viewer/js/features/event/location/10-location-picker-modal.js"></script>
+<script src="./festival-viewer/js/features/event/location/15-location-picker-provider-bridge.js"></script>
+<script src="./festival-viewer/js/features/event/location/25-location-manual-and-reuse-modal.js"></script>
+<script src="./festival-viewer/js/features/event/location/20-location-bind-and-sync.js"></script>
+<script src="./festival-viewer/js/core/save-sync/00-collect-and-save.js"></script>
+<script src="./festival-viewer/js/core/save-sync/10-header-and-view-render.js"></script>
+<script src="./festival-viewer/js/core/save-sync/20-brand-binding-and-edit-fields.js"></script>
+<script src="./festival-viewer/js/core/save-sync/30-editor-overlay-lifecycle.js"></script>
+<script src="./festival-viewer/js/40-import.js"></script>
+<script src="./festival-viewer/js/features/import/translate/00-text-plan-and-merge.js"></script>
+<script src="./festival-viewer/js/features/import/translate/10-modal-list-and-editor.js"></script>
+<script src="./festival-viewer/js/features/import/translate/20-run-and-save.js"></script>
+<script src="./festival-viewer/js/features/import/runtime/00-search-progress-live.js"></script>
+<script src="./festival-viewer/js/features/import/runtime/10-transform-persist.js"></script>
+<script src="./festival-viewer/js/features/import/runtime/20-festival-file-actions.js"></script>
+<script src="./festival-viewer/js/features/import/20-add-event-modal.js"></script>
+<script src="./festival-viewer/js/features/event/00-image-zone-manager.js"></script>
+<script src="./festival-viewer/js/ui/archive/00-filter-and-match.js"></script>
+<script src="./festival-viewer/js/ui/archive/10-month-and-render.js"></script>
+<script src="./festival-viewer/js/ui/archive/20-build-ui-and-tabs.js"></script>
+<script src="./festival-viewer/js/features/event/10-archive-row-render.js"></script>
+<script src="./festival-viewer/js/features/event/20-lineup-modal.js"></script>
+<script src="./festival-viewer/js/60-timetable.js"></script>
+<script src="./festival-viewer/js/features/timetable/bind/00-match-map-and-identity.js"></script>
+<script src="./festival-viewer/js/features/timetable/bind/10-musician-render.js"></script>
+<script src="./festival-viewer/js/features/timetable/bind/20-bind-state-and-candidates.js"></script>
+<script src="./festival-viewer/js/core/state/10-timetable-state-facade.js"></script>
+<script src="./festival-viewer/js/features/timetable/bind/30-bind-modal-actions-and-commit.js"></script>
+<script src="./festival-viewer/js/features/timetable/10-import-bind-modal-core.js"></script>
+<script src="./festival-viewer/js/features/timetable/import-compare/00-normalize-and-field-resolution.js"></script>
+<script src="./festival-viewer/js/features/timetable/import-compare/10-grid-and-compare-render.js"></script>
+<script src="./festival-viewer/js/features/timetable/import-compare/20-selection-actions-and-avatar.js"></script>
+<script src="./festival-viewer/js/features/timetable/12-source-cache-prefetch.js"></script>
+<script src="./festival-viewer/js/features/timetable/13-import-fetch-translate-save.js"></script>
+<script src="./festival-viewer/js/features/timetable/20-modal-and-render.js?v=20260419-tt-edit"></script>
+<script src="./festival-viewer/js/features/dj/library/00-search-selection-state.js"></script>
+<script src="./festival-viewer/js/features/dj/library/10-render-and-load.js"></script>
+<script src="./festival-viewer/js/features/dj/library/20-bulk-translate-and-range.js"></script>
+<script src="./festival-viewer/js/features/dj/10-auth.js"></script>
+<script src="./festival-viewer/js/features/dj/profile/editor/00-basic-fields-and-avatar.js"></script>
+<script src="./festival-viewer/js/features/dj/profile/editor/10-source-state-compare-fetch.js"></script>
+<script src="./festival-viewer/js/features/dj/profile/editor/20-source-modal-lifecycle.js"></script>
+<script src="./festival-viewer/js/features/dj/profile/10-render-and-list-sync.js"></script>
+<script src="./festival-viewer/js/features/dj/profile/20-actions-and-modal.js"></script>
+<script src="./festival-viewer/js/core/bootstrap/00-lightbox-core.js"></script>
+<script src="./festival-viewer/js/core/bootstrap/05-event-bus.js"></script>
+<script src="./festival-viewer/js/core/bootstrap/10-event-dj-image-preview.js"></script>
+<script src="./festival-viewer/js/core/bootstrap/20-domcontentloaded-bindings.js"></script>
+<script src="./festival-viewer/js/core/bootstrap/25-keyboard-dispatch.js"></script>
+<script src="./festival-viewer/js/core/bootstrap/30-keyboard-shortcuts.js"></script>
+<script src="./festival-viewer/js/core/bootstrap/40-float-nav-hooks.js"></script>
+</body>
+</html>
